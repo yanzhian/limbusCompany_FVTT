@@ -1,0 +1,38 @@
+{
+  "id": "limbusCompany",
+  "title": "Limbus Company TRPG",
+  "description": "A tabletop RPG system based on the world of Limbus Company.",
+  "version": "0.1.0",
+  "compatibility": {
+    "minimum": "12",
+    "verified": "12"
+  },
+  "authors": [
+    {
+      "name": "Limbus TRPG Team"
+    }
+  ],
+  "esmodules": [
+    "limbusCompany.mjs"
+  ],
+  "styles": [
+    "css/limbusCompany.css"
+  ],
+  "languages": [
+    {
+      "lang": "zh-cn",
+      "name": "中文（简体）",
+      "path": "lang/zh-cn.json"
+    },
+    {
+      "lang": "en",
+      "name": "English",
+      "path": "lang/en.json"
+    }
+  ],
+  "socket": false,
+  "url": "",
+  "manifest": "",
+  "download": "",
+  "license": ""
+}
