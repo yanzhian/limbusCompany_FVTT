@@ -3,8 +3,9 @@
 
   {{!-- ── 左侧：技能槽 ─────────────────────────────────────────────── --}}
   <div class="skill-panel">
+    <div class="panel-label">技能栏</div>
 
-    {{!-- 基础技能槽（6个八边形） --}}
+    {{!-- 基础技能槽（6个八边形，3×2 排列） --}}
     <div class="basic-skill-slots">
       {{#each basicSkills}}
         <div class="skill-slot-wrap skill-slot-octa-wrap
@@ -25,30 +26,8 @@
       {{/each}}
     </div>
 
-    {{!-- EGO技能槽（5个圆形）+ 守备技能槽（1个八边形） --}}
-    <div class="ego-defense-row">
-
-      {{!-- EGO 技能（圆形，按等级） --}}
-      {{#each egoSkills}}
-        <div class="skill-slot-wrap ego-skill-slot-wrap
-              {{#if item}}skill-slot-equipped{{else}}skill-slot-empty{{/if}}"
-             data-slot-type="ego"
-             data-grade="{{grade}}"
-             {{#if item}}
-               data-item-id="{{item._id}}"
-             {{/if}}
-             title="{{#if item}}{{item.name}}{{else}}{{grade}}{{/if}}">
-          <div class="skill-slot-circle"
-               {{#if item}}style="border-color:{{sinColor item.system.sinType}}"{{/if}}>
-            <img src="{{#if item}}{{item.img}}{{else}}systems/limbusCompany_FVTT/assets/icons/Skill/Normalsin.webp{{/if}}"
-                 alt="{{grade}}"
-                 class="skill-slot-img">
-          </div>
-          <div class="ego-grade-label">{{grade}}</div>
-        </div>
-      {{/each}}
-
-      {{!-- 守备技能槽（八边形） --}}
+    {{!-- 守备技能槽（圆形，单独一行居中） --}}
+    <div class="defense-slot-row">
       <div class="skill-slot-wrap defense-skill-slot
             {{#if defenseSkill.item}}skill-slot-equipped{{else}}skill-slot-empty{{/if}}"
            data-slot-type="defense"
@@ -56,15 +35,68 @@
              data-item-id="{{defenseSkill.item._id}}"
            {{/if}}
            title="{{#if defenseSkill.item}}{{defenseSkill.item.name}}{{else}}守备技能{{/if}}">
-        <div class="skill-slot-octa"
+        <div class="skill-slot-circle"
              {{#if defenseSkill.item}}style="border-color:{{sinColor defenseSkill.item.system.sinType}}"{{/if}}>
           <img src="{{#if defenseSkill.item}}{{defenseSkill.item.img}}{{else}}systems/limbusCompany_FVTT/assets/icons/Skill/Normalsin.webp{{/if}}"
                alt="守备"
                class="skill-slot-img">
         </div>
+        <div class="ego-grade-label">守备</div>
+      </div>
+    </div>
+
+    {{!-- EGO技能槽（5个圆形，按等级分两行：ZAYIN/TET/HE 和 WAW/ALEPH） --}}
+    <div class="ego-rows">
+
+      {{!-- 第一行：ZAYIN TET HE --}}
+      <div class="ego-row">
+        {{#each egoSkills}}
+          {{#if (lte @index 2)}}
+            <div class="skill-slot-wrap ego-skill-slot-wrap
+                  {{#if item}}skill-slot-equipped{{else}}skill-slot-empty{{/if}}"
+                 data-slot-type="ego"
+                 data-grade="{{grade}}"
+                 {{#if item}}
+                   data-item-id="{{item._id}}"
+                 {{/if}}
+                 title="{{#if item}}{{item.name}}{{else}}{{grade}}{{/if}}">
+              <div class="skill-slot-circle"
+                   {{#if item}}style="border-color:{{sinColor item.system.sinType}}"{{/if}}>
+                <img src="{{#if item}}{{item.img}}{{else}}systems/limbusCompany_FVTT/assets/icons/Skill/Normalsin.webp{{/if}}"
+                     alt="{{grade}}"
+                     class="skill-slot-img">
+              </div>
+              <div class="ego-grade-label">{{grade}}</div>
+            </div>
+          {{/if}}
+        {{/each}}
       </div>
 
-    </div>{{!-- /ego-defense-row --}}
+      {{!-- 第二行：WAW ALEPH --}}
+      <div class="ego-row">
+        {{#each egoSkills}}
+          {{#unless (lte @index 2)}}
+            <div class="skill-slot-wrap ego-skill-slot-wrap
+                  {{#if item}}skill-slot-equipped{{else}}skill-slot-empty{{/if}}"
+                 data-slot-type="ego"
+                 data-grade="{{grade}}"
+                 {{#if item}}
+                   data-item-id="{{item._id}}"
+                 {{/if}}
+                 title="{{#if item}}{{item.name}}{{else}}{{grade}}{{/if}}">
+              <div class="skill-slot-circle"
+                   {{#if item}}style="border-color:{{sinColor item.system.sinType}}"{{/if}}>
+                <img src="{{#if item}}{{item.img}}{{else}}systems/limbusCompany_FVTT/assets/icons/Skill/Normalsin.webp{{/if}}"
+                     alt="{{grade}}"
+                     class="skill-slot-img">
+              </div>
+              <div class="ego-grade-label">{{grade}}</div>
+            </div>
+          {{/unless}}
+        {{/each}}
+      </div>
+
+    </div>{{!-- /ego-rows --}}
 
   </div>{{!-- /skill-panel --}}
 

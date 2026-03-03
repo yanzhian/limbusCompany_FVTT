@@ -3,6 +3,7 @@
 
   {{!-- ── 左侧：状态栏 ─────────────────────────────────────────────── --}}
   <div class="combat-status-panel">
+    <div class="panel-label">状态栏</div>
 
     {{!-- BUFF 列表 --}}
     <div class="buff-list-wrap">
@@ -96,9 +97,9 @@
           </div>
         {{/each}}
 
-        {{!-- 1个守备八边形槽 --}}
+        {{!-- 1个守备圆形槽 --}}
         <div class="combat-skill-slot-wrap">
-          <div class="combat-skill-slot skill-slot-octa slot-defense {{#if defenseSkill.item}}slot-equipped{{else}}slot-empty{{/if}}"
+          <div class="combat-skill-slot skill-slot-circle slot-defense {{#if defenseSkill.item}}slot-equipped{{else}}slot-empty{{/if}}"
                {{#if defenseSkill.item}}
                  data-item-id="{{defenseSkill.item._id}}"
                  style="border-color:{{sinColor defenseSkill.item.system.sinType}}"
