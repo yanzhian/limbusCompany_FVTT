@@ -1,0 +1,247 @@
+{
+  "LIMBUSCOMPANY": {
+    "SystemName": "边狱巴士都市规则",
+
+    "ActorTypes": {
+      "character": "玩家角色"
+    },
+
+    "ItemTypes": {
+      "equipment": "装备",
+      "skill":     "技能",
+      "consumable":"消耗品",
+      "material":  "材料",
+      "container": "容器"
+    },
+
+    "Sin": {
+      "Wrath":    "暴怒",
+      "Lust":     "色欲",
+      "Sloth":    "怠惰",
+      "Gluttony": "暴食",
+      "Gloom":    "忧郁",
+      "Pride":    "傲慢",
+      "Envy":     "嫉妒"
+    },
+
+    "DamageType": {
+      "Slash":  "斩击",
+      "Blunt":  "打击",
+      "Pierce": "突刺"
+    },
+
+    "Attribute": {
+      "Str": "力量",
+      "Agi": "敏捷",
+      "Con": "体质",
+      "Int": "感知",
+      "Per": "智力",
+      "Cha": "魅力"
+    },
+
+    "SkillType": {
+      "Basic":   "基础技能",
+      "Defense": "守备技能",
+      "Ego":     "EGO技能"
+    },
+
+    "Category": {
+      "Slash":         "斩击",
+      "Blunt":         "打击",
+      "Pierce":        "突刺",
+      "Dodge":         "闪避",
+      "Block":         "格挡",
+      "Counter":       "反击",
+      "ClashBlock":    "可拼点格挡",
+      "ClashCounter":  "可拼点反击"
+    },
+
+    "EquipSubtype": {
+      "Upper":    "上装",
+      "Lower":    "下装",
+      "Weapon":   "武器",
+      "Accessory":"饰品"
+    },
+
+    "DiceType": {
+      "Normal":      "普通",
+      "Unbreakable": "不可摧毁",
+      "Severing":    "截断"
+    },
+
+    "EgoGrade": {
+      "ZAYIN":  "ZAYIN",
+      "TET":    "TET",
+      "HE":     "HE",
+      "WAW":    "WAW",
+      "ALEPH":  "ALEPH"
+    },
+
+    "Buff": {
+      "Strong":        "强壮",
+      "Endure":        "忍耐",
+      "Swift":         "迅捷",
+      "Guard":         "守护",
+      "ClashPowerUp":  "拼点威力提升",
+      "AtkLevelUp":    "攻击等级提升",
+      "DefLevelUp":    "防御等级提升",
+      "Weak":          "虚弱",
+      "Breach":        "破绽",
+      "Bind":          "束缚",
+      "Fragile":       "易损",
+      "ClashPowerDown":"拼点威力降低",
+      "AtkLevelDown":  "攻击等级降低",
+      "DefLevelDown":  "防御等级降低",
+      "Burn":          "烧伤",
+      "Bleed":         "流血",
+      "Tremor":        "震颤",
+      "Rupture":       "破裂",
+      "Sinking":       "沉沦",
+      "Breathing":     "呼吸法",
+      "Charge":        "充能",
+      "Chaos":         "陷入混乱",
+      "Panic":         "陷入恐慌",
+      "Custom":        "自定义"
+    },
+
+    "Sheet": {
+      "Character": {
+        "TabItems":    "物品",
+        "TabSkills":   "技能",
+        "TabCombat":   "战斗",
+        "HP":          "生命值",
+        "Sanity":      "理智值",
+        "AP":          "行动点",
+        "Level":       "等级",
+        "XP":          "经验值",
+        "StellarMotes":"星芒",
+        "AtkLevel":    "攻击等级",
+        "DefLevel":    "防御等级",
+        "Speed":       "速度",
+        "Currency":    "眼",
+        "Biography":   "背景",
+        "LongRest":    "长休",
+        "EditLock":    "编辑锁",
+        "Resistance":  "抗性",
+        "EgoResistance":"EGO抗性",
+        "ChaosThreshold":"混乱阈值",
+        "AddBuff":     "+ 添加新的状态BUFF",
+        "ResetHP":     "重置生命值",
+        "ResetSanity": "重置理智值",
+        "ResetAP":     "重置行动点"
+      },
+      "Skill": {
+        "RelatedSkill":   "相关技能",
+        "Weight":         "加重值",
+        "DiceFormula":    "骰子公式",
+        "SinCost":        "罪孽消耗",
+        "SanityCost":     "理智消耗",
+        "EgoResistAdj":   "罪孽抗性修正",
+        "Tags":           "标签",
+        "EffectDesc":     "效果描述",
+        "StellarCost":    "星芒费用",
+        "Favorited":      "已收藏",
+        "EditActivate":   "编辑激活效果",
+        "AddEffect":      "添加效果",
+        "StartCombat":    "发起对抗",
+        "SendChat":       "发送到聊天框",
+        "RelatedTrigger": "触发时机",
+        "ErodeTrigger":   "侵蚀形态",
+        "Equip":          "装备",
+        "Unequip":        "卸下"
+      },
+      "Equipment": {
+        "Subtype":      "子类型",
+        "Category":     "分类",
+        "Links":        "链接方向",
+        "StellarCost":  "星芒费用",
+        "Tags":         "标签",
+        "Effect":       "效果描述",
+        "RequiresLink": "需要相互链接",
+        "AtkAdj":       "攻击等级修正",
+        "DefAdj":       "防御等级修正",
+        "SpeedAdj":     "速度修正",
+        "Quantity":     "数量",
+        "Activate":     "激活",
+        "Unequip":      "卸下"
+      },
+      "Consumable": {
+        "Category": "分类",
+        "Quantity":  "数量",
+        "Effect":    "效果"
+      },
+      "Material": {
+        "Category":    "分类",
+        "Description": "描述"
+      },
+      "Container": {
+        "GridSize": "网格尺寸",
+        "Contents": "内容物"
+      }
+    },
+
+    "Combat": {
+      "Initiative":       "先攻",
+      "ClashStart":       "发起对抗",
+      "ClashRespond":     "进行对抗",
+      "ClashResult":      "拼点结算",
+      "TakeDamage":       "承受伤害",
+      "Activate6Bag":     "激活",
+      "Clear6Bag":        "清除",
+      "ResetAP":          "重置",
+      "ClearAP":          "清零",
+      "SwitchRelated":    "切换相关技能",
+      "InChaos":          "陷入混乱",
+      "InPanic":          "陷入恐慌",
+      "ChaosThreshold":   "混乱阈值触发",
+      "SeismicBlast":     "震颤引爆"
+    },
+
+    "Check": {
+      "Title":        "{attr}鉴定",
+      "Difficulty":   "难度等级",
+      "Modifier":     "加值修正",
+      "Roll":         "鉴定",
+      "RollResult":   "骰掷结果",
+      "Success":      "成功",
+      "PerfectSuccess":"完美成功",
+      "Failure":      "失败"
+    },
+
+    "Warning": {
+      "NotEnoughStellar":  "星芒不足，无法装备（需要 {cost} 星芒，当前 {current}/{max}）",
+      "SlotFull":          "技能槽已满（最多 6 个基础技能）",
+      "EgoSlotOccupied":   "该 EGO 等级已装备技能，将被替换",
+      "DefenseSlotOccupied":"守备技能槽已占用，将被替换",
+      "InvalidEquipType":  "此装备类型无法放入该槽位"
+    },
+
+    "Activity": {
+      "Trigger":      "触发时机",
+      "Precondition": "前置条件",
+      "Cost":         "消耗",
+      "Effect":       "效果",
+      "Limit":        "次数限制",
+      "Unlimited":    "无限制",
+      "PerTurn":      "每回合",
+      "TargetSelf":   "自己",
+      "TargetEnemy":  "目标"
+    }
+  },
+
+  "DOCUMENT": {
+    "Actor": {
+      "character": {
+        "label":  "玩家角色",
+        "plural": "角色"
+      }
+    },
+    "Item": {
+      "equipment": { "label": "装备",  "plural": "装备" },
+      "skill":     { "label": "技能",  "plural": "技能" },
+      "consumable":{ "label": "消耗品","plural": "消耗品" },
+      "material":  { "label": "材料",  "plural": "材料" },
+      "container": { "label": "容器",  "plural": "容器" }
+    }
+  }
+}
