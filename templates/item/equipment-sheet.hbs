@@ -1,0 +1,183 @@
+{{!-- equipment-sheet.hbs — 装备物品卡 --}}
+<div class="limbuscompany item-sheet equipment-sheet">
+
+  {{!-- ── 标题栏 ──────────────────────────────────────────────────── --}}
+  <div class="item-sheet-titlebar">
+    <span class="sheet-lock-icon {{#if isLocked}}locked{{else}}unlocked{{/if}}" title="{{#if isLocked}}点击解锁{{else}}点击锁定{{/if}}">
+      <i class="fas fa-{{#if isLocked}}lock{{else}}lock-open{{/if}}"></i>
+    </span>
+    <span class="sheet-type-label">装备</span>
+  </div>
+
+  {{!-- ── 第一行：图标 + 名字 + 链接方向 ──────────────────────────── --}}
+  <div class="item-row-1">
+    {{!-- 图标 --}}
+    {{#if isEditable}}
+      <img src="{{item.img}}" class="item-sheet-icon" data-edit="img" title="更换图标" alt="icon">
+    {{else}}
+      <img src="{{item.img}}" class="item-sheet-icon" alt="icon">
+    {{/if}}
+
+    {{!-- 名字 --}}
+    {{#if (and isEditable (not isLocked))}}
+      <input type="text" name="name" value="{{item.name}}" class="item-name-input"/>
+    {{else}}
+      <div class="item-name-display">{{item.name}}</div>
+    {{/if}}
+
+    {{!-- 链接方向箭头（右上角） --}}
+    <div class="link-dir-group">
+      {{#each linkDirs}}
+        <button class="link-dir-btn link-dir-{{this}} {{#if (lookup ../linksActive this)}}link-active{{/if}}"
+                data-dir="{{this}}"
+                {{#unless ../isEditable}}disabled{{/unless}}
+                title="链接 {{this}}">
+          {{#eq this 'up'}}↑{{/eq}}{{#eq this 'down'}}↓{{/eq}}{{#eq this 'left'}}←{{/eq}}{{#eq this 'right'}}→{{/eq}}
+        </button>
+      {{/each}}
+    </div>
+  </div>
+
+  {{!-- ── 第二行：类型 + 分类 ───────────────────────────────────────── --}}
+  <div class="item-row-2">
+    {{#if (and isEditable (not isLocked))}}
+      <select name="system.subtype" class="equip-subtype-sel">
+        {{#each subtypes}}
+          <option value="{{@key}}" {{#eq @key ../system.subtype}}selected{{/eq}}>{{this}}</option>
+        {{/each}}
+      </select>
+      <input type="text" name="system.category" value="{{system.category}}" class="equip-category-input" placeholder="分类"/>
+    {{else}}
+      <span class="equip-subtype-label">{{#eq system.subtype 'weapon'}}武器{{/eq}}{{#eq system.subtype 'upper'}}上装{{/eq}}{{#eq system.subtype 'lower'}}下装{{/eq}}{{#eq system.subtype 'accessory'}}饰品{{/eq}}</span>
+      <span class="equip-sep">　</span>
+      <span class="equip-category">{{system.category}}</span>
+    {{/if}}
+  </div>
+  <div class="item-row-divider"></div>
+
+  {{!-- ── 第三行：数值修正 ────────────────────────────────────────── --}}
+  <div class="item-row-3 modifier-block">
+
+    {{!-- 上装：物理抗性 --}}
+    {{#if isUpper}}
+      <div class="modifier-upper">
+        {{#if (and isEditable (not isLocked))}}
+          <div class="modifier-row">
+            <img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/Slash.webp" class="mod-icon" alt="斩">
+            <select name="system.resistanceAdj.slash" class="resist-sel">
+              {{#each resistanceValues}}
+                <option value="{{this}}" {{#eq this ../system.resistanceAdj.slash}}selected{{/eq}}>{{this}}</option>
+              {{/each}}
+            </select>
+            <img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/Blunt.webp" class="mod-icon" alt="打" style="margin-left:6px">
+            <select name="system.resistanceAdj.blunt" class="resist-sel">
+              {{#each resistanceValues}}
+                <option value="{{this}}" {{#eq this ../system.resistanceAdj.blunt}}selected{{/eq}}>{{this}}</option>
+              {{/each}}
+            </select>
+            <img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/Pierce.webp" class="mod-icon" alt="突" style="margin-left:6px">
+            <select name="system.resistanceAdj.pierce" class="resist-sel">
+              {{#each resistanceValues}}
+                <option value="{{this}}" {{#eq this ../system.resistanceAdj.pierce}}selected{{/eq}}>{{this}}</option>
+              {{/each}}
+            </select>
+          </div>
+        {{else}}
+          <div class="modifier-row">
+            <img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/Slash.webp" class="mod-icon" alt="斩">
+            <span class="resist-display {{#isResistWeak system.resistanceAdj.slash}}resist-weak{{/isResistWeak}}">{{system.resistanceAdj.slash}}</span>
+            <img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/Blunt.webp" class="mod-icon" alt="打" style="margin-left:6px">
+            <span class="resist-display {{#isResistWeak system.resistanceAdj.blunt}}resist-weak{{/isResistWeak}}">{{system.resistanceAdj.blunt}}</span>
+            <img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/Pierce.webp" class="mod-icon" alt="突" style="margin-left:6px">
+            <span class="resist-display {{#isResistWeak system.resistanceAdj.pierce}}resist-weak{{/isResistWeak}}">{{system.resistanceAdj.pierce}}</span>
+          </div>
+        {{/if}}
+        {{!-- 上装也有防御修正 --}}
+        <div class="modifier-row">
+          <img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/Defense_Level.webp" class="mod-icon" alt="DEF">
+          {{#if (and isEditable (not isLocked))}}
+            <input type="number" name="system.defAdj" value="{{system.defAdj}}" class="mod-input" style="width:55px"/>
+          {{else}}
+            <span class="mod-val {{#gt system.defAdj 0}}mod-pos{{/gt}}">{{#gt system.defAdj 0}}+{{/gt}}{{system.defAdj}}</span>
+          {{/if}}
+        </div>
+      </div>
+    {{else}}
+      {{!-- 其他类型：ATK/DEF/SPD（按类型选择显示） --}}
+      <div class="modifier-rows">
+        {{#unless isLower}}
+          <div class="modifier-row">
+            <img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/Offense_Level.webp" class="mod-icon" alt="ATK">
+            {{#if (and isEditable (not isLocked))}}
+              <input type="number" name="system.atkAdj" value="{{system.atkAdj}}" class="mod-input" style="width:55px"/>
+            {{else}}
+              <span class="mod-val {{#gt system.atkAdj 0}}mod-pos{{/gt}}">{{#gt system.atkAdj 0}}+{{/gt}}{{system.atkAdj}}</span>
+            {{/if}}
+          </div>
+        {{/unless}}
+        <div class="modifier-row">
+          <img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/Defense_Level.webp" class="mod-icon" alt="DEF">
+          {{#if (and isEditable (not isLocked))}}
+            <input type="number" name="system.defAdj" value="{{system.defAdj}}" class="mod-input" style="width:55px"/>
+          {{else}}
+            <span class="mod-val {{#gt system.defAdj 0}}mod-pos{{/gt}}">{{#gt system.defAdj 0}}+{{/gt}}{{system.defAdj}}</span>
+          {{/if}}
+        </div>
+        {{#unless isUpper}}
+          <div class="modifier-row">
+            <img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/Speed.webp" class="mod-icon" alt="SPD">
+            {{#if (and isEditable (not isLocked))}}
+              <input type="number" name="system.speedAdj" value="{{system.speedAdj}}" class="mod-input" style="width:55px"/>
+            {{else}}
+              <span class="mod-val {{#gt system.speedAdj 0}}mod-pos{{/gt}}">{{#gt system.speedAdj 0}}+{{/gt}}{{system.speedAdj}}</span>
+            {{/if}}
+          </div>
+        {{/unless}}
+      </div>
+    {{/if}}
+
+  </div>
+
+  {{!-- ── 标签 ──────────────────────────────────────────────────────── --}}
+  <div class="item-tags-row">
+    {{#if (and isEditable (not isLocked))}}
+      <input type="text" name="system.tags" value="{{system.tags}}" class="tags-input" placeholder="标签1/标签2"/>
+    {{else}}
+      {{#each (split system.tags '/')}}
+        <span class="tag">{{trim this}}</span>
+      {{/each}}
+    {{/if}}
+  </div>
+
+  {{!-- ── 描述区 ──────────────────────────────────────────────────── --}}
+  <div class="item-desc-block">
+    {{#if (and isEditable (not isLocked))}}
+      {{editor system.description target="system.description" button=false editable=true engine="prosemirror"}}
+    {{else}}
+      <div class="item-desc-display">{{{system.description}}}</div>
+    {{/if}}
+  </div>
+
+  {{!-- ── 底部按钮栏 ──────────────────────────────────────────────── --}}
+  <div class="item-sheet-footer">
+    <div class="footer-actions">
+      <button class="item-send-chat sheet-btn">发送聊天框</button>
+      <button class="item-activate sheet-btn">激活</button>
+      <button class="activity-edit-toggle sheet-btn">编辑激活效果 {{#if activitiesExpanded}}▲{{else}}▼{{/if}}</button>
+    </div>
+    <div class="footer-stellar">
+      <i class="fas fa-star"></i>
+      {{#if (and isEditable (not isLocked))}}
+        <input type="number" name="system.stellarCost" value="{{system.stellarCost}}" class="stellar-edit-input" min="0" style="width:40px"/>
+      {{else}}
+        <span class="stellar-cost-edit">{{system.stellarCost}}</span>
+      {{/if}}
+    </div>
+  </div>
+
+  {{!-- ── 活动编辑器（折叠区） ──────────────────────────────────── --}}
+  {{#if activitiesExpanded}}
+    {{> systems/limbusCompany_FVTT/templates/partials/activity-editor.hbs}}
+  {{/if}}
+
+</div>

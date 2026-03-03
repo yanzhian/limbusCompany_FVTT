@@ -1,0 +1,49 @@
+{{!-- container-sheet.hbs — 容器物品卡 --}}
+<div class="limbuscompany item-sheet container-sheet">
+
+  {{!-- ── 标题栏 ──────────────────────────────────────────────────── --}}
+  <div class="item-sheet-titlebar">
+    <span class="sheet-lock-icon {{#if isLocked}}locked{{else}}unlocked{{/if}}" title="{{#if isLocked}}点击解锁{{else}}点击锁定{{/if}}">
+      <i class="fas fa-{{#if isLocked}}lock{{else}}lock-open{{/if}}"></i>
+    </span>
+    <span class="sheet-type-label">容器</span>
+  </div>
+
+  {{!-- ── 第一行：名字 + 网格尺寸 ──────────────────────────────────── --}}
+  <div class="container-header-row">
+    {{#if (and isEditable (not isLocked))}}
+      <input type="text" name="name" value="{{item.name}}" class="item-name-input"/>
+      <label style="margin-left:8px">尺寸</label>
+      <input type="text" name="system.gridSize" value="{{system.gridSize}}" class="grid-size-input" placeholder="6x6" style="width:50px"/>
+    {{else}}
+      <div class="item-name-display">{{item.name}}</div>
+      <div class="grid-size-display">{{gridSizeLabel}}</div>
+    {{/if}}
+  </div>
+
+  {{!-- ── 第二行：搜索栏 + 更多按钮 ────────────────────────────────── --}}
+  <div class="container-toolbar">
+    <input type="text" class="container-search" placeholder="搜索容器内物品…"/>
+    <button class="container-more-btn" title="更多">⋮</button>
+  </div>
+
+  {{!-- ── 主体：物品网格 ──────────────────────────────────────────── --}}
+  <div class="container-grid" style="--grid-cols:{{gridCols}}">
+    {{#each gridCells}}
+      <div class="container-cell {{#if item}}cell-filled{{else}}cell-empty{{/if}}"
+           data-cell-index="{{index}}"
+           {{#if item}}
+             data-item-id="{{item._id}}"
+             data-item-name="{{item.name}}"
+           {{/if}}
+           {{#unless show}}style="display:none"{{/unless}}
+           title="{{#if item}}{{item.name}}{{else}}空槽{{/if}}">
+        {{#if item}}
+          <img src="{{item.img}}" class="container-cell-icon" alt="{{item.name}}">
+          <div class="container-cell-name">{{item.name}}</div>
+        {{/if}}
+      </div>
+    {{/each}}
+  </div>
+
+</div>

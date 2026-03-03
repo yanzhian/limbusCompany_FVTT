@@ -1,0 +1,47 @@
+{{!-- title-card.hbs — 悬停 Title 卡片 partial（JS动态生成，此处备用静态版） --}}
+{{!-- 该卡片通常由 actor-sheet.mjs 的 _buildTitleCard() 动态构建 --}}
+{{!-- 静态版本仅在需要时由 HBS 渲染引擎调用 --}}
+
+{{#if item}}
+  {{#if (eq item.type 'skill')}}
+    <div class="limbus-title-card limbus-title-card-skill">
+      <div class="tc-header" style="background:{{sinColor item.system.sinType}}">{{item.name}}</div>
+      <div class="tc-row2">
+        {{#if (categoryIcon item.system.category)}}
+          <img src="{{categoryIcon item.system.category}}" width="18" height="18" alt="type">
+        {{/if}}
+        <span class="tc-formula">{{fmtDice item.system.diceFormula}}</span>
+        <span class="tc-tags">
+          {{#each (split item.system.tags '/')}}
+            <span class="tag">{{trim this}}</span>
+          {{/each}}
+        </span>
+      </div>
+      {{#if item.system.weight}}
+        <div class="tc-weight">
+          {{#times item.system.weight}}<span class="weight-sq"></span>{{/times}}
+        </div>
+      {{/if}}
+      <div class="tc-desc">{{{item.system.description}}}</div>
+      <div class="tc-footer">
+        <i class="fas fa-star"></i> {{item.getStellarCost}}
+      </div>
+    </div>
+  {{else}}
+    <div class="limbus-title-card limbus-title-card-equip">
+      <div class="tc-header tc-equip-header">
+        <span>{{item.name}}</span>
+        <span class="tc-links">
+          {{#if item.system.links.up}}↑{{/if}}
+          {{#if item.system.links.down}}↓{{/if}}
+          {{#if item.system.links.left}}←{{/if}}
+          {{#if item.system.links.right}}→{{/if}}
+        </span>
+      </div>
+      <div class="tc-row2">武器　{{item.system.category}}</div>
+      <div class="tc-desc">{{{item.system.description}}}</div>
+      <div class="tc-footer-small">鼠标中间用来编辑/查看</div>
+      <div class="tc-footer"><i class="fas fa-star"></i> {{item.system.stellarCost}}</div>
+    </div>
+  {{/if}}
+{{/if}}

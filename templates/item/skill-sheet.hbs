@@ -1,0 +1,279 @@
+{{!-- skill-sheet.hbs — 技能物品卡（基础/守备/EGO 通用） --}}
+<div class="limbuscompany item-sheet skill-sheet">
+
+  {{!-- ── 标题栏 ──────────────────────────────────────────────────── --}}
+  <div class="item-sheet-titlebar">
+    <span class="sheet-lock-icon {{#if isLocked}}locked{{else}}unlocked{{/if}}" title="{{#if isLocked}}点击解锁{{else}}点击锁定{{/if}}">
+      <i class="fas fa-{{#if isLocked}}lock{{else}}lock-open{{/if}}"></i>
+    </span>
+    <span class="sheet-type-label">技能</span>
+    {{!-- 相关技能展开按钮 --}}
+    <button class="related-skill-toggle" title="展开/折叠相关技能">
+      {{#if relatedExpanded}}▲ 相关{{else}}＋ 相关{{/if}}
+    </button>
+  </div>
+
+  {{!-- ══ 主技能卡片 ═══════════════════════════════════════════════════ --}}
+  <div class="skill-card-main">
+
+    {{!-- ── 第一行：技能图标 + 名字 ──────────────────────────────── --}}
+    <div class="item-row-1">
+      <div class="skill-slot-octa skill-icon-big" style="border-color:{{sinColor}}">
+        {{#if isEditable}}
+          <img src="{{item.img}}" class="skill-slot-img" data-edit="img" title="更换图标" alt="icon">
+        {{else}}
+          <img src="{{item.img}}" class="skill-slot-img" alt="icon">
+        {{/if}}
+      </div>
+      {{#if (and isEditable (not isLocked))}}
+        <input type="text" name="name" value="{{item.name}}" class="item-name-input"/>
+      {{else}}
+        <div class="item-name-display" style="color:{{sinColor}}">{{item.name}}</div>
+      {{/if}}
+    </div>
+
+    {{!-- ── 第二行：类型图标 + 骰子公式 ──────────────────────────── --}}
+    <div class="item-row-2 skill-row-2">
+      {{#if (and isEditable (not isLocked))}}
+        {{!-- 分类下拉 --}}
+        {{#if isDefense}}
+          <select name="system.category">
+            {{#each defenseCategories}}
+              <option value="{{@key}}" {{#eq @key ../system.category}}selected{{/eq}}>{{this}}</option>
+            {{/each}}
+          </select>
+        {{else}}
+          <select name="system.category">
+            {{#each attackCategories}}
+              <option value="{{@key}}" {{#eq @key ../system.category}}selected{{/eq}}>{{this}}</option>
+            {{/each}}
+          </select>
+        {{/if}}
+        <input type="text" name="system.diceFormula" value="{{system.diceFormula}}" class="dice-formula-input" placeholder="1D4+2"/>
+      {{else}}
+        {{#if categoryIcon}}
+          <img src="{{categoryIcon}}" class="category-icon" width="22" height="22" alt="type">
+        {{/if}}
+        <span class="dice-formula-display">{{diceFormulaDisplay}}</span>
+      {{/if}}
+
+      {{!-- 标签胶囊 --}}
+      {{#if (and isEditable (not isLocked))}}
+        <input type="text" name="system.tags" value="{{system.tags}}" class="tags-input-sm" placeholder="标签1/标签2"/>
+      {{else}}
+        <span class="skill-tags">
+          {{#each (split system.tags '/')}}
+            <span class="tag">{{trim this}}</span>
+          {{/each}}
+        </span>
+      {{/if}}
+    </div>
+
+    {{!-- ── 罪孽属性（编辑模式） ──────────────────────────────────── --}}
+    {{#if (and isEditable (not isLocked))}}
+      <div class="skill-sin-row">
+        <label>罪孽</label>
+        <select name="system.sinType">
+          {{#each skillSinTypes}}
+            <option value="{{@key}}" {{#eq @key ../system.sinType}}selected{{/eq}}>{{this}}</option>
+          {{/each}}
+        </select>
+        {{!-- 技能等级（仅基础技能） --}}
+        {{#if isBasic}}
+          <label style="margin-left:8px">等级</label>
+          <select name="system.level">
+            <option value="1" {{#eq system.level 1}}selected{{/eq}}>1</option>
+            <option value="2" {{#eq system.level 2}}selected{{/eq}}>2</option>
+            <option value="3" {{#eq system.level 3}}selected{{/eq}}>3</option>
+          </select>
+        {{/if}}
+        {{!-- EGO等级 --}}
+        {{#if isEgo}}
+          <label style="margin-left:8px">EGO等级</label>
+          <select name="system.egoDiceRating">
+            {{#each config.EGO_GRADES}}
+              <option value="{{this}}" {{#eq this ../system.egoDiceRating}}selected{{/eq}}>{{this}}</option>
+            {{/each}}
+          </select>
+        {{/if}}
+      </div>
+    {{/if}}
+
+    {{!-- ── EGO 专有行：消耗 + 修正 ──────────────────────────────── --}}
+    {{#if isEgo}}
+      <div class="ego-extra-row">
+        {{!-- 罪孽消耗 --}}
+        <div class="ego-cost-block">
+          {{#each sinCosts}}
+            <div class="ego-cost-item">
+              {{#if ../../isEditable}}
+                <select name="system.sinCost.{{@index}}.sin" class="sin-cost-sel">
+                  {{#each ../../config.SINS}}
+                    <option value="{{this}}" {{#eq this ../../../../sinCosts.@../sin}}selected{{/eq}}>{{lookup ../../../../config.SIN_LABELS this}}</option>
+                  {{/each}}
+                </select>
+                <input type="number" name="system.sinCost.{{@index}}.amount" value="{{amount}}" class="sin-cost-input" min="0" style="width:40px"/>
+                {{#if ../../isEditable}}
+                  <button class="sin-cost-remove-btn" data-idx="{{@index}}">×</button>
+                {{/if}}
+              {{else}}
+                <img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/{{sin}}_icon.webp" width="16" height="16" alt="{{sin}}">
+                <span>{{amount}}</span>
+              {{/if}}
+            </div>
+          {{/each}}
+          {{#if isEditable}}
+            <button class="sin-cost-add-btn">＋</button>
+          {{/if}}
+        </div>
+
+        {{!-- 理智消耗 --}}
+        {{#if (and isEditable (not isLocked))}}
+          <div class="form-group-inline">
+            <label>理智消耗</label>
+            <input type="number" name="system.sanityCost" value="{{system.sanityCost}}" style="width:50px" min="0"/>
+          </div>
+        {{else}}
+          {{#if system.sanityCost}}
+            <div class="ego-sanity-cost">理智 -{{system.sanityCost}}</div>
+          {{/if}}
+        {{/if}}
+
+        {{!-- 罪孽抗性修正 --}}
+        <div class="ego-resist-block">
+          {{#each egoResChanges}}
+            <div class="ego-resist-item">
+              {{#if ../../isEditable}}
+                <select name="system.egoResistanceChange.{{@index}}.sin">
+                  {{#each ../../../../config.SINS}}
+                    <option value="{{this}}" {{#eq this ../../../../egoResChanges.@../sin}}selected{{/eq}}>{{lookup ../../../../config.SIN_LABELS this}}</option>
+                  {{/each}}
+                </select>
+                <select name="system.egoResistanceChange.{{@index}}.value">
+                  {{#each ../../../../config.RESISTANCE_VALUES}}
+                    <option value="{{this}}" {{#eq this ../../../../egoResChanges.@../value}}selected{{/eq}}>{{this}}</option>
+                  {{/each}}
+                </select>
+                <button class="res-change-remove-btn" data-idx="{{@index}}">×</button>
+              {{else}}
+                <span>{{sin}}×{{value}}</span>
+              {{/if}}
+            </div>
+          {{/each}}
+          {{#if isEditable}}
+            <button class="res-change-add-btn">＋</button>
+          {{/if}}
+        </div>
+      </div>
+    {{/if}}
+
+    {{!-- ── 基础技能：加重值 ──────────────────────────────────────── --}}
+    {{#unless isDefense}}
+      <div class="weight-row">
+        {{#if (and isEditable (not isLocked))}}
+          <label>加重值</label>
+          <input type="number" name="system.weight" value="{{system.weight}}" class="weight-input" min="0" max="8" style="width:45px"/>
+        {{else}}
+          {{#each weightSquares}}
+            <span class="weight-sq" title="加重值"></span>
+          {{/each}}
+        {{/if}}
+      </div>
+    {{/unless}}
+
+    {{!-- ── 描述区 ──────────────────────────────────────────────── --}}
+    <div class="item-desc-block">
+      {{#if (and isEditable (not isLocked))}}
+        {{editor system.description target="system.description" button=false editable=true engine="prosemirror"}}
+      {{else}}
+        <div class="item-desc-display">{{{system.description}}}</div>
+      {{/if}}
+    </div>
+
+    {{!-- ── 底部按钮栏 ──────────────────────────────────────────── --}}
+    <div class="item-sheet-footer">
+      <div class="footer-actions">
+        <button class="item-send-chat sheet-btn">发送聊天框</button>
+        <button class="item-start-clash sheet-btn">发起对抗</button>
+        <button class="activity-edit-toggle sheet-btn">编辑激活效果 {{#if activitiesExpanded}}▲{{else}}▼{{/if}}</button>
+      </div>
+      <div class="footer-stellar">
+        <i class="fas fa-star"></i>
+        {{#if (and isEditable (not isLocked))}}
+          <input type="number" name="system.stellarCost" value="{{system.stellarCost}}" class="stellar-edit-input" min="0" style="width:40px"/>
+        {{else}}
+          <span>{{system.stellarCost}}</span>
+        {{/if}}
+      </div>
+    </div>
+
+    {{!-- ── 活动编辑器（折叠区） ──────────────────────────────── --}}
+    {{#if activitiesExpanded}}
+      {{> systems/limbusCompany_FVTT/templates/partials/activity-editor.hbs}}
+    {{/if}}
+
+  </div>{{!-- /skill-card-main --}}
+
+  {{!-- ══ 相关技能卡片（展开） ════════════════════════════════════════ --}}
+  {{#if relatedExpanded}}
+    <div class="related-skill-divider">
+      <span>相关技能</span>
+    </div>
+
+    {{#if relatedSkillItem}}
+      <div class="skill-card-related" style="border-color:#2A7A2A">
+        <div class="item-row-1">
+          <div class="skill-slot-octa skill-icon-big" style="border-color:#2A7A2A">
+            <img src="{{relatedSkillItem.img}}" class="skill-slot-img" alt="{{relatedSkillItem.name}}">
+          </div>
+          <div class="item-name-display" style="color:#4CAF50">{{relatedSkillItem.name}}</div>
+        </div>
+        <div class="item-row-2 skill-row-2">
+          {{#if relatedSkillItem.categoryIcon}}
+            <img src="{{relatedSkillItem.categoryIcon}}" class="category-icon" width="22" height="22" alt="">
+          {{/if}}
+          <span class="dice-formula-display">{{fmtDice relatedSkillItem.system.diceFormula}}</span>
+        </div>
+        {{!-- 触发条件 --}}
+        {{#if (and isEditable (not isLocked))}}
+          <div class="form-group">
+            <label>触发条件</label>
+            <select name="system.relatedSkill.trigger">
+              {{#each relatedTriggers}}
+                <option value="{{this}}" {{#eq this ../../system.relatedSkill.trigger}}selected{{/eq}}>{{this}}</option>
+              {{/each}}
+            </select>
+          </div>
+          <div class="form-group">
+            <label>技能UUID</label>
+            <input type="text" name="system.relatedSkill.itemUuid" value="{{system.relatedSkill.itemUuid}}" placeholder="拖拽技能到此绑定" class="uuid-input"/>
+          </div>
+        {{else}}
+          <div class="related-trigger-label">触发条件：{{system.relatedSkill.trigger}}</div>
+          <div class="item-desc-display">{{{relatedSkillItem.system.description}}}</div>
+        {{/if}}
+      </div>
+    {{else}}
+      {{!-- 无相关技能 → 编辑模式下可绑定 --}}
+      {{#if (and isEditable (not isLocked))}}
+        <div class="skill-card-related related-empty">
+          <div class="form-group">
+            <label>绑定相关技能（UUID）</label>
+            <input type="text" name="system.relatedSkill.itemUuid" value="{{system.relatedSkill.itemUuid}}" placeholder="拖拽技能到此处或输入UUID" class="uuid-input"/>
+          </div>
+          <div class="form-group">
+            <label>触发条件</label>
+            <select name="system.relatedSkill.trigger">
+              {{#each relatedTriggers}}
+                <option value="{{this}}">{{this}}</option>
+              {{/each}}
+            </select>
+          </div>
+        </div>
+      {{else}}
+        <div class="related-empty-tip">暂无相关技能，解锁编辑模式后可绑定</div>
+      {{/if}}
+    {{/if}}
+  {{/if}}{{!-- /relatedExpanded --}}
+
+</div>
