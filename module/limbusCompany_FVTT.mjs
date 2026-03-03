@@ -214,19 +214,24 @@ Hooks.once("init", () => {
   /** 判断两个值是否相等 */
   Handlebars.registerHelper("eq", (a, b) => a === b);
 
-  /** 逻辑与（用于 HBS 子表达式：(and a b)） */
-  Handlebars.registerHelper("and", (a, b) => a && b);
+  /** 逻辑与（子表达式用：(and a b)） */
+  Handlebars.registerHelper("and", (a, b) => Boolean(a) && Boolean(b));
 
-  /** 逻辑非（用于 HBS 子表达式：(not a)） */
+  /** 逻辑非（子表达式用：(not a)） */
   Handlebars.registerHelper("not", (a) => !a);
 
-  /** 分割字符串为数组（用于标签渲染：(split str sep)） */
-  Handlebars.registerHelper("split", (str, sep) =>
-    (str ?? "").split(sep).filter(Boolean)
-  );
+  /** 分割字符串为数组（SafeString 安全）*/
+  Handlebars.registerHelper("split", (str, sep) => {
+    const s    = str instanceof Handlebars.SafeString ? str.toString() : String(str ?? "");
+    const sep2 = sep instanceof Handlebars.SafeString ? sep.toString() : String(sep ?? "/");
+    return s.split(sep2).filter(Boolean);
+  });
 
   /** 去除字符串首尾空格 */
-  Handlebars.registerHelper("trim", (str) => (str ?? "").trim());
+  Handlebars.registerHelper("trim", (str) => {
+    const s = str instanceof Handlebars.SafeString ? str.toString() : String(str ?? "");
+    return s.trim();
+  });
 
   /** 判断值是否大于 */
   Handlebars.registerHelper("gt", (a, b) => a > b);
