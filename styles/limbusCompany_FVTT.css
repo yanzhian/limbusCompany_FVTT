@@ -1,6 +1,25 @@
 /* ============================================================
    边狱巴士都市规则 — 主样式表
    Foundry VTT v13+ 自定义游戏系统
+   ============================================================
+
+   目录
+   ─────────────────────────────────────────────────────────────
+   §0  CSS 变量（颜色系统）
+   §1  全局基础重置（.limbuscompany 作用域）
+   §2  FVTT 全局 UI 覆盖（无作用域限制）
+       §2-A  应用窗口 / 标题栏
+       §2-B  侧边栏 & 导航标签
+       §2-C  聊天窗口（#chat-log / .chat-message）
+       §2-D  聊天输入控件
+       §2-E  骰子结果（.dice-roll）
+       §2-F  对话框（.dialog）
+       §2-G  右键菜单（nav.context-menu）
+       §2-H  通知（#notifications）
+       §2-I  Hotbar & 宏按钮
+       §2-J  下拉 <select> & 滚动条（全局）
+       §2-K  Tooltip & Prosemirror 编辑器
+   §3  系统组件（.limbuscompany 作用域）
    ============================================================ */
 
 /* ─── CSS 变量（颜色系统） ─────────────────────────────────── */
@@ -989,3 +1008,1348 @@
 .limbuscompany .text-xs    { font-size: 0.65rem; }
 .limbuscompany .font-bold  { font-weight: bold; }
 .limbuscompany .text-center { text-align: center; }
+
+/* ============================================================
+   §2  FVTT 全局 UI 覆盖
+   将 Foundry VTT 默认界面统一为边狱风格
+   ============================================================ */
+
+/* ─── §2-A  应用窗口 / 标题栏 ──────────────────────────────── */
+
+/* 所有应用窗口（角色卡/物品卡/设置等）*/
+.app,
+.window-app {
+  background: linear-gradient(180deg, var(--bg-darkest) 0%, var(--bg-mid) 50%, var(--bg-darkest) 100%);
+  border: 1px solid var(--border-gold);
+  border-radius: 4px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.85);
+  color: var(--text-main);
+  font-family: var(--font-main);
+}
+
+/* 窗口标题栏 */
+.app .window-header,
+.window-app .window-header {
+  background: var(--bg-title-bar);
+  border-bottom: 1px solid var(--border-gold);
+  color: #fff;
+  font-family: var(--font-main);
+  padding: 0 8px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+}
+
+.app .window-header .window-title,
+.window-app .window-header .window-title {
+  color: #fff;
+  font-size: 0.9rem;
+  font-weight: bold;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 标题栏按钮（关闭/最小化等） */
+.app .window-header .header-button,
+.window-app .window-header .header-button,
+.app .window-header a,
+.window-app .window-header a {
+  color: #ccc;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 2px 6px;
+  font-size: 0.85rem;
+  transition: color 0.15s;
+}
+
+.app .window-header .header-button:hover,
+.window-app .window-header .header-button:hover,
+.app .window-header a:hover,
+.window-app .window-header a:hover {
+  color: var(--gold-active);
+}
+
+/* 窗口内容区 */
+.app .window-content,
+.window-app .window-content {
+  background: transparent;
+  color: var(--text-main);
+  font-family: var(--font-main);
+  padding: 0;
+}
+
+/* 窗口 resize 把手 */
+.app .window-resizable-handle,
+.window-app .window-resizable-handle {
+  background: var(--border-gold);
+  opacity: 0.4;
+}
+
+/* ─── §2-B  侧边栏 & 导航标签 ─────────────────────────────── */
+
+/* 主侧边栏容器 */
+#sidebar {
+  background: var(--bg-darkest);
+  border-left: 1px solid var(--border-gold);
+}
+
+/* 侧边栏 Tab 导航栏 */
+#sidebar-tabs {
+  background: var(--bg-darkest);
+  border-bottom: 1px solid var(--border-gold);
+}
+
+#sidebar-tabs .item {
+  color: var(--text-sub);
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  padding: 6px 10px;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+#sidebar-tabs .item:hover {
+  color: var(--text-main);
+}
+
+#sidebar-tabs .item.active {
+  color: var(--gold-active);
+  border-bottom-color: var(--gold-active);
+}
+
+/* 侧边栏 Tab 内容面板 */
+.sidebar-tab {
+  background: var(--bg-darkest);
+}
+
+/* 侧边栏方向按钮（收起/展开侧边栏） */
+#sidebar #sidebar-toggle,
+#sidebar .collapse {
+  background: var(--bg-darkest);
+  border: 1px solid var(--border-gold);
+  color: var(--text-sub);
+  cursor: pointer;
+}
+
+#sidebar #sidebar-toggle:hover,
+#sidebar .collapse:hover {
+  color: var(--gold-active);
+}
+
+/* 侧边栏内通用目录标题 */
+.directory .directory-header,
+.sidebar-tab .directory-header {
+  background: var(--bg-title-bar);
+  border-bottom: 1px solid var(--border-gold);
+  color: var(--text-main);
+  font-size: 0.8rem;
+  font-weight: bold;
+  padding: 6px 8px;
+  display: flex;
+  align-items: center;
+}
+
+/* 目录搜索框 */
+.directory .directory-header input.search,
+.sidebar-tab input[type="search"],
+.sidebar-tab input[type="text"] {
+  background: var(--bg-panel);
+  border: 1px solid var(--border-gold);
+  color: var(--text-main);
+  font-family: var(--font-main);
+  border-radius: 2px;
+  padding: 2px 6px;
+  font-size: 0.75rem;
+}
+
+.directory .directory-header input.search::placeholder,
+.sidebar-tab input::placeholder {
+  color: var(--text-dim);
+}
+
+/* 目录列表项 */
+.directory-list .directory-item,
+.directory-list .entity,
+.sidebar-tab li.entity {
+  border-bottom: 1px solid rgba(95, 62, 33, 0.3);
+  color: var(--text-main);
+  font-size: 0.8rem;
+  padding: 3px 6px;
+  transition: background 0.1s;
+}
+
+.directory-list .directory-item:hover,
+.directory-list .entity:hover,
+.sidebar-tab li.entity:hover {
+  background: rgba(95, 62, 33, 0.25);
+}
+
+.directory-list .directory-item.selected,
+.directory-list .entity.selected {
+  background: rgba(95, 62, 33, 0.5);
+  color: var(--gold-active);
+}
+
+/* 目录列表中的控制按钮 */
+.directory-list .document-controls,
+.directory-list .entity-controls {
+  display: flex;
+  gap: 2px;
+}
+
+.directory-list .document-controls a,
+.directory-list .entity-controls a {
+  color: var(--text-sub);
+  font-size: 0.7rem;
+  padding: 1px 3px;
+  transition: color 0.1s;
+}
+
+.directory-list .document-controls a:hover,
+.directory-list .entity-controls a:hover {
+  color: var(--gold-active);
+}
+
+/* ─── §2-C  聊天窗口 ───────────────────────────────────────── */
+
+/* 聊天日志滚动区 */
+#chat-log {
+  background: var(--bg-darkest);
+  border: none;
+  padding: 6px 4px;
+}
+
+/* 单条聊天消息容器 */
+#chat-log .chat-message,
+.chat-message {
+  background: linear-gradient(180deg, #1A1510 0%, #141008 100%);
+  border: 1px solid var(--border-gold);
+  border-radius: 4px;
+  margin-bottom: 6px;
+  color: var(--text-main);
+  font-family: var(--font-main);
+  font-size: 0.8rem;
+  overflow: hidden;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.6);
+}
+
+/* 消息头部（头像 + 发送者 + 时间） */
+.chat-message .message-header,
+.chat-message header {
+  background: var(--bg-title-bar);
+  border-bottom: 1px solid var(--border-gold);
+  display: flex;
+  align-items: center;
+  padding: 4px 8px;
+  gap: 6px;
+}
+
+/* 发送者头像 */
+.chat-message .message-header img,
+.chat-message header img {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 1px solid var(--border-gold);
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+/* 发送者名字 */
+.chat-message .message-sender,
+.chat-message .alias {
+  color: var(--text-main);
+  font-weight: bold;
+  font-size: 0.82rem;
+  flex: 1;
+}
+
+/* 时间戳 */
+.chat-message .message-timestamp,
+.chat-message time {
+  color: var(--text-dim);
+  font-size: 0.65rem;
+}
+
+/* 消息内容区 */
+.chat-message .message-content,
+.chat-message .content {
+  padding: 8px 10px;
+  color: var(--text-main);
+  line-height: 1.5;
+}
+
+.chat-message .message-content p,
+.chat-message .content p {
+  margin: 0 0 4px;
+}
+
+.chat-message .message-content a,
+.chat-message .content a {
+  color: var(--gold-active);
+  text-decoration: none;
+}
+
+.chat-message .message-content a:hover,
+.chat-message .content a:hover {
+  text-decoration: underline;
+}
+
+/* 系统消息（OOC / emote） */
+.chat-message.ooc .message-header {
+  background: #1A1F2A;
+  border-bottom-color: #3A4A6B;
+}
+
+.chat-message.emote .message-header {
+  background: #1A2020;
+  border-bottom-color: #3A6060;
+}
+
+/* 伤害/治疗聊天消息特殊着色 */
+.chat-message.damage-card .message-header {
+  background: #2A0B0B;
+  border-bottom-color: var(--red-danger);
+}
+
+/* 消息内展开/折叠按钮 */
+.chat-message .card-buttons button,
+.chat-message .message-content button {
+  background: var(--bg-title-bar);
+  border: 1px solid var(--border-gold);
+  color: var(--text-main);
+  font-family: var(--font-main);
+  font-size: 0.72rem;
+  padding: 2px 10px;
+  cursor: pointer;
+  border-radius: 2px;
+  margin: 2px 2px 0 0;
+  transition: background 0.15s;
+}
+
+.chat-message .card-buttons button:hover,
+.chat-message .message-content button:hover {
+  background: var(--border-gold);
+}
+
+/* ─── §2-D  聊天输入控件 ───────────────────────────────────── */
+
+/* 底部整体控件栏 */
+#chat-controls,
+.chat-controls {
+  background: var(--bg-bottom);
+  border-top: 1px solid var(--border-gold);
+  padding: 4px 6px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* 聊天输入框 */
+#chat-message,
+.chat-message-input {
+  background: var(--bg-panel) !important;
+  border: 1px solid var(--border-gold) !important;
+  color: var(--text-main) !important;
+  font-family: var(--font-main) !important;
+  font-size: 0.8rem !important;
+  border-radius: 2px !important;
+  padding: 4px 8px !important;
+  resize: none;
+  flex: 1;
+}
+
+#chat-message::placeholder,
+.chat-message-input::placeholder {
+  color: var(--text-dim) !important;
+}
+
+#chat-message:focus,
+.chat-message-input:focus {
+  outline: 1px solid var(--gold-active) !important;
+  border-color: var(--gold-active) !important;
+}
+
+/* 聊天模式下拉（OOC / IC / emote 选择） */
+#chat-controls select,
+.chat-controls select,
+select#chat-whisper-to {
+  background: var(--bg-panel) !important;
+  border: 1px solid var(--border-gold) !important;
+  color: var(--text-main) !important;
+  font-family: var(--font-main) !important;
+  font-size: 0.75rem !important;
+  border-radius: 2px !important;
+  padding: 2px 4px !important;
+}
+
+/* 发送按钮 */
+#chat-controls button[type="submit"],
+.chat-controls button,
+.send-message {
+  background: var(--bg-title-bar) !important;
+  border: 1px solid var(--border-gold) !important;
+  color: var(--text-main) !important;
+  font-family: var(--font-main) !important;
+  font-size: 0.75rem !important;
+  padding: 4px 10px !important;
+  cursor: pointer !important;
+  border-radius: 2px !important;
+  transition: background 0.15s !important;
+}
+
+#chat-controls button[type="submit"]:hover,
+.chat-controls button:hover {
+  background: var(--border-gold) !important;
+}
+
+/* 聊天图标按钮（骰子 / 清空等） */
+#chat-controls .chat-control-icon,
+#chat-controls a {
+  color: var(--text-sub);
+  font-size: 0.9rem;
+  cursor: pointer;
+  padding: 2px 4px;
+  transition: color 0.15s;
+  background: none;
+  border: none;
+}
+
+#chat-controls .chat-control-icon:hover,
+#chat-controls a:hover {
+  color: var(--gold-active);
+}
+
+/* ─── §2-E  骰子结果（.dice-roll） ────────────────────────── */
+
+/* 骰子公式块 */
+.dice-roll {
+  background: var(--bg-panel);
+  border: 1px solid var(--border-gold);
+  border-radius: 3px;
+  padding: 4px 8px;
+  margin: 4px 0;
+  font-family: var(--font-mono);
+}
+
+.dice-roll .dice-formula {
+  color: var(--text-sub);
+  font-size: 0.75rem;
+  border-bottom: 1px solid rgba(95, 62, 33, 0.4);
+  padding-bottom: 3px;
+  margin-bottom: 3px;
+}
+
+/* 骰子面结果行 */
+.dice-roll .dice-tooltip {
+  color: var(--text-main);
+  font-size: 0.72rem;
+}
+
+.dice-roll .dice-tooltip .part-header {
+  color: var(--text-sub);
+}
+
+.dice-roll .dice-tooltip .part-total {
+  color: var(--gold-active);
+  font-weight: bold;
+}
+
+.dice-roll .dice-tooltip .max {
+  color: var(--gold-active);
+}
+
+.dice-roll .dice-tooltip .min {
+  color: var(--red-danger);
+}
+
+/* 总计结果 */
+.dice-total {
+  font-size: 1.3rem;
+  font-weight: bold;
+  color: var(--gold-active);
+  text-align: right;
+  padding: 2px 4px;
+}
+
+/* 判定成功/失败着色 */
+.dice-total.success { color: var(--gold-active); }
+.dice-total.failure { color: var(--red-danger); }
+
+/* ─── §2-F  对话框（.dialog） ──────────────────────────────── */
+
+/* 通用弹窗容器 */
+.dialog {
+  background: linear-gradient(180deg, var(--bg-darkest) 0%, var(--bg-mid) 100%);
+  border: 1px solid var(--border-gold);
+  border-radius: 4px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.85);
+  color: var(--text-main);
+  font-family: var(--font-main);
+}
+
+/* 弹窗标题栏 */
+.dialog .window-header,
+.dialog header {
+  background: var(--bg-title-bar);
+  border-bottom: 1px solid var(--border-gold);
+  color: #fff;
+  padding: 0 8px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+}
+
+.dialog .window-title,
+.dialog header h4 {
+  color: #fff;
+  font-size: 0.9rem;
+  font-weight: bold;
+  flex: 1;
+}
+
+/* 弹窗内容区 */
+.dialog .dialog-content,
+.dialog .window-content {
+  padding: 10px 12px;
+  color: var(--text-main);
+}
+
+/* 弹窗内标签 */
+.dialog label {
+  color: var(--text-sub);
+  font-size: 0.75rem;
+  display: block;
+  margin-bottom: 2px;
+}
+
+/* 弹窗内输入框 */
+.dialog input[type="text"],
+.dialog input[type="number"],
+.dialog textarea {
+  background: var(--bg-panel);
+  border: 1px solid var(--border-gold);
+  color: var(--text-main);
+  font-family: var(--font-main);
+  font-size: 0.8rem;
+  border-radius: 2px;
+  padding: 3px 6px;
+  width: 100%;
+}
+
+.dialog input:focus,
+.dialog textarea:focus {
+  outline: 1px solid var(--gold-active);
+  border-color: var(--gold-active);
+}
+
+/* 弹窗下拉框 */
+.dialog select {
+  background: var(--bg-panel);
+  border: 1px solid var(--border-gold);
+  color: var(--text-main);
+  font-family: var(--font-main);
+  font-size: 0.8rem;
+  border-radius: 2px;
+  padding: 3px 6px;
+  width: 100%;
+}
+
+/* 弹窗按钮区 */
+.dialog .dialog-buttons,
+.dialog footer {
+  border-top: 1px solid var(--border-gold);
+  padding: 8px 12px;
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  background: rgba(11, 7, 7, 0.4);
+}
+
+.dialog .dialog-buttons button,
+.dialog footer button {
+  background: var(--bg-title-bar);
+  border: 1px solid var(--border-gold);
+  color: var(--text-main);
+  font-family: var(--font-main);
+  font-size: 0.8rem;
+  padding: 5px 18px;
+  cursor: pointer;
+  border-radius: 2px;
+  flex: 1;
+  transition: background 0.15s;
+}
+
+.dialog .dialog-buttons button:hover,
+.dialog footer button:hover {
+  background: var(--border-gold);
+}
+
+/* 主要确认按钮（第一个按钮） */
+.dialog .dialog-buttons button.default,
+.dialog .dialog-buttons button[data-button="yes"],
+.dialog .dialog-buttons button[data-button="ok"],
+.dialog .dialog-buttons button[data-button="confirm"] {
+  background: var(--gold-mid);
+  border-color: var(--gold-active);
+  color: var(--bg-darkest);
+  font-weight: bold;
+}
+
+.dialog .dialog-buttons button.default:hover,
+.dialog .dialog-buttons button[data-button="yes"]:hover,
+.dialog .dialog-buttons button[data-button="ok"]:hover,
+.dialog .dialog-buttons button[data-button="confirm"]:hover {
+  background: var(--gold-active);
+}
+
+/* 危险操作按钮 */
+.dialog .dialog-buttons button[data-button="delete"],
+.dialog .dialog-buttons button[data-button="no"] {
+  background: var(--red-mid);
+  border-color: var(--red-danger);
+  color: #fff;
+}
+
+.dialog .dialog-buttons button[data-button="delete"]:hover {
+  background: var(--red-danger);
+}
+
+/* ─── §2-G  右键菜单 ───────────────────────────────────────── */
+
+nav.context-menu,
+.context-menu {
+  background: var(--bg-mid);
+  border: 1px solid var(--border-gold);
+  border-radius: 3px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.8);
+  padding: 2px 0;
+  font-family: var(--font-main);
+  min-width: 140px;
+}
+
+nav.context-menu .context-item,
+.context-menu li {
+  color: var(--text-main);
+  font-size: 0.78rem;
+  padding: 5px 12px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: background 0.1s;
+  border: none;
+  background: none;
+}
+
+nav.context-menu .context-item:hover,
+.context-menu li:hover {
+  background: rgba(95, 62, 33, 0.5);
+  color: var(--gold-active);
+}
+
+nav.context-menu .context-item i,
+.context-menu li i {
+  width: 14px;
+  text-align: center;
+  color: var(--text-sub);
+}
+
+nav.context-menu .context-item:hover i,
+.context-menu li:hover i {
+  color: var(--gold-active);
+}
+
+/* 分割线 */
+nav.context-menu hr,
+.context-menu hr {
+  border: none;
+  border-top: 1px solid rgba(95, 62, 33, 0.5);
+  margin: 2px 0;
+}
+
+/* ─── §2-H  通知（#notifications）─────────────────────────── */
+
+#notifications {
+  pointer-events: none;
+}
+
+#notifications .notification {
+  background: var(--bg-mid);
+  border: 1px solid var(--border-gold);
+  border-radius: 3px;
+  color: var(--text-main);
+  font-family: var(--font-main);
+  font-size: 0.8rem;
+  padding: 6px 12px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.7);
+  pointer-events: auto;
+}
+
+#notifications .notification.info {
+  border-left: 3px solid var(--border-gold);
+}
+
+#notifications .notification.warning {
+  background: #2A1F00;
+  border-color: var(--gold-active);
+  border-left: 3px solid var(--gold-active);
+  color: var(--gold-active);
+}
+
+#notifications .notification.error {
+  background: #2A0808;
+  border-color: var(--red-danger);
+  border-left: 3px solid var(--red-danger);
+  color: var(--red-danger);
+}
+
+/* ─── §2-I  Hotbar & 宏按钮 ────────────────────────────────── */
+
+#hotbar {
+  background: var(--bg-darkest);
+  border-top: 1px solid var(--border-gold);
+}
+
+#hotbar .bar-controls,
+#hotbar .macro-key {
+  color: var(--text-sub);
+  font-family: var(--font-main);
+}
+
+.macro {
+  background: var(--bg-panel);
+  border: 1px solid var(--border-gold);
+  border-radius: 2px;
+  color: var(--text-main);
+  font-family: var(--font-main);
+  font-size: 0.65rem;
+  transition: border-color 0.15s;
+}
+
+.macro:hover {
+  border-color: var(--gold-active);
+}
+
+.macro .macro-name {
+  color: var(--text-sub);
+  font-size: 0.6rem;
+}
+
+.macro.hover,
+.macro:hover {
+  background: rgba(95, 62, 33, 0.3);
+}
+
+/* 热键小标签 */
+#hotbar .macro-key {
+  color: var(--text-dim);
+  font-size: 0.55rem;
+  background: rgba(11, 7, 7, 0.6);
+}
+
+/* 翻页按钮 */
+#hotbar #hotbar-directory-controls a,
+#hotbar #hotbar-page-controls a {
+  color: var(--text-sub);
+  font-size: 0.8rem;
+  transition: color 0.15s;
+}
+
+#hotbar #hotbar-directory-controls a:hover,
+#hotbar #hotbar-page-controls a:hover {
+  color: var(--gold-active);
+}
+
+/* ─── §2-J  全局 <select> & 滚动条 ─────────────────────────── */
+
+/* 全局 select 下拉框 */
+select {
+  background-color: var(--bg-panel);
+  border: 1px solid var(--border-gold);
+  color: var(--text-main);
+  font-family: var(--font-main);
+  font-size: 0.8rem;
+  padding: 2px 4px;
+  border-radius: 2px;
+  cursor: pointer;
+}
+
+select:focus {
+  outline: 1px solid var(--gold-active);
+  border-color: var(--gold-active);
+}
+
+select option {
+  background: var(--bg-mid);
+  color: var(--text-main);
+}
+
+select option:checked,
+select option:hover {
+  background: var(--border-gold);
+  color: var(--text-main);
+}
+
+/* 全局滚动条 */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-gold) transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: var(--border-gold);
+  border-radius: 2px;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--gold-mid);
+}
+
+/* ─── §2-K  Tooltip & ProseMirror 编辑器 ───────────────────── */
+
+/* 全局 tooltip */
+.tooltip,
+[data-tooltip]::after {
+  background: var(--bg-mid);
+  border: 1px solid var(--border-gold);
+  color: var(--text-main);
+  font-family: var(--font-main);
+  font-size: 0.72rem;
+  padding: 3px 8px;
+  border-radius: 2px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.7);
+}
+
+/* ProseMirror 富文本编辑器 */
+.editor,
+.prosemirror,
+prose-mirror {
+  background: var(--bg-panel);
+  border: 1px solid var(--border-gold);
+  border-radius: 2px;
+  color: var(--text-main);
+  font-family: var(--font-main);
+  font-size: 0.8rem;
+  min-height: 80px;
+}
+
+.editor-content,
+.prosemirror-content {
+  padding: 6px 8px;
+  color: var(--text-main);
+}
+
+/* ProseMirror 工具栏 */
+.editor-toolbar,
+.prosemirror-menu {
+  background: var(--bg-mid);
+  border-bottom: 1px solid var(--border-gold);
+  padding: 2px 4px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+}
+
+.editor-toolbar button,
+.prosemirror-menu button {
+  background: none;
+  border: 1px solid transparent;
+  color: var(--text-sub);
+  cursor: pointer;
+  font-size: 0.7rem;
+  padding: 1px 5px;
+  border-radius: 2px;
+  transition: all 0.1s;
+}
+
+.editor-toolbar button:hover,
+.prosemirror-menu button:hover {
+  background: rgba(95, 62, 33, 0.4);
+  color: var(--gold-active);
+  border-color: var(--border-gold);
+}
+
+.editor-toolbar button.active,
+.prosemirror-menu button.active {
+  background: var(--border-gold);
+  color: var(--text-main);
+}
+
+/* ─── §2-L  Players 列表（左下角） ─────────────────────────── */
+
+#players {
+  background: var(--bg-darkest);
+  border-top: 1px solid var(--border-gold);
+  font-family: var(--font-main);
+}
+
+#players h3 {
+  color: var(--text-sub);
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: 4px 6px 2px;
+  border-bottom: 1px solid rgba(95, 62, 33, 0.4);
+}
+
+#players .player {
+  color: var(--text-main);
+  font-size: 0.75rem;
+  padding: 2px 6px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+#players .player .player-active {
+  color: #4CAF50;
+}
+
+/* ─── §2-M  地图工具栏 & 场景控件（左侧工具栏） ─────────────── */
+
+#controls {
+  background: var(--bg-darkest);
+  border-right: 1px solid var(--border-gold);
+}
+
+#controls .control-tool {
+  color: var(--text-sub);
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 1rem;
+  padding: 6px;
+  transition: color 0.15s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+#controls .control-tool:hover {
+  color: var(--gold-active);
+  background: rgba(95, 62, 33, 0.2);
+}
+
+#controls .control-tool.active {
+  color: var(--gold-active);
+  background: rgba(95, 62, 33, 0.4);
+}
+
+/* ─── §2-N  导航栏（顶部场景导航） ─────────────────────────── */
+
+#navigation {
+  background: rgba(11, 7, 7, 0.9);
+  border-bottom: 1px solid var(--border-gold);
+}
+
+#navigation .scene.nav-item {
+  background: var(--bg-panel);
+  border: 1px solid var(--border-gold);
+  border-radius: 3px;
+  color: var(--text-main);
+  font-family: var(--font-main);
+  font-size: 0.75rem;
+  padding: 4px 10px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+#navigation .scene.nav-item:hover {
+  background: rgba(95, 62, 33, 0.4);
+  color: var(--gold-active);
+}
+
+#navigation .scene.nav-item.active,
+#navigation .scene.nav-item.view {
+  background: var(--bg-title-bar);
+  border-color: var(--gold-active);
+  color: var(--gold-active);
+}
+
+/* ─── §2-O  Combat Tracker ─────────────────────────────────── */
+
+#combat-tracker,
+.combat-tracker {
+  background: var(--bg-darkest);
+  color: var(--text-main);
+  font-family: var(--font-main);
+}
+
+.combat-tracker .combatant {
+  border-bottom: 1px solid rgba(95, 62, 33, 0.3);
+  padding: 4px 6px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: background 0.1s;
+}
+
+.combat-tracker .combatant:hover {
+  background: rgba(95, 62, 33, 0.2);
+}
+
+.combat-tracker .combatant.active {
+  background: rgba(95, 62, 33, 0.4);
+  border-left: 2px solid var(--gold-active);
+}
+
+.combat-tracker .combatant img {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 1px solid var(--border-gold);
+  object-fit: cover;
+}
+
+.combat-tracker .combatant .token-name,
+.combat-tracker .combatant .name {
+  flex: 1;
+  color: var(--text-main);
+  font-size: 0.78rem;
+}
+
+.combat-tracker .combatant .token-initiative,
+.combat-tracker .combatant .initiative {
+  color: var(--gold-active);
+  font-size: 0.78rem;
+  font-weight: bold;
+  min-width: 28px;
+  text-align: center;
+}
+
+/* 战斗控制按钮 */
+.combat-tracker .combat-controls a,
+#combat-tracker .combat-controls a {
+  color: var(--text-sub);
+  font-size: 0.85rem;
+  cursor: pointer;
+  padding: 2px 5px;
+  transition: color 0.15s;
+  background: none;
+  border: none;
+}
+
+.combat-tracker .combat-controls a:hover,
+#combat-tracker .combat-controls a:hover {
+  color: var(--gold-active);
+}
+
+/* ─── §2-P  全局按钮 & 链接重置 ─────────────────────────────── */
+
+/* 确保所有 FVTT 默认按钮继承本系统风格 */
+button:not(.sheet button):not(.dialog button):not(.btn) {
+  font-family: var(--font-main);
+}
+
+/* Foundry 通用链接按钮 */
+a.entity-link,
+a.content-link,
+.content-link {
+  background: rgba(95, 62, 33, 0.3);
+  border: 1px solid var(--border-gold);
+  border-radius: 2px;
+  color: var(--text-main);
+  padding: 0 4px;
+  font-size: 0.8em;
+  text-decoration: none;
+  transition: background 0.15s;
+}
+
+a.entity-link:hover,
+a.content-link:hover,
+.content-link:hover {
+  background: rgba(95, 62, 33, 0.6);
+  color: var(--gold-active);
+}
+
+/* ─── §2-Q  Settings & Setup 界面（系统设置/游戏世界设置） ───── */
+
+#settings-game,
+.settings-sidebar,
+.module-management {
+  background: var(--bg-darkest);
+  color: var(--text-main);
+  font-family: var(--font-main);
+}
+
+.settings-sidebar .settings-list .setting-item,
+.module-management .package-list .package {
+  border-bottom: 1px solid rgba(95, 62, 33, 0.3);
+  padding: 6px 8px;
+  color: var(--text-main);
+  font-size: 0.8rem;
+}
+
+.settings-sidebar input[type="checkbox"] {
+  accent-color: var(--gold-active);
+}
+
+/* ─── §2-R  文件浏览器（FilePicker）───────────────────────── */
+
+.filepicker {
+  background: var(--bg-mid);
+  border: 1px solid var(--border-gold);
+  color: var(--text-main);
+  font-family: var(--font-main);
+}
+
+.filepicker .filepicker-header,
+.filepicker header {
+  background: var(--bg-title-bar);
+  border-bottom: 1px solid var(--border-gold);
+}
+
+.filepicker .filepicker-body {
+  background: var(--bg-darkest);
+}
+
+.filepicker .directory .directory-item {
+  color: var(--text-main);
+  font-size: 0.78rem;
+}
+
+.filepicker .directory .directory-item:hover {
+  background: rgba(95, 62, 33, 0.3);
+}
+
+.filepicker .details .detail-item {
+  border: 1px solid var(--border-gold);
+  background: var(--bg-panel);
+}
+
+.filepicker input[type="text"] {
+  background: var(--bg-panel);
+  border: 1px solid var(--border-gold);
+  color: var(--text-main);
+}
+
+/* ─── §2-S  边狱特有聊天消息（自定义卡片覆盖） ─────────────── */
+
+/*
+ * 以下样式用于系统内部通过 ChatMessage.create() 发送的自定义聊天卡片。
+ * 这些类已在 limbusCompany_FVTT.css §3 区域定义（.limbuscompany .chat-clash 等），
+ * 此处额外将其放入 .chat-message 容器内适配 FVTT 的消息渲染结构。
+ */
+
+/* 对抗/鉴定卡片在聊天框内的容器 */
+.chat-message .limbuscompany-card {
+  background: linear-gradient(180deg, #1A1510 0%, #141008 100%);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.chat-message .limbuscompany-card .card-title {
+  background: var(--bg-title-bar);
+  color: var(--text-main);
+  font-size: 0.88rem;
+  font-weight: bold;
+  padding: 5px 10px;
+  border-bottom: 1px solid var(--border-gold);
+}
+
+.chat-message .limbuscompany-card .card-body {
+  padding: 8px 10px;
+  color: var(--text-main);
+  font-size: 0.8rem;
+}
+
+/* 鉴定结果：成功 */
+.chat-message .limbuscompany-card.result-success {
+  border-left: 3px solid var(--gold-active);
+}
+
+.chat-message .limbuscompany-card.result-success .result-text {
+  color: var(--gold-active);
+  font-size: 1.2rem;
+  font-weight: bold;
+  text-align: center;
+  padding: 8px 0;
+}
+
+/* 鉴定结果：完美成功 */
+.chat-message .limbuscompany-card.result-perfect .result-text {
+  color: var(--gold-active);
+  font-size: 1.5rem;
+  font-weight: bold;
+  text-align: center;
+  padding: 8px 0;
+  text-shadow: 0 0 12px var(--gold-active);
+}
+
+/* 鉴定结果：失败 */
+.chat-message .limbuscompany-card.result-fail {
+  background: linear-gradient(180deg, #2A0808 0%, #1A0404 100%);
+  border-left: 3px solid var(--red-danger);
+}
+
+.chat-message .limbuscompany-card.result-fail .result-text {
+  color: var(--red-danger);
+  font-size: 1.2rem;
+  font-weight: bold;
+  text-align: center;
+  padding: 8px 0;
+}
+
+/* 硬币行（鉴定结果中的硬币展示） */
+.chat-message .coin-result-row {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  padding: 4px 0;
+}
+
+.chat-message .coin-result-row img {
+  width: 24px;
+  height: 24px;
+  object-fit: contain;
+}
+
+/* 对抗卡片 */
+.chat-message .clash-card {
+  background: linear-gradient(180deg, #1A1510 0%, #141008 100%);
+  border: 1px solid var(--border-gold);
+  border-radius: 3px;
+}
+
+.chat-message .clash-card .clash-header {
+  font-size: 0.9rem;
+  font-weight: bold;
+  color: var(--gold-active);
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border-gold);
+}
+
+/* VS 布局（拼点对抗） */
+.chat-message .clash-vs-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-around;
+  padding: 8px 6px;
+  gap: 8px;
+}
+
+.chat-message .clash-vs-row .vs-text {
+  color: var(--text-sub);
+  font-size: 1rem;
+  font-weight: bold;
+}
+
+.chat-message .clash-vs-row .skill-slot {
+  width: 56px;
+  height: 56px;
+}
+
+/* 拼点数字结算 */
+.chat-message .clash-result-numbers {
+  text-align: center;
+  font-size: 1.4rem;
+  font-weight: bold;
+  padding: 4px;
+  color: var(--text-main);
+}
+
+.chat-message .clash-result-numbers .winner-score {
+  color: var(--gold-active);
+}
+
+.chat-message .clash-result-numbers .loser-score {
+  color: var(--red-danger);
+}
+
+/* 承受按钮（对抗聊天框内） */
+.chat-message .clash-action-btn {
+  display: inline-block;
+  margin: 4px 3px 6px;
+  padding: 4px 14px;
+  background: var(--bg-title-bar);
+  border: 1px solid var(--border-gold);
+  color: var(--text-main);
+  border-radius: 2px;
+  cursor: pointer;
+  font-size: 0.78rem;
+  font-family: var(--font-main);
+  transition: background 0.15s;
+}
+
+.chat-message .clash-action-btn:hover {
+  background: var(--border-gold);
+}
+
+.chat-message .clash-action-btn.danger {
+  background: var(--red-mid);
+  border-color: var(--red-danger);
+  color: #fff;
+}
+
+.chat-message .clash-action-btn.danger:hover {
+  background: var(--red-danger);
+}
+
+/* HP 结算卡片 */
+.chat-message .hp-settlement {
+  background: #1A0404;
+  border: 1px solid var(--red-danger);
+  border-radius: 3px;
+  padding: 8px 10px;
+  text-align: center;
+}
+
+.chat-message .hp-settlement .hp-title {
+  color: #fff;
+  font-size: 0.85rem;
+  font-weight: bold;
+  margin-bottom: 4px;
+}
+
+.chat-message .hp-settlement .hp-arrow {
+  font-size: 1.4rem;
+  font-weight: bold;
+  color: var(--text-main);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.chat-message .hp-settlement .hp-before { color: var(--text-sub); }
+.chat-message .hp-settlement .hp-after  { color: var(--red-danger); }
+
+/* 混乱触发警告 */
+.chat-message .chaos-warning {
+  background: #2A1500;
+  border-top: 1px solid var(--gold-active);
+  color: var(--gold-active);
+  font-size: 0.75rem;
+  padding: 4px 8px;
+  text-align: center;
+}
+
+/* 活动效果触发提示行 */
+.chat-message .activity-trigger-line {
+  color: var(--text-sub);
+  font-size: 0.72rem;
+  padding: 2px 6px;
+  border-top: 1px solid rgba(95, 62, 33, 0.3);
+  margin-top: 4px;
+}
+
+.chat-message .activity-trigger-line .trigger-tag {
+  color: var(--gold-active);
+  font-weight: bold;
+}
+
