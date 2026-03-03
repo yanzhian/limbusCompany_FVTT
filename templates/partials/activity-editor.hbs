@@ -1,0 +1,23 @@
+{{!-- activity-editor.hbs — 效果触发编辑器（折叠区，所有物品卡共用） --}}
+<div class="activity-editor-panel">
+  <div class="activity-editor-header">效果触发列表</div>
+
+  {{!-- 已有效果列表 --}}
+  <ul class="activity-list">
+    {{#each activities}}
+      <li class="activity-row" data-activity-idx="{{@index}}">
+        <span class="activity-name">{{name}}</span>
+        <span class="activity-trigger-badge">{{trigger}}</span>
+        <span class="activity-actions">
+          <button class="activity-edit-btn action-btn" title="编辑">编辑</button>
+          <button class="activity-delete-btn action-btn" title="删除">×</button>
+        </span>
+      </li>
+    {{else}}
+      <li class="activity-empty">暂无效果，点击添加</li>
+    {{/each}}
+  </ul>
+
+  {{!-- 添加按钮 --}}
+  <button class="activity-add-btn">＋ 添加效果</button>
+</div>

@@ -1,0 +1,142 @@
+{{!-- tab-items.hbs — 物品 Tab：九宫格装备栏 + 物品列表 --}}
+<div class="tab-inner tab-items-inner">
+
+  {{!-- ── 左侧：九宫格装备栏 ──────────────────────────────────────── --}}
+  <div class="equip-panel">
+    <div class="equip-grid">
+      {{#each equipmentGrid}}
+        <div class="equip-slot {{#if item}}equip-slot-filled{{else}}equip-slot-empty{{/if}}"
+             data-slot="{{slotIndex}}"
+             {{#if item}}
+               data-item-id="{{item._id}}"
+               data-item-name="{{item.name}}"
+             {{/if}}
+             title="{{#if item}}{{item.name}}{{else}}空槽位 {{slotIndex}}{{/if}}"
+             draggable="true">
+          {{#if item}}
+            <img src="{{item.img}}" alt="{{item.name}}" class="equip-slot-icon">
+            {{!-- 链接方向箭头 --}}
+            {{#if item.system.links.up}}    <div class="link-arrow up"></div>{{/if}}
+            {{#if item.system.links.down}}  <div class="link-arrow down"></div>{{/if}}
+            {{#if item.system.links.left}}  <div class="link-arrow left"></div>{{/if}}
+            {{#if item.system.links.right}} <div class="link-arrow right"></div>{{/if}}
+          {{else}}
+            <div class="equip-slot-placeholder"></div>
+          {{/if}}
+        </div>
+      {{/each}}
+    </div>
+  </div>
+
+  {{!-- ── 右侧：物品列表 ──────────────────────────────────────────── --}}
+  <div class="list-panel item-list-panel">
+
+    {{!-- 工具栏 --}}
+    <div class="list-toolbar">
+      <input type="text" class="item-search" placeholder="搜索物品…"/>
+      <div class="toolbar-btns">
+        <button class="filter-favorite-btn toolbar-btn" title="收藏筛选">★</button>
+        <button class="filter-toggle-btn toolbar-btn" title="过滤">▽</button>
+        <button class="filter-expand-all toolbar-btn" title="全部展开">⊞</button>
+        <button class="filter-collapse-all toolbar-btn" title="全部折叠">⊟</button>
+        <button class="item-create-btn toolbar-btn" title="新建物品" data-type="equipment">＋</button>
+      </div>
+
+      {{!-- 过滤面板（默认隐藏） --}}
+      <div class="filter-panel" style="display:none">
+        <div class="filter-section">
+          <div class="filter-section-label">分类</div>
+          <div class="filter-buttons">
+            <button class="filter-category-btn" data-category="weapon">武器</button>
+            <button class="filter-category-btn" data-category="accessory">饰品</button>
+            <button class="filter-category-btn" data-category="upper">上装</button>
+            <button class="filter-category-btn" data-category="lower">下装</button>
+            <button class="filter-category-btn" data-category="consumable">消耗品</button>
+            <button class="filter-category-btn" data-category="material">材料</button>
+            <button class="filter-category-btn" data-category="container">容器</button>
+          </div>
+        </div>
+        <div class="filter-section">
+          <div class="filter-section-label">链接</div>
+          <div class="filter-link-cross">
+            <div class="filter-link-row">
+              <button class="filter-link-btn" data-dir="up">↑</button>
+            </div>
+            <div class="filter-link-row">
+              <button class="filter-link-btn" data-dir="left">←</button>
+              <div class="filter-link-center"></div>
+              <button class="filter-link-btn" data-dir="right">→</button>
+            </div>
+            <div class="filter-link-row">
+              <button class="filter-link-btn" data-dir="down">↓</button>
+            </div>
+          </div>
+        </div>
+        <button class="filter-apply-btn">过滤</button>
+      </div>
+    </div>
+
+    {{!-- 列表表头 --}}
+    <div class="list-header item-list-header">
+      <span class="col-icon"></span>
+      <span class="col-name">名称</span>
+      <span class="col-cat">分类</span>
+      <span class="col-link">链接</span>
+      <span class="col-qty">数量</span>
+      <span class="col-stellar">星芒</span>
+      <span class="col-actions">操作</span>
+    </div>
+
+    {{!-- 分组列表 --}}
+    {{#each itemGroups}}
+      <div class="item-group" data-group-key="{{key}}">
+        <div class="group-header">
+          <span class="group-toggle">▼</span>
+          <span class="group-label">{{label}}</span>
+          <span class="group-count">({{items.length}})</span>
+        </div>
+        <ul class="group-body item-list">
+          {{#each items}}
+            <li class="item-row"
+                data-item-id="{{_id}}"
+                data-item-name="{{name}}"
+                data-type="{{type}}"
+                data-subtype="{{system.subtype}}"
+                data-links="{{#if system.links}}{{#if system.links.up}}up,{{/if}}{{#if system.links.down}}down,{{/if}}{{#if system.links.left}}left,{{/if}}{{#if system.links.right}}right{{/if}}{{/if}}">
+              {{!-- 图标 --}}
+              <span class="col-icon">
+                <img src="{{img}}" class="item-icon" data-item-id="{{_id}}" alt="{{name}}">
+              </span>
+              {{!-- 名称 --}}
+              <span class="col-name item-name">{{name}}</span>
+              {{!-- 分类 --}}
+              <span class="col-cat item-cat">{{system.category}}</span>
+              {{!-- 链接方向 --}}
+              <span class="col-link item-links">
+                {{#if system.links.up}}↑{{/if}}{{#if system.links.down}}↓{{/if}}{{#if system.links.left}}←{{/if}}{{#if system.links.right}}→{{/if}}
+              </span>
+              {{!-- 数量 --}}
+              <span class="col-qty item-qty">{{system.quantity}}</span>
+              {{!-- 星芒 --}}
+              <span class="col-stellar item-stellar">{{stellarCost}}</span>
+              {{!-- 操作 --}}
+              <span class="col-actions">
+                {{#unless (eq type 'material')}}
+                  {{#unless (eq type 'container')}}
+                    <button class="item-activate action-btn" data-item-id="{{_id}}" title="激活">▶</button>
+                  {{/unless}}
+                {{/unless}}
+                <button class="item-more-menu action-btn" data-item-id="{{_id}}" title="更多">⋮</button>
+                <button class="item-favorite action-btn {{#if isFavorite}}fav-active{{/if}}" data-item-id="{{_id}}" title="收藏">★</button>
+              </span>
+            </li>
+          {{/each}}
+        </ul>
+      </div>
+    {{else}}
+      <div class="list-empty">暂无物品</div>
+    {{/each}}
+
+  </div>{{!-- /item-list-panel --}}
+
+</div>

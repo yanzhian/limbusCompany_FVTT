@@ -1,0 +1,137 @@
+{{!-- tab-combat.hbs — 战斗 Tab：BUFF状态 + 战斗技能区 + 行动值 --}}
+<div class="tab-inner tab-combat-inner">
+
+  {{!-- ── 左侧：状态栏 ─────────────────────────────────────────────── --}}
+  <div class="combat-status-panel">
+
+    {{!-- BUFF 列表 --}}
+    <div class="buff-list-wrap">
+      <div class="buff-list-header">
+        <span class="buff-col-icon"></span>
+        <span class="buff-col-name">名称</span>
+        <span class="buff-col-intensity">强度</span>
+        <span class="buff-col-stacks">层数</span>
+        <span class="buff-col-actions">操作</span>
+      </div>
+      <ul class="buff-list">
+        {{#each buffs}}
+          <li class="buff-row" data-buff-id="{{id}}">
+            <span class="buff-col-icon">
+              {{#if icon}}
+                <img src="{{icon}}" width="16" height="16" alt="{{name}}">
+              {{else}}
+                <span class="buff-icon-placeholder"></span>
+              {{/if}}
+            </span>
+            <span class="buff-col-name buff-name">{{name}}</span>
+            <span class="buff-col-intensity">{{intensity}}</span>
+            <span class="buff-col-stacks">{{stacks}}</span>
+            <span class="buff-col-actions">
+              <button class="buff-trigger action-btn" title="触发">触发</button>
+              <button class="buff-delete action-btn" title="删除">×</button>
+            </span>
+          </li>
+        {{else}}
+          <li class="buff-empty">无状态</li>
+        {{/each}}
+      </ul>
+    </div>
+
+    {{!-- 添加BUFF按钮 --}}
+    <button class="add-buff-btn">＋ 添加新的状态BUFF</button>
+
+  </div>{{!-- /combat-status-panel --}}
+
+  {{!-- ── 右侧：战斗技能区 ──────────────────────────────────────────── --}}
+  <div class="combat-skills-panel">
+
+    {{!-- 基础技能区 --}}
+    <div class="combat-section basic-combat-section">
+      <div class="combat-section-header">
+        <span class="combat-section-title">基础技能</span>
+        <button class="combat-activate-btn" title="激活：载入已装备技能">激活</button>
+        <button class="combat-clear-btn" title="清除战斗槽">清除</button>
+      </div>
+
+      {{!-- 6个技能格（横向） --}}
+      <div class="combat-skill-slots-row">
+        {{#times 6}}
+          <div class="combat-skill-slot-wrap">
+            <div class="combat-skill-slot skill-slot-octa slot-empty"
+                 data-slot-index="{{this}}"
+                 title="技能槽 {{this}}">
+              <img src="systems/limbusCompany_FVTT/assets/icons/Skill/Normalsin.webp"
+                   class="combat-skill-img" alt="空">
+            </div>
+            {{!-- 激活/预备状态指示点 --}}
+            <div class="slot-state-dot"></div>
+            {{!-- 相关技能切换按钮（有相关技能时才显示） --}}
+            <button class="combat-skill-related-toggle" style="display:none" title="切换相关技能">↺</button>
+          </div>
+        {{/times}}
+      </div>
+
+    </div>{{!-- /basic-combat-section --}}
+
+    {{!-- EGO / 守备技能区 --}}
+    <div class="combat-section ego-combat-section">
+      <div class="combat-section-header">
+        <span class="combat-section-title">E.G.O / 守备技能</span>
+      </div>
+
+      <div class="combat-skill-slots-row">
+
+        {{!-- 5个EGO圆形槽 --}}
+        {{#each egoSkills}}
+          <div class="combat-skill-slot-wrap">
+            <div class="combat-skill-slot skill-slot-circle slot-ego {{#if item}}slot-equipped{{else}}slot-empty{{/if}}"
+                 {{#if item}}
+                   data-item-id="{{item._id}}"
+                   style="border-color:{{sinColor item.system.sinType}}"
+                 {{/if}}
+                 title="{{#if item}}{{item.name}}{{else}}{{grade}}{{/if}}">
+              <img src="{{#if item}}{{item.img}}{{else}}systems/limbusCompany_FVTT/assets/icons/Skill/Normalsin.webp{{/if}}"
+                   class="combat-skill-img" alt="{{grade}}">
+            </div>
+          </div>
+        {{/each}}
+
+        {{!-- 1个守备八边形槽 --}}
+        <div class="combat-skill-slot-wrap">
+          <div class="combat-skill-slot skill-slot-octa slot-defense {{#if defenseSkill.item}}slot-equipped{{else}}slot-empty{{/if}}"
+               {{#if defenseSkill.item}}
+                 data-item-id="{{defenseSkill.item._id}}"
+                 style="border-color:{{sinColor defenseSkill.item.system.sinType}}"
+               {{/if}}
+               title="{{#if defenseSkill.item}}{{defenseSkill.item.name}}{{else}}守备技能{{/if}}">
+            <img src="{{#if defenseSkill.item}}{{defenseSkill.item.img}}{{else}}systems/limbusCompany_FVTT/assets/icons/Skill/Normalsin.webp{{/if}}"
+                 class="combat-skill-img" alt="守备">
+          </div>
+        </div>
+
+      </div>{{!-- /combat-skill-slots-row --}}
+
+    </div>{{!-- /ego-combat-section --}}
+
+    {{!-- 行动值区 --}}
+    <div class="combat-section ap-section">
+      <div class="combat-section-header">
+        <span class="combat-section-title">行动值</span>
+        <button class="ap-reset-btn" title="重置行动点">重置</button>
+        <button class="ap-clear-btn" title="清零行动点">清除</button>
+      </div>
+      <div class="ap-coins-row">
+        {{#each apCoins}}
+          <div class="ap-coin {{#if active}}ap-coin-active{{else}}ap-coin-inactive{{/if}}"
+               data-index="{{index}}"
+               title="行动点 {{index}}">
+            <img src="{{#if active}}systems/limbusCompany_FVTT/assets/icons/Base_icon/硬币_正面.webp{{else}}systems/limbusCompany_FVTT/assets/icons/Base_icon/硬币_反面.webp{{/if}}"
+                 width="36" height="36" alt="AP">
+          </div>
+        {{/each}}
+      </div>
+    </div>{{!-- /ap-section --}}
+
+  </div>{{!-- /combat-skills-panel --}}
+
+</div>

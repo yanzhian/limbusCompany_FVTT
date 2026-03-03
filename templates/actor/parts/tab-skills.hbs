@@ -1,0 +1,159 @@
+{{!-- tab-skills.hbs — 技能 Tab：技能槽 + 技能列表 --}}
+<div class="tab-inner tab-skills-inner">
+
+  {{!-- ── 左侧：技能槽 ─────────────────────────────────────────────── --}}
+  <div class="skill-panel">
+
+    {{!-- 基础技能槽（6个八边形） --}}
+    <div class="basic-skill-slots">
+      {{#each basicSkills}}
+        <div class="skill-slot-wrap skill-slot-octa-wrap
+              {{#if item}}skill-slot-equipped{{else}}skill-slot-empty{{/if}}"
+             data-slot-type="basic"
+             data-slot-index="{{slotIndex}}"
+             {{#if item}}
+               data-item-id="{{item._id}}"
+             {{/if}}
+             title="{{#if item}}{{item.name}}{{else}}基础技能槽 {{slotIndex}}{{/if}}">
+          <div class="skill-slot-octa"
+               {{#if item}}style="border-color:{{sinColor item.system.sinType}}"{{/if}}>
+            <img src="{{#if item}}{{item.img}}{{else}}systems/limbusCompany_FVTT/assets/icons/Skill/Normalsin.webp{{/if}}"
+                 alt="{{#if item}}{{item.name}}{{else}}空{{/if}}"
+                 class="skill-slot-img">
+          </div>
+        </div>
+      {{/each}}
+    </div>
+
+    {{!-- EGO技能槽（5个圆形）+ 守备技能槽（1个八边形） --}}
+    <div class="ego-defense-row">
+
+      {{!-- EGO 技能（圆形，按等级） --}}
+      {{#each egoSkills}}
+        <div class="skill-slot-wrap ego-skill-slot-wrap
+              {{#if item}}skill-slot-equipped{{else}}skill-slot-empty{{/if}}"
+             data-slot-type="ego"
+             data-grade="{{grade}}"
+             {{#if item}}
+               data-item-id="{{item._id}}"
+             {{/if}}
+             title="{{#if item}}{{item.name}}{{else}}{{grade}}{{/if}}">
+          <div class="skill-slot-circle"
+               {{#if item}}style="border-color:{{sinColor item.system.sinType}}"{{/if}}>
+            <img src="{{#if item}}{{item.img}}{{else}}systems/limbusCompany_FVTT/assets/icons/Skill/Normalsin.webp{{/if}}"
+                 alt="{{grade}}"
+                 class="skill-slot-img">
+          </div>
+          <div class="ego-grade-label">{{grade}}</div>
+        </div>
+      {{/each}}
+
+      {{!-- 守备技能槽（八边形） --}}
+      <div class="skill-slot-wrap defense-skill-slot
+            {{#if defenseSkill.item}}skill-slot-equipped{{else}}skill-slot-empty{{/if}}"
+           data-slot-type="defense"
+           {{#if defenseSkill.item}}
+             data-item-id="{{defenseSkill.item._id}}"
+           {{/if}}
+           title="{{#if defenseSkill.item}}{{defenseSkill.item.name}}{{else}}守备技能{{/if}}">
+        <div class="skill-slot-octa"
+             {{#if defenseSkill.item}}style="border-color:{{sinColor defenseSkill.item.system.sinType}}"{{/if}}>
+          <img src="{{#if defenseSkill.item}}{{defenseSkill.item.img}}{{else}}systems/limbusCompany_FVTT/assets/icons/Skill/Normalsin.webp{{/if}}"
+               alt="守备"
+               class="skill-slot-img">
+        </div>
+      </div>
+
+    </div>{{!-- /ego-defense-row --}}
+
+  </div>{{!-- /skill-panel --}}
+
+  {{!-- ── 右侧：技能列表 ──────────────────────────────────────────── --}}
+  <div class="list-panel skill-list-panel">
+
+    {{!-- 工具栏 --}}
+    <div class="list-toolbar">
+      <input type="text" class="item-search" placeholder="搜索技能…"/>
+      <div class="toolbar-btns">
+        <button class="filter-favorite-btn toolbar-btn" title="收藏筛选">★</button>
+        <button class="filter-toggle-btn toolbar-btn" title="过滤">▽</button>
+        <button class="filter-expand-all toolbar-btn" title="全部展开">⊞</button>
+        <button class="filter-collapse-all toolbar-btn" title="全部折叠">⊟</button>
+        <button class="item-create-btn toolbar-btn" title="新建技能" data-type="skill">＋</button>
+      </div>
+
+      {{!-- 技能过滤面板 --}}
+      <div class="filter-panel" style="display:none">
+        <div class="filter-section">
+          <div class="filter-section-label">类型</div>
+          <div class="filter-buttons">
+            <button class="filter-category-btn" data-category="basic">基本技能</button>
+            <button class="filter-category-btn" data-category="defense">守备技能</button>
+            <button class="filter-category-btn" data-category="ego">E.G.O技能</button>
+          </div>
+        </div>
+        <div class="filter-section">
+          <div class="filter-section-label">罪孽</div>
+          <div class="filter-buttons">
+            {{#each config.SINS}}
+              <button class="filter-category-btn" data-category="{{this}}">{{lookup ../config.SIN_LABELS this}}</button>
+            {{/each}}
+          </div>
+        </div>
+        <button class="filter-apply-btn">过滤</button>
+      </div>
+    </div>
+
+    {{!-- 列表表头 --}}
+    <div class="list-header skill-list-header">
+      <span class="col-icon"></span>
+      <span class="col-name">名称</span>
+      <span class="col-cat">分类</span>
+      <span class="col-sin">罪孽</span>
+      <span class="col-qty">数量</span>
+      <span class="col-stellar">星芒</span>
+      <span class="col-actions">操作</span>
+    </div>
+
+    {{!-- 分组列表 --}}
+    {{#each skillGroups}}
+      <div class="item-group" data-group-key="{{key}}">
+        <div class="group-header">
+          <span class="group-toggle">▼</span>
+          <span class="group-label">{{label}}</span>
+          <span class="group-count">({{items.length}})</span>
+        </div>
+        <ul class="group-body item-list">
+          {{#each items}}
+            <li class="skill-row item-row"
+                data-item-id="{{_id}}"
+                data-item-name="{{name}}"
+                data-type="{{system.type}}"
+                data-subtype="{{system.sinType}}">
+              <span class="col-icon">
+                <img src="{{img}}" class="item-icon" data-item-id="{{_id}}" alt="{{name}}"
+                     style="border-color:{{sinColor}}">
+              </span>
+              <span class="col-name item-name">{{name}}</span>
+              <span class="col-cat">{{system.category}}</span>
+              <span class="col-sin" style="color:{{sinColor}}">{{system.sinType}}</span>
+              <span class="col-qty">1</span>
+              <span class="col-stellar">{{stellarCost}}</span>
+              <span class="col-actions">
+                {{#unless (eq system.type 'defense')}}
+                  <button class="item-start-clash action-btn" data-item-id="{{_id}}" title="发起对抗">▶</button>
+                {{/unless}}
+                <button class="item-more-menu action-btn" data-item-id="{{_id}}" title="更多">⋮</button>
+                <button class="item-favorite action-btn {{#if isFavorite}}fav-active{{/if}}" data-item-id="{{_id}}" title="收藏">★</button>
+              </span>
+            </li>
+          {{/each}}
+        </ul>
+      </div>
+    {{else}}
+      <div class="list-empty">暂无技能</div>
+    {{/each}}
+
+  </div>{{!-- /skill-list-panel --}}
+
+</div>
