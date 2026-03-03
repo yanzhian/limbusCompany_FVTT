@@ -190,12 +190,15 @@ relatedSkill: {
   trigger: "攻击时" | "命中时" | "回合结束时" | ...,
   precondition: { target: "self"|"target", hasBuff: String, intensity: Number, stacks: Number } | null,
   cost: { type: "none"|"forced"|"optional", buff: String, intensity: Number, stacks: Number } | null,
-  effect: { type: "addBuff"|"hpAdj"|"sanityAdj"|"atkAdj"|"defAdj"|"speed"|"seismicBlast", target: "self"|"target", intensity: Number, stacks: Number },
+  effect: { type: "addBuff"|"hpAdj"|"sanityAdj"|"atkAdj"|"defAdj"|"speed"|"seismicBlast" | ..., target: "self"|"target", intensity: Number, stacks: Number },
   limit: { type: "unlimited"|"perTurn", count: Number }
 }
 ```
 
 触发时机完整列表：`使用时 / 攻击前 / 攻击时 / 攻击后 / 拼点时 / 拼点成功 / 拼点失败 / 命中时 / 暴击命中时 / 回合开始时 / 回合结束时 / 受到伤害时`
+
+效果列表：`添加BUFF/ 移除BUFF / 生命值调整 / 理智值调整 / 攻击等级调整/ 防御等级调整 / 速度调整 / 基础值 / 变动值 /骰 数 / 相关技能转换 /震颤引爆 `
+
 
 ### 6. EGO 技能特殊逻辑
 
