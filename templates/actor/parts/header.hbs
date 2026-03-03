@@ -94,11 +94,11 @@
       <div class="info-block-label">基础信息</div>
       <div class="info-row">
         <img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/Offense_Level.webp" class="info-icon" alt="ATK" title="攻击等级">
-        <span class="info-sign {{#gt atkTotal 0}}info-pos{{/if}}{{#lte atkTotal 0}}info-neg{{/if}}">
-          {{#gt atkTotal 0}}+{{/gt}}{{atkTotal}}
+        <span class="info-sign {{#if (gt atkTotal 0)}}info-pos{{/if}}{{#if (lte atkTotal 0)}}info-neg{{/if}}">
+          {{#if (gt atkTotal 0)}}+{{/if}}{{atkTotal}}
         </span>
         <img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/Defense_Level.webp" class="info-icon" alt="DEF" title="防御等级" style="margin-left:6px">
-        <span class="info-sign">{{#gt (system.def.extra) 0}}+{{/gt}}{{system.def.extra}}</span>
+        <span class="info-sign {{#if (gt defTotal 0)}}info-pos{{/if}}">{{#if (gt defTotal 0)}}+{{/if}}{{defTotal}}</span>
         <img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/Speed.webp" class="info-icon" alt="SPD" title="速度" style="margin-left:6px">
         <span class="info-val">{{system.speed.min}}-{{system.speed.max}}</span>
       </div>

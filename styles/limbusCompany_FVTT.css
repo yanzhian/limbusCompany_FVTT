@@ -1014,6 +1014,23 @@
    将 Foundry VTT 默认界面统一为边狱风格
    ============================================================ */
 
+/* ─── 图标保护层 ────────────────────────────────────────────
+   确保 FA6 图标及 FVTT 内置 SVG 图标不受全局 font-family / color
+   覆盖的影响。
+   ─────────────────────────────────────────────────────────── */
+/* FA6 直接在类选择器上设置 font-family，不受父级继承影响。
+   但以防万一，显式恢复 fa-solid / fa-regular 等的 font-family。 */
+.fa, .fas, .far, .fab, .fal, .fad,
+.fa-solid, .fa-regular, .fa-light, .fa-brands, .fa-thin, .fa-duotone {
+  /* 由 Font Awesome 自身 CSS 设置；此处只保证不覆盖显示方式 */
+  display: inline-block;
+}
+
+/* 防止 background 简写属性清除 FA 或 SVG mask 图标的背景图像：
+   所有需要 "无背景色" 的按钮改用 background-color: transparent，
+   以保留 background-image 类图标。
+   实际受影响的规则在下方各节就地修正。              */
+
 /* ─── §2-A  应用窗口 / 标题栏 ──────────────────────────────── */
 
 /* 所有应用窗口（角色卡/物品卡/设置等）*/
@@ -1057,7 +1074,7 @@
 .app .window-header a,
 .window-app .window-header a {
   color: #ccc;
-  background: none;
+  background-color: transparent;
   border: none;
   cursor: pointer;
   padding: 2px 6px;
@@ -1104,7 +1121,7 @@
 
 #sidebar-tabs .item {
   color: var(--text-sub);
-  background: none;
+  background-color: transparent;
   border: none;
   border-bottom: 2px solid transparent;
   padding: 6px 10px;
@@ -1416,7 +1433,7 @@ select#chat-whisper-to {
   cursor: pointer;
   padding: 2px 4px;
   transition: color 0.15s;
-  background: none;
+  background-color: transparent;
   border: none;
 }
 
@@ -1867,7 +1884,7 @@ prose-mirror {
 
 .editor-toolbar button,
 .prosemirror-menu button {
-  background: none;
+  background-color: transparent;
   border: 1px solid transparent;
   color: var(--text-sub);
   cursor: pointer;
@@ -1929,7 +1946,7 @@ prose-mirror {
 
 #controls .control-tool {
   color: var(--text-sub);
-  background: none;
+  background-color: transparent;
   border: none;
   cursor: pointer;
   font-size: 1rem;

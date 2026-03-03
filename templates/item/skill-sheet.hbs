@@ -106,16 +106,14 @@
         <div class="ego-cost-block">
           {{#each sinCosts}}
             <div class="ego-cost-item">
-              {{#if ../../isEditable}}
+              {{#if ../isEditable}}
                 <select name="system.sinCost.{{@index}}.sin" class="sin-cost-sel">
-                  {{#each ../../config.SINS}}
-                    <option value="{{this}}" {{#eq this ../../../../sinCosts.@../sin}}selected{{/eq}}>{{lookup ../../../../config.SIN_LABELS this}}</option>
+                  {{#each ../config.SINS}}
+                    <option value="{{this}}" {{#if (eq this ../sin)}}selected{{/if}}>{{lookup ../config.SIN_LABELS this}}</option>
                   {{/each}}
                 </select>
                 <input type="number" name="system.sinCost.{{@index}}.amount" value="{{amount}}" class="sin-cost-input" min="0" style="width:40px"/>
-                {{#if ../../isEditable}}
-                  <button class="sin-cost-remove-btn" data-idx="{{@index}}">×</button>
-                {{/if}}
+                <button class="sin-cost-remove-btn" data-idx="{{@index}}">×</button>
               {{else}}
                 <img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/{{sin}}_icon.webp" width="16" height="16" alt="{{sin}}">
                 <span>{{amount}}</span>
@@ -143,15 +141,15 @@
         <div class="ego-resist-block">
           {{#each egoResChanges}}
             <div class="ego-resist-item">
-              {{#if ../../isEditable}}
+              {{#if ../isEditable}}
                 <select name="system.egoResistanceChange.{{@index}}.sin">
-                  {{#each ../../../../config.SINS}}
-                    <option value="{{this}}" {{#eq this ../../../../egoResChanges.@../sin}}selected{{/eq}}>{{lookup ../../../../config.SIN_LABELS this}}</option>
+                  {{#each ../config.SINS}}
+                    <option value="{{this}}" {{#if (eq this ../sin)}}selected{{/if}}>{{lookup ../config.SIN_LABELS this}}</option>
                   {{/each}}
                 </select>
                 <select name="system.egoResistanceChange.{{@index}}.value">
-                  {{#each ../../../../config.RESISTANCE_VALUES}}
-                    <option value="{{this}}" {{#eq this ../../../../egoResChanges.@../value}}selected{{/eq}}>{{this}}</option>
+                  {{#each ../config.RESISTANCE_VALUES}}
+                    <option value="{{this}}" {{#if (eq this ../value)}}selected{{/if}}>{{this}}</option>
                   {{/each}}
                 </select>
                 <button class="res-change-remove-btn" data-idx="{{@index}}">×</button>

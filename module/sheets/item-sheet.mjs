@@ -220,7 +220,17 @@ export class LimbusItemSheet extends ItemSheet {
 
   /* ─── 锁切换 ────────────────────────────────────────────────────────────── */
 
-  _onToggleLock(event) {
+  async _onToggleLock(event) {
+    // 从解锁→锁定时先提交表单，保存编辑内容
+    if (!this.isLocked) {
+      const formEl = this.element?.find("form")[0];
+      if (formEl) {
+        try {
+          const fd = new FormDataExtended(formEl);
+          await this.item.update(foundry.utils.expandObject(fd.object));
+        } catch (e) { /* 保存失败不阻塞锁定 */ }
+      }
+    }
     this.isLocked = !this.isLocked;
     this.render(false);
   }
