@@ -1,0 +1,267 @@
+/**
+ * limbusCompany_FVTT.mjs — 系统主入口
+ * Foundry VTT v13+ 边狱巴士都市规则
+ *
+ * 初始化流程：
+ *   Hooks.once("init")     → 注册数据模型、文档类、Sheet、设置
+ *   Hooks.once("setup")    → 完成国际化字符串注册
+ *   Hooks.once("ready")    → 系统就绪通知
+ */
+
+import { LIMBUSCOMPANY }   from "./config.mjs";
+import { LimbusActor, CharacterData }  from "./documents/actor.mjs";
+import {
+  LimbusItem,
+  EquipmentData,
+  SkillData,
+  ConsumableData,
+  MaterialData,
+  ContainerData,
+} from "./documents/item.mjs";
+
+/* ─── Hooks.once("init") ─────────────────────────────────────────────────── */
+
+Hooks.once("init", () => {
+  console.log("limbusCompany_FVTT | 初始化系统…");
+
+  // 将常量挂载到全局 CONFIG
+  CONFIG.LIMBUSCOMPANY = LIMBUSCOMPANY;
+
+  // ── 注册文档类 ─────────────────────────────────────────────────────────
+  CONFIG.Actor.documentClass = LimbusActor;
+  CONFIG.Item.documentClass  = LimbusItem;
+
+  // ── 注册 TypeDataModel（数据模型） ────────────────────────────────────
+  CONFIG.Actor.dataModels = {
+    character: CharacterData,
+  };
+
+  CONFIG.Item.dataModels = {
+    equipment:  EquipmentData,
+    skill:      SkillData,
+    consumable: ConsumableData,
+    material:   MaterialData,
+    container:  ContainerData,
+  };
+
+  // ── 注册游戏系统设置 ───────────────────────────────────────────────────
+  _registerSettings();
+
+  // ── 预加载 HBS 模板 ───────────────────────────────────────────────────
+  _preloadTemplates();
+
+  console.log("limbusCompany_FVTT | 系统初始化完成。");
+});
+
+/* ─── Hooks.once("setup") ────────────────────────────────────────────────── */
+
+Hooks.once("setup", () => {
+  // 本阶段可做国际化字符串注册后的处理（如本地化常量标签）
+  _localizeConfig();
+});
+
+/* ─── Hooks.once("ready") ────────────────────────────────────────────────── */
+
+Hooks.once("ready", () => {
+  console.log("limbusCompany_FVTT | 系统已就绪。");
+});
+
+/* ─── 战斗钩子 ───────────────────────────────────────────────────────────── */
+
+/**
+ * 进入战斗时自动重置 AP / 理智 / 混乱阈值
+ */
+Hooks.on("combatStart", (combat) => {
+  for (const combatant of combat.combatants) {
+    const actor = combatant.actor;
+    if (!actor || actor.type !== "character") continue;
+    actor.longRest().then(() => {
+      // longRest 已重置 HP/理智/AP/混乱阈值
+      // 但战斗开始时不重置 HP，仅重置其他值
+      actor.update({
+        "system.sanity.value":    50,
+        "system.ap.value":        3,
+        "system.chaosThresholds": actor.system.getDefaultChaosThresholds?.() ?? [],
+      });
+    });
+  }
+});
+
+/**
+ * 回合结束时处理特殊状态（陷入混乱/陷入恐慌 自动移除）
+ */
+Hooks.on("combatRound", (combat, _updateData, _options) => {
+  // 在每个 combatant 轮次末尾由 combatTurn 钩子处理
+});
+
+Hooks.on("updateCombat", (combat, changed) => {
+  if (!("turn" in changed)) return;
+  const prevTurnIdx = (changed.turn - 1 + combat.turns.length) % combat.turns.length;
+  const prevTurn    = combat.turns[prevTurnIdx];
+  if (!prevTurn) return;
+
+  const actor = prevTurn.actor;
+  if (!actor || actor.type !== "character") return;
+
+  // 移除【陷入混乱】和【陷入恐慌】（回合末移除）
+  actor.removeBuffsByType("chaos");
+  actor.removeBuffsByType("panic");
+});
+
+/* ─── 内部辅助函数 ───────────────────────────────────────────────────────── */
+
+/**
+ * 注册游戏系统设置
+ */
+function _registerSettings() {
+  // 保留槽位，后续阶段按需添加
+  // 示例：
+  // game.settings.register("limbusCompany_FVTT", "globalSins", {
+  //   name: "全局罪孽资源",
+  //   scope: "world",
+  //   config: false,
+  //   type: Object,
+  //   default: { wrath:0, lust:0, sloth:0, gluttony:0, gloom:0, pride:0, envy:0 },
+  // });
+}
+
+/**
+ * 预加载 Handlebars 模板（提升首次渲染速度）
+ */
+async function _preloadTemplates() {
+  const templatePaths = [
+    // Actor sheets
+    "systems/limbusCompany_FVTT/templates/actor/character-sheet.hbs",
+    "systems/limbusCompany_FVTT/templates/actor/parts/header.hbs",
+    "systems/limbusCompany_FVTT/templates/actor/parts/tab-items.hbs",
+    "systems/limbusCompany_FVTT/templates/actor/parts/tab-skills.hbs",
+    "systems/limbusCompany_FVTT/templates/actor/parts/tab-combat.hbs",
+    // Item sheets
+    "systems/limbusCompany_FVTT/templates/item/equipment-sheet.hbs",
+    "systems/limbusCompany_FVTT/templates/item/skill-sheet.hbs",
+    "systems/limbusCompany_FVTT/templates/item/consumable-sheet.hbs",
+    "systems/limbusCompany_FVTT/templates/item/container-sheet.hbs",
+    // Combat
+    "systems/limbusCompany_FVTT/templates/combat/combat-hud.hbs",
+    // Partials
+    "systems/limbusCompany_FVTT/templates/partials/title-card.hbs",
+    "systems/limbusCompany_FVTT/templates/partials/activity-editor.hbs",
+  ];
+  return loadTemplates(templatePaths);
+}
+
+/**
+ * 本地化常量中的标签键（在 setup 阶段 i18n 已就绪后调用）
+ */
+function _localizeConfig() {
+  const cfg = CONFIG.LIMBUSCOMPANY;
+
+  // 本地化罪孽标签
+  for (const [key, i18nKey] of Object.entries(cfg.SIN_LABELS)) {
+    cfg.SIN_LABELS[key] = game.i18n.localize(i18nKey);
+  }
+
+  // 本地化属性标签
+  for (const [key, i18nKey] of Object.entries(cfg.ATTRIBUTE_LABELS)) {
+    cfg.ATTRIBUTE_LABELS[key] = game.i18n.localize(i18nKey);
+  }
+
+  // 本地化 BUFF 标签
+  for (const [key, i18nKey] of Object.entries(cfg.BUFF_TYPES)) {
+    cfg.BUFF_TYPES[key] = game.i18n.localize(i18nKey);
+  }
+
+  // 本地化技能类型标签
+  for (const [key, i18nKey] of Object.entries(cfg.SKILL_TYPES)) {
+    cfg.SKILL_TYPES[key] = game.i18n.localize(i18nKey);
+  }
+}
+
+/* ─── Handlebars 辅助函数注册 ────────────────────────────────────────────── */
+
+Hooks.once("init", () => {
+  // 注册 Handlebars helpers（供 HBS 模板使用）
+
+  /** 返回数组某索引的值 */
+  Handlebars.registerHelper("arrayIndex", (arr, idx) => arr?.[idx] ?? null);
+
+  /** 将值限定在 min–max 范围内 */
+  Handlebars.registerHelper("clamp", (val, min, max) => Math.min(max, Math.max(min, val)));
+
+  /** 计算百分比（保留 1 位小数） */
+  Handlebars.registerHelper("percent", (val, max) =>
+    max > 0 ? ((val / max) * 100).toFixed(1) : 0
+  );
+
+  /** 返回 n 次重复的数组（用于 each 循环生成 n 个元素） */
+  Handlebars.registerHelper("times", (n, _options) => Array.from({ length: n }, (_, i) => i));
+
+  /** 判断两个值是否相等 */
+  Handlebars.registerHelper("eq", (a, b) => a === b);
+
+  /** 判断值是否大于 */
+  Handlebars.registerHelper("gt", (a, b) => a > b);
+
+  /** 判断值是否小于等于 */
+  Handlebars.registerHelper("lte", (a, b) => a <= b);
+
+  /** 本地化 i18n 字符串 */
+  Handlebars.registerHelper("lc", (key) => game.i18n.localize(key));
+
+  /** 格式化 i18n 字符串（含变量替换） */
+  Handlebars.registerHelper("lcf", (key, data) => game.i18n.format(key, data));
+
+  /** 返回罪孽对应颜色 */
+  Handlebars.registerHelper("sinColor", (sinType) =>
+    CONFIG.LIMBUSCOMPANY?.SIN_COLORS?.[sinType] ?? "#E8CAA2"
+  );
+
+  /** 将骰子公式字符串格式化为大写（1d4 → 1D4） */
+  Handlebars.registerHelper("fmtDice", (formula) =>
+    (formula ?? "").toUpperCase().replace(/D/g, "D")
+  );
+
+  /** 判断抗性倍率是否为弱性（> x1.0） */
+  Handlebars.registerHelper("isResistWeak", (val) => {
+    const num = parseFloat((val ?? "x1.0").replace("x", ""));
+    return num > 1.0;
+  });
+
+  /** 判断抗性倍率是否为抗性（< x1.0） */
+  Handlebars.registerHelper("isResistStrong", (val) => {
+    const num = parseFloat((val ?? "x1.0").replace("x", ""));
+    return num < 1.0;
+  });
+
+  /** 计算混乱阈值刻度线位置（百分比） */
+  Handlebars.registerHelper("chaosLinePos", (percent) => `${percent}%`);
+
+  /** 返回技能图标路径 */
+  Handlebars.registerHelper("skillIcon", (sinType, level, type) => {
+    if (type === "ego") return "systems/limbusCompany_FVTT/assets/icons/Skill/E.G.O.webp";
+    if (!sinType || !level) return "systems/limbusCompany_FVTT/assets/icons/Skill/Normalsin.webp";
+    const sin = sinType.charAt(0).toUpperCase() + sinType.slice(1);
+    return `systems/limbusCompany_FVTT/assets/icons/Skill/${sin}_lv${level}.webp`;
+  });
+
+  /** 返回攻/守类型图标路径 */
+  Handlebars.registerHelper("categoryIcon", (category) => {
+    const iconMap = {
+      slash:        "systems/limbusCompany_FVTT/assets/icons/Base_icon/Slash.webp",
+      blunt:        "systems/limbusCompany_FVTT/assets/icons/Base_icon/Blunt.webp",
+      pierce:       "systems/limbusCompany_FVTT/assets/icons/Base_icon/Pierce.webp",
+      dodge:        "systems/limbusCompany_FVTT/assets/icons/Base_icon/闪避.webp",
+      block:        "systems/limbusCompany_FVTT/assets/icons/Base_icon/防御.webp",
+      counter:      "systems/limbusCompany_FVTT/assets/icons/Base_icon/反击.webp",
+      clashBlock:   "systems/limbusCompany_FVTT/assets/icons/Base_icon/可拼点防御.webp",
+      clashCounter: "systems/limbusCompany_FVTT/assets/icons/Base_icon/可拼点防御.webp",
+    };
+    return iconMap[category] ?? "";
+  });
+
+  /** 返回罪孽图标路径 */
+  Handlebars.registerHelper("sinIcon", (sinType) => {
+    const sin = sinType?.charAt(0).toUpperCase() + sinType?.slice(1);
+    return `systems/limbusCompany_FVTT/assets/icons/Base_icon/${sin}_icon.webp`;
+  });
+});

@@ -1,0 +1,44 @@
+{
+  "id": "limbusCompany_FVTT",
+  "title": "边狱巴士都市规则",
+  "description": "灵感源自《边狱公司》（Limbus Company）宇宙的 Foundry VTT 自定义游戏系统。",
+  "version": "0.1.0",
+  "compatibility": {
+    "minimum": "13",
+    "verified": "13"
+  },
+  "authors": [
+    {
+      "name": "LimbusCompany FVTT Team"
+    }
+  ],
+  "esmodules": [
+    "module/limbusCompany_FVTT.mjs"
+  ],
+  "styles": [
+    "styles/limbusCompany_FVTT.css"
+  ],
+  "languages": [
+    {
+      "lang": "zh-CN",
+      "name": "中文（简体）",
+      "path": "lang/zh-CN.json"
+    }
+  ],
+  "documentTypes": {
+    "Actor": {
+      "character": {}
+    },
+    "Item": {
+      "equipment": {},
+      "skill": {},
+      "consumable": {},
+      "material": {},
+      "container": {}
+    }
+  },
+  "socket": false,
+  "url": "",
+  "manifest": "",
+  "download": ""
+}
