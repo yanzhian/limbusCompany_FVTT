@@ -42,6 +42,7 @@ export class LimbusActorSheet extends ActorSheet {
     context.config     = cfg;
     context.isGM       = game.user.isGM;
     context.isEditable = this.isEditable;
+    this._editUnlocked ??= false;
 
     // ── 经验/HP/理智百分比 ────────────────────────────────────────────────
     context.xpPercent     = system.xp.next  > 0 ? ((system.xp.value  / system.xp.next)  * 100) : 0;
@@ -214,6 +215,7 @@ export class LimbusActorSheet extends ActorSheet {
 
   activateListeners(html) {
     super.activateListeners(html);
+    this._applyEditLockState(html);
 
     // ── 只读操作（非编辑模式也可用） ──────────────────────────────────────
 
@@ -889,17 +891,28 @@ export class LimbusActorSheet extends ActorSheet {
   /* ─── 编辑锁 ─────────────────────────────────────────────────────────────── */
 
   _onToggleLock(event) {
-    const lock = $(event.currentTarget);
-    const isLocked = lock.hasClass("locked");
-    if (isLocked) {
-      lock.removeClass("locked").html('<i class="fas fa-lock-open"></i>');
-      this.element.find(".editable-field").prop("disabled", false);
-      this.element.find(".editable-only").show();
+    event.preventDefault();
+    this._editUnlocked = !this._editUnlocked;
+    this._applyEditLockState(this.element);
+  }
+
+  _applyEditLockState(html) {
+    const root = html && html.find ? html : this.element;
+    if (!root?.length) return;
+
+    const lockBtn = root.find(".sheet-lock-toggle");
+    if (this._editUnlocked) {
+      lockBtn.removeClass("locked").html('<i class="fas fa-lock-open"></i>');
+      root.find(".editable-field").prop("disabled", false);
+      root.find(".editable-only").show();
     } else {
-      lock.addClass("locked").html('<i class="fas fa-lock"></i>');
-      this.element.find(".editable-field").prop("disabled", true);
-      this.element.find(".editable-only").hide();
+      lockBtn.addClass("locked").html('<i class="fas fa-lock"></i>');
+      root.find(".editable-field").prop("disabled", true);
+      root.find(".editable-only").hide();
     }
+
+    // 星芒固定不可编辑
+    root.find("[name='system.stellarMotes.value']").prop("disabled", true);
   }
 
   /* ─── Title 卡片（悬停） ────────────────────────────────────────────────── */
