@@ -499,7 +499,7 @@
 }
 
 .limbuscompany .item-list .item-row {
-  display: flex;
+  /* display: flex; */
   align-items: center;
   height: var(--list-row-height);
   gap: 4px;
