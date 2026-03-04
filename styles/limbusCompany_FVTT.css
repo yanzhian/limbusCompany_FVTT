@@ -24,6 +24,9 @@
 
 /* ─── CSS 变量（颜色系统） ─────────────────────────────────── */
 :root {
+  /* 覆盖 Foundry 默认浅色边框主色 */
+  --color-border-light-primary: #3B2412;
+
   /* 背景色系 */
   --bg-darkest:   #0B0707;   /* 背景最深 */
   --bg-dark:      #0B0707;   /* 别名 */
@@ -2901,6 +2904,13 @@ body.game .limbuscompany.app img {
 .limbuscompany .list-panel {
   flex: 1; display: flex; flex-direction: column; overflow: hidden;
   padding: 0px 6px 6px 8px;
+}
+
+/* 物品列表滚动条 */
+.limbuscompany .item-list-panel {
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: 4px;
 }
 
 /* 物品列表滚动条 */
