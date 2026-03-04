@@ -2372,6 +2372,46 @@ a.content-link:hover,
 
 
 /* ============================================================
+   §2-X  覆盖 FVTT 核心 CSS 图片规则
+   针对两条 foundry.css 内置高特异性规则的精准覆盖：
+   · body.game .sheet.app header.sheet-header img
+     → height:64px; margin-right:6px  (特异性 0,4,3)
+   · body.game .app img
+     → max-width:100%; border-radius:2px; box-sizing:border-box (特异性 0,2,2)
+   两者均高于我们的 .limbuscompany .xxx 规则 (0,2,0)，必须用 !important 覆盖
+   ============================================================ */
+
+/* 头像：100×100px */
+.limbuscompany .actor-avatar {
+  width: 100px !important;
+  height: 100px !important;
+  max-width: none !important;
+  margin-right: 0 !important;
+  border-radius: 4px !important;
+}
+
+/* 资源图标（HP/理智）、基础信息图标（ATK/DEF/SPD）、抗性图标 */
+.limbuscompany .resource-icon,
+.limbuscompany .info-icon,
+.limbuscompany .resist-icon {
+  width: 32px !important;
+  height: 32px !important;
+  max-width: none !important;
+  margin-right: 0 !important;
+  border-radius: 0 !important;
+  flex-shrink: 0 !important;
+}
+
+/* 重置按钮图标 */
+.limbuscompany .reset-icon {
+  width: 16px !important;
+  height: 16px !important;
+  max-width: none !important;
+  margin-right: 0 !important;
+  border-radius: 0 !important;
+}
+
+/* ============================================================
    §3  角色卡 & 物品卡 界面样式（阶段 3 + 4）
    作用域：.limbuscompany
    ============================================================ */
@@ -2513,9 +2553,12 @@ a.content-link:hover,
   background: rgba(95,62,33,.4); border-radius: 3px; overflow: visible;
 }
 .limbuscompany .resource-bar-fill { height: 100%; border-radius: 3px; transition: width .3s; }
-.limbuscompany .hp-fill     { background: linear-gradient(90deg, #C62828, #E53935); }
-.limbuscompany .sanity-fill { background: linear-gradient(90deg, #1565C0, #64B5F6); }
-.limbuscompany .sanity-panic .sanity-fill { background: var(--red-danger); }
+.limbuscompany .hp-fill,
+.limbuscompany .resource-bar-fill.hp-fill     { background: linear-gradient(90deg, #C62828, #E53935) !important; }
+.limbuscompany .sanity-fill,
+.limbuscompany .resource-bar-fill.sanity-fill { background: linear-gradient(90deg, #1565C0, #64B5F6) !important; }
+.limbuscompany .sanity-panic .sanity-fill,
+.limbuscompany .sanity-panic .resource-bar-fill.sanity-fill { background: var(--red-danger) !important; }
 
 /* 数值文字叠加在血条上 */
 .limbuscompany .resource-values {
@@ -2577,11 +2620,17 @@ a.content-link:hover,
 }
 .limbuscompany .info-icon   { width: 32px; height: 32px; object-fit: contain; flex-shrink: 0; }
 .limbuscompany .resist-icon { width: 32px; height: 32px; object-fit: contain; flex-shrink: 0; }
-.limbuscompany .info-val    { font-size: 2rem; color: #E8C9A2; line-height: 1; }
-.limbuscompany .info-sign   { font-size: 2rem; font-weight: bold; line-height: 1; }
+.limbuscompany .info-val    { 
+    /* font-size: 2rem; */
+    color: #E8C9A2; line-height: 1; }
+.limbuscompany .info-sign   { 
+    /* font-size: 2rem;  */
+    font-weight: bold; line-height: 1; }
 .limbuscompany .info-pos    { color: var(--gold-active); }
 .limbuscompany .info-neg    { color: var(--red-danger); }
-.limbuscompany .resist-val  { font-size: 2rem; color: #E8C9A2; line-height: 1; }
+.limbuscompany .resist-val  { 
+  /* font-size: 2rem; */
+   color: #E8C9A2; line-height: 1; }
 .limbuscompany .resist-weak   { color: var(--red-danger); font-weight: bold; }
 .limbuscompany .resist-strong { color: var(--resist-weak); }
 
@@ -2590,6 +2639,7 @@ a.content-link:hover,
 /* 名字块容器 */
 .limbuscompany .name-block {
   display: flex; flex-direction: column; gap: 2px;
+  overflow: hidden;
 }
 
 /* 背景标签行（200×25px，#3B2412背景，16px文字#8E5F34，右对齐） */
@@ -2623,8 +2673,10 @@ a.content-link:hover,
 /* 名字行（200×50px，32px字体，#E8C9A2） */
 .limbuscompany .name-row-main {
   width: 200px; height: 50px; display: flex; align-items: center;
+  overflow: hidden;
 }
 .limbuscompany .actor-name-display {
+  display: block; width: 100%;
   font-size: 32px; font-weight: bold; color: #E8C9A2; line-height: 1;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
