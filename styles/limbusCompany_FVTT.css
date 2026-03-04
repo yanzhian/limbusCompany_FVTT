@@ -1021,8 +1021,12 @@
 /* FA6 直接在类选择器上设置 font-family，不受父级继承影响。
    但以防万一，显式恢复 fa-solid / fa-regular 等的 font-family。 */
 .fa, .fas, .far, .fab, .fal, .fad,
-.fa-solid, .fa-regular, .fa-light, .fa-brands, .fa-thin, .fa-duotone {
-  /* 由 Font Awesome 自身 CSS 设置；此处只保证不覆盖显示方式 */
+.fa-solid, .fa-regular, .fa-light, .fa-brands, .fa-thin, .fa-duotone,
+i[class^="fa"], i[class*=" fa-"] {
+  /* 强制恢复 FA 字体，避免被全局窗口字体覆盖成方块 */
+  font-family: var(--fa-style-family-classic, "Font Awesome 6 Pro", "Font Awesome 6 Free") !important;
+  font-weight: var(--fa-style, 900) !important;
+  font-style: normal;
   display: inline-block;
 }
 
@@ -1944,6 +1948,16 @@ prose-mirror {
   border-right: 1px solid var(--border-gold);
 }
 
+
+/* 左侧工具栏图标（scene-control / control-tool）保护 */
+#controls .scene-control i,
+#controls .control-tool i,
+#controls .scene-control::before,
+#controls .control-tool::before {
+  font-family: var(--fa-style-family-classic, "Font Awesome 6 Pro", "Font Awesome 6 Free") !important;
+  font-weight: var(--fa-style, 900) !important;
+}
+
 #controls .control-tool {
   color: var(--text-sub);
   background-color: transparent;
@@ -2385,9 +2399,19 @@ a.content-link:hover,
 .limbuscompany .actor-avatar {
   width: 100px !important;
   height: 100px !important;
+  flex: none !important;
   max-width: none !important;
   margin-right: 0 !important;
   border-radius: 4px !important;
+}
+
+/* 覆盖 Foundry 默认图片规则，避免全局 img 边框/flex 影响角色卡布局 */
+body.game .limbuscompany.sheet.app header.sheet-header img {
+  flex: none !important;
+}
+
+body.game .limbuscompany.app img {
+  border: none !important;
 }
 
 /* 资源图标（HP/理智）、基础信息图标（ATK/DEF/SPD）、抗性图标 */
@@ -2672,25 +2696,25 @@ a.content-link:hover,
 
 /* 名字行（200×50px，32px字体，#E8C9A2） */
 .limbuscompany .name-row-main {
-  width: 200px; height: 50px; display: flex; align-items: center;
+  width: 100%; min-height: 50px; display: flex; align-items: center; justify-content: center;
   overflow: hidden;
 }
 .limbuscompany .actor-name-display {
   display: block; width: 100%;
   font-size: 32px; font-weight: bold; color: #E8C9A2; line-height: 1;
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: center;
 }
 .limbuscompany .actor-name-input {
   font-size: 32px; font-weight: bold; background: transparent;
   border: none; border-bottom: 1px solid var(--gold-active);
-  color: #E8C9A2; width: 100%; font-family: var(--font-main); line-height: 1;
+  color: #E8C9A2; width: 100%; font-family: var(--font-main); line-height: 1; text-align: center;
 }
 .limbuscompany .actor-name-input:disabled { border: none; cursor: default; }
 
 /* 六属性块（360×80px，居中，每格50×60px，bg #5F3E22） */
 .limbuscompany .attributes-block {
   display: flex; gap: 6px; flex-wrap: nowrap;
-  width: 360px; height: 80px; align-items: center; justify-content: center;
+  width: 100%; max-width: 360px; height: 80px; align-items: center; justify-content: center;
 }
 .limbuscompany .attr-item {
   display: flex; flex-direction: column; align-items: center; justify-content: center;
@@ -3588,4 +3612,3 @@ a.content-link:hover,
   margin-bottom: 8px;
 }
 .limbuscompany .clash-formula { color: var(--text-sub); }
-
