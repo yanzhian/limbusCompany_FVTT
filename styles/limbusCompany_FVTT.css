@@ -2820,8 +2820,16 @@ body.game .limbuscompany.app img {
 /* ─── §3-C  Tab 导航（固定高24px） ──────────────────────────────── */
 
 .limbuscompany .sheet-tabs {
-  display: flex; border-bottom: 1px solid var(--border-gold);
+  display: flex; border-bottom: none !important;
   background: var(--bg-darkest); flex-shrink: 0; height: 24px;
+}
+
+/* 覆盖 Foundry tabs 默认浅色分隔线（--color-border-light-primary） */
+.limbuscompany nav.sheet-tabs.tabs {
+  border: none !important;
+  box-shadow: none !important;
+  background-image: none !important;
+  --color-border-light-primary: transparent;
 }
 .limbuscompany .sheet-tabs .item {
   flex: 1; text-align: center; padding: 0; line-height: 32px; font-size: .8rem;
@@ -2905,6 +2913,13 @@ body.game .limbuscompany.app img {
 .limbuscompany .list-panel {
   flex: 1; display: flex; flex-direction: column; overflow: hidden;
   padding: 0px 6px 6px 8px;
+}
+
+/* 物品列表滚动条 */
+.limbuscompany .item-list-panel {
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: 4px;
 }
 
 /* 物品列表滚动条 */
@@ -3069,7 +3084,6 @@ body.game .limbuscompany.app img {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 2px;
   gap: 12px;
 }
 
