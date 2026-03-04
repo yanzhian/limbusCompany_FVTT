@@ -31,10 +31,10 @@
   --bg-panel:     #201D1A;   /* 过滤面板/侧栏背景 */
   --bg-card:      #181310;   /* 卡片内容区 */
   --bg-bottom:    #0A0605;   /* 底部状态栏 */
-  --bg-title-bar: #5F3E21;   /* 标题栏棕色 */
+  --bg-title-bar: #0A0605;   /* 标题栏棕色 */
 
   /* 分割线 / 边框 */
-  --border-gold:  #5F3E21;   /* 主边框（金棕色） */
+  --border-gold:  #0A0605;   /* 主边框（金棕色） */
   --border-light: #EDE4D6;   /* 浅色分割线 */
   --border-tab:   #3A2A18;   /* Tab 边框 */
 
@@ -2835,7 +2835,7 @@ body.game .limbuscompany.app img {
 /* 九宫格：3列，每格70×70px */
 .limbuscompany .equip-grid {
   display: grid; grid-template-columns: repeat(3, 70px);
-  gap: 5px; justify-content: center;
+  gap: 10px; justify-content: center;
 }
 .limbuscompany .equip-slot {
   width: 70px; height: 70px;
