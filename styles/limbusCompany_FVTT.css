@@ -2666,20 +2666,20 @@ body.game .limbuscompany.app img {
   overflow: hidden;
 }
 
-/* 背景标签行（200×25px，#3B2412背景，16px文字#8E5F34，右对齐） */
+/* 背景标签行（200×25px，#3B2412背景，16px文字#9A6839，右对齐） */
 .limbuscompany .name-row-top {
-  display: flex; align-items: center; gap: 6px; width: 100%;
+  display: flex; align-items: center; justify-content: flex-end; gap: 6px; width: 100%;
 }
 .limbuscompany .bg-tag {
   width: 200px; height: 25px; line-height: 25px;
-  background: #3B2412; color: #8E5F34;
+  background: #3B2412; color: #9A6839;
   font-size: 16px; text-align: right; padding-right: 6px;
   border-radius: 2px; flex-shrink: 0; overflow: hidden;
   text-overflow: ellipsis; white-space: nowrap;
 }
 .limbuscompany .bg-tag-input {
   width: 200px; height: 25px; background: #3B2412;
-  border: 1px solid var(--gold-active); color: #8E5F34;
+  border: 1px solid var(--gold-active); color: #9A6839;
   font-size: 16px; text-align: right; padding: 0 6px;
   border-radius: 2px; font-family: var(--font-main); flex-shrink: 0;
 }
@@ -2694,20 +2694,20 @@ body.game .limbuscompany.app img {
 }
 .limbuscompany .long-rest-btn:hover { background: var(--gold-active); }
 
-/* 名字行（200×50px，32px字体，#E8C9A2） */
+/* 名字行（右对齐并增加高度，避免姓名显示被压） */
 .limbuscompany .name-row-main {
-  width: 100%; min-height: 50px; display: flex; align-items: center; justify-content: center;
+  width: 100%; min-height: 58px; display: flex; align-items: center; justify-content: flex-end;
   overflow: hidden;
 }
 .limbuscompany .actor-name-display {
   display: block; width: 100%;
   font-size: 32px; font-weight: bold; color: #E8C9A2; line-height: 1;
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: center;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: right; padding-right: 6px; line-height: 1.15;
 }
 .limbuscompany .actor-name-input {
   font-size: 32px; font-weight: bold; background: transparent;
   border: none; border-bottom: 1px solid var(--gold-active);
-  color: #E8C9A2; width: 100%; font-family: var(--font-main); line-height: 1; text-align: center;
+  color: #E8C9A2; width: 100%; font-family: var(--font-main); line-height: 1.15; text-align: right; padding-right: 6px;
 }
 .limbuscompany .actor-name-input:disabled { border: none; cursor: default; }
 
