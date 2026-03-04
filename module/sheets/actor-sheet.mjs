@@ -418,8 +418,8 @@ export class LimbusActorSheet extends ActorSheet {
 
     // ── 从装备栏拖到其他区域：视为卸下（源槽清空） ───────────────────────
     const fromSlot = Number.isInteger(data.fromEquipSlot) ? data.fromEquipSlot : parseInt(data.fromEquipSlot);
-    const droppedOutsideEquipGrid = $target.closest(".equip-grid").length === 0;
-    if (Number.isInteger(fromSlot) && fromSlot >= 0 && fromSlot <= 8 && droppedOutsideEquipGrid) {
+    const droppedIntoItemList = $target.closest(".item-list-panel").length > 0;
+    if (Number.isInteger(fromSlot) && fromSlot >= 0 && fromSlot <= 8 && droppedIntoItemList) {
       await this.actor.unequipFromGrid(fromSlot);
       return;
     }
