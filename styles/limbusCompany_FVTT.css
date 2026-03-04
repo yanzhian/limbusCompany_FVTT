@@ -34,10 +34,10 @@
   --bg-panel:     #201D1A;   /* 过滤面板/侧栏背景 */
   --bg-card:      #181310;   /* 卡片内容区 */
   --bg-bottom:    #0A0605;   /* 底部状态栏 */
-  --bg-title-bar: #5F3E21;   /* 标题栏棕色 */
+  --bg-title-bar: #0A0605;   /* 标题栏棕色 */
 
   /* 分割线 / 边框 */
-  --border-gold:  #5F3E21;   /* 主边框（金棕色） */
+  --border-gold:  #0A0605;   /* 主边框（金棕色） */
   --border-light: #EDE4D6;   /* 浅色分割线 */
   --border-tab:   #3A2A18;   /* Tab 边框 */
 
@@ -502,7 +502,7 @@
 }
 
 .limbuscompany .item-list .item-row {
-  display: flex;
+  /* display: flex; */
   align-items: center;
   height: var(--list-row-height);
   gap: 4px;
@@ -578,7 +578,7 @@
 }
 
 .limbuscompany .group-header::before {
-  content: "▼";
+  /* content: "▼"; */
   font-size: 0.55rem;
   transition: transform 0.15s;
 }
@@ -2461,7 +2461,7 @@ body.game .limbuscompany.app img {
   display: flex;
   gap: 6px;
   padding: 8px 10px 6px;
-  border-bottom: 1px solid #E8CAA2;
+  border-bottom: 1px solid #3B2412;
   flex-shrink: 0;
   min-height: var(--header-height);
 }
@@ -2590,7 +2590,7 @@ body.game .limbuscompany.app img {
 
 /* 血条容器：200×32px，内容叠加 */
 .limbuscompany .resource-bar-wrap {
-  width: 200px; height: 32px; flex-shrink: 0;
+  width: 200px; height: 24px; flex-shrink: 0;
   position: relative; border-radius: 3px; overflow: hidden;
 }
 .limbuscompany .resource-bar {
@@ -2665,7 +2665,8 @@ body.game .limbuscompany.app img {
 
 /* 标题：200×24px，深棕背景，金色文字 */
 .limbuscompany .info-block-label {
-  width: 200px; height: 24px; line-height: 24px;
+  /* width: 200px;  */
+  height: 24px; line-height: 24px;
   background: #3B2412; color: #E1AC62;
   font-size: .8rem; font-weight: bold; text-align: center;
   border-radius: 2px; margin-bottom: 4px; flex-shrink: 0;
@@ -2675,7 +2676,7 @@ body.game .limbuscompany.app img {
 /* 内容行：220×50px，图标32px，字体32px */
 .limbuscompany .info-row {
   display: flex; align-items: center; gap: 6px;
-  width: 220px; height: 50px; flex-wrap: nowrap;
+  width: 220px; height: 50px; flex-wrap: nowrap;justify-content: space-around;
 }
 .limbuscompany .info-icon   { width: 32px; height: 32px; object-fit: contain; flex-shrink: 0; }
 .limbuscompany .resist-icon { width: 32px; height: 32px; object-fit: contain; flex-shrink: 0; }
@@ -2753,7 +2754,7 @@ body.game .limbuscompany.app img {
 }
 .limbuscompany .attr-item {
   display: flex; flex-direction: column; align-items: center; justify-content: center;
-  width: 50px; height: 60px; background: #5F3E22; border-radius: 3px;
+  width: 50px; height: 70px; background: #5F3E22; border-radius: 3px;
   gap: 2px; flex-shrink: 0;
 }
 /* 属性名：16px #E8C9A2 */
@@ -2825,7 +2826,7 @@ body.game .limbuscompany.app img {
   flex: 1; text-align: center; padding: 0; line-height: 24px; font-size: .8rem;
   color: var(--text-sub); cursor: pointer; border-bottom: 2px solid transparent;
   transition: all .15s; background: none; border-left: none; border-right: none; border-top: none;
-  height: 24px; display: flex; align-items: center; justify-content: center;
+  height: 36px; display: flex; align-items: center; justify-content: center;
 }
 .limbuscompany .sheet-tabs .item:hover { color: var(--text-main); }
 .limbuscompany .sheet-tabs .item.active { color: var(--gold-active); border-bottom-color: var(--gold-active); }
@@ -2870,7 +2871,7 @@ body.game .limbuscompany.app img {
 /* 九宫格：3列，每格70×70px */
 .limbuscompany .equip-grid {
   display: grid; grid-template-columns: repeat(3, 70px);
-  gap: 5px; justify-content: center;
+  gap: 12px; justify-content: center;
 }
 .limbuscompany .equip-slot {
   width: 70px; height: 70px;
@@ -2893,16 +2894,23 @@ body.game .limbuscompany.app img {
   position: absolute; width: 0; height: 0;
   border: 5px solid transparent; pointer-events: none;
 }
-.limbuscompany .link-arrow.up    { top: -5px; left: 50%; transform: translateX(-50%); border-bottom-color: var(--gold-active); }
-.limbuscompany .link-arrow.down  { bottom: -5px; left: 50%; transform: translateX(-50%); border-top-color: var(--gold-active); }
-.limbuscompany .link-arrow.left  { left: -5px; top: 50%; transform: translateY(-50%); border-right-color: var(--gold-active); }
-.limbuscompany .link-arrow.right { right: -5px; top: 50%; transform: translateY(-50%); border-left-color: var(--gold-active); }
+.limbuscompany .link-arrow.up    { top: -10px; left: 50%; transform: translateX(-50%); border-bottom-color: var(--gold-active); }
+.limbuscompany .link-arrow.down  { bottom: -10px; left: 50%; transform: translateX(-50%); border-top-color: var(--gold-active); }
+.limbuscompany .link-arrow.left  { left: -10px; top: 50%; transform: translateY(-50%); border-right-color: var(--gold-active); }
+.limbuscompany .link-arrow.right { right: -10px; top: 50%; transform: translateY(-50%); border-left-color: var(--gold-active); }
 
 /* ─── §3-F  列表面板（物品/技能右侧，行高25px）─────────────────── */
 
 .limbuscompany .list-panel {
   flex: 1; display: flex; flex-direction: column; overflow: hidden;
-  padding: 6px 6px 6px 8px;
+  padding: 0px 6px 6px 8px;
+}
+
+/* 物品列表滚动条 */
+.limbuscompany .item-list-panel {
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: 4px;
 }
 
 /* 物品列表滚动条 */
@@ -2925,10 +2933,11 @@ body.game .limbuscompany.app img {
   color: var(--text-main); font-family: var(--font-main); font-size: .75rem;
   border-radius: 2px; padding: 3px 6px;
 }
-.limbuscompany .toolbar-btns { display: flex; gap: 2px; }
+.limbuscompany .toolbar-btns { display: flex; gap: 2px; max-height: 26px;}
 .limbuscompany .toolbar-btn {
   background: var(--bg-panel); border: 1px solid var(--border-gold);
-  color: var(--text-sub); font-size: .75rem; padding: 3px 6px;
+  color: var(--text-sub); font-size: .75rem;
+   /* padding: 3px 6px; */
   cursor: pointer; border-radius: 2px; transition: all .15s;
 }
 .limbuscompany .toolbar-btn:hover { color: var(--gold-active); border-color: var(--gold-active); }
@@ -3060,6 +3069,7 @@ body.game .limbuscompany.app img {
   align-items: center;
   justify-content: center;
   gap: 2px;
+  gap: 12px;
 }
 
 .limbuscompany .action-btn {
