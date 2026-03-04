@@ -1021,8 +1021,12 @@
 /* FA6 直接在类选择器上设置 font-family，不受父级继承影响。
    但以防万一，显式恢复 fa-solid / fa-regular 等的 font-family。 */
 .fa, .fas, .far, .fab, .fal, .fad,
-.fa-solid, .fa-regular, .fa-light, .fa-brands, .fa-thin, .fa-duotone {
-  /* 由 Font Awesome 自身 CSS 设置；此处只保证不覆盖显示方式 */
+.fa-solid, .fa-regular, .fa-light, .fa-brands, .fa-thin, .fa-duotone,
+i[class^="fa"], i[class*=" fa-"] {
+  /* 强制恢复 FA 字体，避免被全局窗口字体覆盖成方块 */
+  font-family: var(--fa-style-family-classic, "Font Awesome 6 Pro", "Font Awesome 6 Free") !important;
+  font-weight: var(--fa-style, 900) !important;
+  font-style: normal;
   display: inline-block;
 }
 
@@ -1944,6 +1948,16 @@ prose-mirror {
   border-right: 1px solid var(--border-gold);
 }
 
+
+/* 左侧工具栏图标（scene-control / control-tool）保护 */
+#controls .scene-control i,
+#controls .control-tool i,
+#controls .scene-control::before,
+#controls .control-tool::before {
+  font-family: var(--fa-style-family-classic, "Font Awesome 6 Pro", "Font Awesome 6 Free") !important;
+  font-weight: var(--fa-style, 900) !important;
+}
+
 #controls .control-tool {
   color: var(--text-sub);
   background-color: transparent;
@@ -2385,9 +2399,19 @@ a.content-link:hover,
 .limbuscompany .actor-avatar {
   width: 100px !important;
   height: 100px !important;
+  flex: none !important;
   max-width: none !important;
   margin-right: 0 !important;
   border-radius: 4px !important;
+}
+
+/* 覆盖 Foundry 默认图片规则，避免全局 img 边框/flex 影响角色卡布局 */
+body.game .limbuscompany.sheet.app header.sheet-header img {
+  flex: none !important;
+}
+
+body.game .limbuscompany.app img {
+  border: none !important;
 }
 
 /* 资源图标（HP/理智）、基础信息图标（ATK/DEF/SPD）、抗性图标 */
@@ -2514,6 +2538,24 @@ a.content-link:hover,
 }
 .limbuscompany .lv-value:disabled { border: none; cursor: default; }
 
+.limbuscompany .level-up-btn {
+  width: 22px;
+  height: 22px;
+  margin-left: 4px;
+  border: 1px solid #A7861A;
+  border-radius: 3px;
+  background: #F3CE40;
+  color: #2B1C00;
+  font-weight: bold;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0;
+}
+
+.limbuscompany .level-up-btn:hover {
+  background: #F9DD6F;
+}
+
 /* XP 数值行：右对齐，16px，当前值#E8C9A2，最大值#946438 */
 .limbuscompany .xp-values-row {
   display: flex; align-items: center; justify-content: flex-end;
@@ -2587,6 +2629,20 @@ a.content-link:hover,
 .limbuscompany .resource-reset:hover { opacity: 1; }
 .limbuscompany .reset-icon { width: 16px; height: 16px; }
 
+/* HP/理智重置按钮可见性增强 */
+.limbuscompany .hp-reset.resource-reset,
+.limbuscompany .sanity-reset.resource-reset {
+  background: #E8C9A2;
+  border: 1px solid #9A6839;
+  border-radius: 3px;
+  opacity: 1;
+}
+
+.limbuscompany .hp-reset.resource-reset:hover,
+.limbuscompany .sanity-reset.resource-reset:hover {
+  background: #F1D8BA;
+}
+
 .limbuscompany .panic-label {
   color: var(--red-danger); font-size: .6rem; font-weight: bold;
   margin-left: 4px; animation: blink 1s step-start infinite;
@@ -2625,8 +2681,8 @@ a.content-link:hover,
     color: #E8C9A2; line-height: 1; }
 .limbuscompany .info-sign   { 
     /* font-size: 2rem;  */
-    font-weight: bold; line-height: 1; }
-.limbuscompany .info-pos    { color: var(--gold-active); }
+    font-weight: normal; color: #E8C9A2; line-height: 1; }
+.limbuscompany .info-pos    { color: #E8C9A2; }
 .limbuscompany .info-neg    { color: var(--red-danger); }
 .limbuscompany .resist-val  { 
   /* font-size: 2rem; */
@@ -2642,20 +2698,20 @@ a.content-link:hover,
   overflow: hidden;
 }
 
-/* 背景标签行（200×25px，#3B2412背景，16px文字#8E5F34，右对齐） */
+/* 背景标签行（200×25px，#3B2412背景，16px文字#9A6839，右对齐） */
 .limbuscompany .name-row-top {
-  display: flex; align-items: center; gap: 6px; width: 100%;
+  display: flex; align-items: center; justify-content: flex-end; gap: 6px; width: 100%;
 }
 .limbuscompany .bg-tag {
   width: 200px; height: 25px; line-height: 25px;
-  background: #3B2412; color: #8E5F34;
+  background: #3B2412; color: #9A6839;
   font-size: 16px; text-align: right; padding-right: 6px;
   border-radius: 2px; flex-shrink: 0; overflow: hidden;
   text-overflow: ellipsis; white-space: nowrap;
 }
 .limbuscompany .bg-tag-input {
   width: 200px; height: 25px; background: #3B2412;
-  border: 1px solid var(--gold-active); color: #8E5F34;
+  border: 1px solid var(--gold-active); color: #9A6839;
   font-size: 16px; text-align: right; padding: 0 6px;
   border-radius: 2px; font-family: var(--font-main); flex-shrink: 0;
 }
@@ -2670,27 +2726,27 @@ a.content-link:hover,
 }
 .limbuscompany .long-rest-btn:hover { background: var(--gold-active); }
 
-/* 名字行（200×50px，32px字体，#E8C9A2） */
+/* 名字行（右对齐并增加高度，避免姓名显示被压） */
 .limbuscompany .name-row-main {
-  width: 200px; height: 50px; display: flex; align-items: center;
+  width: 100%; min-height: 58px; display: flex; align-items: center; justify-content: flex-end;
   overflow: hidden;
 }
 .limbuscompany .actor-name-display {
   display: block; width: 100%;
   font-size: 32px; font-weight: bold; color: #E8C9A2; line-height: 1;
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: right; padding-right: 6px; line-height: 1.15;
 }
 .limbuscompany .actor-name-input {
   font-size: 32px; font-weight: bold; background: transparent;
   border: none; border-bottom: 1px solid var(--gold-active);
-  color: #E8C9A2; width: 100%; font-family: var(--font-main); line-height: 1;
+  color: #E8C9A2; width: 100%; font-family: var(--font-main); line-height: 1.15; text-align: right; padding-right: 6px;
 }
 .limbuscompany .actor-name-input:disabled { border: none; cursor: default; }
 
 /* 六属性块（360×80px，居中，每格50×60px，bg #5F3E22） */
 .limbuscompany .attributes-block {
   display: flex; gap: 6px; flex-wrap: nowrap;
-  width: 360px; height: 80px; align-items: center; justify-content: center;
+  width: 100%; max-width: 360px; height: 80px; align-items: center; justify-content: center;
 }
 .limbuscompany .attr-item {
   display: flex; flex-direction: column; align-items: center; justify-content: center;
@@ -2735,6 +2791,25 @@ a.content-link:hover,
   border-radius: 2px;
   cursor: text;
   padding: 1px 3px;
+}
+
+/* 右上角姓名/背景需要保留专用视觉，不受通用 editable-field 覆盖 */
+.limbuscompany .bg-tag-input.editable-field:disabled {
+  background: #3B2412 !important;
+  color: #9A6839 !important;
+  -webkit-text-fill-color: #9A6839 !important;
+  text-align: right;
+  padding: 0 6px;
+}
+
+.limbuscompany .actor-name-input.editable-field:disabled {
+  color: #E8C9A2 !important;
+  -webkit-text-fill-color: #E8C9A2 !important;
+  text-align: right;
+  padding: 0 6px 0 0;
+  min-height: 58px;
+  height: 58px;
+  line-height: 1.15;
 }
 
 /* ─── §3-C  Tab 导航（固定高24px） ──────────────────────────────── */
@@ -2804,6 +2879,7 @@ a.content-link:hover,
   box-shadow: inset 0 1px 3px rgba(0,0,0,.5);
 }
 .limbuscompany .equip-slot:hover { border-color: var(--gold-active); background: rgba(95,62,33,.5); }
+.limbuscompany .equip-slot-filled { background: #3B2412; }
 .limbuscompany .equip-slot-icon { width: 100%; height: 100%; object-fit: cover; border-radius: 3px; }
 .limbuscompany .equip-slot-placeholder {
   width: 40%; height: 40%; border: 1px dashed rgba(95,62,33,.35); border-radius: 2px;
@@ -2825,9 +2901,21 @@ a.content-link:hover,
   flex: 1; display: flex; flex-direction: column; overflow: hidden;
   padding: 6px 6px 6px 8px;
 }
+
+/* 物品列表滚动条 */
+.limbuscompany .item-list-panel {
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: 4px;
+}
 .limbuscompany .list-toolbar {
   display: flex; align-items: center; gap: 4px; margin-bottom: 4px;
-  flex-shrink: 0; position: relative;
+  flex-shrink: 0;
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  background: linear-gradient(180deg, var(--bg-darkest) 0%, var(--bg-mid) 100%);
+  padding-bottom: 2px;
 }
 .limbuscompany .item-search {
   flex: 1; background: var(--bg-panel); border: 1px solid var(--border-gold);
@@ -2899,7 +2987,10 @@ a.content-link:hover,
   flex-shrink: 0; text-transform: uppercase; letter-spacing: .04em;
 }
 /* 图标32px / 名称自适应 / 分类80px / 链接60px / 数量50px / 星芒50px / 操作80px */
-.limbuscompany .item-list-header  { grid-template-columns: 32px 1fr 80px 60px 50px 50px 80px; gap: 4px; }
+.limbuscompany {
+  --item-list-columns: 32px 1fr 80px 60px 50px 50px 80px;
+}
+.limbuscompany .item-list-header  { grid-template-columns: var(--item-list-columns); gap: 4px; }
 .limbuscompany .skill-list-header { grid-template-columns: 32px 1fr 80px 60px 50px 50px 80px; gap: 4px; }
 
 /* 分组 */
@@ -2920,7 +3011,7 @@ a.content-link:hover,
 .limbuscompany .item-list { list-style: none; margin: 0; padding: 0; }
 .limbuscompany .item-row,
 .limbuscompany .skill-row {
-  display: grid; grid-template-columns: 32px 1fr 80px 60px 50px 50px 80px; gap: 4px;
+  display: grid; grid-template-columns: var(--item-list-columns); gap: 4px;
   height: 25px; align-items: center; padding: 0 4px;
   border-bottom: 1px solid rgba(95,62,33,.2); font-size: .75rem;
   transition: background .1s;
@@ -2939,6 +3030,34 @@ a.content-link:hover,
 .limbuscompany .item-links,
 .limbuscompany .item-qty,
 .limbuscompany .item-stellar { color: var(--text-sub); font-size: .72rem; }
+
+/* 让表头与数据列采用一致对齐规则，避免视觉错位 */
+.limbuscompany .item-list-header .col-icon,
+.limbuscompany .item-row .col-icon { justify-self: start; }
+
+.limbuscompany .item-list-header .col-name,
+.limbuscompany .item-row .col-name { justify-self: start; text-align: left; }
+
+.limbuscompany .item-list-header .col-cat,
+.limbuscompany .item-list-header .col-link,
+.limbuscompany .item-list-header .col-qty,
+.limbuscompany .item-list-header .col-stellar,
+.limbuscompany .item-list-header .col-actions,
+.limbuscompany .item-row .col-cat,
+.limbuscompany .item-row .col-link,
+.limbuscompany .item-row .col-qty,
+.limbuscompany .item-row .col-stellar,
+.limbuscompany .item-row .col-actions {
+  justify-self: center;
+  text-align: center;
+}
+
+.limbuscompany .item-row .col-actions {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+}
 
 .limbuscompany .action-btn {
   background: none; border: none; cursor: pointer;
@@ -3588,4 +3707,3 @@ a.content-link:hover,
   margin-bottom: 8px;
 }
 .limbuscompany .clash-formula { color: var(--text-sub); }
-
