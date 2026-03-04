@@ -72,22 +72,32 @@ export class LimbusActorSheet extends ActorSheet {
 
     // ── 技能槽 ────────────────────────────────────────────────────────────
     const basicIds = system.skills?.basic ?? [null, null, null, null, null, null];
-    context.basicSkills = basicIds.map((id, idx) => ({
-      slotIndex: idx,
-      item:      id ? actor.items.get(id) : null,
-      itemId:    id ?? null,
-    }));
+    context.basicSkills = basicIds.map((id, idx) => {
+      const bItem = id ? actor.items.get(id) : null;
+      return {
+        slotIndex: idx,
+        item:      bItem,
+        itemId:    id ?? null,
+        skillImg:  bItem ? _skillAutoIcon(bItem.system) : null,
+      };
+    });
 
+    const defItem = system.skills?.defense ? actor.items.get(system.skills.defense) : null;
     context.defenseSkill = {
-      item:   system.skills?.defense ? actor.items.get(system.skills.defense) : null,
-      itemId: system.skills?.defense ?? null,
+      item:     defItem,
+      itemId:   system.skills?.defense ?? null,
+      skillImg: defItem ? _skillAutoIcon(defItem.system) : null,
     };
 
-    context.egoSkills = cfg.EGO_GRADES.map(grade => ({
-      grade,
-      item:   system.skills?.ego?.[grade] ? actor.items.get(system.skills.ego[grade]) : null,
-      itemId: system.skills?.ego?.[grade] ?? null,
-    }));
+    context.egoSkills = cfg.EGO_GRADES.map(grade => {
+      const egoItem = system.skills?.ego?.[grade] ? actor.items.get(system.skills.ego[grade]) : null;
+      return {
+        grade,
+        item:     egoItem,
+        itemId:   system.skills?.ego?.[grade] ?? null,
+        skillImg: egoItem ? _skillAutoIcon(egoItem.system) : null,
+      };
+    });
 
     // ── 物品分组（物品 Tab） ───────────────────────────────────────────────
     context.itemGroups  = this._groupEquipmentItems();
@@ -180,6 +190,18 @@ export class LimbusActorSheet extends ActorSheet {
 
   _enrichItemContext(item) {
     const sys = item.system;
+    const cfg = CONFIG.LIMBUSCOMPANY;
+
+    // 罪孽中文标签
+    const sinI18nKey = cfg.SIN_LABELS?.[sys.sinType];
+    const sinLabel   = sinI18nKey ? game.i18n.localize(sinI18nKey) : (sys.sinType ?? "");
+
+    // 分类中文标签（首字母大写匹配 i18n key）
+    const catRaw   = sys.category ?? "";
+    const catKey   = `LIMBUSCOMPANY.Category.${catRaw.charAt(0).toUpperCase()}${catRaw.slice(1)}`;
+    const catTrans = game.i18n.localize(catKey);
+    const catLabel = catTrans !== catKey ? catTrans : catRaw;
+
     return {
       _id:         item.id,
       name:        item.name,
@@ -189,7 +211,10 @@ export class LimbusActorSheet extends ActorSheet {
       stellarCost: item.getStellarCost?.() ?? 0,
       isEquipped:  this._isItemEquipped(item.id),
       isFavorite:  this._favorites.has(item.id),
-      sinColor:    CONFIG.LIMBUSCOMPANY.SIN_COLORS?.[sys.sinType] ?? "#E8CAA2",
+      sinColor:    cfg.SIN_COLORS?.[sys.sinType] ?? "#E8CAA2",
+      sinLabel,
+      catLabel,
+      skillIcon:   item.type === "skill" ? _skillAutoIcon(sys) : item.img,
     };
   }
 
@@ -408,29 +433,39 @@ export class LimbusActorSheet extends ActorSheet {
       return;
     }
 
-    // ── 拖入基础技能槽（自由放置：目标具体槽位） ─────────────────────────
-    const basicSlotWrap = $target.closest(".skill-slot-wrap[data-slot-type='basic']");
-    if (basicSlotWrap.length && item.type === "skill" && item.system.type === "basic") {
-      const owned      = ownedItem ?? await this._importItemToActor(item);
-      const targetSlot = parseInt(basicSlotWrap.data("slotIndex") ?? "0");
-      const fromSlot   = parseInt(data.fromSkillSlot ?? "-1");
-      if (owned) await this.actor.equipSkillToSlot(owned.id, targetSlot, isNaN(fromSlot) ? -1 : fromSlot);
-      return;
-    }
+    // ── 拖入任意技能槽（统一入口，含类型不匹配警告） ─────────────────────
+    const skillSlotWrap = $target.closest(".skill-slot-wrap[data-slot-type]");
+    if (skillSlotWrap.length) {
+      const slotType = skillSlotWrap.data("slotType");
 
-    // ── 拖入 EGO 槽 ───────────────────────────────────────────────────────
-    const egoSlot = $target.closest(".ego-skill-slot-wrap");
-    if (egoSlot.length && item.type === "skill" && item.system.type === "ego") {
-      const owned = ownedItem ?? await this._importItemToActor(item);
-      if (owned) await this.actor.equipSkill(owned.id);
-      return;
-    }
+      // 非技能物品拖入技能槽
+      if (item.type !== "skill") {
+        ui.notifications.warn("只有技能才能放入技能槽。");
+        return;
+      }
 
-    // ── 拖入守备槽 ────────────────────────────────────────────────────────
-    const defSlot = $target.closest(".defense-skill-slot");
-    if (defSlot.length && item.type === "skill" && item.system.type === "defense") {
-      const owned = ownedItem ?? await this._importItemToActor(item);
-      if (owned) await this.actor.equipSkill(owned.id);
+      // 类型不匹配（如基础技能拖入EGO槽）
+      const slotLabelMap = { basic:"基础技能槽", ego:"EGO技能槽", defense:"守备技能槽" };
+      const typeLabelMap = { basic:"基础技能",   ego:"EGO技能",   defense:"守备技能" };
+      if (item.system.type !== slotType) {
+        ui.notifications.warn(
+          `${typeLabelMap[item.system.type] ?? "该技能"}无法放入${slotLabelMap[slotType] ?? slotType}。`
+        );
+        return;
+      }
+
+      // ── 基础技能：自由放置到目标槽位 ─────────────────────────────────
+      if (slotType === "basic") {
+        const owned      = ownedItem ?? await this._importItemToActor(item);
+        const targetSlot = parseInt(skillSlotWrap.data("slotIndex") ?? "0");
+        const fromSlot   = parseInt(data.fromSkillSlot ?? "-1");
+        if (owned) await this.actor.equipSkillToSlot(owned.id, targetSlot, isNaN(fromSlot) ? -1 : fromSlot);
+      }
+      // ── EGO / 守备：按类型自动匹配槽位 ──────────────────────────────
+      else {
+        const owned = ownedItem ?? await this._importItemToActor(item);
+        if (owned) await this.actor.equipSkill(owned.id);
+      }
       return;
     }
 
@@ -1124,4 +1159,18 @@ function _getCategoryIcon(category) {
 function _subtypeLabel(subtype) {
   return { weapon:"武器", upper:"上装", lower:"下装", accessory:"饰品",
            consumable:"消耗品", material:"材料", container:"容器" }[subtype] ?? subtype;
+}
+
+/**
+ * 根据罪孽类型和技能等级自动匹配 assets/icons/Skill/ 下的图标路径
+ * EGO技能统一使用 E.G.O.webp；无罪孽则使用 Normalsin.webp
+ */
+function _skillAutoIcon(sys) {
+  const base = "systems/limbusCompany_FVTT/assets/icons/Skill/";
+  if (sys.type === "ego") return base + "E.G.O.webp";
+  const sinMap = { wrath:"Wrath", lust:"Lust", sloth:"Sloth", gluttony:"Gluttony", gloom:"Gloom", pride:"Pride", envy:"Envy" };
+  const sinPrefix = sinMap[sys.sinType];
+  if (!sinPrefix) return base + "Normalsin.webp";
+  const lv = Math.min(3, Math.max(1, parseInt(sys.level) || 1));
+  return `${base}${sinPrefix}_lv${lv}.webp`;
 }

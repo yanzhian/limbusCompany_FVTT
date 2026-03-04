@@ -18,7 +18,7 @@
              title="{{#if item}}{{item.name}}{{else}}基础技能槽 {{slotIndex}}{{/if}}">
           <div class="skill-slot-octa"
                {{#if item}}style="border-color:{{sinColor item.system.sinType}}"{{/if}}>
-            <img src="{{#if item}}{{item.img}}{{else}}systems/limbusCompany_FVTT/assets/icons/Skill/Normalsin.webp{{/if}}"
+            <img src="{{#if item}}{{skillImg}}{{else}}systems/limbusCompany_FVTT/assets/icons/Skill/Normalsin.webp{{/if}}"
                  alt="{{#if item}}{{item.name}}{{else}}空{{/if}}"
                  class="skill-slot-img">
           </div>
@@ -42,7 +42,7 @@
              title="{{#if item}}{{item.name}}{{else}}{{grade}}{{/if}}">
           <div class="skill-slot-circle"
                {{#if item}}style="border-color:{{sinColor item.system.sinType}}"{{/if}}>
-            <img src="{{#if item}}{{item.img}}{{else}}systems/limbusCompany_FVTT/assets/icons/Skill/Normalsin.webp{{/if}}"
+            <img src="{{#if item}}{{skillImg}}{{else}}systems/limbusCompany_FVTT/assets/icons/Skill/Normalsin.webp{{/if}}"
                  alt="{{grade}}"
                  class="skill-slot-img">
           </div>
@@ -60,7 +60,7 @@
            title="{{#if defenseSkill.item}}{{defenseSkill.item.name}}{{else}}守备技能{{/if}}">
         <div class="skill-slot-octa"
              {{#if defenseSkill.item}}style="border-color:{{sinColor defenseSkill.item.system.sinType}}"{{/if}}>
-          <img src="{{#if defenseSkill.item}}{{defenseSkill.item.img}}{{else}}systems/limbusCompany_FVTT/assets/icons/Skill/Normalsin.webp{{/if}}"
+          <img src="{{#if defenseSkill.item}}{{defenseSkill.skillImg}}{{else}}systems/limbusCompany_FVTT/assets/icons/Skill/Normalsin.webp{{/if}}"
                alt="守备"
                class="skill-slot-img">
         </div>
@@ -134,12 +134,12 @@
                 data-type="{{system.type}}"
                 data-subtype="{{system.sinType}}">
               <span class="col-icon">
-                <img src="{{img}}" class="item-icon" data-item-id="{{_id}}" alt="{{name}}"
+                <img src="{{skillIcon}}" class="item-icon" data-item-id="{{_id}}" alt="{{name}}"
                      style="border-color:{{sinColor}}">
               </span>
               <span class="col-name item-name">{{name}}</span>
-              <span class="col-cat">{{system.category}}</span>
-              <span class="col-sin" style="color:{{sinColor}}">{{system.sinType}}</span>
+              <span class="col-cat">{{catLabel}}</span>
+              <span class="col-sin" style="color:{{sinColor}}">{{sinLabel}}</span>
               <span class="col-qty">1</span>
               <span class="col-stellar">{{stellarCost}}</span>
               <span class="col-actions">
