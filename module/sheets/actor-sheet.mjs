@@ -42,9 +42,11 @@ export class LimbusActorSheet extends ActorSheet {
     context.config     = cfg;
     context.isGM       = game.user.isGM;
     context.isEditable = this.isEditable;
+    this._editUnlocked ??= false;
 
     // ── 经验/HP/理智百分比 ────────────────────────────────────────────────
     context.xpPercent     = system.xp.next  > 0 ? ((system.xp.value  / system.xp.next)  * 100) : 0;
+    context.canLevelUp    = (system.xp.value ?? 0) > (system.xp.next ?? Number.MAX_SAFE_INTEGER);
     context.hpPercent     = system.hp.max   > 0 ? ((system.hp.value   / system.hp.max)   * 100) : 0;
     context.sanityPercent = ((system.sanity.value - 5) / 90) * 100;
     context.isInPanic     = system.sanity.value <= 5;
@@ -52,7 +54,7 @@ export class LimbusActorSheet extends ActorSheet {
     // ── 属性列表 ──────────────────────────────────────────────────────────
     context.attributes = cfg.ATTRIBUTES.map(key => ({
       key,
-      label: cfg.ATTRIBUTE_LABELS[key] ?? key,
+      label: this._getAttributeLabel(key),
       value: system.attributes[key] ?? 0,
     }));
 
@@ -143,6 +145,23 @@ export class LimbusActorSheet extends ActorSheet {
       .map(k => groups[k]);
   }
 
+
+  _getAttributeLabel(attrKey) {
+    const i18nKey = CONFIG.LIMBUSCOMPANY.ATTRIBUTE_LABELS?.[attrKey] ?? attrKey;
+    const localized = game.i18n.localize(i18nKey);
+    if (localized !== i18nKey) return localized;
+
+    const fallbackLabels = {
+      str: "力量",
+      agi: "敏捷",
+      con: "体质",
+      int: "智力",
+      per: "感知",
+      cha: "魅力",
+    };
+    return fallbackLabels[attrKey] ?? localized;
+  }
+
   _groupSkillItems() {
     const groups = {
       basic:   { key: "basic",   label: "基本技能",  items: [] },
@@ -197,6 +216,7 @@ export class LimbusActorSheet extends ActorSheet {
 
   activateListeners(html) {
     super.activateListeners(html);
+    this._applyEditLockState(html);
 
     // ── 只读操作（非编辑模式也可用） ──────────────────────────────────────
 
@@ -227,6 +247,9 @@ export class LimbusActorSheet extends ActorSheet {
 
     // ── 锁状态切换 ────────────────────────────────────────────────────────
     html.find(".sheet-lock-toggle").on("click", this._onToggleLock.bind(this));
+
+    // ── 升级按钮（经验值 > 升级阈值） ───────────────────────────────────
+    html.find(".level-up-btn").on("click", this._onLevelUpClick.bind(this));
 
     // ── 长休 ─────────────────────────────────────────────────────────────
     html.find(".long-rest-btn").on("click", () => this.actor.longRest());
@@ -287,6 +310,28 @@ export class LimbusActorSheet extends ActorSheet {
 
   /* ─── 拖放处理 ──────────────────────────────────────────────────────────── */
 
+  _onDragStart(event) {
+    const dragEl = event.currentTarget;
+    const slotEl = dragEl?.closest?.(".equip-slot[data-item-id]");
+
+    if (slotEl) {
+      const itemId = slotEl.dataset.itemId;
+      const slotIndex = Number(slotEl.dataset.slot);
+      const item = this.actor.items.get(itemId);
+      if (!item) return;
+
+      const dragData = {
+        type: "Item",
+        uuid: item.uuid,
+        fromEquipSlot: Number.isInteger(slotIndex) ? slotIndex : null,
+      };
+      event.dataTransfer.setData("text/plain", JSON.stringify(dragData));
+      return;
+    }
+
+    return super._onDragStart(event);
+  }
+
   async _onDrop(event) {
     event.preventDefault();
     const data = TextEditor.getDragEventData(event);
@@ -315,9 +360,27 @@ export class LimbusActorSheet extends ActorSheet {
         ui.notifications.warn("只能将装备放入装备栏。");
         return;
       }
-      // 若物品不属于 actor，先添加
+
+      // 装备栏内拖拽：移动（源槽清空）；若目标有装备则交换
+      const fromSlot = Number.isInteger(data.fromEquipSlot) ? data.fromEquipSlot : parseInt(data.fromEquipSlot);
       const owned = ownedItem ?? (await this._importItemToActor(item));
-      if (owned) await this.actor.equipToGrid(owned.id, slotIdx);
+      if (!owned) return;
+
+      if (Number.isInteger(fromSlot) && fromSlot >= 0 && fromSlot <= 8) {
+        if (fromSlot === slotIdx) return;
+        const sourceId = this.actor.system.equipment?.[`slot${fromSlot}`] ?? null;
+        if (sourceId === owned.id) {
+          const targetId = this.actor.system.equipment?.[`slot${slotIdx}`] ?? null;
+          await this.actor.update({
+            [`system.equipment.slot${slotIdx}`]: owned.id,
+            [`system.equipment.slot${fromSlot}`]: targetId,
+          });
+          return;
+        }
+      }
+
+      // 常规拖入：按装备逻辑处理（含星芒消耗）
+      await this.actor.equipToGrid(owned.id, slotIdx);
       return;
     }
 
@@ -345,6 +408,13 @@ export class LimbusActorSheet extends ActorSheet {
       return;
     }
 
+    // ── 从装备栏拖到其他区域：视为卸下（源槽清空） ───────────────────────
+    const fromSlot = Number.isInteger(data.fromEquipSlot) ? data.fromEquipSlot : parseInt(data.fromEquipSlot);
+    if (Number.isInteger(fromSlot) && fromSlot >= 0 && fromSlot <= 8) {
+      await this.actor.unequipFromGrid(fromSlot);
+      return;
+    }
+
     // ── 默认：添加物品到 actor ────────────────────────────────────────────
     if (!ownedItem) {
       await this._importItemToActor(item);
@@ -361,7 +431,7 @@ export class LimbusActorSheet extends ActorSheet {
   async _onAttributeCheck(event) {
     const attr = event.currentTarget.dataset.attr;
     const attrVal = this.actor.system.attributes[attr] ?? 0;
-    const label = CONFIG.LIMBUSCOMPANY.ATTRIBUTE_LABELS[attr] ?? attr;
+    const label = this._getAttributeLabel(attr);
 
     const { AttributeCheckDialog } = await import("../helpers/dice.mjs").catch(() => ({ AttributeCheckDialog: null }));
     if (AttributeCheckDialog) {
@@ -869,20 +939,36 @@ export class LimbusActorSheet extends ActorSheet {
     await this.actor.removeBuff(buffId);
   }
 
+  async _onLevelUpClick(event) {
+    event.preventDefault();
+    await this.actor.levelUpByXp?.();
+  }
+
   /* ─── 编辑锁 ─────────────────────────────────────────────────────────────── */
 
   _onToggleLock(event) {
-    const lock = $(event.currentTarget);
-    const isLocked = lock.hasClass("locked");
-    if (isLocked) {
-      lock.removeClass("locked").html('<i class="fas fa-lock-open"></i>');
-      this.element.find(".editable-field").prop("disabled", false);
-      this.element.find(".editable-only").show();
+    event.preventDefault();
+    this._editUnlocked = !this._editUnlocked;
+    this._applyEditLockState(this.element);
+  }
+
+  _applyEditLockState(html) {
+    const root = html && html.find ? html : this.element;
+    if (!root?.length) return;
+
+    const lockBtn = root.find(".sheet-lock-toggle");
+    if (this._editUnlocked) {
+      lockBtn.removeClass("locked").html('<i class="fas fa-lock-open"></i>');
+      root.find(".editable-field").prop("disabled", false);
+      root.find(".editable-only").show();
     } else {
-      lock.addClass("locked").html('<i class="fas fa-lock"></i>');
-      this.element.find(".editable-field").prop("disabled", true);
-      this.element.find(".editable-only").hide();
+      lockBtn.addClass("locked").html('<i class="fas fa-lock"></i>');
+      root.find(".editable-field").prop("disabled", true);
+      root.find(".editable-only").hide();
     }
+
+    // 星芒固定不可编辑
+    root.find("[name='system.stellarMotes.value']").prop("disabled", true);
   }
 
   /* ─── Title 卡片（悬停） ────────────────────────────────────────────────── */
