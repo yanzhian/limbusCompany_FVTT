@@ -2867,7 +2867,7 @@ body.game .limbuscompany.app img {
 /* 九宫格：3列，每格70×70px */
 .limbuscompany .equip-grid {
   display: grid; grid-template-columns: repeat(3, 70px);
-  gap: 10px; justify-content: center;
+  gap: 12px; justify-content: center;
 }
 .limbuscompany .equip-slot {
   width: 70px; height: 70px;
