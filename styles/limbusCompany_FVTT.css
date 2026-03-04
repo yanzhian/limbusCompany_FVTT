@@ -2545,7 +2545,7 @@ body.game .limbuscompany.app img {
 .limbuscompany .level-up-btn {
   width: 22px;
   height: 22px;
-  margin-left: 4px;
+  margin-left: 45px;
   border: 1px solid #A7861A;
   border-radius: 3px;
   background: #F3CE40;
@@ -2833,7 +2833,8 @@ body.game .limbuscompany.app img {
 }
 .limbuscompany .sheet-tabs .item {
   flex: 1; text-align: center; padding: 0; line-height: 32px; font-size: .8rem;
-  color: var(--text-sub); cursor: pointer; border-bottom: 2px solid transparent;
+  color: var(--text-sub); cursor: pointer; 
+  /* border-bottom: 2px solid transparent; */
   transition: all .15s; background: none; border-left: none; border-right: none; border-top: none;
   height: 36px; display: flex; align-items: center; justify-content: center;
 }
