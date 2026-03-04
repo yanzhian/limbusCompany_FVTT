@@ -2761,6 +2761,25 @@ body.game .limbuscompany.app img {
   padding: 1px 3px;
 }
 
+/* 右上角姓名/背景需要保留专用视觉，不受通用 editable-field 覆盖 */
+.limbuscompany .bg-tag-input.editable-field:disabled {
+  background: #3B2412 !important;
+  color: #9A6839 !important;
+  -webkit-text-fill-color: #9A6839 !important;
+  text-align: right;
+  padding: 0 6px;
+}
+
+.limbuscompany .actor-name-input.editable-field:disabled {
+  color: #E8C9A2 !important;
+  -webkit-text-fill-color: #E8C9A2 !important;
+  text-align: right;
+  padding: 0 6px 0 0;
+  min-height: 58px;
+  height: 58px;
+  line-height: 1.15;
+}
+
 /* ─── §3-C  Tab 导航（固定高24px） ──────────────────────────────── */
 
 .limbuscompany .sheet-tabs {
