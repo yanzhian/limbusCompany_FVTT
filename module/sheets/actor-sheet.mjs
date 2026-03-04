@@ -52,7 +52,7 @@ export class LimbusActorSheet extends ActorSheet {
     // ── 属性列表 ──────────────────────────────────────────────────────────
     context.attributes = cfg.ATTRIBUTES.map(key => ({
       key,
-      label: cfg.ATTRIBUTE_LABELS[key] ?? key,
+      label: this._getAttributeLabel(key),
       value: system.attributes[key] ?? 0,
     }));
 
@@ -141,6 +141,23 @@ export class LimbusActorSheet extends ActorSheet {
     return order
       .filter(k => groups[k])
       .map(k => groups[k]);
+  }
+
+
+  _getAttributeLabel(attrKey) {
+    const i18nKey = CONFIG.LIMBUSCOMPANY.ATTRIBUTE_LABELS?.[attrKey] ?? attrKey;
+    const localized = game.i18n.localize(i18nKey);
+    if (localized !== i18nKey) return localized;
+
+    const fallbackLabels = {
+      str: "力量",
+      agi: "敏捷",
+      con: "体质",
+      int: "智力",
+      per: "感知",
+      cha: "魅力",
+    };
+    return fallbackLabels[attrKey] ?? localized;
   }
 
   _groupSkillItems() {
@@ -361,7 +378,7 @@ export class LimbusActorSheet extends ActorSheet {
   async _onAttributeCheck(event) {
     const attr = event.currentTarget.dataset.attr;
     const attrVal = this.actor.system.attributes[attr] ?? 0;
-    const label = CONFIG.LIMBUSCOMPANY.ATTRIBUTE_LABELS[attr] ?? attr;
+    const label = this._getAttributeLabel(attr);
 
     const { AttributeCheckDialog } = await import("../helpers/dice.mjs").catch(() => ({ AttributeCheckDialog: null }));
     if (AttributeCheckDialog) {
