@@ -182,6 +182,13 @@ Hooks.on("updateCombat", (combat, changed) => {
 
 /* ─── Token 双击直接打开角色卡（无 Token 配置窗口过渡）──────────────────── */
 
+
+function _tokenOpenDebug(message, data = null) {
+  const prefix = "limbusCompany_FVTT | TokenOpenDebug";
+  if (data) console.info(prefix, message, data);
+  else console.info(prefix, message);
+}
+
 function _installTokenDoubleClickOpenActorSheet() {
   const tokenProto = globalThis.Token?.prototype;
   if (!tokenProto || tokenProto.__limbusDblClickPatched) return;
@@ -195,13 +202,29 @@ function _installTokenDoubleClickOpenActorSheet() {
       const baseActorId = this.document?.actorId ?? tokenActor?.id;
       const baseActor = game.actors?.get(baseActorId) ?? tokenActor;
 
+      _tokenOpenDebug("double-click captured", {
+        tokenName: this.document?.name,
+        tokenActorName: tokenActor?.name,
+        tokenActorType: tokenActor?.type,
+        tokenActorUuid: tokenActor?.uuid,
+        baseActorId,
+        baseActorName: baseActor?.name,
+        baseActorType: baseActor?.type,
+        canObserve: baseActor?.testUserPermission?.(game.user, "OBSERVER"),
+      });
+
       if (baseActor?.type === "character" && baseActor.testUserPermission(game.user, "OBSERVER")) {
         event?.preventDefault?.();
         event?.stopPropagation?.();
         this.release?.();
+        _tokenOpenDebug("rendering base actor sheet", { actorId: baseActor.id, actorName: baseActor.name });
         baseActor.sheet?.render(true, { focus: true });
         return;
       }
+
+      _tokenOpenDebug("fallback to Foundry default double-click behavior", {
+        reason: "baseActor not character or no permission",
+      });
     } catch (err) {
       console.warn("limbusCompany_FVTT | Token 双击打开角色卡失败，回退默认行为", err);
     }
@@ -209,6 +232,7 @@ function _installTokenDoubleClickOpenActorSheet() {
   };
 
   tokenProto.__limbusDblClickPatched = true;
+  _tokenOpenDebug("token double-click patch installed");
 }
 
 /* ─── 内部辅助函数 ───────────────────────────────────────────────────────── */
