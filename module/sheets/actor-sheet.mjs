@@ -379,6 +379,14 @@ export class LimbusActorSheet extends ActorSheet {
         }
       }
 
+      // 从物品列表拖拽已装备物品：禁止复制装备
+      const equippedSlot = Object.entries(this.actor.system.equipment ?? {})
+        .find(([, id]) => id === owned.id)?.[0] ?? null;
+      if (equippedSlot) {
+        ui.notifications.warn("该装备已在九宫格中，请直接拖动九宫格内的装备格进行移动。");
+        return;
+      }
+
       // 常规拖入：按装备逻辑处理（含星芒消耗）
       await this.actor.equipToGrid(owned.id, slotIdx);
       return;
@@ -410,7 +418,8 @@ export class LimbusActorSheet extends ActorSheet {
 
     // ── 从装备栏拖到其他区域：视为卸下（源槽清空） ───────────────────────
     const fromSlot = Number.isInteger(data.fromEquipSlot) ? data.fromEquipSlot : parseInt(data.fromEquipSlot);
-    if (Number.isInteger(fromSlot) && fromSlot >= 0 && fromSlot <= 8) {
+    const droppedOutsideEquipGrid = $target.closest(".equip-grid").length === 0;
+    if (Number.isInteger(fromSlot) && fromSlot >= 0 && fromSlot <= 8 && droppedOutsideEquipGrid) {
       await this.actor.unequipFromGrid(fromSlot);
       return;
     }
