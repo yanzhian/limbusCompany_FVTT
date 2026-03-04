@@ -2911,7 +2911,12 @@ body.game .limbuscompany.app img {
 }
 .limbuscompany .list-toolbar {
   display: flex; align-items: center; gap: 4px; margin-bottom: 4px;
-  flex-shrink: 0; position: relative;
+  flex-shrink: 0;
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  background: linear-gradient(180deg, var(--bg-darkest) 0%, var(--bg-mid) 100%);
+  padding-bottom: 2px;
 }
 .limbuscompany .item-search {
   flex: 1; background: var(--bg-panel); border: 1px solid var(--border-gold);
