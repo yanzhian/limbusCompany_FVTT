@@ -2879,6 +2879,7 @@ body.game .limbuscompany.app img {
   box-shadow: inset 0 1px 3px rgba(0,0,0,.5);
 }
 .limbuscompany .equip-slot:hover { border-color: var(--gold-active); background: rgba(95,62,33,.5); }
+.limbuscompany .equip-slot-filled { background: #3B2412; }
 .limbuscompany .equip-slot-icon { width: 100%; height: 100%; object-fit: cover; border-radius: 3px; }
 .limbuscompany .equip-slot-placeholder {
   width: 40%; height: 40%; border: 1px dashed rgba(95,62,33,.35); border-radius: 2px;
