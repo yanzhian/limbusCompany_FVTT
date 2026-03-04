@@ -2580,11 +2580,17 @@ a.content-link:hover,
 }
 .limbuscompany .info-icon   { width: 32px; height: 32px; object-fit: contain; flex-shrink: 0; }
 .limbuscompany .resist-icon { width: 32px; height: 32px; object-fit: contain; flex-shrink: 0; }
-.limbuscompany .info-val    { font-size: 2rem; color: #E8C9A2; line-height: 1; }
-.limbuscompany .info-sign   { font-size: 2rem; font-weight: bold; line-height: 1; }
+.limbuscompany .info-val    { 
+    /* font-size: 2rem; */
+    color: #E8C9A2; line-height: 1; }
+.limbuscompany .info-sign   { 
+    /* font-size: 2rem;  */
+    font-weight: bold; line-height: 1; }
 .limbuscompany .info-pos    { color: var(--gold-active); }
 .limbuscompany .info-neg    { color: var(--red-danger); }
-.limbuscompany .resist-val  { font-size: 2rem; color: #E8C9A2; line-height: 1; }
+.limbuscompany .resist-val  { 
+  /* font-size: 2rem; */
+   color: #E8C9A2; line-height: 1; }
 .limbuscompany .resist-weak   { color: var(--red-danger); font-weight: bold; }
 .limbuscompany .resist-strong { color: var(--resist-weak); }
 
