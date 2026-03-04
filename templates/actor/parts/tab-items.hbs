@@ -3,7 +3,7 @@
 
   {{!-- ── 左侧：九宫格装备栏 ──────────────────────────────────────── --}}
   <div class="equip-panel">
-    <div class="panel-label">装备栏</div>
+    <div class="panel-label equip-panel-label">装备栏</div>
     <div class="equip-grid">
       {{#each equipmentGrid}}
         <div class="equip-slot {{#if item}}equip-slot-filled{{else}}equip-slot-empty{{/if}}"
@@ -43,10 +43,12 @@
         <button class="item-create-btn toolbar-btn" title="新建物品" data-type="equipment">＋</button>
       </div>
 
-      {{!-- 过滤面板（默认隐藏） --}}
+      {{!-- 过滤面板（默认隐藏，245×255px） --}}
       <div class="filter-panel" style="display:none">
+        {{!-- 分类标题（245×48px，32px字体，#E8CAA1） --}}
+        <div class="filter-panel-title">分类</div>
         <div class="filter-section">
-          <div class="filter-section-label">分类</div>
+          {{!-- 分类按钮（40×20px 每个，横向排列自动换行，支持多选） --}}
           <div class="filter-buttons">
             <button class="filter-category-btn" data-category="weapon">武器</button>
             <button class="filter-category-btn" data-category="accessory">饰品</button>
@@ -58,7 +60,8 @@
           </div>
         </div>
         <div class="filter-section">
-          <div class="filter-section-label">链接</div>
+          <div class="filter-section-label">链接方向</div>
+          {{!-- 十字形布局：↑ / ← · → / ↓ --}}
           <div class="filter-link-cross">
             <div class="filter-link-row">
               <button class="filter-link-btn" data-dir="up">↑</button>

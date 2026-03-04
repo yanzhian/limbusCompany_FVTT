@@ -68,13 +68,13 @@
   --skill-related-border: #22C55E; /* 相关技能边框（绿色） */
 
   /* 布局尺寸 */
-  --sheet-width:        750px;
-  --sheet-height:       861px;
+  --sheet-width:        880px;
+  --sheet-height:       810px;
   --card-width:         17.5rem;
   --card-height:        28.75rem;
-  --header-height:      275px;
+  --header-height:      210px;
   --bottom-bar-height:  36px;
-  --list-row-height:    18px;
+  --list-row-height:    25px;
 
   /* 字体 */
   --font-main:     "Noto Sans SC", "Microsoft YaHei", sans-serif;
@@ -2392,153 +2392,310 @@ a.content-link:hover,
 
 .limbuscompany .sheet-header {
   display: flex;
-  gap: 8px;
+  gap: 6px;
   padding: 8px 10px 6px;
-  border-bottom: 1px solid var(--border-gold);
+  border-bottom: 1px solid #E8CAA2;
+  flex-shrink: 0;
+  min-height: var(--header-height);
+}
+
+/* 列通用 */
+.limbuscompany .header-col { display: flex; flex-direction: column; gap: 4px; }
+
+/* 左列：260px 固定 */
+.limbuscompany .header-left {
+  width: 260px; flex-shrink: 0;
+}
+
+/* 中列：220px 固定 */
+.limbuscompany .header-mid {
+  width: 220px; flex-shrink: 0; padding: 0 4px;
+}
+
+/* 右列：剩余空间，最小 370px */
+.limbuscompany .header-right {
+  flex: 1; min-width: 370px;
+}
+
+/* ── 头像区块（260×100px）：头像100×100 + XP区域150×60 ─────────────── */
+.limbuscompany .avatar-block {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-end;
+  width: 260px;
+  height: 100px;
+  gap: 8px;
+}
+
+/* 头像图片包裹（100×100，锁在右上角） */
+.limbuscompany .avatar-img-wrap {
+  position: relative;
+  width: 100px;
+  height: 100px;
   flex-shrink: 0;
 }
 
-.limbuscompany .header-col { display: flex; flex-direction: column; gap: 4px; }
-.limbuscompany .header-left  { width: 275px; flex-shrink: 0; }
-.limbuscompany .header-mid   { flex: 1; min-width: 120px; }
-.limbuscompany .header-right { flex: 1; min-width: 160px; }
-
-/* 头像区块 */
-.limbuscompany .avatar-block { position: relative; }
-.limbuscompany .avatar-wrap  { position: relative; display: inline-flex; flex-direction: column; align-items: flex-start; gap: 2px; }
 .limbuscompany .actor-avatar {
-  width: 55px; height: 55px; border-radius: 4px;
-  border: 1px solid var(--border-gold); object-fit: cover; cursor: pointer;
+  width: 100px; height: 100px;
+  border-radius: 4px; border: 1px solid var(--border-gold);
+  object-fit: cover; cursor: pointer; display: block;
 }
+
+/* 编辑锁：20×20px，叠在头像右上角 */
 .limbuscompany .sheet-lock-toggle {
-  position: absolute; top: 2px; left: 2px; z-index: 10;
-  background: rgba(0,0,0,.6); border: none; color: var(--text-sub);
-  font-size: .65rem; padding: 1px 3px; cursor: pointer; border-radius: 2px;
+  position: absolute; top: 2px; right: 2px; z-index: 10;
+  width: 20px; height: 20px;
+  background: rgba(0,0,0,.7); border: none; color: var(--text-sub);
+  font-size: .6rem; padding: 0; cursor: pointer; border-radius: 2px;
+  display: flex; align-items: center; justify-content: center;
   transition: color .15s;
 }
 .limbuscompany .sheet-lock-toggle:hover { color: var(--gold-active); }
-.limbuscompany .avatar-level {
-  display: flex; align-items: baseline; gap: 2px; margin-left: 58px;
-  margin-top: -52px;
-}
-.limbuscompany .lv-label { font-size: .6rem; color: var(--text-sub); text-transform: uppercase; }
-.limbuscompany .lv-value { font-size: 1.1rem; font-weight: bold; color: var(--gold-active); }
-.limbuscompany .avatar-xp { font-size: .65rem; color: var(--text-dim); margin-left: 58px; }
-.limbuscompany .xp-bar-wrap {
-  height: 3px; background: rgba(95,62,33,.3); border-radius: 2px;
-  overflow: hidden; width: 100%; margin-top: 2px;
-}
-.limbuscompany .xp-bar-fill { height: 100%; background: var(--gold-active); border-radius: 2px; transition: width .3s; }
+.limbuscompany .sheet-lock-toggle.locked { color: #E8C9A2; }
 
-/* HP / 理智行 */
-.limbuscompany .resource-row {
-  display: flex; align-items: center; gap: 4px; height: 22px;
+/* XP 区域：150×60px，底部对齐 */
+.limbuscompany .xp-section {
+  width: 150px; height: 60px; flex-shrink: 0;
+  display: flex; flex-direction: column; justify-content: flex-end; gap: 2px;
 }
-.limbuscompany .resource-icon { width: 16px; height: 16px; object-fit: contain; flex-shrink: 0; }
-.limbuscompany .resource-bar-wrap { flex: 1; display: flex; flex-direction: column; gap: 2px; }
+
+/* LV 行：左对齐，LV文字16px #946438，数字32px #E8C9A2 */
+.limbuscompany .lv-row {
+  display: flex; align-items: baseline; gap: 3px;
+  justify-content: flex-start;
+}
+.limbuscompany .lv-label {
+  font-size: 16px; font-weight: bold; color: #946438; font-family: var(--font-main);
+}
+.limbuscompany .lv-value {
+  font-size: 32px; font-weight: bold; color: #E8C9A2; line-height: 1;
+  background: transparent; border: none; width: 56px;
+  font-family: var(--font-main); padding: 0;
+}
+.limbuscompany .lv-value:disabled { border: none; cursor: default; }
+
+/* XP 数值行：右对齐，16px，当前值#E8C9A2，最大值#946438 */
+.limbuscompany .xp-values-row {
+  display: flex; align-items: center; justify-content: flex-end;
+  font-size: 16px; gap: 1px;
+}
+.limbuscompany .xp-current {
+  color: #E8C9A2; background: transparent; border: none; width: 48px;
+  font-size: 16px; text-align: right; padding: 0; font-family: var(--font-main);
+}
+.limbuscompany .xp-current:disabled { border: none; cursor: default; }
+.limbuscompany .xp-sep  { color: #E8C9A2; font-size: 16px; }
+.limbuscompany .xp-max  { color: #946438; font-size: 16px; }
+
+/* XP 进度条：150×16px，空#413C37，填充#B43822 */
+.limbuscompany .xp-bar-wrap {
+  width: 150px; height: 16px; background: #413C37;
+  border-radius: 2px; overflow: hidden; flex-shrink: 0;
+}
+.limbuscompany .xp-bar-fill {
+  height: 100%; background: #B43822; border-radius: 2px; transition: width .3s;
+}
+
+/* ── HP / 理智行（图标32px + 血条200×32px + 重置20px）─────────────── */
+.limbuscompany .resource-row {
+  display: flex; align-items: center; gap: 4px; margin-top: 6px;
+}
+/* 图标：32×32px */
+.limbuscompany .resource-icon { width: 32px; height: 32px; object-fit: contain; flex-shrink: 0; }
+
+/* 血条容器：200×32px，内容叠加 */
+.limbuscompany .resource-bar-wrap {
+  width: 200px; height: 32px; flex-shrink: 0;
+  position: relative; border-radius: 3px; overflow: hidden;
+}
 .limbuscompany .resource-bar {
-  height: 8px; background: rgba(95,62,33,.3);
-  border-radius: 3px; overflow: visible; position: relative;
+  position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+  background: rgba(95,62,33,.4); border-radius: 3px; overflow: visible;
 }
 .limbuscompany .resource-bar-fill { height: 100%; border-radius: 3px; transition: width .3s; }
-.limbuscompany .hp-fill    { background: linear-gradient(90deg, #C62828, #E53935); }
+.limbuscompany .hp-fill     { background: linear-gradient(90deg, #C62828, #E53935); }
 .limbuscompany .sanity-fill { background: linear-gradient(90deg, #1565C0, #64B5F6); }
 .limbuscompany .sanity-panic .sanity-fill { background: var(--red-danger); }
+
+/* 数值文字叠加在血条上 */
 .limbuscompany .resource-values {
-  display: flex; align-items: center; gap: 2px; font-size: .72rem;
+  position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+  display: flex; align-items: center; justify-content: center;
+  gap: 2px; z-index: 2; font-size: .85rem; color: var(--text-main);
+  text-shadow: 0 1px 3px rgba(0,0,0,.8);
 }
 .limbuscompany .resource-values input {
-  background: transparent; border: none; border-bottom: 1px solid var(--border-gold);
-  color: var(--text-main); width: 36px; font-size: .72rem; text-align: center; padding: 0;
+  background: transparent; border: none;
+  color: var(--text-main); width: 40px; font-size: .85rem;
+  text-align: right; padding: 0; font-family: var(--font-main);
+  text-shadow: 0 1px 3px rgba(0,0,0,.8);
 }
-.limbuscompany .resource-sep { color: var(--text-dim); }
+.limbuscompany .resource-values input:disabled { border: none; cursor: default; }
+.limbuscompany .resource-sep { color: rgba(232,202,162,.7); }
+.limbuscompany .hp-max, .limbuscompany .hp-value,
+.limbuscompany .sanity-value { color: var(--text-main); font-size: .85rem; }
+
+/* 重置按钮：20×20px */
 .limbuscompany .resource-reset {
-  background: none; border: none; cursor: pointer; padding: 1px 2px;
-  opacity: .6; transition: opacity .15s;
+  width: 20px; height: 20px; background: none; border: none;
+  cursor: pointer; padding: 0; opacity: .65; transition: opacity .15s;
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
 }
 .limbuscompany .resource-reset:hover { opacity: 1; }
+.limbuscompany .reset-icon { width: 16px; height: 16px; }
+
 .limbuscompany .panic-label {
   color: var(--red-danger); font-size: .6rem; font-weight: bold;
   margin-left: 4px; animation: blink 1s step-start infinite;
 }
 @keyframes blink { 50% { opacity: 0; } }
 
-/* 混乱阈值刻度 */
+/* 混乱阈值刻度（白色细竖线叠在血条上） */
 .limbuscompany .chaos-mark {
-  position: absolute; top: -2px; width: 2px; height: 12px;
-  background: rgba(232,202,162,.8); transform: translateX(-50%);
-  pointer-events: none; z-index: 2;
+  position: absolute; top: 0; bottom: 0; width: 2px;
+  background: rgba(255,255,255,.85); transform: translateX(-50%);
+  pointer-events: none; z-index: 3;
 }
-.limbuscompany .chaos-mark-burned { background: rgba(127,127,128,.5); }
+.limbuscompany .chaos-mark-burned { background: rgba(127,127,128,.4); }
 
-/* 中列信息块 */
-.limbuscompany .info-block { margin-bottom: 4px; }
-.limbuscompany .info-block-label { font-size: .6rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: .05em; margin-bottom: 2px; }
-.limbuscompany .info-row { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
-.limbuscompany .info-icon { width: 16px; height: 16px; object-fit: contain; }
-.limbuscompany .info-val  { font-size: .8rem; color: var(--text-main); }
-.limbuscompany .info-sign { font-size: .8rem; font-weight: bold; }
-.limbuscompany .info-pos  { color: var(--gold-active); }
-.limbuscompany .info-neg  { color: var(--red-danger); }
-.limbuscompany .resist-icon { width: 16px; height: 16px; object-fit: contain; }
-.limbuscompany .resist-val  { font-size: .8rem; color: var(--text-main); }
+/* ── 中列信息块（200×24px标题 + 220×50px内容行）──────────────────── */
+.limbuscompany .info-block { margin-bottom: 6px; }
+
+/* 标题：200×24px，深棕背景，金色文字 */
+.limbuscompany .info-block-label {
+  width: 200px; height: 24px; line-height: 24px;
+  background: #3B2412; color: #E1AC62;
+  font-size: .8rem; font-weight: bold; text-align: center;
+  border-radius: 2px; margin-bottom: 4px; flex-shrink: 0;
+  letter-spacing: .05em; user-select: none;
+}
+
+/* 内容行：220×50px，图标32px，字体32px */
+.limbuscompany .info-row {
+  display: flex; align-items: center; gap: 6px;
+  width: 220px; height: 50px; flex-wrap: nowrap;
+}
+.limbuscompany .info-icon   { width: 32px; height: 32px; object-fit: contain; flex-shrink: 0; }
+.limbuscompany .resist-icon { width: 32px; height: 32px; object-fit: contain; flex-shrink: 0; }
+.limbuscompany .info-val    { font-size: 2rem; color: #E8C9A2; line-height: 1; }
+.limbuscompany .info-sign   { font-size: 2rem; font-weight: bold; line-height: 1; }
+.limbuscompany .info-pos    { color: var(--gold-active); }
+.limbuscompany .info-neg    { color: var(--red-danger); }
+.limbuscompany .resist-val  { font-size: 2rem; color: #E8C9A2; line-height: 1; }
 .limbuscompany .resist-weak   { color: var(--red-danger); font-weight: bold; }
 .limbuscompany .resist-strong { color: var(--resist-weak); }
 
-/* 右列：名字 & 属性 */
-.limbuscompany .name-row-top { display: flex; align-items: center; gap: 4px; }
-.limbuscompany .bg-tag {
-  font-size: .65rem; color: var(--text-sub);
-  border: 1px solid var(--border-gold); border-radius: 8px; padding: 0 6px;
-}
-.limbuscompany .bg-tag-input {
-  background: transparent; border: none; border-bottom: 1px dashed var(--border-gold);
-  color: var(--text-sub); font-size: .65rem; width: 80px;
-}
-.limbuscompany .long-rest-btn {
-  background: var(--gold-mid); border: 1px solid var(--gold-active);
-  color: var(--bg-darkest); font-family: var(--font-main); font-size: .7rem;
-  padding: 2px 8px; cursor: pointer; border-radius: 8px; font-weight: bold;
-  transition: background .15s; margin-left: auto;
-}
-.limbuscompany .long-rest-btn:hover { background: var(--gold-active); }
-.limbuscompany .actor-name-display { font-size: 1.1rem; font-weight: bold; color: var(--text-main); }
-.limbuscompany .actor-name-input {
-  font-size: 1.1rem; font-weight: bold; background: transparent;
-  border: none; border-bottom: 1px solid var(--border-gold);
-  color: var(--text-main); width: 100%; font-family: var(--font-main);
-}
-.limbuscompany .attributes-block { display: flex; gap: 4px; flex-wrap: wrap; }
-.limbuscompany .attr-item {
-  display: flex; flex-direction: column; align-items: center;
-  min-width: 32px; gap: 2px;
-}
-.limbuscompany .attr-label { font-size: .55rem; color: var(--text-dim); text-align: center; }
-.limbuscompany .attr-value {
-  font-size: .9rem; font-weight: bold; color: var(--text-main);
-  width: 28px; text-align: center; background: transparent;
-  border: none; border-bottom: 1px solid rgba(95,62,33,.5);
-  font-family: var(--font-main);
-}
-.limbuscompany .attr-check-btn {
-  width: 20px; height: 20px; border-radius: 50%;
-  border: 1px solid var(--border-gold); background: rgba(95,62,33,.2);
-  cursor: pointer; transition: all .15s;
-}
-.limbuscompany .attr-check-btn:hover {
-  background: var(--border-gold); box-shadow: 0 0 6px rgba(229,186,37,.4);
+/* ── 右列：背景标签 + 名字 + 六属性 ──────────────────────────────── */
+
+/* 名字块容器 */
+.limbuscompany .name-block {
+  display: flex; flex-direction: column; gap: 2px;
 }
 
-/* ─── §3-C  Tab 导航 ─────────────────────────────────────────────── */
+/* 背景标签行（200×25px，#3B2412背景，16px文字#8E5F34，右对齐） */
+.limbuscompany .name-row-top {
+  display: flex; align-items: center; gap: 6px; width: 100%;
+}
+.limbuscompany .bg-tag {
+  width: 200px; height: 25px; line-height: 25px;
+  background: #3B2412; color: #8E5F34;
+  font-size: 16px; text-align: right; padding-right: 6px;
+  border-radius: 2px; flex-shrink: 0; overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap;
+}
+.limbuscompany .bg-tag-input {
+  width: 200px; height: 25px; background: #3B2412;
+  border: 1px solid var(--gold-active); color: #8E5F34;
+  font-size: 16px; text-align: right; padding: 0 6px;
+  border-radius: 2px; font-family: var(--font-main); flex-shrink: 0;
+}
+.limbuscompany .bg-tag-input:disabled { border: none; cursor: default; }
+
+/* 长休按钮 */
+.limbuscompany .long-rest-btn {
+  background: var(--gold-mid); border: 1px solid var(--gold-active);
+  color: var(--bg-darkest); font-family: var(--font-main); font-size: .8rem;
+  padding: 4px 12px; cursor: pointer; border-radius: 8px; font-weight: bold;
+  transition: background .15s; margin-left: auto; white-space: nowrap;
+}
+.limbuscompany .long-rest-btn:hover { background: var(--gold-active); }
+
+/* 名字行（200×50px，32px字体，#E8C9A2） */
+.limbuscompany .name-row-main {
+  width: 200px; height: 50px; display: flex; align-items: center;
+}
+.limbuscompany .actor-name-display {
+  font-size: 32px; font-weight: bold; color: #E8C9A2; line-height: 1;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.limbuscompany .actor-name-input {
+  font-size: 32px; font-weight: bold; background: transparent;
+  border: none; border-bottom: 1px solid var(--gold-active);
+  color: #E8C9A2; width: 100%; font-family: var(--font-main); line-height: 1;
+}
+.limbuscompany .actor-name-input:disabled { border: none; cursor: default; }
+
+/* 六属性块（360×80px，居中，每格50×60px，bg #5F3E22） */
+.limbuscompany .attributes-block {
+  display: flex; gap: 6px; flex-wrap: nowrap;
+  width: 360px; height: 80px; align-items: center; justify-content: center;
+}
+.limbuscompany .attr-item {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  width: 50px; height: 60px; background: #5F3E22; border-radius: 3px;
+  gap: 2px; flex-shrink: 0;
+}
+/* 属性名：16px #E8C9A2 */
+.limbuscompany .attr-label {
+  font-size: 16px; color: #E8C9A2; text-align: center; line-height: 1; font-weight: bold;
+}
+/* 属性数值：16px */
+.limbuscompany .attr-value {
+  font-size: 16px; font-weight: bold; color: var(--text-main);
+  width: 36px; text-align: center; background: transparent;
+  border: none; font-family: var(--font-main); line-height: 1;
+}
+.limbuscompany .attr-value:disabled { border: none; cursor: default; }
+/* 鉴定按钮：圆形16×16px */
+.limbuscompany .attr-check-btn {
+  width: 16px; height: 16px; border-radius: 50%;
+  border: none; background: #9A6839;
+  cursor: pointer; transition: background .15s; flex-shrink: 0;
+}
+.limbuscompany .attr-check-btn:hover { background: #F2BE2B; }
+.limbuscompany .attr-check-btn.selected { background: #F2BE2B; }
+
+/* ── 编辑锁字段样式（锁定时禁止编辑，解锁时显示金色边框输入框） ───── */
+.limbuscompany .editable-field:disabled {
+  /* 锁定状态：看起来像只读文本 */
+  background: transparent !important;
+  border: none !important;
+  border-bottom: none !important;
+  color: inherit;
+  cursor: default;
+  pointer-events: none;
+  -webkit-text-fill-color: inherit;
+}
+.limbuscompany .editable-field:not(:disabled) {
+  /* 解锁状态：显示金色边框 */
+  border: 1px solid var(--gold-active) !important;
+  background: rgba(0,0,0,.3) !important;
+  border-radius: 2px;
+  cursor: text;
+  padding: 1px 3px;
+}
+
+/* ─── §3-C  Tab 导航（固定高24px） ──────────────────────────────── */
 
 .limbuscompany .sheet-tabs {
   display: flex; border-bottom: 1px solid var(--border-gold);
-  background: var(--bg-darkest); flex-shrink: 0;
+  background: var(--bg-darkest); flex-shrink: 0; height: 24px;
 }
 .limbuscompany .sheet-tabs .item {
-  flex: 1; text-align: center; padding: 6px 0; font-size: .8rem;
+  flex: 1; text-align: center; padding: 0; line-height: 24px; font-size: .8rem;
   color: var(--text-sub); cursor: pointer; border-bottom: 2px solid transparent;
   transition: all .15s; background: none; border-left: none; border-right: none; border-top: none;
+  height: 24px; display: flex; align-items: center; justify-content: center;
 }
 .limbuscompany .sheet-tabs .item:hover { color: var(--text-main); }
 .limbuscompany .sheet-tabs .item.active { color: var(--gold-active); border-bottom-color: var(--gold-active); }
@@ -2554,9 +2711,17 @@ a.content-link:hover,
   display: flex; width: 100%; height: 100%; gap: 0;
 }
 
-/* ─── §3-E  九宫格装备栏 ─────────────────────────────────────────── */
+/* ─── §3-E  九宫格装备栏（固定宽275px，格子70×70px）────────────── */
 
-/* 左侧面板通用标题标签 */
+/* 装备栏标题（270×55px，24px字体，#E8CAA1） */
+.limbuscompany .equip-panel-label {
+  width: 270px; height: 55px; line-height: 55px;
+  font-size: 24px; color: #E8CAA1; text-align: center;
+  border: none; background: transparent;
+  margin-bottom: 4px; user-select: none; flex-shrink: 0;
+}
+
+/* 通用面板标题（小标签）*/
 .limbuscompany .panel-label {
   font-size: .68rem; color: var(--text-dim); text-align: center;
   border: 1px solid rgba(95,62,33,.35); padding: 2px 6px;
@@ -2565,37 +2730,44 @@ a.content-link:hover,
   background: rgba(11,7,7,.4);
 }
 
+/* 装备栏面板：固定275px宽 */
 .limbuscompany .equip-panel {
-  width: 220px; flex-shrink: 0; padding: 8px;
+  width: 275px; flex-shrink: 0; padding: 8px;
   border-right: 1px solid rgba(95,62,33,.4);
+  display: flex; flex-direction: column;
 }
+
+/* 九宫格：3列，每格70×70px */
 .limbuscompany .equip-grid {
-  display: grid; grid-template-columns: repeat(3, 1fr);
-  gap: 5px;
+  display: grid; grid-template-columns: repeat(3, 70px);
+  gap: 5px; justify-content: center;
 }
 .limbuscompany .equip-slot {
-  aspect-ratio: 1; border: 1px solid var(--border-gold);
-  border-radius: 4px; background: rgba(95,62,33,.22);
+  width: 70px; height: 70px;
+  border: 1px solid var(--border-gold); border-radius: 4px;
+  background: #5F3E22;
   display: flex; align-items: center; justify-content: center;
   position: relative; cursor: pointer; overflow: visible;
   transition: border-color .15s, background .15s;
   box-shadow: inset 0 1px 3px rgba(0,0,0,.5);
 }
-.limbuscompany .equip-slot:hover { border-color: var(--gold-active); background: rgba(95,62,33,.35); }
+.limbuscompany .equip-slot:hover { border-color: var(--gold-active); background: rgba(95,62,33,.5); }
 .limbuscompany .equip-slot-icon { width: 100%; height: 100%; object-fit: cover; border-radius: 3px; }
 .limbuscompany .equip-slot-placeholder {
-  width: 40%; height: 40%; border: 1px dashed rgba(95,62,33,.25); border-radius: 2px;
+  width: 40%; height: 40%; border: 1px dashed rgba(95,62,33,.35); border-radius: 2px;
 }
+
+/* 链接箭头 */
 .limbuscompany .link-arrow {
   position: absolute; width: 0; height: 0;
-  border: 4px solid transparent; pointer-events: none;
+  border: 5px solid transparent; pointer-events: none;
 }
-.limbuscompany .link-arrow.up    { top: -4px; left: 50%; transform: translateX(-50%); border-bottom-color: var(--gold-active); }
-.limbuscompany .link-arrow.down  { bottom: -4px; left: 50%; transform: translateX(-50%); border-top-color: var(--gold-active); }
-.limbuscompany .link-arrow.left  { left: -4px; top: 50%; transform: translateY(-50%); border-right-color: var(--gold-active); }
-.limbuscompany .link-arrow.right { right: -4px; top: 50%; transform: translateY(-50%); border-left-color: var(--gold-active); }
+.limbuscompany .link-arrow.up    { top: -5px; left: 50%; transform: translateX(-50%); border-bottom-color: var(--gold-active); }
+.limbuscompany .link-arrow.down  { bottom: -5px; left: 50%; transform: translateX(-50%); border-top-color: var(--gold-active); }
+.limbuscompany .link-arrow.left  { left: -5px; top: 50%; transform: translateY(-50%); border-right-color: var(--gold-active); }
+.limbuscompany .link-arrow.right { right: -5px; top: 50%; transform: translateY(-50%); border-left-color: var(--gold-active); }
 
-/* ─── §3-F  列表面板（物品/技能右侧） ──────────────────────────────── */
+/* ─── §3-F  列表面板（物品/技能右侧，行高25px）─────────────────── */
 
 .limbuscompany .list-panel {
   flex: 1; display: flex; flex-direction: column; overflow: hidden;
@@ -2613,26 +2785,43 @@ a.content-link:hover,
 .limbuscompany .toolbar-btns { display: flex; gap: 2px; }
 .limbuscompany .toolbar-btn {
   background: var(--bg-panel); border: 1px solid var(--border-gold);
-  color: var(--text-sub); font-size: .7rem; padding: 2px 5px;
+  color: var(--text-sub); font-size: .75rem; padding: 3px 6px;
   cursor: pointer; border-radius: 2px; transition: all .15s;
 }
 .limbuscompany .toolbar-btn:hover { color: var(--gold-active); border-color: var(--gold-active); }
 .limbuscompany .toolbar-btn.active { color: var(--gold-active); border-color: var(--gold-active); background: rgba(95,62,33,.3); }
 
-/* 过滤面板 */
+/* 过滤面板（245×255px，深色背景浮层） */
 .limbuscompany .filter-panel {
   position: absolute; top: 100%; right: 0; z-index: 1000;
+  width: 245px; min-height: 255px;
   background: var(--bg-panel); border: 1px solid var(--border-gold);
-  border-radius: 3px; padding: 8px; min-width: 200px;
+  border-radius: 3px; padding: 0 0 8px 0;
   box-shadow: 0 4px 16px rgba(0,0,0,.7);
 }
-.limbuscompany .filter-section { margin-bottom: 8px; }
-.limbuscompany .filter-section-label { font-size: .65rem; color: var(--text-dim); margin-bottom: 4px; text-transform: uppercase; }
-.limbuscompany .filter-buttons { display: flex; gap: 3px; flex-wrap: wrap; }
-.limbuscompany .filter-category-btn,
+/* 过滤面板顶部标题（245×48px，32px字体，#E8CAA1） */
+.limbuscompany .filter-panel-title {
+  width: 245px; height: 48px; line-height: 48px;
+  font-size: 32px; color: #E8CAA1; text-align: center;
+  font-weight: bold; user-select: none;
+  border-bottom: 1px solid rgba(95,62,33,.4);
+  margin-bottom: 6px;
+}
+.limbuscompany .filter-section { margin-bottom: 8px; padding: 0 8px; }
+.limbuscompany .filter-section-label {
+  font-size: .65rem; color: var(--text-dim); margin-bottom: 4px; text-transform: uppercase;
+}
+/* 分类按钮（40×20px 每个） */
+.limbuscompany .filter-buttons { display: flex; gap: 4px; flex-wrap: wrap; }
+.limbuscompany .filter-category-btn {
+  width: 40px; height: 20px; line-height: 20px;
+  background: var(--bg-darkest); border: 1px solid var(--border-gold);
+  color: var(--text-sub); font-size: .7rem; padding: 0 2px; text-align: center;
+  cursor: pointer; border-radius: 2px; transition: all .15s;
+}
 .limbuscompany .filter-link-btn {
   background: var(--bg-darkest); border: 1px solid var(--border-gold);
-  color: var(--text-sub); font-size: .7rem; padding: 2px 6px;
+  color: var(--text-sub); font-size: .8rem; padding: 2px 6px;
   cursor: pointer; border-radius: 2px; transition: all .15s;
 }
 .limbuscompany .filter-category-btn:hover,
@@ -2644,20 +2833,22 @@ a.content-link:hover,
 .limbuscompany .filter-apply-btn {
   background: var(--bg-title-bar); border: 1px solid var(--border-gold);
   color: var(--text-main); font-family: var(--font-main); font-size: .75rem;
-  padding: 4px 12px; cursor: pointer; border-radius: 2px; width: 100%; margin-top: 4px;
+  padding: 4px 12px; cursor: pointer; border-radius: 2px;
+  width: calc(100% - 16px); margin: 4px 8px 0;
 }
-.limbuscompany .filter-link-cross { display: flex; flex-direction: column; align-items: center; gap: 2px; }
-.limbuscompany .filter-link-row   { display: flex; gap: 6px; align-items: center; }
-.limbuscompany .filter-link-center { width: 18px; height: 18px; }
+.limbuscompany .filter-link-cross { display: flex; flex-direction: column; align-items: center; gap: 3px; }
+.limbuscompany .filter-link-row   { display: flex; gap: 8px; align-items: center; }
+.limbuscompany .filter-link-center { width: 20px; height: 20px; }
 
 /* 列表表头 */
 .limbuscompany .list-header {
-  display: grid; font-size: .6rem; color: var(--text-dim);
+  display: grid; font-size: .65rem; color: var(--text-dim);
   padding: 0 4px 2px; border-bottom: 1px solid rgba(95,62,33,.4);
   flex-shrink: 0; text-transform: uppercase; letter-spacing: .04em;
 }
-.limbuscompany .item-list-header  { grid-template-columns: 20px 1fr 64px 44px 36px 36px 64px; gap: 4px; }
-.limbuscompany .skill-list-header { grid-template-columns: 20px 1fr 64px 44px 36px 36px 64px; gap: 4px; }
+/* 图标32px / 名称自适应 / 分类80px / 链接60px / 数量50px / 星芒50px / 操作80px */
+.limbuscompany .item-list-header  { grid-template-columns: 32px 1fr 80px 60px 50px 50px 80px; gap: 4px; }
+.limbuscompany .skill-list-header { grid-template-columns: 32px 1fr 80px 60px 50px 50px 80px; gap: 4px; }
 
 /* 分组 */
 .limbuscompany .item-group { flex-shrink: 0; }
@@ -2665,7 +2856,7 @@ a.content-link:hover,
   display: flex; align-items: center; gap: 4px; cursor: pointer;
   padding: 2px 4px; background: rgba(95,62,33,.15);
   border-top: 1px solid rgba(95,62,33,.3); border-bottom: 1px solid rgba(95,62,33,.3);
-  font-size: .72rem; color: var(--text-sub); user-select: none;
+  font-size: .75rem; color: var(--text-sub); user-select: none;
   transition: background .1s;
 }
 .limbuscompany .group-header:hover { background: rgba(95,62,33,.3); }
@@ -2673,20 +2864,21 @@ a.content-link:hover,
 .limbuscompany .group-label { flex: 1; }
 .limbuscompany .group-count { color: var(--text-dim); font-size: .65rem; }
 
-/* 列表行 */
+/* 列表行（行高25px） */
 .limbuscompany .item-list { list-style: none; margin: 0; padding: 0; }
 .limbuscompany .item-row,
 .limbuscompany .skill-row {
-  display: grid; grid-template-columns: 20px 1fr 64px 44px 36px 36px 64px; gap: 4px;
-  height: 22px; align-items: center; padding: 0 4px;
-  border-bottom: 1px solid rgba(95,62,33,.2); font-size: .72rem;
+  display: grid; grid-template-columns: 32px 1fr 80px 60px 50px 50px 80px; gap: 4px;
+  height: 25px; align-items: center; padding: 0 4px;
+  border-bottom: 1px solid rgba(95,62,33,.2); font-size: .75rem;
   transition: background .1s;
 }
 .limbuscompany .item-row:hover,
 .limbuscompany .skill-row:hover { background: rgba(95,62,33,.2); }
 
+/* 图标列：32px */
 .limbuscompany .item-icon {
-  width: 16px; height: 16px; object-fit: contain; cursor: pointer;
+  width: 32px; height: 32px; object-fit: contain; cursor: pointer;
   border-radius: 2px; border: 1px solid rgba(95,62,33,.4);
 }
 .limbuscompany .item-name { cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -2694,11 +2886,11 @@ a.content-link:hover,
 .limbuscompany .item-cat,
 .limbuscompany .item-links,
 .limbuscompany .item-qty,
-.limbuscompany .item-stellar { color: var(--text-sub); font-size: .68rem; }
+.limbuscompany .item-stellar { color: var(--text-sub); font-size: .72rem; }
 
 .limbuscompany .action-btn {
   background: none; border: none; cursor: pointer;
-  color: var(--text-sub); font-size: .7rem; padding: 0 2px;
+  color: var(--text-sub); font-size: .75rem; padding: 0 2px;
   transition: color .1s;
 }
 .limbuscompany .action-btn:hover { color: var(--gold-active); }
@@ -2910,8 +3102,8 @@ a.content-link:hover,
 
 .limbuscompany .sheet-footer {
   display: flex; justify-content: space-between; align-items: center;
-  height: 34px; padding: 0 10px;
-  background: var(--bg-bottom); border-top: 1px solid var(--border-gold);
+  height: 36px; padding: 0 12px;
+  background: #0A0605; border-top: 1px solid var(--border-gold);
   flex-shrink: 0;
 }
 .limbuscompany .footer-left,
