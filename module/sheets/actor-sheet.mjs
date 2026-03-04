@@ -310,6 +310,28 @@ export class LimbusActorSheet extends ActorSheet {
 
   /* ─── 拖放处理 ──────────────────────────────────────────────────────────── */
 
+  _onDragStart(event) {
+    const dragEl = event.currentTarget;
+    const slotEl = dragEl?.closest?.(".equip-slot[data-item-id]");
+
+    if (slotEl) {
+      const itemId = slotEl.dataset.itemId;
+      const slotIndex = Number(slotEl.dataset.slot);
+      const item = this.actor.items.get(itemId);
+      if (!item) return;
+
+      const dragData = {
+        type: "Item",
+        uuid: item.uuid,
+        fromEquipSlot: Number.isInteger(slotIndex) ? slotIndex : null,
+      };
+      event.dataTransfer.setData("text/plain", JSON.stringify(dragData));
+      return;
+    }
+
+    return super._onDragStart(event);
+  }
+
   async _onDrop(event) {
     event.preventDefault();
     const data = TextEditor.getDragEventData(event);
@@ -338,9 +360,27 @@ export class LimbusActorSheet extends ActorSheet {
         ui.notifications.warn("只能将装备放入装备栏。");
         return;
       }
-      // 若物品不属于 actor，先添加
+
+      // 装备栏内拖拽：移动（源槽清空）；若目标有装备则交换
+      const fromSlot = Number.isInteger(data.fromEquipSlot) ? data.fromEquipSlot : parseInt(data.fromEquipSlot);
       const owned = ownedItem ?? (await this._importItemToActor(item));
-      if (owned) await this.actor.equipToGrid(owned.id, slotIdx);
+      if (!owned) return;
+
+      if (Number.isInteger(fromSlot) && fromSlot >= 0 && fromSlot <= 8) {
+        if (fromSlot === slotIdx) return;
+        const sourceId = this.actor.system.equipment?.[`slot${fromSlot}`] ?? null;
+        if (sourceId === owned.id) {
+          const targetId = this.actor.system.equipment?.[`slot${slotIdx}`] ?? null;
+          await this.actor.update({
+            [`system.equipment.slot${slotIdx}`]: owned.id,
+            [`system.equipment.slot${fromSlot}`]: targetId,
+          });
+          return;
+        }
+      }
+
+      // 常规拖入：按装备逻辑处理（含星芒消耗）
+      await this.actor.equipToGrid(owned.id, slotIdx);
       return;
     }
 
@@ -365,6 +405,13 @@ export class LimbusActorSheet extends ActorSheet {
     if (defSlot.length && item.type === "skill" && item.system.type === "defense") {
       const owned = ownedItem ?? await this._importItemToActor(item);
       if (owned) await this.actor.equipSkill(owned.id);
+      return;
+    }
+
+    // ── 从装备栏拖到其他区域：视为卸下（源槽清空） ───────────────────────
+    const fromSlot = Number.isInteger(data.fromEquipSlot) ? data.fromEquipSlot : parseInt(data.fromEquipSlot);
+    if (Number.isInteger(fromSlot) && fromSlot >= 0 && fromSlot <= 8) {
+      await this.actor.unequipFromGrid(fromSlot);
       return;
     }
 
