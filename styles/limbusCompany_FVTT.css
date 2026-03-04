@@ -2676,6 +2676,7 @@ a.content-link:hover,
   overflow: hidden;
 }
 .limbuscompany .actor-name-display {
+  display: block; width: 100%;
   font-size: 32px; font-weight: bold; color: #E8C9A2; line-height: 1;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
