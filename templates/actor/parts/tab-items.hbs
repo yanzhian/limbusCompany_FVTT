@@ -13,7 +13,7 @@
                data-item-name="{{item.name}}"
              {{/if}}
              title="{{#if item}}{{item.name}}{{else}}空槽位 {{slotIndex}}{{/if}}"
-             draggable="true">
+             draggable="{{#if item}}true{{else}}false{{/if}}">
           {{#if item}}
             <img src="{{item.img}}" alt="{{item.name}}" class="equip-slot-icon">
             {{!-- 链接方向箭头 --}}
