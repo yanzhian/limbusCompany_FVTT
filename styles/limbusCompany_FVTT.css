@@ -3166,10 +3166,10 @@ body.game .limbuscompany.app img {
   width: 100%; height: auto; aspect-ratio: 1;
 }
 
-/* EGO/守备网格内：圆形与八边形统一缩小至40px，保持紧凑 */
+/* EGO/守备网格内：圆形与八边形统一缩小至80px，保持紧凑 */
 .limbuscompany .ego-skill-grid .skill-slot-circle,
 .limbuscompany .ego-skill-grid .skill-slot-octa {
-  width: 40px; height: 40px;
+  width: 80px; height: 80px;
 }
 
 .limbuscompany .ego-grade-label {
