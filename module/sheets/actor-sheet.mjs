@@ -52,7 +52,7 @@ export class LimbusActorSheet extends ActorSheet {
     // ── 属性列表 ──────────────────────────────────────────────────────────
     context.attributes = cfg.ATTRIBUTES.map(key => ({
       key,
-      label: cfg.ATTRIBUTE_LABELS[key] ?? key,
+      label: game.i18n.localize(cfg.ATTRIBUTE_LABELS[key] ?? key),
       value: system.attributes[key] ?? 0,
     }));
 
