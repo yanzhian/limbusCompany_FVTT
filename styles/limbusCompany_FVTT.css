@@ -3046,7 +3046,7 @@ body.game .limbuscompany.app img {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 10px;
+  gap: 12px;
 }
 
 .limbuscompany .action-btn {
