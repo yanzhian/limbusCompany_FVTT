@@ -2611,6 +2611,20 @@ body.game .limbuscompany.app img {
 .limbuscompany .resource-reset:hover { opacity: 1; }
 .limbuscompany .reset-icon { width: 16px; height: 16px; }
 
+/* HP/理智重置按钮可见性增强 */
+.limbuscompany .hp-reset.resource-reset,
+.limbuscompany .sanity-reset.resource-reset {
+  background: #E8C9A2;
+  border: 1px solid #9A6839;
+  border-radius: 3px;
+  opacity: 1;
+}
+
+.limbuscompany .hp-reset.resource-reset:hover,
+.limbuscompany .sanity-reset.resource-reset:hover {
+  background: #F1D8BA;
+}
+
 .limbuscompany .panic-label {
   color: var(--red-danger); font-size: .6rem; font-weight: bold;
   margin-left: 4px; animation: blink 1s step-start infinite;
