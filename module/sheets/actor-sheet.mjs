@@ -192,15 +192,12 @@ export class LimbusActorSheet extends ActorSheet {
     const sys = item.system;
     const cfg = CONFIG.LIMBUSCOMPANY;
 
-    // 罪孽中文标签
-    const sinI18nKey = cfg.SIN_LABELS?.[sys.sinType];
-    const sinLabel   = sinI18nKey ? game.i18n.localize(sinI18nKey) : (sys.sinType ?? "");
+    // 罪孽中文标签（直接查表，不依赖 game.i18n）
+    const sinLabel = cfg.SIN_LABELS_ZH?.[sys.sinType] ?? (sys.sinType ?? "");
 
-    // 分类中文标签（首字母大写匹配 i18n key）
+    // 分类中文标签（直接查表，不依赖 game.i18n）
     const catRaw   = sys.category ?? "";
-    const catKey   = `LIMBUSCOMPANY.Category.${catRaw.charAt(0).toUpperCase()}${catRaw.slice(1)}`;
-    const catTrans = game.i18n.localize(catKey);
-    const catLabel = catTrans !== catKey ? catTrans : catRaw;
+    const catLabel = cfg.CATEGORY_LABELS_ZH?.[catRaw] ?? catRaw;
 
     return {
       _id:         item.id,
