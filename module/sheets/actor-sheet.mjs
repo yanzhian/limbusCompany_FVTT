@@ -312,20 +312,36 @@ export class LimbusActorSheet extends ActorSheet {
 
   _onDragStart(event) {
     const dragEl = event.currentTarget;
-    const slotEl = dragEl?.closest?.(".equip-slot[data-item-id]");
 
-    if (slotEl) {
-      const itemId = slotEl.dataset.itemId;
-      const slotIndex = Number(slotEl.dataset.slot);
+    // ── 来自九宫格装备槽 ──────────────────────────────────────────────────
+    const equipSlotEl = dragEl?.closest?.(".equip-slot[data-item-id]");
+    if (equipSlotEl) {
+      const itemId = equipSlotEl.dataset.itemId;
+      const slotIndex = Number(equipSlotEl.dataset.slot);
       const item = this.actor.items.get(itemId);
       if (!item) return;
-
-      const dragData = {
+      event.dataTransfer.setData("text/plain", JSON.stringify({
         type: "Item",
         uuid: item.uuid,
         fromEquipSlot: Number.isInteger(slotIndex) ? slotIndex : null,
-      };
-      event.dataTransfer.setData("text/plain", JSON.stringify(dragData));
+      }));
+      return;
+    }
+
+    // ── 来自技能槽（基础/EGO/守备） ───────────────────────────────────────
+    const skillSlotEl = dragEl?.closest?.(".skill-slot-wrap[data-item-id]");
+    if (skillSlotEl) {
+      const itemId    = skillSlotEl.dataset.itemId;
+      const slotType  = skillSlotEl.dataset.slotType;
+      const slotIndex = parseInt(skillSlotEl.dataset.slotIndex ?? "-1");
+      const item      = this.actor.items.get(itemId);
+      if (!item) return;
+      event.dataTransfer.setData("text/plain", JSON.stringify({
+        type:              "Item",
+        uuid:              item.uuid,
+        fromSkillSlotType: slotType,
+        fromSkillSlot:     slotType === "basic" ? slotIndex : -1,
+      }));
       return;
     }
 
@@ -392,11 +408,13 @@ export class LimbusActorSheet extends ActorSheet {
       return;
     }
 
-    // ── 拖入基础技能槽 ────────────────────────────────────────────────────
-    const basicSlot = $target.closest(".basic-skill-slots");
-    if (basicSlot.length && item.type === "skill" && item.system.type === "basic") {
-      const owned = ownedItem ?? await this._importItemToActor(item);
-      if (owned) await this.actor.equipSkill(owned.id);
+    // ── 拖入基础技能槽（自由放置：目标具体槽位） ─────────────────────────
+    const basicSlotWrap = $target.closest(".skill-slot-wrap[data-slot-type='basic']");
+    if (basicSlotWrap.length && item.type === "skill" && item.system.type === "basic") {
+      const owned      = ownedItem ?? await this._importItemToActor(item);
+      const targetSlot = parseInt(basicSlotWrap.data("slotIndex") ?? "0");
+      const fromSlot   = parseInt(data.fromSkillSlot ?? "-1");
+      if (owned) await this.actor.equipSkillToSlot(owned.id, targetSlot, isNaN(fromSlot) ? -1 : fromSlot);
       return;
     }
 
@@ -1021,7 +1039,7 @@ export class LimbusActorSheet extends ActorSheet {
         <div class="tc-row2">
           <img src="${_getCategoryIcon(sys.category)}" width="18" height="18" alt="type">
           <span class="tc-formula">${(sys.diceFormula ?? "").toUpperCase()}</span>
-          <span class="tc-tags">${(sys.tags ?? "").split("/").filter(Boolean).map(t => `<span class="tag">${t.trim()}</span>`).join("")}</span>
+          <span class="tc-tags">${(Array.isArray(sys.tags) ? sys.tags : (sys.tags ?? "").split("/")).filter(Boolean).map(t => `<span class="tag">${String(t).trim()}</span>`).join("")}</span>
         </div>
         ${sys.weight ? `<div class="tc-weight">${Array.from({length: sys.weight ?? 0}, () => '<span class="weight-sq"></span>').join("")}</div>` : ""}
         <div class="tc-desc">${sys.effectDesc ?? item.system.description ?? ""}</div>
