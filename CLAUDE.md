@@ -30,8 +30,8 @@
 | `level` | Number | 等级 |
 | `xp.value / xp.next` | Number | 经验值（见升级表） |
 | `stellarMotes.value / stellarMotes.max` | Number | 星芒：初始30，每升1级+1上限 |
-| `atk.base` | Number | 攻击等级：`力量÷3↓ + 等级×3` + 装备修正 |
-| `def.base` | Number | 防御等级：`体质÷3↓ + 等级×3` + 装备修正 |
+| `atk.base` | Number | 攻击等级：`力量÷3↓ + 等级` + 装备修正 |
+| `def.base` | Number | 防御等级：`体质÷3↓ + 等级` + 装备修正 |
 | `attributes.str/agi/con/int/per/cha` | Number | 六属性，范围 2–10，初始 30 点分配 |
 | `resistances.slash/blunt/pierce` | String/Enum | 物理抗性（由上装决定），格式 `xN.0` |
 | `egoResistances.wrath/lust/sloth/gluttony/gloom/pride/envy` | String | 罪孽抗性，默认全部 `x1.0` |
