@@ -2569,7 +2569,7 @@ body.game .limbuscompany.app img {
 
 /* 血条容器：200×32px，内容叠加 */
 .limbuscompany .resource-bar-wrap {
-  width: 200px; height: 32px; flex-shrink: 0;
+  width: 200px; height: 24px; flex-shrink: 0;
   position: relative; border-radius: 3px; overflow: hidden;
 }
 .limbuscompany .resource-bar {
