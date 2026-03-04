@@ -2372,6 +2372,46 @@ a.content-link:hover,
 
 
 /* ============================================================
+   §2-X  覆盖 FVTT 核心 CSS 图片规则
+   针对两条 foundry.css 内置高特异性规则的精准覆盖：
+   · body.game .sheet.app header.sheet-header img
+     → height:64px; margin-right:6px  (特异性 0,4,3)
+   · body.game .app img
+     → max-width:100%; border-radius:2px; box-sizing:border-box (特异性 0,2,2)
+   两者均高于我们的 .limbuscompany .xxx 规则 (0,2,0)，必须用 !important 覆盖
+   ============================================================ */
+
+/* 头像：100×100px */
+.limbuscompany .actor-avatar {
+  width: 100px !important;
+  height: 100px !important;
+  max-width: none !important;
+  margin-right: 0 !important;
+  border-radius: 4px !important;
+}
+
+/* 资源图标（HP/理智）、基础信息图标（ATK/DEF/SPD）、抗性图标 */
+.limbuscompany .resource-icon,
+.limbuscompany .info-icon,
+.limbuscompany .resist-icon {
+  width: 32px !important;
+  height: 32px !important;
+  max-width: none !important;
+  margin-right: 0 !important;
+  border-radius: 0 !important;
+  flex-shrink: 0 !important;
+}
+
+/* 重置按钮图标 */
+.limbuscompany .reset-icon {
+  width: 16px !important;
+  height: 16px !important;
+  max-width: none !important;
+  margin-right: 0 !important;
+  border-radius: 0 !important;
+}
+
+/* ============================================================
    §3  角色卡 & 物品卡 界面样式（阶段 3 + 4）
    作用域：.limbuscompany
    ============================================================ */
