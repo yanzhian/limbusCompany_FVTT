@@ -2662,7 +2662,8 @@ body.game .limbuscompany.app img {
 
 /* 标题：200×24px，深棕背景，金色文字 */
 .limbuscompany .info-block-label {
-  width: 200px; height: 24px; line-height: 24px;
+  /* width: 200px;  */
+  height: 24px; line-height: 24px;
   background: #3B2412; color: #E1AC62;
   font-size: .8rem; font-weight: bold; text-align: center;
   border-radius: 2px; margin-bottom: 4px; flex-shrink: 0;
@@ -2672,7 +2673,7 @@ body.game .limbuscompany.app img {
 /* 内容行：220×50px，图标32px，字体32px */
 .limbuscompany .info-row {
   display: flex; align-items: center; gap: 6px;
-  width: 220px; height: 50px; flex-wrap: nowrap;
+  width: 220px; height: 50px; flex-wrap: nowrap;justify-content: space-around;
 }
 .limbuscompany .info-icon   { width: 32px; height: 32px; object-fit: contain; flex-shrink: 0; }
 .limbuscompany .resist-icon { width: 32px; height: 32px; object-fit: contain; flex-shrink: 0; }
@@ -2822,7 +2823,7 @@ body.game .limbuscompany.app img {
   flex: 1; text-align: center; padding: 0; line-height: 24px; font-size: .8rem;
   color: var(--text-sub); cursor: pointer; border-bottom: 2px solid transparent;
   transition: all .15s; background: none; border-left: none; border-right: none; border-top: none;
-  height: 24px; display: flex; align-items: center; justify-content: center;
+  height: 32px; display: flex; align-items: center; justify-content: center;
 }
 .limbuscompany .sheet-tabs .item:hover { color: var(--text-main); }
 .limbuscompany .sheet-tabs .item.active { color: var(--gold-active); border-bottom-color: var(--gold-active); }
@@ -2890,10 +2891,10 @@ body.game .limbuscompany.app img {
   position: absolute; width: 0; height: 0;
   border: 5px solid transparent; pointer-events: none;
 }
-.limbuscompany .link-arrow.up    { top: -5px; left: 50%; transform: translateX(-50%); border-bottom-color: var(--gold-active); }
-.limbuscompany .link-arrow.down  { bottom: -5px; left: 50%; transform: translateX(-50%); border-top-color: var(--gold-active); }
-.limbuscompany .link-arrow.left  { left: -5px; top: 50%; transform: translateY(-50%); border-right-color: var(--gold-active); }
-.limbuscompany .link-arrow.right { right: -5px; top: 50%; transform: translateY(-50%); border-left-color: var(--gold-active); }
+.limbuscompany .link-arrow.up    { top: -10px; left: 50%; transform: translateX(-50%); border-bottom-color: var(--gold-active); }
+.limbuscompany .link-arrow.down  { bottom: -10px; left: 50%; transform: translateX(-50%); border-top-color: var(--gold-active); }
+.limbuscompany .link-arrow.left  { left: -10px; top: 50%; transform: translateY(-50%); border-right-color: var(--gold-active); }
+.limbuscompany .link-arrow.right { right: -10px; top: 50%; transform: translateY(-50%); border-left-color: var(--gold-active); }
 
 /* ─── §3-F  列表面板（物品/技能右侧，行高25px）─────────────────── */
 
