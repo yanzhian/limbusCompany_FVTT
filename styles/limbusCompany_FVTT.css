@@ -575,7 +575,7 @@
 }
 
 .limbuscompany .group-header::before {
-  content: "▼";
+  /* content: "▼"; */
   font-size: 0.55rem;
   transition: transform 0.15s;
 }
@@ -2911,10 +2911,11 @@ body.game .limbuscompany.app img {
   color: var(--text-main); font-family: var(--font-main); font-size: .75rem;
   border-radius: 2px; padding: 3px 6px;
 }
-.limbuscompany .toolbar-btns { display: flex; gap: 2px; }
+.limbuscompany .toolbar-btns { display: flex; gap: 2px; max-height: 26px;}
 .limbuscompany .toolbar-btn {
   background: var(--bg-panel); border: 1px solid var(--border-gold);
-  color: var(--text-sub); font-size: .75rem; padding: 3px 6px;
+  color: var(--text-sub); font-size: .75rem;
+   /* padding: 3px 6px; */
   cursor: pointer; border-radius: 2px; transition: all .15s;
 }
 .limbuscompany .toolbar-btn:hover { color: var(--gold-active); border-color: var(--gold-active); }
