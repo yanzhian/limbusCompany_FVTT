@@ -2663,8 +2663,8 @@ body.game .limbuscompany.app img {
     color: #E8C9A2; line-height: 1; }
 .limbuscompany .info-sign   { 
     /* font-size: 2rem;  */
-    font-weight: bold; line-height: 1; }
-.limbuscompany .info-pos    { color: var(--gold-active); }
+    font-weight: normal; color: #E8C9A2; line-height: 1; }
+.limbuscompany .info-pos    { color: #E8C9A2; }
 .limbuscompany .info-neg    { color: var(--red-danger); }
 .limbuscompany .resist-val  { 
   /* font-size: 2rem; */

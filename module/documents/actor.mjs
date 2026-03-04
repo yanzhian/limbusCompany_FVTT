@@ -52,6 +52,7 @@ export class CharacterData extends foundry.abstract.TypeDataModel {
       hp: new fields.SchemaField({
         value: new fields.NumberField({ required: true, integer: true, min: 0, initial: 10 }),
         max:   new fields.NumberField({ required: true, integer: true, min: 1, initial: 10 }),
+        rollTotal: new fields.NumberField({ required: true, integer: true, min: 1, initial: 10 }),
       }),
 
       // ── 理智值（范围 5–95，默认 50） ───────────────────────────────────
@@ -199,11 +200,15 @@ export class CharacterData extends foundry.abstract.TypeDataModel {
     const { attributes, level } = this;
     const { str, agi, con } = attributes;
 
-    // 攻击等级基础值：力量÷3↓ + 等级×3
-    this.atk.base = Math.floor(str / 3) + level * 3;
+    // 攻击等级基础值：力量÷3↓ + 等级
+    this.atk.base = Math.floor(str / 3) + level;
 
-    // 防御等级基础值：体质÷3↓ + 等级×3
-    this.def.base = Math.floor(con / 3) + level * 3;
+    // 防御等级基础值：体质÷3↓ + 等级
+    this.def.base = Math.floor(con / 3) + level;
+
+    // 最大生命值：等级d10累计 + 体质×5
+    const rollTotal = Math.max(1, this.hp.rollTotal ?? 10);
+    this.hp.max = (con * 5) + rollTotal;
 
     // 速度范围：1+敏捷 ~ 6+敏捷（1D6+敏捷）
     this.speed.min = 1 + agi;
@@ -475,6 +480,7 @@ export class LimbusActor extends Actor {
     let level         = this.system.level;
     let attrPoints    = this.system.attrPoints;
     let stellarMax    = this.system.stellarMotes.max;
+    let hpRollTotal   = this.system.hp.rollTotal ?? Math.max(1, (this.system.hp.max ?? 10) - ((this.system.attributes?.con ?? 0) * 5));
 
     xp += amount;
 
@@ -486,15 +492,48 @@ export class LimbusActor extends Actor {
       xp       -= needed;
       level     += 1;
       stellarMax = 30 + (level - 1);
+      const hpGainRoll = await this._rollHpGainForLevel(level);
+      hpRollTotal += hpGainRoll;
       if (level % 10 === 0) attrPoints += 1;
     }
+
+    const con = this.system.attributes?.con ?? 0;
+    const nextHPMax = (con * 5) + hpRollTotal;
+    const nextHPValue = Math.min(Math.max(this.system.hp.value, 0), nextHPMax);
 
     return this.update({
       "system.level":             level,
       "system.xp.value":          xp,
       "system.attrPoints":        attrPoints,
       "system.stellarMotes.max":  stellarMax,
+      "system.hp.rollTotal":      hpRollTotal,
+      "system.hp.max":            nextHPMax,
+      "system.hp.value":          nextHPValue,
     });
+  }
+
+  async _rollHpGainForLevel(level) {
+    const roll = await (new Roll("1d10")).evaluate();
+    const gain = roll.total ?? 1;
+
+    ChatMessage.create({
+      speaker: ChatMessage.getSpeaker({ actor: this }),
+      content: `<div class="limbuscompany-card"><div class="card-title">升级生命值</div><div class="card-body">Lv ${level}：1D10 = <strong>${gain}</strong></div></div>`,
+      rolls: [roll],
+      type: CONST.CHAT_MESSAGE_STYLES.ROLL,
+    });
+
+    await Dialog.wait({
+      title: `升级到 Lv ${level}`,
+      content: `<div class="limbuscompany"><p>生命值成长掷骰结果：<strong>${gain}</strong>（1D10）</p><p>点击确认继续。</p></div>`,
+      buttons: {
+        ok: { label: "确认" },
+      },
+      default: "ok",
+      close: () => gain,
+    });
+
+    return gain;
   }
 
   // ─── 长休 ──────────────────────────────────────────────────────────────
