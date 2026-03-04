@@ -79,6 +79,62 @@ Hooks.once("setup", () => {
 
 Hooks.once("ready", () => {
   console.log("limbusCompany_FVTT | 系统已就绪。");
+  _installTokenDoubleClickOpenActorSheet();
+});
+
+
+/* ─── 角色卡 <-> 场上 Token 双向同步（非链接 Token） ─────────────────────── */
+
+Hooks.on("updateActor", async (actor, changed, options) => {
+  if (actor.type !== "character") return;
+  if (options?.fromTokenSync) return;
+
+  const hasActorDataChange =
+    ("system" in changed) ||
+    ("name" in changed) ||
+    ("img" in changed);
+  if (!hasActorDataChange) return;
+
+  const scenes = game.scenes?.contents ?? [];
+  const tokenUpdates = [];
+
+  for (const scene of scenes) {
+    for (const token of scene.tokens.contents) {
+      if (token.actorId !== actor.id) continue;
+      if (token.actorLink) continue; // 链接 Token 由 Foundry 自带同步
+
+      tokenUpdates.push({
+        _id: token.id,
+        delta: {
+          system: actor.system.toObject(),
+        },
+      });
+    }
+
+    if (tokenUpdates.length > 0) {
+      await scene.updateEmbeddedDocuments("Token", tokenUpdates, { fromActorSync: true, diff: false });
+      tokenUpdates.length = 0;
+    }
+  }
+});
+
+Hooks.on("updateToken", async (token, changed, options) => {
+  if (options?.fromActorSync) return;
+  if (token.actorLink) return; // 链接 Token 会自动写回 Actor
+
+  const baseActor = game.actors?.get(token.actorId);
+  if (!baseActor || baseActor.type !== "character") return;
+
+  const hasSystemDelta =
+    Boolean(changed?.delta?.system) ||
+    Boolean(changed?.actorData?.system) ||
+    Boolean(changed?.system);
+  if (!hasSystemDelta) return;
+
+  const tokenSystem = token.actor?.system?.toObject?.();
+  if (!tokenSystem) return;
+
+  await baseActor.update({ system: tokenSystem }, { fromTokenSync: true, diff: false });
 });
 
 /* ─── 战斗钩子 ───────────────────────────────────────────────────────────── */
@@ -122,6 +178,35 @@ Hooks.on("updateCombat", (combat, changed) => {
   actor.removeBuffsByType("chaos");
   actor.removeBuffsByType("panic");
 });
+
+
+/* ─── Token 双击直接打开角色卡（无 Token 配置窗口过渡）──────────────────── */
+
+function _installTokenDoubleClickOpenActorSheet() {
+  const tokenProto = globalThis.Token?.prototype;
+  if (!tokenProto || tokenProto.__limbusDblClickPatched) return;
+
+  const original = tokenProto._onClickLeft2;
+  if (typeof original !== "function") return;
+
+  tokenProto._onClickLeft2 = function(event, ...args) {
+    try {
+      const actor = this.actor;
+      if (actor?.type === "character" && actor.testUserPermission(game.user, "OBSERVER")) {
+        event?.preventDefault?.();
+        event?.stopPropagation?.();
+        this.release?.();
+        actor.sheet?.render(true, { focus: true });
+        return;
+      }
+    } catch (err) {
+      console.warn("limbusCompany_FVTT | Token 双击打开角色卡失败，回退默认行为", err);
+    }
+    return original.call(this, event, ...args);
+  };
+
+  tokenProto.__limbusDblClickPatched = true;
+}
 
 /* ─── 内部辅助函数 ───────────────────────────────────────────────────────── */
 
