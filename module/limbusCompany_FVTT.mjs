@@ -80,6 +80,13 @@ Hooks.once("setup", () => {
 Hooks.once("ready", () => {
   console.log("limbusCompany_FVTT | 系统已就绪。");
   _installTokenDoubleClickOpenActorSheet();
+  // 某些加载时序下 ready 阶段 Token 原型尚未就绪，做一次延迟补丁兜底
+  setTimeout(() => _installTokenDoubleClickOpenActorSheet(), 200);
+});
+
+// 画布每次就绪时再次确保双击补丁存在（重连/重载场景后仍生效）
+Hooks.on("canvasReady", () => {
+  _installTokenDoubleClickOpenActorSheet();
 });
 
 
@@ -184,7 +191,7 @@ Hooks.on("updateCombat", (combat, changed) => {
 
 
 function _installTokenDoubleClickOpenActorSheet() {
-  const tokenProto = globalThis.Token?.prototype;
+  const tokenProto = globalThis.Token?.prototype ?? CONFIG.Token?.objectClass?.prototype;
   if (!tokenProto || tokenProto.__limbusDblClickPatched) return;
 
   const original = tokenProto._onClickLeft2;
