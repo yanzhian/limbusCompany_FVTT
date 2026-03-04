@@ -3106,30 +3106,31 @@ body.game .limbuscompany.app img {
 
 /* ─── §3-G  技能槽（八边形 & 圆形） ─────────────────────────────── */
 
+/* 技能栏面板：固定275px宽 */
 .limbuscompany .skill-panel {
-  width: 220px; flex-shrink: 0; padding: 8px;
+  width: 275px; flex-shrink: 0; padding: 8px;
   border-right: 1px solid rgba(95,62,33,.4);
   display: flex; flex-direction: column; gap: 6px;
 }
 
-/* 基础技能：2×3 网格 */
+/* 技能栏标题（270×55px，24px字体，#E8CAA1，与装备栏标题规格一致） */
+.limbuscompany .skill-panel-label {
+  width: 270px; height: 55px; line-height: 55px;
+  font-size: 24px; color: #E8CAA1; text-align: center;
+  border: none; background: transparent;
+  margin-bottom: 4px; user-select: none; flex-shrink: 0;
+}
+
+/* 基础技能：3×2 网格 */
 .limbuscompany .basic-skill-slots {
   display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px;
 }
 
-/* 守备技能槽独行（居中显示） */
-.limbuscompany .defense-slot-row {
-  display: flex; justify-content: center; padding: 2px 0;
+/* EGO（×5）+ 守备（×1）— 3×2 网格，与基础技能列对齐 */
+.limbuscompany .ego-skill-grid {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px;
   border-top: 1px solid rgba(95,62,33,.25);
-  border-bottom: 1px solid rgba(95,62,33,.25);
-}
-
-/* EGO等级槽分两行 */
-.limbuscompany .ego-rows {
-  display: flex; flex-direction: column; gap: 4px;
-}
-.limbuscompany .ego-row {
-  display: flex; gap: 6px; justify-content: flex-start;
+  padding-top: 6px;
 }
 
 /* 技能槽外层包裹 */
@@ -3169,9 +3170,9 @@ body.game .limbuscompany.app img {
   width: 100%; height: auto; aspect-ratio: 1;
 }
 
-/* EGO行内，圆形稍小保持紧凑 */
-.limbuscompany .ego-row .skill-slot-circle,
-.limbuscompany .defense-slot-row .skill-slot-circle {
+/* EGO/守备网格内：圆形与八边形统一缩小至40px，保持紧凑 */
+.limbuscompany .ego-skill-grid .skill-slot-circle,
+.limbuscompany .ego-skill-grid .skill-slot-octa {
   width: 40px; height: 40px;
 }
 
