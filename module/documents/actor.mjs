@@ -515,6 +515,186 @@ export class LimbusActor extends Actor {
       "system.hp.max":            nextHPMax,
       "system.hp.value":          nextHPValue,
     });
+
+    await Dialog.wait({
+      title: `升级到 Lv ${level}`,
+      content: `<div class="limbuscompany"><p>生命值成长掷骰结果：<strong>${gain}</strong>（1D10）</p><p>点击确认继续。</p></div>`,
+      buttons: {
+        ok: { label: "确认" },
+      },
+      default: "ok",
+      close: () => gain,
+    });
+
+    return gain;
+  }
+
+  async _rollHpGainForLevel(level) {
+    const roll = await (new Roll("1d10")).evaluate();
+    const gain = roll.total ?? 1;
+
+    ChatMessage.create({
+      speaker: ChatMessage.getSpeaker({ actor: this }),
+      content: `<div class="limbuscompany-card"><div class="card-title">升级生命值</div><div class="card-body">Lv ${level}：1D10 = <strong>${gain}</strong></div></div>`,
+      rolls: [roll],
+      type: CONST.CHAT_MESSAGE_STYLES.ROLL,
+    });
+
+    await Dialog.wait({
+      title: `升级到 Lv ${level}`,
+      content: `<div class="limbuscompany"><p>生命值成长掷骰结果：<strong>${gain}</strong>（1D10）</p><p>点击确认继续。</p></div>`,
+      buttons: {
+        ok: { label: "确认" },
+      },
+      default: "ok",
+      close: () => gain,
+    });
+
+    return gain;
+  }
+
+  async _rollHpGainForLevel(level) {
+    const roll = await (new Roll("1d10")).evaluate();
+    const gain = roll.total ?? 1;
+
+    ChatMessage.create({
+      speaker: ChatMessage.getSpeaker({ actor: this }),
+      content: `<div class="limbuscompany-card"><div class="card-title">升级生命值</div><div class="card-body">Lv ${level}：1D10 = <strong>${gain}</strong></div></div>`,
+      rolls: [roll],
+      type: CONST.CHAT_MESSAGE_STYLES.ROLL,
+    });
+
+    await Dialog.wait({
+      title: `升级到 Lv ${level}`,
+      content: `<div class="limbuscompany"><p>生命值成长掷骰结果：<strong>${gain}</strong>（1D10）</p><p>点击确认继续。</p></div>`,
+      buttons: {
+        ok: { label: "确认" },
+      },
+      default: "ok",
+      close: () => gain,
+    });
+
+    return gain;
+  }
+
+  async _rollHpGainForLevel(level) {
+    const roll = await (new Roll("1d10")).evaluate();
+    const gain = roll.total ?? 1;
+
+    ChatMessage.create({
+      speaker: ChatMessage.getSpeaker({ actor: this }),
+      content: `<div class="limbuscompany-card"><div class="card-title">升级生命值</div><div class="card-body">Lv ${level}：1D10 = <strong>${gain}</strong></div></div>`,
+      rolls: [roll],
+      type: CONST.CHAT_MESSAGE_STYLES.ROLL,
+    });
+
+    await Dialog.wait({
+      title: `升级到 Lv ${level}`,
+      content: `<div class="limbuscompany"><p>生命值成长掷骰结果：<strong>${gain}</strong>（1D10）</p><p>点击确认继续。</p></div>`,
+      buttons: {
+        ok: { label: "确认" },
+      },
+      default: "ok",
+      close: () => gain,
+    });
+
+    return gain;
+  }
+
+  async _rollHpGainForLevel(level) {
+    const roll = await (new Roll("1d10")).evaluate();
+    const gain = roll.total ?? 1;
+
+    ChatMessage.create({
+      speaker: ChatMessage.getSpeaker({ actor: this }),
+      content: `<div class="limbuscompany-card"><div class="card-title">升级生命值</div><div class="card-body">Lv ${level}：1D10 = <strong>${gain}</strong></div></div>`,
+      rolls: [roll],
+      type: CONST.CHAT_MESSAGE_STYLES.ROLL,
+    });
+
+    await Dialog.wait({
+      title: `升级到 Lv ${level}`,
+      content: `<div class="limbuscompany"><p>生命值成长掷骰结果：<strong>${gain}</strong>（1D10）</p><p>点击确认继续。</p></div>`,
+      buttons: {
+        ok: { label: "确认" },
+      },
+      default: "ok",
+      close: () => gain,
+    });
+
+    return gain;
+  }
+
+  async _rollHpGainForLevel(level) {
+    const roll = await (new Roll("1d10")).evaluate();
+    const gain = roll.total ?? 1;
+
+    ChatMessage.create({
+      speaker: ChatMessage.getSpeaker({ actor: this }),
+      content: `<div class="limbuscompany-card"><div class="card-title">升级生命值</div><div class="card-body">Lv ${level}：1D10 = <strong>${gain}</strong></div></div>`,
+      rolls: [roll],
+      type: CONST.CHAT_MESSAGE_STYLES.ROLL,
+    });
+
+    await Dialog.wait({
+      title: `升级到 Lv ${level}`,
+      content: `<div class="limbuscompany"><p>生命值成长掷骰结果：<strong>${gain}</strong>（1D10）</p><p>点击确认继续。</p></div>`,
+      buttons: {
+        ok: { label: "确认" },
+      },
+      default: "ok",
+      close: () => gain,
+    });
+
+    return gain;
+  }
+
+  async _rollHpGainForLevel(level) {
+    const roll = await (new Roll("1d10")).evaluate();
+    const gain = roll.total ?? 1;
+
+    ChatMessage.create({
+      speaker: ChatMessage.getSpeaker({ actor: this }),
+      content: `<div class="limbuscompany-card"><div class="card-title">升级生命值</div><div class="card-body">Lv ${level}：1D10 = <strong>${gain}</strong></div></div>`,
+      rolls: [roll],
+      type: CONST.CHAT_MESSAGE_STYLES.ROLL,
+    });
+
+    await Dialog.wait({
+      title: `升级到 Lv ${level}`,
+      content: `<div class="limbuscompany"><p>生命值成长掷骰结果：<strong>${gain}</strong>（1D10）</p><p>点击确认继续。</p></div>`,
+      buttons: {
+        ok: { label: "确认" },
+      },
+      default: "ok",
+      close: () => gain,
+    });
+
+    return gain;
+  }
+
+  async _rollHpGainForLevel(level) {
+    const roll = await (new Roll("1d10")).evaluate();
+    const gain = roll.total ?? 1;
+
+    ChatMessage.create({
+      speaker: ChatMessage.getSpeaker({ actor: this }),
+      content: `<div class="limbuscompany-card"><div class="card-title">升级生命值</div><div class="card-body">Lv ${level}：1D10 = <strong>${gain}</strong></div></div>`,
+      rolls: [roll],
+      type: CONST.CHAT_MESSAGE_STYLES.ROLL,
+    });
+
+    await Dialog.wait({
+      title: `升级到 Lv ${level}`,
+      content: `<div class="limbuscompany"><p>生命值成长掷骰结果：<strong>${gain}</strong>（1D10）</p><p>点击确认继续。</p></div>`,
+      buttons: {
+        ok: { label: "确认" },
+      },
+      default: "ok",
+      close: () => gain,
+    });
+
+    return gain;
   }
 
   async _rollHpGainForLevel(level) {
