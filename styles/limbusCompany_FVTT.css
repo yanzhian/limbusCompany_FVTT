@@ -2976,7 +2976,10 @@ body.game .limbuscompany.app img {
   flex-shrink: 0; text-transform: uppercase; letter-spacing: .04em;
 }
 /* 图标32px / 名称自适应 / 分类80px / 链接60px / 数量50px / 星芒50px / 操作80px */
-.limbuscompany .item-list-header  { grid-template-columns: 32px 1fr 80px 60px 50px 50px 80px; gap: 4px; }
+.limbuscompany {
+  --item-list-columns: 32px 1fr 80px 60px 50px 50px 80px;
+}
+.limbuscompany .item-list-header  { grid-template-columns: var(--item-list-columns); gap: 4px; }
 .limbuscompany .skill-list-header { grid-template-columns: 32px 1fr 80px 60px 50px 50px 80px; gap: 4px; }
 
 /* 分组 */
@@ -2997,7 +3000,7 @@ body.game .limbuscompany.app img {
 .limbuscompany .item-list { list-style: none; margin: 0; padding: 0; }
 .limbuscompany .item-row,
 .limbuscompany .skill-row {
-  display: grid; grid-template-columns: 32px 1fr 80px 60px 50px 50px 80px; gap: 4px;
+  display: grid; grid-template-columns: var(--item-list-columns); gap: 4px;
   height: 25px; align-items: center; padding: 0 4px;
   border-bottom: 1px solid rgba(95,62,33,.2); font-size: .75rem;
   transition: background .1s;
@@ -3016,6 +3019,34 @@ body.game .limbuscompany.app img {
 .limbuscompany .item-links,
 .limbuscompany .item-qty,
 .limbuscompany .item-stellar { color: var(--text-sub); font-size: .72rem; }
+
+/* 让表头与数据列采用一致对齐规则，避免视觉错位 */
+.limbuscompany .item-list-header .col-icon,
+.limbuscompany .item-row .col-icon { justify-self: start; }
+
+.limbuscompany .item-list-header .col-name,
+.limbuscompany .item-row .col-name { justify-self: start; text-align: left; }
+
+.limbuscompany .item-list-header .col-cat,
+.limbuscompany .item-list-header .col-link,
+.limbuscompany .item-list-header .col-qty,
+.limbuscompany .item-list-header .col-stellar,
+.limbuscompany .item-list-header .col-actions,
+.limbuscompany .item-row .col-cat,
+.limbuscompany .item-row .col-link,
+.limbuscompany .item-row .col-qty,
+.limbuscompany .item-row .col-stellar,
+.limbuscompany .item-row .col-actions {
+  justify-self: center;
+  text-align: center;
+}
+
+.limbuscompany .item-row .col-actions {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+}
 
 .limbuscompany .action-btn {
   background: none; border: none; cursor: pointer;
