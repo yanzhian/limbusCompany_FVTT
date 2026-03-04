@@ -515,6 +515,18 @@ export class LimbusActor extends Actor {
       "system.hp.max":            nextHPMax,
       "system.hp.value":          nextHPValue,
     });
+
+    await Dialog.wait({
+      title: `升级到 Lv ${level}`,
+      content: `<div class="limbuscompany"><p>生命值成长掷骰结果：<strong>${gain}</strong>（1D10）</p><p>点击确认继续。</p></div>`,
+      buttons: {
+        ok: { label: "确认" },
+      },
+      default: "ok",
+      close: () => gain,
+    });
+
+    return gain;
   }
 
   async _rollHpGainForLevel(level) {
