@@ -26,6 +26,7 @@
 :root {
   /* 覆盖 Foundry 默认浅色边框主色 */
   --color-border-light-primary: #3B2412;
+  
 
   /* 背景色系 */
   --bg-darkest:   #0B0707;   /* 背景最深 */
@@ -2461,7 +2462,7 @@ body.game .limbuscompany.app img {
   display: flex;
   gap: 6px;
   padding: 8px 10px 6px;
-  border-bottom: 1px solid #3B2412;
+  /* border-bottom: 1px solid #3B2412; */
   flex-shrink: 0;
   min-height: var(--header-height);
 }
@@ -2823,7 +2824,7 @@ body.game .limbuscompany.app img {
   background: var(--bg-darkest); flex-shrink: 0; height: 24px;
 }
 .limbuscompany .sheet-tabs .item {
-  flex: 1; text-align: center; padding: 0; line-height: 24px; font-size: .8rem;
+  flex: 1; text-align: center; padding: 0; line-height: 32px; font-size: .8rem;
   color: var(--text-sub); cursor: pointer; border-bottom: 2px solid transparent;
   transition: all .15s; background: none; border-left: none; border-right: none; border-top: none;
   height: 36px; display: flex; align-items: center; justify-content: center;
