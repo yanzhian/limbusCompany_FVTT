@@ -1,41 +1,59 @@
-{{!-- header.hbs — 角色卡顶部三列区域 --}}
+{{!-- header.hbs — 角色卡顶部三列区域（按规格重写） --}}
 <header class="sheet-header">
 
   {{!-- ── 左列：头像 / LV / XP / HP / 理智 ────────────────────────── --}}
   <div class="header-col header-left">
 
-    {{!-- A：头像区域 --}}
+    {{!-- A：头像区域（260px × 100px）：头像100×100 + XP区域150×60 --}}
     <div class="avatar-block">
-      <div class="avatar-wrap">
-        {{!-- 编辑锁图标 --}}
-        <button class="sheet-lock-toggle locked" title="编辑锁">
-          <i class="fas fa-lock"></i>
-        </button>
-        {{!-- 头像图片 --}}
+
+      {{!-- 头像图片包裹层（100×100），锁图标叠在右上角 --}}
+      <div class="avatar-img-wrap">
         {{#if isEditable}}
+          <button class="sheet-lock-toggle locked" title="编辑锁">
+            <i class="fas fa-lock"></i>
+          </button>
           <img class="actor-avatar" src="{{actor.img}}" data-edit="img" title="更换头像" alt="avatar">
         {{else}}
           <img class="actor-avatar" src="{{actor.img}}" alt="avatar">
         {{/if}}
-        {{!-- LV + 经验 --}}
-        <div class="avatar-level">
+      </div>
+
+      {{!-- XP 区域（150px × 60px），底部对齐 --}}
+      <div class="xp-section">
+        <div class="lv-row">
           <span class="lv-label">LV</span>
-          <span class="lv-value">{{system.level}}</span>
+          {{#if isEditable}}
+            <input type="number" name="system.level" value="{{system.level}}"
+                   class="lv-value editable-field" min="1" max="50" disabled/>
+          {{else}}
+            <span class="lv-value">{{system.level}}</span>
+          {{/if}}
         </div>
-        <div class="avatar-xp">{{system.xp.value}}/{{system.xp.next}}</div>
+        <div class="xp-values-row">
+          {{#if isEditable}}
+            <input type="number" name="system.xp.value" value="{{system.xp.value}}"
+                   class="xp-current editable-field" min="0" disabled/>
+          {{else}}
+            <span class="xp-current">{{system.xp.value}}</span>
+          {{/if}}
+          <span class="xp-sep"> / </span>
+          <span class="xp-max">{{system.xp.next}}</span>
+        </div>
         <div class="xp-bar-wrap">
           <div class="xp-bar-fill" style="width:{{clamp xpPercent 0 100}}%"></div>
         </div>
       </div>
-    </div>
 
-    {{!-- B：HP 行 --}}
+    </div>{{!-- /avatar-block --}}
+
+    {{!-- B：HP 行（图标32px + 血条200×32 + 重置20px） --}}
     <div class="resource-row hp-row">
       <img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/Health.webp" class="resource-icon" alt="HP">
       <div class="resource-bar-wrap">
         <div class="resource-bar hp-bar">
           <div class="resource-bar-fill hp-fill" style="width:{{clamp hpPercent 0 100}}%"></div>
-          {{!-- 混乱阈值刻度线 --}}
+          {{!-- 混乱阈值刻度线（白色细竖线叠加在血条上） --}}
           {{#each chaosThresholds}}
             <div class="chaos-mark {{#if triggered}}chaos-mark-burned{{/if}}"
                  style="left:{{chaosLinePos percent}};"
@@ -45,24 +63,26 @@
         </div>
         <div class="resource-values">
           {{#if isEditable}}
-            <input type="number" name="system.hp.value" value="{{system.hp.value}}" class="hp-value editable-field" min="0"/>
+            <input type="number" name="system.hp.value" value="{{system.hp.value}}"
+                   class="hp-value editable-field" min="0" disabled/>
           {{else}}
             <span class="hp-value">{{system.hp.value}}</span>
           {{/if}}
           <span class="resource-sep">/</span>
           {{#if isEditable}}
-            <input type="number" name="system.hp.max" value="{{system.hp.max}}" class="hp-max editable-field" min="1"/>
+            <input type="number" name="system.hp.max" value="{{system.hp.max}}"
+                   class="hp-max editable-field" min="1" disabled/>
           {{else}}
             <span class="hp-max">{{system.hp.max}}</span>
           {{/if}}
         </div>
       </div>
       <button class="hp-reset resource-reset" title="重置生命值">
-        <img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/重置.svg" width="14" height="14" alt="reset">
+        <img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/重置.svg" class="reset-icon" alt="reset">
       </button>
     </div>
 
-    {{!-- B：理智值行 --}}
+    {{!-- B：理智值行（模板与HP行同步，无混乱阈值） --}}
     <div class="resource-row sanity-row {{#if isInPanic}}sanity-panic{{/if}}">
       <img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/Sanity.webp" class="resource-icon" alt="理智">
       <div class="resource-bar-wrap">
@@ -71,7 +91,8 @@
         </div>
         <div class="resource-values">
           {{#if isEditable}}
-            <input type="number" name="system.sanity.value" value="{{system.sanity.value}}" class="sanity-value editable-field" min="5" max="95"/>
+            <input type="number" name="system.sanity.value" value="{{system.sanity.value}}"
+                   class="sanity-value editable-field" min="5" max="95" disabled/>
           {{else}}
             <span class="sanity-value">{{system.sanity.value}}</span>
           {{/if}}
@@ -80,7 +101,7 @@
         </div>
       </div>
       <button class="sanity-reset resource-reset" title="重置理智">
-        <img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/重置.svg" width="14" height="14" alt="reset">
+        <img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/重置.svg" class="reset-icon" alt="reset">
       </button>
     </div>
 
@@ -89,7 +110,7 @@
   {{!-- ── 中列：基础信息 + 抗性信息 ────────────────────────────────── --}}
   <div class="header-col header-mid">
 
-    {{!-- 基础信息栏 --}}
+    {{!-- 基础信息栏（200×24px 标题 + 220×50px 内容行） --}}
     <div class="info-block basic-info">
       <div class="info-block-label">基础信息</div>
       <div class="info-row">
@@ -97,36 +118,43 @@
         <span class="info-sign {{#if (gt atkTotal 0)}}info-pos{{/if}}{{#if (lte atkTotal 0)}}info-neg{{/if}}">
           {{#if (gt atkTotal 0)}}+{{/if}}{{atkTotal}}
         </span>
-        <img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/Defense_Level.webp" class="info-icon" alt="DEF" title="防御等级" style="margin-left:6px">
+        <img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/Defense_Level.webp" class="info-icon" alt="DEF" title="防御等级">
         <span class="info-sign {{#if (gt defTotal 0)}}info-pos{{/if}}">{{#if (gt defTotal 0)}}+{{/if}}{{defTotal}}</span>
-        <img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/Speed.webp" class="info-icon" alt="SPD" title="速度" style="margin-left:6px">
+        <img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/Speed.webp" class="info-icon" alt="SPD" title="速度">
         <span class="info-val">{{system.speed.min}}-{{system.speed.max}}</span>
       </div>
     </div>
 
-    {{!-- 抗性信息栏 --}}
+    {{!-- 抗性信息栏（200×24px 标题 + 220×50px 内容行） --}}
     <div class="info-block resist-info">
       <div class="info-block-label">抗性信息</div>
       <div class="info-row">
         <img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/Slash.webp"  class="resist-icon" alt="斩" title="斩击">
-        <span class="resist-val {{#isResistWeak system.resistances.slash}}resist-weak{{/isResistWeak}}{{#isResistStrong system.resistances.slash}}resist-strong{{/isResistStrong}}">{{system.resistances.slash}}</span>
-        <img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/Blunt.webp"  class="resist-icon" alt="打" title="打击" style="margin-left:4px">
-        <span class="resist-val {{#isResistWeak system.resistances.blunt}}resist-weak{{/isResistWeak}}{{#isResistStrong system.resistances.blunt}}resist-strong{{/isResistStrong}}">{{system.resistances.blunt}}</span>
-        <img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/Pierce.webp" class="resist-icon" alt="突" title="突刺" style="margin-left:4px">
-        <span class="resist-val {{#isResistWeak system.resistances.pierce}}resist-weak{{/isResistWeak}}{{#isResistStrong system.resistances.pierce}}resist-strong{{/isResistStrong}}">{{system.resistances.pierce}}</span>
+        <span class="resist-val {{#isResistWeak system.resistances.slash}}resist-weak{{/isResistWeak}}{{#isResistStrong system.resistances.slash}}resist-strong{{/isResistStrong}}">
+          ×{{system.resistances.slash}}
+        </span>
+        <img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/Blunt.webp"  class="resist-icon" alt="打" title="打击">
+        <span class="resist-val {{#isResistWeak system.resistances.blunt}}resist-weak{{/isResistWeak}}{{#isResistStrong system.resistances.blunt}}resist-strong{{/isResistStrong}}">
+          ×{{system.resistances.blunt}}
+        </span>
+        <img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/Pierce.webp" class="resist-icon" alt="突" title="突刺">
+        <span class="resist-val {{#isResistWeak system.resistances.pierce}}resist-weak{{/isResistWeak}}{{#isResistStrong system.resistances.pierce}}resist-strong{{/isResistStrong}}">
+          ×{{system.resistances.pierce}}
+        </span>
       </div>
     </div>
 
   </div>{{!-- /header-mid --}}
 
-  {{!-- ── 右列：背景 + 名字 + 六属性 ──────────────────────────────── --}}
+  {{!-- ── 右列：背景 + 名字 + 长休 + 六属性 ───────────────────────── --}}
   <div class="header-col header-right">
 
-    {{!-- D：背景标签 + 玩家名字 + 长休 --}}
+    {{!-- D：背景标签（200×25px）+ 玩家名字（200×50px）+ 长休按钮 --}}
     <div class="name-block">
       <div class="name-row-top">
         {{#if isEditable}}
-          <input type="text" name="system.backgroundTag" value="{{system.backgroundTag}}" class="bg-tag-input editable-field" placeholder="背景标签"/>
+          <input type="text" name="system.backgroundTag" value="{{system.backgroundTag}}"
+                 class="bg-tag-input editable-field" placeholder="背景标签" disabled/>
         {{else}}
           <span class="bg-tag">{{system.backgroundTag}}</span>
         {{/if}}
@@ -134,21 +162,22 @@
       </div>
       <div class="name-row-main">
         {{#if isEditable}}
-          <input type="text" name="name" value="{{actor.name}}" class="actor-name-input editable-field"/>
+          <input type="text" name="name" value="{{actor.name}}"
+                 class="actor-name-input editable-field" disabled/>
         {{else}}
           <span class="actor-name-display">{{actor.name}}</span>
         {{/if}}
       </div>
     </div>
 
-    {{!-- E：六属性 --}}
+    {{!-- E：六属性（360×80px，居中排列，每格50×60px） --}}
     <div class="attributes-block">
       {{#each attributes}}
         <div class="attr-item">
           <div class="attr-label">{{label}}</div>
           {{#if ../isEditable}}
             <input type="number" name="system.attributes.{{key}}" value="{{value}}"
-                   class="attr-value editable-field" min="2" max="10"/>
+                   class="attr-value editable-field" min="2" max="10" disabled/>
           {{else}}
             <div class="attr-value">{{value}}</div>
           {{/if}}
