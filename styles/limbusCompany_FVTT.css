@@ -1,11 +1,707 @@
 /*
  * limbusCompany_FVTT.css
- *
- * 样式已重置为干净基线，避免影响 Foundry VTT 原生 UI（包含图标）。
- * 后续将基于此文件逐步重建系统专用样式。
+ * 角色卡-装备页面基础样式（按设计稿）
+ * 说明：仅作用于 .limbuscompany 作用域，避免污染 Foundry 全局 UI。
  */
 
-/* 仅保留系统根作用域，不对 Foundry 全局元素做覆盖。 */
-.limbuscompany {
-  font-family: "Noto Sans SC", "Microsoft YaHei", sans-serif;
+.limbuscompany.actor.character-sheet {
+  width: 880px;
+  height: 810px;
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  color: #E8C9A2;
+  font-family: "Microsoft YaHei", "Noto Sans SC", sans-serif;
+  background: linear-gradient(180deg, #0B0707 0%, #201C16 50%, #0B0707 100%);
+  border: 1px solid #E8CAA2;
+}
+
+.limbuscompany * { box-sizing: border-box; }
+
+/* ===== 顶部三列 ===== */
+.limbuscompany .sheet-header {
+  height: 200px;
+  display: grid;
+  grid-template-columns: 275px 220px 1fr;
+  gap: 8px;
+  padding: 8px 8px 6px;
+  border-bottom: 1px solid #E8CAA2;
+}
+
+.limbuscompany .header-col { min-height: 0; }
+
+/* 左列 */
+.limbuscompany .header-left { width: 275px; }
+.limbuscompany .avatar-block {
+  width: 260px;
+  height: 100px;
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+}
+
+.limbuscompany .avatar-img-wrap {
+  width: 100px;
+  height: 100px;
+  position: relative;
+  flex: 0 0 100px;
+}
+
+.limbuscompany .actor-avatar {
+  width: 100px;
+  height: 100px;
+  object-fit: cover;
+  border: 1px solid #E8CAA2;
+}
+
+.limbuscompany .sheet-lock-toggle {
+  width: 20px;
+  height: 20px;
+  position: absolute;
+  right: 2px;
+  top: 2px;
+  border: 1px solid #946438;
+  background: rgba(11, 7, 7, 0.88);
+  color: #E8C9A2;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.limbuscompany .xp-section {
+  width: 150px;
+  height: 60px;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  margin-bottom: 2px;
+}
+
+.limbuscompany .lv-row {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.limbuscompany .lv-label {
+  font-size: 16px;
+  color: #946438;
+  font-weight: 700;
+}
+
+.limbuscompany .lv-value {
+  width: 58px;
+  border: 0;
+  background: transparent;
+  color: #E8C9A2;
+  font-size: 32px;
+  font-weight: 700;
+  line-height: 1;
+  padding: 0;
+}
+
+.limbuscompany .xp-values-row {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  font-size: 16px;
+}
+
+.limbuscompany .xp-current,
+.limbuscompany .xp-sep { color: #E8C9A2; }
+.limbuscompany .xp-max { color: #946438; }
+
+.limbuscompany .xp-current,
+.limbuscompany .xp-max {
+  border: 0;
+  background: transparent;
+  width: 48px;
+  text-align: right;
+  padding: 0;
+}
+
+.limbuscompany .xp-bar-wrap {
+  width: 150px;
+  height: 16px;
+  background: #413C37;
+  border: 1px solid #6A533D;
+  margin-top: 4px;
+}
+
+.limbuscompany .xp-bar-fill {
+  height: 100%;
+  background: #B43822;
+}
+
+.limbuscompany .resource-row {
+  width: 260px;
+  margin-top: 8px;
+  display: grid;
+  grid-template-columns: 32px 1fr 20px;
+  align-items: center;
+  column-gap: 6px;
+}
+
+.limbuscompany .resource-icon {
+  width: 32px;
+  height: 32px;
+  object-fit: contain;
+}
+
+.limbuscompany .resource-bar-wrap {
+  width: 200px;
+  position: relative;
+}
+
+.limbuscompany .resource-bar {
+  width: 200px;
+  height: 32px;
+  position: relative;
+  border: 1px solid #634B34;
+  background: #413C37;
+  overflow: hidden;
+}
+
+.limbuscompany .resource-bar-fill { height: 100%; }
+.limbuscompany .hp-fill { background: #B43822; }
+.limbuscompany .sanity-fill { background: #4E7DA8; }
+
+.limbuscompany .resource-values {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  font-size: 24px;
+  font-weight: 700;
+  pointer-events: none;
+}
+
+.limbuscompany .resource-values input,
+.limbuscompany .resource-values span {
+  color: #E8C9A2;
+  background: transparent;
+  border: 0;
+  width: auto;
+  min-width: 0;
+  padding: 0;
+  text-align: center;
+}
+
+.limbuscompany .resource-sep { margin: 0 2px; }
+
+.limbuscompany .chaos-mark {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: #ffffff;
+  opacity: .9;
+}
+
+.limbuscompany .chaos-mark-burned {
+  opacity: .25;
+  background: #8d8d8d;
+}
+
+.limbuscompany .resource-reset {
+  width: 20px;
+  height: 20px;
+  border: 1px solid #946438;
+  background: #0B0707;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 0;
+}
+
+.limbuscompany .reset-icon {
+  width: 16px;
+  height: 16px;
+  object-fit: contain;
+}
+
+/* 中列 */
+.limbuscompany .header-mid {
+  width: 220px;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  gap: 10px;
+}
+
+.limbuscompany .info-block-label {
+  width: 200px;
+  height: 24px;
+  background: #3B2412;
+  color: #E1AC62;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+}
+
+.limbuscompany .info-row {
+  width: 220px;
+  min-height: 50px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 32px;
+  color: #E8C9A2;
+}
+
+.limbuscompany .info-icon,
+.limbuscompany .resist-icon {
+  width: 32px;
+  height: 32px;
+  object-fit: contain;
+}
+
+.limbuscompany .info-sign,
+.limbuscompany .info-val,
+.limbuscompany .resist-val {
+  font-size: 32px;
+  color: #E8C9A2;
+  line-height: 1;
+}
+
+/* 右列 */
+.limbuscompany .header-right {
+  width: 370px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.limbuscompany .name-row-top {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.limbuscompany .bg-tag,
+.limbuscompany .bg-tag-input {
+  width: 200px;
+  height: 25px;
+  background: #3B2412;
+  color: #8E5F34;
+  font-size: 16px;
+  border: 1px solid #5F3E22;
+  text-align: right;
+  padding: 0 8px;
+}
+
+.limbuscompany .name-row-main {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.limbuscompany .actor-name-display,
+.limbuscompany .actor-name-input {
+  width: 200px;
+  height: 50px;
+  background: transparent;
+  border: 0;
+  color: #E8C9A2;
+  font-size: 32px;
+  text-align: right;
+  padding: 0;
+}
+
+.limbuscompany .attributes-block {
+  width: 360px;
+  height: 80px;
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+}
+
+.limbuscompany .attr-item {
+  width: 50px;
+  height: 60px;
+  background: #5F3E22;
+  border-radius: 6px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  margin-top: 10px;
+}
+
+.limbuscompany .attr-label {
+  font-size: 16px;
+  color: #E8C9A2;
+  line-height: 1;
+}
+
+.limbuscompany .attr-value {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: #E8C9A2;
+  font-size: 16px;
+  text-align: center;
+}
+
+.limbuscompany .attr-check-btn {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 0;
+  background: #9A6839;
+  position: absolute;
+  bottom: -8px;
+  cursor: pointer;
+}
+
+.limbuscompany .attr-check-btn:hover,
+.limbuscompany .attr-check-btn.active { background: #F2BE2B; }
+
+/* ===== Tab 导航 ===== */
+.limbuscompany .sheet-tabs.tabs {
+  height: 24px;
+  display: flex;
+  border-top: 1px solid #E8CAA2;
+  border-bottom: 1px solid #E8CAA2;
+}
+
+.limbuscompany .sheet-tabs .item {
+  width: 72px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #E8CAA1;
+  text-decoration: none;
+  font-size: 14px;
+  border-right: 1px solid #5F3E22;
+}
+
+.limbuscompany .sheet-tabs .item.active {
+  background: #5F3E22;
+  color: #F2BE2B;
+}
+
+/* ===== Tab 内容区 ===== */
+.limbuscompany .sheet-body {
+  height: calc(810px - 200px - 24px - 36px);
+  overflow: hidden;
+}
+
+.limbuscompany .sheet-body .tab { height: 100%; }
+
+/* 物品 Tab */
+.limbuscompany .tab-items-layout {
+  height: 100%;
+  display: grid;
+  grid-template-columns: 275px 1fr;
+  border-bottom: 1px solid #E8CAA2;
+}
+
+.limbuscompany .equip-panel {
+  border-right: 1px solid #E8CAA2;
+  padding: 8px 6px;
+}
+
+.limbuscompany .equip-title {
+  width: 270px;
+  height: 55px;
+  color: #E8CAA1;
+  font-size: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.limbuscompany .equip-grid {
+  margin: 6px auto 0;
+  width: 222px;
+  display: grid;
+  grid-template-columns: repeat(3, 70px);
+  gap: 6px;
+}
+
+.limbuscompany .equip-slot {
+  width: 70px;
+  height: 70px;
+  background: #5F3E22;
+  border-radius: 8px;
+  position: relative;
+  border: 1px solid #8D6138;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.limbuscompany .equip-slot .equip-icon {
+  width: 64px;
+  height: 64px;
+  object-fit: contain;
+}
+
+.limbuscompany .equip-slot-placeholder {
+  width: 70px;
+  height: 70px;
+}
+
+.limbuscompany .link-arrow {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  background-image: url("../assets/icons/Base_icon/Link.webp");
+  background-size: contain;
+  background-repeat: no-repeat;
+  opacity: .75;
+}
+.limbuscompany .link-arrow.up { top: 2px; left: 50%; transform: translateX(-50%) rotate(-90deg); }
+.limbuscompany .link-arrow.down { bottom: 2px; left: 50%; transform: translateX(-50%) rotate(90deg); }
+.limbuscompany .link-arrow.left { left: 2px; top: 50%; transform: translateY(-50%) rotate(180deg); }
+.limbuscompany .link-arrow.right { right: 2px; top: 50%; transform: translateY(-50%); }
+
+.limbuscompany .list-panel {
+  padding: 8px;
+  overflow: hidden;
+}
+
+.limbuscompany .list-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  position: relative;
+}
+
+.limbuscompany .item-search {
+  flex: 1;
+  height: 28px;
+  border: 1px solid #E8CAA2;
+  background: #1F1812;
+  color: #E8C9A2;
+  padding: 0 8px;
+}
+
+.limbuscompany .toolbar-btns {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.limbuscompany .toolbar-btn {
+  width: 24px;
+  height: 24px;
+  border: 1px solid #E8CAA2;
+  background: #1F1812;
+  color: #E8CAA1;
+  cursor: pointer;
+  padding: 0;
+}
+
+.limbuscompany .toolbar-btn:hover { color: #F2BE2B; border-color: #F2BE2B; }
+
+.limbuscompany .filter-panel {
+  width: 245px;
+  height: 255px;
+  position: absolute;
+  top: 32px;
+  right: 0;
+  z-index: 20;
+  background: linear-gradient(180deg, #0B0707 0%, #201C16 50%, #0B0707 100%);
+  border: 1px solid #E8CAA2;
+  padding: 8px;
+}
+
+.limbuscompany .filter-panel-title {
+  width: 245px;
+  height: 48px;
+  margin: -8px -8px 6px;
+  color: #E8CAA1;
+  font-size: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.limbuscompany .filter-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.limbuscompany .filter-category-btn {
+  width: 40px;
+  height: 20px;
+  border: 1px solid #8E5F34;
+  background: #3B2412;
+  color: #E8CAA1;
+  font-size: 12px;
+  cursor: pointer;
+  padding: 0;
+}
+
+.limbuscompany .filter-category-btn.selected,
+.limbuscompany .filter-link-btn.selected {
+  background: #8E5F34;
+  color: #F2BE2B;
+}
+
+.limbuscompany .filter-section-label {
+  margin: 6px 0 3px;
+  color: #E8CAA1;
+  font-size: 14px;
+}
+
+.limbuscompany .filter-link-cross {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.limbuscompany .filter-link-row {
+  display: flex;
+  gap: 4px;
+  min-height: 22px;
+  align-items: center;
+}
+
+.limbuscompany .filter-link-btn {
+  width: 20px;
+  height: 20px;
+  border: 1px solid #8E5F34;
+  background: #3B2412;
+  color: #E8CAA1;
+  cursor: pointer;
+  padding: 0;
+}
+
+.limbuscompany .filter-link-center { width: 20px; height: 20px; }
+
+.limbuscompany .filter-apply-btn {
+  margin-top: 8px;
+  width: 100%;
+  height: 24px;
+  border: 1px solid #E8CAA2;
+  background: #5F3E22;
+  color: #E8CAA1;
+}
+
+.limbuscompany .item-list-header,
+.limbuscompany .item-row {
+  height: 25px;
+  display: grid;
+  grid-template-columns: 32px 1fr 80px 60px 50px 50px 80px;
+  align-items: center;
+  column-gap: 4px;
+}
+
+.limbuscompany .item-list-header {
+  margin-top: 8px;
+  background: #D4B48B;
+  color: #3B2412;
+  font-size: 12px;
+  padding: 0 6px;
+}
+
+.limbuscompany .item-group { margin-top: 2px; }
+
+.limbuscompany .group-header {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 25px;
+  color: #E8CAA1;
+  font-size: 16px;
+}
+
+.limbuscompany .item-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 355px;
+  overflow: auto;
+}
+
+.limbuscompany .item-row {
+  padding: 0 6px;
+  border-bottom: 1px solid rgba(232, 202, 162, 0.18);
+  font-size: 14px;
+}
+
+.limbuscompany .item-icon {
+  width: 24px;
+  height: 24px;
+  object-fit: contain;
+}
+
+.limbuscompany .col-actions {
+  display: flex;
+  gap: 2px;
+  align-items: center;
+}
+
+.limbuscompany .action-btn {
+  width: 20px;
+  height: 20px;
+  border: 1px solid #8E5F34;
+  background: transparent;
+  color: #E8CAA1;
+  padding: 0;
+}
+
+/* Title 卡片 */
+.limbuscompany .title-card {
+  position: fixed;
+  width: 17.5rem;
+  height: 28.75rem;
+  background: linear-gradient(180deg, #0B0707 0%, #201C16 50%, #0B0707 100%);
+  border: 1px solid #E8CAA2;
+  z-index: 999;
+}
+
+/* ===== 底部固定栏 ===== */
+.limbuscompany .sheet-footer {
+  margin-top: auto;
+  height: 36px;
+  background: #0A0605;
+  border-top: 1px solid #E8CAA2;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 10px;
+  color: #E8CAA1;
+}
+
+.limbuscompany .footer-left,
+.limbuscompany .footer-right {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 30px;
+}
+
+.limbuscompany .footer-icon {
+  width: 20px;
+  height: 20px;
+  object-fit: contain;
+}
+
+.limbuscompany .footer-currency,
+.limbuscompany .footer-stellar-val,
+.limbuscompany .footer-stellar-max {
+  border: 0;
+  background: transparent;
+  color: #E8CAA1;
+  font-size: 30px;
+  padding: 0;
+  width: auto;
+}
+
+/* 编辑锁打开时输入框：金色边框 */
+.limbuscompany .editable-field:enabled {
+  border: 1px solid #E8CAA2;
+  border-radius: 2px;
+  background: rgba(11, 7, 7, .45);
 }
