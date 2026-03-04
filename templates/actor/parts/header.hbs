@@ -29,6 +29,9 @@
           {{else}}
             <span class="lv-value">{{system.level}}</span>
           {{/if}}
+          {{#if canLevelUp}}
+            <button type="button" class="level-up-btn" title="升级">↑</button>
+          {{/if}}
         </div>
         <div class="xp-values-row">
           {{#if isEditable}}
@@ -115,11 +118,9 @@
       <div class="info-block-label">基础信息</div>
       <div class="info-row">
         <img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/Offense_Level.webp" class="info-icon" alt="ATK" title="攻击等级">
-        <span class="info-sign {{#if (gt atkTotal 0)}}info-pos{{/if}}{{#if (lte atkTotal 0)}}info-neg{{/if}}">
-          {{#if (gt atkTotal 0)}}+{{/if}}{{atkTotal}}
-        </span>
+        <span class="info-sign">{{atkTotal}}</span>
         <img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/Defense_Level.webp" class="info-icon" alt="DEF" title="防御等级">
-        <span class="info-sign {{#if (gt defTotal 0)}}info-pos{{/if}}">{{#if (gt defTotal 0)}}+{{/if}}{{defTotal}}</span>
+        <span class="info-sign">{{defTotal}}</span>
         <img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/Speed.webp" class="info-icon" alt="SPD" title="速度">
         <span class="info-val">{{system.speed.min}}-{{system.speed.max}}</span>
       </div>
