@@ -42,6 +42,7 @@ export class LimbusActorSheet extends ActorSheet {
     context.config     = cfg;
     context.isGM       = game.user.isGM;
     context.isEditable = this.isEditable;
+    this._editUnlocked ??= false;
 
     // ── 经验/HP/理智百分比 ────────────────────────────────────────────────
     context.xpPercent     = system.xp.next  > 0 ? ((system.xp.value  / system.xp.next)  * 100) : 0;
@@ -52,7 +53,7 @@ export class LimbusActorSheet extends ActorSheet {
     // ── 属性列表 ──────────────────────────────────────────────────────────
     context.attributes = cfg.ATTRIBUTES.map(key => ({
       key,
-      label: cfg.ATTRIBUTE_LABELS[key] ?? key,
+      label: this._getAttributeLabel(key),
       value: system.attributes[key] ?? 0,
     }));
 
@@ -143,6 +144,23 @@ export class LimbusActorSheet extends ActorSheet {
       .map(k => groups[k]);
   }
 
+
+  _getAttributeLabel(attrKey) {
+    const i18nKey = CONFIG.LIMBUSCOMPANY.ATTRIBUTE_LABELS?.[attrKey] ?? attrKey;
+    const localized = game.i18n.localize(i18nKey);
+    if (localized !== i18nKey) return localized;
+
+    const fallbackLabels = {
+      str: "力量",
+      agi: "敏捷",
+      con: "体质",
+      int: "智力",
+      per: "感知",
+      cha: "魅力",
+    };
+    return fallbackLabels[attrKey] ?? localized;
+  }
+
   _groupSkillItems() {
     const groups = {
       basic:   { key: "basic",   label: "基本技能",  items: [] },
@@ -197,6 +215,7 @@ export class LimbusActorSheet extends ActorSheet {
 
   activateListeners(html) {
     super.activateListeners(html);
+    this._applyEditLockState(html);
 
     // ── 只读操作（非编辑模式也可用） ──────────────────────────────────────
 
@@ -361,7 +380,7 @@ export class LimbusActorSheet extends ActorSheet {
   async _onAttributeCheck(event) {
     const attr = event.currentTarget.dataset.attr;
     const attrVal = this.actor.system.attributes[attr] ?? 0;
-    const label = CONFIG.LIMBUSCOMPANY.ATTRIBUTE_LABELS[attr] ?? attr;
+    const label = this._getAttributeLabel(attr);
 
     const { AttributeCheckDialog } = await import("../helpers/dice.mjs").catch(() => ({ AttributeCheckDialog: null }));
     if (AttributeCheckDialog) {
@@ -872,17 +891,28 @@ export class LimbusActorSheet extends ActorSheet {
   /* ─── 编辑锁 ─────────────────────────────────────────────────────────────── */
 
   _onToggleLock(event) {
-    const lock = $(event.currentTarget);
-    const isLocked = lock.hasClass("locked");
-    if (isLocked) {
-      lock.removeClass("locked").html('<i class="fas fa-lock-open"></i>');
-      this.element.find(".editable-field").prop("disabled", false);
-      this.element.find(".editable-only").show();
+    event.preventDefault();
+    this._editUnlocked = !this._editUnlocked;
+    this._applyEditLockState(this.element);
+  }
+
+  _applyEditLockState(html) {
+    const root = html && html.find ? html : this.element;
+    if (!root?.length) return;
+
+    const lockBtn = root.find(".sheet-lock-toggle");
+    if (this._editUnlocked) {
+      lockBtn.removeClass("locked").html('<i class="fas fa-lock-open"></i>');
+      root.find(".editable-field").prop("disabled", false);
+      root.find(".editable-only").show();
     } else {
-      lock.addClass("locked").html('<i class="fas fa-lock"></i>');
-      this.element.find(".editable-field").prop("disabled", true);
-      this.element.find(".editable-only").hide();
+      lockBtn.addClass("locked").html('<i class="fas fa-lock"></i>');
+      root.find(".editable-field").prop("disabled", true);
+      root.find(".editable-only").hide();
     }
+
+    // 星芒固定不可编辑
+    root.find("[name='system.stellarMotes.value']").prop("disabled", true);
   }
 
   /* ─── Title 卡片（悬停） ────────────────────────────────────────────────── */
