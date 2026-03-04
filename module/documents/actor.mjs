@@ -475,41 +475,58 @@ export class LimbusActor extends Actor {
    * @param {number} amount
    */
   async addXP(amount) {
+    const curr = this.system.xp.value ?? 0;
+    const next = Math.max(0, curr + Number(amount || 0));
+    return this.update({ "system.xp.value": next });
+  }
+
+  /**
+   * 手动升级：当经验值大于当前升级阈值时可触发。
+   * 升级后：等级+1，经验清零，星芒上限更新，按规则掷 1D10 增加最大生命值。
+   */
+  async levelUpByXp() {
     const xpTable = CONFIG.LIMBUSCOMPANY?.LEVEL_XP ?? [];
-    let { value: xp } = this.system.xp;
-    let level         = this.system.level;
-    let attrPoints    = this.system.attrPoints;
-    let stellarMax    = this.system.stellarMotes.max;
-    let hpRollTotal   = this.system.hp.rollTotal ?? Math.max(1, (this.system.hp.max ?? 10) - ((this.system.attributes?.con ?? 0) * 5));
+    const sys = this.system;
+    const currentLevel = sys.level;
+    const needed = xpTable[currentLevel] ?? null;
+    const currentXp = sys.xp.value ?? 0;
 
-    xp += amount;
-
-    // 连续升级检查
-    while (true) {
-      const needed = xpTable[level] ?? null;
-      if (needed === null || xp < needed) break;
-      // 升级
-      xp       -= needed;
-      level     += 1;
-      stellarMax = 30 + (level - 1);
-      const hpGainRoll = await this._rollHpGainForLevel(level);
-      hpRollTotal += hpGainRoll;
-      if (level % 10 === 0) attrPoints += 1;
+    if (needed === null || currentXp <= needed) {
+      ui.notifications?.warn?.("经验值未超过升级阈值，无法升级。");
+      return;
     }
 
-    const con = this.system.attributes?.con ?? 0;
-    const nextHPMax = (con * 5) + hpRollTotal;
-    const nextHPValue = Math.min(Math.max(this.system.hp.value, 0), nextHPMax);
+    const nextLevel = currentLevel + 1;
+    const hpGainRoll = await this._rollHpGainForLevel(nextLevel);
+    const currRollTotal = sys.hp.rollTotal ?? Math.max(1, (sys.hp.max ?? 10) - ((sys.attributes?.con ?? 0) * 5));
+    const nextRollTotal = currRollTotal + hpGainRoll;
+    const con = sys.attributes?.con ?? 0;
+    const nextHPMax = (con * 5) + nextRollTotal;
+    const nextHPValue = Math.min(Math.max(sys.hp.value ?? 0, 0), nextHPMax);
+    const nextStellarMax = 30 + (nextLevel - 1);
+    const nextAttrPoints = (nextLevel % 10 === 0) ? ((sys.attrPoints ?? 0) + 1) : (sys.attrPoints ?? 0);
 
     return this.update({
-      "system.level":             level,
-      "system.xp.value":          xp,
-      "system.attrPoints":        attrPoints,
-      "system.stellarMotes.max":  stellarMax,
-      "system.hp.rollTotal":      hpRollTotal,
+      "system.level":             nextLevel,
+      "system.xp.value":          0,
+      "system.attrPoints":        nextAttrPoints,
+      "system.stellarMotes.max":  nextStellarMax,
+      "system.hp.rollTotal":      nextRollTotal,
       "system.hp.max":            nextHPMax,
       "system.hp.value":          nextHPValue,
     });
+
+    await Dialog.wait({
+      title: `升级到 Lv ${level}`,
+      content: `<div class="limbuscompany"><p>生命值成长掷骰结果：<strong>${gain}</strong>（1D10）</p><p>点击确认继续。</p></div>`,
+      buttons: {
+        ok: { label: "确认" },
+      },
+      default: "ok",
+      close: () => gain,
+    });
+
+    return gain;
   }
 
   async _rollHpGainForLevel(level) {

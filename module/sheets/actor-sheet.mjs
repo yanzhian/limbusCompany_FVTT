@@ -46,6 +46,7 @@ export class LimbusActorSheet extends ActorSheet {
 
     // ── 经验/HP/理智百分比 ────────────────────────────────────────────────
     context.xpPercent     = system.xp.next  > 0 ? ((system.xp.value  / system.xp.next)  * 100) : 0;
+    context.canLevelUp    = (system.xp.value ?? 0) > (system.xp.next ?? Number.MAX_SAFE_INTEGER);
     context.hpPercent     = system.hp.max   > 0 ? ((system.hp.value   / system.hp.max)   * 100) : 0;
     context.sanityPercent = ((system.sanity.value - 5) / 90) * 100;
     context.isInPanic     = system.sanity.value <= 5;
@@ -246,6 +247,9 @@ export class LimbusActorSheet extends ActorSheet {
 
     // ── 锁状态切换 ────────────────────────────────────────────────────────
     html.find(".sheet-lock-toggle").on("click", this._onToggleLock.bind(this));
+
+    // ── 升级按钮（经验值 > 升级阈值） ───────────────────────────────────
+    html.find(".level-up-btn").on("click", this._onLevelUpClick.bind(this));
 
     // ── 长休 ─────────────────────────────────────────────────────────────
     html.find(".long-rest-btn").on("click", () => this.actor.longRest());
@@ -886,6 +890,11 @@ export class LimbusActorSheet extends ActorSheet {
   async _onBuffDelete(event) {
     const buffId = event.currentTarget.closest("[data-buff-id]")?.dataset.buffId;
     await this.actor.removeBuff(buffId);
+  }
+
+  async _onLevelUpClick(event) {
+    event.preventDefault();
+    await this.actor.levelUpByXp?.();
   }
 
   /* ─── 编辑锁 ─────────────────────────────────────────────────────────────── */

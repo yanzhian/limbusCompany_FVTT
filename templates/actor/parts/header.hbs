@@ -29,6 +29,9 @@
           {{else}}
             <span class="lv-value">{{system.level}}</span>
           {{/if}}
+          {{#if canLevelUp}}
+            <button type="button" class="level-up-btn" title="升级">↑</button>
+          {{/if}}
         </div>
         <div class="xp-values-row">
           {{#if isEditable}}
