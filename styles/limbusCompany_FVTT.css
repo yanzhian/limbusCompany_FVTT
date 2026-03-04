@@ -2458,7 +2458,7 @@ body.game .limbuscompany.app img {
   display: flex;
   gap: 6px;
   padding: 8px 10px 6px;
-  border-bottom: 1px solid #E8CAA2;
+  border-bottom: 1px solid #3B2412;
   flex-shrink: 0;
   min-height: var(--header-height);
 }
@@ -2569,7 +2569,7 @@ body.game .limbuscompany.app img {
 
 /* 血条容器：200×32px，内容叠加 */
 .limbuscompany .resource-bar-wrap {
-  width: 200px; height: 32px; flex-shrink: 0;
+  width: 200px; height: 24px; flex-shrink: 0;
   position: relative; border-radius: 3px; overflow: hidden;
 }
 .limbuscompany .resource-bar {
@@ -2718,7 +2718,7 @@ body.game .limbuscompany.app img {
 }
 .limbuscompany .attr-item {
   display: flex; flex-direction: column; align-items: center; justify-content: center;
-  width: 50px; height: 60px; background: #5F3E22; border-radius: 3px;
+  width: 50px; height: 70px; background: #5F3E22; border-radius: 3px;
   gap: 2px; flex-shrink: 0;
 }
 /* 属性名：16px #E8C9A2 */
