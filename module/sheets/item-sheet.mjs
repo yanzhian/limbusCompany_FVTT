@@ -19,7 +19,7 @@ export class LimbusItemSheet extends ItemSheet {
     return foundry.utils.mergeObject(super.defaultOptions, {
       classes:  ["limbuscompany", "sheet", "item"],
       width:    460,
-      height:   760,
+      height:   500,
       tabs:     [],
       resizable: true,
     });

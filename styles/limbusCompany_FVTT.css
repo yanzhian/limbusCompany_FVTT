@@ -3587,6 +3587,7 @@ body.game .limbuscompany.app img {
   background: var(--bg-title-bar); border: 1px solid var(--border-gold);
   color: var(--text-main); font-family: var(--font-main); font-size: .72rem;
   padding: 3px 10px; cursor: pointer; border-radius: 2px; transition: background .15s;
+  min-width: 120px;
 }
 .limbuscompany .sheet-btn:hover { background: var(--border-gold); }
 .limbuscompany .footer-stellar {
