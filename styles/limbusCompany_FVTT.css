@@ -3043,7 +3043,7 @@ body.game .limbuscompany.app img {
 .limbuscompany .item-row,
 .limbuscompany .skill-row {
   display: grid; grid-template-columns: var(--item-list-columns); gap: 4px;
-  height: 25px; align-items: center; padding: 0 4px;
+  min-height: 34px; align-items: center; padding: 0 4px;
   border-bottom: 1px solid rgba(95,62,33,.2); font-size: .75rem;
   transition: background .1s;
 }
@@ -3052,7 +3052,7 @@ body.game .limbuscompany.app img {
 
 /* 图标列：32px */
 .limbuscompany .item-icon {
-  width: 32px; height: 32px; object-fit: contain; cursor: pointer;
+  width: 24px; height: 24px; object-fit: contain; cursor: pointer;
   border-radius: 2px; border: 1px solid rgba(95,62,33,.4);
 }
 .limbuscompany .item-name { cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -3064,7 +3064,12 @@ body.game .limbuscompany.app img {
 
 /* 让表头与数据列采用一致对齐规则，避免视觉错位 */
 .limbuscompany .item-list-header .col-icon,
-.limbuscompany .item-row .col-icon { justify-self: start; }
+.limbuscompany .item-row .col-icon,
+.limbuscompany .skill-row .col-icon {
+  justify-self: start;
+  display: inline-flex;
+  align-items: center;
+}
 
 .limbuscompany .item-list-header .col-name,
 .limbuscompany .item-row .col-name { justify-self: start; text-align: left; }
@@ -3138,29 +3143,43 @@ body.game .limbuscompany.app img {
 /* ── 方形槽（基础 / 守备）── */
 .limbuscompany .skill-slot-octa {
   width: 48px; height: 48px;
-  border-radius: 4px;
-  background: #181511;
-  border: 1px solid rgba(185,142,60,.3);
-  overflow: hidden;
+  position: relative;
+  background: transparent;
+  border: none;
+  overflow: visible;
   display: flex; align-items: center; justify-content: center;
   flex-shrink: 0;
+}
+
+.limbuscompany .skill-slot-octa::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: #181511;
+  border: 1px solid rgba(185,142,60,.6);
+  clip-path: polygon(30% 0, 70% 0, 100% 30%, 100% 70%, 70% 100%, 30% 100%, 0 70%, 0 30%);
+  box-shadow: inset 0 0 0 1px rgba(0,0,0,.35);
 }
 
 /* ── 圆形槽（EGO）── */
 .limbuscompany .skill-slot-circle {
   width: 48px; height: 48px;
+  position: relative;
   border-radius: 50%;
   background: #181511;
   border: 1px solid rgba(185,142,60,.3);
-  overflow: hidden;
+  overflow: visible;
   display: flex; align-items: center; justify-content: center;
   flex-shrink: 0;
 }
 
 /* 图标（普通 flex 子元素，无 position: absolute 避免尺寸冲突） */
 .limbuscompany .skill-slot-img {
-  width: 100%; height: 100%;
-  object-fit: cover; display: block;
+  position: relative;
+  z-index: 1;
+  width: 72%; height: 72%;
+  object-fit: contain; display: block;
+  filter: drop-shadow(0 0 1px rgba(0,0,0,.7));
 }
 
 /* 空槽：暗淡 */
@@ -3171,15 +3190,22 @@ body.game .limbuscompany.app img {
    --sin-color 由内联 style 注入 */
 .limbuscompany .skill-slot-equipped .skill-slot-octa,
 .limbuscompany .skill-slot-equipped .skill-slot-circle {
-  border-color: transparent;
   box-shadow: 0 0 0 2px var(--sin-color, var(--border-gold)),
               0 0 7px 1px var(--sin-color, var(--border-gold));
+}
+
+.limbuscompany .skill-slot-equipped .skill-slot-octa::before {
+  border-color: var(--sin-color, var(--border-gold));
 }
 
 /* 悬停 */
 .limbuscompany .skill-slot-empty:hover .skill-slot-octa,
 .limbuscompany .skill-slot-empty:hover .skill-slot-circle {
-  border-color: var(--gold-active); opacity: .7;
+  opacity: .7;
+}
+
+.limbuscompany .skill-slot-empty:hover .skill-slot-octa::before {
+  border-color: var(--gold-active);
 }
 .limbuscompany .skill-slot-equipped:hover .skill-slot-octa,
 .limbuscompany .skill-slot-equipped:hover .skill-slot-circle {

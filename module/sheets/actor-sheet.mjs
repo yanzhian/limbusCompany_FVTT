@@ -865,7 +865,7 @@ export class LimbusActorSheet extends ActorSheet {
       const id   = state.active[i] ?? null;
       const item = id ? this.actor.items.get(id) : null;
 
-      $el.find("img").attr("src", item ? item.img : "systems/limbusCompany_FVTT/assets/icons/Skill/Normalsin.webp");
+      $el.find("img").attr("src", item ? _skillAutoIcon(item.system) : "systems/limbusCompany_FVTT/assets/icons/Skill/Normalsin.webp");
       $el.data("item-id", id ?? "").attr("data-item-id", id ?? "");
 
       // 状态样式
@@ -877,7 +877,7 @@ export class LimbusActorSheet extends ActorSheet {
     // 预备槽
     const reserveEl = html.find(".combat-reserve-slot");
     const resItem   = state.reserve ? this.actor.items.get(state.reserve) : null;
-    reserveEl.find("img").attr("src", resItem?.img ?? "systems/limbusCompany_FVTT/assets/icons/Skill/Normalsin.webp");
+    reserveEl.find("img").attr("src", resItem ? _skillAutoIcon(resItem.system) : "systems/limbusCompany_FVTT/assets/icons/Skill/Normalsin.webp");
   }
 
   _onCombatSkillClick(event) {
