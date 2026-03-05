@@ -119,7 +119,7 @@ export class LimbusItemSheet extends ItemSheet {
       context.isUpper     = sys.subtype === "upper";
       context.isLower     = sys.subtype === "lower";
       context.isAccessory = sys.subtype === "accessory";
-      context.subtypes    = cfg.EQUIPMENT_SUBTYPES;
+      context.subtypes    = Object.fromEntries(Object.entries(cfg.EQUIPMENT_SUBTYPES ?? {}).map(([k, v]) => [k, game.i18n.localize(v)]));
       context.resistanceValues = cfg.RESISTANCE_VALUES ?? ["x0.5", "x1.0", "x2.0"];
 
       // 汇总修正行（用于解锁编辑）
@@ -246,11 +246,23 @@ export class LimbusItemSheet extends ItemSheet {
         expanded.system.subtype = nextSubtype;
       }
 
-      // 关键修复：抗性字段在部分提交里缺失会被 schema 默认覆盖，这里强制补齐当前值
+      // 关键修复：只应用“当前变化字段”，其余抗性沿用当前值，避免未改字段被回写成 x0.5
       const currentRes = this.item.system.resistanceAdj ?? {};
       expanded.system.resistanceAdj ??= {};
+      const changedName = event?.target?.name ?? event?.currentTarget?.name ?? null;
+      const changedResKey = changedName?.startsWith("system.resistanceAdj.")
+        ? changedName.replace("system.resistanceAdj.", "")
+        : null;
+
       for (const key of ["slash", "blunt", "pierce"]) {
         const nextRes = expanded.system.resistanceAdj[key];
+
+        // 单字段变更提交：非当前字段一律继承旧值
+        if (changedResKey && key !== changedResKey) {
+          expanded.system.resistanceAdj[key] = currentRes[key] ?? "x1.0";
+          continue;
+        }
+
         if (nextRes === undefined || nextRes === "") {
           expanded.system.resistanceAdj[key] = currentRes[key] ?? "x1.0";
           continue;
@@ -270,6 +282,7 @@ export class LimbusItemSheet extends ItemSheet {
         subtypeFlat: flatSubtype,
         subtypeDOM: domSubtype,
         subtypeLastChanged: this._debugSubtypeLast,
+        changedInputName: event?.target?.name ?? event?.currentTarget?.name ?? null,
         resistanceBefore: this.item.system.resistanceAdj,
         resistanceAfter: expanded.system?.resistanceAdj,
       });

@@ -43,7 +43,7 @@
     {{#if (and isEditable (not isLocked))}}
       <select name="system.subtype" class="equip-subtype-sel">
         {{#each subtypes}}
-          <option value="{{@key}}" {{#eq @key ../system.subtype}}selected{{/eq}}>{{localize this}}</option>
+          <option value="{{@key}}" {{#eq @key ../system.subtype}}selected{{/eq}}>{{this}}</option>
         {{/each}}
       </select>
       <input type="text" name="system.category" value="{{system.category}}" class="equip-category-input" placeholder="分类"/>
