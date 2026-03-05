@@ -193,6 +193,15 @@ export class LimbusItemSheet extends ItemSheet {
 
     if (!this.isEditable) return;
 
+    // ── 装备子类型：强制同步当前值（避免浏览器回退首项） ───────────────
+    if (this.item.type === "equipment") {
+      const subtypeSel = html.find("select[name='system.subtype']");
+      if (subtypeSel.length) {
+        subtypeSel.val(this.item.system.subtype ?? "weapon");
+        subtypeSel.on("change", (ev) => { this._debugSubtypeLast = ev.currentTarget.value; });
+      }
+    }
+
     // ── 链接方向箭头 ──────────────────────────────────────────────────────
     html.find(".link-dir-btn").on("click", this._onLinkDirToggle.bind(this));
 
@@ -226,7 +235,9 @@ export class LimbusItemSheet extends ItemSheet {
 
       // Foundry 版本差异下，formData 可能是扁平对象或嵌套对象
       const expanded = formData.system ? formData : foundry.utils.expandObject(formData);
-      const nextSubtype = expanded.system?.subtype;
+      const flatSubtype = formData["system.subtype"];
+      const domSubtype = this.element?.find?.("[name='system.subtype']")?.val?.();
+      const nextSubtype = expanded.system?.subtype ?? flatSubtype;
       if (!validSubtypes.includes(nextSubtype)) {
         const fallbackSubtype = this.item.system.subtype ?? "weapon";
         if (expanded.system) expanded.system.subtype = fallbackSubtype;
@@ -253,6 +264,9 @@ export class LimbusItemSheet extends ItemSheet {
         isLocked: this.isLocked,
         subtypeBefore: this.item.system.subtype,
         subtypeAfter: expanded.system?.subtype,
+        subtypeFlat: flatSubtype,
+        subtypeDOM: domSubtype,
+        subtypeLastChanged: this._debugSubtypeLast,
         resistanceBefore: this.item.system.resistanceAdj,
         resistanceAfter: expanded.system?.resistanceAdj,
       });
@@ -275,7 +289,8 @@ export class LimbusItemSheet extends ItemSheet {
       const formEl = this.element?.find("form")[0];
       if (formEl) {
         try {
-          const fd = new FormDataExtended(formEl);
+          const FormDataX = foundry.applications?.ux?.FormDataExtended ?? FormDataExtended;
+          const fd = new FormDataX(formEl);
           await this.item.update(foundry.utils.expandObject(fd.object));
         } catch (e) { /* 保存失败不阻塞锁定 */ }
       }
