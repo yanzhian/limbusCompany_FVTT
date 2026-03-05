@@ -1865,7 +1865,7 @@ prose-mirror {
   color: var(--text-main);
   font-family: var(--font-main);
   font-size: 0.8rem;
-  min-height: 80px;
+  min-height: 180px;
 }
 
 .editor-content,
@@ -3780,7 +3780,7 @@ body.game .limbuscompany.app img {
 .limbuscompany .activity-edit-btn {
   background: var(--bg-panel); border: 1px solid var(--border-gold);
   color: var(--text-sub); font-size: .65rem; padding: 1px 5px;
-  cursor: pointer; border-radius: 2px; transition: all .15s;
+  cursor: pointer; border-radius: 2px; transition: all .15s;min-width: 40px;
 }
 .limbuscompany .activity-edit-btn:hover { color: var(--gold-active); border-color: var(--gold-active); }
 .limbuscompany .activity-delete-btn {
