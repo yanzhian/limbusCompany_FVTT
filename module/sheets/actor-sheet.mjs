@@ -86,6 +86,11 @@ export class LimbusActorSheet extends ActorSheet {
       }
       : { ...system.resistances };
 
+    const stellarMax = 30 + (system.level ?? 1);
+    const equippedStellarCost = this._calcEquippedStellarCost();
+    context.footerStellarMax = stellarMax;
+    context.footerStellarVal = Math.max(0, stellarMax - equippedStellarCost);
+
     // ── 九宫格装备槽 ──────────────────────────────────────────────────────
     context.equipmentGrid = [];
     for (let i = 0; i < 9; i++) {
@@ -241,6 +246,32 @@ export class LimbusActorSheet extends ActorSheet {
       catLabel,
       skillIcon:   item.img,
     };
+  }
+
+  _calcEquippedStellarCost() {
+    const sys = this.actor.system;
+    let total = 0;
+
+    for (const itemId of Object.values(sys.equipment ?? {})) {
+      const item = itemId ? this.actor.items.get(itemId) : null;
+      total += item?.getStellarCost?.() ?? 0;
+    }
+
+    for (const itemId of (sys.skills?.basic ?? [])) {
+      const item = itemId ? this.actor.items.get(itemId) : null;
+      total += item?.getStellarCost?.() ?? 0;
+    }
+
+    const defenseId = sys.skills?.defense ?? null;
+    const defense = defenseId ? this.actor.items.get(defenseId) : null;
+    total += defense?.getStellarCost?.() ?? 0;
+
+    for (const itemId of Object.values(sys.skills?.ego ?? {})) {
+      const item = itemId ? this.actor.items.get(itemId) : null;
+      total += item?.getStellarCost?.() ?? 0;
+    }
+
+    return total;
   }
 
   _isItemGridEquipped(itemId) {

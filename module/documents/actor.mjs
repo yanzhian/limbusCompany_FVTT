@@ -79,7 +79,7 @@ export class CharacterData extends foundry.abstract.TypeDataModel {
         next:  new fields.NumberField({ required: true, integer: true, min: 0, initial: 10 }),
       }),
 
-      // ── 星芒（初始上限 30，每升 1 级 +1） ──────────────────────────────
+      // ── 星芒（上限 = 30 + 等级） ─────────────────────────────────────
       stellarMotes: new fields.SchemaField({
         value: new fields.NumberField({ required: true, integer: true, min: 0, initial: 30 }),
         max:   new fields.NumberField({ required: true, integer: true, min: 0, initial: 30 }),
@@ -214,8 +214,8 @@ export class CharacterData extends foundry.abstract.TypeDataModel {
     this.speed.min = 1 + agi;
     this.speed.max = 6 + agi;
 
-    // 星芒上限：30 + (等级-1)
-    this.stellarMotes.max = 30 + (level - 1);
+    // 星芒上限：30 + 等级
+    this.stellarMotes.max = 30 + level;
 
     // 下一级经验需求
     const xpTable = CONFIG.LIMBUSCOMPANY?.LEVEL_XP ?? [];
@@ -569,7 +569,7 @@ export class LimbusActor extends Actor {
     const con = sys.attributes?.con ?? 0;
     const nextHPMax = (con * 5) + nextRollTotal;
     const nextHPValue = Math.min(Math.max(sys.hp.value ?? 0, 0), nextHPMax);
-    const nextStellarMax = 30 + (nextLevel - 1);
+    const nextStellarMax = 30 + nextLevel;
     const nextAttrPoints = (nextLevel % 10 === 0) ? ((sys.attrPoints ?? 0) + 1) : (sys.attrPoints ?? 0);
 
     return this.update({
