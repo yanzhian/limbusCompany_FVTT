@@ -3186,16 +3186,21 @@ body.game .limbuscompany.app img {
 .limbuscompany .skill-slot-empty .skill-slot-octa,
 .limbuscompany .skill-slot-empty .skill-slot-circle { opacity: .45; }
 
-/* 装备状态：罪孽框用 box-shadow（向外扩展，不被 overflow:hidden 裁剪）
+/* 装备状态：圆槽用 box-shadow，七边形槽用伪元素 filter（避免出现方形发光框）
    --sin-color 由内联 style 注入 */
-.limbuscompany .skill-slot-equipped .skill-slot-octa,
 .limbuscompany .skill-slot-equipped .skill-slot-circle {
   box-shadow: 0 0 0 2px var(--sin-color, var(--border-gold)),
               0 0 7px 1px var(--sin-color, var(--border-gold));
 }
 
+.limbuscompany .skill-slot-equipped .skill-slot-octa {
+  box-shadow: none;
+}
+
 .limbuscompany .skill-slot-equipped .skill-slot-octa::before {
   border-color: var(--sin-color, var(--border-gold));
+  filter: drop-shadow(0 0 2px var(--sin-color, var(--border-gold)))
+          drop-shadow(0 0 6px var(--sin-color, var(--border-gold)));
 }
 
 /* 悬停 */
@@ -3207,10 +3212,14 @@ body.game .limbuscompany.app img {
 .limbuscompany .skill-slot-empty:hover .skill-slot-octa::before {
   border-color: var(--gold-active);
 }
-.limbuscompany .skill-slot-equipped:hover .skill-slot-octa,
 .limbuscompany .skill-slot-equipped:hover .skill-slot-circle {
   box-shadow: 0 0 0 2px var(--sin-color, var(--border-gold)),
               0 0 12px 3px var(--sin-color, var(--border-gold));
+}
+
+.limbuscompany .skill-slot-equipped:hover .skill-slot-octa::before {
+  filter: drop-shadow(0 0 3px var(--sin-color, var(--border-gold)))
+          drop-shadow(0 0 10px var(--sin-color, var(--border-gold)));
 }
 
 /* 基础技能格内：充满网格格子 */
