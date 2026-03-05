@@ -108,6 +108,9 @@ export class LimbusActorSheet extends ActorSheet {
     context.buffs = system.buffs ?? [];
     context.buffIcons = _buildBuffIconMap();
 
+    // ── 基础技能战斗槽（6格占位，避免 {{#times}} 未注册问题） ─────────────
+    context.basicCombatSlots = [0, 1, 2, 3, 4, 5].map(i => ({ slotIndex: i }));
+
     // ── 混乱阈值（HP条刻度） ──────────────────────────────────────────────
     context.chaosThresholds = system.chaosThresholds ?? [];
 

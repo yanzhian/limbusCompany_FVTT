@@ -3,7 +3,7 @@
 
   {{!-- ── 左侧：状态栏 ─────────────────────────────────────────────── --}}
   <div class="combat-status-panel">
-    <div class="combat-status-title">装备栏</div>
+    <div class="combat-status-title">状态栏</div>
 
     {{!-- BUFF 列表表头 --}}
     <div class="buff-list-wrap">
@@ -64,20 +64,19 @@
 
       {{!-- 6个技能格（横向排列） --}}
       <div class="combat-skill-slots-row">
-        {{#times 6}}
+        {{#each basicCombatSlots}}
           <div class="combat-skill-slot-wrap">
             <div class="combat-skill-slot skill-slot-octa slot-empty"
-                 data-slot-index="{{this}}"
-                 title="技能槽 {{this}}">
+                 data-slot-index="{{slotIndex}}">
               <img src="systems/limbusCompany_FVTT/assets/icons/Skill/Normalsin.webp"
-                   class="combat-skill-img" alt="空">
+                   class="combat-skill-img" alt="">
             </div>
             {{!-- 激活/预备状态指示点 --}}
             <div class="slot-state-dot"></div>
             {{!-- 相关技能切换按钮（有绑定相关技能时才显示） --}}
             <button class="combat-skill-related-toggle" style="display:none" title="切换相关技能">↺</button>
           </div>
-        {{/times}}
+        {{/each}}
       </div>
 
     </div>{{!-- /basic-combat-section --}}
