@@ -3050,6 +3050,10 @@ body.game .limbuscompany.app img {
 .limbuscompany .item-row:hover,
 .limbuscompany .skill-row:hover { background: rgba(95,62,33,.2); }
 
+.limbuscompany .item-row.item-row-equipped { background: #3B2412; }
+.limbuscompany .item-row.item-row-equipped:hover { background: #4a2d16; }
+
+
 /* 图标列：32px */
 .limbuscompany .item-icon {
   width: 24px; height: 24px; object-fit: contain; cursor: pointer;

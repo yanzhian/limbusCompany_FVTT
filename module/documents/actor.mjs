@@ -79,7 +79,7 @@ export class CharacterData extends foundry.abstract.TypeDataModel {
         next:  new fields.NumberField({ required: true, integer: true, min: 0, initial: 10 }),
       }),
 
-      // ── 星芒（初始上限 30，每升 1 级 +1） ──────────────────────────────
+      // ── 星芒（上限 = 30 + 等级） ─────────────────────────────────────
       stellarMotes: new fields.SchemaField({
         value: new fields.NumberField({ required: true, integer: true, min: 0, initial: 30 }),
         max:   new fields.NumberField({ required: true, integer: true, min: 0, initial: 30 }),
@@ -214,8 +214,8 @@ export class CharacterData extends foundry.abstract.TypeDataModel {
     this.speed.min = 1 + agi;
     this.speed.max = 6 + agi;
 
-    // 星芒上限：30 + (等级-1)
-    this.stellarMotes.max = 30 + (level - 1);
+    // 星芒上限：30 + 等级
+    this.stellarMotes.max = 30 + level;
 
     // 下一级经验需求
     const xpTable = CONFIG.LIMBUSCOMPANY?.LEVEL_XP ?? [];
@@ -357,6 +357,9 @@ export class LimbusActor extends Actor {
     const item = this.items.get(itemId);
     if (!item || item.type !== "equipment") return;
 
+    const prevId = this.system.equipment[`slot${slotIndex}`];
+    if (!this._canEquipSubtype(item, { currentSlot: slotIndex, replacingItemId: prevId })) return;
+
     const { canEquip, cost, current, max } = this.checkStellarCost(item);
     if (!canEquip) {
       const msg = game.i18n.format("LIMBUSCOMPANY.Warning.NotEnoughStellar", { cost, current, max });
@@ -365,7 +368,6 @@ export class LimbusActor extends Actor {
     }
 
     // 先卸下该槽位原有装备（返还星芒）
-    const prevId = this.system.equipment[`slot${slotIndex}`];
     if (prevId) await this.unequipFromGrid(slotIndex);
 
     await this.spendStellarMotes(cost);
@@ -382,6 +384,24 @@ export class LimbusActor extends Actor {
     const item = this.items.get(itemId);
     if (item) await this.gainStellarMotes(item.getStellarCost?.() ?? 0);
     return this.update({ [`system.equipment.slot${slotIndex}`]: null });
+  }
+
+
+  _canEquipSubtype(item, { currentSlot = null, replacingItemId = null } = {}) {
+    const subtype = item?.system?.subtype;
+    if (!["upper", "lower"].includes(subtype)) return true;
+
+    const equippedIds = Object.entries(this.system.equipment ?? {})
+      .filter(([slotKey, id]) => id && slotKey !== `slot${currentSlot}`)
+      .map(([, id]) => id)
+      .filter(id => id !== replacingItemId && id !== item.id);
+
+    const hasSameSubtype = equippedIds.some(id => this.items.get(id)?.system?.subtype === subtype);
+    if (hasSameSubtype) {
+      ui.notifications.warn(`${subtype === "upper" ? "上装" : "下装"}只能装备 1 个。`);
+      return false;
+    }
+    return true;
   }
 
   // ─── 装备技能 ──────────────────────────────────────────────────────────
@@ -549,7 +569,7 @@ export class LimbusActor extends Actor {
     const con = sys.attributes?.con ?? 0;
     const nextHPMax = (con * 5) + nextRollTotal;
     const nextHPValue = Math.min(Math.max(sys.hp.value ?? 0, 0), nextHPMax);
-    const nextStellarMax = 30 + (nextLevel - 1);
+    const nextStellarMax = 30 + nextLevel;
     const nextAttrPoints = (nextLevel % 10 === 0) ? ((sys.attrPoints ?? 0) + 1) : (sys.attrPoints ?? 0);
 
     return this.update({
