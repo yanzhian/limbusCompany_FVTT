@@ -3156,7 +3156,7 @@ body.game .limbuscompany.app img {
   position: absolute;
   inset: 0;
   background: #181511;
-  border: none;
+  border: 1px solid #5F3E22;
   clip-path: polygon(28% 0, 72% 0, 100% 24%, 100% 68%, 50% 100%, 0 68%, 0 24%);
   box-shadow: inset 0 0 0 1px rgba(0,0,0,.35);
 }
@@ -3186,7 +3186,7 @@ body.game .limbuscompany.app img {
 .limbuscompany .skill-slot-empty .skill-slot-octa,
 .limbuscompany .skill-slot-empty .skill-slot-circle { opacity: .45; }
 
-/* 装备状态：圆槽用 box-shadow，七边形槽用伪元素 filter（避免出现方形发光框）
+/* 装备状态：圆槽用 box-shadow，七边形槽用伪元素内发光
    --sin-color 由内联 style 注入 */
 .limbuscompany .skill-slot-equipped .skill-slot-circle {
   box-shadow: 0 0 0 2px var(--sin-color, var(--border-gold)),
@@ -3198,9 +3198,10 @@ body.game .limbuscompany.app img {
 }
 
 .limbuscompany .skill-slot-equipped .skill-slot-octa::before {
-  border: none;
-  filter: drop-shadow(0 0 2px var(--sin-color, var(--border-gold)))
-          drop-shadow(0 0 8px var(--sin-color, var(--border-gold)));
+  border-color: #5F3E22;
+  box-shadow: inset 0 0 0 1px rgba(0,0,0,.35),
+              inset 0 0 0 2px var(--sin-color, var(--border-gold)),
+              inset 0 0 9px 1px var(--sin-color, var(--border-gold));
 }
 
 /* 悬停 */
@@ -3215,8 +3216,9 @@ body.game .limbuscompany.app img {
 }
 
 .limbuscompany .skill-slot-equipped:hover .skill-slot-octa::before {
-  filter: drop-shadow(0 0 3px var(--sin-color, var(--border-gold)))
-          drop-shadow(0 0 10px var(--sin-color, var(--border-gold)));
+  box-shadow: inset 0 0 0 1px rgba(0,0,0,.35),
+              inset 0 0 0 2px var(--sin-color, var(--border-gold)),
+              inset 0 0 13px 2px var(--sin-color, var(--border-gold));
 }
 
 /* 基础技能格内：充满网格格子 */
