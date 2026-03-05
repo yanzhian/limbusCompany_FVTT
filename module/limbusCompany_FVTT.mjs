@@ -367,14 +367,6 @@ Hooks.once("init", () => {
   /** 计算混乱阈值刻度线位置（百分比） */
   Handlebars.registerHelper("chaosLinePos", (percent) => `${percent}%`);
 
-  /** 返回技能图标路径 */
-  Handlebars.registerHelper("skillIcon", (sinType, level, type) => {
-    if (type === "ego") return "systems/limbusCompany_FVTT/assets/icons/Skill/E.G.O.webp";
-    if (!sinType || !level) return "systems/limbusCompany_FVTT/assets/icons/Skill/Normalsin.webp";
-    const sin = sinType.charAt(0).toUpperCase() + sinType.slice(1);
-    return `systems/limbusCompany_FVTT/assets/icons/Skill/${sin}_lv${level}.webp`;
-  });
-
   /** 返回攻/守类型图标路径 */
   Handlebars.registerHelper("categoryIcon", (category) => {
     const iconMap = {
