@@ -302,15 +302,12 @@ export class LimbusItemSheet extends ItemSheet {
   /* ─── 锁切换 ────────────────────────────────────────────────────────────── */
 
   async _onToggleLock(event) {
-    // 从解锁→锁定时先提交表单，保存编辑内容
+    // 从解锁→锁定时，走 FormApplication 官方 submit 流程，避免手工 FormData 导致字段回写异常
     if (!this.isLocked) {
-      const formEl = this.element?.find("form")[0];
-      if (formEl) {
-        try {
-          const FormDataX = foundry.applications?.ux?.FormDataExtended ?? FormDataExtended;
-          const fd = new FormDataX(formEl);
-          await this.item.update(foundry.utils.expandObject(fd.object));
-        } catch (e) { /* 保存失败不阻塞锁定 */ }
+      try {
+        await this.submit({ preventClose: true, preventRender: true });
+      } catch (e) {
+        console.warn("[LimbusItemSheet][lock-submit-failed]", e);
       }
     }
     this.isLocked = !this.isLocked;
