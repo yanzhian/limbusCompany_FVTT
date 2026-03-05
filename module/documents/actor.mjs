@@ -357,6 +357,9 @@ export class LimbusActor extends Actor {
     const item = this.items.get(itemId);
     if (!item || item.type !== "equipment") return;
 
+    const prevId = this.system.equipment[`slot${slotIndex}`];
+    if (!this._canEquipSubtype(item, { currentSlot: slotIndex, replacingItemId: prevId })) return;
+
     const { canEquip, cost, current, max } = this.checkStellarCost(item);
     if (!canEquip) {
       const msg = game.i18n.format("LIMBUSCOMPANY.Warning.NotEnoughStellar", { cost, current, max });
@@ -365,7 +368,6 @@ export class LimbusActor extends Actor {
     }
 
     // 先卸下该槽位原有装备（返还星芒）
-    const prevId = this.system.equipment[`slot${slotIndex}`];
     if (prevId) await this.unequipFromGrid(slotIndex);
 
     await this.spendStellarMotes(cost);
@@ -382,6 +384,24 @@ export class LimbusActor extends Actor {
     const item = this.items.get(itemId);
     if (item) await this.gainStellarMotes(item.getStellarCost?.() ?? 0);
     return this.update({ [`system.equipment.slot${slotIndex}`]: null });
+  }
+
+
+  _canEquipSubtype(item, { currentSlot = null, replacingItemId = null } = {}) {
+    const subtype = item?.system?.subtype;
+    if (!["upper", "lower"].includes(subtype)) return true;
+
+    const equippedIds = Object.entries(this.system.equipment ?? {})
+      .filter(([slotKey, id]) => id && slotKey !== `slot${currentSlot}`)
+      .map(([, id]) => id)
+      .filter(id => id !== replacingItemId && id !== item.id);
+
+    const hasSameSubtype = equippedIds.some(id => this.items.get(id)?.system?.subtype === subtype);
+    if (hasSameSubtype) {
+      ui.notifications.warn(`${subtype === "upper" ? "上装" : "下装"}只能装备 1 个。`);
+      return false;
+    }
+    return true;
   }
 
   // ─── 装备技能 ──────────────────────────────────────────────────────────
