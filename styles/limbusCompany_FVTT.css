@@ -3156,7 +3156,7 @@ body.game .limbuscompany.app img {
   position: absolute;
   inset: 0;
   background: #181511;
-  border: 1px solid rgba(185,142,60,.6);
+  border: none;
   clip-path: polygon(28% 0, 72% 0, 100% 24%, 100% 68%, 50% 100%, 0 68%, 0 24%);
   box-shadow: inset 0 0 0 1px rgba(0,0,0,.35);
 }
@@ -3167,7 +3167,7 @@ body.game .limbuscompany.app img {
   position: relative;
   border-radius: 50%;
   background: #181511;
-  border: 1px solid rgba(185,142,60,.3);
+  border: none;
   overflow: visible;
   display: flex; align-items: center; justify-content: center;
   flex-shrink: 0;
@@ -3198,9 +3198,9 @@ body.game .limbuscompany.app img {
 }
 
 .limbuscompany .skill-slot-equipped .skill-slot-octa::before {
-  border-color: var(--sin-color, var(--border-gold));
+  border: none;
   filter: drop-shadow(0 0 2px var(--sin-color, var(--border-gold)))
-          drop-shadow(0 0 6px var(--sin-color, var(--border-gold)));
+          drop-shadow(0 0 8px var(--sin-color, var(--border-gold)));
 }
 
 /* 悬停 */
@@ -3209,9 +3209,6 @@ body.game .limbuscompany.app img {
   opacity: .7;
 }
 
-.limbuscompany .skill-slot-empty:hover .skill-slot-octa::before {
-  border-color: var(--gold-active);
-}
 .limbuscompany .skill-slot-equipped:hover .skill-slot-circle {
   box-shadow: 0 0 0 2px var(--sin-color, var(--border-gold)),
               0 0 12px 3px var(--sin-color, var(--border-gold));
