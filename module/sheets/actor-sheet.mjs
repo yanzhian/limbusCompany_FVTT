@@ -324,6 +324,7 @@ export class LimbusActorSheet extends ActorSheet {
     html.find(".add-buff-btn").on("click",        this._onAddBuff.bind(this));
     html.find(".buff-trigger").on("click",        this._onBuffTrigger.bind(this));
     html.find(".buff-delete").on("click",         this._onBuffDelete.bind(this));
+    html.find(".buff-inline-input").on("change",  this._onBuffInlineEdit.bind(this));
 
     // ── 战斗技能槽点击（发起对抗） ────────────────────────────────────────
     html.find(".combat-skill-slot[data-item-id]").on("click", this._onCombatSkillClick.bind(this));
@@ -843,12 +844,13 @@ export class LimbusActorSheet extends ActorSheet {
 
   _syncCombatSlots(html) {
     if (!this._combatBagState) {
-      // 初始化 6-bag：从已装备的基础技能构建
+      // 初始化 6-bag：从已装备的基础技能随机排序
       const basicIds = (this.actor.system.skills?.basic ?? []).filter(Boolean);
+      const shuffled = [...basicIds].sort(() => Math.random() - 0.5);
       this._combatBagState = {
-        bag:     [...basicIds],          // 剩余可抽取
-        active:  [basicIds[0] ?? null, basicIds[1] ?? null],
-        reserve: basicIds[2] ?? null,
+        bag:     shuffled.slice(3),      // 剩余可抽取
+        active:  [shuffled[0] ?? null, shuffled[1] ?? null],  // 激活槽
+        reserve: shuffled[2] ?? null,    // 预备槽
         used:    [],
       };
     }
@@ -857,27 +859,101 @@ export class LimbusActorSheet extends ActorSheet {
 
   _renderCombatSlots(html) {
     const state = this._combatBagState;
-    if (!state) return;
+    const basicSlots = html.find(".basic-combat-section .combat-skill-slot-wrap");
 
-    const slots = html.find(".combat-skill-slot");
-    slots.each((i, el) => {
-      const $el  = $(el);
-      const id   = state.active[i] ?? null;
-      const item = id ? this.actor.items.get(id) : null;
+    if (!state) {
+      // 无激活状态：全部显示为空槽
+      basicSlots.each((i, wrap) => {
+        const $wrap = $(wrap);
+        const $slot = $wrap.find(".combat-skill-slot");
+        $slot.find("img").attr("src", "systems/limbusCompany_FVTT/assets/icons/Skill/Normalsin.webp");
+        $slot.removeAttr("data-item-id").attr("data-item-id", "");
+        $slot.removeClass("slot-active slot-reserve").addClass("slot-empty");
+        $wrap.find(".slot-state-dot").removeClass("dot-active dot-reserve");
+        $wrap.find(".combat-skill-related-toggle").hide();
+      });
+      return;
+    }
 
-      $el.find("img").attr("src", item?.img ?? "");
-      $el.data("item-id", id ?? "").attr("data-item-id", id ?? "");
+    // 构建6个槽位的数据：[active0, active1, reserve, bag0, bag1, bag2]
+    const slotIds = [
+      state.active[0] ?? null,
+      state.active[1] ?? null,
+      state.reserve   ?? null,
+      state.bag[0]    ?? null,
+      state.bag[1]    ?? null,
+      state.bag[2]    ?? null,
+    ];
+
+    basicSlots.each((i, wrap) => {
+      const $wrap = $(wrap);
+      const $slot = $wrap.find(".combat-skill-slot");
+      const $dot  = $wrap.find(".slot-state-dot");
+      const $toggle = $wrap.find(".combat-skill-related-toggle");
+      const id    = slotIds[i] ?? null;
+      const item  = id ? this.actor.items.get(id) : null;
+
+      // 图片
+      const defaultImg = "systems/limbusCompany_FVTT/assets/icons/Skill/Normalsin.webp";
+      $slot.find("img").attr("src", item?.img ?? defaultImg);
+      $slot.attr("data-item-id", id ?? "");
 
       // 状态样式
-      $el.removeClass("slot-active slot-reserve slot-empty");
-      if (i < 2 && id) $el.addClass("slot-active");
-      else              $el.addClass("slot-empty");
-    });
+      $slot.removeClass("slot-active slot-reserve slot-empty");
+      $dot.removeClass("dot-active dot-reserve");
+      if (i < 2 && id) {
+        $slot.addClass("slot-active");
+        $dot.addClass("dot-active");
+      } else if (i === 2 && id) {
+        $slot.addClass("slot-reserve");
+        $dot.addClass("dot-reserve");
+      } else {
+        $slot.addClass("slot-empty");
+      }
 
-    // 预备槽
-    const reserveEl = html.find(".combat-reserve-slot");
-    const resItem   = state.reserve ? this.actor.items.get(state.reserve) : null;
-    reserveEl.find("img").attr("src", resItem?.img ?? "");
+      // 相关技能切换按钮：有绑定相关技能时才显示
+      const hasRelated = !!(item?.system?.relatedSkill?.itemUuid);
+      $toggle.toggle(hasRelated);
+    });
+  }
+
+  // 使用基础技能后，将该槽位标记为已用，剩余槽前移，从bag补充最右槽
+  _onCombatSkillUse(slotIndex) {
+    const state = this._combatBagState;
+    if (!state) return;
+
+    const slotIds = [
+      state.active[0] ?? null,
+      state.active[1] ?? null,
+      state.reserve   ?? null,
+      state.bag[0]    ?? null,
+      state.bag[1]    ?? null,
+      state.bag[2]    ?? null,
+    ];
+
+    const usedId = slotIds[slotIndex];
+    if (!usedId) return;
+
+    // 移除已激活（前两格）不参与前推，只移动非已激活格的技能
+    // 将 slotIndex 位置的技能移除，剩余非空未使用槽向前补位
+    // 已激活槽（0,1）不动，预备和bag槽前推
+    if (slotIndex >= 2) {
+      // 从 bag 列表移除对应位置
+      const bagIdx = slotIndex - 2;
+      state.bag.splice(bagIdx, 1);
+    } else {
+      // 激活槽使用后：预备变激活，从 bag 补预备
+      state.active[slotIndex] = state.reserve ?? null;
+      state.reserve = state.bag.shift() ?? null;
+      if (state.bag.length === 0 && state.used.length > 0) {
+        // 6-bag 一轮结束，重新洗牌
+        state.bag = [...state.used].sort(() => Math.random() - 0.5);
+        state.used = [];
+      }
+    }
+
+    if (usedId) state.used.push(usedId);
+    this._renderCombatSlots(this.element);
   }
 
   _onCombatSkillClick(event) {
@@ -996,6 +1072,18 @@ export class LimbusActorSheet extends ActorSheet {
   async _onBuffDelete(event) {
     const buffId = event.currentTarget.closest("[data-buff-id]")?.dataset.buffId;
     await this.actor.removeBuff(buffId);
+  }
+
+  async _onBuffInlineEdit(event) {
+    if (!this._editUnlocked) return;
+    const input  = event.currentTarget;
+    const buffId = input.dataset.buffId;
+    const field  = input.dataset.field;
+    const value  = parseInt(input.value) || 0;
+    const buffs  = (this.actor.system.buffs ?? []).map(b =>
+      b.id === buffId ? { ...b, [field]: value } : b
+    );
+    await this.actor.update({ "system.buffs": buffs });
   }
 
   async _onLevelUpClick(event) {

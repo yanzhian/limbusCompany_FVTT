@@ -3,9 +3,9 @@
 
   {{!-- ── 左侧：状态栏 ─────────────────────────────────────────────── --}}
   <div class="combat-status-panel">
-    <div class="panel-label">状态栏</div>
+    <div class="combat-status-title">装备栏</div>
 
-    {{!-- BUFF 列表 --}}
+    {{!-- BUFF 列表表头 --}}
     <div class="buff-list-wrap">
       <div class="buff-list-header">
         <span class="buff-col-icon"></span>
@@ -25,11 +25,19 @@
               {{/if}}
             </span>
             <span class="buff-col-name buff-name">{{name}}</span>
-            <span class="buff-col-intensity">{{intensity}}</span>
-            <span class="buff-col-stacks">{{stacks}}</span>
+            <span class="buff-col-intensity">
+              <input class="buff-inline-input editable-field" type="number"
+                     data-buff-id="{{id}}" data-field="intensity"
+                     value="{{intensity}}" min="0" disabled>
+            </span>
+            <span class="buff-col-stacks">
+              <input class="buff-inline-input editable-field" type="number"
+                     data-buff-id="{{id}}" data-field="stacks"
+                     value="{{stacks}}" min="0" disabled>
+            </span>
             <span class="buff-col-actions">
               <button class="buff-trigger action-btn" title="触发">触发</button>
-              <button class="buff-delete action-btn" title="删除">×</button>
+              <button class="buff-delete action-btn" title="删除">删除</button>
             </span>
           </li>
         {{else}}
@@ -50,11 +58,11 @@
     <div class="combat-section basic-combat-section">
       <div class="combat-section-header">
         <span class="combat-section-title">基础技能</span>
-        <button class="combat-activate-btn" title="激活：载入已装备技能">激活</button>
-        <button class="combat-clear-btn" title="清除战斗槽">清除</button>
+        <button class="combat-activate-btn" title="激活：载入已装备技能并随机排序">激活</button>
+        <button class="combat-clear-btn" title="清除战斗槽，重置6-bag">清除</button>
       </div>
 
-      {{!-- 6个技能格（横向） --}}
+      {{!-- 6个技能格（横向排列） --}}
       <div class="combat-skill-slots-row">
         {{#times 6}}
           <div class="combat-skill-slot-wrap">
@@ -66,7 +74,7 @@
             </div>
             {{!-- 激活/预备状态指示点 --}}
             <div class="slot-state-dot"></div>
-            {{!-- 相关技能切换按钮（有相关技能时才显示） --}}
+            {{!-- 相关技能切换按钮（有绑定相关技能时才显示） --}}
             <button class="combat-skill-related-toggle" style="display:none" title="切换相关技能">↺</button>
           </div>
         {{/times}}
@@ -85,7 +93,7 @@
         {{!-- 5个EGO圆形槽 --}}
         {{#each egoSkills}}
           <div class="combat-skill-slot-wrap">
-            <div class="combat-skill-slot skill-slot-circle slot-ego {{#if item}}slot-equipped{{else}}slot-empty{{/if}}"
+            <div class="combat-skill-slot skill-slot-circle combat-ego-slot {{#if item}}slot-equipped{{else}}slot-empty{{/if}}"
                  {{#if item}}
                    data-item-id="{{item._id}}"
                    style="border-color:{{sinColor item.system.sinType}}"
@@ -97,9 +105,9 @@
           </div>
         {{/each}}
 
-        {{!-- 1个守备圆形槽 --}}
+        {{!-- 1个守备技能格（八边形以区分EGO） --}}
         <div class="combat-skill-slot-wrap">
-          <div class="combat-skill-slot skill-slot-circle slot-defense {{#if defenseSkill.item}}slot-equipped{{else}}slot-empty{{/if}}"
+          <div class="combat-skill-slot skill-slot-octa combat-defense-slot {{#if defenseSkill.item}}slot-equipped{{else}}slot-empty{{/if}}"
                {{#if defenseSkill.item}}
                  data-item-id="{{defenseSkill.item._id}}"
                  style="border-color:{{sinColor defenseSkill.item.system.sinType}}"
@@ -118,8 +126,8 @@
     <div class="combat-section ap-section">
       <div class="combat-section-header">
         <span class="combat-section-title">行动值</span>
-        <button class="ap-reset-btn" title="重置行动点">重置</button>
-        <button class="ap-clear-btn" title="清零行动点">清除</button>
+        <button class="ap-reset-btn" title="恢复行动点至上限">重置</button>
+        <button class="ap-clear-btn" title="清零所有行动点">清除</button>
       </div>
       <div class="ap-coins-row">
         {{#each apCoins}}
