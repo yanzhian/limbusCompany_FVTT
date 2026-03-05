@@ -3043,7 +3043,7 @@ body.game .limbuscompany.app img {
 .limbuscompany .item-row,
 .limbuscompany .skill-row {
   display: grid; grid-template-columns: var(--item-list-columns); gap: 4px;
-  height: 25px; align-items: center; padding: 0 4px;
+  min-height: 34px; align-items: center; padding: 0 4px;
   border-bottom: 1px solid rgba(95,62,33,.2); font-size: .75rem;
   transition: background .1s;
 }
@@ -3052,7 +3052,7 @@ body.game .limbuscompany.app img {
 
 /* 图标列：32px */
 .limbuscompany .item-icon {
-  width: 32px; height: 32px; object-fit: contain; cursor: pointer;
+  width: 24px; height: 24px; object-fit: contain; cursor: pointer;
   border-radius: 2px; border: 1px solid rgba(95,62,33,.4);
 }
 .limbuscompany .item-name { cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -3064,7 +3064,12 @@ body.game .limbuscompany.app img {
 
 /* 让表头与数据列采用一致对齐规则，避免视觉错位 */
 .limbuscompany .item-list-header .col-icon,
-.limbuscompany .item-row .col-icon { justify-self: start; }
+.limbuscompany .item-row .col-icon,
+.limbuscompany .skill-row .col-icon {
+  justify-self: start;
+  display: inline-flex;
+  align-items: center;
+}
 
 .limbuscompany .item-list-header .col-name,
 .limbuscompany .item-row .col-name { justify-self: start; text-align: left; }
@@ -3138,53 +3143,84 @@ body.game .limbuscompany.app img {
 /* ── 方形槽（基础 / 守备）── */
 .limbuscompany .skill-slot-octa {
   width: 48px; height: 48px;
-  border-radius: 4px;
-  background: #181511;
-  border: 1px solid rgba(185,142,60,.3);
-  overflow: hidden;
+  position: relative;
+  background: transparent;
+  border: none;
+  overflow: visible;
   display: flex; align-items: center; justify-content: center;
   flex-shrink: 0;
+}
+
+.limbuscompany .skill-slot-octa::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: #181511;
+  border: none;
+  clip-path: polygon(28% 0, 72% 0, 100% 24%, 100% 68%, 50% 100%, 0 68%, 0 24%);
+  box-shadow: inset 0 0 0 1px #5F3E22,
+              inset 0 0 0 2px rgba(0,0,0,.35);
 }
 
 /* ── 圆形槽（EGO）── */
 .limbuscompany .skill-slot-circle {
   width: 48px; height: 48px;
+  position: relative;
   border-radius: 50%;
   background: #181511;
-  border: 1px solid rgba(185,142,60,.3);
-  overflow: hidden;
+  border: none;
+  overflow: visible;
   display: flex; align-items: center; justify-content: center;
   flex-shrink: 0;
 }
 
 /* 图标（普通 flex 子元素，无 position: absolute 避免尺寸冲突） */
 .limbuscompany .skill-slot-img {
-  width: 100%; height: 100%;
-  object-fit: cover; display: block;
+  position: relative;
+  z-index: 1;
+  width: 72%; height: 72%;
+  object-fit: contain; display: block;
+  filter: drop-shadow(0 0 1px rgba(0,0,0,.7));
 }
 
 /* 空槽：暗淡 */
 .limbuscompany .skill-slot-empty .skill-slot-octa,
 .limbuscompany .skill-slot-empty .skill-slot-circle { opacity: .45; }
 
-/* 装备状态：罪孽框用 box-shadow（向外扩展，不被 overflow:hidden 裁剪）
+/* 装备状态：圆槽用 box-shadow，七边形槽用伪元素内发光
    --sin-color 由内联 style 注入 */
-.limbuscompany .skill-slot-equipped .skill-slot-octa,
 .limbuscompany .skill-slot-equipped .skill-slot-circle {
-  border-color: transparent;
   box-shadow: 0 0 0 2px var(--sin-color, var(--border-gold)),
               0 0 7px 1px var(--sin-color, var(--border-gold));
+}
+
+.limbuscompany .skill-slot-equipped .skill-slot-octa {
+  box-shadow: none;
+}
+
+.limbuscompany .skill-slot-equipped .skill-slot-octa::before {
+  box-shadow: inset 0 0 0 1px #5F3E22,
+              inset 0 0 0 2px rgba(0,0,0,.35),
+              inset 0 0 0 3px var(--sin-color, var(--border-gold)),
+              inset 0 0 9px 1px var(--sin-color, var(--border-gold));
 }
 
 /* 悬停 */
 .limbuscompany .skill-slot-empty:hover .skill-slot-octa,
 .limbuscompany .skill-slot-empty:hover .skill-slot-circle {
-  border-color: var(--gold-active); opacity: .7;
+  opacity: .7;
 }
-.limbuscompany .skill-slot-equipped:hover .skill-slot-octa,
+
 .limbuscompany .skill-slot-equipped:hover .skill-slot-circle {
   box-shadow: 0 0 0 2px var(--sin-color, var(--border-gold)),
               0 0 12px 3px var(--sin-color, var(--border-gold));
+}
+
+.limbuscompany .skill-slot-equipped:hover .skill-slot-octa::before {
+  box-shadow: inset 0 0 0 1px #5F3E22,
+              inset 0 0 0 2px rgba(0,0,0,.35),
+              inset 0 0 0 3px var(--sin-color, var(--border-gold)),
+              inset 0 0 13px 2px var(--sin-color, var(--border-gold));
 }
 
 /* 基础技能格内：充满网格格子 */
