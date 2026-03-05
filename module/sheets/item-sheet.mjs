@@ -93,15 +93,22 @@ export class LimbusItemSheet extends ItemSheet {
       }
 
       // EGO 消耗行
+      // 注意：schema 字段名为 sinCost[].sinType 和 egoResistanceAdj[].{sinType,multiplier}
       if (context.isEgo) {
-        context.sinCosts = _parseSinCosts(sys.sinCost ?? []);
-        context.egoResChanges = _parseResistanceChanges(sys.egoResistanceChange ?? []);
+        context.sinCosts = sys.sinCost ?? [];
+        context.egoResChanges = sys.egoResistanceAdj ?? [];
       }
 
-      // 攻击/守备类别选项
-      context.attackCategories  = cfg.ATTACK_CATEGORIES;
-      context.defenseCategories = cfg.DEFENSE_CATEGORIES;
-      context.skillSinTypes     = cfg.SIN_LABELS ?? {};
+      // 攻击/守备类别选项：使用中文直接标签，避免模板渲染 i18n key 字符串
+      const _catZh = cfg.CATEGORY_LABELS_ZH ?? {};
+      context.attackCategories = Object.fromEntries(
+        Object.keys(cfg.ATTACK_CATEGORIES ?? {}).map(k => [k, _catZh[k] ?? k])
+      );
+      context.defenseCategories = Object.fromEntries(
+        Object.keys(cfg.DEFENSE_CATEGORIES ?? {}).map(k => [k, _catZh[k] ?? k])
+      );
+      // 罪孽类型：同样使用中文标签
+      context.skillSinTypes = cfg.SIN_LABELS_ZH ?? {};
 
       // 技能骰公式（格式化为大写）
       context.diceFormulaDisplay = (sys.diceFormula ?? "").toUpperCase();
@@ -210,6 +217,20 @@ export class LimbusItemSheet extends ItemSheet {
       }
     }
 
+    // ── 技能各下拉菜单：强制同步当前值（原理同上，防止浏览器回退首项） ──
+    if (this.item.type === "skill") {
+      const sys = this.item.system;
+      const _syncSel = (name, val) => {
+        const el = html.find(`select[name='${name}']`);
+        if (el.length) el.val(String(val ?? ""));
+      };
+      _syncSel("system.type",          sys.type           ?? "basic");
+      _syncSel("system.category",      sys.category       ?? "slash");
+      _syncSel("system.sinType",       sys.sinType        ?? "wrath");
+      _syncSel("system.level",         sys.level          ?? 1);
+      _syncSel("system.egoDiceRating", sys.egoDiceRating  ?? "");
+    }
+
     // ── 链接方向箭头 ──────────────────────────────────────────────────────
     html.find(".link-dir-btn").on("click", this._onLinkDirToggle.bind(this));
 
@@ -304,6 +325,30 @@ export class LimbusItemSheet extends ItemSheet {
         Object.assign(formData, flattened);
       }
     }
+
+    // ── skill：将用户输入的 diceFormula 文本解析为真正的 schema 字段
+    if (this.item.type === "skill") {
+      const _isFlat  = !formData.system;
+      const rawFml   = _isFlat ? formData["system.diceFormula"] : formData.system?.diceFormula;
+      if (rawFml !== undefined) {
+        const parsed = _parseDiceFormula(String(rawFml));
+        if (parsed) {
+          if (_isFlat) {
+            formData["system.diceCount"]  = parsed.diceCount;
+            formData["system.diceFaces"]  = parsed.diceFaces;
+            formData["system.baseValue"]  = parsed.baseValue;
+          } else {
+            formData.system.diceCount  = parsed.diceCount;
+            formData.system.diceFaces  = parsed.diceFaces;
+            formData.system.baseValue  = parsed.baseValue;
+          }
+        }
+        // 无论解析成功与否都丢弃原始文本（prepareDerivedData 会重新生成）
+        if (_isFlat) delete formData["system.diceFormula"];
+        else         delete formData.system.diceFormula;
+      }
+    }
+
     return super._updateObject(event, formData);
   }
 
@@ -595,7 +640,7 @@ export class LimbusItemSheet extends ItemSheet {
 
   async _onSinCostAdd(event) {
     const costs = foundry.utils.deepClone(this.item.system.sinCost ?? []);
-    costs.push({ sin: "wrath", amount: 1 });
+    costs.push({ sinType: "wrath", amount: 1 }); // schema 字段名为 sinType
     await this.item.update({ "system.sinCost": costs });
   }
 
@@ -606,15 +651,16 @@ export class LimbusItemSheet extends ItemSheet {
   }
 
   async _onResChangeAdd(event) {
-    const changes = foundry.utils.deepClone(this.item.system.egoResistanceChange ?? []);
-    changes.push({ sin: "wrath", value: "x1.0" });
-    await this.item.update({ "system.egoResistanceChange": changes });
+    // schema 字段名为 egoResistanceAdj，条目属性为 {sinType, multiplier}
+    const changes = foundry.utils.deepClone(this.item.system.egoResistanceAdj ?? []);
+    changes.push({ sinType: "wrath", multiplier: "x1.0" });
+    await this.item.update({ "system.egoResistanceAdj": changes });
   }
 
   async _onResChangeRemove(event) {
     const idx     = parseInt(event.currentTarget.dataset.idx ?? -1);
-    const changes = foundry.utils.deepClone(this.item.system.egoResistanceChange ?? []);
-    if (idx >= 0) { changes.splice(idx, 1); await this.item.update({ "system.egoResistanceChange": changes }); }
+    const changes = foundry.utils.deepClone(this.item.system.egoResistanceAdj ?? []);
+    if (idx >= 0) { changes.splice(idx, 1); await this.item.update({ "system.egoResistanceAdj": changes }); }
   }
 
   /* ─── 星芒费用编辑 ──────────────────────────────────────────────────────── */
@@ -679,12 +725,29 @@ export class LimbusItemSheet extends ItemSheet {
 
 /* ─── 模块级辅助函数 ─────────────────────────────────────────────────────── */
 
+/**
+ * 将 "2d6+3" / "1D4" 风格的骰子公式字符串解析为 schema 实际字段值。
+ * 支持格式：NdF、NdF+B（大小写均可，忽略空格）。
+ * 解析失败返回 null，调用方应保留旧值。
+ */
+function _parseDiceFormula(formula) {
+  if (!formula) return null;
+  const m = String(formula).toLowerCase().replace(/\s+/g, "")
+    .match(/^(\d+)d(\d+)(?:\+(\d+))?$/);
+  if (!m) return null;
+  return {
+    diceCount: Math.max(0, parseInt(m[1]) || 0),
+    diceFaces: Math.max(1, parseInt(m[2]) || 4),
+    baseValue: Math.max(0, parseInt(m[3] ?? 0) || 0),
+  };
+}
+
 function _getCategoryIcon(category) {
   const base = "systems/limbusCompany_FVTT/assets/icons/Base_icon/";
   const map  = {
     slash:"Slash.webp", blunt:"Blunt.webp", pierce:"Pierce.webp",
     dodge:"闪避.webp",  block:"防御.webp",  counter:"反击.webp",
-    clashBlock:"可拼点防御.webp", clashCounter:"可拼点防御.webp",
+    clashBlock:"可拼点防御.webp", clashCounter:"可拼点反击.webp",
   };
   return map[category] ? base + map[category] : "";
 }

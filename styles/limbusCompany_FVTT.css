@@ -58,12 +58,12 @@
 
   /* 七宗罪颜色 */
   --sin-wrath:    #E94545;
-  --sin-lust:     #E8527C;
-  --sin-sloth:    #5F8DB0;
-  --sin-gluttony: #D4703A;
-  --sin-gloom:    #527878;
-  --sin-pride:    #E5BA25;
-  --sin-envy:     #8B5CF6;
+  --sin-lust:     rgb(230, 152, 8);
+  --sin-sloth:    #e9e658;
+  --sin-gluttony: #5fc40d;
+  --sin-gloom:    #12dada;
+  --sin-pride:    #073bac;
+  --sin-envy:     #5922da;
 
   /* 技能状态 */
   --skill-active-glow:  #E5BA25;   /* 激活槽金色发光 */

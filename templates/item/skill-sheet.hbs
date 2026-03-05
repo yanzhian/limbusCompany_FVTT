@@ -1,5 +1,5 @@
 {{!-- skill-sheet.hbs — 技能物品卡（基础/守备/EGO 通用） --}}
-<div class="limbuscompany item-sheet skill-sheet">
+<form class="limbuscompany item-sheet skill-sheet" autocomplete="off">
 
   {{!-- ── 标题栏 ──────────────────────────────────────────────────── --}}
   <div class="item-sheet-titlebar">
@@ -49,7 +49,8 @@
             {{/each}}
           </select>
         {{/if}}
-        <input type="text" name="system.diceFormula" value="{{system.diceFormula}}" class="dice-formula-input" placeholder="1D4+2"/>
+        {{!-- 骰子公式文本输入（_updateObject 会解析为 diceCount/diceFaces/baseValue） --}}
+        <input type="text" name="system.diceFormula" value="{{diceFormulaDisplay}}" class="dice-formula-input" placeholder="1D4+2"/>
       {{else}}
         {{#if categoryIcon}}
           <img src="{{categoryIcon}}" class="category-icon" width="22" height="22" alt="type">
@@ -69,10 +70,17 @@
       {{/if}}
     </div>
 
-    {{!-- ── 罪孽属性（编辑模式） ──────────────────────────────────── --}}
+    {{!-- ── 技能类型 + 罪孽属性（编辑模式） ─────────────────────── --}}
     {{#if (and isEditable (not isLocked))}}
       <div class="skill-sin-row">
-        <label>罪孽</label>
+        {{!-- 技能类型切换（基础/守备/EGO），锁定后展示类型标签 --}}
+        <label>类型</label>
+        <select name="system.type">
+          <option value="basic"   {{#eq system.type "basic"}}selected{{/eq}}>基础技能</option>
+          <option value="defense" {{#eq system.type "defense"}}selected{{/eq}}>守备技能</option>
+          <option value="ego"     {{#eq system.type "ego"}}selected{{/eq}}>E.G.O</option>
+        </select>
+        <label style="margin-left:8px">罪孽</label>
         <select name="system.sinType">
           {{#each skillSinTypes}}
             <option value="{{@key}}" {{#eq @key ../system.sinType}}selected{{/eq}}>{{this}}</option>
@@ -97,6 +105,11 @@
           </select>
         {{/if}}
       </div>
+    {{else}}
+      {{!-- 锁定时展示类型标签 --}}
+      <div class="skill-type-label">
+        {{#eq system.type "basic"}}基础技能{{/eq}}{{#eq system.type "defense"}}守备技能{{/eq}}{{#eq system.type "ego"}}E.G.O{{/eq}}
+      </div>
     {{/if}}
 
     {{!-- ── EGO 专有行：消耗 + 修正 ──────────────────────────────── --}}
@@ -107,15 +120,16 @@
           {{#each sinCosts}}
             <div class="ego-cost-item">
               {{#if ../isEditable}}
-                <select name="system.sinCost.{{@index}}.sin" class="sin-cost-sel">
+                {{!-- schema 字段名为 sinType，不是 sin --}}
+                <select name="system.sinCost.{{@index}}.sinType" class="sin-cost-sel">
                   {{#each ../config.SINS}}
-                    <option value="{{this}}" {{#if (eq this ../sin)}}selected{{/if}}>{{lookup ../config.SIN_LABELS this}}</option>
+                    <option value="{{this}}" {{#if (eq this ../sinType)}}selected{{/if}}>{{lookup ../config.SIN_LABELS_ZH this}}</option>
                   {{/each}}
                 </select>
                 <input type="number" name="system.sinCost.{{@index}}.amount" value="{{amount}}" class="sin-cost-input" min="0" style="width:40px"/>
                 <button class="sin-cost-remove-btn" data-idx="{{@index}}">×</button>
               {{else}}
-                <img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/{{sin}}_icon.webp" width="16" height="16" alt="{{sin}}">
+                <img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/{{sinType}}_icon.webp" width="16" height="16" alt="{{sinType}}">
                 <span>{{amount}}</span>
               {{/if}}
             </div>
@@ -142,19 +156,20 @@
           {{#each egoResChanges}}
             <div class="ego-resist-item">
               {{#if ../isEditable}}
-                <select name="system.egoResistanceChange.{{@index}}.sin">
+                {{!-- schema 字段：egoResistanceAdj[].{sinType, multiplier} --}}
+                <select name="system.egoResistanceAdj.{{@index}}.sinType">
                   {{#each ../config.SINS}}
-                    <option value="{{this}}" {{#if (eq this ../sin)}}selected{{/if}}>{{lookup ../config.SIN_LABELS this}}</option>
+                    <option value="{{this}}" {{#if (eq this ../sinType)}}selected{{/if}}>{{lookup ../config.SIN_LABELS_ZH this}}</option>
                   {{/each}}
                 </select>
-                <select name="system.egoResistanceChange.{{@index}}.value">
+                <select name="system.egoResistanceAdj.{{@index}}.multiplier">
                   {{#each ../config.RESISTANCE_VALUES}}
-                    <option value="{{this}}" {{#if (eq this ../value)}}selected{{/if}}>{{this}}</option>
+                    <option value="{{this}}" {{#if (eq this ../multiplier)}}selected{{/if}}>{{this}}</option>
                   {{/each}}
                 </select>
                 <button class="res-change-remove-btn" data-idx="{{@index}}">×</button>
               {{else}}
-                <span>{{sin}}×{{value}}</span>
+                <span>{{sinType}}×{{multiplier}}</span>
               {{/if}}
             </div>
           {{/each}}
@@ -182,9 +197,9 @@
     {{!-- ── 描述区 ──────────────────────────────────────────────── --}}
     <div class="item-desc-block">
       {{#if (and isEditable (not isLocked))}}
-        {{editor system.description target="system.description" button=false editable=true engine="prosemirror"}}
+        {{editor system.effectDesc target="system.effectDesc" button=false editable=true engine="prosemirror"}}
       {{else}}
-        <div class="item-desc-display">{{{system.description}}}</div>
+        <div class="item-desc-display">{{{system.effectDesc}}}</div>
       {{/if}}
     </div>
 
@@ -196,7 +211,7 @@
         <button class="activity-edit-toggle sheet-btn">编辑激活效果 {{#if activitiesExpanded}}▲{{else}}▼{{/if}}</button>
       </div>
       <div class="footer-stellar">
-        <i class="fas fa-star"></i>
+        <img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/Starlight.webp" class="stellar-icon" alt="星芒">
         {{#if (and isEditable (not isLocked))}}
           <input type="number" name="system.stellarCost" value="{{system.stellarCost}}" class="stellar-edit-input" min="0" style="width:40px"/>
         {{else}}
@@ -248,7 +263,7 @@
           </div>
         {{else}}
           <div class="related-trigger-label">触发条件：{{system.relatedSkill.trigger}}</div>
-          <div class="item-desc-display">{{{relatedSkillItem.system.description}}}</div>
+          <div class="item-desc-display">{{{relatedSkillItem.system.effectDesc}}}</div>
         {{/if}}
       </div>
     {{else}}
@@ -274,4 +289,4 @@
     {{/if}}
   {{/if}}{{!-- /relatedExpanded --}}
 
-</div>
+</form>
