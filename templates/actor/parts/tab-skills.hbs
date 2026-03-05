@@ -48,7 +48,7 @@
         </div>
       {{/each}}
 
-      {{!-- 守备技能槽（八边形，无文字标签，第4行最右格） --}}
+      {{!-- 守备技能槽（八边形，第4行最右格） --}}
       <div class="skill-slot-wrap defense-skill-slot
             {{#if defenseSkill.item}}skill-slot-equipped{{else}}skill-slot-empty{{/if}}"
            data-slot-type="defense"
@@ -61,6 +61,15 @@
                alt="{{defenseSkill.item.name}}"
                class="skill-slot-img">{{/if}}
         </div>
+        {{#if defenseSkill.item}}
+          <div class="ego-grade-label defense-cat-label">
+            {{#if defenseSkill.item.system.category}}
+              <img src="{{lookup @root.config.CATEGORY_ICON_PATHS defenseSkill.item.system.category}}" width="16" height="16" alt="{{defenseSkill.item.system.category}}" class="defense-cat-icon">
+            {{/if}}
+          </div>
+        {{else}}
+          <div class="ego-grade-label">守备</div>
+        {{/if}}
       </div>
 
     </div>{{!-- /ego-skill-grid --}}

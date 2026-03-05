@@ -70,6 +70,25 @@
       {{/if}}
     </div>
 
+    {{!-- ── 守备技能：反击伤害类型 ─────────────────────────────────── --}}
+    {{#if isCounterType}}
+      <div class="counter-type-row">
+        {{#if (and isEditable (not isLocked))}}
+          <label>反击伤害</label>
+          <select name="system.counterType">
+            <option value="slash"  {{#if (eq system.counterType "slash")}}selected{{/if}}>斩击</option>
+            <option value="blunt"  {{#if (eq system.counterType "blunt")}}selected{{/if}}>打击</option>
+            <option value="pierce" {{#if (eq system.counterType "pierce")}}selected{{/if}}>突刺</option>
+          </select>
+        {{else}}
+          <span class="counter-type-label">反击伤害：</span>
+          {{#if system.counterType}}
+            <img src="{{lookup @root.config.CATEGORY_ICON_PATHS system.counterType}}" class="category-icon" width="18" height="18" alt="{{system.counterType}}">
+          {{/if}}
+        {{/if}}
+      </div>
+    {{/if}}
+
     {{!-- ── 技能类型 + 罪孽属性（编辑模式） ─────────────────────── --}}
     {{#if (and isEditable (not isLocked))}}
       <div class="skill-sin-row">

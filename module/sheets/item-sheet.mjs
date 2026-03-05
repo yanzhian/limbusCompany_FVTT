@@ -72,9 +72,11 @@ export class LimbusItemSheet extends ItemSheet {
     if (item.type === "skill") {
       context.sinColor = cfg.SIN_COLORS?.[sys.sinType] ?? "#5F3E21";
       context.categoryIcon = _getCategoryIcon(sys.category);
-      context.isBasic   = sys.type === "basic";
-      context.isDefense = sys.type === "defense";
-      context.isEgo     = sys.type === "ego";
+      context.isBasic       = sys.type === "basic";
+      context.isDefense     = sys.type === "defense";
+      context.isEgo         = sys.type === "ego";
+      context.isCounterType = sys.type === "defense" &&
+        (sys.category === "counter" || sys.category === "clashCounter");
 
       // 相关技能解析
       const relUuid = sys.relatedSkill?.itemUuid;
@@ -229,6 +231,7 @@ export class LimbusItemSheet extends ItemSheet {
       _syncSel("system.sinType",       sys.sinType        ?? "wrath");
       _syncSel("system.level",         sys.level          ?? 1);
       _syncSel("system.egoDiceRating", sys.egoDiceRating  ?? "");
+      _syncSel("system.counterType",   sys.counterType    ?? "slash");
     }
 
     // ── 链接方向箭头 ──────────────────────────────────────────────────────

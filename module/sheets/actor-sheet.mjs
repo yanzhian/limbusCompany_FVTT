@@ -20,7 +20,7 @@ export class LimbusActorSheet extends ActorSheet {
       width:    880,
       height:   810,
       tabs:     [{ navSelector: ".sheet-tabs", contentSelector: ".sheet-body", initial: "items" }],
-      dragDrop: [{ dragSelector: ".equip-slot[data-item-id], .skill-slot-wrap[data-item-id], .item-row .item-icon, .skill-row .item-icon", dropSelector: ".equip-grid, .item-list-panel, .basic-skill-slots, .ego-skill-slots, .defense-skill-slot" }],
+      dragDrop: [{ dragSelector: ".equip-slot[data-item-id], .skill-slot-wrap[data-item-id], .item-row .item-icon, .skill-row .item-icon", dropSelector: ".equip-grid, .item-list-panel, .basic-skill-slots, .ego-skill-grid, .defense-skill-slot" }],
       scrollY:  [".item-list-panel", ".skill-list-panel", ".buff-list"],
     });
   }
