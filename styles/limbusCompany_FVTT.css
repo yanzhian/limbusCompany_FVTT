@@ -3641,6 +3641,15 @@ body.game .limbuscompany.app img {
 .limbuscompany .skill-sin-row {
   display: flex; align-items: center; gap: 6px; padding: 3px 10px; font-size: .75rem;
 }
+.limbuscompany .skill-type-label {
+  display: flex; align-items: center; gap: 4px; padding: 3px 10px; font-size: .75rem;
+  color: var(--text-sub);
+}
+.limbuscompany .skill-type-label .sin-type-icon { flex-shrink: 0; }
+.limbuscompany .skill-level-badge {
+  background: rgba(95,62,33,.5); border: 1px solid var(--border-gold);
+  color: var(--text-main); font-size: .65rem; padding: 0 4px; border-radius: 2px;
+}
 .limbuscompany .weight-row {
   display: flex; align-items: center; gap: 3px; padding: 2px 10px; min-height: 20px;
 }

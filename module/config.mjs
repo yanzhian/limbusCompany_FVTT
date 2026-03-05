@@ -30,6 +30,17 @@ LIMBUSCOMPANY.SIN_LABELS_ZH = {
   envy:     "嫉妒",
 };
 
+/** 七宗罪图标路径 */
+LIMBUSCOMPANY.SIN_ICON_PATHS = {
+  wrath:    "systems/limbusCompany_FVTT/assets/icons/Base_icon/Wrath_icon.webp",
+  lust:     "systems/limbusCompany_FVTT/assets/icons/Base_icon/Lust_icon.webp",
+  sloth:    "systems/limbusCompany_FVTT/assets/icons/Base_icon/Sloth_icon.webp",
+  gluttony: "systems/limbusCompany_FVTT/assets/icons/Base_icon/Gluttony_icon.webp",
+  gloom:    "systems/limbusCompany_FVTT/assets/icons/Base_icon/Gloom_icon.webp",
+  pride:    "systems/limbusCompany_FVTT/assets/icons/Base_icon/Pride_icon.webp",
+  envy:     "systems/limbusCompany_FVTT/assets/icons/Base_icon/Envy_icon.webp",
+};
+
 /** 七宗罪 UI 颜色（CSS hex） */
 LIMBUSCOMPANY.SIN_COLORS = {
   wrath:    "#E94545",
