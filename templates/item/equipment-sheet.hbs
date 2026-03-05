@@ -92,7 +92,7 @@
           {{#if (and isEditable (not isLocked))}}
             <input type="number" name="system.defAdj" value="{{system.defAdj}}" class="mod-input" style="width:55px"/>
           {{else}}
-            <span class="mod-val {{#gt system.defAdj 0}}mod-pos{{/gt}}">{{#gt system.defAdj 0}}+{{/gt}}{{system.defAdj}}</span>
+            <span class="mod-val {{#if (gt system.defAdj 0)}}mod-pos{{/if}}">{{#if (gt system.defAdj 0)}}+{{/if}}{{system.defAdj}}</span>
           {{/if}}
         </div>
       </div>
@@ -105,7 +105,7 @@
             {{#if (and isEditable (not isLocked))}}
               <input type="number" name="system.atkAdj" value="{{system.atkAdj}}" class="mod-input" style="width:55px"/>
             {{else}}
-              <span class="mod-val {{#gt system.atkAdj 0}}mod-pos{{/gt}}">{{#gt system.atkAdj 0}}+{{/gt}}{{system.atkAdj}}</span>
+              <span class="mod-val {{#if (gt system.atkAdj 0)}}mod-pos{{/if}}">{{#if (gt system.atkAdj 0)}}+{{/if}}{{system.atkAdj}}</span>
             {{/if}}
           </div>
         {{/unless}}
@@ -114,7 +114,7 @@
           {{#if (and isEditable (not isLocked))}}
             <input type="number" name="system.defAdj" value="{{system.defAdj}}" class="mod-input" style="width:55px"/>
           {{else}}
-            <span class="mod-val {{#gt system.defAdj 0}}mod-pos{{/gt}}">{{#gt system.defAdj 0}}+{{/gt}}{{system.defAdj}}</span>
+            <span class="mod-val {{#if (gt system.defAdj 0)}}mod-pos{{/if}}">{{#if (gt system.defAdj 0)}}+{{/if}}{{system.defAdj}}</span>
           {{/if}}
         </div>
         {{#unless isUpper}}
@@ -123,7 +123,7 @@
             {{#if (and isEditable (not isLocked))}}
               <input type="number" name="system.speedAdj" value="{{system.speedAdj}}" class="mod-input" style="width:55px"/>
             {{else}}
-              <span class="mod-val {{#gt system.speedAdj 0}}mod-pos{{/gt}}">{{#gt system.speedAdj 0}}+{{/gt}}{{system.speedAdj}}</span>
+              <span class="mod-val {{#if (gt system.speedAdj 0)}}mod-pos{{/if}}">{{#if (gt system.speedAdj 0)}}+{{/if}}{{system.speedAdj}}</span>
             {{/if}}
           </div>
         {{/unless}}

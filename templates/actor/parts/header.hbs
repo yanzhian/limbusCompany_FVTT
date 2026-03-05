@@ -122,7 +122,7 @@
         <img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/Defense_Level.webp" class="info-icon" alt="DEF" title="防御等级">
         <span class="info-sign">{{defTotal}}</span>
         <img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/Speed.webp" class="info-icon" alt="SPD" title="速度">
-        <span class="info-val">{{system.speed.min}}-{{system.speed.max}}</span>
+        <span class="info-val">{{speedDisplay.min}}-{{speedDisplay.max}}</span>
       </div>
     </div>
 
@@ -131,16 +131,16 @@
       <div class="info-block-label">抗性信息</div>
       <div class="info-row">
         <img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/Slash.webp"  class="resist-icon" alt="斩" title="斩击">
-        <span class="resist-val {{#isResistWeak system.resistances.slash}}resist-weak{{/isResistWeak}}{{#isResistStrong system.resistances.slash}}resist-strong{{/isResistStrong}}">
-          {{system.resistances.slash}}
+        <span class="resist-val {{#isResistWeak displayResistances.slash}}resist-weak{{/isResistWeak}}{{#isResistStrong displayResistances.slash}}resist-strong{{/isResistStrong}}">
+          {{displayResistances.slash}}
         </span>
         <img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/Blunt.webp"  class="resist-icon" alt="打" title="打击">
-        <span class="resist-val {{#isResistWeak system.resistances.blunt}}resist-weak{{/isResistWeak}}{{#isResistStrong system.resistances.blunt}}resist-strong{{/isResistStrong}}">
-          {{system.resistances.blunt}}
+        <span class="resist-val {{#isResistWeak displayResistances.blunt}}resist-weak{{/isResistWeak}}{{#isResistStrong displayResistances.blunt}}resist-strong{{/isResistStrong}}">
+          {{displayResistances.blunt}}
         </span>
         <img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/Pierce.webp" class="resist-icon" alt="突" title="突刺">
-        <span class="resist-val {{#isResistWeak system.resistances.pierce}}resist-weak{{/isResistWeak}}{{#isResistStrong system.resistances.pierce}}resist-strong{{/isResistStrong}}">
-          {{system.resistances.pierce}}
+        <span class="resist-val {{#isResistWeak displayResistances.pierce}}resist-weak{{/isResistWeak}}{{#isResistStrong displayResistances.pierce}}resist-strong{{/isResistStrong}}">
+          {{displayResistances.pierce}}
         </span>
       </div>
     </div>
