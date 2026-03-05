@@ -3859,3 +3859,266 @@ body.game .limbuscompany.app img {
   margin-bottom: 8px;
 }
 .limbuscompany .clash-formula { color: var(--text-sub); }
+
+/* ============================================================
+   §3-R  鉴定弹窗（新版）— limbus-check-dialog-window
+   ============================================================ */
+
+/* 弹窗窗口整体尺寸 */
+.limbus-check-dialog-window {
+  min-width: 380px !important;
+}
+
+/* 弹窗内容区：清除 Foundry 默认 padding */
+.limbus-check-dialog-window .window-content {
+  padding: 0;
+  background: linear-gradient(180deg, #1A1410 0%, #0E0B08 100%);
+}
+
+/* 弹窗内容容器 */
+.limbus-check-dialog {
+  padding: 16px 16px 4px;
+  font-family: var(--font-main);
+  color: var(--text-main);
+}
+
+/* 各区块间距 */
+.limbus-check-dialog .check-section {
+  margin-bottom: 14px;
+}
+
+/* 区块标签 */
+.limbus-check-dialog .check-section-label {
+  font-size: 0.78rem;
+  color: var(--text-sub);
+  margin-bottom: 7px;
+  letter-spacing: 0.04em;
+}
+
+/* ── 难度硬币行 ── */
+.limbus-difficulty-coins-row {
+  display: flex;
+  gap: 5px;
+  align-items: center;
+  flex-wrap: nowrap;
+}
+
+/* 单枚难度硬币 */
+.limbus-difficulty-coin {
+  width: 34px;
+  height: 34px;
+  cursor: pointer;
+  object-fit: contain;
+  border-radius: 2px;
+  transition: transform 0.12s, filter 0.12s;
+  flex-shrink: 0;
+}
+
+/* 反面（暗色）硬币：叠加灰暗滤镜 */
+.limbus-difficulty-coin.tails {
+  filter: brightness(0.38) saturate(0.5);
+}
+
+.limbus-difficulty-coin:hover {
+  transform: scale(1.18);
+  filter: brightness(1.1);
+}
+
+.limbus-difficulty-coin.heads:hover {
+  filter: brightness(1.18) drop-shadow(0 0 4px #E5BA25);
+}
+
+/* ── 加值修正输入框 ── */
+.limbus-check-bonus-input {
+  width: 100%;
+  background: rgba(255, 255, 255, 0.05) !important;
+  border: 1px solid #5F3E22 !important;
+  color: var(--text-main) !important;
+  font-family: var(--font-main);
+  font-size: 0.85rem;
+  padding: 8px 12px !important;
+  border-radius: 3px;
+  box-sizing: border-box;
+}
+
+.limbus-check-bonus-input::placeholder {
+  color: var(--text-dim);
+  font-style: italic;
+}
+
+.limbus-check-bonus-input:focus {
+  outline: none;
+  border-color: var(--gold-mid) !important;
+}
+
+/* ── 鉴定按钮（覆盖 Dialog 默认按钮样式）── */
+.limbus-check-dialog-window .dialog-buttons {
+  padding: 0 16px 16px;
+  margin: 0;
+  background: transparent;
+  border: none;
+  gap: 0;
+}
+
+.limbus-check-dialog-window .dialog-button {
+  background: #5F3E22 !important;
+  color: #E8C9A2 !important;
+  border: 1px solid #7A5030 !important;
+  font-family: var(--font-main);
+  font-size: 1rem !important;
+  font-weight: bold;
+  padding: 10px 0 !important;
+  width: 100%;
+  border-radius: 3px;
+  cursor: pointer;
+  letter-spacing: 0.12em;
+  transition: background 0.15s;
+}
+
+.limbus-check-dialog-window .dialog-button:hover {
+  background: #7A5030 !important;
+}
+
+/* ============================================================
+   §3-S  鉴定聊天框（新版）— limbus-check-card
+   ============================================================ */
+
+/* 聊天消息容器：去掉 Foundry 自带的 padding */
+.chat-message .message-content:has(.limbus-check-card) {
+  padding: 0;
+}
+
+/* 主卡片 */
+.limbus-check-card {
+  background: linear-gradient(180deg, #1E1812 0%, #0F0C09 100%);
+  border: 1px solid #5A3A1A;
+  border-radius: 6px;
+  overflow: hidden;
+  font-family: var(--font-main);
+  color: var(--text-main);
+}
+
+/* 失败：深红背景 */
+.limbus-check-card.result-fail {
+  background: linear-gradient(180deg, #2E0909 0%, #160404 100%);
+  border-color: #8B1A1A;
+}
+
+/* ── 顶部 header（头像 + 标题 + 玩家名）── */
+.limbus-check-card .check-card-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px 8px;
+}
+
+.limbus-check-card .check-actor-avatar {
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid #6B4520;
+  flex-shrink: 0;
+}
+
+.limbus-check-card .check-actor-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+/* 鉴定标题：25px，金色 #E8C9A2 */
+.limbus-check-card .check-title {
+  font-size: 16px;
+  font-weight: bold;
+  color: #E8C9A2;
+  line-height: 1.2;
+}
+
+/* 玩家名：较小字号，稍透明 */
+.limbus-check-card .check-player {
+  font-size: 13px;
+  color: #E8CAA1;
+  opacity: 0.65;
+}
+
+/* ── 金色渐变分割线（两边透明）── */
+.limbus-check-card .check-gold-divider {
+  height: 1px;
+  background: linear-gradient(
+    to right,
+    transparent 0%,
+    #A07820 25%,
+    #E5BA25 50%,
+    #A07820 75%,
+    transparent 100%
+  );
+  margin: 2px 0;
+}
+
+/* ── 难度等级文字 ── */
+.limbus-check-card .check-difficulty-text {
+  padding: 8px 14px 2px;
+  font-size: 0.78rem;
+  color: var(--text-sub);
+}
+
+.limbus-check-card .check-difficulty-num {
+  color: var(--text-main);
+  font-weight: bold;
+  font-size: 0.85rem;
+  margin-left: 3px;
+}
+
+/* ── 结果大字 ── */
+.limbus-check-card .check-result-text {
+  text-align: center;
+  font-size: 1.65rem;
+  font-weight: bold;
+  color: #E5BA25;
+  padding: 6px 12px 8px;
+  letter-spacing: 0.06em;
+}
+
+/* 失败：红色大字 */
+.limbus-check-card.result-fail .check-result-text {
+  color: #E94745;
+  font-size: 1.65rem;
+}
+
+/* 完美成功：更亮更大 */
+.limbus-check-card.result-perfect .check-result-text {
+  color: #FFD700;
+  font-size: 1.95rem;
+  text-shadow: 0 0 14px rgba(229, 186, 37, 0.65),
+               0 0 4px rgba(255, 220, 80, 0.4);
+}
+
+/* ── 骰掷结果标签 ── */
+.limbus-check-card .check-coins-label {
+  padding: 0 14px 5px;
+  font-size: 0.72rem;
+  color: var(--text-sub);
+}
+
+/* ── 硬币结果行 ── */
+.limbus-check-card .check-coin-row {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  padding: 4px 12px 10px;
+  align-items: center;
+}
+
+.limbus-check-card .check-coin-row img {
+  width: 28px;
+  height: 28px;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+
+/* 反面硬币在结果行中稍微暗化 */
+.limbus-check-card .check-coin-row img.coin-tails {
+  filter: brightness(0.45) saturate(0.5);
+}
