@@ -119,7 +119,11 @@ export class LimbusItemSheet extends ItemSheet {
       context.isUpper     = sys.subtype === "upper";
       context.isLower     = sys.subtype === "lower";
       context.isAccessory = sys.subtype === "accessory";
-      context.subtypes    = Object.fromEntries(Object.entries(cfg.EQUIPMENT_SUBTYPES ?? {}).map(([k, v]) => [k, game.i18n.localize(v)]));
+      const subtypeZh = { upper: "上装", lower: "下装", weapon: "武器", accessory: "饰品" };
+      context.subtypes    = Object.fromEntries(Object.entries(cfg.EQUIPMENT_SUBTYPES ?? {}).map(([k, v]) => {
+        const localized = game.i18n.localize(v);
+        return [k, (localized && localized !== v) ? localized : (subtypeZh[k] ?? k)];
+      }));
       context.resistanceValues = cfg.RESISTANCE_VALUES ?? ["x0.5", "x1.0", "x2.0"];
 
       // 汇总修正行（用于解锁编辑）
@@ -302,15 +306,15 @@ export class LimbusItemSheet extends ItemSheet {
   /* ─── 锁切换 ────────────────────────────────────────────────────────────── */
 
   async _onToggleLock(event) {
-    // 从解锁→锁定时，走 FormApplication 官方 submit 流程，避免手工 FormData 导致字段回写异常
-    if (!this.isLocked) {
-      try {
-        await this.submit({ preventClose: true, preventRender: true });
-      } catch (e) {
-        console.warn("[LimbusItemSheet][lock-submit-failed]", e);
-      }
-    }
+    // 变更：不在锁切换时强制提交，避免锁定流程触发二次回写（导致抗性回退）
     this.isLocked = !this.isLocked;
+    console.warn("[LimbusItemSheet][lock-toggle]", {
+      itemId: this.item.id,
+      itemName: this.item.name,
+      nowLocked: this.isLocked,
+      subtype: this.item.system.subtype,
+      resistance: this.item.system.resistanceAdj,
+    });
     this.render(false);
   }
 
