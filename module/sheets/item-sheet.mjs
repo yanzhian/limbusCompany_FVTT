@@ -125,6 +125,7 @@ export class LimbusItemSheet extends ItemSheet {
         return [k, (localized && localized !== v) ? localized : (subtypeZh[k] ?? k)];
       }));
       context.resistanceValues = cfg.RESISTANCE_VALUES ?? ["x0.5", "x1.0", "x2.0"];
+      context.subtypeLabel = ({ weapon: "武器", upper: "上装", lower: "下装", accessory: "饰品" })[sys.subtype] ?? "装备";
 
       // 汇总修正行（用于解锁编辑）
       context.modifiers = _parseModifiers(sys);

@@ -48,7 +48,7 @@
       </select>
       <input type="text" name="system.category" value="{{system.category}}" class="equip-category-input" placeholder="分类"/>
     {{else}}
-      <span class="equip-subtype-label">{{#eq system.subtype 'weapon'}}武器{{/eq}}{{#eq system.subtype 'upper'}}上装{{/eq}}{{#eq system.subtype 'lower'}}下装{{/eq}}{{#eq system.subtype 'accessory'}}饰品{{/eq}}</span>
+      <span class="equip-subtype-label">{{subtypeLabel}}</span>
       <span class="equip-sep">　</span>
       <span class="equip-category">{{system.category}}</span>
     {{/if}}
@@ -65,21 +65,15 @@
           <div class="modifier-row">
             <img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/Slash.webp" class="mod-icon" alt="斩">
             <select name="system.resistanceAdj.slash" class="resist-sel">
-              {{#each resistanceValues}}
-                <option value="{{this}}" {{#eq this ../system.resistanceAdj.slash}}selected{{/eq}}>{{this}}</option>
-              {{/each}}
+              {{selectOptions resistanceValues selected=system.resistanceAdj.slash}}
             </select>
             <img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/Blunt.webp" class="mod-icon" alt="打" style="margin-left:6px">
             <select name="system.resistanceAdj.blunt" class="resist-sel">
-              {{#each resistanceValues}}
-                <option value="{{this}}" {{#eq this ../system.resistanceAdj.blunt}}selected{{/eq}}>{{this}}</option>
-              {{/each}}
+              {{selectOptions resistanceValues selected=system.resistanceAdj.blunt}}
             </select>
             <img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/Pierce.webp" class="mod-icon" alt="突" style="margin-left:6px">
             <select name="system.resistanceAdj.pierce" class="resist-sel">
-              {{#each resistanceValues}}
-                <option value="{{this}}" {{#eq this ../system.resistanceAdj.pierce}}selected{{/eq}}>{{this}}</option>
-              {{/each}}
+              {{selectOptions resistanceValues selected=system.resistanceAdj.pierce}}
             </select>
           </div>
         {{else}}
