@@ -19,6 +19,17 @@ LIMBUSCOMPANY.SIN_LABELS = {
   envy:     "LIMBUSCOMPANY.Sin.Envy",
 };
 
+/** 七宗罪中文名（直接使用，不依赖 i18n 时序） */
+LIMBUSCOMPANY.SIN_LABELS_ZH = {
+  wrath:    "暴怒",
+  lust:     "色欲",
+  sloth:    "怠惰",
+  gluttony: "暴食",
+  gloom:    "忧郁",
+  pride:    "傲慢",
+  envy:     "嫉妒",
+};
+
 /** 七宗罪 UI 颜色（CSS hex） */
 LIMBUSCOMPANY.SIN_COLORS = {
   wrath:    "#E94545",
@@ -167,6 +178,18 @@ LIMBUSCOMPANY.DEFENSE_CATEGORIES = {
   counter:       "LIMBUSCOMPANY.Category.Counter",
   clashBlock:    "LIMBUSCOMPANY.Category.ClashBlock",
   clashCounter:  "LIMBUSCOMPANY.Category.ClashCounter",
+};
+
+/** 技能分类中文名（直接使用，不依赖 i18n 时序） */
+LIMBUSCOMPANY.CATEGORY_LABELS_ZH = {
+  slash:        "斩击",
+  blunt:        "打击",
+  pierce:       "突刺",
+  dodge:        "闪避",
+  block:        "格挡",
+  counter:      "反击",
+  clashBlock:   "可拼点格挡",
+  clashCounter: "可拼点反击",
 };
 
 // ─── 装备子类型 ───────────────────────────────────────────────────────────────

@@ -417,13 +417,9 @@
   object-fit: cover;
 }
 
-/* 八边形裁切 */
+/* 四边形（方形）裁切 */
 .limbuscompany .skill-slot.octagon img {
-  clip-path: polygon(
-    30% 0%, 70% 0%, 100% 30%,
-    100% 70%, 70% 100%, 30% 100%,
-    0% 70%, 0% 30%
-  );
+  border-radius: 4px;
 }
 
 /* 圆形裁切（EGO） */
@@ -3106,73 +3102,101 @@ body.game .limbuscompany.app img {
 
 /* ─── §3-G  技能槽（八边形 & 圆形） ─────────────────────────────── */
 
+/* 技能栏面板：固定275px宽 */
 .limbuscompany .skill-panel {
-  width: 220px; flex-shrink: 0; padding: 8px;
+  width: 275px; flex-shrink: 0; padding: 8px;
   border-right: 1px solid rgba(95,62,33,.4);
   display: flex; flex-direction: column; gap: 6px;
 }
 
-/* 基础技能：2×3 网格 */
+/* 技能栏标题（270×55px，24px字体，#E8CAA1，与装备栏标题规格一致） */
+.limbuscompany .skill-panel-label {
+  width: 270px; height: 55px; line-height: 55px;
+  font-size: 24px; color: #E8CAA1; text-align: center;
+  border: none; background: transparent;
+  margin-bottom: 4px; user-select: none; flex-shrink: 0;
+}
+
+/* 基础技能：3×2 网格 */
 .limbuscompany .basic-skill-slots {
   display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px;
 }
 
-/* 守备技能槽独行（居中显示） */
-.limbuscompany .defense-slot-row {
-  display: flex; justify-content: center; padding: 2px 0;
+/* EGO（×5）+ 守备（×1）— 3×2 网格，与基础技能列对齐 */
+.limbuscompany .ego-skill-grid {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px;
   border-top: 1px solid rgba(95,62,33,.25);
-  border-bottom: 1px solid rgba(95,62,33,.25);
-}
-
-/* EGO等级槽分两行 */
-.limbuscompany .ego-rows {
-  display: flex; flex-direction: column; gap: 4px;
-}
-.limbuscompany .ego-row {
-  display: flex; gap: 6px; justify-content: flex-start;
+  padding-top: 6px;
 }
 
 /* 技能槽外层包裹 */
 .limbuscompany .skill-slot-wrap {
   display: flex; flex-direction: column; align-items: center;
-  gap: 2px; cursor: pointer; position: relative;
+  gap: 2px; cursor: pointer;
 }
 
-/* 八边形技能槽 */
+/* ── 方形槽（基础 / 守备）── */
 .limbuscompany .skill-slot-octa {
   width: 48px; height: 48px;
-  clip-path: polygon(25% 0%, 75% 0%, 100% 25%, 100% 75%, 75% 100%, 25% 100%, 0% 75%, 0% 25%);
-  border: 2px solid var(--border-gold);
-  background: rgba(11,7,7,.8);
+  border-radius: 4px;
+  background: #181511;
+  border: 1px solid rgba(185,142,60,.3);
+  overflow: hidden;
   display: flex; align-items: center; justify-content: center;
-  overflow: hidden; transition: border-color .15s;
+  flex-shrink: 0;
 }
-.limbuscompany .skill-slot-wrap:hover .skill-slot-octa { border-color: var(--gold-active); }
 
-/* 圆形技能槽（EGO） */
+/* ── 圆形槽（EGO）── */
 .limbuscompany .skill-slot-circle {
-  width: 48px; height: 48px; border-radius: 50%;
-  border: 2px solid var(--border-gold);
-  background: rgba(11,7,7,.8);
+  width: 48px; height: 48px;
+  border-radius: 50%;
+  background: #181511;
+  border: 1px solid rgba(185,142,60,.3);
+  overflow: hidden;
   display: flex; align-items: center; justify-content: center;
-  overflow: hidden; transition: border-color .15s;
+  flex-shrink: 0;
 }
-.limbuscompany .skill-slot-wrap:hover .skill-slot-circle { border-color: var(--gold-active); }
 
-.limbuscompany .skill-slot-img { width: 100%; height: 100%; object-fit: cover; }
+/* 图标（普通 flex 子元素，无 position: absolute 避免尺寸冲突） */
+.limbuscompany .skill-slot-img {
+  width: 100%; height: 100%;
+  object-fit: cover; display: block;
+}
+
+/* 空槽：暗淡 */
 .limbuscompany .skill-slot-empty .skill-slot-octa,
 .limbuscompany .skill-slot-empty .skill-slot-circle { opacity: .45; }
 
-/* 基础技能格内，八边形充满格子 */
+/* 装备状态：罪孽框用 box-shadow（向外扩展，不被 overflow:hidden 裁剪）
+   --sin-color 由内联 style 注入 */
+.limbuscompany .skill-slot-equipped .skill-slot-octa,
+.limbuscompany .skill-slot-equipped .skill-slot-circle {
+  border-color: transparent;
+  box-shadow: 0 0 0 2px var(--sin-color, var(--border-gold)),
+              0 0 7px 1px var(--sin-color, var(--border-gold));
+}
+
+/* 悬停 */
+.limbuscompany .skill-slot-empty:hover .skill-slot-octa,
+.limbuscompany .skill-slot-empty:hover .skill-slot-circle {
+  border-color: var(--gold-active); opacity: .7;
+}
+.limbuscompany .skill-slot-equipped:hover .skill-slot-octa,
+.limbuscompany .skill-slot-equipped:hover .skill-slot-circle {
+  box-shadow: 0 0 0 2px var(--sin-color, var(--border-gold)),
+              0 0 12px 3px var(--sin-color, var(--border-gold));
+}
+
+/* 基础技能格内：充满网格格子 */
 .limbuscompany .basic-skill-slots .skill-slot-wrap { min-width: 0; }
 .limbuscompany .basic-skill-slots .skill-slot-octa {
   width: 100%; height: auto; aspect-ratio: 1;
 }
 
-/* EGO行内，圆形稍小保持紧凑 */
-.limbuscompany .ego-row .skill-slot-circle,
-.limbuscompany .defense-slot-row .skill-slot-circle {
-  width: 40px; height: 40px;
+/* EGO/守备网格内：48px */
+.limbuscompany .ego-skill-grid .skill-slot-circle,
+.limbuscompany .ego-skill-grid .skill-slot-octa {
+  width: 48px; height: 48px;
 }
 
 .limbuscompany .ego-grade-label {
@@ -3263,7 +3287,7 @@ body.game .limbuscompany.app img {
   background: rgba(11,7,7,.8);
 }
 .limbuscompany .combat-skill-slot.skill-slot-octa {
-  clip-path: polygon(25% 0%, 75% 0%, 100% 25%, 100% 75%, 75% 100%, 25% 100%, 0% 75%, 0% 25%);
+  border-radius: 4px;
   border: 2px solid var(--border-gold);
 }
 .limbuscompany .combat-skill-slot.skill-slot-circle {

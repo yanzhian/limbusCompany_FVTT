@@ -434,6 +434,52 @@ export class LimbusActor extends Actor {
   }
 
   /**
+   * 装备基础技能到指定槽位（自由放置，支持槽内移动与替换）
+   * @param {string} itemId        物品 ID
+   * @param {number} targetSlot    目标槽位索引（0–5）
+   * @param {number} [fromSlot=-1] 源槽位索引（来自槽位拖拽时传入，-1 表示来自列表）
+   */
+  async equipSkillToSlot(itemId, targetSlot, fromSlot = -1) {
+    const item = this.items.get(itemId);
+    if (!item || item.type !== "skill" || item.system.type !== "basic") return;
+
+    const slots = [...(this.system.skills.basic ?? [null, null, null, null, null, null])];
+
+    // ── 槽位间移动（来自另一个基础技能槽） ─────────────────────────────
+    if (fromSlot >= 0 && fromSlot <= 5) {
+      if (fromSlot === targetSlot) return;
+      const displaced = slots[targetSlot] ?? null;  // 目标槽原有技能
+      slots[targetSlot] = itemId;
+      slots[fromSlot]   = displaced;                // 交换（为 null 即清空）
+      return this.update({ "system.skills.basic": slots });
+    }
+
+    // ── 来自技能列表 ────────────────────────────────────────────────────
+    // 已在某个槽位则拒绝重复装备
+    if (slots.includes(itemId)) {
+      ui.notifications.warn("该技能已装备在技能栏中，请直接拖动技能槽进行移位。");
+      return;
+    }
+
+    // 星芒检查
+    const { canEquip, cost, current, max } = this.checkStellarCost(item);
+    if (!canEquip) {
+      ui.notifications.warn(game.i18n.format("LIMBUSCOMPANY.Warning.NotEnoughStellar", { cost, current, max }));
+      return;
+    }
+
+    // 目标槽已有技能则先卸下（退还星芒）
+    const prevId = slots[targetSlot];
+    if (prevId) await this.unequipSkill(prevId);
+
+    // 重新读取（unequipSkill 会触发 update）
+    const refreshed = [...(this.system.skills.basic ?? [null, null, null, null, null, null])];
+    refreshed[targetSlot] = itemId;
+    await this.spendStellarMotes(cost);
+    return this.update({ "system.skills.basic": refreshed });
+  }
+
+  /**
    * 卸下技能（通过物品 ID 查找并清除对应槽位）
    * @param {string} itemId
    */

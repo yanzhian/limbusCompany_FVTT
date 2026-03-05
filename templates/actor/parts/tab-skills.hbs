@@ -3,7 +3,7 @@
 
   {{!-- ── 左侧：技能槽 ─────────────────────────────────────────────── --}}
   <div class="skill-panel">
-    <div class="panel-label">技能栏</div>
+    <div class="skill-panel-label">技能栏</div>
 
     {{!-- 基础技能槽（6个八边形，3×2 排列） --}}
     <div class="basic-skill-slots">
@@ -16,9 +16,8 @@
                data-item-id="{{item._id}}"
              {{/if}}
              title="{{#if item}}{{item.name}}{{else}}基础技能槽 {{slotIndex}}{{/if}}">
-          <div class="skill-slot-octa"
-               {{#if item}}style="border-color:{{sinColor item.system.sinType}}"{{/if}}>
-            <img src="{{#if item}}{{item.img}}{{else}}systems/limbusCompany_FVTT/assets/icons/Skill/Normalsin.webp{{/if}}"
+          <div class="skill-slot-octa" {{#if item}}style="--sin-color:{{sinColor item.system.sinType}}"{{/if}}>
+            <img src="{{#if item}}{{skillImg}}{{else}}systems/limbusCompany_FVTT/assets/icons/Skill/Normalsin.webp{{/if}}"
                  alt="{{#if item}}{{item.name}}{{else}}空{{/if}}"
                  class="skill-slot-img">
           </div>
@@ -26,8 +25,30 @@
       {{/each}}
     </div>
 
-    {{!-- 守备技能槽（圆形，单独一行居中） --}}
-    <div class="defense-slot-row">
+    {{!-- EGO技能槽（圆形×5）+ 守备技能槽（八边形×1）— 3×2 网格布局 --}}
+    {{!-- 排列：ZAYIN/TET/HE（第3行）/ WAW/ALEPH/守备（第4行） --}}
+    <div class="ego-skill-grid">
+
+      {{!-- EGO槽：ZAYIN → TET → HE → WAW → ALEPH（顺序由 egoSkills 数组保证） --}}
+      {{#each egoSkills}}
+        <div class="skill-slot-wrap ego-skill-slot-wrap
+              {{#if item}}skill-slot-equipped{{else}}skill-slot-empty{{/if}}"
+             data-slot-type="ego"
+             data-grade="{{grade}}"
+             {{#if item}}
+               data-item-id="{{item._id}}"
+             {{/if}}
+             title="{{#if item}}{{item.name}}{{else}}{{grade}}{{/if}}">
+          <div class="skill-slot-circle" {{#if item}}style="--sin-color:{{sinColor item.system.sinType}}"{{/if}}>
+            <img src="{{#if item}}{{skillImg}}{{else}}systems/limbusCompany_FVTT/assets/icons/Skill/Normalsin.webp{{/if}}"
+                 alt="{{grade}}"
+                 class="skill-slot-img">
+          </div>
+          <div class="ego-grade-label">{{grade}}</div>
+        </div>
+      {{/each}}
+
+      {{!-- 守备技能槽（八边形，无文字标签，第4行最右格） --}}
       <div class="skill-slot-wrap defense-skill-slot
             {{#if defenseSkill.item}}skill-slot-equipped{{else}}skill-slot-empty{{/if}}"
            data-slot-type="defense"
@@ -35,68 +56,14 @@
              data-item-id="{{defenseSkill.item._id}}"
            {{/if}}
            title="{{#if defenseSkill.item}}{{defenseSkill.item.name}}{{else}}守备技能{{/if}}">
-        <div class="skill-slot-circle"
-             {{#if defenseSkill.item}}style="border-color:{{sinColor defenseSkill.item.system.sinType}}"{{/if}}>
-          <img src="{{#if defenseSkill.item}}{{defenseSkill.item.img}}{{else}}systems/limbusCompany_FVTT/assets/icons/Skill/Normalsin.webp{{/if}}"
+        <div class="skill-slot-octa" {{#if defenseSkill.item}}style="--sin-color:{{sinColor defenseSkill.item.system.sinType}}"{{/if}}>
+          <img src="{{#if defenseSkill.item}}{{defenseSkill.skillImg}}{{else}}systems/limbusCompany_FVTT/assets/icons/Skill/Normalsin.webp{{/if}}"
                alt="守备"
                class="skill-slot-img">
         </div>
-        <div class="ego-grade-label">守备</div>
-      </div>
-    </div>
-
-    {{!-- EGO技能槽（5个圆形，按等级分两行：ZAYIN/TET/HE 和 WAW/ALEPH） --}}
-    <div class="ego-rows">
-
-      {{!-- 第一行：ZAYIN TET HE --}}
-      <div class="ego-row">
-        {{#each egoSkills}}
-          {{#if (lte @index 2)}}
-            <div class="skill-slot-wrap ego-skill-slot-wrap
-                  {{#if item}}skill-slot-equipped{{else}}skill-slot-empty{{/if}}"
-                 data-slot-type="ego"
-                 data-grade="{{grade}}"
-                 {{#if item}}
-                   data-item-id="{{item._id}}"
-                 {{/if}}
-                 title="{{#if item}}{{item.name}}{{else}}{{grade}}{{/if}}">
-              <div class="skill-slot-circle"
-                   {{#if item}}style="border-color:{{sinColor item.system.sinType}}"{{/if}}>
-                <img src="{{#if item}}{{item.img}}{{else}}systems/limbusCompany_FVTT/assets/icons/Skill/Normalsin.webp{{/if}}"
-                     alt="{{grade}}"
-                     class="skill-slot-img">
-              </div>
-              <div class="ego-grade-label">{{grade}}</div>
-            </div>
-          {{/if}}
-        {{/each}}
       </div>
 
-      {{!-- 第二行：WAW ALEPH --}}
-      <div class="ego-row">
-        {{#each egoSkills}}
-          {{#unless (lte @index 2)}}
-            <div class="skill-slot-wrap ego-skill-slot-wrap
-                  {{#if item}}skill-slot-equipped{{else}}skill-slot-empty{{/if}}"
-                 data-slot-type="ego"
-                 data-grade="{{grade}}"
-                 {{#if item}}
-                   data-item-id="{{item._id}}"
-                 {{/if}}
-                 title="{{#if item}}{{item.name}}{{else}}{{grade}}{{/if}}">
-              <div class="skill-slot-circle"
-                   {{#if item}}style="border-color:{{sinColor item.system.sinType}}"{{/if}}>
-                <img src="{{#if item}}{{item.img}}{{else}}systems/limbusCompany_FVTT/assets/icons/Skill/Normalsin.webp{{/if}}"
-                     alt="{{grade}}"
-                     class="skill-slot-img">
-              </div>
-              <div class="ego-grade-label">{{grade}}</div>
-            </div>
-          {{/unless}}
-        {{/each}}
-      </div>
-
-    </div>{{!-- /ego-rows --}}
+    </div>{{!-- /ego-skill-grid --}}
 
   </div>{{!-- /skill-panel --}}
 
@@ -116,19 +83,20 @@
 
       {{!-- 技能过滤面板 --}}
       <div class="filter-panel" style="display:none">
+        <div class="filter-panel-title">过滤</div>
         <div class="filter-section">
           <div class="filter-section-label">类型</div>
           <div class="filter-buttons">
-            <button class="filter-category-btn" data-category="basic">基本技能</button>
-            <button class="filter-category-btn" data-category="defense">守备技能</button>
-            <button class="filter-category-btn" data-category="ego">E.G.O技能</button>
+            <button class="filter-category-btn" data-category="basic">基本</button>
+            <button class="filter-category-btn" data-category="defense">守备</button>
+            <button class="filter-category-btn" data-category="ego">E.G.O</button>
           </div>
         </div>
         <div class="filter-section">
           <div class="filter-section-label">罪孽</div>
           <div class="filter-buttons">
             {{#each config.SINS}}
-              <button class="filter-category-btn" data-category="{{this}}">{{lookup ../config.SIN_LABELS this}}</button>
+              <button class="filter-category-btn" data-category="{{this}}">{{lookup ../config.SIN_LABELS_ZH this}}</button>
             {{/each}}
           </div>
         </div>
@@ -163,12 +131,11 @@
                 data-type="{{system.type}}"
                 data-subtype="{{system.sinType}}">
               <span class="col-icon">
-                <img src="{{img}}" class="item-icon" data-item-id="{{_id}}" alt="{{name}}"
-                     style="border-color:{{sinColor}}">
+                <img src="{{skillIcon}}" class="item-icon" data-item-id="{{_id}}" alt="{{name}}">
               </span>
               <span class="col-name item-name">{{name}}</span>
-              <span class="col-cat">{{system.category}}</span>
-              <span class="col-sin" style="color:{{sinColor}}">{{system.sinType}}</span>
+              <span class="col-cat">{{catLabel}}</span>
+              <span class="col-sin" style="color:{{sinColor}}">{{sinLabel}}</span>
               <span class="col-qty">1</span>
               <span class="col-stellar">{{stellarCost}}</span>
               <span class="col-actions">
