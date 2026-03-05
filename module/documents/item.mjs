@@ -146,6 +146,10 @@ export class SkillData extends foundry.abstract.TypeDataModel {
       // 守备：dodge / block / counter / clashBlock / clashCounter
       category: new fields.StringField({ required: true, initial: "slash" }),
 
+      // 反击伤害类型（仅守备技能 category=counter/clashCounter 有效）
+      counterType: new fields.StringField({ required: false, initial: "slash",
+        choices: ["slash", "blunt", "pierce"] }),
+
       // 罪孽属性（决定图标和边框颜色）
       sinType: new fields.StringField({ required: true, initial: "wrath",
         choices: ["wrath", "lust", "sloth", "gluttony", "gloom", "pride", "envy"] }),

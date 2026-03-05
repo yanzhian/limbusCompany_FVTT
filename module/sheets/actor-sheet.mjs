@@ -20,7 +20,7 @@ export class LimbusActorSheet extends ActorSheet {
       width:    880,
       height:   810,
       tabs:     [{ navSelector: ".sheet-tabs", contentSelector: ".sheet-body", initial: "items" }],
-      dragDrop: [{ dragSelector: ".equip-slot[data-item-id], .skill-slot-wrap[data-item-id], .item-row .item-icon, .skill-row .item-icon", dropSelector: ".equip-grid, .item-list-panel, .basic-skill-slots, .ego-skill-slots, .defense-skill-slot" }],
+      dragDrop: [{ dragSelector: ".equip-slot[data-item-id], .skill-slot-wrap[data-item-id], .item-row .item-icon, .skill-row .item-icon", dropSelector: ".equip-grid, .item-list-panel, .basic-skill-slots, .ego-skill-grid, .defense-skill-slot" }],
       scrollY:  [".item-list-panel", ".skill-list-panel", ".buff-list"],
     });
   }
@@ -1328,13 +1328,7 @@ function _buffIconPath(type) {
 }
 
 function _getCategoryIcon(category) {
-  const base = "systems/limbusCompany_FVTT/assets/icons/Base_icon/";
-  const map  = {
-    slash:"Slash.webp", blunt:"Blunt.webp", pierce:"Pierce.webp",
-    dodge:"闪避.webp",  block:"防御.webp",  counter:"反击.webp",
-    clashBlock:"可拼点防御.webp", clashCounter:"可拼点防御.webp",
-  };
-  return map[category] ? base + map[category] : "";
+  return CONFIG.LIMBUSCOMPANY?.CATEGORY_ICON_PATHS?.[category] ?? "";
 }
 
 function _subtypeLabel(subtype) {

@@ -52,8 +52,8 @@
         {{!-- 骰子公式文本输入（_updateObject 会解析为 diceCount/diceFaces/baseValue） --}}
         <input type="text" name="system.diceFormula" value="{{diceFormulaDisplay}}" class="dice-formula-input" placeholder="1D4+2"/>
       {{else}}
-        {{#if categoryIcon}}
-          <img src="{{categoryIcon}}" class="category-icon" width="22" height="22" alt="type">
+        {{#if system.category}}
+          <img src="{{lookup @root.config.CATEGORY_ICON_PATHS system.category}}" class="category-icon" width="22" height="22" alt="{{system.category}}">
         {{/if}}
         <span class="dice-formula-display">{{diceFormulaDisplay}}</span>
       {{/if}}
@@ -70,29 +70,48 @@
       {{/if}}
     </div>
 
+    {{!-- ── 守备技能：反击伤害类型 ─────────────────────────────────── --}}
+    {{#if isCounterType}}
+      <div class="counter-type-row">
+        {{#if (and isEditable (not isLocked))}}
+          <label>反击伤害</label>
+          <select name="system.counterType">
+            <option value="slash"  {{#if (eq system.counterType "slash")}}selected{{/if}}>斩击</option>
+            <option value="blunt"  {{#if (eq system.counterType "blunt")}}selected{{/if}}>打击</option>
+            <option value="pierce" {{#if (eq system.counterType "pierce")}}selected{{/if}}>突刺</option>
+          </select>
+        {{else}}
+          <span class="counter-type-label">反击伤害：</span>
+          {{#if system.counterType}}
+            <img src="{{lookup @root.config.CATEGORY_ICON_PATHS system.counterType}}" class="category-icon" width="18" height="18" alt="{{system.counterType}}">
+          {{/if}}
+        {{/if}}
+      </div>
+    {{/if}}
+
     {{!-- ── 技能类型 + 罪孽属性（编辑模式） ─────────────────────── --}}
     {{#if (and isEditable (not isLocked))}}
       <div class="skill-sin-row">
         {{!-- 技能类型切换（基础/守备/EGO），锁定后展示类型标签 --}}
         <label>类型</label>
         <select name="system.type">
-          <option value="basic"   {{#eq system.type "basic"}}selected{{/eq}}>基础技能</option>
-          <option value="defense" {{#eq system.type "defense"}}selected{{/eq}}>守备技能</option>
-          <option value="ego"     {{#eq system.type "ego"}}selected{{/eq}}>E.G.O</option>
+          <option value="basic"   {{#if (eq system.type "basic")}}selected{{/if}}>基础技能</option>
+          <option value="defense" {{#if (eq system.type "defense")}}selected{{/if}}>守备技能</option>
+          <option value="ego"     {{#if (eq system.type "ego")}}selected{{/if}}>E.G.O</option>
         </select>
         <label style="margin-left:8px">罪孽</label>
         <select name="system.sinType">
           {{#each skillSinTypes}}
-            <option value="{{@key}}" {{#eq @key ../system.sinType}}selected{{/eq}}>{{this}}</option>
+            <option value="{{@key}}" {{#if (eq @key ../system.sinType)}}selected{{/if}}>{{this}}</option>
           {{/each}}
         </select>
         {{!-- 技能等级（仅基础技能） --}}
         {{#if isBasic}}
           <label style="margin-left:8px">等级</label>
           <select name="system.level">
-            <option value="1" {{#eq system.level 1}}selected{{/eq}}>1</option>
-            <option value="2" {{#eq system.level 2}}selected{{/eq}}>2</option>
-            <option value="3" {{#eq system.level 3}}selected{{/eq}}>3</option>
+            <option value="1" {{#if (eq system.level 1)}}selected{{/if}}>1</option>
+            <option value="2" {{#if (eq system.level 2)}}selected{{/if}}>2</option>
+            <option value="3" {{#if (eq system.level 3)}}selected{{/if}}>3</option>
           </select>
         {{/if}}
         {{!-- EGO等级 --}}
@@ -100,15 +119,26 @@
           <label style="margin-left:8px">EGO等级</label>
           <select name="system.egoDiceRating">
             {{#each config.EGO_GRADES}}
-              <option value="{{this}}" {{#eq this ../system.egoDiceRating}}selected{{/eq}}>{{this}}</option>
+              <option value="{{this}}" {{#if (eq this ../system.egoDiceRating)}}selected{{/if}}>{{this}}</option>
             {{/each}}
           </select>
         {{/if}}
       </div>
     {{else}}
-      {{!-- 锁定时展示类型标签 --}}
+      {{!-- 锁定时展示类型标签 + 罪孽图标 + 等级 --}}
       <div class="skill-type-label">
-        {{#eq system.type "basic"}}基础技能{{/eq}}{{#eq system.type "defense"}}守备技能{{/eq}}{{#eq system.type "ego"}}E.G.O{{/eq}}
+        {{#if (eq system.type "basic")}}基础技能{{/if}}
+        {{#if (eq system.type "defense")}}守备技能{{/if}}
+        {{#if (eq system.type "ego")}}E.G.O{{/if}}
+        {{#if system.sinType}}
+          <img src="{{lookup @root.config.SIN_ICON_PATHS system.sinType}}" width="14" height="14" alt="{{system.sinType}}" class="sin-type-icon">
+        {{/if}}
+        {{#if (eq system.type "basic")}}
+          <span class="skill-level-badge">Lv{{system.level}}</span>
+        {{/if}}
+        {{#if (eq system.type "ego")}}
+          <span class="skill-level-badge">{{system.egoDiceRating}}</span>
+        {{/if}}
       </div>
     {{/if}}
 
@@ -122,19 +152,19 @@
               {{#if ../isEditable}}
                 {{!-- schema 字段名为 sinType，不是 sin --}}
                 <select name="system.sinCost.{{@index}}.sinType" class="sin-cost-sel">
-                  {{#each ../config.SINS}}
-                    <option value="{{this}}" {{#if (eq this ../sinType)}}selected{{/if}}>{{lookup ../config.SIN_LABELS_ZH this}}</option>
+                  {{#each @root.config.SINS}}
+                    <option value="{{this}}" {{#if (eq this ../sinType)}}selected{{/if}}>{{lookup @root.config.SIN_LABELS_ZH this}}</option>
                   {{/each}}
                 </select>
                 <input type="number" name="system.sinCost.{{@index}}.amount" value="{{amount}}" class="sin-cost-input" min="0" style="width:40px"/>
                 <button class="sin-cost-remove-btn" data-idx="{{@index}}">×</button>
               {{else}}
-                <img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/{{sinType}}_icon.webp" width="16" height="16" alt="{{sinType}}">
+                <img src="{{lookup @root.config.SIN_ICON_PATHS sinType}}" width="16" height="16" alt="{{sinType}}">
                 <span>{{amount}}</span>
               {{/if}}
             </div>
           {{/each}}
-          {{#if isEditable}}
+          {{#if (and isEditable (not isLocked))}}
             <button class="sin-cost-add-btn">＋</button>
           {{/if}}
         </div>
@@ -158,12 +188,12 @@
               {{#if ../isEditable}}
                 {{!-- schema 字段：egoResistanceAdj[].{sinType, multiplier} --}}
                 <select name="system.egoResistanceAdj.{{@index}}.sinType">
-                  {{#each ../config.SINS}}
-                    <option value="{{this}}" {{#if (eq this ../sinType)}}selected{{/if}}>{{lookup ../config.SIN_LABELS_ZH this}}</option>
+                  {{#each @root.config.SINS}}
+                    <option value="{{this}}" {{#if (eq this ../sinType)}}selected{{/if}}>{{lookup @root.config.SIN_LABELS_ZH this}}</option>
                   {{/each}}
                 </select>
                 <select name="system.egoResistanceAdj.{{@index}}.multiplier">
-                  {{#each ../config.RESISTANCE_VALUES}}
+                  {{#each @root.config.RESISTANCE_VALUES}}
                     <option value="{{this}}" {{#if (eq this ../multiplier)}}selected{{/if}}>{{this}}</option>
                   {{/each}}
                 </select>
@@ -173,7 +203,7 @@
               {{/if}}
             </div>
           {{/each}}
-          {{#if isEditable}}
+          {{#if (and isEditable (not isLocked))}}
             <button class="res-change-add-btn">＋</button>
           {{/if}}
         </div>
@@ -242,8 +272,8 @@
           <div class="item-name-display" style="color:#4CAF50">{{relatedSkillItem.name}}</div>
         </div>
         <div class="item-row-2 skill-row-2">
-          {{#if relatedSkillItem.categoryIcon}}
-            <img src="{{relatedSkillItem.categoryIcon}}" class="category-icon" width="22" height="22" alt="">
+          {{#if relatedSkillItem.system.category}}
+            <img src="{{lookup @root.config.CATEGORY_ICON_PATHS relatedSkillItem.system.category}}" class="category-icon" width="22" height="22" alt="{{relatedSkillItem.system.category}}">
           {{/if}}
           <span class="dice-formula-display">{{fmtDice relatedSkillItem.system.diceFormula}}</span>
         </div>

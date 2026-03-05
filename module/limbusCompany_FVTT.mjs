@@ -369,17 +369,7 @@ Hooks.once("init", () => {
 
   /** 返回攻/守类型图标路径 */
   Handlebars.registerHelper("categoryIcon", (category) => {
-    const iconMap = {
-      slash:        "systems/limbusCompany_FVTT/assets/icons/Base_icon/Slash.webp",
-      blunt:        "systems/limbusCompany_FVTT/assets/icons/Base_icon/Blunt.webp",
-      pierce:       "systems/limbusCompany_FVTT/assets/icons/Base_icon/Pierce.webp",
-      dodge:        "systems/limbusCompany_FVTT/assets/icons/Base_icon/闪避.webp",
-      block:        "systems/limbusCompany_FVTT/assets/icons/Base_icon/防御.webp",
-      counter:      "systems/limbusCompany_FVTT/assets/icons/Base_icon/反击.webp",
-      clashBlock:   "systems/limbusCompany_FVTT/assets/icons/Base_icon/可拼点防御.webp",
-      clashCounter: "systems/limbusCompany_FVTT/assets/icons/Base_icon/可拼点防御.webp",
-    };
-    return iconMap[category] ?? "";
+    return CONFIG.LIMBUSCOMPANY?.CATEGORY_ICON_PATHS?.[category] ?? "";
   });
 
   /** 返回罪孽图标路径 */
