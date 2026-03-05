@@ -49,12 +49,8 @@
             {{/each}}
           </select>
         {{/if}}
-        {{!-- 骰子公式：使用真正的 schema 字段（diceFormula 是派生字段，不可直接编辑） --}}
-        <input type="number" name="system.diceCount"  value="{{system.diceCount}}"  class="dice-count-input"  min="0" style="width:36px" title="骰子数"/>
-        <span class="dice-sep">d</span>
-        <input type="number" name="system.diceFaces"  value="{{system.diceFaces}}"  class="dice-faces-input"  min="1" style="width:36px" title="面数"/>
-        <span class="dice-sep">+</span>
-        <input type="number" name="system.baseValue"  value="{{system.baseValue}}"  class="dice-base-input"   min="0" style="width:36px" title="基础值"/>
+        {{!-- 骰子公式文本输入（_updateObject 会解析为 diceCount/diceFaces/baseValue） --}}
+        <input type="text" name="system.diceFormula" value="{{diceFormulaDisplay}}" class="dice-formula-input" placeholder="1D4+2"/>
       {{else}}
         {{#if categoryIcon}}
           <img src="{{categoryIcon}}" class="category-icon" width="22" height="22" alt="type">
@@ -74,10 +70,17 @@
       {{/if}}
     </div>
 
-    {{!-- ── 罪孽属性（编辑模式） ──────────────────────────────────── --}}
+    {{!-- ── 技能类型 + 罪孽属性（编辑模式） ─────────────────────── --}}
     {{#if (and isEditable (not isLocked))}}
       <div class="skill-sin-row">
-        <label>罪孽</label>
+        {{!-- 技能类型切换（基础/守备/EGO），锁定后展示类型标签 --}}
+        <label>类型</label>
+        <select name="system.type">
+          <option value="basic"   {{#eq system.type "basic"}}selected{{/eq}}>基础技能</option>
+          <option value="defense" {{#eq system.type "defense"}}selected{{/eq}}>守备技能</option>
+          <option value="ego"     {{#eq system.type "ego"}}selected{{/eq}}>E.G.O</option>
+        </select>
+        <label style="margin-left:8px">罪孽</label>
         <select name="system.sinType">
           {{#each skillSinTypes}}
             <option value="{{@key}}" {{#eq @key ../system.sinType}}selected{{/eq}}>{{this}}</option>
@@ -101,6 +104,11 @@
             {{/each}}
           </select>
         {{/if}}
+      </div>
+    {{else}}
+      {{!-- 锁定时展示类型标签 --}}
+      <div class="skill-type-label">
+        {{#eq system.type "basic"}}基础技能{{/eq}}{{#eq system.type "defense"}}守备技能{{/eq}}{{#eq system.type "ego"}}E.G.O{{/eq}}
       </div>
     {{/if}}
 

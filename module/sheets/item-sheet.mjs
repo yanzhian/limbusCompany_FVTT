@@ -217,6 +217,20 @@ export class LimbusItemSheet extends ItemSheet {
       }
     }
 
+    // ── 技能各下拉菜单：强制同步当前值（原理同上，防止浏览器回退首项） ──
+    if (this.item.type === "skill") {
+      const sys = this.item.system;
+      const _syncSel = (name, val) => {
+        const el = html.find(`select[name='${name}']`);
+        if (el.length) el.val(String(val ?? ""));
+      };
+      _syncSel("system.type",          sys.type           ?? "basic");
+      _syncSel("system.category",      sys.category       ?? "slash");
+      _syncSel("system.sinType",       sys.sinType        ?? "wrath");
+      _syncSel("system.level",         sys.level          ?? 1);
+      _syncSel("system.egoDiceRating", sys.egoDiceRating  ?? "");
+    }
+
     // ── 链接方向箭头 ──────────────────────────────────────────────────────
     html.find(".link-dir-btn").on("click", this._onLinkDirToggle.bind(this));
 
@@ -312,10 +326,27 @@ export class LimbusItemSheet extends ItemSheet {
       }
     }
 
-    // ── skill：diceFormula 是派生字段，不应持久化（prepareDerivedData 会重新计算）
+    // ── skill：将用户输入的 diceFormula 文本解析为真正的 schema 字段
     if (this.item.type === "skill") {
-      if (formData["system.diceFormula"] !== undefined) delete formData["system.diceFormula"];
-      else if (formData.system?.diceFormula !== undefined) delete formData.system.diceFormula;
+      const _isFlat  = !formData.system;
+      const rawFml   = _isFlat ? formData["system.diceFormula"] : formData.system?.diceFormula;
+      if (rawFml !== undefined) {
+        const parsed = _parseDiceFormula(String(rawFml));
+        if (parsed) {
+          if (_isFlat) {
+            formData["system.diceCount"]  = parsed.diceCount;
+            formData["system.diceFaces"]  = parsed.diceFaces;
+            formData["system.baseValue"]  = parsed.baseValue;
+          } else {
+            formData.system.diceCount  = parsed.diceCount;
+            formData.system.diceFaces  = parsed.diceFaces;
+            formData.system.baseValue  = parsed.baseValue;
+          }
+        }
+        // 无论解析成功与否都丢弃原始文本（prepareDerivedData 会重新生成）
+        if (_isFlat) delete formData["system.diceFormula"];
+        else         delete formData.system.diceFormula;
+      }
     }
 
     return super._updateObject(event, formData);
@@ -693,6 +724,23 @@ export class LimbusItemSheet extends ItemSheet {
 }
 
 /* ─── 模块级辅助函数 ─────────────────────────────────────────────────────── */
+
+/**
+ * 将 "2d6+3" / "1D4" 风格的骰子公式字符串解析为 schema 实际字段值。
+ * 支持格式：NdF、NdF+B（大小写均可，忽略空格）。
+ * 解析失败返回 null，调用方应保留旧值。
+ */
+function _parseDiceFormula(formula) {
+  if (!formula) return null;
+  const m = String(formula).toLowerCase().replace(/\s+/g, "")
+    .match(/^(\d+)d(\d+)(?:\+(\d+))?$/);
+  if (!m) return null;
+  return {
+    diceCount: Math.max(0, parseInt(m[1]) || 0),
+    diceFaces: Math.max(1, parseInt(m[2]) || 4),
+    baseValue: Math.max(0, parseInt(m[3] ?? 0) || 0),
+  };
+}
 
 function _getCategoryIcon(category) {
   const base = "systems/limbusCompany_FVTT/assets/icons/Base_icon/";
