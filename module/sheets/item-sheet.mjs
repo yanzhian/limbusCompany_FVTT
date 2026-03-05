@@ -124,7 +124,10 @@ export class LimbusItemSheet extends ItemSheet {
         const localized = game.i18n.localize(v);
         return [k, (localized && localized !== v) ? localized : (subtypeZh[k] ?? k)];
       }));
-      context.resistanceValues = cfg.RESISTANCE_VALUES ?? ["x0.5", "x1.0", "x2.0"];
+      // 必须传 object 而非 array：Foundry selectOptions 对纯数组会用索引(0/1/2)作为 value，
+      // 导致表单提交的是整数字符串而非 "x0.5" 等，无法通过 validResists 校验。
+      const _resArr = cfg.RESISTANCE_VALUES ?? ["x0.5", "x1.0", "x2.0"];
+      context.resistanceValues = Object.fromEntries(_resArr.map(v => [v, v]));
       context.subtypeLabel = ({ weapon: "武器", upper: "上装", lower: "下装", accessory: "饰品" })[sys.subtype] ?? "装备";
 
       // 汇总修正行（用于解锁编辑）
@@ -263,17 +266,18 @@ export class LimbusItemSheet extends ItemSheet {
         const nextRes = expanded.system.resistanceAdj[key];
 
         // 单字段变更提交：非当前字段一律继承旧值
+        // 注意：用 || 而非 ??，因为 schema 默认值是 ""（空字符串），?? 不会触发回退
         if (changedResKey && key !== changedResKey) {
-          expanded.system.resistanceAdj[key] = currentRes[key] ?? "x1.0";
+          expanded.system.resistanceAdj[key] = currentRes[key] || "x1.0";
           continue;
         }
 
         if (nextRes === undefined || nextRes === "") {
-          expanded.system.resistanceAdj[key] = currentRes[key] ?? "x1.0";
+          expanded.system.resistanceAdj[key] = currentRes[key] || "x1.0";
           continue;
         }
         if (!validResists.includes(nextRes)) {
-          expanded.system.resistanceAdj[key] = currentRes[key] ?? "x1.0";
+          expanded.system.resistanceAdj[key] = currentRes[key] || "x1.0";
         }
       }
 
