@@ -20,7 +20,7 @@ export class LimbusActorSheet extends ActorSheet {
       width:    880,
       height:   810,
       tabs:     [{ navSelector: ".sheet-tabs", contentSelector: ".sheet-body", initial: "items" }],
-      dragDrop: [{ dragSelector: ".equip-slot[data-item-id], .skill-slot-wrap[data-item-id], .item-row .item-icon, .skill-row .item-icon", dropSelector: ".equip-grid, .basic-skill-slots, .ego-skill-slots, .defense-skill-slot" }],
+      dragDrop: [{ dragSelector: ".equip-slot[data-item-id], .skill-slot-wrap[data-item-id], .item-row .item-icon, .skill-row .item-icon", dropSelector: ".equip-grid, .item-list-panel, .basic-skill-slots, .ego-skill-slots, .defense-skill-slot" }],
       scrollY:  [".item-list-panel", ".skill-list-panel", ".buff-list"],
     });
   }
@@ -531,22 +531,36 @@ export class LimbusActorSheet extends ActorSheet {
       return;
     }
 
-    // ── 从装备栏拖到其他区域：视为卸下（源槽清空） ───────────────────────
+    // ── 拖入物品列表：
+    // 1) 从装备槽拖回列表 → 视为卸下
+    // 2) 从 FVTT 物品目录/其他来源拖入 → 复制一份到角色物品
     const fromSlot = Number.isInteger(data.fromEquipSlot) ? data.fromEquipSlot : parseInt(data.fromEquipSlot);
     const droppedIntoItemList = $target.closest(".item-list-panel").length > 0;
-    if (Number.isInteger(fromSlot) && fromSlot >= 0 && fromSlot <= 8 && droppedIntoItemList) {
-      await this.actor.unequipFromGrid(fromSlot);
-      return;
+    if (droppedIntoItemList) {
+      if (Number.isInteger(fromSlot) && fromSlot >= 0 && fromSlot <= 8) {
+        await this.actor.unequipFromGrid(fromSlot);
+        return;
+      }
+      const fromSkillSlot = Number.isInteger(data.fromSkillSlot)
+        ? data.fromSkillSlot
+        : parseInt(data.fromSkillSlot ?? "-1");
+      const fromOwnedSlots = data.fromSkillSlotType || (Number.isInteger(fromSkillSlot) && fromSkillSlot >= 0);
+      if (!fromOwnedSlots) {
+        await this._importItemToActor(item, { forceDuplicate: true });
+        return;
+      }
     }
 
     // ── 默认：添加物品到 actor ────────────────────────────────────────────
     if (!ownedItem) {
-      await this._importItemToActor(item);
+      await this._importItemToActor(item, { forceDuplicate: false });
     }
   }
 
-  async _importItemToActor(item) {
-    const created = await Item.create(item.toObject(), { parent: this.actor });
+  async _importItemToActor(item, { forceDuplicate = false } = {}) {
+    const itemData = item.toObject();
+    if (forceDuplicate || this.actor.items.get(itemData._id)) delete itemData._id;
+    const created = await Item.create(itemData, { parent: this.actor });
     return created;
   }
 

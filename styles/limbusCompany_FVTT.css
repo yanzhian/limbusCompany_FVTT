@@ -3543,6 +3543,8 @@ body.game .limbuscompany.app img {
 
 /* 修正块 */
 .limbuscompany .modifier-block { padding: 4px 10px; }
+.limbuscompany .modifier-rows { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.limbuscompany .modifier-rows .modifier-row { margin-bottom: 0; }
 .limbuscompany .modifier-row { display: flex; align-items: center; gap: 6px; margin-bottom: 3px; font-size: .8rem; }
 .limbuscompany .mod-icon { width: 16px; height: 16px; object-fit: contain; }
 .limbuscompany .mod-val { min-width: 30px; }
