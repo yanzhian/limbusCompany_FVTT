@@ -543,24 +543,42 @@ export class LimbusActorSheet extends ActorSheet {
             else if (headCount === difficulty){ resultText = "完美成功"; resultClass = "result-perfect"; }
             else                             { resultText = "失败";     resultClass = "result-fail"; }
 
-            const coinHtml = Array.from({ length: coins }, (_, i) => {
-              const isFace = i < headCount;
-              const src = isFace
-                ? "systems/limbusCompany_FVTT/assets/icons/Base_icon/硬币_正面.webp"
-                : "systems/limbusCompany_FVTT/assets/icons/Base_icon/硬币_反面.webp";
-              return `<img src="${src}" width="24" height="24" alt="coin">`;
-            }).join("");
+            const COIN_FACE = "systems/limbusCompany_FVTT/assets/icons/Base_icon/硬币_正面.webp";
+            const COIN_TAIL = "systems/limbusCompany_FVTT/assets/icons/Base_icon/硬币_反面.webp";
+            // Collect per-coin results
+            const coinResults = [];
+            for (const term of roll.terms) {
+              if (!term.results) continue;
+              for (const r of term.results) {
+                coinResults.push(r.result >= 2);
+              }
+            }
+            const coinRowHtml = coinResults.map(isHeads =>
+              `<img src="${isHeads ? COIN_FACE : COIN_TAIL}" width="28" height="28"
+                    class="${isHeads ? "coin-heads" : "coin-tails"}" alt="${isHeads ? "正面" : "反面"}">`
+            ).join("");
+
+            const actorImg  = this.actor.img || "icons/svg/mystery-man.svg";
+            const ownerUser = game.users?.find(u => !u.isGM && u.character?.id === this.actor.id);
+            const playerName = ownerUser?.name ?? this.actor.name ?? game.user?.name ?? "未知玩家";
 
             ChatMessage.create({
               speaker: ChatMessage.getSpeaker({ actor: this.actor }),
               content: `
-              <div class="limbuscompany-card ${resultClass}">
-                <div class="card-title">${label}鉴定结果</div>
-                <div class="card-body">
-                  <div>难度等级 ${difficulty}</div>
-                  <div class="result-text">${resultText}</div>
-                  <div class="coin-result-row">${coinHtml}</div>
+              <div class="limbus-check-card ${resultClass}">
+                <div class="check-card-header">
+                  <img class="check-actor-avatar" src="${actorImg}" alt="${this.actor.name}">
+                  <div class="check-actor-info">
+                    <div class="check-title">${label}鉴定结果</div>
+                    <div class="check-player">${playerName}</div>
+                  </div>
                 </div>
+                <div class="check-gold-divider"></div>
+                <div class="check-difficulty-text">难度等级 <span class="check-difficulty-num">${difficulty}</span></div>
+                <div class="check-result-text">${resultText}</div>
+                <div class="check-coins-label">骰掷结果</div>
+                <div class="check-coin-row">${coinRowHtml}</div>
+                <div class="check-gold-divider"></div>
               </div>`,
             });
           },
