@@ -1,5 +1,5 @@
 {{!-- skill-sheet.hbs — 技能物品卡（基础/守备/EGO 通用） --}}
-<div class="limbuscompany item-sheet skill-sheet">
+<form class="limbuscompany item-sheet skill-sheet" autocomplete="off">
 
   {{!-- ── 标题栏 ──────────────────────────────────────────────────── --}}
   <div class="item-sheet-titlebar">
@@ -182,9 +182,9 @@
     {{!-- ── 描述区 ──────────────────────────────────────────────── --}}
     <div class="item-desc-block">
       {{#if (and isEditable (not isLocked))}}
-        {{editor system.description target="system.description" button=false editable=true engine="prosemirror"}}
+        {{editor system.effectDesc target="system.effectDesc" button=false editable=true engine="prosemirror"}}
       {{else}}
-        <div class="item-desc-display">{{{system.description}}}</div>
+        <div class="item-desc-display">{{{system.effectDesc}}}</div>
       {{/if}}
     </div>
 
@@ -248,7 +248,7 @@
           </div>
         {{else}}
           <div class="related-trigger-label">触发条件：{{system.relatedSkill.trigger}}</div>
-          <div class="item-desc-display">{{{relatedSkillItem.system.description}}}</div>
+          <div class="item-desc-display">{{{relatedSkillItem.system.effectDesc}}}</div>
         {{/if}}
       </div>
     {{else}}
@@ -274,4 +274,4 @@
     {{/if}}
   {{/if}}{{!-- /relatedExpanded --}}
 
-</div>
+</form>
