@@ -16,11 +16,12 @@
                data-item-id="{{item._id}}"
              {{/if}}
              title="{{#if item}}{{item.name}}{{else}}基础技能槽 {{slotIndex}}{{/if}}">
-          <div class="skill-slot-octa"
-               {{#if item}}style="border-color:{{sinColor item.system.sinType}}"{{/if}}>
+          <div class="skill-slot-octa">
+            <div class="skill-slot-bg"></div>
             <img src="{{#if item}}{{skillImg}}{{else}}systems/limbusCompany_FVTT/assets/icons/Skill/Normalsin.webp{{/if}}"
                  alt="{{#if item}}{{item.name}}{{else}}空{{/if}}"
                  class="skill-slot-img">
+            {{#if item}}<div class="skill-sin-frame" style="border-color:{{sinColor item.system.sinType}}"></div>{{/if}}
           </div>
         </div>
       {{/each}}
@@ -40,11 +41,12 @@
                data-item-id="{{item._id}}"
              {{/if}}
              title="{{#if item}}{{item.name}}{{else}}{{grade}}{{/if}}">
-          <div class="skill-slot-circle"
-               {{#if item}}style="border-color:{{sinColor item.system.sinType}}"{{/if}}>
+          <div class="skill-slot-circle">
+            <div class="skill-slot-bg"></div>
             <img src="{{#if item}}{{skillImg}}{{else}}systems/limbusCompany_FVTT/assets/icons/Skill/Normalsin.webp{{/if}}"
                  alt="{{grade}}"
                  class="skill-slot-img">
+            {{#if item}}<div class="skill-sin-frame" style="border-color:{{sinColor item.system.sinType}}"></div>{{/if}}
           </div>
           <div class="ego-grade-label">{{grade}}</div>
         </div>
@@ -58,11 +60,12 @@
              data-item-id="{{defenseSkill.item._id}}"
            {{/if}}
            title="{{#if defenseSkill.item}}{{defenseSkill.item.name}}{{else}}守备技能{{/if}}">
-        <div class="skill-slot-octa"
-             {{#if defenseSkill.item}}style="border-color:{{sinColor defenseSkill.item.system.sinType}}"{{/if}}>
+        <div class="skill-slot-octa">
+          <div class="skill-slot-bg"></div>
           <img src="{{#if defenseSkill.item}}{{defenseSkill.skillImg}}{{else}}systems/limbusCompany_FVTT/assets/icons/Skill/Normalsin.webp{{/if}}"
                alt="守备"
                class="skill-slot-img">
+          {{#if defenseSkill.item}}<div class="skill-sin-frame" style="border-color:{{sinColor defenseSkill.item.system.sinType}}"></div>{{/if}}
         </div>
       </div>
 
@@ -134,8 +137,7 @@
                 data-type="{{system.type}}"
                 data-subtype="{{system.sinType}}">
               <span class="col-icon">
-                <img src="{{skillIcon}}" class="item-icon" data-item-id="{{_id}}" alt="{{name}}"
-                     style="border-color:{{sinColor}}">
+                <img src="{{skillIcon}}" class="item-icon" data-item-id="{{_id}}" alt="{{name}}">
               </span>
               <span class="col-name item-name">{{name}}</span>
               <span class="col-cat">{{catLabel}}</span>
