@@ -93,15 +93,22 @@ export class LimbusItemSheet extends ItemSheet {
       }
 
       // EGO 消耗行
+      // 注意：schema 字段名为 sinCost[].sinType 和 egoResistanceAdj[].{sinType,multiplier}
       if (context.isEgo) {
-        context.sinCosts = _parseSinCosts(sys.sinCost ?? []);
-        context.egoResChanges = _parseResistanceChanges(sys.egoResistanceChange ?? []);
+        context.sinCosts = sys.sinCost ?? [];
+        context.egoResChanges = sys.egoResistanceAdj ?? [];
       }
 
-      // 攻击/守备类别选项
-      context.attackCategories  = cfg.ATTACK_CATEGORIES;
-      context.defenseCategories = cfg.DEFENSE_CATEGORIES;
-      context.skillSinTypes     = cfg.SIN_LABELS ?? {};
+      // 攻击/守备类别选项：使用中文直接标签，避免模板渲染 i18n key 字符串
+      const _catZh = cfg.CATEGORY_LABELS_ZH ?? {};
+      context.attackCategories = Object.fromEntries(
+        Object.keys(cfg.ATTACK_CATEGORIES ?? {}).map(k => [k, _catZh[k] ?? k])
+      );
+      context.defenseCategories = Object.fromEntries(
+        Object.keys(cfg.DEFENSE_CATEGORIES ?? {}).map(k => [k, _catZh[k] ?? k])
+      );
+      // 罪孽类型：同样使用中文标签
+      context.skillSinTypes = cfg.SIN_LABELS_ZH ?? {};
 
       // 技能骰公式（格式化为大写）
       context.diceFormulaDisplay = (sys.diceFormula ?? "").toUpperCase();
@@ -304,6 +311,13 @@ export class LimbusItemSheet extends ItemSheet {
         Object.assign(formData, flattened);
       }
     }
+
+    // ── skill：diceFormula 是派生字段，不应持久化（prepareDerivedData 会重新计算）
+    if (this.item.type === "skill") {
+      if (formData["system.diceFormula"] !== undefined) delete formData["system.diceFormula"];
+      else if (formData.system?.diceFormula !== undefined) delete formData.system.diceFormula;
+    }
+
     return super._updateObject(event, formData);
   }
 
@@ -595,7 +609,7 @@ export class LimbusItemSheet extends ItemSheet {
 
   async _onSinCostAdd(event) {
     const costs = foundry.utils.deepClone(this.item.system.sinCost ?? []);
-    costs.push({ sin: "wrath", amount: 1 });
+    costs.push({ sinType: "wrath", amount: 1 }); // schema 字段名为 sinType
     await this.item.update({ "system.sinCost": costs });
   }
 
@@ -606,15 +620,16 @@ export class LimbusItemSheet extends ItemSheet {
   }
 
   async _onResChangeAdd(event) {
-    const changes = foundry.utils.deepClone(this.item.system.egoResistanceChange ?? []);
-    changes.push({ sin: "wrath", value: "x1.0" });
-    await this.item.update({ "system.egoResistanceChange": changes });
+    // schema 字段名为 egoResistanceAdj，条目属性为 {sinType, multiplier}
+    const changes = foundry.utils.deepClone(this.item.system.egoResistanceAdj ?? []);
+    changes.push({ sinType: "wrath", multiplier: "x1.0" });
+    await this.item.update({ "system.egoResistanceAdj": changes });
   }
 
   async _onResChangeRemove(event) {
     const idx     = parseInt(event.currentTarget.dataset.idx ?? -1);
-    const changes = foundry.utils.deepClone(this.item.system.egoResistanceChange ?? []);
-    if (idx >= 0) { changes.splice(idx, 1); await this.item.update({ "system.egoResistanceChange": changes }); }
+    const changes = foundry.utils.deepClone(this.item.system.egoResistanceAdj ?? []);
+    if (idx >= 0) { changes.splice(idx, 1); await this.item.update({ "system.egoResistanceAdj": changes }); }
   }
 
   /* ─── 星芒费用编辑 ──────────────────────────────────────────────────────── */
@@ -684,7 +699,7 @@ function _getCategoryIcon(category) {
   const map  = {
     slash:"Slash.webp", blunt:"Blunt.webp", pierce:"Pierce.webp",
     dodge:"闪避.webp",  block:"防御.webp",  counter:"反击.webp",
-    clashBlock:"可拼点防御.webp", clashCounter:"可拼点防御.webp",
+    clashBlock:"可拼点防御.webp", clashCounter:"可拼点反击.webp",
   };
   return map[category] ? base + map[category] : "";
 }

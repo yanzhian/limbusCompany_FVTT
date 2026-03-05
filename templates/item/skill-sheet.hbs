@@ -49,7 +49,12 @@
             {{/each}}
           </select>
         {{/if}}
-        <input type="text" name="system.diceFormula" value="{{system.diceFormula}}" class="dice-formula-input" placeholder="1D4+2"/>
+        {{!-- 骰子公式：使用真正的 schema 字段（diceFormula 是派生字段，不可直接编辑） --}}
+        <input type="number" name="system.diceCount"  value="{{system.diceCount}}"  class="dice-count-input"  min="0" style="width:36px" title="骰子数"/>
+        <span class="dice-sep">d</span>
+        <input type="number" name="system.diceFaces"  value="{{system.diceFaces}}"  class="dice-faces-input"  min="1" style="width:36px" title="面数"/>
+        <span class="dice-sep">+</span>
+        <input type="number" name="system.baseValue"  value="{{system.baseValue}}"  class="dice-base-input"   min="0" style="width:36px" title="基础值"/>
       {{else}}
         {{#if categoryIcon}}
           <img src="{{categoryIcon}}" class="category-icon" width="22" height="22" alt="type">
@@ -107,15 +112,16 @@
           {{#each sinCosts}}
             <div class="ego-cost-item">
               {{#if ../isEditable}}
-                <select name="system.sinCost.{{@index}}.sin" class="sin-cost-sel">
+                {{!-- schema 字段名为 sinType，不是 sin --}}
+                <select name="system.sinCost.{{@index}}.sinType" class="sin-cost-sel">
                   {{#each ../config.SINS}}
-                    <option value="{{this}}" {{#if (eq this ../sin)}}selected{{/if}}>{{lookup ../config.SIN_LABELS this}}</option>
+                    <option value="{{this}}" {{#if (eq this ../sinType)}}selected{{/if}}>{{lookup ../config.SIN_LABELS_ZH this}}</option>
                   {{/each}}
                 </select>
                 <input type="number" name="system.sinCost.{{@index}}.amount" value="{{amount}}" class="sin-cost-input" min="0" style="width:40px"/>
                 <button class="sin-cost-remove-btn" data-idx="{{@index}}">×</button>
               {{else}}
-                <img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/{{sin}}_icon.webp" width="16" height="16" alt="{{sin}}">
+                <img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/{{sinType}}_icon.webp" width="16" height="16" alt="{{sinType}}">
                 <span>{{amount}}</span>
               {{/if}}
             </div>
@@ -142,19 +148,20 @@
           {{#each egoResChanges}}
             <div class="ego-resist-item">
               {{#if ../isEditable}}
-                <select name="system.egoResistanceChange.{{@index}}.sin">
+                {{!-- schema 字段：egoResistanceAdj[].{sinType, multiplier} --}}
+                <select name="system.egoResistanceAdj.{{@index}}.sinType">
                   {{#each ../config.SINS}}
-                    <option value="{{this}}" {{#if (eq this ../sin)}}selected{{/if}}>{{lookup ../config.SIN_LABELS this}}</option>
+                    <option value="{{this}}" {{#if (eq this ../sinType)}}selected{{/if}}>{{lookup ../config.SIN_LABELS_ZH this}}</option>
                   {{/each}}
                 </select>
-                <select name="system.egoResistanceChange.{{@index}}.value">
+                <select name="system.egoResistanceAdj.{{@index}}.multiplier">
                   {{#each ../config.RESISTANCE_VALUES}}
-                    <option value="{{this}}" {{#if (eq this ../value)}}selected{{/if}}>{{this}}</option>
+                    <option value="{{this}}" {{#if (eq this ../multiplier)}}selected{{/if}}>{{this}}</option>
                   {{/each}}
                 </select>
                 <button class="res-change-remove-btn" data-idx="{{@index}}">×</button>
               {{else}}
-                <span>{{sin}}×{{value}}</span>
+                <span>{{sinType}}×{{multiplier}}</span>
               {{/if}}
             </div>
           {{/each}}
@@ -196,7 +203,7 @@
         <button class="activity-edit-toggle sheet-btn">编辑激活效果 {{#if activitiesExpanded}}▲{{else}}▼{{/if}}</button>
       </div>
       <div class="footer-stellar">
-        <i class="fas fa-star"></i>
+        <img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/Starlight.webp" class="stellar-icon" alt="星芒">
         {{#if (and isEditable (not isLocked))}}
           <input type="number" name="system.stellarCost" value="{{system.stellarCost}}" class="stellar-edit-input" min="0" style="width:40px"/>
         {{else}}
