@@ -3455,6 +3455,8 @@ body.game .limbuscompany.app img {
   background: linear-gradient(180deg, var(--bg-darkest) 0%, var(--bg-mid) 60%, var(--bg-darkest) 100%);
   color: var(--text-main); font-family: var(--font-main);
   min-height: 200px;
+  max-height: 85vh;
+  overflow-y: auto;
 }
 
 /* 物品卡标题栏 */
@@ -3519,12 +3521,20 @@ body.game .limbuscompany.app img {
 .limbuscompany .link-dir-right { grid-area: right; }
 .limbuscompany .link-dir-btn {
   background: var(--bg-darkest); border: 1px solid var(--border-gold);
-  color: var(--text-sub); font-size: .65rem; cursor: pointer;
-  border-radius: 2px; transition: all .15s;
+  cursor: pointer; border-radius: 2px; transition: all .15s;
   display: flex; align-items: center; justify-content: center;
 }
-.limbuscompany .link-dir-btn.link-active { background: var(--gold-mid); border-color: var(--gold-active); color: var(--bg-darkest); }
-.limbuscompany .link-dir-btn:hover { border-color: var(--gold-active); color: var(--gold-active); }
+.limbuscompany .link-dir-icon {
+  width: 12px; height: 12px; object-fit: contain;
+  filter: grayscale(1) brightness(0.75);
+  transition: filter .15s;
+}
+.limbuscompany .link-dir-up .link-dir-icon { transform: rotate(180deg); }
+.limbuscompany .link-dir-left .link-dir-icon { transform: rotate(90deg); }
+.limbuscompany .link-dir-right .link-dir-icon { transform: rotate(-90deg); }
+.limbuscompany .link-dir-btn.link-active { background: var(--gold-mid); border-color: var(--gold-active); }
+.limbuscompany .link-dir-btn.link-active .link-dir-icon,
+.limbuscompany .link-dir-btn:hover .link-dir-icon { filter: none; }
 .limbuscompany .link-dir-btn:disabled { opacity: .4; cursor: default; }
 
 /* 修正块 */
@@ -3580,11 +3590,18 @@ body.game .limbuscompany.app img {
 }
 .limbuscompany .sheet-btn:hover { background: var(--border-gold); }
 .limbuscompany .footer-stellar {
-  display: flex; align-items: center; gap: 4px; font-size: .85rem; color: var(--gold-active);
+  display: flex; align-items: center; gap: 4px; font-size: .85rem;
 }
+.limbuscompany .stellar-icon { width: 14px; height: 14px; object-fit: contain; }
+.limbuscompany .stellar-cost-edit,
+.limbuscompany .stellar-edit-input {
+  color: #E8CAA2;
+  font-weight: 700;
+}
+
 .limbuscompany .stellar-edit-input {
   background: transparent; border: none; border-bottom: 1px solid var(--gold-mid);
-  color: var(--gold-active); font-size: .85rem; width: 36px; text-align: center;
+  font-size: .85rem; width: 36px; text-align: center;
   font-family: var(--font-main);
 }
 .limbuscompany .stellar-cost-edit { cursor: pointer; }

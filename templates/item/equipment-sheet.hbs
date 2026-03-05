@@ -1,5 +1,5 @@
 {{!-- equipment-sheet.hbs — 装备物品卡 --}}
-<div class="limbuscompany item-sheet equipment-sheet">
+<form class="limbuscompany item-sheet equipment-sheet" autocomplete="off">
 
   {{!-- ── 标题栏 ──────────────────────────────────────────────────── --}}
   <div class="item-sheet-titlebar">
@@ -26,13 +26,13 @@
     {{/if}}
 
     {{!-- 链接方向箭头（右上角） --}}
-    <div class="link-dir-group">
+    <div class="link-dir-group" role="group" aria-label="链接方向">
       {{#each linkDirs}}
-        <button class="link-dir-btn link-dir-{{this}} {{#if (lookup ../linksActive this)}}link-active{{/if}}"
+        <button type="button" class="link-dir-btn link-dir-{{this}} {{#if (lookup ../linksActive this)}}link-active{{/if}}"
                 data-dir="{{this}}"
-                {{#unless ../isEditable}}disabled{{/unless}}
+                {{#if (or ../isLocked (not ../isEditable))}}disabled{{/if}}
                 title="链接 {{this}}">
-          {{#eq this 'up'}}↑{{/eq}}{{#eq this 'down'}}↓{{/eq}}{{#eq this 'left'}}←{{/eq}}{{#eq this 'right'}}→{{/eq}}
+          <img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/Link.svg" class="link-dir-icon" alt="链接 {{this}}">
         </button>
       {{/each}}
     </div>
@@ -166,7 +166,7 @@
       <button class="activity-edit-toggle sheet-btn">编辑激活效果 {{#if activitiesExpanded}}▲{{else}}▼{{/if}}</button>
     </div>
     <div class="footer-stellar">
-      <i class="fas fa-star"></i>
+      <img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/Starlight.webp" class="stellar-icon" alt="星芒">
       {{#if (and isEditable (not isLocked))}}
         <input type="number" name="system.stellarCost" value="{{system.stellarCost}}" class="stellar-edit-input" min="0" style="width:40px"/>
       {{else}}
@@ -180,4 +180,4 @@
     {{> systems/limbusCompany_FVTT/templates/partials/activity-editor.hbs}}
   {{/if}}
 
-</div>
+</form>

@@ -19,7 +19,7 @@ export class LimbusItemSheet extends ItemSheet {
     return foundry.utils.mergeObject(super.defaultOptions, {
       classes:  ["limbuscompany", "sheet", "item"],
       width:    460,
-      height:   "auto",
+      height:   760,
       tabs:     [],
       resizable: true,
     });
@@ -482,6 +482,8 @@ export class LimbusItemSheet extends ItemSheet {
   /* ─── 链接方向 ──────────────────────────────────────────────────────────── */
 
   async _onLinkDirToggle(event) {
+    event.preventDefault();
+    if (this.isLocked) return;
     const dir     = event.currentTarget.dataset.dir;
     const current = this.item.system.links?.[dir] ?? false;
     await this.item.update({ [`system.links.${dir}`]: !current });
