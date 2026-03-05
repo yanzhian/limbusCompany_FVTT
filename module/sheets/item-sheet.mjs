@@ -222,9 +222,46 @@ export class LimbusItemSheet extends ItemSheet {
   async _updateObject(event, formData) {
     if (this.item.type === "equipment") {
       const validSubtypes = ["upper", "lower", "weapon", "accessory"];
-      const nextSubtype = formData["system.subtype"];
+      const validResists  = ["x0.5", "x1.0", "x2.0"];
+
+      // Foundry 版本差异下，formData 可能是扁平对象或嵌套对象
+      const expanded = formData.system ? formData : foundry.utils.expandObject(formData);
+      const nextSubtype = expanded.system?.subtype;
       if (!validSubtypes.includes(nextSubtype)) {
-        formData["system.subtype"] = this.item.system.subtype ?? "weapon";
+        const fallbackSubtype = this.item.system.subtype ?? "weapon";
+        if (expanded.system) expanded.system.subtype = fallbackSubtype;
+        formData["system.subtype"] = fallbackSubtype;
+      }
+
+      // 上装物理抗性：若提交值缺失/非法，保留当前值，避免回退到 schema 默认
+      const currentRes = this.item.system.resistanceAdj ?? {};
+      for (const key of ["slash", "blunt", "pierce"]) {
+        const nextRes = expanded.system?.resistanceAdj?.[key];
+        if (nextRes === undefined || nextRes === "") continue;
+        if (!validResists.includes(nextRes)) {
+          const fallbackRes = currentRes[key] ?? "x1.0";
+          if (!expanded.system.resistanceAdj) expanded.system.resistanceAdj = {};
+          expanded.system.resistanceAdj[key] = fallbackRes;
+          formData[`system.resistanceAdj.${key}`] = fallbackRes;
+        }
+      }
+
+      // 调试：请把这条日志（equipment submit）内容反馈给我定位现场数据
+      console.warn("[LimbusItemSheet][equipment submit]", {
+        itemId: this.item.id,
+        itemName: this.item.name,
+        isLocked: this.isLocked,
+        subtypeBefore: this.item.system.subtype,
+        subtypeAfter: expanded.system?.subtype,
+        resistanceBefore: this.item.system.resistanceAdj,
+        resistanceAfter: expanded.system?.resistanceAdj,
+      });
+
+      // 还原为当前 Foundry 提交格式
+      if (!formData.system) {
+        const flattened = foundry.utils.flattenObject(expanded);
+        for (const k of Object.keys(formData)) delete formData[k];
+        Object.assign(formData, flattened);
       }
     }
     return super._updateObject(event, formData);
