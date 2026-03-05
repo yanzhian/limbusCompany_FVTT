@@ -218,6 +218,18 @@ export class LimbusItemSheet extends ItemSheet {
     html.find(".container-cell[data-item-id]").on("contextmenu", this._onContainerCellMenu.bind(this));
   }
 
+
+  async _updateObject(event, formData) {
+    if (this.item.type === "equipment") {
+      const validSubtypes = ["upper", "lower", "weapon", "accessory"];
+      const nextSubtype = formData["system.subtype"];
+      if (!validSubtypes.includes(nextSubtype)) {
+        formData["system.subtype"] = this.item.system.subtype ?? "weapon";
+      }
+    }
+    return super._updateObject(event, formData);
+  }
+
   /* ─── 锁切换 ────────────────────────────────────────────────────────────── */
 
   async _onToggleLock(event) {
