@@ -17,9 +17,9 @@
              {{/if}}
              title="{{#if item}}{{item.name}}{{else}}基础技能槽 {{slotIndex}}{{/if}}">
           <div class="skill-slot-octa" {{#if item}}style="--sin-color:{{sinColor item.system.sinType}}"{{/if}}>
-            <img src="{{#if item}}{{skillImg}}{{else}}systems/limbusCompany_FVTT/assets/icons/Skill/Normalsin.webp{{/if}}"
-                 alt="{{#if item}}{{item.name}}{{else}}空{{/if}}"
-                 class="skill-slot-img">
+            {{#if item}}<img src="{{skillImg}}"
+                 alt="{{item.name}}"
+                 class="skill-slot-img">{{/if}}
           </div>
         </div>
       {{/each}}
@@ -40,9 +40,9 @@
              {{/if}}
              title="{{#if item}}{{item.name}}{{else}}{{grade}}{{/if}}">
           <div class="skill-slot-circle" {{#if item}}style="--sin-color:{{sinColor item.system.sinType}}"{{/if}}>
-            <img src="{{#if item}}{{skillImg}}{{else}}systems/limbusCompany_FVTT/assets/icons/Skill/Normalsin.webp{{/if}}"
-                 alt="{{grade}}"
-                 class="skill-slot-img">
+            {{#if item}}<img src="{{skillImg}}"
+                 alt="{{item.name}}"
+                 class="skill-slot-img">{{/if}}
           </div>
           <div class="ego-grade-label">{{grade}}</div>
         </div>
@@ -57,9 +57,9 @@
            {{/if}}
            title="{{#if defenseSkill.item}}{{defenseSkill.item.name}}{{else}}守备技能{{/if}}">
         <div class="skill-slot-octa" {{#if defenseSkill.item}}style="--sin-color:{{sinColor defenseSkill.item.system.sinType}}"{{/if}}>
-          <img src="{{#if defenseSkill.item}}{{defenseSkill.skillImg}}{{else}}systems/limbusCompany_FVTT/assets/icons/Skill/Normalsin.webp{{/if}}"
-               alt="守备"
-               class="skill-slot-img">
+          {{#if defenseSkill.item}}<img src="{{defenseSkill.skillImg}}"
+               alt="{{defenseSkill.item.name}}"
+               class="skill-slot-img">{{/if}}
         </div>
       </div>
 

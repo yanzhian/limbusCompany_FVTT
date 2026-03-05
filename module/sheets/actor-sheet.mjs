@@ -78,7 +78,7 @@ export class LimbusActorSheet extends ActorSheet {
         slotIndex: idx,
         item:      bItem,
         itemId:    id ?? null,
-        skillImg:  bItem ? _skillAutoIcon(bItem.system) : null,
+        skillImg:  bItem ? _skillAutoIcon(bItem.system, bItem.img) : null,
       };
     });
 
@@ -86,7 +86,7 @@ export class LimbusActorSheet extends ActorSheet {
     context.defenseSkill = {
       item:     defItem,
       itemId:   system.skills?.defense ?? null,
-      skillImg: defItem ? _skillAutoIcon(defItem.system) : null,
+      skillImg: defItem ? _skillAutoIcon(defItem.system, defItem.img) : null,
     };
 
     context.egoSkills = cfg.EGO_GRADES.map(grade => {
@@ -95,7 +95,7 @@ export class LimbusActorSheet extends ActorSheet {
         grade,
         item:     egoItem,
         itemId:   system.skills?.ego?.[grade] ?? null,
-        skillImg: egoItem ? _skillAutoIcon(egoItem.system) : null,
+        skillImg: egoItem ? _skillAutoIcon(egoItem.system, egoItem.img) : null,
       };
     });
 
@@ -211,7 +211,7 @@ export class LimbusActorSheet extends ActorSheet {
       sinColor:    cfg.SIN_COLORS?.[sys.sinType] ?? "#E8CAA2",
       sinLabel,
       catLabel,
-      skillIcon:   item.type === "skill" ? _skillAutoIcon(sys) : item.img,
+      skillIcon:   item.type === "skill" ? _skillAutoIcon(sys, item.img, { allowNormal: false }) : item.img,
     };
   }
 
@@ -865,7 +865,7 @@ export class LimbusActorSheet extends ActorSheet {
       const id   = state.active[i] ?? null;
       const item = id ? this.actor.items.get(id) : null;
 
-      $el.find("img").attr("src", item ? _skillAutoIcon(item.system) : "systems/limbusCompany_FVTT/assets/icons/Skill/Normalsin.webp");
+      $el.find("img").attr("src", item ? _skillAutoIcon(item.system, item.img) : "");
       $el.data("item-id", id ?? "").attr("data-item-id", id ?? "");
 
       // 状态样式
@@ -877,7 +877,7 @@ export class LimbusActorSheet extends ActorSheet {
     // 预备槽
     const reserveEl = html.find(".combat-reserve-slot");
     const resItem   = state.reserve ? this.actor.items.get(state.reserve) : null;
-    reserveEl.find("img").attr("src", resItem ? _skillAutoIcon(resItem.system) : "systems/limbusCompany_FVTT/assets/icons/Skill/Normalsin.webp");
+    reserveEl.find("img").attr("src", resItem ? _skillAutoIcon(resItem.system, resItem.img) : "");
   }
 
   _onCombatSkillClick(event) {
@@ -1162,12 +1162,20 @@ function _subtypeLabel(subtype) {
  * 根据罪孽类型和技能等级自动匹配 assets/icons/Skill/ 下的图标路径
  * EGO技能统一使用 E.G.O.webp；无罪孽则使用 Normalsin.webp
  */
-function _skillAutoIcon(sys) {
+function _skillAutoIcon(sys, fallback = "", { allowNormal = true } = {}) {
   const base = "systems/limbusCompany_FVTT/assets/icons/Skill/";
   if (sys.type === "ego") return base + "E.G.O.webp";
-  const sinMap = { wrath:"Wrath", lust:"Lust", sloth:"Sloth", gluttony:"Gluttony", gloom:"Gloom", pride:"Pride", envy:"Envy" };
-  const sinPrefix = sinMap[sys.sinType];
-  if (!sinPrefix) return base + "Normalsin.webp";
+
+  const rawSin = String(sys.sinType ?? "").trim();
+  const sinKey = rawSin.toLowerCase();
+  const sinMap = {
+    wrath:"Wrath", lust:"Lust", sloth:"Sloth", gluttony:"Gluttony", gloom:"Gloom", pride:"Pride", envy:"Envy",
+    愤怒:"Wrath", 色欲:"Lust", 怠惰:"Sloth", 暴食:"Gluttony", 忧郁:"Gloom", 傲慢:"Pride", 嫉妒:"Envy",
+  };
+
+  const sinPrefix = sinMap[sinKey] ?? sinMap[rawSin];
+  if (!sinPrefix) return allowNormal ? (base + "Normalsin.webp") : (fallback || "");
+
   const lv = Math.min(3, Math.max(1, parseInt(sys.level) || 1));
   return `${base}${sinPrefix}_lv${lv}.webp`;
 }
