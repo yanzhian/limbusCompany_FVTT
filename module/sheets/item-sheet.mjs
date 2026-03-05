@@ -234,26 +234,29 @@ export class LimbusItemSheet extends ItemSheet {
       const validResists  = ["x0.5", "x1.0", "x2.0"];
 
       // Foundry 版本差异下，formData 可能是扁平对象或嵌套对象
-      const expanded = formData.system ? formData : foundry.utils.expandObject(formData);
+      const expanded = formData.system ? foundry.utils.deepClone(formData) : foundry.utils.expandObject(formData);
+      expanded.system ??= {};
+
       const flatSubtype = formData["system.subtype"];
       const domSubtype = this.element?.find?.("[name='system.subtype']")?.val?.();
-      const nextSubtype = expanded.system?.subtype ?? flatSubtype;
+      const nextSubtype = expanded.system.subtype ?? flatSubtype;
       if (!validSubtypes.includes(nextSubtype)) {
-        const fallbackSubtype = this.item.system.subtype ?? "weapon";
-        if (expanded.system) expanded.system.subtype = fallbackSubtype;
-        formData["system.subtype"] = fallbackSubtype;
+        expanded.system.subtype = this.item.system.subtype ?? "weapon";
+      } else {
+        expanded.system.subtype = nextSubtype;
       }
 
-      // 上装物理抗性：若提交值缺失/非法，保留当前值，避免回退到 schema 默认
+      // 关键修复：抗性字段在部分提交里缺失会被 schema 默认覆盖，这里强制补齐当前值
       const currentRes = this.item.system.resistanceAdj ?? {};
+      expanded.system.resistanceAdj ??= {};
       for (const key of ["slash", "blunt", "pierce"]) {
-        const nextRes = expanded.system?.resistanceAdj?.[key];
-        if (nextRes === undefined || nextRes === "") continue;
+        const nextRes = expanded.system.resistanceAdj[key];
+        if (nextRes === undefined || nextRes === "") {
+          expanded.system.resistanceAdj[key] = currentRes[key] ?? "x1.0";
+          continue;
+        }
         if (!validResists.includes(nextRes)) {
-          const fallbackRes = currentRes[key] ?? "x1.0";
-          if (!expanded.system.resistanceAdj) expanded.system.resistanceAdj = {};
-          expanded.system.resistanceAdj[key] = fallbackRes;
-          formData[`system.resistanceAdj.${key}`] = fallbackRes;
+          expanded.system.resistanceAdj[key] = currentRes[key] ?? "x1.0";
         }
       }
 
@@ -271,8 +274,9 @@ export class LimbusItemSheet extends ItemSheet {
         resistanceAfter: expanded.system?.resistanceAdj,
       });
 
-      // 还原为当前 Foundry 提交格式
-      if (!formData.system) {
+      if (formData.system) {
+        Object.assign(formData, expanded);
+      } else {
         const flattened = foundry.utils.flattenObject(expanded);
         for (const k of Object.keys(formData)) delete formData[k];
         Object.assign(formData, flattened);
@@ -280,6 +284,7 @@ export class LimbusItemSheet extends ItemSheet {
     }
     return super._updateObject(event, formData);
   }
+
 
   /* ─── 锁切换 ────────────────────────────────────────────────────────────── */
 
