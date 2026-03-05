@@ -1,5 +1,5 @@
 {{!-- equipment-sheet.hbs — 装备物品卡 --}}
-<div class="limbuscompany item-sheet equipment-sheet">
+<form class="limbuscompany item-sheet equipment-sheet" autocomplete="off">
 
   {{!-- ── 标题栏 ──────────────────────────────────────────────────── --}}
   <div class="item-sheet-titlebar">
@@ -26,13 +26,13 @@
     {{/if}}
 
     {{!-- 链接方向箭头（右上角） --}}
-    <div class="link-dir-group">
+    <div class="link-dir-group" role="group" aria-label="链接方向">
       {{#each linkDirs}}
-        <button class="link-dir-btn link-dir-{{this}} {{#if (lookup ../linksActive this)}}link-active{{/if}}"
+        <button type="button" class="link-dir-btn link-dir-{{this}} {{#if (lookup ../linksActive this)}}link-active{{/if}}"
                 data-dir="{{this}}"
-                {{#unless ../isEditable}}disabled{{/unless}}
+                {{#if (or ../isLocked (not ../isEditable))}}disabled{{/if}}
                 title="链接 {{this}}">
-          {{#eq this 'up'}}↑{{/eq}}{{#eq this 'down'}}↓{{/eq}}{{#eq this 'left'}}←{{/eq}}{{#eq this 'right'}}→{{/eq}}
+          <img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/Link.svg" class="link-dir-icon" alt="链接 {{this}}">
         </button>
       {{/each}}
     </div>
@@ -48,7 +48,7 @@
       </select>
       <input type="text" name="system.category" value="{{system.category}}" class="equip-category-input" placeholder="分类"/>
     {{else}}
-      <span class="equip-subtype-label">{{#eq system.subtype 'weapon'}}武器{{/eq}}{{#eq system.subtype 'upper'}}上装{{/eq}}{{#eq system.subtype 'lower'}}下装{{/eq}}{{#eq system.subtype 'accessory'}}饰品{{/eq}}</span>
+      <span class="equip-subtype-label">{{subtypeLabel}}</span>
       <span class="equip-sep">　</span>
       <span class="equip-category">{{system.category}}</span>
     {{/if}}
@@ -65,21 +65,15 @@
           <div class="modifier-row">
             <img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/Slash.webp" class="mod-icon" alt="斩">
             <select name="system.resistanceAdj.slash" class="resist-sel">
-              {{#each resistanceValues}}
-                <option value="{{this}}" {{#eq this ../system.resistanceAdj.slash}}selected{{/eq}}>{{this}}</option>
-              {{/each}}
+              {{selectOptions resistanceValues selected=system.resistanceAdj.slash}}
             </select>
             <img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/Blunt.webp" class="mod-icon" alt="打" style="margin-left:6px">
             <select name="system.resistanceAdj.blunt" class="resist-sel">
-              {{#each resistanceValues}}
-                <option value="{{this}}" {{#eq this ../system.resistanceAdj.blunt}}selected{{/eq}}>{{this}}</option>
-              {{/each}}
+              {{selectOptions resistanceValues selected=system.resistanceAdj.blunt}}
             </select>
             <img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/Pierce.webp" class="mod-icon" alt="突" style="margin-left:6px">
             <select name="system.resistanceAdj.pierce" class="resist-sel">
-              {{#each resistanceValues}}
-                <option value="{{this}}" {{#eq this ../system.resistanceAdj.pierce}}selected{{/eq}}>{{this}}</option>
-              {{/each}}
+              {{selectOptions resistanceValues selected=system.resistanceAdj.pierce}}
             </select>
           </div>
         {{else}}
@@ -166,7 +160,7 @@
       <button class="activity-edit-toggle sheet-btn">编辑激活效果 {{#if activitiesExpanded}}▲{{else}}▼{{/if}}</button>
     </div>
     <div class="footer-stellar">
-      <i class="fas fa-star"></i>
+      <img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/Starlight.webp" class="stellar-icon" alt="星芒">
       {{#if (and isEditable (not isLocked))}}
         <input type="number" name="system.stellarCost" value="{{system.stellarCost}}" class="stellar-edit-input" min="0" style="width:40px"/>
       {{else}}
@@ -180,4 +174,4 @@
     {{> systems/limbusCompany_FVTT/templates/partials/activity-editor.hbs}}
   {{/if}}
 
-</div>
+</form>

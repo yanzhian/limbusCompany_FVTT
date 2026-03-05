@@ -19,7 +19,7 @@ export class LimbusItemSheet extends ItemSheet {
     return foundry.utils.mergeObject(super.defaultOptions, {
       classes:  ["limbuscompany", "sheet", "item"],
       width:    460,
-      height:   "auto",
+      height:   760,
       tabs:     [],
       resizable: true,
     });
@@ -119,8 +119,13 @@ export class LimbusItemSheet extends ItemSheet {
       context.isUpper     = sys.subtype === "upper";
       context.isLower     = sys.subtype === "lower";
       context.isAccessory = sys.subtype === "accessory";
-      context.subtypes    = cfg.EQUIPMENT_SUBTYPES;
+      const subtypeZh = { upper: "上装", lower: "下装", weapon: "武器", accessory: "饰品" };
+      context.subtypes    = Object.fromEntries(Object.entries(cfg.EQUIPMENT_SUBTYPES ?? {}).map(([k, v]) => {
+        const localized = game.i18n.localize(v);
+        return [k, (localized && localized !== v) ? localized : (subtypeZh[k] ?? k)];
+      }));
       context.resistanceValues = cfg.RESISTANCE_VALUES ?? ["x0.5", "x1.0", "x2.0"];
+      context.subtypeLabel = ({ weapon: "武器", upper: "上装", lower: "下装", accessory: "饰品" })[sys.subtype] ?? "装备";
 
       // 汇总修正行（用于解锁编辑）
       context.modifiers = _parseModifiers(sys);
@@ -193,6 +198,15 @@ export class LimbusItemSheet extends ItemSheet {
 
     if (!this.isEditable) return;
 
+    // ── 装备子类型：强制同步当前值（避免浏览器回退首项） ───────────────
+    if (this.item.type === "equipment") {
+      const subtypeSel = html.find("select[name='system.subtype']");
+      if (subtypeSel.length) {
+        subtypeSel.val(this.item.system.subtype ?? "weapon");
+        subtypeSel.on("change", (ev) => { this._debugSubtypeLast = ev.currentTarget.value; });
+      }
+    }
+
     // ── 链接方向箭头 ──────────────────────────────────────────────────────
     html.find(".link-dir-btn").on("click", this._onLinkDirToggle.bind(this));
 
@@ -218,20 +232,90 @@ export class LimbusItemSheet extends ItemSheet {
     html.find(".container-cell[data-item-id]").on("contextmenu", this._onContainerCellMenu.bind(this));
   }
 
+
+  async _updateObject(event, formData) {
+    if (this.item.type === "equipment") {
+      const validSubtypes = ["upper", "lower", "weapon", "accessory"];
+      const validResists  = ["x0.5", "x1.0", "x2.0"];
+
+      // Foundry 版本差异下，formData 可能是扁平对象或嵌套对象
+      const expanded = formData.system ? foundry.utils.deepClone(formData) : foundry.utils.expandObject(formData);
+      expanded.system ??= {};
+
+      const flatSubtype = formData["system.subtype"];
+      const domSubtype = this.element?.find?.("[name='system.subtype']")?.val?.();
+      const nextSubtype = expanded.system.subtype ?? flatSubtype;
+      if (!validSubtypes.includes(nextSubtype)) {
+        expanded.system.subtype = this.item.system.subtype ?? "weapon";
+      } else {
+        expanded.system.subtype = nextSubtype;
+      }
+
+      // 关键修复：只应用“当前变化字段”，其余抗性沿用当前值，避免未改字段被回写成 x0.5
+      const currentRes = this.item.system.resistanceAdj ?? {};
+      expanded.system.resistanceAdj ??= {};
+      const changedName = event?.target?.name ?? event?.currentTarget?.name ?? null;
+      const changedResKey = changedName?.startsWith("system.resistanceAdj.")
+        ? changedName.replace("system.resistanceAdj.", "")
+        : null;
+
+      for (const key of ["slash", "blunt", "pierce"]) {
+        const nextRes = expanded.system.resistanceAdj[key];
+
+        // 单字段变更提交：非当前字段一律继承旧值
+        if (changedResKey && key !== changedResKey) {
+          expanded.system.resistanceAdj[key] = currentRes[key] ?? "x1.0";
+          continue;
+        }
+
+        if (nextRes === undefined || nextRes === "") {
+          expanded.system.resistanceAdj[key] = currentRes[key] ?? "x1.0";
+          continue;
+        }
+        if (!validResists.includes(nextRes)) {
+          expanded.system.resistanceAdj[key] = currentRes[key] ?? "x1.0";
+        }
+      }
+
+      // 调试：请把这条日志（equipment submit）内容反馈给我定位现场数据
+      console.warn("[LimbusItemSheet][equipment submit]", {
+        itemId: this.item.id,
+        itemName: this.item.name,
+        isLocked: this.isLocked,
+        subtypeBefore: this.item.system.subtype,
+        subtypeAfter: expanded.system?.subtype,
+        subtypeFlat: flatSubtype,
+        subtypeDOM: domSubtype,
+        subtypeLastChanged: this._debugSubtypeLast,
+        changedInputName: event?.target?.name ?? event?.currentTarget?.name ?? null,
+        resistanceBefore: this.item.system.resistanceAdj,
+        resistanceAfter: expanded.system?.resistanceAdj,
+      });
+
+      if (formData.system) {
+        Object.assign(formData, expanded);
+      } else {
+        const flattened = foundry.utils.flattenObject(expanded);
+        for (const k of Object.keys(formData)) delete formData[k];
+        Object.assign(formData, flattened);
+      }
+    }
+    return super._updateObject(event, formData);
+  }
+
+
   /* ─── 锁切换 ────────────────────────────────────────────────────────────── */
 
   async _onToggleLock(event) {
-    // 从解锁→锁定时先提交表单，保存编辑内容
-    if (!this.isLocked) {
-      const formEl = this.element?.find("form")[0];
-      if (formEl) {
-        try {
-          const fd = new FormDataExtended(formEl);
-          await this.item.update(foundry.utils.expandObject(fd.object));
-        } catch (e) { /* 保存失败不阻塞锁定 */ }
-      }
-    }
+    // 变更：不在锁切换时强制提交，避免锁定流程触发二次回写（导致抗性回退）
     this.isLocked = !this.isLocked;
+    console.warn("[LimbusItemSheet][lock-toggle]", {
+      itemId: this.item.id,
+      itemName: this.item.name,
+      nowLocked: this.isLocked,
+      subtype: this.item.system.subtype,
+      resistance: this.item.system.resistanceAdj,
+    });
     this.render(false);
   }
 
@@ -482,6 +566,8 @@ export class LimbusItemSheet extends ItemSheet {
   /* ─── 链接方向 ──────────────────────────────────────────────────────────── */
 
   async _onLinkDirToggle(event) {
+    event.preventDefault();
+    if (this.isLocked) return;
     const dir     = event.currentTarget.dataset.dir;
     const current = this.item.system.links?.[dir] ?? false;
     await this.item.update({ [`system.links.${dir}`]: !current });
