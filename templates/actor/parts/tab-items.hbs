@@ -101,7 +101,7 @@
         </div>
         <ul class="group-body item-list">
           {{#each items}}
-            <li class="item-row"
+            <li class="item-row {{#if isGridEquipped}}item-row-equipped{{/if}}"
                 data-item-id="{{_id}}"
                 data-item-name="{{name}}"
                 data-type="{{type}}"

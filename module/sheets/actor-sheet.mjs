@@ -58,9 +58,33 @@ export class LimbusActorSheet extends ActorSheet {
       value: system.attributes[key] ?? 0,
     }));
 
-    // ── 攻防总值（base + extra） ──────────────────────────────────────────
-    context.atkTotal = (system.atk.base ?? 0) + (system.atk.extra ?? 0);
-    context.defTotal = (system.def.base ?? 0) + (system.def.extra ?? 0);
+    // ── 装备修正后的基础信息 / 抗性信息 ────────────────────────────────────
+    const equippedItems = Object.values(system.equipment ?? {})
+      .map(id => (id ? actor.items.get(id) : null))
+      .filter(item => item?.type === "equipment");
+
+    const equipAdj = equippedItems.reduce((acc, eq) => {
+      acc.atk += Number(eq.system?.atkAdj ?? 0);
+      acc.def += Number(eq.system?.defAdj ?? 0);
+      acc.speed += Number(eq.system?.speedAdj ?? 0);
+      return acc;
+    }, { atk: 0, def: 0, speed: 0 });
+
+    context.atkTotal = (system.atk.base ?? 0) + (system.atk.extra ?? 0) + equipAdj.atk;
+    context.defTotal = (system.def.base ?? 0) + (system.def.extra ?? 0) + equipAdj.def;
+    context.speedDisplay = {
+      min: (system.speed.min ?? 0) + equipAdj.speed,
+      max: (system.speed.max ?? 0) + equipAdj.speed,
+    };
+
+    const equippedUpper = equippedItems.find(eq => eq.system?.subtype === "upper");
+    context.displayResistances = equippedUpper?.system?.resistanceAdj
+      ? {
+        slash: equippedUpper.system.resistanceAdj.slash ?? system.resistances.slash,
+        blunt: equippedUpper.system.resistanceAdj.blunt ?? system.resistances.blunt,
+        pierce: equippedUpper.system.resistanceAdj.pierce ?? system.resistances.pierce,
+      }
+      : { ...system.resistances };
 
     // ── 九宫格装备槽 ──────────────────────────────────────────────────────
     context.equipmentGrid = [];
@@ -210,12 +234,18 @@ export class LimbusActorSheet extends ActorSheet {
       system:      sys,
       stellarCost: item.getStellarCost?.() ?? 0,
       isEquipped:  this._isItemEquipped(item.id),
+      isGridEquipped: this._isItemGridEquipped(item.id),
       isFavorite:  this._favorites.has(item.id),
       sinColor:    cfg.SIN_COLORS?.[sys.sinType] ?? "#E8CAA2",
       sinLabel,
       catLabel,
       skillIcon:   item.img,
     };
+  }
+
+  _isItemGridEquipped(itemId) {
+    const sys = this.actor.system;
+    return Object.values(sys.equipment ?? {}).includes(itemId);
   }
 
   _isItemEquipped(itemId) {
