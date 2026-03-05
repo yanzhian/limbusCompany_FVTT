@@ -3157,7 +3157,7 @@ body.game .limbuscompany.app img {
   inset: 0;
   background: #181511;
   border: none;
-  clip-path: polygon(28% 0, 72% 0, 100% 24%, 100% 68%, 50% 100%, 0 68%, 0 24%);
+  /* clip-path: polygon(28% 0, 72% 0, 100% 24%, 100% 68%, 50% 100%, 0 68%, 0 24%); */
   box-shadow: inset 0 0 0 1px #5F3E22,
               inset 0 0 0 2px rgba(0,0,0,.35);
 }
@@ -3167,7 +3167,7 @@ body.game .limbuscompany.app img {
   width: 48px; height: 48px;
   position: relative;
   border-radius: 50%;
-  background: #181511;
+  background: #5F3E22;
   border: none;
   overflow: visible;
   display: flex; align-items: center; justify-content: center;
@@ -3232,7 +3232,7 @@ body.game .limbuscompany.app img {
 /* EGO/守备网格内：48px */
 .limbuscompany .ego-skill-grid .skill-slot-circle,
 .limbuscompany .ego-skill-grid .skill-slot-octa {
-  width: 48px; height: 48px;
+  width: 80px; height: 80px;
 }
 
 .limbuscompany .ego-grade-label {
