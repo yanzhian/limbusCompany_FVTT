@@ -41,6 +41,18 @@ LIMBUSCOMPANY.SIN_ICON_PATHS = {
   envy:     "systems/limbusCompany_FVTT/assets/icons/Base_icon/Envy_icon.webp",
 };
 
+/** 技能分类图标路径 */
+LIMBUSCOMPANY.CATEGORY_ICON_PATHS = {
+  slash:        "systems/limbusCompany_FVTT/assets/icons/Base_icon/slash.webp",
+  blunt:        "systems/limbusCompany_FVTT/assets/icons/Base_icon/blunt.webp",
+  pierce:       "systems/limbusCompany_FVTT/assets/icons/Base_icon/pierce.webp",
+  dodge:        "systems/limbusCompany_FVTT/assets/icons/Base_icon/dodge.webp",
+  block:        "systems/limbusCompany_FVTT/assets/icons/Base_icon/block.webp",
+  counter:      "systems/limbusCompany_FVTT/assets/icons/Base_icon/counter.webp",
+  clashBlock:   "systems/limbusCompany_FVTT/assets/icons/Base_icon/clash_block.webp",
+  clashCounter: "systems/limbusCompany_FVTT/assets/icons/Base_icon/clash_counter.webp",
+};
+
 /** 七宗罪 UI 颜色（CSS hex） */
 LIMBUSCOMPANY.SIN_COLORS = {
   wrath:    "#E94545",

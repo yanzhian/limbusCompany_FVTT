@@ -52,8 +52,8 @@
         {{!-- 骰子公式文本输入（_updateObject 会解析为 diceCount/diceFaces/baseValue） --}}
         <input type="text" name="system.diceFormula" value="{{diceFormulaDisplay}}" class="dice-formula-input" placeholder="1D4+2"/>
       {{else}}
-        {{#if categoryIcon}}
-          <img src="{{categoryIcon}}" class="category-icon" width="22" height="22" alt="type">
+        {{#if system.category}}
+          <img src="{{lookup @root.config.CATEGORY_ICON_PATHS system.category}}" class="category-icon" width="22" height="22" alt="{{system.category}}">
         {{/if}}
         <span class="dice-formula-display">{{diceFormulaDisplay}}</span>
       {{/if}}
@@ -253,8 +253,8 @@
           <div class="item-name-display" style="color:#4CAF50">{{relatedSkillItem.name}}</div>
         </div>
         <div class="item-row-2 skill-row-2">
-          {{#if relatedSkillItem.categoryIcon}}
-            <img src="{{relatedSkillItem.categoryIcon}}" class="category-icon" width="22" height="22" alt="">
+          {{#if relatedSkillItem.system.category}}
+            <img src="{{lookup @root.config.CATEGORY_ICON_PATHS relatedSkillItem.system.category}}" class="category-icon" width="22" height="22" alt="{{relatedSkillItem.system.category}}">
           {{/if}}
           <span class="dice-formula-display">{{fmtDice relatedSkillItem.system.diceFormula}}</span>
         </div>

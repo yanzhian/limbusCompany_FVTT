@@ -743,13 +743,8 @@ function _parseDiceFormula(formula) {
 }
 
 function _getCategoryIcon(category) {
-  const base = "systems/limbusCompany_FVTT/assets/icons/Base_icon/";
-  const map  = {
-    slash:"Slash.webp", blunt:"Blunt.webp", pierce:"Pierce.webp",
-    dodge:"闪避.webp",  block:"防御.webp",  counter:"反击.webp",
-    clashBlock:"可拼点防御.webp", clashCounter:"可拼点反击.webp",
-  };
-  return map[category] ? base + map[category] : "";
+  const cfg = CONFIG.LIMBUSCOMPANY;
+  return cfg?.CATEGORY_ICON_PATHS?.[category] ?? "";
 }
 
 function _subtypeLabel(sub) {

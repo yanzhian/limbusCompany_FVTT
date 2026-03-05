@@ -1328,13 +1328,7 @@ function _buffIconPath(type) {
 }
 
 function _getCategoryIcon(category) {
-  const base = "systems/limbusCompany_FVTT/assets/icons/Base_icon/";
-  const map  = {
-    slash:"Slash.webp", blunt:"Blunt.webp", pierce:"Pierce.webp",
-    dodge:"闪避.webp",  block:"防御.webp",  counter:"反击.webp",
-    clashBlock:"可拼点防御.webp", clashCounter:"可拼点防御.webp",
-  };
-  return map[category] ? base + map[category] : "";
+  return CONFIG.LIMBUSCOMPANY?.CATEGORY_ICON_PATHS?.[category] ?? "";
 }
 
 function _subtypeLabel(subtype) {

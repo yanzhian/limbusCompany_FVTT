@@ -63,26 +63,26 @@
       <div class="modifier-upper">
         {{#if (and isEditable (not isLocked))}}
           <div class="modifier-row">
-            <img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/Slash.webp" class="mod-icon" alt="斩">
+            <img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/slash.webp" class="mod-icon" alt="斩">
             <select name="system.resistanceAdj.slash" class="resist-sel">
               {{selectOptions resistanceValues selected=system.resistanceAdj.slash}}
             </select>
-            <img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/Blunt.webp" class="mod-icon" alt="打" style="margin-left:6px">
+            <img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/blunt.webp" class="mod-icon" alt="打" style="margin-left:6px">
             <select name="system.resistanceAdj.blunt" class="resist-sel">
               {{selectOptions resistanceValues selected=system.resistanceAdj.blunt}}
             </select>
-            <img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/Pierce.webp" class="mod-icon" alt="突" style="margin-left:6px">
+            <img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/pierce.webp" class="mod-icon" alt="突" style="margin-left:6px">
             <select name="system.resistanceAdj.pierce" class="resist-sel">
               {{selectOptions resistanceValues selected=system.resistanceAdj.pierce}}
             </select>
           </div>
         {{else}}
           <div class="modifier-row">
-            <img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/Slash.webp" class="mod-icon" alt="斩">
+            <img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/slash.webp" class="mod-icon" alt="斩">
             <span class="resist-display {{#isResistWeak system.resistanceAdj.slash}}resist-weak{{/isResistWeak}}">{{system.resistanceAdj.slash}}</span>
-            <img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/Blunt.webp" class="mod-icon" alt="打" style="margin-left:6px">
+            <img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/blunt.webp" class="mod-icon" alt="打" style="margin-left:6px">
             <span class="resist-display {{#isResistWeak system.resistanceAdj.blunt}}resist-weak{{/isResistWeak}}">{{system.resistanceAdj.blunt}}</span>
-            <img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/Pierce.webp" class="mod-icon" alt="突" style="margin-left:6px">
+            <img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/pierce.webp" class="mod-icon" alt="突" style="margin-left:6px">
             <span class="resist-display {{#isResistWeak system.resistanceAdj.pierce}}resist-weak{{/isResistWeak}}">{{system.resistanceAdj.pierce}}</span>
           </div>
         {{/if}}
