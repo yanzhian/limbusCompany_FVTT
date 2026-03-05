@@ -3524,7 +3524,7 @@ body.game .limbuscompany.app img {
 .limbuscompany .link-dir-left  { grid-area: left; }
 .limbuscompany .link-dir-right { grid-area: right; }
 .limbuscompany .link-dir-btn {
-  background: var(--bg-darkest); border: 1px solid var(--border-gold);
+  background: #5f3e22; border: 1px solid var(--border-gold);
   cursor: pointer; border-radius: 2px; transition: all .15s;
   display: flex; align-items: center; justify-content: center;
 }
