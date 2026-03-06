@@ -3985,6 +3985,22 @@ body.game .limbuscompany.app img {
   font-size: 16px;
 }
 
+.limbus-title-card-equip .modifier-row .mod-icon {
+  width: 16px;
+  height: 16px;
+  min-width: 16px;
+  min-height: 16px;
+  object-fit: contain;
+  display: inline-block;
+  vertical-align: middle;
+}
+
+.limbus-title-card-equip .modifier-row .resist-display,
+.limbus-title-card-equip .modifier-row .mod-val {
+  font-size: 16px;
+  line-height: 1.2;
+}
+
 .limbus-title-card-equip .tc-tags-row {
   padding: 8px 24px 10px;
 }
