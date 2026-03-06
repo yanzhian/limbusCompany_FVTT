@@ -1382,11 +1382,11 @@ export class LimbusActorSheet extends ActorSheet {
     this._titleCard = this._buildTitleCard(item);
 
     const rect     = this.element[0].getBoundingClientRect();
-    const cardW    = 280; // --card-width ≈ 17.5rem at 16px
-    const left     = rect.left - cardW - 8;
-    const top      = Math.max(8, rect.top);
+    const cardH    = 500;
+    const left     = rect.right + 8;
+    const top      = Math.max(8, Math.min(rect.top, window.innerHeight - cardH - 8));
 
-    this._titleCard.css({ position: "fixed", left: Math.max(8, left), top, zIndex: 99998 });
+    this._titleCard.css({ position: "fixed", left, top, zIndex: 99998 });
     $("body").append(this._titleCard);
   }
 

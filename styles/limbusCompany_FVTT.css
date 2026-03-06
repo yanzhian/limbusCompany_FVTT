@@ -3885,7 +3885,7 @@ body.game .limbuscompany.app img {
 /* ─── §3-O  Title 卡片（悬停弹出） ─────────────────────────────── */
 
 .limbus-title-card {
-  width: 560px; height: 700px; max-height: 700px;
+  width: 280px; height: 500px; max-height: 500px;
   background: linear-gradient(180deg, var(--bg-darkest) 0%, var(--bg-mid) 50%, var(--bg-darkest) 100%);
   border: 1px solid var(--border-gold); border-radius: 4px;
   box-shadow: 0 8px 32px rgba(0,0,0,.85); overflow: hidden;
@@ -3924,17 +3924,17 @@ body.game .limbuscompany.app img {
 }
 
 .limbus-title-card-equip .tc-equip-title {
-  font-size: 32px;
+  font-size: 24px;
   color: #E8CAA1;
   background: transparent !important;
-  padding: 20px 24px 8px;
+  padding: 12px 12px 4px;
   line-height: 1.2;
 }
 
 .limbus-title-card-equip .tc-equip-subrow {
   border-bottom: none;
-  padding: 0 24px;
-  font-size: 24px;
+  padding: 0 12px;
+  font-size: 16px;
   color: #EBBD68;
   align-items: flex-start;
 }
@@ -3978,11 +3978,15 @@ body.game .limbuscompany.app img {
 }
 
 .limbus-title-card-equip .tc-modifier-block {
-  padding: 12px 24px 4px;
+  padding: 8px 12px 4px;
 }
 
 .limbus-title-card-equip .modifier-row {
   font-size: 16px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
 }
 
 .limbus-title-card-equip .modifier-row .mod-icon {
@@ -4002,32 +4006,58 @@ body.game .limbuscompany.app img {
 }
 
 .limbus-title-card-equip .tc-tags-row {
-  padding: 8px 24px 10px;
+  display: flex;
+  align-items: center;
+  flex-wrap: nowrap;
+  gap: 6px;
+  overflow-x: auto;
+  padding: 6px 12px;
+  min-height: 16px;
+}
+
+.limbus-title-card-equip .tc-tags-row .tag {
+  font-size: 16px;
+  line-height: 1;
+  padding: 1px 6px;
+  white-space: nowrap;
 }
 
 .limbus-title-card-equip .tc-gold-divider {
   height: 1px;
-  margin: 8px 24px;
+  margin: 6px 12px;
   background: linear-gradient(90deg, rgba(235,189,104,0) 0%, rgba(235,189,104,.95) 50%, rgba(235,189,104,0) 100%);
 }
 
 .limbus-title-card-equip .item-desc-display {
   font-size: 16px;
   color: #E8CAA1;
-  padding: 8px 24px;
-  line-height: 1.7;
+  padding: 6px 12px;
+  line-height: 1.45;
   overflow: auto;
 }
 
 .limbus-title-card-equip .tc-equip-footer {
   border-top: none;
   margin-top: auto;
-  padding: 10px 24px 16px;
+  padding: 8px 12px 10px;
 }
 
 .limbus-title-card-equip .tc-equip-footer .stellar-icon {
   width: 16px;
   height: 16px;
+}
+
+.limbus-title-card-skill .tc-header {
+  font-size: 24px;
+  color: #E8CAA1;
+  padding: 12px 12px 6px;
+}
+
+.limbus-title-card-skill .tc-row2,
+.limbus-title-card-skill .tc-desc,
+.limbus-title-card-skill .tc-footer {
+  padding-left: 12px;
+  padding-right: 12px;
 }
 
 /* ─── §3-P  Activity 编辑器对话框内联表单 ──────────────────────── */
