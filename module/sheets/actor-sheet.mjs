@@ -107,7 +107,7 @@ export class LimbusActorSheet extends ActorSheet {
         slotIndex: idx,
         item:      bItem,
         itemId:    id ?? null,
-        skillImg:  bItem?.img ?? null,
+        skillImg:  this._resolveSkillImg(bItem),
       };
     });
 
@@ -115,7 +115,7 @@ export class LimbusActorSheet extends ActorSheet {
     context.defenseSkill = {
       item:     defItem,
       itemId:   system.skills?.defense ?? null,
-      skillImg: defItem?.img ?? null,
+      skillImg: this._resolveSkillImg(defItem),
     };
 
     context.egoSkills = cfg.EGO_GRADES.map(grade => {
@@ -124,7 +124,7 @@ export class LimbusActorSheet extends ActorSheet {
         grade,
         item:     egoItem,
         itemId:   system.skills?.ego?.[grade] ?? null,
-        skillImg: egoItem?.img ?? null,
+        skillImg: this._resolveSkillImg(egoItem),
       };
     });
 
@@ -150,6 +150,40 @@ export class LimbusActorSheet extends ActorSheet {
     context.filterState = this._filterState ?? { categories: [], links: [] };
 
     return context;
+  }
+
+  /* ─── 技能图标解析辅助 ──────────────────────────────────────────────────── */
+
+  /**
+   * 解析技能图标路径：
+   * 1. item.img 若为系统/模块/世界路径 → 直接使用
+   * 2. 否则根据 sinType + level 自动推导图标
+   * 3. 最终回退到 Normalsin.webp
+   */
+  _resolveSkillImg(item) {
+    const base = "systems/limbusCompany_FVTT/assets/icons/Skill/";
+    const fallback = `${base}Normalsin.webp`;
+    if (!item) return fallback;
+
+    const img = item.img;
+    // 自定义路径（系统/模块/世界资源或外部 URL）直接使用
+    if (img && (
+      img.startsWith("systems/") || img.startsWith("modules/") ||
+      img.startsWith("worlds/")  || img.startsWith("http")     ||
+      img.startsWith("data:")    || img.startsWith("/")
+    )) return img;
+
+    // 根据罪孽类型和等级推导图标
+    const sinCapMap = {
+      wrath: "Wrath", lust: "Lust", sloth: "Sloth",
+      gluttony: "Gluttony", gloom: "Gloom", pride: "Pride", envy: "Envy",
+    };
+    const sinCap = sinCapMap[item.system?.sinType];
+    if (sinCap) {
+      const lv = Math.min(3, Math.max(1, parseInt(item.system?.level) || 1));
+      return `${base}${sinCap}_lv${lv}.webp`;
+    }
+    return fallback;
   }
 
   /* ─── 物品分组辅助 ──────────────────────────────────────────────────────── */
@@ -331,13 +365,10 @@ export class LimbusActorSheet extends ActorSheet {
       }
     });
 
-    // 重渲染后恢复战斗槽：
-    // Foundry v13 中 tab .active 类在 activateListeners 之后才由 _activateCoreListeners 写入，
-    // 因此需使用 _activeTab 标志位，并以足够长的延迟确保 DOM 就绪。
-    if (this._activeTab === "combat") {
-      setTimeout(() => {
-        if (this._combatBagState) this._renderCombatSlots(this.element);
-      }, 80);
+    // 重渲染后恢复战斗槽（无论当前在哪个 Tab，DOM 元素都存在）：
+    // 只要 _combatBagState 存在就恢复，避免 AP/BUFF 等更新触发重渲染时清空槽位。
+    if (this._combatBagState) {
+      setTimeout(() => this._renderCombatSlots(this.element), 80);
     }
 
     // ── 非 GM/非编辑：只读分支结束 ────────────────────────────────────────
@@ -402,10 +433,12 @@ export class LimbusActorSheet extends ActorSheet {
     html.find(".buff-delete").on("click",         this._onBuffDelete.bind(this));
     html.find(".buff-inline-input").on("change",  this._onBuffInlineEdit.bind(this));
 
-    // ── 战斗技能槽点击（发起对抗）
-    // 注意：data-item-id 是运行时动态写入，不能在绑定时用属性选择器过滤
-    // 改用 basic-combat-section 下所有槽格，点击时在 handler 内部检查 slot-active
+    // ── 战斗技能槽点击 ────────────────────────────────────────────────────
+    // 基础技能槽：data-item-id 是运行时动态写入，不能在绑定时用属性选择器过滤
     html.find(".basic-combat-section .combat-skill-slot").on("click", this._onCombatSkillClick.bind(this));
+    // EGO / 守备技能槽：data-item-id 由 HBS 模板直接写入，绑定时已存在
+    html.find(".ego-combat-section .combat-skill-slot[data-item-id], .combat-defense-slot[data-item-id]")
+      .on("click", this._onEgoSkillClick.bind(this));
     html.find(".combat-skill-related-toggle").on("click", this._onRelatedSkillToggle.bind(this));
   }
 
@@ -1012,31 +1045,48 @@ export class LimbusActorSheet extends ActorSheet {
       return;
     }
 
-    basicSlots.each((i, wrap) => {
-      const $wrap  = $(wrap);
-      const $slot  = $wrap.find(".combat-skill-slot");
-      const $dot   = $wrap.find(".slot-state-dot");
-      const $toggle = $wrap.find(".combat-skill-related-toggle");
-      const $name  = $wrap.find(".combat-slot-name");
-      const id     = state.slots[i] ?? null;
-      const item   = id ? this.actor.items.get(id) : null;
+    const ap = this.actor.system.ap?.value ?? 0;
 
-      // 图片（使用技能实际 img，||保证空字符串也能fallback）
-      $slot.find("img").attr("src", item?.img || defaultImg);
+    basicSlots.each((i, wrap) => {
+      const $wrap   = $(wrap);
+      const $slot   = $wrap.find(".combat-skill-slot");
+      const $dot    = $wrap.find(".slot-state-dot");
+      const $toggle = $wrap.find(".combat-skill-related-toggle");
+      const $name   = $wrap.find(".combat-slot-name");
+      const id      = state.slots[i] ?? null;
+
+      // 主技能
+      const mainItem = id ? this.actor.items.get(id) : null;
+
+      // 相关技能切换模式：显示关联技能还是主技能
+      const isRelated = !!(state.relatedMode?.[i]);
+      let displayItem = mainItem;
+      if (isRelated && mainItem?.system?.relatedSkill?.itemUuid) {
+        const relUuid = mainItem.system.relatedSkill.itemUuid;
+        const relResolved = typeof fromUuidSync !== "undefined"
+          ? (fromUuidSync(relUuid) ?? null)
+          : null;
+        if (relResolved) displayItem = relResolved;
+      }
+
+      // 图片：使用 _resolveSkillImg 保证回退到系统内资源
+      $slot.find("img").attr("src", this._resolveSkillImg(displayItem));
       $slot.attr("data-item-id", id ?? "");
       $slot.attr("data-slot-index", i);
 
-      // 名称（截短）
-      if ($name.length) $name.text(item ? item.name : "");
+      // 名称（截短显示）
+      if ($name.length) $name.text(displayItem ? displayItem.name : "");
 
-      // 状态样式：0,1 = 激活（金色），2 = 预备（暗红），3-5 = bag（暗淡）
-      $slot.removeClass("slot-active slot-reserve slot-bag slot-empty");
+      // 状态样式：0,1 = 激活（金色），2 = 预备（暗红），3-5 = bag
+      $slot.removeClass("slot-active slot-reserve slot-bag slot-empty slot-no-ap");
       $dot.removeClass("dot-active dot-reserve");
 
       if (id) {
         if (i < 2) {
           $slot.addClass("slot-active");
           $dot.addClass("dot-active");
+          // AP 不足时添加视觉提示（金框保留但加灰化）
+          if (ap <= 0) $slot.addClass("slot-no-ap");
         } else if (i === 2) {
           $slot.addClass("slot-reserve");
           $dot.addClass("dot-reserve");
@@ -1047,22 +1097,14 @@ export class LimbusActorSheet extends ActorSheet {
         $slot.addClass("slot-empty");
       }
 
-      // 罪孽色边框（有技能时）
-      if (item?.system?.sinType) {
-        const sinColor = CONFIG.LIMBUSCOMPANY?.SIN_COLORS?.[item.system.sinType] ?? "";
-        if (sinColor && i < 2) {
-          // 激活槽：叠加罪孽色内发光
-          $slot.css("--slot-sin-color", sinColor);
-        } else {
-          $slot.css("--slot-sin-color", "");
-        }
-      } else {
-        $slot.css("--slot-sin-color", "");
-      }
+      // 罪孽色内发光（激活槽）
+      const sinColor = CONFIG.LIMBUSCOMPANY?.SIN_COLORS?.[displayItem?.system?.sinType] ?? "";
+      $slot.css("--slot-sin-color", (sinColor && i < 2) ? sinColor : "");
 
-      // 相关技能切换按钮
-      const hasRelated = !!(item?.system?.relatedSkill?.itemUuid);
-      $toggle.toggle(hasRelated);
+      // 相关技能切换按钮（有关联技能时显示，激活状态标记）
+      const hasRelated = !!(mainItem?.system?.relatedSkill?.itemUuid);
+      $toggle.toggle(hasRelated && i < 2);
+      $toggle.toggleClass("related-active", isRelated);
     });
   }
 
@@ -1156,16 +1198,53 @@ export class LimbusActorSheet extends ActorSheet {
     if (!$slot.hasClass("slot-active")) return;
     const itemId = $slot.attr("data-item-id");
     if (!itemId) return;
-    const item = this.actor.items.get(itemId);
-    if (!item) return;
+
+    // AP 不足时拦截，保留视觉状态但阻止操作
+    if ((this.actor.system.ap?.value ?? 0) <= 0) {
+      ui.notifications?.warn("行动值不足，无法使用技能");
+      return;
+    }
+
     const slotIndex = parseInt($slot.attr("data-slot-index") ?? "0");
+    const state = this._combatBagState;
+
+    // 若处于相关技能显示模式，使用相关技能；否则使用主技能
+    let item = this.actor.items.get(itemId);
+    if (!item) return;
+    if (state?.relatedMode?.[slotIndex] && item.system?.relatedSkill?.itemUuid) {
+      const relUuid = item.system.relatedSkill.itemUuid;
+      const relItem = typeof fromUuidSync !== "undefined" ? fromUuidSync(relUuid) : null;
+      if (relItem) item = relItem;
+    }
+
     this._showClashDialog(item, slotIndex);
   }
 
+  _onEgoSkillClick(event) {
+    // EGO / 守备技能：直接发起对抗，不推进 bag，不消耗行动值
+    const itemId = event.currentTarget.dataset.itemId;
+    if (!itemId) return;
+    const item = this.actor.items.get(itemId);
+    if (!item) return;
+    this._showClashDialog(item, -1);  // slotIndex = -1 → 不触发 bag 动画/AP 消耗
+  }
+
   _onRelatedSkillToggle(event) {
-    // 切换相关技能
-    const wrap = $(event.currentTarget).closest(".combat-skill-slot-wrap");
-    wrap.find(".related-indicator").toggleClass("active");
+    event.stopPropagation(); // 防止触发父元素的点击事件
+    const $wrap = $(event.currentTarget).closest(".combat-skill-slot-wrap");
+    const $slot = $wrap.find(".combat-skill-slot");
+    const slotIndex = parseInt($slot.attr("data-slot-index") ?? "-1");
+    if (slotIndex < 0 || !this._combatBagState) return;
+
+    // 初始化 relatedMode 数组
+    const state = this._combatBagState;
+    if (!state.relatedMode) state.relatedMode = Array(6).fill(false);
+
+    // 切换该槽的相关技能显示模式
+    state.relatedMode[slotIndex] = !state.relatedMode[slotIndex];
+
+    // 重渲染（只需更新视觉，状态已就绪）
+    this._renderCombatSlots(this.element);
   }
 
   /* ─── 行动值（AP） ──────────────────────────────────────────────────────── */

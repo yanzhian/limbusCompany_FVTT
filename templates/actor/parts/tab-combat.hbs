@@ -100,7 +100,8 @@
                    style="border-color:{{sinColor item.system.sinType}}"
                  {{/if}}
                  title="{{#if item}}{{item.name}}{{else}}{{grade}}{{/if}}">
-              <img src="{{#if item}}{{item.img}}{{else}}systems/limbusCompany_FVTT/assets/icons/Skill/Normalsin.webp{{/if}}"
+              {{!-- 使用 getData 预解析的 skillImg 而非 item.img，保证图标路径有效 --}}
+              <img src="{{#if skillImg}}{{skillImg}}{{else}}systems/limbusCompany_FVTT/assets/icons/Skill/Normalsin.webp{{/if}}"
                    class="combat-skill-img" alt="{{grade}}">
             </div>
           </div>
@@ -114,7 +115,7 @@
                  style="border-color:{{sinColor defenseSkill.item.system.sinType}}"
                {{/if}}
                title="{{#if defenseSkill.item}}{{defenseSkill.item.name}}{{else}}守备技能{{/if}}">
-            <img src="{{#if defenseSkill.item}}{{defenseSkill.item.img}}{{else}}systems/limbusCompany_FVTT/assets/icons/Skill/Normalsin.webp{{/if}}"
+            <img src="{{#if defenseSkill.skillImg}}{{defenseSkill.skillImg}}{{else}}systems/limbusCompany_FVTT/assets/icons/Skill/Normalsin.webp{{/if}}"
                  class="combat-skill-img" alt="守备">
           </div>
         </div>

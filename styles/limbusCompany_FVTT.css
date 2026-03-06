@@ -3465,6 +3465,20 @@ body.game .limbuscompany.app img {
   padding: 0; transition: all .15s;
 }
 .limbuscompany .combat-skill-related-toggle:hover { color: var(--gold-active); border-color: var(--gold-active); }
+/* 已切换为相关技能时：绿色高亮 */
+.limbuscompany .combat-skill-related-toggle.related-active {
+  color: #6EE06E; border-color: #6EE06E;
+  box-shadow: 0 0 4px 1px rgba(110,224,110,.5);
+}
+
+/* AP不足时激活槽：保留金框但降低不透明度 */
+.limbuscompany .combat-skill-slot.slot-active.slot-no-ap {
+  opacity: .5;
+  cursor: not-allowed;
+}
+.limbuscompany .combat-skill-slot.slot-active.slot-no-ap:hover {
+  transform: none;
+}
 
 /* 行动值硬币 */
 .limbuscompany .ap-coins-row { display: flex; gap: 10px; align-items: center; padding: 4px 0; }
