@@ -323,16 +323,21 @@ export class LimbusActorSheet extends ActorSheet {
     html.find(".skill-slot-wrap[data-item-id]").on("mouseenter", this._onItemHover.bind(this));
     html.find(".skill-slot-wrap[data-item-id]").on("mouseleave", this._onItemHoverEnd.bind(this));
 
-    // Tab 切换到 combat → 初始化战斗槽
-    html.find(".sheet-tabs .item[data-tab='combat']").on("click", () => {
-      setTimeout(() => this._syncCombatSlots(html), 50);
+    // Tab 切换时跟踪当前 tab ID（跨重渲染保持状态）
+    html.find(".sheet-tabs .item[data-tab]").on("click", (ev) => {
+      this._activeTab = ev.currentTarget.dataset.tab;
+      if (this._activeTab === "combat") {
+        setTimeout(() => this._syncCombatSlots(this.element), 50);
+      }
     });
 
-    // 重渲染时若战斗 Tab 仍处于激活状态，恢复战斗槽显示
-    if (html.find(".tab.active[data-tab='combat']").length) {
+    // 重渲染后恢复战斗槽：
+    // Foundry v13 中 tab .active 类在 activateListeners 之后才由 _activateCoreListeners 写入，
+    // 因此需使用 _activeTab 标志位，并以足够长的延迟确保 DOM 就绪。
+    if (this._activeTab === "combat") {
       setTimeout(() => {
-        if (this._combatBagState) this._renderCombatSlots(html);
-      }, 20);
+        if (this._combatBagState) this._renderCombatSlots(this.element);
+      }, 80);
     }
 
     // ── 非 GM/非编辑：只读分支结束 ────────────────────────────────────────
@@ -397,8 +402,10 @@ export class LimbusActorSheet extends ActorSheet {
     html.find(".buff-delete").on("click",         this._onBuffDelete.bind(this));
     html.find(".buff-inline-input").on("change",  this._onBuffInlineEdit.bind(this));
 
-    // ── 战斗技能槽点击（发起对抗） ────────────────────────────────────────
-    html.find(".combat-skill-slot[data-item-id]").on("click", this._onCombatSkillClick.bind(this));
+    // ── 战斗技能槽点击（发起对抗）
+    // 注意：data-item-id 是运行时动态写入，不能在绑定时用属性选择器过滤
+    // 改用 basic-combat-section 下所有槽格，点击时在 handler 内部检查 slot-active
+    html.find(".basic-combat-section .combat-skill-slot").on("click", this._onCombatSkillClick.bind(this));
     html.find(".combat-skill-related-toggle").on("click", this._onRelatedSkillToggle.bind(this));
   }
 
@@ -955,8 +962,8 @@ export class LimbusActorSheet extends ActorSheet {
   /* ─── 战斗 Tab ──────────────────────────────────────────────────────────── */
 
   _onCombatActivate(event) {
-    // 每次点击激活都重新初始化，打乱重排
     this._combatBagState = null;
+    this._activeTab = "combat";
     this._syncCombatSlots(this.element);
   }
 
@@ -995,7 +1002,7 @@ export class LimbusActorSheet extends ActorSheet {
       basicSlots.each((i, wrap) => {
         const $wrap = $(wrap);
         const $slot = $wrap.find(".combat-skill-slot");
-        $slot.find("img").attr("src", defaultImg);
+        $slot.find("img").attr("src", defaultImg).show();
         $slot.attr("data-item-id", "");
         $slot.removeClass("slot-active slot-reserve slot-bag").addClass("slot-empty");
         $wrap.find(".slot-state-dot").removeClass("dot-active dot-reserve");
@@ -1014,8 +1021,8 @@ export class LimbusActorSheet extends ActorSheet {
       const id     = state.slots[i] ?? null;
       const item   = id ? this.actor.items.get(id) : null;
 
-      // 图片（使用技能实际 img）
-      $slot.find("img").attr("src", item?.img ?? defaultImg);
+      // 图片（使用技能实际 img，||保证空字符串也能fallback）
+      $slot.find("img").attr("src", item?.img || defaultImg);
       $slot.attr("data-item-id", id ?? "");
       $slot.attr("data-slot-index", i);
 
@@ -1072,17 +1079,18 @@ export class LimbusActorSheet extends ActorSheet {
 
   // 带动画地使用指定激活槽技能（仅 slotIndex = 0 或 1）
   _animateCombatSkillUse(slotIndex) {
-    const html  = this.element;
-    if (!html?.length) return;
+    if (!this.element?.length) return;
 
-    const $wraps = html.find(".basic-combat-section .combat-skill-slot-wrap");
+    // 每个阶段都通过 this.element 实时查询，避免因重渲染导致引用失效
+    const _wraps = () => this.element.find(".basic-combat-section .combat-skill-slot-wrap");
+
+    const $wraps = _wraps();
     if (slotIndex >= $wraps.length) return;
 
     const state = this._combatBagState;
     if (!state || !state.slots[slotIndex]) return;
 
-    const $usedWrap  = $wraps.eq(slotIndex);
-    const $usedSlot  = $usedWrap.find(".combat-skill-slot");
+    const $usedSlot = $wraps.eq(slotIndex).find(".combat-skill-slot");
 
     // 计算单格宽度（含 gap）用于位移
     let slotOuterW = 58; // 默认 52px + 6px gap
@@ -1101,8 +1109,9 @@ export class LimbusActorSheet extends ActorSheet {
 
     // ── 第2阶段（140ms后）：右侧槽向左滑 ───────────────────────────────
     setTimeout(() => {
-      for (let i = slotIndex + 1; i < $wraps.length; i++) {
-        $wraps.eq(i).css({
+      const $w = _wraps();
+      for (let i = slotIndex + 1; i < $w.length; i++) {
+        $w.eq(i).css({
           transition: "transform 0.22s ease",
           transform:  `translateX(-${slotOuterW}px)`,
         });
@@ -1117,15 +1126,14 @@ export class LimbusActorSheet extends ActorSheet {
       state.slots.push(nextId);   // 补充到位置5
 
       // 重置所有 transform（不带动画）
-      $wraps.each((_, el) => $(el).css({ transition: "none", transform: "" }));
-      $usedSlot.css({ transition: "none", transform: "", opacity: "" });
+      const $w2 = _wraps();
+      $w2.each((_, el) => $(el).css({ transition: "none", transform: "" }));
 
       // 静态重渲染（应用最新状态）
-      this._renderCombatSlots(html);
+      this._renderCombatSlots(this.element);
 
       // ── 第4阶段：新槽在位置5淡入 ─────────────────────────────────────
-      const $newWrap = html.find(".basic-combat-section .combat-skill-slot-wrap").eq(5);
-      const $newSlot = $newWrap.find(".combat-skill-slot");
+      const $newSlot = _wraps().eq(5).find(".combat-skill-slot");
       $newSlot.css({ opacity: "0", transform: "scale(0.7)" });
 
       // 双帧延迟确保浏览器处理完上面的状态变更
@@ -1136,7 +1144,6 @@ export class LimbusActorSheet extends ActorSheet {
             opacity:    "1",
             transform:  "scale(1)",
           });
-          // 淡入完成后清理内联样式
           setTimeout(() => $newSlot.css({ transition: "", transform: "" }), 380);
         });
       });
