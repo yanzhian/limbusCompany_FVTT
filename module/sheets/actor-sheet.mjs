@@ -1382,15 +1382,36 @@ export class LimbusActorSheet extends ActorSheet {
     this._titleCard = this._buildTitleCard(item);
 
     const rect     = this.element[0].getBoundingClientRect();
-    const cardW    = 280; // --card-width ≈ 17.5rem at 16px
-    const left     = rect.left - cardW - 8;
-    const top      = Math.max(8, rect.top);
+    const cardW    = 280;
+    const cardH    = 500;
+    const left     = Math.max(8, rect.left - cardW - 8);
+    const top      = Math.max(8, Math.min(rect.top, window.innerHeight - cardH - 8));
 
-    this._titleCard.css({ position: "fixed", left: Math.max(8, left), top, zIndex: 99998 });
+    this._titleCard.css({ position: "fixed", left, top, zIndex: 99998 });
     $("body").append(this._titleCard);
+
+    // 允许在悬停期间通过滚轮滚动 Title 卡描述区（卡片本身 pointer-events: none）
+    this._titleCardWheelEl = el;
+    this._titleCardWheelHandler = (ev) => {
+      if (!this._titleCard?.length) return;
+      const desc = this._titleCard.find(".item-desc-display, .tc-desc")[0];
+      if (!desc) return;
+
+      const hasOverflow = desc.scrollHeight > desc.clientHeight;
+      if (!hasOverflow) return;
+
+      desc.scrollTop += ev.deltaY;
+      ev.preventDefault();
+    };
+    el.addEventListener("wheel", this._titleCardWheelHandler, { passive: false });
   }
 
   _onItemHoverEnd() {
+    if (this._titleCardWheelEl && this._titleCardWheelHandler) {
+      this._titleCardWheelEl.removeEventListener("wheel", this._titleCardWheelHandler);
+    }
+    this._titleCardWheelEl = null;
+    this._titleCardWheelHandler = null;
     this._titleCard?.remove();
     this._titleCard = null;
   }
@@ -1419,20 +1440,68 @@ export class LimbusActorSheet extends ActorSheet {
     }
 
     // Equipment / other
-    const linksHtml = Object.entries(sys.links ?? {})
-      .filter(([_, v]) => v)
-      .map(([k]) => `<span class="tc-link-arrow link-${k}"></span>`)
-      .join("");
+    const linkDirs = ["up", "left", "right", "down"];
+    const linkArrows = { up: "↑", down: "↓", left: "←", right: "→" };
+    const linkButtonsHtml = linkDirs.map((dir) => {
+      const active = sys.links?.[dir] ? "link-active" : "";
+      return `<span class="link-dir-btn link-dir-${dir} ${active}"><span class="tc-link-arrow-text" aria-label="链接 ${dir}">${linkArrows[dir]}</span></span>`;
+    }).join("");
+
+    const formatSigned = (value = 0) => {
+      const num = Number(value) || 0;
+      return `${num > 0 ? "+" : ""}${num}`;
+    };
+
+    const modifierRows = [];
+    if (sys.subtype === "upper") {
+      modifierRows.push(`<div class="modifier-row">
+        <img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/slash.webp" class="mod-icon" alt="斩"><span class="resist-display">${sys.resistanceAdj?.slash ?? "1.0"}</span>
+        <img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/blunt.webp" class="mod-icon" alt="打"><span class="resist-display">${sys.resistanceAdj?.blunt ?? "1.0"}</span>
+        <img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/pierce.webp" class="mod-icon" alt="突"><span class="resist-display">${sys.resistanceAdj?.pierce ?? "1.0"}</span>
+      </div>`);
+      modifierRows.push(`<div class="modifier-row">
+        <img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/Defense_Level.webp" class="mod-icon" alt="DEF"><span class="mod-val">${formatSigned(sys.defAdj)}</span>
+      </div>`);
+    } else {
+      if (sys.subtype !== "lower") {
+        modifierRows.push(`<div class="modifier-row">
+          <img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/Offense_Level.webp" class="mod-icon" alt="ATK"><span class="mod-val">${formatSigned(sys.atkAdj)}</span>
+        </div>`);
+      }
+      modifierRows.push(`<div class="modifier-row">
+        <img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/Defense_Level.webp" class="mod-icon" alt="DEF"><span class="mod-val">${formatSigned(sys.defAdj)}</span>
+      </div>`);
+      if (sys.subtype !== "upper") {
+        modifierRows.push(`<div class="modifier-row">
+          <img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/Speed.webp" class="mod-icon" alt="SPD"><span class="mod-val">${formatSigned(sys.speedAdj)}</span>
+        </div>`);
+      }
+    }
+
+    const tagList = (Array.isArray(sys.tags) ? sys.tags : String(sys.tags ?? "").split("/"))
+      .map((t) => String(t).trim())
+      .filter(Boolean)
+      .join("/");
 
     return $(`<div class="limbus-title-card limbus-title-card-equip">
-      <div class="tc-header tc-equip-header">
-        <span>${item.name}</span>
-        <span class="tc-links">${linksHtml}</span>
+      <div class="tc-header tc-equip-title">${item.name}</div>
+      <div class="tc-equip-main-row">
+        <div class="tc-equip-info-col">
+          <div class="tc-row2 tc-equip-subrow">
+            <span class="equip-subtype-label">【${_subtypeLabel(sys.subtype ?? item.type)}】</span>
+            <span class="equip-category">【${sys.category ?? ""}】</span>
+          </div>
+          <div class="tc-modifier-block">
+            <div class="modifier-rows">${modifierRows.join("")}</div>
+          </div>
+          <div class="item-tags-row tc-tags-row">${tagList}</div>
+        </div>
+        <span class="link-dir-group tc-link-dir-group">${linkButtonsHtml}</span>
       </div>
-      <div class="tc-row2">${_subtypeLabel(sys.subtype ?? item.type)}　${sys.category ?? ""}</div>
-      <div class="tc-desc">${sys.description ?? ""}</div>
-      <div class="tc-footer-small">鼠标中间用来编辑/查看</div>
-      <div class="tc-footer"><i class="fas fa-star"></i> ${sys.stellarCost ?? 0}</div>
+      <div class="tc-gold-divider"></div>
+      <div class="tc-desc item-desc-display">${sys.effect ?? sys.description ?? ""}</div>
+      <div class="tc-gold-divider tc-gold-divider-muted"></div>
+      <div class="tc-footer tc-equip-footer"><img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/Starlight.webp" class="stellar-icon" alt="星芒"><span>${sys.stellarCost ?? 0}</span></div>
     </div>`);
   }
 }
@@ -1490,4 +1559,3 @@ function _subtypeLabel(subtype) {
   return { weapon:"武器", upper:"上装", lower:"下装", accessory:"饰品",
            consumable:"消耗品", material:"材料", container:"容器" }[subtype] ?? subtype;
 }
-

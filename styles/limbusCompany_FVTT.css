@@ -3885,11 +3885,13 @@ body.game .limbuscompany.app img {
 /* ─── §3-O  Title 卡片（悬停弹出） ─────────────────────────────── */
 
 .limbus-title-card {
-  width: 280px; max-height: 460px;
+  width: 280px; height: 500px; max-height: 500px;
   background: linear-gradient(180deg, var(--bg-darkest) 0%, var(--bg-mid) 50%, var(--bg-darkest) 100%);
   border: 1px solid var(--border-gold); border-radius: 4px;
   box-shadow: 0 8px 32px rgba(0,0,0,.85); overflow: hidden;
   font-family: var(--font-main); pointer-events: none;
+  display: flex;
+  flex-direction: column;
 }
 .tc-header {
   padding: 6px 10px; font-size: .9rem; font-weight: bold; color: #fff;
@@ -3919,6 +3921,173 @@ body.game .limbuscompany.app img {
 .tc-footer-small {
   padding: 2px 10px; font-size: .62rem; color: var(--text-dim);
   text-align: center;
+}
+
+.limbus-title-card-equip .tc-equip-title {
+  font-size: 24px;
+  color: #E8CAA1;
+  background: transparent !important;
+  padding: 12px 12px 4px;
+  line-height: 1.2;
+}
+
+.limbus-title-card-equip .tc-equip-subrow {
+  border-bottom: none;
+  padding: 0;
+  font-size: 16px;
+  color: #EBBD68;
+  align-items: center;
+  min-height: 16px;
+}
+
+.limbus-title-card-equip .equip-subtype-label,
+.limbus-title-card-equip .equip-category {
+  color: #EBBD68;
+}
+
+.limbus-title-card-equip .tc-equip-main-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 12px;
+}
+
+.limbus-title-card-equip .tc-equip-info-col {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.limbus-title-card-equip .tc-link-dir-group {
+  margin-left: 0;
+  flex-shrink: 0;
+  display: grid;
+  grid-template-areas: ". up ." "left . right" ". down .";
+  grid-template-columns: 16px 16px 16px;
+  grid-template-rows: 16px 16px 16px;
+  gap: 2px;
+}
+
+.limbus-title-card-equip .tc-link-dir-group .link-dir-up { grid-area: up; }
+.limbus-title-card-equip .tc-link-dir-group .link-dir-down { grid-area: down; }
+.limbus-title-card-equip .tc-link-dir-group .link-dir-left { grid-area: left; }
+.limbus-title-card-equip .tc-link-dir-group .link-dir-right { grid-area: right; }
+
+.limbus-title-card-equip .tc-link-dir-group .link-dir-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border-gold);
+  border-radius: 2px;
+  background: rgba(95,62,33,.45);
+}
+
+.limbus-title-card-equip .tc-link-dir-group .tc-link-arrow-text {
+  color: #EBBD68;
+  font-size: 12px;
+  line-height: 1;
+}
+
+.limbus-title-card-equip .tc-link-dir-group .link-dir-btn.link-active {
+  background: var(--gold-mid);
+}
+
+.limbus-title-card-equip .tc-modifier-block {
+  padding: 0;
+}
+
+.limbus-title-card-equip .modifier-rows {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+}
+
+.limbus-title-card-equip .modifier-row {
+  font-size: 16px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+}
+
+.limbus-title-card-equip .modifier-row .mod-icon {
+  width: 16px;
+  height: 16px;
+  min-width: 16px;
+  min-height: 16px;
+  object-fit: contain;
+  display: inline-block;
+  vertical-align: middle;
+}
+
+.limbus-title-card-equip .modifier-row .resist-display,
+.limbus-title-card-equip .modifier-row .mod-val {
+  font-size: 16px;
+  line-height: 1.2;
+}
+
+.limbus-title-card-equip .tc-tags-row {
+  display: block;
+  min-height: 16px;
+  background: #3B2412;
+  color: #9A6839;
+  font-size: 16px;
+  line-height: 1;
+  border-radius: 2px;
+  overflow-x: auto;
+  width: 100%;
+  padding: 2px 8px;
+  white-space: nowrap;
+}
+
+.limbus-title-card-equip .tc-gold-divider {
+  height: 1px;
+  margin: 6px 12px;
+  background: linear-gradient(90deg, rgba(235,189,104,0) 0%, rgba(235,189,104,.95) 50%, rgba(235,189,104,0) 100%);
+}
+
+.limbus-title-card-equip .item-desc-display {
+  font-size: 10px;
+  color: #E8CAA1;
+  padding: 6px 12px;
+  line-height: 1.45;
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+.limbus-title-card-equip .tc-gold-divider-muted {
+  background: linear-gradient(90deg, rgba(154,104,57,0) 0%, rgba(154,104,57,.95) 50%, rgba(154,104,57,0) 100%);
+  margin-top: auto;
+  margin-bottom: 5px;
+}
+
+.limbus-title-card-equip .tc-equip-footer {
+  border-top: none;
+  margin-top: 0;
+  padding: 8px 12px 10px;
+}
+
+.limbus-title-card-equip .tc-equip-footer .stellar-icon {
+  width: 16px;
+  height: 16px;
+}
+
+.limbus-title-card-skill .tc-header {
+  font-size: 24px;
+  color: #E8CAA1;
+  padding: 12px 12px 6px;
+}
+
+.limbus-title-card-skill .tc-row2,
+.limbus-title-card-skill .tc-desc,
+.limbus-title-card-skill .tc-footer {
+  padding-left: 12px;
+  padding-right: 12px;
 }
 
 /* ─── §3-P  Activity 编辑器对话框内联表单 ──────────────────────── */
