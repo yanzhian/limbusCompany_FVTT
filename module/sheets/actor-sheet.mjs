@@ -1058,24 +1058,13 @@ export class LimbusActorSheet extends ActorSheet {
       // 主技能
       const mainItem = id ? this.actor.items.get(id) : null;
 
-      // 相关技能切换模式：显示关联技能还是主技能
-      const isRelated = !!(state.relatedMode?.[i]);
-      let displayItem = mainItem;
-      if (isRelated && mainItem?.system?.relatedSkill?.itemUuid) {
-        const relUuid = mainItem.system.relatedSkill.itemUuid;
-        const relResolved = typeof fromUuidSync !== "undefined"
-          ? (fromUuidSync(relUuid) ?? null)
-          : null;
-        if (relResolved) displayItem = relResolved;
-      }
-
       // 图片：使用 _resolveSkillImg 保证回退到系统内资源
-      $slot.find("img").attr("src", this._resolveSkillImg(displayItem));
+      $slot.find("img").attr("src", this._resolveSkillImg(mainItem));
       $slot.attr("data-item-id", id ?? "");
       $slot.attr("data-slot-index", i);
 
       // 名称（截短显示）
-      if ($name.length) $name.text(displayItem ? displayItem.name : "");
+      if ($name.length) $name.text(mainItem ? mainItem.name : "");
 
       // 状态样式：0,1 = 激活（金色），2 = 预备（暗红），3-5 = bag
       $slot.removeClass("slot-active slot-reserve slot-bag slot-empty slot-no-ap");
@@ -1098,13 +1087,12 @@ export class LimbusActorSheet extends ActorSheet {
       }
 
       // 罪孽色内发光（激活槽）
-      const sinColor = CONFIG.LIMBUSCOMPANY?.SIN_COLORS?.[displayItem?.system?.sinType] ?? "";
+      const sinColor = CONFIG.LIMBUSCOMPANY?.SIN_COLORS?.[mainItem?.system?.sinType] ?? "";
       $slot.css("--slot-sin-color", (sinColor && i < 2) ? sinColor : "");
 
-      // 相关技能切换按钮（有关联技能时显示，激活状态标记）
+      // 相关技能切换按钮（有关联技能时显示）
       const hasRelated = !!(mainItem?.system?.relatedSkill?.itemUuid);
       $toggle.toggle(hasRelated && i < 2);
-      $toggle.toggleClass("related-active", isRelated);
     });
   }
 
@@ -1230,21 +1218,8 @@ export class LimbusActorSheet extends ActorSheet {
   }
 
   _onRelatedSkillToggle(event) {
-    event.stopPropagation(); // 防止触发父元素的点击事件
-    const $wrap = $(event.currentTarget).closest(".combat-skill-slot-wrap");
-    const $slot = $wrap.find(".combat-skill-slot");
-    const slotIndex = parseInt($slot.attr("data-slot-index") ?? "-1");
-    if (slotIndex < 0 || !this._combatBagState) return;
-
-    // 初始化 relatedMode 数组
-    const state = this._combatBagState;
-    if (!state.relatedMode) state.relatedMode = Array(6).fill(false);
-
-    // 切换该槽的相关技能显示模式
-    state.relatedMode[slotIndex] = !state.relatedMode[slotIndex];
-
-    // 重渲染（只需更新视觉，状态已就绪）
-    this._renderCombatSlots(this.element);
+    event.stopPropagation();
+    $(event.currentTarget).toggleClass("related-active");
   }
 
   /* ─── 行动值（AP） ──────────────────────────────────────────────────────── */

@@ -3363,7 +3363,7 @@ body.game .limbuscompany.app img {
 /* 战斗技能格（52px） */
 .limbuscompany .combat-skill-slot {
   width: 52px; height: 52px;
-  display: flex; align-items: center; justify-content: center;
+  position: relative;
   overflow: hidden; cursor: pointer; transition: all .15s;
   background: rgba(11,7,7,.8);
 }
@@ -3422,7 +3422,11 @@ body.game .limbuscompany.app img {
   border-color: var(--gold-active);
   opacity: .8;
 }
-.limbuscompany .combat-skill-img { width: 100%; height: 100%; object-fit: cover; }
+.limbuscompany .combat-skill-img {
+  position: absolute; top: 0; left: 0;
+  width: 100%; height: 100%;
+  object-fit: cover; display: block;
+}
 
 /* 技能名称标签（战斗槽下方小字） */
 .limbuscompany .combat-slot-name {

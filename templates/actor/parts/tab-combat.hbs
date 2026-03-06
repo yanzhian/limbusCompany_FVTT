@@ -104,6 +104,7 @@
               <img src="{{#if skillImg}}{{skillImg}}{{else}}systems/limbusCompany_FVTT/assets/icons/Skill/Normalsin.webp{{/if}}"
                    class="combat-skill-img" alt="{{grade}}">
             </div>
+            <button class="combat-skill-related-toggle" style="display:none" title="切换相关技能">↺</button>
           </div>
         {{/each}}
 
@@ -118,6 +119,7 @@
             <img src="{{#if defenseSkill.skillImg}}{{defenseSkill.skillImg}}{{else}}systems/limbusCompany_FVTT/assets/icons/Skill/Normalsin.webp{{/if}}"
                  class="combat-skill-img" alt="守备">
           </div>
+          <button class="combat-skill-related-toggle" style="display:none" title="切换相关技能">↺</button>
         </div>
 
       </div>{{!-- /combat-skill-slots-row --}}
