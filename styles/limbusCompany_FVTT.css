@@ -4055,8 +4055,8 @@ body.game .limbuscompany.app img {
   color: #E8CAA1;
   padding: 6px 12px;
   line-height: 1.45;
-  min-height: 80px;
-  max-height: 220px;
+  flex: 1;
+  min-height: 0;
   overflow: auto;
 }
 
