@@ -3981,6 +3981,14 @@ body.game .limbuscompany.app img {
   padding: 8px 12px 4px;
 }
 
+.limbus-title-card-equip .modifier-rows {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+}
+
 .limbus-title-card-equip .modifier-row {
   font-size: 16px;
   display: flex;
@@ -4006,19 +4014,17 @@ body.game .limbuscompany.app img {
 }
 
 .limbus-title-card-equip .tc-tags-row {
-  display: flex;
-  align-items: center;
-  flex-wrap: nowrap;
-  gap: 6px;
-  overflow-x: auto;
-  padding: 6px 12px;
+  display: block;
   min-height: 16px;
-}
-
-.limbus-title-card-equip .tc-tags-row .tag {
+  background: #3B2412;
+  color: #9A6839;
   font-size: 16px;
   line-height: 1;
-  padding: 1px 6px;
+  border-radius: 2px;
+  overflow-x: auto;
+  width: fit-content;
+  max-width: 100%;
+  padding: 2px 8px;
   white-space: nowrap;
 }
 

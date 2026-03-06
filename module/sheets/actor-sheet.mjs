@@ -1460,8 +1460,7 @@ export class LimbusActorSheet extends ActorSheet {
     const tagList = (Array.isArray(sys.tags) ? sys.tags : String(sys.tags ?? "").split("/"))
       .map((t) => String(t).trim())
       .filter(Boolean)
-      .map((t) => `<span class="tag">${t}</span>`)
-      .join("");
+      .join("/");
 
     return $(`<div class="limbus-title-card limbus-title-card-equip">
       <div class="tc-header tc-equip-title">${item.name}</div>
