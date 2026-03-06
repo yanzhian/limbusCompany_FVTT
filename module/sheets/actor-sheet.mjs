@@ -1420,9 +1420,10 @@ export class LimbusActorSheet extends ActorSheet {
 
     // Equipment / other
     const linkDirs = ["up", "left", "right", "down"];
+    const linkArrows = { up: "↑", down: "↓", left: "←", right: "→" };
     const linkButtonsHtml = linkDirs.map((dir) => {
       const active = sys.links?.[dir] ? "link-active" : "";
-      return `<span class="link-dir-btn link-dir-${dir} ${active}"><img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/Link.svg" class="link-dir-icon" alt="链接 ${dir}"></span>`;
+      return `<span class="link-dir-btn link-dir-${dir} ${active}"><span class="tc-link-arrow-text" aria-label="链接 ${dir}">${linkArrows[dir]}</span></span>`;
     }).join("");
 
     const formatSigned = (value = 0) => {

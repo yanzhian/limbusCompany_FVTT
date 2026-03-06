@@ -3946,6 +3946,35 @@ body.game .limbuscompany.app img {
 
 .limbus-title-card-equip .tc-link-dir-group {
   margin-left: auto;
+  display: grid;
+  grid-template-areas: ". up ." "left . right" ". down .";
+  grid-template-columns: 24px 24px 24px;
+  grid-template-rows: 24px 24px 24px;
+  gap: 2px;
+}
+
+.limbus-title-card-equip .tc-link-dir-group .link-dir-up { grid-area: up; }
+.limbus-title-card-equip .tc-link-dir-group .link-dir-down { grid-area: down; }
+.limbus-title-card-equip .tc-link-dir-group .link-dir-left { grid-area: left; }
+.limbus-title-card-equip .tc-link-dir-group .link-dir-right { grid-area: right; }
+
+.limbus-title-card-equip .tc-link-dir-group .link-dir-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border-gold);
+  border-radius: 2px;
+  background: rgba(95,62,33,.45);
+}
+
+.limbus-title-card-equip .tc-link-dir-group .tc-link-arrow-text {
+  color: #EBBD68;
+  font-size: 14px;
+  line-height: 1;
+}
+
+.limbus-title-card-equip .tc-link-dir-group .link-dir-btn.link-active {
+  background: var(--gold-mid);
 }
 
 .limbus-title-card-equip .tc-modifier-block {
