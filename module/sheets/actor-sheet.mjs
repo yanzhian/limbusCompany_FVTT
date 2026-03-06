@@ -1382,8 +1382,9 @@ export class LimbusActorSheet extends ActorSheet {
     this._titleCard = this._buildTitleCard(item);
 
     const rect     = this.element[0].getBoundingClientRect();
+    const cardW    = 280;
     const cardH    = 500;
-    const left     = rect.right + 8;
+    const left     = Math.max(8, rect.left - cardW - 8);
     const top      = Math.max(8, Math.min(rect.top, window.innerHeight - cardH - 8));
 
     this._titleCard.css({ position: "fixed", left, top, zIndex: 99998 });
@@ -1464,18 +1465,22 @@ export class LimbusActorSheet extends ActorSheet {
 
     return $(`<div class="limbus-title-card limbus-title-card-equip">
       <div class="tc-header tc-equip-title">${item.name}</div>
-      <div class="tc-row2 tc-equip-subrow">
-        <span class="equip-subtype-label">【${_subtypeLabel(sys.subtype ?? item.type)}】</span>
-        <span class="equip-category">【${sys.category ?? ""}】</span>
+      <div class="tc-equip-main-row">
+        <div class="tc-equip-info-col">
+          <div class="tc-row2 tc-equip-subrow">
+            <span class="equip-subtype-label">【${_subtypeLabel(sys.subtype ?? item.type)}】</span>
+            <span class="equip-category">【${sys.category ?? ""}】</span>
+          </div>
+          <div class="tc-modifier-block">
+            <div class="modifier-rows">${modifierRows.join("")}</div>
+          </div>
+          <div class="item-tags-row tc-tags-row">${tagList}</div>
+        </div>
         <span class="link-dir-group tc-link-dir-group">${linkButtonsHtml}</span>
       </div>
-      <div class="tc-modifier-block">
-        <div class="modifier-rows">${modifierRows.join("")}</div>
-      </div>
-      <div class="item-tags-row tc-tags-row">${tagList}</div>
       <div class="tc-gold-divider"></div>
       <div class="tc-desc item-desc-display">${sys.effect ?? sys.description ?? ""}</div>
-      <div class="tc-gold-divider"></div>
+      <div class="tc-gold-divider tc-gold-divider-muted"></div>
       <div class="tc-footer tc-equip-footer"><img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/Starlight.webp" class="stellar-icon" alt="星芒"><span>${sys.stellarCost ?? 0}</span></div>
     </div>`);
   }
