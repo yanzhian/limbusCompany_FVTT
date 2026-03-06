@@ -1389,9 +1389,29 @@ export class LimbusActorSheet extends ActorSheet {
 
     this._titleCard.css({ position: "fixed", left, top, zIndex: 99998 });
     $("body").append(this._titleCard);
+
+    // 允许在悬停期间通过滚轮滚动 Title 卡描述区（卡片本身 pointer-events: none）
+    this._titleCardWheelEl = el;
+    this._titleCardWheelHandler = (ev) => {
+      if (!this._titleCard?.length) return;
+      const desc = this._titleCard.find(".item-desc-display, .tc-desc")[0];
+      if (!desc) return;
+
+      const hasOverflow = desc.scrollHeight > desc.clientHeight;
+      if (!hasOverflow) return;
+
+      desc.scrollTop += ev.deltaY;
+      ev.preventDefault();
+    };
+    el.addEventListener("wheel", this._titleCardWheelHandler, { passive: false });
   }
 
   _onItemHoverEnd() {
+    if (this._titleCardWheelEl && this._titleCardWheelHandler) {
+      this._titleCardWheelEl.removeEventListener("wheel", this._titleCardWheelHandler);
+    }
+    this._titleCardWheelEl = null;
+    this._titleCardWheelHandler = null;
     this._titleCard?.remove();
     this._titleCard = null;
   }
