@@ -4062,11 +4062,13 @@ body.game .limbuscompany.app img {
 
 .limbus-title-card-equip .tc-gold-divider-muted {
   background: linear-gradient(90deg, rgba(154,104,57,0) 0%, rgba(154,104,57,.95) 50%, rgba(154,104,57,0) 100%);
+  margin-top: auto;
+  margin-bottom: 5px;
 }
 
 .limbus-title-card-equip .tc-equip-footer {
   border-top: none;
-  margin-top: auto;
+  margin-top: 0;
   padding: 8px 12px 10px;
 }
 
