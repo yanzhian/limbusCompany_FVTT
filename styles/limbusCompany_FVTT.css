@@ -3948,8 +3948,8 @@ body.game .limbuscompany.app img {
   margin-left: auto;
   display: grid;
   grid-template-areas: ". up ." "left . right" ". down .";
-  grid-template-columns: 24px 24px 24px;
-  grid-template-rows: 24px 24px 24px;
+  grid-template-columns: 16px 16px 16px;
+  grid-template-rows: 16px 16px 16px;
   gap: 2px;
 }
 
@@ -3969,7 +3969,7 @@ body.game .limbuscompany.app img {
 
 .limbus-title-card-equip .tc-link-dir-group .tc-link-arrow-text {
   color: #EBBD68;
-  font-size: 14px;
+  font-size: 12px;
   line-height: 1;
 }
 
@@ -4010,8 +4010,8 @@ body.game .limbuscompany.app img {
 }
 
 .limbus-title-card-equip .tc-equip-footer .stellar-icon {
-  width: 20px;
-  height: 20px;
+  width: 16px;
+  height: 16px;
 }
 
 /* ─── §3-P  Activity 编辑器对话框内联表单 ──────────────────────── */
