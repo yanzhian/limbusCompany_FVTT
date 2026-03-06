@@ -107,7 +107,7 @@ export class LimbusActorSheet extends ActorSheet {
         slotIndex: idx,
         item:      bItem,
         itemId:    id ?? null,
-        skillImg:  this._resolveSkillImg(bItem),
+        skillImg:  bItem?.img ?? "",
       };
     });
 
@@ -115,7 +115,7 @@ export class LimbusActorSheet extends ActorSheet {
     context.defenseSkill = {
       item:     defItem,
       itemId:   system.skills?.defense ?? null,
-      skillImg: this._resolveSkillImg(defItem),
+      skillImg: defItem?.img ?? "",
     };
 
     context.egoSkills = cfg.EGO_GRADES.map(grade => {
@@ -124,7 +124,7 @@ export class LimbusActorSheet extends ActorSheet {
         grade,
         item:     egoItem,
         itemId:   system.skills?.ego?.[grade] ?? null,
-        skillImg: this._resolveSkillImg(egoItem),
+        skillImg: egoItem?.img ?? "",
       };
     });
 
@@ -1058,8 +1058,7 @@ export class LimbusActorSheet extends ActorSheet {
       // 主技能
       const mainItem = id ? this.actor.items.get(id) : null;
 
-      // 图片：使用 _resolveSkillImg 保证回退到系统内资源
-      $slot.find("img").attr("src", this._resolveSkillImg(mainItem));
+      $slot.find("img").attr("src", mainItem?.img ?? "");
       $slot.attr("data-item-id", id ?? "");
       $slot.attr("data-slot-index", i);
 
