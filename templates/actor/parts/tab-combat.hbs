@@ -68,9 +68,10 @@
           <div class="combat-skill-slot-wrap">
             <div class="combat-skill-slot skill-slot-octa slot-empty"
                  data-slot-index="{{slotIndex}}">
-              <img src="systems/limbusCompany_FVTT/assets/icons/Skill/Normalsin.webp"
-                   class="combat-skill-img" alt="">
+              <img src="" class="combat-skill-img" alt="">
             </div>
+            {{!-- 技能名称（小字） --}}
+            <div class="combat-slot-name"></div>
             {{!-- 激活/预备状态指示点 --}}
             <div class="slot-state-dot"></div>
             {{!-- 相关技能切换按钮（有绑定相关技能时才显示） --}}
@@ -98,9 +99,9 @@
                    style="border-color:{{sinColor item.system.sinType}}"
                  {{/if}}
                  title="{{#if item}}{{item.name}}{{else}}{{grade}}{{/if}}">
-              <img src="{{#if item}}{{item.img}}{{else}}systems/limbusCompany_FVTT/assets/icons/Skill/Normalsin.webp{{/if}}"
-                   class="combat-skill-img" alt="{{grade}}">
+              <img src="{{skillImg}}" class="combat-skill-img" alt="{{grade}}">
             </div>
+            <button class="combat-skill-related-toggle" style="display:none" title="切换相关技能">↺</button>
           </div>
         {{/each}}
 
@@ -112,9 +113,9 @@
                  style="border-color:{{sinColor defenseSkill.item.system.sinType}}"
                {{/if}}
                title="{{#if defenseSkill.item}}{{defenseSkill.item.name}}{{else}}守备技能{{/if}}">
-            <img src="{{#if defenseSkill.item}}{{defenseSkill.item.img}}{{else}}systems/limbusCompany_FVTT/assets/icons/Skill/Normalsin.webp{{/if}}"
-                 class="combat-skill-img" alt="守备">
+            <img src="{{defenseSkill.skillImg}}" class="combat-skill-img" alt="守备">
           </div>
+          <button class="combat-skill-related-toggle" style="display:none" title="切换相关技能">↺</button>
         </div>
 
       </div>{{!-- /combat-skill-slots-row --}}

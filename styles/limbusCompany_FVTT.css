@@ -3363,7 +3363,7 @@ body.game .limbuscompany.app img {
 /* 战斗技能格（52px） */
 .limbuscompany .combat-skill-slot {
   width: 52px; height: 52px;
-  display: flex; align-items: center; justify-content: center;
+  position: relative;
   overflow: hidden; cursor: pointer; transition: all .15s;
   background: rgba(11,7,7,.8);
 }
@@ -3386,20 +3386,65 @@ body.game .limbuscompany.app img {
   filter: brightness(1);
 }
 
-/* 激活/预备/空状态 */
+/* 激活/预备/bag/空状态 */
 .limbuscompany .combat-skill-slot.slot-active {
-  box-shadow: 0 0 14px 3px rgba(229,186,37,.7),
-              inset 0 0 6px 1px rgba(229,186,37,.2);
+  box-shadow: 0 0 14px 3px rgba(229,186,37,.75),
+              inset 0 0 8px 2px rgba(229,186,37,.25);
   border-color: var(--gold-active);
+  cursor: pointer;
+}
+/* 激活槽：罪孽色内发光叠加（由 JS 通过 CSS 变量注入） */
+.limbuscompany .combat-skill-slot.slot-active[style*="--slot-sin-color"] {
+  box-shadow: 0 0 14px 3px rgba(229,186,37,.75),
+              inset 0 0 8px 2px rgba(229,186,37,.25),
+              inset 0 0 20px 4px color-mix(in srgb, var(--slot-sin-color, transparent) 30%, transparent);
 }
 .limbuscompany .combat-skill-slot.slot-reserve {
-  box-shadow: 0 0 8px 2px rgba(180,80,80,.5);
+  box-shadow: 0 0 8px 2px rgba(180,80,80,.55);
   border-color: #C83232;
+  opacity: .85;
 }
-.limbuscompany .combat-skill-slot.slot-empty { opacity: .45; }
+.limbuscompany .combat-skill-slot.slot-bag {
+  opacity: .55;
+}
+.limbuscompany .combat-skill-slot.slot-empty { opacity: .35; }
 .limbuscompany .combat-skill-slot.slot-equipped { opacity: 1; }
-.limbuscompany .combat-skill-slot:hover { border-color: var(--gold-active); opacity: 1; }
-.limbuscompany .combat-skill-img { width: 100%; height: 100%; object-fit: cover; }
+
+/* 激活槽：悬停效果增强 */
+.limbuscompany .combat-skill-slot.slot-active:hover {
+  border-color: #FFE566;
+  box-shadow: 0 0 20px 5px rgba(229,186,37,.9),
+              inset 0 0 10px 3px rgba(229,186,37,.35);
+  transform: scale(1.05);
+}
+/* 非激活槽悬停 */
+.limbuscompany .combat-skill-slot:not(.slot-active):hover {
+  border-color: var(--gold-active);
+  opacity: .8;
+}
+.limbuscompany .combat-skill-img {
+  position: absolute; top: 0; left: 0;
+  width: 100%; height: 100%;
+  object-fit: cover; display: block;
+}
+
+/* 技能名称标签（战斗槽下方小字） */
+.limbuscompany .combat-slot-name {
+  font-size: .58rem;
+  color: var(--text-sub);
+  text-align: center;
+  max-width: 52px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  line-height: 1.2;
+  margin-top: 1px;
+}
+
+/* 战斗槽容器：overflow visible 保证飞出动画不被裁剪 */
+.limbuscompany .basic-combat-section { overflow: visible; }
+.limbuscompany .combat-skill-slots-row { overflow: visible; padding: 4px 0 8px; }
+.limbuscompany .combat-skill-slot-wrap { overflow: visible; }
 
 /* 状态指示点 */
 .limbuscompany .slot-state-dot {
@@ -3424,6 +3469,20 @@ body.game .limbuscompany.app img {
   padding: 0; transition: all .15s;
 }
 .limbuscompany .combat-skill-related-toggle:hover { color: var(--gold-active); border-color: var(--gold-active); }
+/* 已切换为相关技能时：绿色高亮 */
+.limbuscompany .combat-skill-related-toggle.related-active {
+  color: #6EE06E; border-color: #6EE06E;
+  box-shadow: 0 0 4px 1px rgba(110,224,110,.5);
+}
+
+/* AP不足时激活槽：保留金框但降低不透明度 */
+.limbuscompany .combat-skill-slot.slot-active.slot-no-ap {
+  opacity: .5;
+  cursor: not-allowed;
+}
+.limbuscompany .combat-skill-slot.slot-active.slot-no-ap:hover {
+  transform: none;
+}
 
 /* 行动值硬币 */
 .limbuscompany .ap-coins-row { display: flex; gap: 10px; align-items: center; padding: 4px 0; }
