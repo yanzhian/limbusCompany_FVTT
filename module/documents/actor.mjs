@@ -1016,7 +1016,7 @@ export class LimbusActor extends Actor {
     });
 
     // 添加【陷入混乱】BUFF（回合末移除逻辑由战斗系统处理）
-    await this.addBuff({ type: "chaos", name: "陷入混乱", intensity: 1, stacks: 1, whenAdded: "本回合" });
+    await this.addBuff({ type: "chaos", name: "陷入混乱", intensity: 0, stacks: 1, whenAdded: "本回合" });
 
     // 在聊天框通知
     ChatMessage.create({
