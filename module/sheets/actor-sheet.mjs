@@ -1017,9 +1017,10 @@ export class LimbusActorSheet extends ActorSheet {
       const bag2 = [...basicIds].sort(() => Math.random() - 0.5);
 
       this._combatBagState = {
-        equipped: basicIds,             // 装备的6个技能 ID
-        slots:    bag1.slice(0, 6),     // 当前6个显示槽 [0..5]
-        pool:     bag2,                 // 预备池（下一轮抽取来源）
+        equipped:    basicIds,          // 装备的6个技能 ID
+        slots:       bag1.slice(0, 6), // 当前6个显示槽 [0..5]
+        pool:        bag2,             // 预备池（下一轮抽取来源）
+        relatedMode: {},               // slotIndex → true 时显示相关技能
       };
     }
     this._renderCombatSlots(html);
@@ -1089,9 +1090,23 @@ export class LimbusActorSheet extends ActorSheet {
       const sinColor = CONFIG.LIMBUSCOMPANY?.SIN_COLORS?.[mainItem?.system?.sinType] ?? "";
       $slot.css("--slot-sin-color", (sinColor && i < 2) ? sinColor : "");
 
-      // 相关技能切换按钮（有关联技能时显示）
+      // 相关技能切换按钮（激活槽且有关联技能时显示）
       const hasRelated = !!(mainItem?.system?.relatedSkill?.itemUuid);
-      $toggle.toggle(hasRelated && i < 2);
+      const showToggle = hasRelated && i < 2;
+      $toggle.toggle(showToggle);
+
+      // 若处于相关技能模式，用相关技能图标/名称覆盖
+      if (showToggle && state.relatedMode?.[i]) {
+        const relUuid = mainItem.system.relatedSkill.itemUuid;
+        const relItem = typeof fromUuidSync !== "undefined" ? fromUuidSync(relUuid) : null;
+        if (relItem) {
+          $slot.find("img").attr("src", relItem.img ?? "");
+          if ($name.length) $name.text(relItem.name ?? "");
+        }
+        $toggle.addClass("related-active");
+      } else {
+        $toggle.removeClass("related-active");
+      }
     });
   }
 
@@ -1218,7 +1233,33 @@ export class LimbusActorSheet extends ActorSheet {
 
   _onRelatedSkillToggle(event) {
     event.stopPropagation();
-    $(event.currentTarget).toggleClass("related-active");
+    const $btn   = $(event.currentTarget);
+    const $wrap  = $btn.closest(".combat-skill-slot-wrap");
+    const $slot  = $wrap.find(".combat-skill-slot");
+    const slotIndex = parseInt($slot.attr("data-slot-index") ?? "0");
+
+    const state = this._combatBagState;
+    if (!state) return;
+    if (!state.relatedMode) state.relatedMode = {};
+
+    const isNowRelated = !state.relatedMode[slotIndex];
+    state.relatedMode[slotIndex] = isNowRelated;
+    $btn.toggleClass("related-active", isNowRelated);
+
+    // 取主技能和相关技能，更新槽位显示
+    const mainId   = state.slots[slotIndex];
+    const mainItem = mainId ? this.actor.items.get(mainId) : null;
+    if (!mainItem) return;
+
+    let displayItem = mainItem;
+    if (isNowRelated) {
+      const relUuid = mainItem.system?.relatedSkill?.itemUuid;
+      const relItem = relUuid && typeof fromUuidSync !== "undefined" ? fromUuidSync(relUuid) : null;
+      if (relItem) displayItem = relItem;
+    }
+
+    $slot.find("img").attr("src", displayItem.img ?? "");
+    $wrap.find(".combat-slot-name").text(displayItem.name ?? "");
   }
 
   /* ─── 行动值（AP） ──────────────────────────────────────────────────────── */
