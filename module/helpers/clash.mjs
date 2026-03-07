@@ -248,6 +248,12 @@ export class ClashManager {
       return;
     }
 
+    // 发起方自己不能作为防守方响应自己的对抗
+    if (defActor.id === initFlags.attackerId) {
+      ui.notifications.warn("发起对抗的角色不能对自己的发起进行对抗");
+      return;
+    }
+
     ClashManager._buildPickerDialog(defActor, (chosenItem) => {
       ClashManager.showPerformDialog(defActor, chosenItem, msgId, initFlags);
     });
@@ -542,8 +548,8 @@ export class ClashManager {
     const guard   = ClashManager._getBuffVal(loser,  "guard").intensity;
     const fragile = ClashManager._getBuffVal(loser,  "fragile").intensity;
 
-    // 基础伤害（含等级差 + 拼点威力BUFF）
-    const base = winScore + pwrUp - pwrDown + lvBonus;
+    // 拼点阶段：骰数结果 + 拼点威力 BUFF（攻防等级差在乘以抗性后再加）
+    const clashBase = winScore + pwrUp - pwrDown;
 
     // ── 物理抗性（含上装 resistanceAdj 覆盖，与角色卡 info-row 保持一致）──
     const PHYS_CATS   = ["slash", "blunt", "pierce"];
@@ -561,7 +567,9 @@ export class ClashManager {
     // 综合倍率 = 物理抗性 × 罪孽抗性
     const totalMult   = physMult * sinMult;
 
-    let finalDamage = Math.max(0, Math.round(base * totalMult) + fragile - guard);
+    // 最终伤害 = (拼点基础 × 综合抗性) + BUFF伤害修正 + 攻防等级差加值
+    // 公式：技能分类 × 目标抗性 + BUFF效果 + 攻防等级相差值（每3级+1）
+    let finalDamage = Math.max(0, Math.round(clashBase * totalMult) + fragile - guard + lvBonus);
 
     // ── 结算说明 ──
     const loserName = loser?.name ?? "?";
@@ -592,7 +600,7 @@ export class ClashManager {
       notes.push(`${loserName} 受到 ${finalDamage} 点伤害`);
     }
 
-    if (lvBonus > 0) notes.push(`（攻防等级差 ${lvDiff} 级，额外 +${lvBonus} 伤害）`);
+    if (lvBonus > 0) notes.push(`（攻防等级差 ${lvDiff} 级，抗性后额外 +${lvBonus} 伤害）`);
     if (pwrUp)       notes.push(`（拼点威力提升 +${pwrUp}）`);
     if (pwrDown)     notes.push(`（拼点威力降低 -${pwrDown}）`);
 
@@ -681,32 +689,49 @@ export class ClashManager {
   /* ─── 阶段六：直接承受（跳过对抗，玩家B点聊天框承受） ────────────────── */
 
   static async handleDirectTake(initFlags) {
-    const defActor =
+    const selActor =
       game.user.character ??
       canvas.tokens?.controlled?.[0]?.actor ??
       null;
 
-    if (!defActor) {
+    if (!selActor) {
       ui.notifications.warn("请先选中承受伤害的角色 Token");
       return;
     }
 
-    // 直接伤害 = 攻击骰结果 × 抗性
+    // 发起方不能承受自己发起的攻击
+    if (selActor.id === initFlags.attackerId) {
+      ui.notifications.warn("发起对抗的角色不能承受自己的攻击，请由目标玩家操作");
+      return;
+    }
+
+    // 直接伤害 = 攻击骰结果 × 实际抗性（含上装修正）
     const category   = initFlags.category ?? "";
-    const resSys     = defActor.system?.resistances ?? {};
-    const resistMult = ClashManager._parseResistance(resSys[category] ?? "x1.0");
+    const PHYS_CATS  = ["slash", "blunt", "pierce"];
+    const effRes     = ClashManager._getEffectiveResistances(selActor);
+    const resStr     = PHYS_CATS.includes(category) ? (effRes[category] ?? "x1.0") : "x1.0";
+    const resistMult = ClashManager._parseResistance(resStr);
     const damage     = Math.max(0, Math.round(initFlags.rollTotal * resistMult));
 
-    await ClashManager._applyAndSendTake(defActor, damage);
+    // 优先使用 base actor（确保角色卡与 linked tokens 同步）
+    const baseActor = game.actors.get(selActor.id) ?? selActor;
+    await ClashManager._applyAndSendTake(baseActor, damage);
+
+    // 若选中的是非 linked token actor，额外同步该 token 的 HP
+    if (selActor !== baseActor && selActor.isToken) {
+      const th  = selActor.system?.hp?.value ?? 0;
+      await selActor.update({ "system.hp.value": Math.max(0, th - damage) });
+    }
   }
 
   /* ─── 阶段七：承受结算（应用伤害 + 发送聊天框） ─────────────────────── */
 
   static async handleApplyDamage(targetActorId, damage) {
-    // 优先用点击时选中的 token，否则用 flags 中的 targetActorId
-    const selected = canvas.tokens?.controlled?.[0]?.actor;
-    const byId     = game.actors.get(targetActorId);
-    const actor    = selected ?? byId;
+    // 优先使用 flags 记录的 base actor（更新后 linked tokens 自动同步）
+    const baseActor = game.actors.get(targetActorId);
+    const selToken  = canvas.tokens?.controlled?.[0];
+    const selActor  = selToken?.actor;
+    const actor     = baseActor ?? selActor;
 
     if (!actor) {
       ui.notifications.warn("找不到目标角色，请先选中 Token");
@@ -714,6 +739,12 @@ export class ClashManager {
     }
 
     await ClashManager._applyAndSendTake(actor, damage);
+
+    // 若选中的是非 linked token actor（与 base actor 为不同文档），额外同步该 token 的 HP
+    if (selActor && selActor !== actor && selActor.isToken) {
+      const th = selActor.system?.hp?.value ?? 0;
+      await selActor.update({ "system.hp.value": Math.max(0, th - damage) });
+    }
   }
 
   static async _applyAndSendTake(actor, damage) {
@@ -722,24 +753,19 @@ export class ClashManager {
     const maxHp = sys.hp?.max   ?? 1;
     const newHp = Math.max(0, oldHp - damage);
 
-    // 检查混乱阈值
-    const thresholds = [...(sys.chaosThresholds ?? [])];
-    let chaosTriggered = false;
-    for (let i = 0; i < thresholds.length; i++) {
-      const t = thresholds[i];
-      if (!t.triggered && newHp <= maxHp * t.percent / 100) {
-        thresholds[i] = { ...t, triggered: true };
-        chaosTriggered = true;
-        break; // 每次只触发一条
-      }
+    // 提前判断是否跨越混乱阈值（用于聊天框显示，实际效果由 checkAndTriggerChaos 处理）
+    const thresholds    = sys.chaosThresholds ?? [];
+    const chaosTriggered = thresholds.some(
+      t => !t.triggered && newHp <= maxHp * t.percent / 100
+    );
+
+    // 更新 HP
+    await actor.update({ "system.hp.value": newHp });
+
+    // 触发混乱效果（烧断阈值 + x2.0 抗性 + AP=0 + 添加【陷入混乱】BUFF + 聊天通知）
+    if (chaosTriggered && actor.checkAndTriggerChaos) {
+      await actor.checkAndTriggerChaos(newHp, oldHp);
     }
-
-    // 更新 HP（混乱由 triggerChaos 处理）
-    const updateData = { "system.hp.value": newHp };
-    if (chaosTriggered) updateData["system.chaosThresholds"] = thresholds;
-    await actor.update(updateData);
-
-    if (chaosTriggered && actor.triggerChaos) await actor.triggerChaos();
 
     await ClashManager._sendTakeMsg(actor, damage, oldHp, newHp, maxHp, chaosTriggered);
   }
