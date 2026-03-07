@@ -20,6 +20,7 @@ import {
 } from "./documents/item.mjs";
 import { LimbusActorSheet } from "./sheets/actor-sheet.mjs";
 import { LimbusItemSheet }  from "./sheets/item-sheet.mjs";
+import { ClashManager }     from "./helpers/clash.mjs";
 
 /* ─── Hooks.once("init") ─────────────────────────────────────────────────── */
 
@@ -87,6 +88,32 @@ Hooks.once("ready", () => {
 // 画布每次就绪时再次确保双击补丁存在（重连/重载场景后仍生效）
 Hooks.on("canvasReady", () => {
   _installTokenDoubleClickOpenActorSheet();
+});
+
+/* ─── 对抗聊天框按钮交互 ─────────────────────────────────────────────────── */
+
+Hooks.on("renderChatMessage", (_message, html, _data) => {
+  const flags = _message.flags?.limbusCompany_FVTT;
+  if (!flags?.type) return;
+
+  // ── 发起对抗聊天框：对抗 / 承受 ──
+  if (flags.type === "clash-initiate") {
+    html.find(".clash-btn-clash").on("click", () => {
+      ClashManager.showRespondDialog(_message.id, flags);
+    });
+    html.find(".clash-btn-take").on("click", () => {
+      ClashManager.handleDirectTake(flags);
+    });
+  }
+
+  // ── 拼点结算聊天框：承受（扣血） ──
+  if (flags.type === "clash-resolve") {
+    html.find(".clash-btn-apply-damage").on("click", (e) => {
+      const targetActorId = e.currentTarget.dataset.targetActorId ?? flags.targetActorId;
+      const damage        = parseInt(e.currentTarget.dataset.damage ?? flags.damage) || 0;
+      ClashManager.handleApplyDamage(targetActorId, damage);
+    });
+  }
 });
 
 

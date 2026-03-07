@@ -10,6 +10,8 @@
  *   - 底部固定栏（眼货币 + 星芒）
  */
 
+import { ClashManager } from "../helpers/clash.mjs";
+
 export class LimbusActorSheet extends ActorSheet {
 
   /* ─── 默认选项 ──────────────────────────────────────────────────────────── */
@@ -729,81 +731,7 @@ export class LimbusActorSheet extends ActorSheet {
   }
 
   async _showClashDialog(item, slotIndex = -1) {
-    const sys     = item.system;
-    const formula = sys.diceFormula ?? "1d4";
-    const sinColor = CONFIG.LIMBUSCOMPANY?.SIN_COLORS?.[sys.sinType] ?? "#5F3E21";
-
-    const content = `
-      <div class="limbuscompany clash-dialog">
-        <div class="clash-skill-info" style="border-left:3px solid ${sinColor};padding-left:8px;margin-bottom:8px;">
-          <img src="${item.img}" width="40" height="40"
-               style="clip-path:polygon(25% 0%,75% 0%,100% 25%,100% 75%,75% 100%,25% 100%,0% 75%,0% 25%);vertical-align:middle;margin-right:6px;"
-               alt="${item.name}">
-          <strong>${item.name}</strong>
-          <span class="clash-formula" style="margin-left:8px;color:var(--text-sub)">${formula.toUpperCase()}</span>
-        </div>
-        <div class="form-group">
-          <label>加值修正</label>
-          <input type="text" name="bonus" placeholder="±N" style="width:80px"/>
-        </div>
-      </div>`;
-
-    new Dialog({
-      title: "发起对抗",
-      content,
-      buttons: {
-        clash: {
-          label: "发起对抗",
-          callback: async (dlgHtml) => {
-            const bonusStr    = dlgHtml.find("[name='bonus']").val()?.trim() || "";
-            const bonus       = parseInt(bonusStr) || 0;
-            const fullFormula = bonus !== 0 ? `${formula}${bonus >= 0 ? "+" : ""}${bonus}` : formula;
-
-            // 投骰
-            const roll = new Roll(fullFormula);
-            await roll.evaluate();
-
-            ChatMessage.create({
-              speaker: ChatMessage.getSpeaker({ actor: this.actor }),
-              content: `
-              <div class="limbuscompany clash-card">
-                <div class="clash-header">发起对抗</div>
-                <div class="card-body">
-                  <div class="clash-vs-row">
-                    <div class="skill-slot">
-                      <img src="${item.img}" width="56" height="56"
-                           style="clip-path:polygon(25% 0%,75% 0%,100% 25%,100% 75%,75% 100%,25% 100%,0% 75%,0% 25%);border-radius:0;"
-                           alt="${item.name}">
-                    </div>
-                    <div>
-                      <div style="font-size:1rem;font-weight:bold;">${item.name}</div>
-                      <div style="color:var(--text-sub)">${fullFormula.toUpperCase()}</div>
-                    </div>
-                  </div>
-                  <div class="clash-action-btns" data-item-id="${item.id}" data-roll-total="${roll.total}" data-formula="${fullFormula}">
-                    <button class="clash-action-btn" data-action="clash">对抗</button>
-                    <button class="clash-action-btn danger" data-action="take">承受</button>
-                  </div>
-                </div>
-              </div>`,
-              flags: { limbusCompany_FVTT: { type: "clash-initiate", attackerId: this.actor.id, itemId: item.id, rollTotal: roll.total } },
-            });
-
-            // 如果从战斗槽激活：播放动画 + 扣行动值
-            if (slotIndex >= 0 && this._combatBagState) {
-              this._animateCombatSkillUse(slotIndex);
-              // 动画全程约 700ms，动画结束后再扣 AP（避免重渲中断动画）
-              setTimeout(async () => {
-                const ap = this.actor.system.ap.value;
-                if (ap > 0) await this.actor.update({ "system.ap.value": ap - 1 });
-              }, 720);
-            }
-          },
-        },
-        cancel: { label: "取消" },
-      },
-      default: "clash",
-    }).render(true);
+    await ClashManager.showInitiateDialog(this.actor, item, slotIndex);
   }
 
   async _onItemActivate(event) {
