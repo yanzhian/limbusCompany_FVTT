@@ -32,6 +32,31 @@ export class ClashManager {
     return m ? parseFloat(m[1]) : 1.0;
   }
 
+  /**
+   * 返回角色的实际物理抗性（含上装 resistanceAdj 覆盖），
+   * 与 actor-sheet.mjs getData() 中 displayResistances 逻辑完全一致。
+   */
+  static _getEffectiveResistances(actor) {
+    const sys          = actor?.system ?? {};
+    const equippedItems = Object.values(sys.equipment ?? {})
+      .map(id => (id ? actor.items.get(id) : null))
+      .filter(item => item?.type === "equipment");
+    const upper = equippedItems.find(eq => eq.system?.subtype === "upper");
+    if (upper?.system?.resistanceAdj) {
+      const adj = upper.system.resistanceAdj;
+      return {
+        slash:  adj.slash  ?? sys.resistances?.slash  ?? "x1.0",
+        blunt:  adj.blunt  ?? sys.resistances?.blunt  ?? "x1.0",
+        pierce: adj.pierce ?? sys.resistances?.pierce ?? "x1.0",
+      };
+    }
+    return {
+      slash:  sys.resistances?.slash  ?? "x1.0",
+      blunt:  sys.resistances?.blunt  ?? "x1.0",
+      pierce: sys.resistances?.pierce ?? "x1.0",
+    };
+  }
+
   static _getBuff(actor, type) {
     return (actor?.system?.buffs ?? []).find(b => b.type === type) ?? null;
   }
@@ -520,12 +545,17 @@ export class ClashManager {
     // 基础伤害（含等级差 + 拼点威力BUFF）
     const base = winScore + pwrUp - pwrDown + lvBonus;
 
-    // ── 物理抗性（slash / blunt / pierce）──
-    const physResStr  = loser?.system?.resistances?.[winCat] ?? "x1.0";
+    // ── 物理抗性（含上装 resistanceAdj 覆盖，与角色卡 info-row 保持一致）──
+    const PHYS_CATS   = ["slash", "blunt", "pierce"];
+    const effRes      = loser ? ClashManager._getEffectiveResistances(loser) : {};
+    const physResStr  = PHYS_CATS.includes(winCat) ? (effRes[winCat] ?? "x1.0") : "x1.0";
     const physMult    = ClashManager._parseResistance(physResStr);
 
     // ── 罪孽抗性（wrath / lust / sloth / gluttony / gloom / pride / envy）──
-    const sinResStr   = loser?.system?.egoResistances?.[winSin] ?? "x1.0";
+    const SIN_TYPES   = ["wrath","lust","sloth","gluttony","gloom","pride","envy"];
+    const sinResStr   = (loser && SIN_TYPES.includes(winSin))
+      ? (loser.system?.egoResistances?.[winSin] ?? "x1.0")
+      : "x1.0";
     const sinMult     = ClashManager._parseResistance(sinResStr);
 
     // 综合倍率 = 物理抗性 × 罪孽抗性
