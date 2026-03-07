@@ -18,6 +18,10 @@ export class ClashManager {
     return CONFIG.LIMBUSCOMPANY?.CATEGORY_LABELS_ZH?.[cat] ?? cat ?? "";
   }
 
+  static _sinLabel(sinType) {
+    return CONFIG.LIMBUSCOMPANY?.SIN_LABELS_ZH?.[sinType] ?? sinType ?? "";
+  }
+
   static _sinColor(sinType) {
     return CONFIG.LIMBUSCOMPANY?.SIN_COLORS?.[sinType] ?? "#E8CAA2";
   }
@@ -480,9 +484,11 @@ export class ClashManager {
     const atkActor = game.actors.get(initFlags.attackerId);
     const resolution = ClashManager._computeResolution({
       atkActor,    atkTotal:    initFlags.rollTotal,   atkFormula:  initFlags.formula,
-      atkItemName: initFlags.itemName, atkItemImg: initFlags.itemImg, atkCategory: initFlags.category,
+      atkItemName: initFlags.itemName, atkItemImg: initFlags.itemImg,
+      atkCategory: initFlags.category ?? "",           atkSinType:  initFlags.sinType ?? "",
       defActor,    defTotal:    defRoll.total,         defFormula,
-      defItemName: defItem.name,       defItemImg: defItem.img,       defCategory: sys.category ?? "",
+      defItemName: defItem.name,       defItemImg: defItem.img,
+      defCategory: sys.category ?? "",                 defSinType:  sys.sinType ?? "",
     });
 
     await ClashManager._sendResolveMsg(resolution, initFlags, defActor, defItem, defFormula);
@@ -490,56 +496,79 @@ export class ClashManager {
 
   /* ─── 阶段五b：拼点结算逻辑 ────────────────────────────────────────────── */
 
-  static _computeResolution({ atkActor, atkTotal, atkFormula, atkItemName, atkItemImg, atkCategory,
-                               defActor, defTotal, defFormula, defItemName, defItemImg, defCategory }) {
-    const atkWins    = atkTotal >= defTotal;
-    const winner     = atkWins ? atkActor : defActor;
-    const loser      = atkWins ? defActor : atkActor;
-    const winScore   = atkWins ? atkTotal : defTotal;
-    const loseScore  = atkWins ? defTotal : atkTotal;
-    const winCat     = atkWins ? atkCategory : defCategory;
+  static _computeResolution({ atkActor, atkTotal, atkFormula, atkItemName, atkItemImg, atkCategory, atkSinType,
+                               defActor, defTotal, defFormula, defItemName, defItemImg, defCategory, defSinType }) {
+    const atkWins  = atkTotal >= defTotal;
+    const winner   = atkWins ? atkActor : defActor;
+    const loser    = atkWins ? defActor : atkActor;
+    const winScore = atkWins ? atkTotal : defTotal;
+    const winCat   = atkWins ? atkCategory : defCategory;
+    const winSin   = atkWins ? atkSinType  : defSinType;
 
     // 攻防等级差
-    const atkLv  = (atkWins ? atkActor : defActor)?.system?.atk?.base ?? 0;
-    const defLv  = (atkWins ? defActor : atkActor)?.system?.def?.base ?? 0;
-    const lvDiff = Math.abs(atkLv - defLv);
+    const atkLv   = (atkWins ? atkActor : defActor)?.system?.atk?.base ?? 0;
+    const defLv   = (atkWins ? defActor : atkActor)?.system?.def?.base ?? 0;
+    const lvDiff  = Math.abs(atkLv - defLv);
     const lvBonus = Math.floor(lvDiff / 3);
 
-    // BUFF 修正（胜者）
+    // BUFF 修正
     const pwrUp   = ClashManager._getBuffVal(winner, "clashPowerUp").intensity;
     const pwrDown = ClashManager._getBuffVal(loser,  "clashPowerDown").intensity;
     const guard   = ClashManager._getBuffVal(loser,  "guard").intensity;
     const fragile = ClashManager._getBuffVal(loser,  "fragile").intensity;
 
-    // 基础伤害
-    let base = winScore + pwrUp - pwrDown + lvBonus;
+    // 基础伤害（含等级差 + 拼点威力BUFF）
+    const base = winScore + pwrUp - pwrDown + lvBonus;
 
-    // 抗性
-    let resistMult = 1.0;
-    if (loser) {
-      const resSys = loser.system?.resistances ?? {};
-      const resStr = resSys[winCat] ?? "x1.0";
-      resistMult = ClashManager._parseResistance(resStr);
-    }
+    // ── 物理抗性（slash / blunt / pierce）──
+    const physResStr  = loser?.system?.resistances?.[winCat] ?? "x1.0";
+    const physMult    = ClashManager._parseResistance(physResStr);
 
-    let finalDamage = Math.max(0, Math.round(base * resistMult) + fragile - guard);
+    // ── 罪孽抗性（wrath / lust / sloth / gluttony / gloom / pride / envy）──
+    const sinResStr   = loser?.system?.egoResistances?.[winSin] ?? "x1.0";
+    const sinMult     = ClashManager._parseResistance(sinResStr);
 
-    // 结算说明
+    // 综合倍率 = 物理抗性 × 罪孽抗性
+    const totalMult   = physMult * sinMult;
+
+    let finalDamage = Math.max(0, Math.round(base * totalMult) + fragile - guard);
+
+    // ── 结算说明 ──
+    const loserName = loser?.name ?? "?";
     const notes = [];
+
     notes.push(`本次对抗：${atkActor?.name ?? "?"} vs ${defActor?.name ?? "?"}`);
-    notes.push(`${winner?.name ?? "?"} 获胜，${loser?.name ?? "?"} 败北`);
-    if (resistMult !== 1.0) {
+
+    // 结算结果行：公式=骰数
+    notes.push(`结算结果：`);
+    notes.push(`　${atkActor?.name ?? "?"}：${atkFormula.toUpperCase()}=${atkTotal}`);
+    notes.push(`　${defActor?.name ?? "?"}：${defFormula.toUpperCase()}=${defTotal}`);
+
+    notes.push(`${winner?.name ?? "?"} 获胜，${loserName} 败北`);
+
+    // 抗性说明（仅在非 x1.0 时显示，合并为一行）
+    const resParts = [];
+    if (physMult !== 1.0) {
       const catLbl = ClashManager._catLabel(winCat);
-      notes.push(`由于 ${loser?.name ?? "?"} ${catLbl}${resistMult > 1 ? "弱性" : "抗性"} 伤害×${resistMult}`);
+      resParts.push(`${catLbl}${physMult > 1 ? "弱性" : "抗性"}×${physMult}`);
     }
-    if (lvBonus > 0) notes.push(`攻防等级差 ${lvDiff} 级，额外 +${lvBonus} 伤害`);
-    if (pwrUp)   notes.push(`拼点威力提升 +${pwrUp}`);
-    if (pwrDown) notes.push(`拼点威力降低 -${pwrDown}`);
-    notes.push(`${loser?.name ?? "?"} 受到 ${finalDamage} 点伤害`);
+    if (sinMult !== 1.0) {
+      const sinLbl = ClashManager._sinLabel(winSin);
+      resParts.push(`${sinLbl} 抗性×${sinMult}`);
+    }
+    if (resParts.length > 0) {
+      notes.push(`${loserName} 由于 ${resParts.join(" + ")} 受到 ${finalDamage} 点伤害`);
+    } else {
+      notes.push(`${loserName} 受到 ${finalDamage} 点伤害`);
+    }
+
+    if (lvBonus > 0) notes.push(`（攻防等级差 ${lvDiff} 级，额外 +${lvBonus} 伤害）`);
+    if (pwrUp)       notes.push(`（拼点威力提升 +${pwrUp}）`);
+    if (pwrDown)     notes.push(`（拼点威力降低 -${pwrDown}）`);
 
     return {
       atkWins, winner, loser,
-      atkTotal, defTotal, winScore, loseScore,
+      atkTotal, defTotal, winScore,
       atkItemName, atkItemImg, atkFormula, atkActor,
       defItemName, defItemImg, defFormula, defActor,
       finalDamage, notes,
