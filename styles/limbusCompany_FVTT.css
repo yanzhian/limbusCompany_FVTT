@@ -3057,8 +3057,8 @@ body.game .limbuscompany.app img {
 .limbuscompany .item-row:hover,
 .limbuscompany .skill-row:hover { background: rgba(95,62,33,.2); }
 
-.limbuscompany .item-row.item-row-equipped { background: #472204; }
-.limbuscompany .item-row.item-row-equipped:hover { background: #4a2d16; }
+.limbuscompany .item-row.item-row-equipped { background: #3B2412; }
+.limbuscompany .item-row.item-row-equipped:hover { background: #5F3E22; }
 
 
 /* 图标列：32px */
