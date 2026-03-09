@@ -285,6 +285,18 @@ export class CharacterData extends foundry.abstract.TypeDataModel {
 
 export class LimbusActor extends Actor {
 
+  /**
+   * @override
+   * 新建角色时强制 prototypeToken.actorLink = true，
+   * 确保拖拽到场景时 Token 与角色卡共享数据，不会产生独立的 Token 副本。
+   */
+  async _preCreate(data, options, user) {
+    await super._preCreate(data, options, user);
+    if (this.type === "character") {
+      this.updateSource({ "prototypeToken.actorLink": true });
+    }
+  }
+
   /** @override */
   prepareData() {
     super.prepareData();
