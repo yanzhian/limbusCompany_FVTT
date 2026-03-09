@@ -254,8 +254,14 @@ export class ClashManager {
       return;
     }
 
-    ClashManager._buildPickerDialog(defActor, (chosenItem) => {
-      ClashManager.showPerformDialog(defActor, chosenItem, msgId, initFlags);
+    // 行动值不足则无法进行对抗
+    if ((defActor.system.ap?.value ?? 0) <= 0) {
+      ui.notifications.warn(`${defActor.name} 行动值不足，无法进行对抗`);
+      return;
+    }
+
+    ClashManager._buildPickerDialog(defActor, (chosenItem, slotIdx) => {
+      ClashManager.showPerformDialog(defActor, chosenItem, msgId, initFlags, slotIdx);
     });
   }
 
@@ -290,14 +296,15 @@ export class ClashManager {
     }));
 
     // ─── slot HTML 工厂 ───
-    const octaSlotHtml = (item, extraClass = "") => {
+    // slotIdx: 对应 bagState.slots 的下标（-1 = 守备/EGO，不属于 6-bag）
+    const octaSlotHtml = (item, extraClass = "", slotIdx = -1) => {
       if (!item) {
         return `<div class="clash-pick-slot clash-pick-empty" style="width:52px;height:52px;"></div>`;
       }
       const sin = ClashManager._sinColor(item.system?.sinType);
       const hasRel = !!(item.system?.relatedSkill?.itemUuid);
       return `
-        <div class="clash-pick-slot ${extraClass}" data-item-id="${item.id}" title="${item.name}"
+        <div class="clash-pick-slot ${extraClass}" data-item-id="${item.id}" data-slot-index="${slotIdx}" title="${item.name}"
              style="position:relative;width:52px;height:52px;cursor:pointer;flex-shrink:0;">
           <img src="${item.img}"
                style="width:52px;height:52px;${OCTA_STYLE}border:2px solid ${sin};"
@@ -317,7 +324,7 @@ export class ClashManager {
       return `
         <div style="display:flex;flex-direction:column;align-items:center;gap:3px;">
           ${item
-            ? `<div class="clash-pick-slot" data-item-id="${item.id}" title="${item.name}"
+            ? `<div class="clash-pick-slot" data-item-id="${item.id}" data-slot-index="-1" title="${item.name}"
                     style="width:52px;height:52px;border-radius:50%;overflow:hidden;
                            border:2px solid ${sin};cursor:pointer;flex-shrink:0;">
                  <img src="${item.img}" style="width:100%;height:100%;object-fit:cover;" alt="${item.name}">
@@ -330,16 +337,16 @@ export class ClashManager {
 
     const topRow = `
       <div style="display:flex;gap:16px;justify-content:center;padding:10px 0 28px;">
-        ${octaSlotHtml(active0, "clash-pick-active")}
-        ${octaSlotHtml(active1, "clash-pick-active")}
-        ${octaSlotHtml(defItem)}
+        ${octaSlotHtml(active0, "clash-pick-active", 0)}
+        ${octaSlotHtml(active1, "clash-pick-active", 1)}
+        ${octaSlotHtml(defItem, "", -1)}
       </div>`;
 
     const expandedHtml = `
       <div class="clash-pick-expanded" style="display:none;">
         ${ClashManager._goldDivider()}
         <div style="display:flex;flex-wrap:wrap;gap:16px;justify-content:center;padding:8px 0 16px;">
-          ${restItems.map(it => octaSlotHtml(it)).join("")}
+          ${restItems.map((it, j) => octaSlotHtml(it, "", 2 + j)).join("")}
         </div>
         ${egoEntries.some(e => e.item) ? `
           <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;padding:4px 0 8px;">
@@ -370,14 +377,15 @@ export class ClashManager {
           $(e.currentTarget).text(open ? "▼" : "▲");
         });
 
-        // 选中技能
+        // 选中技能（携带 slotIdx 供后续推进战斗袋）
         dlgHtml.on("click", ".clash-pick-slot:not(.clash-pick-empty)", (e) => {
           if ($(e.target).hasClass("clash-pick-rel")) return; // 不触发 related toggle
-          const itemId = e.currentTarget.dataset.itemId;
-          const item   = actor.items.get(itemId);
+          const itemId  = e.currentTarget.dataset.itemId;
+          const slotIdx = parseInt(e.currentTarget.dataset.slotIndex ?? "-1");
+          const item    = actor.items.get(itemId);
           if (!item) return;
           dlg.close();
-          onPick(item);
+          onPick(item, slotIdx);
         });
 
         // 切换相关技能
@@ -414,7 +422,7 @@ export class ClashManager {
 
   /* ─── 阶段四：进行对抗弹窗（与发起对抗一致，标题/按钮不同） ─────────── */
 
-  static async showPerformDialog(defActor, defItem, initMsgId, initFlags) {
+  static async showPerformDialog(defActor, defItem, initMsgId, initFlags, slotIdx = -1) {
     const sys     = defItem.system ?? {};
     const formula = sys.diceFormula ?? "1d4";
     const catIcon = ClashManager._catIcon(sys.category);
@@ -449,7 +457,7 @@ export class ClashManager {
               const roll     = new Roll(full);
               await roll.evaluate();
               await ClashManager._sendResponseAndResolve(
-                defActor, defItem, roll, full, initMsgId, initFlags
+                defActor, defItem, roll, full, initMsgId, initFlags, slotIdx
               );
               resolve(true);
             },
@@ -470,7 +478,7 @@ export class ClashManager {
 
   /* ─── 阶段五：进行对抗聊天框 + 自动拼点结算 ─────────────────────────── */
 
-  static async _sendResponseAndResolve(defActor, defItem, defRoll, defFormula, initMsgId, initFlags) {
+  static async _sendResponseAndResolve(defActor, defItem, defRoll, defFormula, initMsgId, initFlags, slotIdx = -1) {
     const sys        = defItem.system ?? {};
     const effectDesc = ClashManager._effectDesc(defItem);
 
@@ -510,6 +518,12 @@ export class ClashManager {
     // 扣防守方 AP
     const defAp = defActor.system.ap?.value ?? 0;
     if (defAp > 0) await defActor.update({ "system.ap.value": defAp - 1 });
+
+    // 推进防守方战斗袋（技能消失，后面的技能填充）
+    if (slotIdx >= 0) {
+      const sheet = defActor.sheet;
+      if (sheet?._combatBagState) sheet._animateCombatSkillUse?.(slotIdx);
+    }
 
     // 拼点结算
     const atkActor = game.actors.get(initFlags.attackerId);
