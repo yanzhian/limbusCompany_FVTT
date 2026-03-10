@@ -1315,8 +1315,73 @@ export class LimbusActorSheet extends ActorSheet {
     const buffId = event.currentTarget.closest("[data-buff-id]")?.dataset.buffId;
     const buff   = this.actor.system.buffs?.find(b => b.id === buffId);
     if (!buff) return;
-    ui.notifications.info(`触发 【${buff.name}】 强度:${buff.intensity} 层数:${buff.stacks}`);
-    // 实际触发逻辑在 helpers/buff.mjs 阶段实现
+
+    const actor     = this.actor;
+    const intensity = buff.intensity ?? 0;
+    const stacks    = buff.stacks    ?? 0;
+
+    switch (buff.type) {
+
+      // ── 流血 / 破裂 / 燃烧：受到强度点固定伤害，层数 -1 ─────────────────
+      case "bleed":
+      case "rupture":
+      case "burn": {
+        const oldHp = actor.system.hp?.value ?? 0;
+        const newHp = Math.max(0, oldHp - intensity);
+        await actor.update({ "system.hp.value": newHp });
+        await actor.reduceBuffStacks(buff.type);
+        if (actor.checkAndTriggerChaos) await actor.checkAndTriggerChaos(newHp, oldHp);
+        ChatMessage.create({
+          speaker: ChatMessage.getSpeaker({ actor }),
+          content: `<div class="limbuscompany chat-clash">
+            <strong>${actor.name}</strong>【${buff.name}】触发：受到 <strong>${intensity}</strong> 点固定伤害。
+            （HP ${oldHp} → ${newHp}）
+          </div>`,
+        });
+        break;
+      }
+
+      // ── 沉沦：理智 -强度，层数 -1 ────────────────────────────────────────
+      case "sinking": {
+        const oldSan = actor.system.sanity?.value ?? 50;
+        const newSan = Math.max(5, oldSan - intensity);
+        await actor.setSanity(oldSan - intensity);
+        await actor.reduceBuffStacks("sinking");
+        ChatMessage.create({
+          speaker: ChatMessage.getSpeaker({ actor }),
+          content: `<div class="limbuscompany chat-clash">
+            <strong>${actor.name}</strong>【沉沦】触发：理智 -${intensity}。
+            （理智 ${oldSan} → ${newSan}）
+          </div>`,
+        });
+        break;
+      }
+
+      // ── 震颤：混乱阈值前移强度值，层数 -1 ───────────────────────────────
+      case "tremor": {
+        await actor.triggerSeismicBlast(intensity);
+        await actor.reduceBuffStacks("tremor");
+        ChatMessage.create({
+          speaker: ChatMessage.getSpeaker({ actor }),
+          content: `<div class="limbuscompany chat-clash">
+            <strong>${actor.name}</strong>【震颤】引爆：混乱阈值前移 <strong>${intensity}%</strong>。
+          </div>`,
+        });
+        break;
+      }
+
+      // ── 充能：消耗 1 层 ───────────────────────────────────────────────────
+      case "charge": {
+        await actor.reduceBuffStacks("charge");
+        ui.notifications.info(`${actor.name}【充能】消耗 1 层（剩余 ${Math.max(0, stacks - 1)} 层）`);
+        break;
+      }
+
+      // ── 其他 BUFF：仅提示，不执行效果 ────────────────────────────────────
+      default:
+        ui.notifications.info(`触发 【${buff.name}】 强度:${intensity} 层数:${stacks}`);
+        break;
+    }
   }
 
   async _onBuffDelete(event) {
