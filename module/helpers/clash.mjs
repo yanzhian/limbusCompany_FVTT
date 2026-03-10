@@ -716,13 +716,15 @@ export class ClashManager {
       : "x1.0";
     const sinMult   = ClashManager._parseResistance(sinResStr);
 
-    // ── 守护/易损（使用 intensity，直接加减伤害）─────────────────────────
-    const guard   = gi(loser, "guard");
-    const fragile = gi(loser, "fragile");
+    // ── 守护/易损（使用 stacks 层数，在抗性前加减骰数，之后再乘以抗性倍率）──
+    const guard   = gs(loser, "guard");
+    const fragile = gs(loser, "fragile");
 
     // ── 最终伤害 ──────────────────────────────────────────────────────────
-    // critMult 在抗性前应用，等级差加值已在拼点阶段计入有效骰数
-    const totalMult = critMult * physMult * sinMult;
+    // 计算顺序：winScore → critMult → +易损-守护 → ×physMult × sinMult
+    // 易损/守护先修正骰数，再由抗性倍率整体放大/缩小
+    const totalMult    = critMult * physMult * sinMult;
+    const adjustedBase = Math.max(0, Math.round(winScore * critMult) + fragile - guard);
 
     // 闪避：拼点成功 → 无伤害；平局 → 无伤害（再次骰掷）
     const dodgeWin  = defCategory === "dodge" && !atkWins && !isTie;
@@ -738,10 +740,10 @@ export class ClashManager {
         finalDamage = 0;
       } else {
         // 强化防御拼点失败：伤害减去格挡骰数
-        finalDamage = Math.max(0, Math.round(winScore * totalMult) - defEffective + fragile - guard);
+        finalDamage = Math.max(0, Math.round(adjustedBase * physMult * sinMult) - defEffective);
       }
     } else {
-      finalDamage = Math.max(0, Math.round(winScore * totalMult) + fragile - guard);
+      finalDamage = Math.max(0, Math.round(adjustedBase * physMult * sinMult));
     }
 
     // ── 结算说明 ──────────────────────────────────────────────────────────
@@ -776,9 +778,14 @@ export class ClashManager {
     } else {
       notes.push(`${winner?.name ?? "?"} 获胜，${loserName} 败北`);
 
-      // 呼吸暴击注释：在抗性结算之前，显示施加暴击后、抗性前的伤害值
-      const preResDmg = Math.round(winScore * critMult);
-      if (breatheCrit) notes.push(`【呼吸】触发暴击！×1.5 → ${preResDmg}（抗性结算前）`);
+      // 呼吸暴击注释（在易损/守护和抗性之前）
+      const critBase = Math.round(winScore * critMult);
+      if (breatheCrit) notes.push(`【呼吸】触发暴击！×1.5 → ${critBase}`);
+
+      // 易损/守护注释（在抗性之前）
+      const showEffects = !dodgeWin && !(defCategory === "clashBlock" && !atkWins);
+      if (showEffects && fragile > 0) notes.push(`【易损】+${fragile} 层：${critBase} → ${critBase + fragile}（抗性前）`);
+      if (showEffects && guard   > 0) notes.push(`【守护】-${guard} 层：${critBase + fragile} → ${adjustedBase}（抗性前）`);
 
       // 守备技能特殊说明 + 抗性说明
       const resParts = [];
@@ -791,17 +798,13 @@ export class ClashManager {
         notes.push(`${defActor?.name ?? "?"} 格挡成功！攻击完全抵消`);
       } else if (defCategory === "clashBlock" && atkWins) {
         const baseNote = resParts.length > 0
-          ? `${loserName} 由于 ${resParts.join(" + ")} 受到伤害` : `${loserName} 受到伤害`;
-        notes.push(`${baseNote}，格挡减免 ${defEffective}，最终 ${finalDamage} 点`);
+          ? `基础 ${adjustedBase} 由于 ${resParts.join(" + ")} 受到伤害` : `受到伤害`;
+        notes.push(`${loserName} ${baseNote}，格挡减免 ${defEffective}，最终 ${finalDamage} 点`);
       } else {
         notes.push(resParts.length > 0
           ? `${loserName} 由于 ${resParts.join(" + ")} 受到 ${finalDamage} 点伤害`
           : `${loserName} 受到 ${finalDamage} 点伤害`);
       }
-
-      const showEffects = !dodgeWin && !(defCategory === "clashBlock" && !atkWins);
-      if (showEffects && fragile > 0) notes.push(`（易损 +${fragile} 伤害）`);
-      if (showEffects && guard   > 0) notes.push(`（守护 -${guard} 伤害）`);
     }
 
     return {
@@ -1209,14 +1212,17 @@ export class ClashManager {
     const defSinMult  = SIN_TYPES.includes(defSinType)
       ? ClashManager._parseResistance(atkActor.system?.egoResistances?.[defSinType] ?? "x1.0") : 1.0;
 
-    // ── 守护/易损（各自适用） ─────────────────────────────────────────────
-    const defFragile = gi(defActor, "fragile");
-    const defGuard   = gi(defActor, "guard");
-    const atkFragile = gi(atkActor, "fragile");
-    const atkGuard   = gi(atkActor, "guard");
+    // ── 守护/易损（stacks 层数，在抗性前加减骰数）各自适用 ───────────────
+    const defFragile    = gs(defActor, "fragile");
+    const defGuard      = gs(defActor, "guard");
+    const atkFragile    = gs(atkActor, "fragile");
+    const atkGuard      = gs(atkActor, "guard");
+    // 易损/守护先修正骰数，再乘抗性
+    const adjAtkEff     = Math.max(0, atkEffective + defFragile - defGuard);
+    const adjDefEff     = Math.max(0, defEffective + atkFragile - atkGuard);
 
-    const damageToDefActor = Math.max(0, Math.round(atkEffective * atkPhysMult * atkSinMult) + defFragile - defGuard);
-    const damageToAtkActor = Math.max(0, Math.round(defEffective * defSinMult) + atkFragile - atkGuard);
+    const damageToDefActor = Math.max(0, Math.round(adjAtkEff * atkPhysMult * atkSinMult));
+    const damageToAtkActor = Math.max(0, Math.round(adjDefEff * defSinMult));
 
     // ── 说明文字 ─────────────────────────────────────────────────────────
     const atkModStr = (() => {
@@ -1239,11 +1245,24 @@ export class ClashManager {
     const atkResNote = defSinMult !== 1.0
       ? `（${ClashManager._sinLabel(defSinType)} 抗性×${defSinMult}）` : "";
 
+    const defFGStr = (() => {
+      const p = [];
+      if (defFragile > 0) p.push(`易损+${defFragile}`);
+      if (defGuard   > 0) p.push(`守护-${defGuard}`);
+      return p.length ? `，${p.join("，")}→${adjAtkEff}（抗性前）` : "";
+    })();
+    const atkFGStr = (() => {
+      const p = [];
+      if (atkFragile > 0) p.push(`易损+${atkFragile}`);
+      if (atkGuard   > 0) p.push(`守护-${atkGuard}`);
+      return p.length ? `，${p.join("，")}→${adjDefEff}（抗性前）` : "";
+    })();
+
     const noteLines = [
       `${atkActor?.name ?? "?"}（攻击）：${initFlags.formula?.toUpperCase() ?? ""}=${initFlags.rollTotal}${atkModStr}`,
       `${defActor?.name ?? "?"}（反击）：${defFormula?.toUpperCase() ?? ""}=${defRoll.total}${defModStr}`,
-      `${defActor?.name ?? "?"} 受到 ${damageToDefActor} 点伤害${defResNote}${defFragile > 0 ? `，易损+${defFragile}` : ""}${defGuard > 0 ? `，守护-${defGuard}` : ""}`,
-      `${atkActor?.name ?? "?"} 受到反击 ${damageToAtkActor} 点伤害${atkResNote}${atkFragile > 0 ? `，易损+${atkFragile}` : ""}${atkGuard > 0 ? `，守护-${atkGuard}` : ""}`,
+      `${defActor?.name ?? "?"} 受到 ${damageToDefActor} 点伤害${defFGStr}${defResNote}`,
+      `${atkActor?.name ?? "?"} 受到反击 ${damageToAtkActor} 点伤害${atkFGStr}${atkResNote}`,
     ];
     if (atkLvBonus > 0) noteLines.push(`（攻击方等级 ${atkLv} vs 防守方等级 ${defLv}，等级差 ${atkLv - defLv}，+${atkLvBonus}）`);
     if (defLvBonus > 0) noteLines.push(`（防守方等级 ${defLv} vs 攻击方等级 ${atkLv}，等级差 ${defLv - atkLv}，反击+${defLvBonus}）`);
@@ -1344,12 +1363,13 @@ export class ClashManager {
     const atkSinMult  = SIN_TYPES.includes(atkSinType)
       ? ClashManager._parseResistance(defActor.system?.egoResistances?.[atkSinType] ?? "x1.0") : 1.0;
 
-    // ── 守护/易损 ────────────────────────────────────────────────────────
-    const fragile = gi(defActor, "fragile");
-    const guard   = gi(defActor, "guard");
-
-    const rawDamage   = Math.round(atkEffective * atkPhysMult * atkSinMult);
-    const finalDamage = Math.max(0, rawDamage - defEffective + fragile - guard);
+    // ── 守护/易损（stacks 层数，在抗性前加减骰数）───────────────────────
+    const fragile      = gs(defActor, "fragile");
+    const guard        = gs(defActor, "guard");
+    // 易损/守护先修正攻击方骰数，再乘抗性
+    const adjustedAtk  = Math.max(0, atkEffective + fragile - guard);
+    const rawDamage    = Math.round(adjustedAtk * atkPhysMult * atkSinMult);
+    const finalDamage  = Math.max(0, rawDamage - defEffective);
 
     // ── 说明文字 ─────────────────────────────────────────────────────────
     const resNote = atkPhysMult !== 1.0 || atkSinMult !== 1.0
@@ -1371,10 +1391,17 @@ export class ClashManager {
       return parts.length ? ` +${parts.join("+")}→${defEffective}` : "";
     })();
 
+    const fragileGuardStr = (() => {
+      const parts = [];
+      if (fragile > 0) parts.push(`易损+${fragile}`);
+      if (guard   > 0) parts.push(`守护-${guard}`);
+      return parts.length ? ` ${parts.join("，")}→${adjustedAtk}（抗性前）` : "";
+    })();
+
     const notes = [
-      `${atkActor?.name ?? "?"}：${initFlags.formula?.toUpperCase() ?? ""}=${initFlags.rollTotal}${atkModStr}`,
+      `${atkActor?.name ?? "?"}：${initFlags.formula?.toUpperCase() ?? ""}=${initFlags.rollTotal}${atkModStr}${fragileGuardStr}`,
       `${defActor?.name ?? "?"} 格挡：${defFormula?.toUpperCase() ?? ""}=${defRoll.total}${defModStr}`,
-      `原始伤害 ${rawDamage}${resNote} − 格挡 ${defEffective}${fragile > 0 ? ` + 易损${fragile}` : ""}${guard > 0 ? ` - 守护${guard}` : ""} = ${finalDamage} 点`,
+      `伤害 ${adjustedAtk}${resNote} → ${rawDamage} − 格挡 ${defEffective} = ${finalDamage} 点`,
     ];
     if (atkLvBonus > 0) notes.push(`（攻击方等级 ${atkLv} vs 防守方等级 ${defLv}，等级差 ${atkLv - defLv}，+${atkLvBonus}）`);
     if (defLvBonus > 0) notes.push(`（防守方等级 ${defLv} vs 攻击方等级 ${atkLv}，等级差 ${defLv - atkLv}，格挡+${defLvBonus}）`);
