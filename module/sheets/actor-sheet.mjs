@@ -93,11 +93,20 @@ export class LimbusActorSheet extends ActorSheet {
       return acc;
     }, { atk: 0, def: 0, speed: 0 });
 
-    context.atkTotal = (system.atk.base ?? 0) + (system.atk.extra ?? 0) + equipAdj.atk;
-    context.defTotal = (system.def.base ?? 0) + (system.def.extra ?? 0) + equipAdj.def;
+    // BUFF 层数修正（攻击等级提升/降低、防御等级提升/降低、迅捷/束缚）
+    const bStacks = (type) => (system.buffs ?? [])
+      .filter(b => b.type === type)
+      .reduce((s, b) => s + (b.stacks ?? 0), 0);
+
+    const buffAtkMod   = bStacks("atkLevelUp") - bStacks("atkLevelDown");
+    const buffDefMod   = bStacks("defLevelUp")  - bStacks("defLevelDown");
+    const buffSpeedMod = bStacks("swift")        - bStacks("bind");
+
+    context.atkTotal = (system.atk.base ?? 0) + (system.atk.extra ?? 0) + equipAdj.atk + buffAtkMod;
+    context.defTotal = (system.def.base ?? 0) + (system.def.extra ?? 0) + equipAdj.def + buffDefMod;
     context.speedDisplay = {
-      min: (system.speed.min ?? 0) + equipAdj.speed,
-      max: (system.speed.max ?? 0) + equipAdj.speed,
+      min: (system.speed.min ?? 0) + equipAdj.speed + buffSpeedMod,
+      max: (system.speed.max ?? 0) + equipAdj.speed + buffSpeedMod,
     };
 
     const equippedUpper = equippedItems.find(eq => eq.system?.subtype === "upper");
