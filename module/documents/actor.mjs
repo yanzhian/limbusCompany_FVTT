@@ -1017,21 +1017,31 @@ export class LimbusActor extends Actor {
     if (!triggered) return;
 
     thresholds[burnedIdx] = { ...thresholds[burnedIdx], triggered: true };
-    await this.update({ "system.chaosThresholds": thresholds });
 
-    // 触发混乱效果：物理抗性全部变为 x2.0，清空行动点
+    // 将混乱阈值烧断、物理抗性 ×2.0、AP 清零、添加 BUFF 合并为单次 update，
+    // 避免多次 update 连发触发 Foundry 竞态（renderChatMessage / deleteDocuments 报错）
+    const newBuffs = [...(this.system.buffs ?? [])];
+    newBuffs.push({
+      id:        foundry.utils.randomID(),
+      type:      "chaos",
+      name:      "陷入混乱",
+      icon:      "",
+      intensity: 0,
+      stacks:    1,
+      whenAdded: "本回合",
+    });
+
     await this.update({
+      "system.chaosThresholds":    thresholds,
       "system.resistances.slash":  "x2.0",
       "system.resistances.blunt":  "x2.0",
       "system.resistances.pierce": "x2.0",
       "system.ap.value":           0,
+      "system.buffs":              newBuffs,
     });
 
-    // 添加【陷入混乱】BUFF（回合末移除逻辑由战斗系统处理）
-    await this.addBuff({ type: "chaos", name: "陷入混乱", intensity: 0, stacks: 1, whenAdded: "本回合" });
-
-    // 在聊天框通知
-    ChatMessage.create({
+    // await 确保消息创建完成，防止 Foundry 消息清理竞态
+    await ChatMessage.create({
       content: `<div class="limbuscompany chat-clash"><strong>${this.name}</strong> 混乱阈值被触发（${thresholds[burnedIdx].percent}%）——【陷入混乱】！</div>`,
     });
   }

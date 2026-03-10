@@ -665,6 +665,18 @@ export class ClashManager {
     const winCat   = atkWins ? atkCategory  : defCategory;
     const winSin   = atkWins ? atkSinType   : defSinType;
 
+    // ── 呼吸（breathing）：命中方判定暴击（在抗性计算之前） ──────────────
+    // 暴击判定先于抗性，critMult 作为额外倍率参与 winScore 计算，
+    // 触发时层数-1 由调用方执行
+    const breatheBuff = ClashManager._getBuff(winner, "breathing");
+    let   breatheCrit = false;
+    let   critMult    = 1.0;
+    if (breatheBuff && breatheBuff.stacks > 0) {
+      const critChance = (breatheBuff.intensity ?? 1) * 0.05;
+      breatheCrit = Math.random() < critChance;
+      if (breatheCrit) critMult = 1.5;
+    }
+
     // ── 物理抗性（含上装 resistanceAdj 覆盖）────────────────────────────
     const effRes     = loser ? ClashManager._getEffectiveResistances(loser) : {};
     const physResStr = PHYS_CATS.has(winCat) ? (effRes[winCat] ?? "x1.0") : "x1.0";
@@ -681,22 +693,10 @@ export class ClashManager {
     const fragile = gi(loser, "fragile");
 
     // ── 最终伤害 ──────────────────────────────────────────────────────────
-    // 公式：round(winScore × physMult × sinMult) + 易损强度 - 守护强度
-    // 等级差加值已在拼点阶段计入有效骰数，不再单独计入伤害
-    const totalMult = physMult * sinMult;
-    let   finalDamage = Math.max(0, Math.round(winScore * totalMult) + fragile - guard);
-
-    // ── 呼吸（breathing）：命中方有 breathing BUFF 时，强度×5% 概率暴击 ──
-    // 暴击：伤害×1.5；触发时层数-1（由调用方在结算后执行）
-    const breatheBuff = ClashManager._getBuff(winner, "breathing");
-    let   breatheCrit = false;
-    if (breatheBuff && breatheBuff.stacks > 0) {
-      const critChance = (breatheBuff.intensity ?? 1) * 0.05;
-      breatheCrit = Math.random() < critChance;
-      if (breatheCrit) {
-        finalDamage = Math.max(0, Math.round(winScore * totalMult * 1.5) + fragile - guard);
-      }
-    }
+    // 公式：round(winScore × critMult × physMult × sinMult) + 易损强度 - 守护强度
+    // critMult 在抗性前应用，等级差加值已在拼点阶段计入有效骰数
+    const totalMult   = critMult * physMult * sinMult;
+    const finalDamage = Math.max(0, Math.round(winScore * totalMult) + fragile - guard);
 
     // ── 结算说明 ──────────────────────────────────────────────────────────
     const loserName = loser?.name ?? "?";
