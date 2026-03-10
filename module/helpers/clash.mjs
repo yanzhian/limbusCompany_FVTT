@@ -557,42 +557,56 @@ export class ClashManager {
     const gs = (actor, type) => ClashManager._getBuffVal(actor, type).stacks;
     const gi = (actor, type) => ClashManager._getBuffVal(actor, type).intensity;
 
-    // ── 各方有效骰数（骰子结果 + BUFF 修正）──────────────────────────────
-    // 攻击方（基础/EGO 技能）：强壮/虚弱 + 拼点威力提升/降低
+    // ── 有效攻/防等级（含装备加成 + atk.extra/def.extra + BUFF 层数）────
+    const effAtkLv = (a) => {
+      const sys = a?.system ?? {};
+      const equipAdj = Object.values(sys.equipment ?? {})
+        .map(id => id ? a.items.get(id) : null)
+        .filter(item => item?.type === "equipment")
+        .reduce((s, eq) => s + Number(eq.system?.atkAdj ?? 0), 0);
+      return (sys.atk?.base ?? 0) + (sys.atk?.extra ?? 0) + equipAdj
+           + gs(a, "atkLevelUp") - gs(a, "atkLevelDown");
+    };
+    const effDefLv = (a) => {
+      const sys = a?.system ?? {};
+      const equipAdj = Object.values(sys.equipment ?? {})
+        .map(id => id ? a.items.get(id) : null)
+        .filter(item => item?.type === "equipment")
+        .reduce((s, eq) => s + Number(eq.system?.defAdj ?? 0), 0);
+      return (sys.def?.base ?? 0) + (sys.def?.extra ?? 0) + equipAdj
+           + gs(a, "defLevelUp") - gs(a, "defLevelDown");
+    };
+
+    // ── 各方等级（攻击方始终用 atkLv；防守方：DEF型技能用 defLv，其余用 atkLv）
+    const atkSideLv = effAtkLv(atkActor);
+    const defSideLv = DEF_LEVEL_CATS.has(defCategory) ? effDefLv(defActor) : effAtkLv(defActor);
+
+    // 等级差加值（仅等级高的一方获得，差值每3级 +1 有效骰数）
+    const atkLvBonus = Math.floor(Math.max(0, atkSideLv - defSideLv) / 3);
+    const defLvBonus = Math.floor(Math.max(0, defSideLv - atkSideLv) / 3);
+
+    // ── 各方有效骰数（骰子结果 + BUFF 修正 + 等级差加值）────────────────
+    // 攻击方（基础/EGO 技能）：强壮/虚弱 + 拼点威力提升/降低 + 等级差
     const atkDiceMod = gs(atkActor, "strong")       - gs(atkActor, "weak")
                      + gs(atkActor, "clashPowerUp")  - gs(atkActor, "clashPowerDown");
 
-    // 防守方：守备技能 → 忍耐/破绽；基础/EGO → 强壮/虚弱；两者都再加拼点威力
+    // 防守方：守备技能 → 忍耐/破绽；基础/EGO → 强壮/虚弱；两者都再加拼点威力 + 等级差
     const defIsDefCat = ALL_DEF_CATS.has(defCategory);
     const defDiceMod  = defIsDefCat
       ? (gs(defActor, "endure")  - gs(defActor, "breach"))
       : (gs(defActor, "strong")  - gs(defActor, "weak"));
     const defPwrMod   = gs(defActor, "clashPowerUp") - gs(defActor, "clashPowerDown");
 
-    const atkEffective = atkTotal + atkDiceMod;
-    const defEffective = defTotal + defDiceMod + defPwrMod;
+    const atkEffective = atkTotal + atkDiceMod + atkLvBonus;
+    const defEffective = defTotal + defDiceMod + defPwrMod + defLvBonus;
 
-    // ── 胜负判定（基于有效骰数）──────────────────────────────────────────
+    // ── 胜负判定（基于含等级差的有效骰数）───────────────────────────────
     const atkWins  = atkEffective >= defEffective;
     const winner   = atkWins ? atkActor : defActor;
     const loser    = atkWins ? defActor : atkActor;
     const winScore = atkWins ? atkEffective : defEffective;
     const winCat   = atkWins ? atkCategory  : defCategory;
     const winSin   = atkWins ? atkSinType   : defSinType;
-
-    // ── 有效攻/防等级（含 BUFF 层数加成）────────────────────────────────
-    const effAtkLv = (a) => (a?.system?.atk?.base ?? 0) + gs(a, "atkLevelUp") - gs(a, "atkLevelDown");
-    const effDefLv = (a) => (a?.system?.def?.base ?? 0) + gs(a, "defLevelUp") - gs(a, "defLevelDown");
-
-    // ── 等级差加值 ────────────────────────────────────────────────────────
-    // 胜方技能类型决定比较哪个等级：
-    //   闪避/格挡/可拼点格挡（DEF型）→ 胜方 defLv vs 败方 atkLv
-    //   其余（基础/EGO/反击/可拼点反击）→ 胜方 atkLv vs 败方 defLv
-    const winUsesDefLv = DEF_LEVEL_CATS.has(winCat);
-    const winnerLv     = winUsesDefLv ? effDefLv(winner) : effAtkLv(winner);
-    const loserLv      = winUsesDefLv ? effAtkLv(loser)  : effDefLv(loser);
-    const lvDiff       = Math.max(0, winnerLv - loserLv);   // 仅正差有加成
-    const lvBonus      = Math.floor(lvDiff / 3);
 
     // ── 物理抗性（含上装 resistanceAdj 覆盖）────────────────────────────
     const effRes     = loser ? ClashManager._getEffectiveResistances(loser) : {};
@@ -610,9 +624,10 @@ export class ClashManager {
     const fragile = gi(loser, "fragile");
 
     // ── 最终伤害 ──────────────────────────────────────────────────────────
-    // 公式：round(winScore × physMult × sinMult) + 易损强度 - 守护强度 + 攻/防等级差加值
+    // 公式：round(winScore × physMult × sinMult) + 易损强度 - 守护强度
+    // 等级差加值已在拼点阶段计入有效骰数，不再单独计入伤害
     const totalMult   = physMult * sinMult;
-    const finalDamage = Math.max(0, Math.round(winScore * totalMult) + fragile - guard + lvBonus);
+    const finalDamage = Math.max(0, Math.round(winScore * totalMult) + fragile - guard);
 
     // ── 结算说明 ──────────────────────────────────────────────────────────
     const loserName = loser?.name ?? "?";
@@ -621,16 +636,27 @@ export class ClashManager {
     notes.push(`本次对抗：${atkActor?.name ?? "?"} vs ${defActor?.name ?? "?"}`);
     notes.push(`结算结果：`);
 
-    // 攻击方骰数（有 BUFF 时展示修正过程）
-    const atkBuffStr = atkDiceMod !== 0
-      ? `+BUFF(${atkDiceMod >= 0 ? "+" : ""}${atkDiceMod})=${atkEffective}` : "";
+    // 攻击方骰数（有 BUFF 或等级差时展示修正过程）
+    const atkModTotal = atkDiceMod + atkLvBonus;
+    const atkModParts = [];
+    if (atkDiceMod !== 0) atkModParts.push(`BUFF(${atkDiceMod >= 0 ? "+" : ""}${atkDiceMod})`);
+    if (atkLvBonus  > 0)  atkModParts.push(`等级差(+${atkLvBonus})`);
+    const atkBuffStr = atkModParts.length > 0
+      ? `+${atkModParts.join("+")}=${atkEffective}` : "";
     notes.push(`　${atkActor?.name ?? "?"}：${atkFormula.toUpperCase()}=${atkTotal} ${atkBuffStr}`.trim());
 
     // 防守方骰数
-    const defBuff = defDiceMod + defPwrMod;
-    const defBuffStr = defBuff !== 0
-      ? `+BUFF(${defBuff >= 0 ? "+" : ""}${defBuff})=${defEffective}` : "";
+    const defModTotal = defDiceMod + defPwrMod + defLvBonus;
+    const defModParts = [];
+    if ((defDiceMod + defPwrMod) !== 0) defModParts.push(`BUFF(${(defDiceMod + defPwrMod) >= 0 ? "+" : ""}${defDiceMod + defPwrMod})`);
+    if (defLvBonus > 0) defModParts.push(`等级差(+${defLvBonus})`);
+    const defBuffStr = defModParts.length > 0
+      ? `+${defModParts.join("+")}=${defEffective}` : "";
     notes.push(`　${defActor?.name ?? "?"}：${defFormula.toUpperCase()}=${defTotal} ${defBuffStr}`.trim());
+
+    // 等级差说明
+    if (atkLvBonus > 0) notes.push(`（攻击方等级 ${atkSideLv} vs 防守方等级 ${defSideLv}，等级差 ${atkSideLv - defSideLv}，拼点+${atkLvBonus}）`);
+    if (defLvBonus > 0) notes.push(`（防守方等级 ${defSideLv} vs 攻击方等级 ${atkSideLv}，等级差 ${defSideLv - atkSideLv}，拼点+${defLvBonus}）`);
 
     notes.push(`${winner?.name ?? "?"} 获胜，${loserName} 败北`);
 
@@ -642,11 +668,6 @@ export class ClashManager {
       ? `${loserName} 由于 ${resParts.join(" + ")} 受到 ${finalDamage} 点伤害`
       : `${loserName} 受到 ${finalDamage} 点伤害`);
 
-    // 额外说明
-    if (lvBonus > 0) {
-      const lvLabel = winUsesDefLv ? "防御" : "攻击";
-      notes.push(`（${lvLabel}等级差 ${lvDiff} 级，抗性后额外 +${lvBonus} 伤害）`);
-    }
     if (fragile > 0) notes.push(`（易损 +${fragile} 伤害）`);
     if (guard   > 0) notes.push(`（守护 -${guard} 伤害）`);
 
