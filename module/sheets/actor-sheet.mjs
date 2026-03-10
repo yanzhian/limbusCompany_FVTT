@@ -12,7 +12,28 @@
 
 import { ClashManager } from "../helpers/clash.mjs";
 
+/**
+ * 以 actorId 为 key 的模块级战斗袋状态 Map。
+ * 确保同一角色的角色卡 sheet 与 Token sheet 共享同一状态，不因实例不同而分裂。
+ */
+const _globalBagState = new Map();
+
 export class LimbusActorSheet extends ActorSheet {
+
+  /* ─── 战斗袋状态（跨实例共享） ─────────────────────────────────────────── */
+
+  /** 读取：从模块级 Map 取，角色卡 sheet 与 Token sheet 共用同一对象 */
+  get _combatBagState() {
+    return _globalBagState.get(this.actor?.id) ?? null;
+  }
+
+  /** 写入：null 表示清除，其他值存入 Map */
+  set _combatBagState(value) {
+    const id = this.actor?.id;
+    if (!id) return;
+    if (value == null) _globalBagState.delete(id);
+    else               _globalBagState.set(id, value);
+  }
 
   /* ─── 默认选项 ──────────────────────────────────────────────────────────── */
 
@@ -72,11 +93,20 @@ export class LimbusActorSheet extends ActorSheet {
       return acc;
     }, { atk: 0, def: 0, speed: 0 });
 
-    context.atkTotal = (system.atk.base ?? 0) + (system.atk.extra ?? 0) + equipAdj.atk;
-    context.defTotal = (system.def.base ?? 0) + (system.def.extra ?? 0) + equipAdj.def;
+    // BUFF 层数修正（攻击等级提升/降低、防御等级提升/降低、迅捷/束缚）
+    const bStacks = (type) => (system.buffs ?? [])
+      .filter(b => b.type === type)
+      .reduce((s, b) => s + (b.stacks ?? 0), 0);
+
+    const buffAtkMod   = bStacks("atkLevelUp") - bStacks("atkLevelDown");
+    const buffDefMod   = bStacks("defLevelUp")  - bStacks("defLevelDown");
+    const buffSpeedMod = bStacks("swift")        - bStacks("bind");
+
+    context.atkTotal = (system.atk.base ?? 0) + (system.atk.extra ?? 0) + equipAdj.atk + buffAtkMod;
+    context.defTotal = (system.def.base ?? 0) + (system.def.extra ?? 0) + equipAdj.def + buffDefMod;
     context.speedDisplay = {
-      min: (system.speed.min ?? 0) + equipAdj.speed,
-      max: (system.speed.max ?? 0) + equipAdj.speed,
+      min: (system.speed.min ?? 0) + equipAdj.speed + buffSpeedMod,
+      max: (system.speed.max ?? 0) + equipAdj.speed + buffSpeedMod,
     };
 
     const equippedUpper = equippedItems.find(eq => eq.system?.subtype === "upper");

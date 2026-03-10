@@ -254,8 +254,14 @@ export class ClashManager {
       return;
     }
 
-    ClashManager._buildPickerDialog(defActor, (chosenItem) => {
-      ClashManager.showPerformDialog(defActor, chosenItem, msgId, initFlags);
+    // 行动值不足则无法进行对抗
+    if ((defActor.system.ap?.value ?? 0) <= 0) {
+      ui.notifications.warn(`${defActor.name} 行动值不足，无法进行对抗`);
+      return;
+    }
+
+    ClashManager._buildPickerDialog(defActor, (chosenItem, slotIdx) => {
+      ClashManager.showPerformDialog(defActor, chosenItem, msgId, initFlags, slotIdx);
     });
   }
 
@@ -290,14 +296,15 @@ export class ClashManager {
     }));
 
     // ─── slot HTML 工厂 ───
-    const octaSlotHtml = (item, extraClass = "") => {
+    // slotIdx: 对应 bagState.slots 的下标（-1 = 守备/EGO，不属于 6-bag）
+    const octaSlotHtml = (item, extraClass = "", slotIdx = -1) => {
       if (!item) {
         return `<div class="clash-pick-slot clash-pick-empty" style="width:52px;height:52px;"></div>`;
       }
       const sin = ClashManager._sinColor(item.system?.sinType);
       const hasRel = !!(item.system?.relatedSkill?.itemUuid);
       return `
-        <div class="clash-pick-slot ${extraClass}" data-item-id="${item.id}" title="${item.name}"
+        <div class="clash-pick-slot ${extraClass}" data-item-id="${item.id}" data-slot-index="${slotIdx}" title="${item.name}"
              style="position:relative;width:52px;height:52px;cursor:pointer;flex-shrink:0;">
           <img src="${item.img}"
                style="width:52px;height:52px;${OCTA_STYLE}border:2px solid ${sin};"
@@ -317,7 +324,7 @@ export class ClashManager {
       return `
         <div style="display:flex;flex-direction:column;align-items:center;gap:3px;">
           ${item
-            ? `<div class="clash-pick-slot" data-item-id="${item.id}" title="${item.name}"
+            ? `<div class="clash-pick-slot" data-item-id="${item.id}" data-slot-index="-1" title="${item.name}"
                     style="width:52px;height:52px;border-radius:50%;overflow:hidden;
                            border:2px solid ${sin};cursor:pointer;flex-shrink:0;">
                  <img src="${item.img}" style="width:100%;height:100%;object-fit:cover;" alt="${item.name}">
@@ -330,16 +337,16 @@ export class ClashManager {
 
     const topRow = `
       <div style="display:flex;gap:16px;justify-content:center;padding:10px 0 28px;">
-        ${octaSlotHtml(active0, "clash-pick-active")}
-        ${octaSlotHtml(active1, "clash-pick-active")}
-        ${octaSlotHtml(defItem)}
+        ${octaSlotHtml(active0, "clash-pick-active", 0)}
+        ${octaSlotHtml(active1, "clash-pick-active", 1)}
+        ${octaSlotHtml(defItem, "", -1)}
       </div>`;
 
     const expandedHtml = `
       <div class="clash-pick-expanded" style="display:none;">
         ${ClashManager._goldDivider()}
         <div style="display:flex;flex-wrap:wrap;gap:16px;justify-content:center;padding:8px 0 16px;">
-          ${restItems.map(it => octaSlotHtml(it)).join("")}
+          ${restItems.map((it, j) => octaSlotHtml(it, "", 2 + j)).join("")}
         </div>
         ${egoEntries.some(e => e.item) ? `
           <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;padding:4px 0 8px;">
@@ -370,14 +377,15 @@ export class ClashManager {
           $(e.currentTarget).text(open ? "▼" : "▲");
         });
 
-        // 选中技能
+        // 选中技能（携带 slotIdx 供后续推进战斗袋）
         dlgHtml.on("click", ".clash-pick-slot:not(.clash-pick-empty)", (e) => {
           if ($(e.target).hasClass("clash-pick-rel")) return; // 不触发 related toggle
-          const itemId = e.currentTarget.dataset.itemId;
-          const item   = actor.items.get(itemId);
+          const itemId  = e.currentTarget.dataset.itemId;
+          const slotIdx = parseInt(e.currentTarget.dataset.slotIndex ?? "-1");
+          const item    = actor.items.get(itemId);
           if (!item) return;
           dlg.close();
-          onPick(item);
+          onPick(item, slotIdx);
         });
 
         // 切换相关技能
@@ -414,7 +422,7 @@ export class ClashManager {
 
   /* ─── 阶段四：进行对抗弹窗（与发起对抗一致，标题/按钮不同） ─────────── */
 
-  static async showPerformDialog(defActor, defItem, initMsgId, initFlags) {
+  static async showPerformDialog(defActor, defItem, initMsgId, initFlags, slotIdx = -1) {
     const sys     = defItem.system ?? {};
     const formula = sys.diceFormula ?? "1d4";
     const catIcon = ClashManager._catIcon(sys.category);
@@ -449,7 +457,7 @@ export class ClashManager {
               const roll     = new Roll(full);
               await roll.evaluate();
               await ClashManager._sendResponseAndResolve(
-                defActor, defItem, roll, full, initMsgId, initFlags
+                defActor, defItem, roll, full, initMsgId, initFlags, slotIdx
               );
               resolve(true);
             },
@@ -470,7 +478,7 @@ export class ClashManager {
 
   /* ─── 阶段五：进行对抗聊天框 + 自动拼点结算 ─────────────────────────── */
 
-  static async _sendResponseAndResolve(defActor, defItem, defRoll, defFormula, initMsgId, initFlags) {
+  static async _sendResponseAndResolve(defActor, defItem, defRoll, defFormula, initMsgId, initFlags, slotIdx = -1) {
     const sys        = defItem.system ?? {};
     const effectDesc = ClashManager._effectDesc(defItem);
 
@@ -511,6 +519,12 @@ export class ClashManager {
     const defAp = defActor.system.ap?.value ?? 0;
     if (defAp > 0) await defActor.update({ "system.ap.value": defAp - 1 });
 
+    // 推进防守方战斗袋（技能消失，后面的技能填充）
+    if (slotIdx >= 0) {
+      const sheet = defActor.sheet;
+      if (sheet?._combatBagState) sheet._animateCombatSkillUse?.(slotIdx);
+    }
+
     // 拼点结算
     const atkActor = game.actors.get(initFlags.attackerId);
     const resolution = ClashManager._computeResolution({
@@ -529,84 +543,137 @@ export class ClashManager {
 
   static _computeResolution({ atkActor, atkTotal, atkFormula, atkItemName, atkItemImg, atkCategory, atkSinType,
                                defActor, defTotal, defFormula, defItemName, defItemImg, defCategory, defSinType }) {
-    const atkWins  = atkTotal >= defTotal;
+
+    // ── 技能分类分组 ──────────────────────────────────────────────────────
+    // 守备技能（全部）→ 使用忍耐/破绽调整骰数
+    const ALL_DEF_CATS   = new Set(["dodge","block","counter","clashBlock","clashCounter"]);
+    // 使用防御等级（而非攻击等级）进行等级差比较的守备技能（不含反击系列）
+    const DEF_LEVEL_CATS = new Set(["dodge","block","clashBlock"]);
+    const PHYS_CATS      = new Set(["slash","blunt","pierce"]);
+    const SIN_TYPES      = new Set(["wrath","lust","sloth","gluttony","gloom","pride","envy"]);
+
+    // ── BUFF 辅助 ─────────────────────────────────────────────────────────
+    // 骰数/等级类 BUFF 均使用 stacks（层数）；守护/易损使用 intensity（强度）
+    const gs = (actor, type) => ClashManager._getBuffVal(actor, type).stacks;
+    const gi = (actor, type) => ClashManager._getBuffVal(actor, type).intensity;
+
+    // ── 有效攻/防等级（含装备加成 + atk.extra/def.extra + BUFF 层数）────
+    const effAtkLv = (a) => {
+      const sys = a?.system ?? {};
+      const equipAdj = Object.values(sys.equipment ?? {})
+        .map(id => id ? a.items.get(id) : null)
+        .filter(item => item?.type === "equipment")
+        .reduce((s, eq) => s + Number(eq.system?.atkAdj ?? 0), 0);
+      return (sys.atk?.base ?? 0) + (sys.atk?.extra ?? 0) + equipAdj
+           + gs(a, "atkLevelUp") - gs(a, "atkLevelDown");
+    };
+    const effDefLv = (a) => {
+      const sys = a?.system ?? {};
+      const equipAdj = Object.values(sys.equipment ?? {})
+        .map(id => id ? a.items.get(id) : null)
+        .filter(item => item?.type === "equipment")
+        .reduce((s, eq) => s + Number(eq.system?.defAdj ?? 0), 0);
+      return (sys.def?.base ?? 0) + (sys.def?.extra ?? 0) + equipAdj
+           + gs(a, "defLevelUp") - gs(a, "defLevelDown");
+    };
+
+    // ── 各方等级（攻击方始终用 atkLv；防守方：DEF型技能用 defLv，其余用 atkLv）
+    const atkSideLv = effAtkLv(atkActor);
+    const defSideLv = DEF_LEVEL_CATS.has(defCategory) ? effDefLv(defActor) : effAtkLv(defActor);
+
+    // 等级差加值（仅等级高的一方获得，差值每3级 +1 有效骰数）
+    const atkLvBonus = Math.floor(Math.max(0, atkSideLv - defSideLv) / 3);
+    const defLvBonus = Math.floor(Math.max(0, defSideLv - atkSideLv) / 3);
+
+    // ── 各方有效骰数（骰子结果 + BUFF 修正 + 等级差加值）────────────────
+    // 攻击方（基础/EGO 技能）：强壮/虚弱 + 拼点威力提升/降低 + 等级差
+    const atkDiceMod = gs(atkActor, "strong")       - gs(atkActor, "weak")
+                     + gs(atkActor, "clashPowerUp")  - gs(atkActor, "clashPowerDown");
+
+    // 防守方：守备技能 → 忍耐/破绽；基础/EGO → 强壮/虚弱；两者都再加拼点威力 + 等级差
+    const defIsDefCat = ALL_DEF_CATS.has(defCategory);
+    const defDiceMod  = defIsDefCat
+      ? (gs(defActor, "endure")  - gs(defActor, "breach"))
+      : (gs(defActor, "strong")  - gs(defActor, "weak"));
+    const defPwrMod   = gs(defActor, "clashPowerUp") - gs(defActor, "clashPowerDown");
+
+    const atkEffective = atkTotal + atkDiceMod + atkLvBonus;
+    const defEffective = defTotal + defDiceMod + defPwrMod + defLvBonus;
+
+    // ── 胜负判定（基于含等级差的有效骰数）───────────────────────────────
+    const atkWins  = atkEffective >= defEffective;
     const winner   = atkWins ? atkActor : defActor;
     const loser    = atkWins ? defActor : atkActor;
-    const winScore = atkWins ? atkTotal : defTotal;
-    const winCat   = atkWins ? atkCategory : defCategory;
-    const winSin   = atkWins ? atkSinType  : defSinType;
+    const winScore = atkWins ? atkEffective : defEffective;
+    const winCat   = atkWins ? atkCategory  : defCategory;
+    const winSin   = atkWins ? atkSinType   : defSinType;
 
-    // 攻防等级差
-    const atkLv   = (atkWins ? atkActor : defActor)?.system?.atk?.base ?? 0;
-    const defLv   = (atkWins ? defActor : atkActor)?.system?.def?.base ?? 0;
-    const lvDiff  = Math.abs(atkLv - defLv);
-    const lvBonus = Math.floor(lvDiff / 3);
+    // ── 物理抗性（含上装 resistanceAdj 覆盖）────────────────────────────
+    const effRes     = loser ? ClashManager._getEffectiveResistances(loser) : {};
+    const physResStr = PHYS_CATS.has(winCat) ? (effRes[winCat] ?? "x1.0") : "x1.0";
+    const physMult   = ClashManager._parseResistance(physResStr);
 
-    // BUFF 修正
-    const pwrUp   = ClashManager._getBuffVal(winner, "clashPowerUp").intensity;
-    const pwrDown = ClashManager._getBuffVal(loser,  "clashPowerDown").intensity;
-    const guard   = ClashManager._getBuffVal(loser,  "guard").intensity;
-    const fragile = ClashManager._getBuffVal(loser,  "fragile").intensity;
-
-    // 拼点阶段：骰数结果 + 拼点威力 BUFF（攻防等级差在乘以抗性后再加）
-    const clashBase = winScore + pwrUp - pwrDown;
-
-    // ── 物理抗性（含上装 resistanceAdj 覆盖，与角色卡 info-row 保持一致）──
-    const PHYS_CATS   = ["slash", "blunt", "pierce"];
-    const effRes      = loser ? ClashManager._getEffectiveResistances(loser) : {};
-    const physResStr  = PHYS_CATS.includes(winCat) ? (effRes[winCat] ?? "x1.0") : "x1.0";
-    const physMult    = ClashManager._parseResistance(physResStr);
-
-    // ── 罪孽抗性（wrath / lust / sloth / gluttony / gloom / pride / envy）──
-    const SIN_TYPES   = ["wrath","lust","sloth","gluttony","gloom","pride","envy"];
-    const sinResStr   = (loser && SIN_TYPES.includes(winSin))
+    // ── 罪孽抗性 ─────────────────────────────────────────────────────────
+    const sinResStr = (loser && SIN_TYPES.has(winSin))
       ? (loser.system?.egoResistances?.[winSin] ?? "x1.0")
       : "x1.0";
-    const sinMult     = ClashManager._parseResistance(sinResStr);
+    const sinMult   = ClashManager._parseResistance(sinResStr);
 
-    // 综合倍率 = 物理抗性 × 罪孽抗性
+    // ── 守护/易损（使用 intensity，直接加减伤害）─────────────────────────
+    const guard   = gi(loser, "guard");
+    const fragile = gi(loser, "fragile");
+
+    // ── 最终伤害 ──────────────────────────────────────────────────────────
+    // 公式：round(winScore × physMult × sinMult) + 易损强度 - 守护强度
+    // 等级差加值已在拼点阶段计入有效骰数，不再单独计入伤害
     const totalMult   = physMult * sinMult;
+    const finalDamage = Math.max(0, Math.round(winScore * totalMult) + fragile - guard);
 
-    // 最终伤害 = (拼点基础 × 综合抗性) + BUFF伤害修正 + 攻防等级差加值
-    // 公式：技能分类 × 目标抗性 + BUFF效果 + 攻防等级相差值（每3级+1）
-    let finalDamage = Math.max(0, Math.round(clashBase * totalMult) + fragile - guard + lvBonus);
-
-    // ── 结算说明 ──
+    // ── 结算说明 ──────────────────────────────────────────────────────────
     const loserName = loser?.name ?? "?";
-    const notes = [];
+    const notes     = [];
 
     notes.push(`本次对抗：${atkActor?.name ?? "?"} vs ${defActor?.name ?? "?"}`);
-
-    // 结算结果行：公式=骰数
     notes.push(`结算结果：`);
-    notes.push(`　${atkActor?.name ?? "?"}：${atkFormula.toUpperCase()}=${atkTotal}`);
-    notes.push(`　${defActor?.name ?? "?"}：${defFormula.toUpperCase()}=${defTotal}`);
+
+    // 攻击方骰数（有 BUFF 或等级差时展示修正过程）
+    const atkModTotal = atkDiceMod + atkLvBonus;
+    const atkModParts = [];
+    if (atkDiceMod !== 0) atkModParts.push(`BUFF(${atkDiceMod >= 0 ? "+" : ""}${atkDiceMod})`);
+    if (atkLvBonus  > 0)  atkModParts.push(`等级差(+${atkLvBonus})`);
+    const atkBuffStr = atkModParts.length > 0
+      ? `+${atkModParts.join("+")}=${atkEffective}` : "";
+    notes.push(`　${atkActor?.name ?? "?"}：${atkFormula.toUpperCase()}=${atkTotal} ${atkBuffStr}`.trim());
+
+    // 防守方骰数
+    const defModTotal = defDiceMod + defPwrMod + defLvBonus;
+    const defModParts = [];
+    if ((defDiceMod + defPwrMod) !== 0) defModParts.push(`BUFF(${(defDiceMod + defPwrMod) >= 0 ? "+" : ""}${defDiceMod + defPwrMod})`);
+    if (defLvBonus > 0) defModParts.push(`等级差(+${defLvBonus})`);
+    const defBuffStr = defModParts.length > 0
+      ? `+${defModParts.join("+")}=${defEffective}` : "";
+    notes.push(`　${defActor?.name ?? "?"}：${defFormula.toUpperCase()}=${defTotal} ${defBuffStr}`.trim());
+
+    // 等级差说明
+    if (atkLvBonus > 0) notes.push(`（攻击方等级 ${atkSideLv} vs 防守方等级 ${defSideLv}，等级差 ${atkSideLv - defSideLv}，拼点+${atkLvBonus}）`);
+    if (defLvBonus > 0) notes.push(`（防守方等级 ${defSideLv} vs 攻击方等级 ${atkSideLv}，等级差 ${defSideLv - atkSideLv}，拼点+${defLvBonus}）`);
 
     notes.push(`${winner?.name ?? "?"} 获胜，${loserName} 败北`);
 
-    // 抗性说明（仅在非 x1.0 时显示，合并为一行）
+    // 抗性说明
     const resParts = [];
-    if (physMult !== 1.0) {
-      const catLbl = ClashManager._catLabel(winCat);
-      resParts.push(`${catLbl}${physMult > 1 ? "弱性" : "抗性"}×${physMult}`);
-    }
-    if (sinMult !== 1.0) {
-      const sinLbl = ClashManager._sinLabel(winSin);
-      resParts.push(`${sinLbl} 抗性×${sinMult}`);
-    }
-    if (resParts.length > 0) {
-      notes.push(`${loserName} 由于 ${resParts.join(" + ")} 受到 ${finalDamage} 点伤害`);
-    } else {
-      notes.push(`${loserName} 受到 ${finalDamage} 点伤害`);
-    }
+    if (physMult !== 1.0) resParts.push(`${ClashManager._catLabel(winCat)}${physMult > 1 ? "弱性" : "抗性"}×${physMult}`);
+    if (sinMult  !== 1.0) resParts.push(`${ClashManager._sinLabel(winSin)} 抗性×${sinMult}`);
+    notes.push(resParts.length > 0
+      ? `${loserName} 由于 ${resParts.join(" + ")} 受到 ${finalDamage} 点伤害`
+      : `${loserName} 受到 ${finalDamage} 点伤害`);
 
-    if (lvBonus > 0) notes.push(`（攻防等级差 ${lvDiff} 级，抗性后额外 +${lvBonus} 伤害）`);
-    if (pwrUp)       notes.push(`（拼点威力提升 +${pwrUp}）`);
-    if (pwrDown)     notes.push(`（拼点威力降低 -${pwrDown}）`);
+    if (fragile > 0) notes.push(`（易损 +${fragile} 伤害）`);
+    if (guard   > 0) notes.push(`（守护 -${guard} 伤害）`);
 
     return {
       atkWins, winner, loser,
-      atkTotal, defTotal, winScore,
+      atkTotal: atkEffective, defTotal: defEffective, winScore,
       atkItemName, atkItemImg, atkFormula, atkActor,
       defItemName, defItemImg, defFormula, defActor,
       finalDamage, notes,

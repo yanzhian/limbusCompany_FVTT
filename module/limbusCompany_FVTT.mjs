@@ -83,6 +83,9 @@ Hooks.once("ready", () => {
   _installTokenDoubleClickOpenActorSheet();
   // 某些加载时序下 ready 阶段 Token 原型尚未就绪，做一次延迟补丁兜底
   setTimeout(() => _installTokenDoubleClickOpenActorSheet(), 200);
+
+  // GM 在线时执行一次迁移：把所有现有角色及其场景 Token 改为 linked
+  if (game.user.isGM) _migrateTokenLinks();
 });
 
 // 画布每次就绪时再次确保双击补丁存在（重连/重载场景后仍生效）
@@ -245,6 +248,43 @@ function _installTokenDoubleClickOpenActorSheet() {
   };
 
   tokenProto.__limbusDblClickPatched = true;
+}
+
+/* ─── Token linked 迁移（GM 启动时自动修复）────────────────────────────── */
+
+/**
+ * 将所有 character 类型 Actor 的 prototypeToken.actorLink 置为 true，
+ * 并对所有场景中已放置的非 linked Token 做同样处理。
+ * 幂等：已经是 linked 的不会重复写入。
+ */
+async function _migrateTokenLinks() {
+  // ── 1. 修复角色原型 Token ─────────────────────────────────────────────
+  const actorUpdates = game.actors.contents
+    .filter(a => a.type === "character" && !a.prototypeToken?.actorLink)
+    .map(a => ({ _id: a.id, "prototypeToken.actorLink": true }));
+
+  if (actorUpdates.length > 0) {
+    await Actor.updateDocuments(actorUpdates);
+    console.log(`limbusCompany_FVTT | 已修复 ${actorUpdates.length} 个角色的原型 Token（→ linked）`);
+  }
+
+  // ── 2. 修复各场景中已放置的非 linked Token ───────────────────────────
+  let tokenFixed = 0;
+  for (const scene of game.scenes.contents) {
+    const tokenUpdates = scene.tokens.contents
+      .filter(t => t.actorId && !t.actorLink)
+      .map(t => ({ _id: t.id, actorLink: true }));
+
+    if (tokenUpdates.length > 0) {
+      await scene.updateEmbeddedDocuments("Token", tokenUpdates);
+      tokenFixed += tokenUpdates.length;
+    }
+  }
+
+  if (tokenFixed > 0) {
+    console.log(`limbusCompany_FVTT | 已修复 ${tokenFixed} 个场景 Token（→ linked）`);
+    ui.notifications.info(`已自动将 ${tokenFixed} 个 Token 设置为"链接角色数据"`, { permanent: false });
+  }
 }
 
 /* ─── 内部辅助函数 ───────────────────────────────────────────────────────── */
