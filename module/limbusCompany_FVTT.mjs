@@ -109,8 +109,29 @@ Hooks.on("renderChatMessage", (_message, html, _data) => {
     });
   }
 
-  // ── 拼点结算聊天框：承受（扣血） ──
+  // ── 拼点结算聊天框：承受（扣血） / 再次骰掷（平局） ──
   if (flags.type === "clash-resolve") {
+    html.find(".clash-btn-apply-damage").on("click", (e) => {
+      const targetActorId = e.currentTarget.dataset.targetActorId ?? flags.targetActorId;
+      const damage        = parseInt(e.currentTarget.dataset.damage ?? flags.damage) || 0;
+      ClashManager.handleApplyDamage(targetActorId, damage);
+    });
+    html.find(".clash-btn-reroll").on("click", () => {
+      ClashManager.rerollClash(flags.rerollData);
+    });
+  }
+
+  // ── 反击聊天框：双方承受按钮 ──
+  if (flags.type === "clash-counter") {
+    html.find(".clash-btn-apply-damage").on("click", (e) => {
+      const targetActorId = e.currentTarget.dataset.targetActorId;
+      const damage        = parseInt(e.currentTarget.dataset.damage) || 0;
+      ClashManager.handleApplyDamage(targetActorId, damage);
+    });
+  }
+
+  // ── 格挡聊天框：承受按钮 ──
+  if (flags.type === "clash-block") {
     html.find(".clash-btn-apply-damage").on("click", (e) => {
       const targetActorId = e.currentTarget.dataset.targetActorId ?? flags.targetActorId;
       const damage        = parseInt(e.currentTarget.dataset.damage ?? flags.damage) || 0;
