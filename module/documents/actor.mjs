@@ -1074,6 +1074,21 @@ export class LimbusActor extends Actor {
     return this.update({ "system.buffs": buffs });
   }
 
+  /**
+   * 减少指定类型 BUFF 的层数，层数归零时自动移除。
+   * @param {string} type   BUFF type 键
+   * @param {number} amount 减少量，默认 1
+   */
+  async reduceBuffStacks(type, amount = 1) {
+    const buffs = [...(this.system.buffs ?? [])];
+    const idx   = buffs.findIndex(b => b.type === type);
+    if (idx === -1) return;
+    const next = Math.max(0, (buffs[idx].stacks ?? 1) - amount);
+    if (next <= 0) buffs.splice(idx, 1);
+    else           buffs[idx] = { ...buffs[idx], stacks: next };
+    return this.update({ "system.buffs": buffs });
+  }
+
   // ─── 震颤引爆 ──────────────────────────────────────────────────────────
 
   /**

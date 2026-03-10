@@ -66,6 +66,52 @@ export class ClashManager {
     return { intensity: b?.intensity ?? 0, stacks: b?.stacks ?? 0 };
   }
 
+  /**
+   * 减少 BUFF 层数，归零时自动移除。
+   * 优先调用 actor.reduceBuffStacks（如已定义），否则直接写 system.buffs。
+   */
+  static async _reduceBuffStacks(actor, type, amount = 1) {
+    if (!actor) return;
+    if (typeof actor.reduceBuffStacks === "function") {
+      return actor.reduceBuffStacks(type, amount);
+    }
+    // 兜底：直接操作 buffs 数组
+    const buffs = [...(actor.system?.buffs ?? [])];
+    const idx   = buffs.findIndex(b => b.type === type);
+    if (idx === -1) return;
+    const next = Math.max(0, (buffs[idx].stacks ?? 1) - amount);
+    if (next <= 0) buffs.splice(idx, 1);
+    else           buffs[idx] = { ...buffs[idx], stacks: next };
+    return actor.update({ "system.buffs": buffs });
+  }
+
+  /**
+   * 处理【流血】：持有 bleed 的角色执行攻击动作时，受到强度点固定伤害，层数-1。
+   * @param {Actor} actor  持有 bleed 的攻击方/响应方
+   * @returns {number} 实际造成的流血伤害（0 = 未触发）
+   */
+  static async _processBleed(actor) {
+    const buff = ClashManager._getBuff(actor, "bleed");
+    if (!buff || buff.stacks <= 0) return 0;
+
+    const dmg   = buff.intensity ?? 0;
+    const oldHp = actor.system.hp?.value ?? 0;
+    const newHp = Math.max(0, oldHp - dmg);
+
+    await actor.update({ "system.hp.value": newHp });
+    await ClashManager._reduceBuffStacks(actor, "bleed");
+    if (actor.checkAndTriggerChaos) await actor.checkAndTriggerChaos(newHp, oldHp);
+
+    ChatMessage.create({
+      speaker: ChatMessage.getSpeaker({ actor }),
+      content: `<div class="limbuscompany chat-clash">
+        <strong>${actor.name}</strong>【流血】发作：受到 <strong>${dmg}</strong> 点固定伤害。
+        （HP ${oldHp} → ${newHp}）
+      </div>`,
+    });
+    return dmg;
+  }
+
   static _effectDesc(item) {
     const sys = item?.system ?? {};
     const parts = [];
@@ -220,6 +266,9 @@ export class ClashManager {
         },
       },
     });
+
+    // 流血：发起者执行攻击动作时触发
+    await ClashManager._processBleed(actor);
 
     // 推进战斗槽 + 扣 AP（若从战斗槽触发）
     if (slotIndex >= 0) {
@@ -515,6 +564,9 @@ export class ClashManager {
       },
     });
 
+    // 流血：防守方进行对抗也是攻击动作，同样触发
+    await ClashManager._processBleed(defActor);
+
     // 扣防守方 AP
     const defAp = defActor.system.ap?.value ?? 0;
     if (defAp > 0) await defActor.update({ "system.ap.value": defAp - 1 });
@@ -535,6 +587,11 @@ export class ClashManager {
       defItemName: defItem.name,       defItemImg: defItem.img,
       defCategory: sys.category ?? "",                 defSinType:  sys.sinType ?? "",
     });
+
+    // 呼吸暴击触发：层数-1
+    if (resolution.breatheCrit && resolution.winner) {
+      await ClashManager._reduceBuffStacks(resolution.winner, "breathing");
+    }
 
     await ClashManager._sendResolveMsg(resolution, initFlags, defActor, defItem, defFormula);
   }
@@ -626,8 +683,20 @@ export class ClashManager {
     // ── 最终伤害 ──────────────────────────────────────────────────────────
     // 公式：round(winScore × physMult × sinMult) + 易损强度 - 守护强度
     // 等级差加值已在拼点阶段计入有效骰数，不再单独计入伤害
-    const totalMult   = physMult * sinMult;
-    const finalDamage = Math.max(0, Math.round(winScore * totalMult) + fragile - guard);
+    const totalMult = physMult * sinMult;
+    let   finalDamage = Math.max(0, Math.round(winScore * totalMult) + fragile - guard);
+
+    // ── 呼吸（breathing）：命中方有 breathing BUFF 时，强度×5% 概率暴击 ──
+    // 暴击：伤害×1.5；触发时层数-1（由调用方在结算后执行）
+    const breatheBuff = ClashManager._getBuff(winner, "breathing");
+    let   breatheCrit = false;
+    if (breatheBuff && breatheBuff.stacks > 0) {
+      const critChance = (breatheBuff.intensity ?? 1) * 0.05;
+      breatheCrit = Math.random() < critChance;
+      if (breatheCrit) {
+        finalDamage = Math.max(0, Math.round(winScore * totalMult * 1.5) + fragile - guard);
+      }
+    }
 
     // ── 结算说明 ──────────────────────────────────────────────────────────
     const loserName = loser?.name ?? "?";
@@ -670,13 +739,14 @@ export class ClashManager {
 
     if (fragile > 0) notes.push(`（易损 +${fragile} 伤害）`);
     if (guard   > 0) notes.push(`（守护 -${guard} 伤害）`);
+    if (breatheCrit) notes.push(`【呼吸】触发暴击！伤害 ×1.5 → ${finalDamage}`);
 
     return {
       atkWins, winner, loser,
       atkTotal: atkEffective, defTotal: defEffective, winScore,
       atkItemName, atkItemImg, atkFormula, atkActor,
       defItemName, defItemImg, defFormula, defActor,
-      finalDamage, notes,
+      finalDamage, notes, breatheCrit,
     };
   }
 
@@ -814,14 +884,52 @@ export class ClashManager {
     }
   }
 
-  static async _applyAndSendTake(actor, damage) {
+  /**
+   * @param {Actor}  actor
+   * @param {number} damage      基础伤害（拼点/直接承受计算后的值）
+   * @param {object} [opts]
+   * @param {boolean} [opts.isSeismic=false]  是否为【震颤引爆】类型攻击
+   */
+  static async _applyAndSendTake(actor, damage, { isSeismic = false } = {}) {
     const sys   = actor.system;
-    const oldHp = sys.hp?.value ?? 0;
-    const maxHp = sys.hp?.max   ?? 1;
-    const newHp = Math.max(0, oldHp - damage);
+    const maxHp = sys.hp?.max ?? 1;
 
-    // 提前判断是否跨越混乱阈值（用于聊天框显示，实际效果由 checkAndTriggerChaos 处理）
-    const thresholds    = sys.chaosThresholds ?? [];
+    // ── 受到伤害时 BUFF ────────────────────────────────────────────────────
+
+    // 【破裂】：附加强度点固定伤害，层数-1
+    const ruptureBuff = ClashManager._getBuff(actor, "rupture");
+    let ruptureDmg = 0;
+    if (ruptureBuff && ruptureBuff.stacks > 0) {
+      ruptureDmg = ruptureBuff.intensity ?? 0;
+      await ClashManager._reduceBuffStacks(actor, "rupture");
+    }
+
+    // 【沉沦】：增加强度点侵蚀度（降低理智），层数-1
+    const sinkingBuff = ClashManager._getBuff(actor, "sinking");
+    let sanityDmg = 0;
+    if (sinkingBuff && sinkingBuff.stacks > 0) {
+      sanityDmg = sinkingBuff.intensity ?? 0;
+      await ClashManager._reduceBuffStacks(actor, "sinking");
+    }
+
+    // 【震颤】：受到震颤引爆攻击时，混乱阈值前移强度值，层数-1
+    let tremorTriggered = false;
+    if (isSeismic) {
+      const tremorBuff = ClashManager._getBuff(actor, "tremor");
+      if (tremorBuff && tremorBuff.stacks > 0) {
+        await actor.triggerSeismicBlast?.(tremorBuff.intensity ?? 0);
+        await ClashManager._reduceBuffStacks(actor, "tremor");
+        tremorTriggered = true;
+      }
+    }
+
+    // ── HP 结算（基础伤害 + 破裂附加） ────────────────────────────────────
+    const totalDmg = damage + ruptureDmg;
+    const oldHp    = sys.hp?.value ?? 0;
+    const newHp    = Math.max(0, oldHp - totalDmg);
+
+    // 提前判断混乱阈值（用于聊天框显示）
+    const thresholds     = sys.chaosThresholds ?? [];
     const chaosTriggered = thresholds.some(
       t => !t.triggered && newHp <= maxHp * t.percent / 100
     );
@@ -829,16 +937,28 @@ export class ClashManager {
     // 更新 HP
     await actor.update({ "system.hp.value": newHp });
 
-    // 触发混乱效果（烧断阈值 + x2.0 抗性 + AP=0 + 添加【陷入混乱】BUFF + 聊天通知）
+    // 沉沦：更新理智值（setSanity 内部会检查恐慌状态）
+    if (sanityDmg > 0 && typeof actor.setSanity === "function") {
+      await actor.setSanity((actor.system.sanity?.value ?? 50) - sanityDmg);
+    }
+
+    // 触发混乱效果
     if (chaosTriggered && actor.checkAndTriggerChaos) {
       await actor.checkAndTriggerChaos(newHp, oldHp);
     }
 
-    await ClashManager._sendTakeMsg(actor, damage, oldHp, newHp, maxHp, chaosTriggered);
+    await ClashManager._sendTakeMsg(actor, damage, oldHp, newHp, maxHp, chaosTriggered,
+      { ruptureDmg, sanityDmg, tremorTriggered });
   }
 
-  static async _sendTakeMsg(actor, damage, oldHp, newHp, maxHp, chaosTriggered) {
-    const hpPct = Math.max(0, Math.round((newHp / maxHp) * 100));
+  static async _sendTakeMsg(actor, damage, oldHp, newHp, maxHp, chaosTriggered,
+      { ruptureDmg = 0, sanityDmg = 0, tremorTriggered = false } = {}) {
+    const hpPct     = Math.max(0, Math.round((newHp / maxHp) * 100));
+    const totalDmg  = damage + ruptureDmg;
+    const extraLines = [];
+    if (ruptureDmg  > 0) extraLines.push(`【破裂】附加 +${ruptureDmg} 点固定伤害`);
+    if (sanityDmg   > 0) extraLines.push(`【沉沦】附加 ${sanityDmg} 点侵蚀度（理智-${sanityDmg}）`);
+    if (tremorTriggered) extraLines.push(`【震颤】引爆：混乱阈值前移`);
 
     const content = `
       <div class="limbus-clash-card limbus-take-card"
@@ -848,7 +968,10 @@ export class ClashManager {
         ${ClashManager._goldDivider()}
         <div style="text-align:center;margin:10px 0;">
           <div style="font-size:16px;font-weight:bold;color:#E8C9A2;margin-bottom:6px;">生命值结算</div>
-          <div style="font-size:13px;color:#E8CAA1;margin-bottom:10px;">${actor.name} 受到了 ${damage} 点伤害</div>
+          <div style="font-size:13px;color:#E8CAA1;margin-bottom:10px;">
+            ${actor.name} 受到了 ${totalDmg} 点伤害
+            ${ruptureDmg > 0 ? `（基础 ${damage} + 破裂 ${ruptureDmg}）` : ""}
+          </div>
           <div style="display:flex;align-items:center;justify-content:center;gap:18px;">
             <span style="font-size:2rem;font-weight:bold;color:#E8C9A2;">${oldHp}</span>
             <span style="font-size:1.5rem;color:#C9A84C;">→</span>
@@ -856,6 +979,11 @@ export class ClashManager {
           </div>
         </div>
         ${ClashManager._goldDivider()}
+        ${extraLines.length > 0
+          ? `<div style="font-size:.8rem;color:#9A8462;margin-bottom:4px;">
+               ${extraLines.map(l => `<div>${l}</div>`).join("")}
+             </div>`
+          : ""}
         ${chaosTriggered
           ? `<div style="text-align:center;font-size:.85rem;color:#E84444;font-weight:bold;margin-bottom:6px;">
                伤害超过混乱阈值 陷入混乱
