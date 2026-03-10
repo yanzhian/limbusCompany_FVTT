@@ -109,8 +109,29 @@ Hooks.on("renderChatMessage", (_message, html, _data) => {
     });
   }
 
-  // ── 拼点结算聊天框：承受（扣血） ──
+  // ── 拼点结算聊天框：承受（扣血） / 再次骰掷（平局） ──
   if (flags.type === "clash-resolve") {
+    html.find(".clash-btn-apply-damage").on("click", (e) => {
+      const targetActorId = e.currentTarget.dataset.targetActorId ?? flags.targetActorId;
+      const damage        = parseInt(e.currentTarget.dataset.damage ?? flags.damage) || 0;
+      ClashManager.handleApplyDamage(targetActorId, damage);
+    });
+    html.find(".clash-btn-reroll").on("click", () => {
+      ClashManager.rerollClash(flags.rerollData);
+    });
+  }
+
+  // ── 反击聊天框：双方承受按钮 ──
+  if (flags.type === "clash-counter") {
+    html.find(".clash-btn-apply-damage").on("click", (e) => {
+      const targetActorId = e.currentTarget.dataset.targetActorId;
+      const damage        = parseInt(e.currentTarget.dataset.damage) || 0;
+      ClashManager.handleApplyDamage(targetActorId, damage);
+    });
+  }
+
+  // ── 格挡聊天框：承受按钮 ──
+  if (flags.type === "clash-block") {
     html.find(".clash-btn-apply-damage").on("click", (e) => {
       const targetActorId = e.currentTarget.dataset.targetActorId ?? flags.targetActorId;
       const damage        = parseInt(e.currentTarget.dataset.damage ?? flags.damage) || 0;
@@ -202,18 +223,57 @@ Hooks.on("combatRound", (combat, _updateData, _options) => {
   // 在每个 combatant 轮次末尾由 combatTurn 钩子处理
 });
 
-Hooks.on("updateCombat", (combat, changed) => {
-  if (!("turn" in changed)) return;
-  const prevTurnIdx = (changed.turn - 1 + combat.turns.length) % combat.turns.length;
-  const prevTurn    = combat.turns[prevTurnIdx];
-  if (!prevTurn) return;
+Hooks.on("updateCombat", async (combat, changed) => {
+  // ── 每个 combatant 轮次末：移除【陷入混乱】和【陷入恐慌】 ──────────────
+  if ("turn" in changed) {
+    const prevTurnIdx = (changed.turn - 1 + combat.turns.length) % combat.turns.length;
+    const prevTurn    = combat.turns[prevTurnIdx];
+    const actor       = prevTurn?.actor;
+    if (actor?.type === "character") {
+      actor.removeBuffsByType("chaos");
+      actor.removeBuffsByType("panic");
+    }
+  }
 
-  const actor = prevTurn.actor;
-  if (!actor || actor.type !== "character") return;
+  // ── 每轮（round）结束：燃烧伤害、充能衰减、呼吸衰减（仅 GM 执行） ────
+  if (!("round" in changed)) return;
+  if (!game.user.isGM) return;
 
-  // 移除【陷入混乱】和【陷入恐慌】（回合末移除）
-  actor.removeBuffsByType("chaos");
-  actor.removeBuffsByType("panic");
+  for (const combatant of combat.combatants) {
+    const actor = combatant.actor;
+    if (!actor || actor.type !== "character") continue;
+    const buffs = actor.system.buffs ?? [];
+
+    // 【燃烧】：受到强度点固定伤害，层数-1
+    const burnBuff = buffs.find(b => b.type === "burn");
+    if (burnBuff && burnBuff.stacks > 0) {
+      const dmg   = burnBuff.intensity ?? 0;
+      const oldHp = actor.system.hp?.value ?? 0;
+      const newHp = Math.max(0, oldHp - dmg);
+      await actor.update({ "system.hp.value": newHp });
+      await actor.reduceBuffStacks?.("burn");
+      if (actor.checkAndTriggerChaos) await actor.checkAndTriggerChaos(newHp, oldHp);
+      ChatMessage.create({
+        speaker: ChatMessage.getSpeaker({ actor }),
+        content: `<div class="limbuscompany chat-clash">
+          <strong>${actor.name}</strong>【燃烧】发作：受到 <strong>${dmg}</strong> 点固定伤害。
+          （HP ${oldHp} → ${newHp}）
+        </div>`,
+      });
+    }
+
+    // 【充能】：层数-1（最大 20 层，衰减即可）
+    const chargeBuff = buffs.find(b => b.type === "charge");
+    if (chargeBuff && chargeBuff.stacks > 0) {
+      await actor.reduceBuffStacks?.("charge");
+    }
+
+    // 【呼吸】：层数-1（每轮结束衰减）
+    const breatheBuff = buffs.find(b => b.type === "breathing");
+    if (breatheBuff && breatheBuff.stacks > 0) {
+      await actor.reduceBuffStacks?.("breathing");
+    }
+  }
 });
 
 
