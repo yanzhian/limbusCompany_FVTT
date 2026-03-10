@@ -543,84 +543,116 @@ export class ClashManager {
 
   static _computeResolution({ atkActor, atkTotal, atkFormula, atkItemName, atkItemImg, atkCategory, atkSinType,
                                defActor, defTotal, defFormula, defItemName, defItemImg, defCategory, defSinType }) {
-    const atkWins  = atkTotal >= defTotal;
+
+    // ── 技能分类分组 ──────────────────────────────────────────────────────
+    // 守备技能（全部）→ 使用忍耐/破绽调整骰数
+    const ALL_DEF_CATS   = new Set(["dodge","block","counter","clashBlock","clashCounter"]);
+    // 使用防御等级（而非攻击等级）进行等级差比较的守备技能（不含反击系列）
+    const DEF_LEVEL_CATS = new Set(["dodge","block","clashBlock"]);
+    const PHYS_CATS      = new Set(["slash","blunt","pierce"]);
+    const SIN_TYPES      = new Set(["wrath","lust","sloth","gluttony","gloom","pride","envy"]);
+
+    // ── BUFF 辅助 ─────────────────────────────────────────────────────────
+    // 骰数/等级类 BUFF 均使用 stacks（层数）；守护/易损使用 intensity（强度）
+    const gs = (actor, type) => ClashManager._getBuffVal(actor, type).stacks;
+    const gi = (actor, type) => ClashManager._getBuffVal(actor, type).intensity;
+
+    // ── 各方有效骰数（骰子结果 + BUFF 修正）──────────────────────────────
+    // 攻击方（基础/EGO 技能）：强壮/虚弱 + 拼点威力提升/降低
+    const atkDiceMod = gs(atkActor, "strong")       - gs(atkActor, "weak")
+                     + gs(atkActor, "clashPowerUp")  - gs(atkActor, "clashPowerDown");
+
+    // 防守方：守备技能 → 忍耐/破绽；基础/EGO → 强壮/虚弱；两者都再加拼点威力
+    const defIsDefCat = ALL_DEF_CATS.has(defCategory);
+    const defDiceMod  = defIsDefCat
+      ? (gs(defActor, "endure")  - gs(defActor, "breach"))
+      : (gs(defActor, "strong")  - gs(defActor, "weak"));
+    const defPwrMod   = gs(defActor, "clashPowerUp") - gs(defActor, "clashPowerDown");
+
+    const atkEffective = atkTotal + atkDiceMod;
+    const defEffective = defTotal + defDiceMod + defPwrMod;
+
+    // ── 胜负判定（基于有效骰数）──────────────────────────────────────────
+    const atkWins  = atkEffective >= defEffective;
     const winner   = atkWins ? atkActor : defActor;
     const loser    = atkWins ? defActor : atkActor;
-    const winScore = atkWins ? atkTotal : defTotal;
-    const winCat   = atkWins ? atkCategory : defCategory;
-    const winSin   = atkWins ? atkSinType  : defSinType;
+    const winScore = atkWins ? atkEffective : defEffective;
+    const winCat   = atkWins ? atkCategory  : defCategory;
+    const winSin   = atkWins ? atkSinType   : defSinType;
 
-    // 攻防等级差
-    const atkLv   = (atkWins ? atkActor : defActor)?.system?.atk?.base ?? 0;
-    const defLv   = (atkWins ? defActor : atkActor)?.system?.def?.base ?? 0;
-    const lvDiff  = Math.abs(atkLv - defLv);
-    const lvBonus = Math.floor(lvDiff / 3);
+    // ── 有效攻/防等级（含 BUFF 层数加成）────────────────────────────────
+    const effAtkLv = (a) => (a?.system?.atk?.base ?? 0) + gs(a, "atkLevelUp") - gs(a, "atkLevelDown");
+    const effDefLv = (a) => (a?.system?.def?.base ?? 0) + gs(a, "defLevelUp") - gs(a, "defLevelDown");
 
-    // BUFF 修正
-    const pwrUp   = ClashManager._getBuffVal(winner, "clashPowerUp").intensity;
-    const pwrDown = ClashManager._getBuffVal(loser,  "clashPowerDown").intensity;
-    const guard   = ClashManager._getBuffVal(loser,  "guard").intensity;
-    const fragile = ClashManager._getBuffVal(loser,  "fragile").intensity;
+    // ── 等级差加值 ────────────────────────────────────────────────────────
+    // 胜方技能类型决定比较哪个等级：
+    //   闪避/格挡/可拼点格挡（DEF型）→ 胜方 defLv vs 败方 atkLv
+    //   其余（基础/EGO/反击/可拼点反击）→ 胜方 atkLv vs 败方 defLv
+    const winUsesDefLv = DEF_LEVEL_CATS.has(winCat);
+    const winnerLv     = winUsesDefLv ? effDefLv(winner) : effAtkLv(winner);
+    const loserLv      = winUsesDefLv ? effAtkLv(loser)  : effDefLv(loser);
+    const lvDiff       = Math.max(0, winnerLv - loserLv);   // 仅正差有加成
+    const lvBonus      = Math.floor(lvDiff / 3);
 
-    // 拼点阶段：骰数结果 + 拼点威力 BUFF（攻防等级差在乘以抗性后再加）
-    const clashBase = winScore + pwrUp - pwrDown;
+    // ── 物理抗性（含上装 resistanceAdj 覆盖）────────────────────────────
+    const effRes     = loser ? ClashManager._getEffectiveResistances(loser) : {};
+    const physResStr = PHYS_CATS.has(winCat) ? (effRes[winCat] ?? "x1.0") : "x1.0";
+    const physMult   = ClashManager._parseResistance(physResStr);
 
-    // ── 物理抗性（含上装 resistanceAdj 覆盖，与角色卡 info-row 保持一致）──
-    const PHYS_CATS   = ["slash", "blunt", "pierce"];
-    const effRes      = loser ? ClashManager._getEffectiveResistances(loser) : {};
-    const physResStr  = PHYS_CATS.includes(winCat) ? (effRes[winCat] ?? "x1.0") : "x1.0";
-    const physMult    = ClashManager._parseResistance(physResStr);
-
-    // ── 罪孽抗性（wrath / lust / sloth / gluttony / gloom / pride / envy）──
-    const SIN_TYPES   = ["wrath","lust","sloth","gluttony","gloom","pride","envy"];
-    const sinResStr   = (loser && SIN_TYPES.includes(winSin))
+    // ── 罪孽抗性 ─────────────────────────────────────────────────────────
+    const sinResStr = (loser && SIN_TYPES.has(winSin))
       ? (loser.system?.egoResistances?.[winSin] ?? "x1.0")
       : "x1.0";
-    const sinMult     = ClashManager._parseResistance(sinResStr);
+    const sinMult   = ClashManager._parseResistance(sinResStr);
 
-    // 综合倍率 = 物理抗性 × 罪孽抗性
+    // ── 守护/易损（使用 intensity，直接加减伤害）─────────────────────────
+    const guard   = gi(loser, "guard");
+    const fragile = gi(loser, "fragile");
+
+    // ── 最终伤害 ──────────────────────────────────────────────────────────
+    // 公式：round(winScore × physMult × sinMult) + 易损强度 - 守护强度 + 攻/防等级差加值
     const totalMult   = physMult * sinMult;
+    const finalDamage = Math.max(0, Math.round(winScore * totalMult) + fragile - guard + lvBonus);
 
-    // 最终伤害 = (拼点基础 × 综合抗性) + BUFF伤害修正 + 攻防等级差加值
-    // 公式：技能分类 × 目标抗性 + BUFF效果 + 攻防等级相差值（每3级+1）
-    let finalDamage = Math.max(0, Math.round(clashBase * totalMult) + fragile - guard + lvBonus);
-
-    // ── 结算说明 ──
+    // ── 结算说明 ──────────────────────────────────────────────────────────
     const loserName = loser?.name ?? "?";
-    const notes = [];
+    const notes     = [];
 
     notes.push(`本次对抗：${atkActor?.name ?? "?"} vs ${defActor?.name ?? "?"}`);
-
-    // 结算结果行：公式=骰数
     notes.push(`结算结果：`);
-    notes.push(`　${atkActor?.name ?? "?"}：${atkFormula.toUpperCase()}=${atkTotal}`);
-    notes.push(`　${defActor?.name ?? "?"}：${defFormula.toUpperCase()}=${defTotal}`);
+
+    // 攻击方骰数（有 BUFF 时展示修正过程）
+    const atkBuffStr = atkDiceMod !== 0
+      ? `+BUFF(${atkDiceMod >= 0 ? "+" : ""}${atkDiceMod})=${atkEffective}` : "";
+    notes.push(`　${atkActor?.name ?? "?"}：${atkFormula.toUpperCase()}=${atkTotal} ${atkBuffStr}`.trim());
+
+    // 防守方骰数
+    const defBuff = defDiceMod + defPwrMod;
+    const defBuffStr = defBuff !== 0
+      ? `+BUFF(${defBuff >= 0 ? "+" : ""}${defBuff})=${defEffective}` : "";
+    notes.push(`　${defActor?.name ?? "?"}：${defFormula.toUpperCase()}=${defTotal} ${defBuffStr}`.trim());
 
     notes.push(`${winner?.name ?? "?"} 获胜，${loserName} 败北`);
 
-    // 抗性说明（仅在非 x1.0 时显示，合并为一行）
+    // 抗性说明
     const resParts = [];
-    if (physMult !== 1.0) {
-      const catLbl = ClashManager._catLabel(winCat);
-      resParts.push(`${catLbl}${physMult > 1 ? "弱性" : "抗性"}×${physMult}`);
-    }
-    if (sinMult !== 1.0) {
-      const sinLbl = ClashManager._sinLabel(winSin);
-      resParts.push(`${sinLbl} 抗性×${sinMult}`);
-    }
-    if (resParts.length > 0) {
-      notes.push(`${loserName} 由于 ${resParts.join(" + ")} 受到 ${finalDamage} 点伤害`);
-    } else {
-      notes.push(`${loserName} 受到 ${finalDamage} 点伤害`);
-    }
+    if (physMult !== 1.0) resParts.push(`${ClashManager._catLabel(winCat)}${physMult > 1 ? "弱性" : "抗性"}×${physMult}`);
+    if (sinMult  !== 1.0) resParts.push(`${ClashManager._sinLabel(winSin)} 抗性×${sinMult}`);
+    notes.push(resParts.length > 0
+      ? `${loserName} 由于 ${resParts.join(" + ")} 受到 ${finalDamage} 点伤害`
+      : `${loserName} 受到 ${finalDamage} 点伤害`);
 
-    if (lvBonus > 0) notes.push(`（攻防等级差 ${lvDiff} 级，抗性后额外 +${lvBonus} 伤害）`);
-    if (pwrUp)       notes.push(`（拼点威力提升 +${pwrUp}）`);
-    if (pwrDown)     notes.push(`（拼点威力降低 -${pwrDown}）`);
+    // 额外说明
+    if (lvBonus > 0) {
+      const lvLabel = winUsesDefLv ? "防御" : "攻击";
+      notes.push(`（${lvLabel}等级差 ${lvDiff} 级，抗性后额外 +${lvBonus} 伤害）`);
+    }
+    if (fragile > 0) notes.push(`（易损 +${fragile} 伤害）`);
+    if (guard   > 0) notes.push(`（守护 -${guard} 伤害）`);
 
     return {
       atkWins, winner, loser,
-      atkTotal, defTotal, winScore,
+      atkTotal: atkEffective, defTotal: defEffective, winScore,
       atkItemName, atkItemImg, atkFormula, atkActor,
       defItemName, defItemImg, defFormula, defActor,
       finalDamage, notes,
