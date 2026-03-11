@@ -3,9 +3,6 @@
  * 全流程：发起对抗 → 聊天框 → 进行对抗确认 → 进行对抗 → 拼点结算 → 承受
  */
 
-const OCTA_CLIP = "polygon(25% 0%,75% 0%,100% 25%,100% 75%,75% 100%,25% 100%,0% 75%,0% 25%)";
-const OCTA_STYLE = `clip-path:${OCTA_CLIP};object-fit:cover;`;
-
 export class ClashManager {
 
   /* ─── 工具函数 ─────────────────────────────────────────────────────────── */
@@ -201,7 +198,7 @@ export class ClashManager {
     const formula  = sys.diceFormula ?? "1d4";
     return `
       <div style="display:flex;align-items:center;gap:12px;margin:8px 0;">
-        <img src="${item.img}" style="width:50px;height:50px;${OCTA_STYLE}border:2px solid ${sinColor};flex-shrink:0;" alt="${item.name}">
+        <img src="${item.img}" style="width:50px;height:50px;object-fit:cover;display:block;margin:0 auto;border:2px solid ${sinColor};flex-shrink:0;" alt="${item.name}">
         <div>
           <div style="font-size:24px;font-weight:bold;color:#E8C9A2;">${item.name}</div>
           <div style="display:flex;align-items:center;gap:6px;margin-top:3px;">
@@ -398,7 +395,7 @@ export class ClashManager {
         <div class="clash-pick-slot ${extraClass}" data-item-id="${item.id}" data-slot-index="${slotIdx}" title="${item.name}"
              style="position:relative;width:52px;height:52px;cursor:pointer;flex-shrink:0;">
           <img src="${item.img}"
-               style="width:52px;height:52px;${OCTA_STYLE}border:2px solid ${sin};"
+               style="width:52px;height:52px;object-fit:cover;display:block;margin:0 auto;border:2px solid ${sin};"
                alt="${item.name}">
           ${hasRel ? `<button class="clash-pick-rel" data-base-id="${item.id}"
                                title="切换相关技能"
@@ -909,14 +906,14 @@ export class ClashManager {
         <div style="display:flex;align-items:flex-start;gap:12px;margin:8px 0;">
           <div style="flex:1;text-align:center;">
             <div style="font-size:12px;color:#9A8462;margin-bottom:4px;">${atkActor?.name ?? "?"}</div>
-            <img src="${atkItemImg ?? ""}" style="width:50px;height:50px;${OCTA_STYLE}" alt="">
+            <img src="${atkItemImg ?? ""}" style="width:50px;height:50px;object-fit:cover;display:block;margin:0 auto;" alt="">
             <div style="font-size:12px;color:#E8C9A2;margin-top:4px;">${atkItemName ?? ""}</div>
             <div style="font-size:11px;color:#EBBD68;">${atkFormula ?? ""}</div>
           </div>
           <div style="align-self:center;font-size:1.6rem;font-weight:bold;color:#C9A84C;padding:0 4px;">${isClashCounterWin ? "⚔️" : "VS"}</div>
           <div style="flex:1;text-align:center;">
             <div style="font-size:12px;color:#9A8462;margin-bottom:4px;">${defActor?.name ?? "?"}</div>
-            <img src="${defItemImg ?? ""}" style="width:50px;height:50px;${OCTA_STYLE}" alt="">
+            <img src="${defItemImg ?? ""}" style="width:50px;height:50px;object-fit:cover;display:block;margin:0 auto;" alt="">
             <div style="font-size:12px;color:#E8C9A2;margin-top:4px;">${defItemName ?? ""}</div>
             <div style="font-size:11px;color:#EBBD68;">${defFormula ?? ""}</div>
           </div>
@@ -1379,13 +1376,13 @@ export class ClashManager {
         <div style="display:flex;align-items:flex-start;gap:12px;margin:8px 0;">
           <div style="flex:1;text-align:center;">
             <div style="font-size:12px;color:#9A8462;margin-bottom:4px;">${atkActor?.name ?? "?"}</div>
-            <img src="${atkItemImg}" style="width:50px;height:50px;${OCTA_STYLE}" alt="">
+            <img src="${atkItemImg}" style="width:50px;height:50px;object-fit:cover;display:block;margin:0 auto;" alt="">
             <div style="font-size:12px;color:#EBBD68;">${initFlags.formula?.toUpperCase() ?? ""}=${atkEffective}</div>
           </div>
           <div style="align-self:center;font-size:1.6rem;font-weight:bold;color:#E84444;padding:0 4px;">⚔️</div>
           <div style="flex:1;text-align:center;">
             <div style="font-size:12px;color:#9A8462;margin-bottom:4px;">${defActor?.name ?? "?"}</div>
-            <img src="${defItem.img ?? ""}" style="width:50px;height:50px;${OCTA_STYLE}" alt="${defItem.name}">
+            <img src="${defItem.img ?? ""}" style="width:50px;height:50px;object-fit:cover;display:block;margin:0 auto;" alt="${defItem.name}">
             <div style="font-size:12px;color:#EBBD68;">${defFormula?.toUpperCase() ?? ""}=${defEffective}</div>
           </div>
         </div>
@@ -1518,13 +1515,13 @@ export class ClashManager {
         <div style="display:flex;align-items:flex-start;gap:12px;margin:8px 0;">
           <div style="flex:1;text-align:center;">
             <div style="font-size:12px;color:#9A8462;margin-bottom:4px;">${atkActor?.name ?? "?"}</div>
-            <img src="${atkItemImg}" style="width:50px;height:50px;${OCTA_STYLE}" alt="">
+            <img src="${atkItemImg}" style="width:50px;height:50px;object-fit:cover;display:block;margin:0 auto;" alt="">
             <div style="font-size:12px;color:#EBBD68;">${initFlags.formula?.toUpperCase() ?? ""}=${atkEffective}</div>
           </div>
           <div style="align-self:center;font-size:1.6rem;font-weight:bold;color:#6699CC;padding:0 4px;">🛡️</div>
           <div style="flex:1;text-align:center;">
             <div style="font-size:12px;color:#9A8462;margin-bottom:4px;">${defActor?.name ?? "?"}</div>
-            <img src="${defItem.img ?? ""}" style="width:50px;height:50px;${OCTA_STYLE}" alt="${defItem.name}">
+            <img src="${defItem.img ?? ""}" style="width:50px;height:50px;object-fit:cover;display:block;margin:0 auto;" alt="${defItem.name}">
             <div style="font-size:12px;color:#EBBD68;">${defFormula?.toUpperCase() ?? ""}=${defEffective}</div>
           </div>
         </div>
