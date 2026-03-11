@@ -246,6 +246,10 @@ export class ClashManager {
               const roll     = new Roll(full);
               await roll.evaluate();
               await ClashManager._sendInitiateMsg(actor, item, roll, full, slotIndex);
+              // EGO 技能使用后，将 egoResistanceAdj 应用到角色的罪孽抗性
+              if (item.system?.type === "ego") {
+                await ClashManager._applyEgoResistanceChanges(actor, item);
+              }
               resolve(true);
             },
           },
@@ -946,6 +950,20 @@ export class ClashManager {
         },
       },
     });
+  }
+
+  /* ─── EGO 罪孽抗性修改 ────────────────────────────────────────────────── */
+
+  static async _applyEgoResistanceChanges(actor, item) {
+    const adj = item.system?.egoResistanceAdj;
+    if (!adj?.length) return;
+    const VALID = CONFIG.LIMBUSCOMPANY?.RESISTANCE_VALUES ?? ["x0.5","x1.0","x2.0","x2.5","x3.0"];
+    const update = {};
+    for (const { sinType, multiplier } of adj) {
+      if (!sinType || !VALID.includes(multiplier)) continue;
+      update[`system.egoResistances.${sinType}`] = multiplier;
+    }
+    if (Object.keys(update).length) await actor.update(update);
   }
 
   /* ─── 再次骰掷（平局时重新计算） ─────────────────────────────────────── */
