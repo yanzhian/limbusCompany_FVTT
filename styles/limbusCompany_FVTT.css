@@ -3441,6 +3441,7 @@ body.game .limbuscompany.app img {
   width: 100%; height: 100%;
   object-fit: cover; display: block;
 }
+.limbuscompany .combat-skill-img[src=""] { display: none; }
 
 /* 技能名称标签（战斗槽下方小字） */
 .limbuscompany .combat-slot-name {
@@ -3504,6 +3505,29 @@ body.game .limbuscompany.app img {
 .limbuscompany .ap-coin-active { opacity: 1; }
 .limbuscompany .ap-coin-inactive { opacity: .35; filter: grayscale(1); }
 .limbuscompany .ap-coin:hover { opacity: 1; filter: none; }
+
+/* ─── 罪孽抗性横排 ──────────────────────────────────────────────── */
+
+.limbuscompany .sin-resist-row {
+  display: flex; flex-wrap: wrap; gap: 6px; padding: 4px 0;
+}
+.limbuscompany .sin-resist-item {
+  display: flex; flex-direction: column; align-items: center; gap: 3px;
+  min-width: 40px;
+}
+.limbuscompany .sin-resist-icon {
+  width: 28px; height: 28px; border-radius: 50%;
+  border: 2px solid #5A4A30; object-fit: cover;
+}
+.limbuscompany .sin-resist-val {
+  font-size: .65rem; color: #C9B887; font-weight: bold; white-space: nowrap;
+}
+.limbuscompany .sin-resist-select {
+  width: 54px; font-size: .6rem; background: #1A1208; color: #C9B887;
+  border: 1px solid #5A4A30; border-radius: 2px; text-align: center;
+  padding: 1px 0;
+}
+.limbuscompany .sin-resist-select:not([disabled]) { border-color: #C9A84C; }
 
 /* ─── §3-I  底部固定状态栏 ──────────────────────────────────────── */
 

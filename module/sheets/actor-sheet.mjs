@@ -189,6 +189,19 @@ export class LimbusActorSheet extends ActorSheet {
     // ── 战斗行动值显示（3枚硬币） ─────────────────────────────────────────
     context.apCoins = [0, 1, 2].map(i => ({ index: i, active: i < (system.ap.value ?? 0) }));
 
+    // ── 罪孽抗性（战斗 Tab 显示，供 EGO 修改后实时刷新） ─────────────────
+    const SINS = cfg.SINS ?? ["wrath","lust","sloth","gluttony","gloom","pride","envy"];
+    const SIN_ICON_BASE = "systems/limbusCompany_FVTT/assets/icons/Base_icon/";
+    context.sinResistances = SINS.map(sin => ({
+      sin,
+      label:    cfg.SIN_LABELS_ZH?.[sin] ?? sin,
+      icon:     `${SIN_ICON_BASE}${sin.charAt(0).toUpperCase() + sin.slice(1)}_icon.webp`,
+      color:    cfg.SIN_COLORS?.[sin] ?? "#E8C9A2",
+      value:    system.egoResistances?.[sin] ?? "x1.0",
+      field:    `system.egoResistances.${sin}`,
+    }));
+    context.resistanceValues = cfg.RESISTANCE_VALUES ?? ["x0.5","x1.0","x2.0","x2.5","x3.0"];
+
     // ── 本地过滤状态（不持久化） ──────────────────────────────────────────
     context.filterState = this._filterState ?? { categories: [], links: [] };
 
@@ -481,6 +494,12 @@ export class LimbusActorSheet extends ActorSheet {
     html.find(".buff-trigger").on("click",        this._onBuffTrigger.bind(this));
     html.find(".buff-delete").on("click",         this._onBuffDelete.bind(this));
     html.find(".buff-inline-input").on("change",  this._onBuffInlineEdit.bind(this));
+    // 罪孽抗性下拉直接写入 actor
+    html.find(".sin-resist-select").on("change", async (ev) => {
+      const name = ev.currentTarget.name;   // e.g. "system.egoResistances.wrath"
+      const val  = ev.currentTarget.value;
+      if (name && val) await this.actor.update({ [name]: val });
+    });
 
     // ── 战斗技能槽点击 ────────────────────────────────────────────────────
     // 基础技能槽：data-item-id 是运行时动态写入，不能在绑定时用属性选择器过滤
@@ -1450,10 +1469,12 @@ export class LimbusActorSheet extends ActorSheet {
       lockBtn.removeClass("locked").html('<i class="fas fa-lock-open"></i>');
       root.find(".editable-field").prop("disabled", false);
       root.find(".editable-only").show();
+      root.find(".sin-resist-static").hide();
     } else {
       lockBtn.addClass("locked").html('<i class="fas fa-lock"></i>');
       root.find(".editable-field").prop("disabled", true);
       root.find(".editable-only").hide();
+      root.find(".sin-resist-static").show();
     }
 
     // 星芒固定不可编辑
