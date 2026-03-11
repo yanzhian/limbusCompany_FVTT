@@ -16,7 +16,8 @@
       </div>
       <ul class="buff-list">
         {{#each buffs}}
-          <li class="buff-row" data-buff-id="{{id}}">
+          <li class="buff-row {{#if (eq whenAdded '下回合')}}buff-row--next-turn{{/if}}"
+              data-buff-id="{{id}}">
             <span class="buff-col-icon">
               {{#if icon}}
                 <img src="{{icon}}" width="16" height="16" alt="{{name}}">
@@ -24,7 +25,10 @@
                 <span class="buff-icon-placeholder"></span>
               {{/if}}
             </span>
-            <span class="buff-col-name buff-name">{{name}}</span>
+            <span class="buff-col-name buff-name">
+              {{name}}
+              {{#if (eq whenAdded '下回合')}}<span class="buff-next-turn-badge">下回合</span>{{/if}}
+            </span>
             <span class="buff-col-intensity">
               <input class="buff-inline-input editable-field" type="number"
                      data-buff-id="{{id}}" data-field="intensity"

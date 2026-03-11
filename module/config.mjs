@@ -179,6 +179,23 @@ LIMBUSCOMPANY.BUFF_GROUPS = {
   other:    ["custom"],
 };
 
+/**
+ * 回合结束时自动清除的 BUFF 类型（本回合生效，下回合转为本回合生效）。
+ * 包含所有增益/减益（强壮/虚弱/忍耐/破绽/迅捷/束缚/守护/易损/拼点威力/攻防等级）
+ * 以及陷入混乱/陷入恐慌三种混乱状态。
+ */
+LIMBUSCOMPANY.TURN_END_BUFF_TYPES = new Set([
+  "strong", "weak",
+  "endure", "breach",
+  "swift",  "bind",
+  "guard",  "fragile",
+  "clashPowerUp",  "clashPowerDown",
+  "atkLevelUp",    "atkLevelDown",
+  "defLevelUp",    "defLevelDown",
+  "chaos", "chaos_plus", "chaos_double_plus",
+  "panic",
+]);
+
 // ─── 技能类型 ─────────────────────────────────────────────────────────────────
 
 LIMBUSCOMPANY.SKILL_TYPES = {

@@ -38,8 +38,8 @@ export class ClashManager {
    */
   static _getEffectiveResistances(actor) {
     const sys          = actor?.system ?? {};
-    // 陷入混乱时，物理抗性强制提升（优先级最高，无视装备）
-    const buffs = sys.buffs ?? [];
+    // 陷入混乱时，物理抗性强制提升（优先级最高，无视装备；仅本回合生效的混乱才计入）
+    const buffs = (sys.buffs ?? []).filter(b => b.whenAdded !== "下回合");
     if (buffs.some(b => b.type === "chaos_double_plus")) return { slash: "x3.0", blunt: "x3.0", pierce: "x3.0" };
     if (buffs.some(b => b.type === "chaos_plus"))        return { slash: "x2.5", blunt: "x2.5", pierce: "x2.5" };
     if (buffs.some(b => b.type === "chaos"))             return { slash: "x2.0", blunt: "x2.0", pierce: "x2.0" };
@@ -63,7 +63,8 @@ export class ClashManager {
   }
 
   static _getBuff(actor, type) {
-    return (actor?.system?.buffs ?? []).find(b => b.type === type) ?? null;
+    // 只取"本回合"有效的 BUFF；"下回合"的尚未生效，不参与本回合计算
+    return (actor?.system?.buffs ?? []).find(b => b.type === type && b.whenAdded !== "下回合") ?? null;
   }
 
   static _getBuffVal(actor, type) {

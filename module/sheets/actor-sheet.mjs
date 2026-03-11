@@ -110,7 +110,8 @@ export class LimbusActorSheet extends ActorSheet {
     };
 
     const equippedUpper = equippedItems.find(eq => eq.system?.subtype === "upper");
-    const _buffs         = system.buffs ?? [];
+    // 只有本回合有效的混乱 BUFF 才影响抗性显示
+    const _buffs         = (system.buffs ?? []).filter(b => b.whenAdded !== "下回合");
     const hasChaosDouble = _buffs.some(b => b.type === "chaos_double_plus");
     const hasChaosPlus   = _buffs.some(b => b.type === "chaos_plus");
     const hasChaos       = _buffs.some(b => b.type === "chaos");

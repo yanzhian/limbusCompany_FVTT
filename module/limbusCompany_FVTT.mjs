@@ -230,10 +230,13 @@ Hooks.on("updateCombat", async (combat, changed) => {
     const prevTurn    = combat.turns[prevTurnIdx];
     const actor       = prevTurn?.actor;
     if (actor?.type === "character") {
-      actor.removeBuffsByType("chaos");
-      actor.removeBuffsByType("chaos_plus");
-      actor.removeBuffsByType("chaos_double_plus");
-      actor.removeBuffsByType("panic");
+      const TURN_END = CONFIG.LIMBUSCOMPANY?.TURN_END_BUFF_TYPES ?? new Set();
+      const updatedBuffs = (actor.system.buffs ?? [])
+        // 移除"本回合"的临时 BUFF（强壮/虚弱/混乱/恐慌等）
+        .filter(b => !(TURN_END.has(b.type) && b.whenAdded !== "下回合"))
+        // 将所有"下回合"的 BUFF 转为"本回合"（正式生效）
+        .map(b => b.whenAdded === "下回合" ? { ...b, whenAdded: "本回合" } : b);
+      await actor.update({ "system.buffs": updatedBuffs });
     }
   }
 
