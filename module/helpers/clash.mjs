@@ -200,10 +200,10 @@ export class ClashManager {
       <div style="display:flex;align-items:center;gap:12px;margin:8px 0;">
         <img src="${item.img}" style="width:50px;height:50px;object-fit:cover;border:2px solid ${sinColor};flex-shrink:0;" alt="${item.name}">
         <div>
-          <div style="font-size:24px;font-weight:bold;color:#E8C9A2;">${item.name}</div>
+          <div style="font-size:16px;font-weight:bold;color:#E8C9A2;">${item.name}</div>
           <div style="display:flex;align-items:center;gap:6px;margin-top:3px;">
-            ${catIcon ? `<img src="${catIcon}" style="width:24px;height:24px;" alt="${catLabel}">` : ""}
-            <span style="font-size:24px;color:#EBBD68;">${formula.toUpperCase()}</span>
+            ${catIcon ? `<img src="${catIcon}" style="width:16px;height:16px;" alt="${catLabel}">` : ""}
+            <span style="font-size:16px;color:#EBBD68;">${formula.toUpperCase()}</span>
           </div>
         </div>
       </div>`;
@@ -227,11 +227,11 @@ export class ClashManager {
         <div style="margin-bottom:12px;">
           <label style="display:block;font-size:.75rem;color:#9A8462;margin-bottom:4px;">加值修正</label>
           <input type="text" name="bonus" placeholder="±N 或 1d4+2"
-                 style="width:100%;box-sizing:border-box;background:#1A1208;border:1px solid #C9A84C;
+                 style="width:100%;box-sizing:border-box;background:#1A1208;
                         color:#E8C9A2;font-size:.85rem;padding:6px 8px;border-radius:3px;outline:none;">
         </div>
       </div>`;
-
+// border:1px solid #C9A84C;
     return new Promise(resolve => {
       new Dialog({
         title: "发起对抗",
@@ -276,16 +276,16 @@ export class ClashManager {
         ${ClashManager._skillRow(item)}
         <div class="clash-action-row" style="display:flex;gap:8px;margin-top:8px;margin-bottom:4px;">
           <button class="clash-btn-clash"
-                  style="width:48px;height:30px;background:#5F3E22;color:#E8C9A2;
-                         border:1px solid #C9A84C;cursor:pointer;font-size:.85rem;border-radius:2px;">对抗</button>
+                  style="width:50px;height:30px;background:#5F3E22;color:#E8C9A2;
+                         cursor:pointer;font-size:.85rem;border-radius:2px;">对抗</button>
           <button class="clash-btn-take"
-                  style="width:48px;height:30px;background:#B84444;color:#fff;
+                  style="width:50px;height:30px;background:#B84444;color:#fff;
                          border:none;cursor:pointer;font-size:.85rem;border-radius:2px;">承受</button>
         </div>
         ${ClashManager._goldDivider()}
         ${effectDesc ? `<div style="font-size:.8rem;color:#9A8462;line-height:1.5;">${effectDesc}</div>` : ""}
       </div>`;
-
+// border:1px solid #C9A84C;
     const msg = await ChatMessage.create({
       speaker: ChatMessage.getSpeaker({ actor }),
       content,
@@ -526,11 +526,11 @@ export class ClashManager {
         <div style="margin-bottom:12px;">
           <label style="display:block;font-size:.75rem;color:#9A8462;margin-bottom:4px;">加值修正</label>
           <input type="text" name="bonus" placeholder="±N 或 1d4+2"
-                 style="width:100%;box-sizing:border-box;background:#1A1208;border:1px solid #C9A84C;
+                 style="width:100%;box-sizing:border-box;background:#1A1208;
                         color:#E8C9A2;font-size:.85rem;padding:6px 8px;border-radius:3px;outline:none;">
         </div>
       </div>`;
-
+// border:1px solid #C9A84C;
     return new Promise(resolve => {
       new Dialog({
         title: "进行对抗",
@@ -577,7 +577,7 @@ export class ClashManager {
         ${ClashManager._goldDivider()}
         ${ClashManager._skillRow(defItem)}
         <div style="display:flex;gap:8px;margin-top:8px;margin-bottom:4px;">
-          <button disabled style="width:48px;height:30px;background:#3A3028;color:#6A5A48;
+          <button disabled style="width:50px;height:30px;background:#3A3028;color:#6A5A48;
                                   border:1px solid #4A3820;font-size:.85rem;cursor:not-allowed;
                                   border-radius:2px;">对抗</button>
         </div>
@@ -787,7 +787,7 @@ export class ClashManager {
     if (defLvBonus > 0) notes.push(`（防守方等级 ${defSideLv} vs 攻击方等级 ${atkSideLv}，等级差 ${defSideLv - atkSideLv}，拼点+${defLvBonus}）`);
 
     if (isTie) {
-      notes.push(`⚖️ 平局！（${atkEffective} = ${defEffective}）需要再次骰掷`);
+      notes.push(`平局！（${atkEffective} = ${defEffective}）需要再次骰掷`);
     } else {
       notes.push(`${winner?.name ?? "?"} 获胜，${loserName} 败北`);
 
@@ -845,7 +845,7 @@ export class ClashManager {
     const isDodgeWin        = !!dodgeWin;
     const noTake            = isDodgeWin || isClashBlockWin;
 
-    const resolveTitle = isTie             ? "⚖️ 平局 — 再次骰掷"
+    const resolveTitle = isTie             ? "平局"
                        : isClashCounterWin ? "⚔️ 强化反击"
                        : isDodgeWin        ? "闪避成功"
                        : isClashBlockWin   ? "格挡成功"
@@ -882,7 +882,7 @@ export class ClashManager {
            <button class="clash-btn-reroll"
                    style="padding:4px 16px;height:30px;background:#5F3E22;color:#E8C9A2;
                           border:1px solid #C9A84C;cursor:pointer;font-size:.85rem;border-radius:2px;flex-shrink:0;">
-             🎲 再次骰掷
+             再次骰掷
            </button>
            <span style="font-size:.7rem;color:#6A5A48;">平局！双方重新骰掷</span>
          </div>`
@@ -972,7 +972,7 @@ export class ClashManager {
     await ChatMessage.create({
       speaker: ChatMessage.getSpeaker({ actor: atkActor }),
       content: `<div class="limbuscompany chat-clash">
-        ⚖️ <strong>再次骰掷</strong>：${atkActor.name} 掷出 <strong>${atkRoll.total}</strong>，
+        <strong>再次骰掷</strong>：${atkActor.name} 掷出 <strong>${atkRoll.total}</strong>，
         ${defActor.name} 掷出 <strong>${defRoll.total}</strong>
       </div>`,
     });
@@ -1227,7 +1227,7 @@ export class ClashManager {
         ${ClashManager._chatHeader(actor, "承受")}
         ${ClashManager._goldDivider()}
         ${calcNotes.length > 0 ? `
-        <div style="margin:6px 0 4px;padding:5px 7px;background:rgba(0,0,0,.25);border-radius:3px;border-left:2px solid #C9A84C;">
+        <div style="margin:6px 0 4px;padding:5px 7px;background:rgba(0,0,0,.25);border-radius:3px;">
           <div style="font-size:.65rem;font-weight:bold;color:#C9A84C;margin-bottom:3px;letter-spacing:.05em;">结算说明</div>
           ${calcNotes.map(n => `<div style="font-size:.72rem;color:#9A8462;line-height:1.55;">${n}</div>`).join("")}
         </div>
@@ -1333,7 +1333,7 @@ export class ClashManager {
     })();
     const defModStr = (() => {
       const parts = [];
-      if (defDiceMod !== 0) parts.push(`忍耐/破绽${defDiceMod >= 0 ? "+" : ""}${defDiceMod}`);
+      if (defDiceMod !== 0) parts.push(`BUFF${defDiceMod >= 0 ? "+" : ""}${defDiceMod}`);
       if (defLvBonus  > 0)  parts.push(`等级差+${defLvBonus}`);
       return parts.length ? ` +${parts.join("+")}→${defEffective}` : "";
     })();
@@ -1371,7 +1371,7 @@ export class ClashManager {
 
     const content = `
       <div class="limbus-clash-card" data-clash-type="counter">
-        ${ClashManager._chatHeader(defActor, "⚔️ 反击")}
+        ${ClashManager._chatHeader(defActor, "反击")}
         ${ClashManager._goldDivider()}
         <div style="display:flex;align-items:flex-start;gap:12px;margin:8px 0;">
           <div style="flex:1;text-align:center;">
