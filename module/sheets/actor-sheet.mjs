@@ -110,13 +110,16 @@ export class LimbusActorSheet extends ActorSheet {
     };
 
     const equippedUpper = equippedItems.find(eq => eq.system?.subtype === "upper");
-    context.displayResistances = equippedUpper?.system?.resistanceAdj
-      ? {
-        slash: equippedUpper.system.resistanceAdj.slash ?? system.resistances.slash,
-        blunt: equippedUpper.system.resistanceAdj.blunt ?? system.resistances.blunt,
-        pierce: equippedUpper.system.resistanceAdj.pierce ?? system.resistances.pierce,
-      }
-      : { ...system.resistances };
+    const hasChaos = (system.buffs ?? []).some(b => b.type === "chaos");
+    context.displayResistances = hasChaos
+      ? { slash: "x2.0", blunt: "x2.0", pierce: "x2.0" }
+      : equippedUpper?.system?.resistanceAdj
+        ? {
+          slash: equippedUpper.system.resistanceAdj.slash ?? system.resistances.slash,
+          blunt: equippedUpper.system.resistanceAdj.blunt ?? system.resistances.blunt,
+          pierce: equippedUpper.system.resistanceAdj.pierce ?? system.resistances.pierce,
+        }
+        : { ...system.resistances };
 
     const stellarMax = 30 + (system.level ?? 1);
     const equippedStellarCost = this._calcEquippedStellarCost();
@@ -417,7 +420,13 @@ export class LimbusActorSheet extends ActorSheet {
 
     // ── HP / 理智 重置 ───────────────────────────────────────────────────
     html.find(".hp-reset").on("click", () => {
-      this.actor.update({ "system.hp.value": this.actor.system.hp.max });
+      const sys = this.actor.system;
+      const defaultThresholds = sys.getDefaultChaosThresholds?.()
+        ?? [{ percent: 60, triggered: false }, { percent: 30, triggered: false }];
+      this.actor.update({
+        "system.hp.value":        sys.hp.max,
+        "system.chaosThresholds": defaultThresholds,
+      });
     });
     html.find(".sanity-reset").on("click", () => {
       this.actor.update({ "system.sanity.value": 50 });
@@ -1540,6 +1549,9 @@ function _buffIconPath(type) {
   const base = "systems/limbusCompany_FVTT/assets/icons/Buff_icon/";
   const map  = { strong:"强壮", weak:"虚弱", endure:"忍耐", breach:"破绽",
     swift:"迅捷", bind:"束缚", guard:"守护", fragile:"易损",
+    clashPowerUp:"拼点威力提升", clashPowerDown:"拼点威力降低",
+    atkLevelUp:"攻击等级提升",   atkLevelDown:"攻击等级降低",
+    defLevelUp:"防御等级提升",   defLevelDown:"防御等级降低",
     burn:"烧伤", bleed:"流血", tremor:"震颤", rupture:"破裂",
     sinking:"沉沦", breathing:"呼吸法", charge:"充能",
     chaos:"陷入混乱", panic:"陷入恐慌" };

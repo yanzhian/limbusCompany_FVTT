@@ -38,6 +38,9 @@ export class ClashManager {
    */
   static _getEffectiveResistances(actor) {
     const sys          = actor?.system ?? {};
+    // 陷入混乱时，物理抗性强制为 x2.0（优先级最高，无视装备）
+    const hasChaos = (sys.buffs ?? []).some(b => b.type === "chaos");
+    if (hasChaos) return { slash: "x2.0", blunt: "x2.0", pierce: "x2.0" };
     const equippedItems = Object.values(sys.equipment ?? {})
       .map(id => (id ? actor.items.get(id) : null))
       .filter(item => item?.type === "equipment");

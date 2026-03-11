@@ -1032,12 +1032,9 @@ export class LimbusActor extends Actor {
     });
 
     await this.update({
-      "system.chaosThresholds":    thresholds,
-      "system.resistances.slash":  "x2.0",
-      "system.resistances.blunt":  "x2.0",
-      "system.resistances.pierce": "x2.0",
-      "system.ap.value":           0,
-      "system.buffs":              newBuffs,
+      "system.chaosThresholds": thresholds,
+      "system.ap.value":        0,
+      "system.buffs":           newBuffs,
     });
 
     // await 确保消息创建完成，防止 Foundry 消息清理竞态
