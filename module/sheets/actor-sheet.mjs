@@ -1337,14 +1337,18 @@ export class LimbusActorSheet extends ActorSheet {
       case "burn": {
         const oldHp = actor.system.hp?.value ?? 0;
         const newHp = Math.max(0, oldHp - intensity);
+        const maxHpBuff = actor.system.hp?.max ?? 1;
+        const chaosTriggeredBuff = (actor.system.chaosThresholds ?? []).some(
+          t => !t.triggered && newHp <= maxHpBuff * t.percent / 100
+        );
         await actor.update({ "system.hp.value": newHp });
         await actor.reduceBuffStacks(buff.type);
-        if (actor.checkAndTriggerChaos) await actor.checkAndTriggerChaos(newHp, oldHp);
-        ChatMessage.create({
+        if (actor.checkAndTriggerChaos) await actor.checkAndTriggerChaos(newHp, oldHp, { silent: true });
+        await ChatMessage.create({
           speaker: ChatMessage.getSpeaker({ actor }),
           content: `<div class="limbuscompany chat-clash">
             <strong>${actor.name}</strong>【${buff.name}】触发：受到 <strong>${intensity}</strong> 点固定伤害。
-            （HP ${oldHp} → ${newHp}）
+            （HP ${oldHp} → ${newHp}）${chaosTriggeredBuff ? "　<span style='color:#E84444;font-weight:bold;'>——【陷入混乱】！</span>" : ""}
           </div>`,
         });
         break;
@@ -1356,7 +1360,7 @@ export class LimbusActorSheet extends ActorSheet {
         const newSan = Math.max(5, oldSan - intensity);
         await actor.setSanity(oldSan - intensity);
         await actor.reduceBuffStacks("sinking");
-        ChatMessage.create({
+        await ChatMessage.create({
           speaker: ChatMessage.getSpeaker({ actor }),
           content: `<div class="limbuscompany chat-clash">
             <strong>${actor.name}</strong>【沉沦】触发：理智 -${intensity}。
@@ -1370,7 +1374,7 @@ export class LimbusActorSheet extends ActorSheet {
       case "tremor": {
         await actor.triggerSeismicBlast(intensity);
         await actor.reduceBuffStacks("tremor");
-        ChatMessage.create({
+        await ChatMessage.create({
           speaker: ChatMessage.getSpeaker({ actor }),
           content: `<div class="limbuscompany chat-clash">
             <strong>${actor.name}</strong>【震颤】引爆：混乱阈值前移 <strong>${intensity}%</strong>。

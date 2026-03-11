@@ -963,7 +963,7 @@ export class ClashManager {
     await atkRoll.evaluate();
     await defRoll.evaluate();
 
-    ChatMessage.create({
+    await ChatMessage.create({
       speaker: ChatMessage.getSpeaker({ actor: atkActor }),
       content: `<div class="limbuscompany chat-clash">
         ⚖️ <strong>再次骰掷</strong>：${atkActor.name} 掷出 <strong>${atkRoll.total}</strong>，
