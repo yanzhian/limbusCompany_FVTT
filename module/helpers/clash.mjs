@@ -1040,9 +1040,9 @@ export class ClashManager {
     // ── 有效骰数 ──────────────────────────────────────────────────────────
     const effectiveAtk = rollTotal + atkDiceMod + lvBonus;
 
-    // ── 守护（强度）/ 易损（强度） ──────────────────────────────────────
-    const guard   = gi(defActor, "guard");
-    const fragile = gi(defActor, "fragile");
+    // ── 守护（层数）/ 易损（层数） ──────────────────────────────────────
+    const guard   = gs(defActor, "guard");
+    const fragile = gs(defActor, "fragile");
     const adjustedAtk = Math.max(0, effectiveAtk + fragile - guard);
 
     // ── 物理抗性 & 罪孽抗性 ────────────────────────────────────────────
