@@ -1112,14 +1112,14 @@ i[class^="fa"], i[class*=" fa-"] {
 
 /* 主侧边栏容器 */
 #sidebar {
-  background: var(--bg-darkest);
-  border-left: 1px solid var(--border-gold);
+  /* background: var(--bg-darkest);
+  border-left: 1px solid var(--border-gold); */
 }
 
 /* 侧边栏 Tab 导航栏 */
 #sidebar-tabs {
-  background: var(--bg-darkest);
-  border-bottom: 1px solid var(--border-gold);
+  /* background: var(--bg-darkest);
+  border-bottom: 1px solid var(--border-gold); */
 }
 
 #sidebar-tabs .item {
@@ -1299,7 +1299,7 @@ i[class^="fa"], i[class*=" fa-"] {
 /* 消息内容区 */
 .chat-message .message-content,
 .chat-message .content {
-  padding: 8px 10px;
+  /* padding: 8px 10px; */
   color: var(--text-main);
   line-height: 1.5;
 }
@@ -1732,8 +1732,8 @@ nav.context-menu hr,
 /* ─── §2-I  Hotbar & 宏按钮 ────────────────────────────────── */
 
 #hotbar {
-  background: var(--bg-darkest);
-  border-top: 1px solid var(--border-gold);
+  /* background: var(--bg-darkest);
+  border-top: 1px solid var(--border-gold); */
 }
 
 #hotbar .bar-controls,
@@ -1819,7 +1819,7 @@ select option:hover {
 /* 全局滚动条 */
 * {
   scrollbar-width: thin;
-  scrollbar-color: var(--border-gold) transparent;
+  scrollbar-color: #5F3E22 transparent;
 }
 
 *::-webkit-scrollbar {
@@ -4340,7 +4340,7 @@ body.game .limbuscompany.app img {
     #A07820 75%,
     transparent 100%
   );
-  margin: 2px 0;
+  margin-bottom: 12px
 }
 
 /* ── 难度等级文字 ── */
@@ -4423,7 +4423,7 @@ body.game .limbuscompany.app img {
 /* ── 聊天框卡片基础 ── */
 .limbus-clash-card {
   background: linear-gradient(180deg, #1A1510 0%, #141008 100%);
-  border: 1px solid #C9A84C;
+  border: 1px solid #5A3A1A;
   border-radius: 4px;
   padding: 10px 12px;
   font-family: var(--font-main, sans-serif);
@@ -4457,7 +4457,7 @@ body.game .limbuscompany.app img {
 .clash-pick-empty {
   background: rgba(255,255,255,.04);
   border: 2px dashed rgba(201,168,76,.3);
-  clip-path: polygon(25% 0%,75% 0%,100% 25%,100% 75%,75% 100%,25% 100%,0% 75%,0% 25%);
+  /* clip-path: polygon(25% 0%,75% 0%,100% 25%,100% 75%,75% 100%,25% 100%,0% 75%,0% 25%); */
   cursor: default !important;
 }
 
