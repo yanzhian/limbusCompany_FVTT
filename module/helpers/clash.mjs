@@ -1024,22 +1024,98 @@ export class ClashManager {
       return;
     }
 
-    // 直接伤害 = 攻击骰结果 × 实际抗性（含上装修正）
-    const category   = initFlags.category ?? "";
-    const PHYS_CATS  = ["slash", "blunt", "pierce"];
-    const effRes     = ClashManager._getEffectiveResistances(selActor);
-    const resStr     = PHYS_CATS.includes(category) ? (effRes[category] ?? "x1.0") : "x1.0";
-    const resistMult = ClashManager._parseResistance(resStr);
-    const damage     = Math.max(0, Math.round(initFlags.rollTotal * resistMult));
+    const atkActor  = game.actors.get(initFlags.attackerId);
+    const defActor  = selActor;
+    const rollTotal = initFlags.rollTotal ?? 0;
+    const category  = initFlags.category ?? "";
+    const sinType   = initFlags.sinType  ?? "";
+    const PHYS_CATS = ["slash", "blunt", "pierce"];
+    const SIN_TYPES = ["wrath","lust","sloth","gluttony","gloom","pride","envy"];
+    const PHYS_LABELS = { slash: "斩击", blunt: "打击", pierce: "突刺" };
+    const SIN_LABELS  = { wrath:"暴怒", lust:"色欲", sloth:"怠惰",
+                          gluttony:"暴食", gloom:"忧郁", pride:"傲慢", envy:"嫉妒" };
+
+    const gs = (actor, type) => ClashManager._getBuffVal(actor, type).stacks;
+    const gi = (actor, type) => ClashManager._getBuffVal(actor, type).intensity;
+
+    // ── 攻击方 BUFF 修正 ─────────────────────────────────────────────────
+    const strong  = atkActor ? gs(atkActor, "strong")       : 0;
+    const weak    = atkActor ? gs(atkActor, "weak")         : 0;
+    const pwrUp   = atkActor ? gs(atkActor, "clashPowerUp") : 0;
+    const pwrDn   = atkActor ? gs(atkActor, "clashPowerDown") : 0;
+    const atkDiceMod = strong - weak + pwrUp - pwrDn;
+
+    // ── 等级差加值（防御等级 > 攻击等级时无加成）──────────────────────────
+    const atkLv   = atkActor ? ClashManager._effAtkLv(atkActor) : 0;
+    const defLv   = ClashManager._effDefLv(defActor);
+    const lvBonus = Math.floor(Math.max(0, atkLv - defLv) / 3);
+
+    // ── 有效骰数 ──────────────────────────────────────────────────────────
+    const effectiveAtk = rollTotal + atkDiceMod + lvBonus;
+
+    // ── 守护（强度）/ 易损（强度） ──────────────────────────────────────
+    const guard   = gi(defActor, "guard");
+    const fragile = gi(defActor, "fragile");
+    const adjustedAtk = Math.max(0, effectiveAtk + fragile - guard);
+
+    // ── 物理抗性 & 罪孽抗性 ────────────────────────────────────────────
+    const effRes    = ClashManager._getEffectiveResistances(defActor);
+    const physResStr = PHYS_CATS.includes(category) ? (effRes[category] ?? "x1.0") : "x1.0";
+    const sinResStr  = SIN_TYPES.includes(sinType)
+      ? (defActor.system?.egoResistances?.[sinType] ?? "x1.0") : "x1.0";
+    const physMult = ClashManager._parseResistance(physResStr);
+    const sinMult  = ClashManager._parseResistance(sinResStr);
+
+    // ── 最终伤害 ──────────────────────────────────────────────────────────
+    const finalDamage = Math.max(0, Math.round(adjustedAtk * physMult * sinMult));
+
+    // ── 逐步结算说明 ──────────────────────────────────────────────────────
+    const calcNotes = [];
+    let step = rollTotal;
+
+    calcNotes.push(`骰点结果：${step}`);
+
+    if (atkDiceMod !== 0) {
+      const parts = [];
+      if (strong > 0) parts.push(`强壮+${strong}`);
+      if (weak   > 0) parts.push(`虚弱-${weak}`);
+      if (pwrUp  > 0) parts.push(`拼点威力↑+${pwrUp}`);
+      if (pwrDn  > 0) parts.push(`拼点威力↓-${pwrDn}`);
+      step += atkDiceMod;
+      calcNotes.push(`攻击方BUFF（${parts.join("，")}）→ 有效骰数 ${step}`);
+    }
+
+    if (lvBonus > 0) {
+      step += lvBonus;
+      calcNotes.push(`等级差加值（攻Lv${atkLv} vs 防Lv${defLv}，差${atkLv - defLv}，+${lvBonus}）→ ${step}`);
+    } else if (defLv > atkLv) {
+      calcNotes.push(`等级差：防御等级${defLv} > 攻击等级${atkLv}，无加成`);
+    }
+
+    if (fragile > 0 || guard > 0) {
+      const prev = step;
+      step = adjustedAtk;
+      const parts = [];
+      if (fragile > 0) parts.push(`易损+${fragile}`);
+      if (guard   > 0) parts.push(`守护-${guard}`);
+      calcNotes.push(`${parts.join("，")}：${prev} → ${step}`);
+    }
+
+    if (physMult !== 1.0 || sinMult !== 1.0) {
+      const resParts = [];
+      if (physMult !== 1.0) resParts.push(`${PHYS_LABELS[category] ?? category}抗性${physResStr}`);
+      if (sinMult  !== 1.0) resParts.push(`${SIN_LABELS[sinType]  ?? sinType}罪孽抗性${sinResStr}`);
+      calcNotes.push(`${resParts.join(" × ")}：${step} → ${finalDamage}`);
+    }
 
     // 优先使用 base actor（确保角色卡与 linked tokens 同步）
     const baseActor = game.actors.get(selActor.id) ?? selActor;
-    await ClashManager._applyAndSendTake(baseActor, damage);
+    await ClashManager._applyAndSendTake(baseActor, finalDamage, { calcNotes });
 
     // 若选中的是非 linked token actor，额外同步该 token 的 HP
     if (selActor !== baseActor && selActor.isToken) {
-      const th  = selActor.system?.hp?.value ?? 0;
-      await selActor.update({ "system.hp.value": Math.max(0, th - damage) });
+      const th = selActor.system?.hp?.value ?? 0;
+      await selActor.update({ "system.hp.value": Math.max(0, th - finalDamage) });
     }
   }
 
@@ -1072,7 +1148,7 @@ export class ClashManager {
    * @param {object} [opts]
    * @param {boolean} [opts.isSeismic=false]  是否为【震颤引爆】类型攻击
    */
-  static async _applyAndSendTake(actor, damage, { isSeismic = false } = {}) {
+  static async _applyAndSendTake(actor, damage, { isSeismic = false, calcNotes = [] } = {}) {
     const sys   = actor.system;
     const maxHp = sys.hp?.max ?? 1;
 
@@ -1135,17 +1211,17 @@ export class ClashManager {
     }
 
     await ClashManager._sendTakeMsg(actor, damage, oldHp, newHp, maxHp, chaosTriggered,
-      { ruptureDmg, sanityDmg, tremorTriggered, chaosName });
+      { ruptureDmg, sanityDmg, tremorTriggered, chaosName, calcNotes });
   }
 
   static async _sendTakeMsg(actor, damage, oldHp, newHp, maxHp, chaosTriggered,
-      { ruptureDmg = 0, sanityDmg = 0, tremorTriggered = false, chaosName = "陷入混乱" } = {}) {
-    const hpPct     = Math.max(0, Math.round((newHp / maxHp) * 100));
-    const totalDmg  = damage + ruptureDmg;
+      { ruptureDmg = 0, sanityDmg = 0, tremorTriggered = false, chaosName = "陷入混乱", calcNotes = [] } = {}) {
+    const hpPct    = Math.max(0, Math.round((newHp / maxHp) * 100));
+    const totalDmg = damage + ruptureDmg;
     const extraLines = [];
-    if (ruptureDmg  > 0) extraLines.push(`【破裂】附加 +${ruptureDmg} 点固定伤害`);
-    if (sanityDmg   > 0) extraLines.push(`【沉沦】附加 ${sanityDmg} 点侵蚀度（理智-${sanityDmg}）`);
-    if (tremorTriggered) extraLines.push(`【震颤】引爆：混乱阈值前移`);
+    if (ruptureDmg   > 0) extraLines.push(`【破裂】附加 +${ruptureDmg} 点固定伤害`);
+    if (sanityDmg    > 0) extraLines.push(`【沉沦】附加 ${sanityDmg} 点侵蚀度（理智-${sanityDmg}）`);
+    if (tremorTriggered)  extraLines.push(`【震颤】引爆：混乱阈值前移`);
 
     const content = `
       <div class="limbus-clash-card limbus-take-card"
@@ -1153,6 +1229,12 @@ export class ClashManager {
            data-clash-type="take">
         ${ClashManager._chatHeader(actor, "承受")}
         ${ClashManager._goldDivider()}
+        ${calcNotes.length > 0 ? `
+        <div style="margin:6px 0 4px;padding:5px 7px;background:rgba(0,0,0,.25);border-radius:3px;border-left:2px solid #C9A84C;">
+          <div style="font-size:.65rem;font-weight:bold;color:#C9A84C;margin-bottom:3px;letter-spacing:.05em;">结算说明</div>
+          ${calcNotes.map(n => `<div style="font-size:.72rem;color:#9A8462;line-height:1.55;">${n}</div>`).join("")}
+        </div>
+        ${ClashManager._goldDivider()}` : ""}
         <div style="text-align:center;margin:10px 0;">
           <div style="font-size:16px;font-weight:bold;color:#E8C9A2;margin-bottom:6px;">生命值结算</div>
           <div style="font-size:13px;color:#E8CAA1;margin-bottom:10px;">
