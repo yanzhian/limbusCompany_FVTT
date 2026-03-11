@@ -3026,7 +3026,7 @@ body.game .limbuscompany.app img {
 }
 /* 图标32px / 名称自适应 / 分类80px / 链接60px / 数量50px / 星芒50px / 操作80px */
 .limbuscompany {
-  --item-list-columns: 32px 1fr 80px 60px 50px 50px 80px;
+  --item-list-columns: 32px 1fr 130px 50px 40px 70px 80px;
 }
 .limbuscompany .item-list-header  { grid-template-columns: var(--item-list-columns); gap: 4px; }
 .limbuscompany .skill-list-header { grid-template-columns: 32px 1fr 80px 60px 50px 50px 80px; gap: 4px; }
@@ -3271,14 +3271,14 @@ body.game .limbuscompany.app img {
 /* BUFF 列表 */
 .limbuscompany .buff-list-wrap { flex: 1; overflow-y: auto; min-height: 0; }
 .limbuscompany .buff-list-header {
-  display: grid; grid-template-columns: 20px 1fr 36px 36px 90px; gap: 4px;
+  display: grid; grid-template-columns: 20px 1fr 30px 50px 60px; gap: 4px;
   font-size: .6rem; color: var(--text-dim); padding: 0 4px 2px;
   border-bottom: 1px solid rgba(95,62,33,.4);
 }
 .limbuscompany .buff-list { list-style: none; margin: 0; padding: 0; }
 .limbuscompany .buff-row {
-  display: grid; grid-template-columns: 20px 1fr 36px 36px 90px; gap: 4px;
-  height: 24px; align-items: center; padding: 0 4px; font-size: .7rem;
+  display: grid; grid-template-columns: 20px 1fr 20px 30px 90px;; gap: 4px;
+  height: 28px; align-items: center; padding: 0 4px; font-size: .7rem;
   border-bottom: 1px solid rgba(95,62,33,.15);
   transition: background .1s;
 }
