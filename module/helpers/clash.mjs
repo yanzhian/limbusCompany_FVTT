@@ -38,6 +38,11 @@ export class ClashManager {
    */
   static _getEffectiveResistances(actor) {
     const sys          = actor?.system ?? {};
+    // 陷入混乱时，物理抗性强制提升（优先级最高，无视装备；仅本回合生效的混乱才计入）
+    const buffs = (sys.buffs ?? []).filter(b => b.whenAdded !== "下回合");
+    if (buffs.some(b => b.type === "chaos_double_plus")) return { slash: "x3.0", blunt: "x3.0", pierce: "x3.0" };
+    if (buffs.some(b => b.type === "chaos_plus"))        return { slash: "x2.5", blunt: "x2.5", pierce: "x2.5" };
+    if (buffs.some(b => b.type === "chaos"))             return { slash: "x2.0", blunt: "x2.0", pierce: "x2.0" };
     const equippedItems = Object.values(sys.equipment ?? {})
       .map(id => (id ? actor.items.get(id) : null))
       .filter(item => item?.type === "equipment");
@@ -58,7 +63,8 @@ export class ClashManager {
   }
 
   static _getBuff(actor, type) {
-    return (actor?.system?.buffs ?? []).find(b => b.type === type) ?? null;
+    // 只取"本回合"有效的 BUFF；"下回合"的尚未生效，不参与本回合计算
+    return (actor?.system?.buffs ?? []).find(b => b.type === type && b.whenAdded !== "下回合") ?? null;
   }
 
   static _getBuffVal(actor, type) {
@@ -124,15 +130,25 @@ export class ClashManager {
     const oldHp = actor.system.hp?.value ?? 0;
     const newHp = Math.max(0, oldHp - dmg);
 
+    const maxHpForBleed      = actor.system.hp?.max ?? 1;
+    const _BC_TYPES          = ["chaos", "chaos_plus", "chaos_double_plus"];
+    const _BC_NAMES          = ["陷入混乱", "陷入混乱+", "陷入混乱++"];
+    const bleedChaosCount    = (actor.system.chaosThresholds ?? []).filter(
+      t => !t.triggered && newHp <= maxHpForBleed * t.percent / 100
+    ).length;
+    const bleedExistingType  = (actor.system.buffs ?? []).find(b => _BC_TYPES.includes(b.type))?.type;
+    const bleedCurrentLevel  = bleedExistingType ? (_BC_TYPES.indexOf(bleedExistingType) + 1) : 0;
+    const bleedNewLevel      = Math.min(3, bleedCurrentLevel + bleedChaosCount);
+    const bleedChaosName     = _BC_NAMES[bleedNewLevel - 1] ?? "陷入混乱";
     await actor.update({ "system.hp.value": newHp });
     await ClashManager._reduceBuffStacks(actor, "bleed");
-    if (actor.checkAndTriggerChaos) await actor.checkAndTriggerChaos(newHp, oldHp);
+    if (actor.checkAndTriggerChaos) await actor.checkAndTriggerChaos(newHp, oldHp, { silent: true });
 
-    ChatMessage.create({
+    await ChatMessage.create({
       speaker: ChatMessage.getSpeaker({ actor }),
       content: `<div class="limbuscompany chat-clash">
         <strong>${actor.name}</strong>【流血】发作：受到 <strong>${dmg}</strong> 点固定伤害。
-        （HP ${oldHp} → ${newHp}）
+        （HP ${oldHp} → ${newHp}）${bleedChaosCount > 0 ? `　<span style='color:#E84444;font-weight:bold;'>——【${bleedChaosName}】！</span>` : ""}
       </div>`,
     });
     return dmg;
@@ -956,7 +972,7 @@ export class ClashManager {
     await atkRoll.evaluate();
     await defRoll.evaluate();
 
-    ChatMessage.create({
+    await ChatMessage.create({
       speaker: ChatMessage.getSpeaker({ actor: atkActor }),
       content: `<div class="limbuscompany chat-clash">
         ⚖️ <strong>再次骰掷</strong>：${atkActor.name} 掷出 <strong>${atkRoll.total}</strong>，
@@ -1094,11 +1110,16 @@ export class ClashManager {
     const oldHp    = sys.hp?.value ?? 0;
     const newHp    = Math.max(0, oldHp - totalDmg);
 
-    // 提前判断混乱阈值（用于聊天框显示）
-    const thresholds     = sys.chaosThresholds ?? [];
-    const chaosTriggered = thresholds.some(
-      t => !t.triggered && newHp <= maxHp * t.percent / 100
-    );
+    // 提前判断混乱阈值（用于聊天框显示，含升级逻辑）
+    const _CHAOS_TYPES  = ["chaos", "chaos_plus", "chaos_double_plus"];
+    const _CHAOS_NAMES  = ["陷入混乱", "陷入混乱+", "陷入混乱++"];
+    const thresholds    = sys.chaosThresholds ?? [];
+    const chaosCount    = thresholds.filter(t => !t.triggered && newHp <= maxHp * t.percent / 100).length;
+    const chaosTriggered = chaosCount > 0;
+    const existingChaosType  = (sys.buffs ?? []).find(b => _CHAOS_TYPES.includes(b.type))?.type;
+    const currentChaosLevel  = existingChaosType ? (_CHAOS_TYPES.indexOf(existingChaosType) + 1) : 0;
+    const newChaosLevel      = Math.min(3, currentChaosLevel + chaosCount);
+    const chaosName          = _CHAOS_NAMES[newChaosLevel - 1] ?? "陷入混乱";
 
     // 更新 HP
     await actor.update({ "system.hp.value": newHp });
@@ -1108,17 +1129,17 @@ export class ClashManager {
       await actor.setSanity((actor.system.sanity?.value ?? 50) - sanityDmg);
     }
 
-    // 触发混乱效果
+    // 触发混乱效果（silent=true：混乱信息已在取血消息中展示，无需额外聊天框，避免双次 ChatMessage.create 触发 Foundry 清理竞态）
     if (chaosTriggered && actor.checkAndTriggerChaos) {
-      await actor.checkAndTriggerChaos(newHp, oldHp);
+      await actor.checkAndTriggerChaos(newHp, oldHp, { silent: true });
     }
 
     await ClashManager._sendTakeMsg(actor, damage, oldHp, newHp, maxHp, chaosTriggered,
-      { ruptureDmg, sanityDmg, tremorTriggered });
+      { ruptureDmg, sanityDmg, tremorTriggered, chaosName });
   }
 
   static async _sendTakeMsg(actor, damage, oldHp, newHp, maxHp, chaosTriggered,
-      { ruptureDmg = 0, sanityDmg = 0, tremorTriggered = false } = {}) {
+      { ruptureDmg = 0, sanityDmg = 0, tremorTriggered = false, chaosName = "陷入混乱" } = {}) {
     const hpPct     = Math.max(0, Math.round((newHp / maxHp) * 100));
     const totalDmg  = damage + ruptureDmg;
     const extraLines = [];
@@ -1152,7 +1173,7 @@ export class ClashManager {
           : ""}
         ${chaosTriggered
           ? `<div style="text-align:center;font-size:.85rem;color:#E84444;font-weight:bold;margin-bottom:6px;">
-               伤害超过混乱阈值 陷入混乱
+               伤害超过混乱阈值——【${chaosName}】
              </div>`
           : ""}
         <div style="background:#1A0305;border-radius:3px;overflow:hidden;height:10px;margin:4px 0;">

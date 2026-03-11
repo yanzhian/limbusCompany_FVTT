@@ -224,52 +224,57 @@ Hooks.on("combatRound", (combat, _updateData, _options) => {
 });
 
 Hooks.on("updateCombat", async (combat, changed) => {
-  // ── 每个 combatant 轮次末：移除【陷入混乱】和【陷入恐慌】 ──────────────
-  if ("turn" in changed) {
-    const prevTurnIdx = (changed.turn - 1 + combat.turns.length) % combat.turns.length;
-    const prevTurn    = combat.turns[prevTurnIdx];
-    const actor       = prevTurn?.actor;
-    if (actor?.type === "character") {
-      actor.removeBuffsByType("chaos");
-      actor.removeBuffsByType("panic");
-    }
-  }
-
-  // ── 每轮（round）结束：燃烧伤害、充能衰减、呼吸衰减（仅 GM 执行） ────
+  // ── 每轮（round）结束：统一清 BUFF + 燃烧/充能/呼吸衰减（仅 GM 执行） ──
   if (!("round" in changed)) return;
   if (!game.user.isGM) return;
+
+  const TURN_END = CONFIG.LIMBUSCOMPANY?.TURN_END_BUFF_TYPES ?? new Set();
 
   for (const combatant of combat.combatants) {
     const actor = combatant.actor;
     if (!actor || actor.type !== "character") continue;
     const buffs = actor.system.buffs ?? [];
 
+    // ── 回合结束 BUFF 清理与晋升 ────────────────────────────────────────
+    // 移除本轮有效的临时 BUFF（强壮/虚弱/混乱/恐慌等），将下回合 BUFF 转为本回合
+    const updatedBuffs = buffs
+      .filter(b => !(TURN_END.has(b.type) && b.whenAdded !== "下回合"))
+      .map(b => b.whenAdded === "下回合" ? { ...b, whenAdded: "本回合" } : b);
+    await actor.update({ "system.buffs": updatedBuffs });
+
+    // 更新后重新读取 buffs（上面 update 已改变数据）
+    const freshBuffs = actor.system.buffs ?? [];
+
     // 【燃烧】：受到强度点固定伤害，层数-1
-    const burnBuff = buffs.find(b => b.type === "burn");
+    const burnBuff = freshBuffs.find(b => b.type === "burn");
     if (burnBuff && burnBuff.stacks > 0) {
       const dmg   = burnBuff.intensity ?? 0;
       const oldHp = actor.system.hp?.value ?? 0;
       const newHp = Math.max(0, oldHp - dmg);
+      const maxHpForBurn = actor.system.hp?.max ?? 1;
+      const chaosTriggeredByBurn = (actor.system.chaosThresholds ?? []).some(
+        t => !t.triggered && newHp <= maxHpForBurn * t.percent / 100
+      );
       await actor.update({ "system.hp.value": newHp });
       await actor.reduceBuffStacks?.("burn");
-      if (actor.checkAndTriggerChaos) await actor.checkAndTriggerChaos(newHp, oldHp);
-      ChatMessage.create({
+      if (actor.checkAndTriggerChaos) await actor.checkAndTriggerChaos(newHp, oldHp, { silent: true });
+      await ChatMessage.create({
         speaker: ChatMessage.getSpeaker({ actor }),
         content: `<div class="limbuscompany chat-clash">
           <strong>${actor.name}</strong>【燃烧】发作：受到 <strong>${dmg}</strong> 点固定伤害。
-          （HP ${oldHp} → ${newHp}）
+          （HP ${oldHp} → ${newHp}）${chaosTriggeredByBurn ? "　<span style='color:#E84444;font-weight:bold;'>——【陷入混乱】！</span>" : ""}
         </div>`,
       });
     }
 
     // 【充能】：层数-1（最大 20 层，衰减即可）
-    const chargeBuff = buffs.find(b => b.type === "charge");
+    const chargeBuff = freshBuffs.find(b => b.type === "charge");
     if (chargeBuff && chargeBuff.stacks > 0) {
       await actor.reduceBuffStacks?.("charge");
     }
 
     // 【呼吸】：层数-1（每轮结束衰减）
-    const breatheBuff = buffs.find(b => b.type === "breathing");
+    const breatheBuff = freshBuffs.find(b => b.type === "breathing");
     if (breatheBuff && breatheBuff.stacks > 0) {
       await actor.reduceBuffStacks?.("breathing");
     }

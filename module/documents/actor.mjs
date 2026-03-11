@@ -611,343 +611,7 @@ export class LimbusActor extends Actor {
     const roll = await (new Roll("1d10")).evaluate();
     const gain = roll.total ?? 1;
 
-    ChatMessage.create({
-      speaker: ChatMessage.getSpeaker({ actor: this }),
-      content: `<div class="limbuscompany-card"><div class="card-title">升级生命值</div><div class="card-body">Lv ${level}：1D10 = <strong>${gain}</strong></div></div>`,
-      rolls: [roll],
-      type: CONST.CHAT_MESSAGE_STYLES.ROLL,
-    });
-
-    await Dialog.wait({
-      title: `升级到 Lv ${level}`,
-      content: `<div class="limbuscompany"><p>生命值成长掷骰结果：<strong>${gain}</strong>（1D10）</p><p>点击确认继续。</p></div>`,
-      buttons: {
-        ok: { label: "确认" },
-      },
-      default: "ok",
-      close: () => gain,
-    });
-
-    return gain;
-  }
-
-  async _rollHpGainForLevel(level) {
-    const roll = await (new Roll("1d10")).evaluate();
-    const gain = roll.total ?? 1;
-
-    ChatMessage.create({
-      speaker: ChatMessage.getSpeaker({ actor: this }),
-      content: `<div class="limbuscompany-card"><div class="card-title">升级生命值</div><div class="card-body">Lv ${level}：1D10 = <strong>${gain}</strong></div></div>`,
-      rolls: [roll],
-      type: CONST.CHAT_MESSAGE_STYLES.ROLL,
-    });
-
-    await Dialog.wait({
-      title: `升级到 Lv ${level}`,
-      content: `<div class="limbuscompany"><p>生命值成长掷骰结果：<strong>${gain}</strong>（1D10）</p><p>点击确认继续。</p></div>`,
-      buttons: {
-        ok: { label: "确认" },
-      },
-      default: "ok",
-      close: () => gain,
-    });
-
-    return gain;
-  }
-
-  async _rollHpGainForLevel(level) {
-    const roll = await (new Roll("1d10")).evaluate();
-    const gain = roll.total ?? 1;
-
-    ChatMessage.create({
-      speaker: ChatMessage.getSpeaker({ actor: this }),
-      content: `<div class="limbuscompany-card"><div class="card-title">升级生命值</div><div class="card-body">Lv ${level}：1D10 = <strong>${gain}</strong></div></div>`,
-      rolls: [roll],
-      type: CONST.CHAT_MESSAGE_STYLES.ROLL,
-    });
-
-    await Dialog.wait({
-      title: `升级到 Lv ${level}`,
-      content: `<div class="limbuscompany"><p>生命值成长掷骰结果：<strong>${gain}</strong>（1D10）</p><p>点击确认继续。</p></div>`,
-      buttons: {
-        ok: { label: "确认" },
-      },
-      default: "ok",
-      close: () => gain,
-    });
-
-    return gain;
-  }
-
-  async _rollHpGainForLevel(level) {
-    const roll = await (new Roll("1d10")).evaluate();
-    const gain = roll.total ?? 1;
-
-    ChatMessage.create({
-      speaker: ChatMessage.getSpeaker({ actor: this }),
-      content: `<div class="limbuscompany-card"><div class="card-title">升级生命值</div><div class="card-body">Lv ${level}：1D10 = <strong>${gain}</strong></div></div>`,
-      rolls: [roll],
-      type: CONST.CHAT_MESSAGE_STYLES.ROLL,
-    });
-
-    await Dialog.wait({
-      title: `升级到 Lv ${level}`,
-      content: `<div class="limbuscompany"><p>生命值成长掷骰结果：<strong>${gain}</strong>（1D10）</p><p>点击确认继续。</p></div>`,
-      buttons: {
-        ok: { label: "确认" },
-      },
-      default: "ok",
-      close: () => gain,
-    });
-
-    return gain;
-  }
-
-  async _rollHpGainForLevel(level) {
-    const roll = await (new Roll("1d10")).evaluate();
-    const gain = roll.total ?? 1;
-
-    ChatMessage.create({
-      speaker: ChatMessage.getSpeaker({ actor: this }),
-      content: `<div class="limbuscompany-card"><div class="card-title">升级生命值</div><div class="card-body">Lv ${level}：1D10 = <strong>${gain}</strong></div></div>`,
-      rolls: [roll],
-      type: CONST.CHAT_MESSAGE_STYLES.ROLL,
-    });
-
-    await Dialog.wait({
-      title: `升级到 Lv ${level}`,
-      content: `<div class="limbuscompany"><p>生命值成长掷骰结果：<strong>${gain}</strong>（1D10）</p><p>点击确认继续。</p></div>`,
-      buttons: {
-        ok: { label: "确认" },
-      },
-      default: "ok",
-      close: () => gain,
-    });
-
-    return gain;
-  }
-
-  async _rollHpGainForLevel(level) {
-    const roll = await (new Roll("1d10")).evaluate();
-    const gain = roll.total ?? 1;
-
-    ChatMessage.create({
-      speaker: ChatMessage.getSpeaker({ actor: this }),
-      content: `<div class="limbuscompany-card"><div class="card-title">升级生命值</div><div class="card-body">Lv ${level}：1D10 = <strong>${gain}</strong></div></div>`,
-      rolls: [roll],
-      type: CONST.CHAT_MESSAGE_STYLES.ROLL,
-    });
-
-    await Dialog.wait({
-      title: `升级到 Lv ${level}`,
-      content: `<div class="limbuscompany"><p>生命值成长掷骰结果：<strong>${gain}</strong>（1D10）</p><p>点击确认继续。</p></div>`,
-      buttons: {
-        ok: { label: "确认" },
-      },
-      default: "ok",
-      close: () => gain,
-    });
-
-    return gain;
-  }
-
-  async _rollHpGainForLevel(level) {
-    const roll = await (new Roll("1d10")).evaluate();
-    const gain = roll.total ?? 1;
-
-    ChatMessage.create({
-      speaker: ChatMessage.getSpeaker({ actor: this }),
-      content: `<div class="limbuscompany-card"><div class="card-title">升级生命值</div><div class="card-body">Lv ${level}：1D10 = <strong>${gain}</strong></div></div>`,
-      rolls: [roll],
-      type: CONST.CHAT_MESSAGE_STYLES.ROLL,
-    });
-
-    await Dialog.wait({
-      title: `升级到 Lv ${level}`,
-      content: `<div class="limbuscompany"><p>生命值成长掷骰结果：<strong>${gain}</strong>（1D10）</p><p>点击确认继续。</p></div>`,
-      buttons: {
-        ok: { label: "确认" },
-      },
-      default: "ok",
-      close: () => gain,
-    });
-
-    return gain;
-  }
-
-  async _rollHpGainForLevel(level) {
-    const roll = await (new Roll("1d10")).evaluate();
-    const gain = roll.total ?? 1;
-
-    ChatMessage.create({
-      speaker: ChatMessage.getSpeaker({ actor: this }),
-      content: `<div class="limbuscompany-card"><div class="card-title">升级生命值</div><div class="card-body">Lv ${level}：1D10 = <strong>${gain}</strong></div></div>`,
-      rolls: [roll],
-      type: CONST.CHAT_MESSAGE_STYLES.ROLL,
-    });
-
-    await Dialog.wait({
-      title: `升级到 Lv ${level}`,
-      content: `<div class="limbuscompany"><p>生命值成长掷骰结果：<strong>${gain}</strong>（1D10）</p><p>点击确认继续。</p></div>`,
-      buttons: {
-        ok: { label: "确认" },
-      },
-      default: "ok",
-      close: () => gain,
-    });
-
-    return gain;
-  }
-
-  async _rollHpGainForLevel(level) {
-    const roll = await (new Roll("1d10")).evaluate();
-    const gain = roll.total ?? 1;
-
-    ChatMessage.create({
-      speaker: ChatMessage.getSpeaker({ actor: this }),
-      content: `<div class="limbuscompany-card"><div class="card-title">升级生命值</div><div class="card-body">Lv ${level}：1D10 = <strong>${gain}</strong></div></div>`,
-      rolls: [roll],
-      type: CONST.CHAT_MESSAGE_STYLES.ROLL,
-    });
-
-    await Dialog.wait({
-      title: `升级到 Lv ${level}`,
-      content: `<div class="limbuscompany"><p>生命值成长掷骰结果：<strong>${gain}</strong>（1D10）</p><p>点击确认继续。</p></div>`,
-      buttons: {
-        ok: { label: "确认" },
-      },
-      default: "ok",
-      close: () => gain,
-    });
-
-    return gain;
-  }
-
-  async _rollHpGainForLevel(level) {
-    const roll = await (new Roll("1d10")).evaluate();
-    const gain = roll.total ?? 1;
-
-    ChatMessage.create({
-      speaker: ChatMessage.getSpeaker({ actor: this }),
-      content: `<div class="limbuscompany-card"><div class="card-title">升级生命值</div><div class="card-body">Lv ${level}：1D10 = <strong>${gain}</strong></div></div>`,
-      rolls: [roll],
-      type: CONST.CHAT_MESSAGE_STYLES.ROLL,
-    });
-
-    await Dialog.wait({
-      title: `升级到 Lv ${level}`,
-      content: `<div class="limbuscompany"><p>生命值成长掷骰结果：<strong>${gain}</strong>（1D10）</p><p>点击确认继续。</p></div>`,
-      buttons: {
-        ok: { label: "确认" },
-      },
-      default: "ok",
-      close: () => gain,
-    });
-
-    return gain;
-  }
-
-  async _rollHpGainForLevel(level) {
-    const roll = await (new Roll("1d10")).evaluate();
-    const gain = roll.total ?? 1;
-
-    ChatMessage.create({
-      speaker: ChatMessage.getSpeaker({ actor: this }),
-      content: `<div class="limbuscompany-card"><div class="card-title">升级生命值</div><div class="card-body">Lv ${level}：1D10 = <strong>${gain}</strong></div></div>`,
-      rolls: [roll],
-      type: CONST.CHAT_MESSAGE_STYLES.ROLL,
-    });
-
-    await Dialog.wait({
-      title: `升级到 Lv ${level}`,
-      content: `<div class="limbuscompany"><p>生命值成长掷骰结果：<strong>${gain}</strong>（1D10）</p><p>点击确认继续。</p></div>`,
-      buttons: {
-        ok: { label: "确认" },
-      },
-      default: "ok",
-      close: () => gain,
-    });
-
-    return gain;
-  }
-
-  async _rollHpGainForLevel(level) {
-    const roll = await (new Roll("1d10")).evaluate();
-    const gain = roll.total ?? 1;
-
-    ChatMessage.create({
-      speaker: ChatMessage.getSpeaker({ actor: this }),
-      content: `<div class="limbuscompany-card"><div class="card-title">升级生命值</div><div class="card-body">Lv ${level}：1D10 = <strong>${gain}</strong></div></div>`,
-      rolls: [roll],
-      type: CONST.CHAT_MESSAGE_STYLES.ROLL,
-    });
-
-    await Dialog.wait({
-      title: `升级到 Lv ${level}`,
-      content: `<div class="limbuscompany"><p>生命值成长掷骰结果：<strong>${gain}</strong>（1D10）</p><p>点击确认继续。</p></div>`,
-      buttons: {
-        ok: { label: "确认" },
-      },
-      default: "ok",
-      close: () => gain,
-    });
-
-    return gain;
-  }
-
-  async _rollHpGainForLevel(level) {
-    const roll = await (new Roll("1d10")).evaluate();
-    const gain = roll.total ?? 1;
-
-    ChatMessage.create({
-      speaker: ChatMessage.getSpeaker({ actor: this }),
-      content: `<div class="limbuscompany-card"><div class="card-title">升级生命值</div><div class="card-body">Lv ${level}：1D10 = <strong>${gain}</strong></div></div>`,
-      rolls: [roll],
-      type: CONST.CHAT_MESSAGE_STYLES.ROLL,
-    });
-
-    await Dialog.wait({
-      title: `升级到 Lv ${level}`,
-      content: `<div class="limbuscompany"><p>生命值成长掷骰结果：<strong>${gain}</strong>（1D10）</p><p>点击确认继续。</p></div>`,
-      buttons: {
-        ok: { label: "确认" },
-      },
-      default: "ok",
-      close: () => gain,
-    });
-
-    return gain;
-  }
-
-  async _rollHpGainForLevel(level) {
-    const roll = await (new Roll("1d10")).evaluate();
-    const gain = roll.total ?? 1;
-
-    ChatMessage.create({
-      speaker: ChatMessage.getSpeaker({ actor: this }),
-      content: `<div class="limbuscompany-card"><div class="card-title">升级生命值</div><div class="card-body">Lv ${level}：1D10 = <strong>${gain}</strong></div></div>`,
-      rolls: [roll],
-      type: CONST.CHAT_MESSAGE_STYLES.ROLL,
-    });
-
-    await Dialog.wait({
-      title: `升级到 Lv ${level}`,
-      content: `<div class="limbuscompany"><p>生命值成长掷骰结果：<strong>${gain}</strong>（1D10）</p><p>点击确认继续。</p></div>`,
-      buttons: {
-        ok: { label: "确认" },
-      },
-      default: "ok",
-      close: () => gain,
-    });
-
-    return gain;
-  }
-
-  async _rollHpGainForLevel(level) {
-    const roll = await (new Roll("1d10")).evaluate();
-    const gain = roll.total ?? 1;
-
-    ChatMessage.create({
+    await ChatMessage.create({
       speaker: ChatMessage.getSpeaker({ actor: this }),
       content: `<div class="limbuscompany-card"><div class="card-title">升级生命值</div><div class="card-body">Lv ${level}：1D10 = <strong>${gain}</strong></div></div>`,
       rolls: [roll],
@@ -991,40 +655,53 @@ export class LimbusActor extends Actor {
   // ─── 混乱阈值触发检查（每次 HP 变动时调用） ──────────────────────────────
 
   /**
-   * 检查并处理混乱阈值触发（单次触发逻辑）。
+   * 检查并处理混乱阈值触发。
+   * 同一次伤害可同时跨越多条阈值，全部烧断；
+   * 若已有混乱 BUFF，则按触发条数升级，依次类推：
+   *   无 + 1条 → 陷入混乱（×2.0）
+   *   无 + 2条 / 陷入混乱 + 1条 → 陷入混乱+（×2.5）
+   *   任意 → 陷入混乱++（×3.0，上限）
    * 仅在 HP 减少时调用，HP 回升不触发。
    * @param {number} newHP
    * @param {number} oldHP
+   * @param {object} [opts]
+   * @param {boolean} [opts.silent=false] 为 true 时跳过聊天框（调用方自行在消息中显示混乱信息）
    */
-  async checkAndTriggerChaos(newHP, oldHP) {
+  async checkAndTriggerChaos(newHP, oldHP, { silent = false } = {}) {
     if (newHP >= oldHP) return; // HP 没有减少则不检查
 
     const sys        = this.system;
     const maxHP      = sys.hp.max;
     const thresholds = [...sys.chaosThresholds];
-    let triggered    = false;
-    let burnedIdx    = -1;
+    const burnedIdxs = [];
 
+    // 同次伤害可同时跨越多条阈值，全部烧断
     for (let i = 0; i < thresholds.length; i++) {
       const t = thresholds[i];
       if (!t.triggered && newHP <= maxHP * t.percent / 100) {
-        burnedIdx = i;
-        triggered = true;
-        break; // 每次只触发一条
+        burnedIdxs.push(i);
+        thresholds[i] = { ...thresholds[i], triggered: true };
       }
     }
 
-    if (!triggered) return;
+    if (burnedIdxs.length === 0) return;
 
-    thresholds[burnedIdx] = { ...thresholds[burnedIdx], triggered: true };
+    // 混乱等级：0=无 1=陷入混乱 2=陷入混乱+ 3=陷入混乱++
+    const CHAOS_TYPES = ["chaos", "chaos_plus", "chaos_double_plus"];
+    const CHAOS_NAMES = ["陷入混乱", "陷入混乱+", "陷入混乱++"];
 
-    // 将混乱阈值烧断、物理抗性 ×2.0、AP 清零、添加 BUFF 合并为单次 update，
-    // 避免多次 update 连发触发 Foundry 竞态（renderChatMessage / deleteDocuments 报错）
-    const newBuffs = [...(this.system.buffs ?? [])];
+    const existingChaos = (this.system.buffs ?? []).find(b => CHAOS_TYPES.includes(b.type));
+    const currentLevel  = existingChaos ? (CHAOS_TYPES.indexOf(existingChaos.type) + 1) : 0;
+    const newLevel      = Math.min(3, currentLevel + burnedIdxs.length);
+    const chaosType     = CHAOS_TYPES[newLevel - 1];
+    const chaosName     = CHAOS_NAMES[newLevel - 1];
+
+    // 移除旧混乱 BUFF（如有），加入升级后的 BUFF
+    let newBuffs = (this.system.buffs ?? []).filter(b => !CHAOS_TYPES.includes(b.type));
     newBuffs.push({
       id:        foundry.utils.randomID(),
-      type:      "chaos",
-      name:      "陷入混乱",
+      type:      chaosType,
+      name:      chaosName,
       icon:      "",
       intensity: 0,
       stacks:    1,
@@ -1032,18 +709,19 @@ export class LimbusActor extends Actor {
     });
 
     await this.update({
-      "system.chaosThresholds":    thresholds,
-      "system.resistances.slash":  "x2.0",
-      "system.resistances.blunt":  "x2.0",
-      "system.resistances.pierce": "x2.0",
-      "system.ap.value":           0,
-      "system.buffs":              newBuffs,
+      "system.chaosThresholds": thresholds,
+      "system.ap.value":        0,
+      "system.buffs":           newBuffs,
     });
 
-    // await 确保消息创建完成，防止 Foundry 消息清理竞态
-    await ChatMessage.create({
-      content: `<div class="limbuscompany chat-clash"><strong>${this.name}</strong> 混乱阈值被触发（${thresholds[burnedIdx].percent}%）——【陷入混乱】！</div>`,
-    });
+    // silent=true 时调用方已在取血消息中展示混乱触发信息，无需再创建独立消息
+    if (!silent) {
+      const pctList  = burnedIdxs.map(i => thresholds[i].percent + "%").join("、");
+      const upgraded = existingChaos ? `（${CHAOS_NAMES[currentLevel - 1]} → ${chaosName}）` : "";
+      await ChatMessage.create({
+        content: `<div class="limbuscompany chat-clash"><strong>${this.name}</strong> 混乱阈值被触发（${pctList}）——【${chaosName}】${upgraded}！</div>`,
+      });
+    }
   }
 
   // ─── BUFF 管理 ─────────────────────────────────────────────────────────
@@ -1128,7 +806,7 @@ export class LimbusActor extends Actor {
       // 触发恐慌：清空行动点，EGO 相关技能切换为侵蚀形态
       await this.update({ "system.ap.value": 0 });
       await this.addBuff({ type: "panic", name: "陷入恐慌", intensity: 1, stacks: 1, whenAdded: "本回合" });
-      ChatMessage.create({
+      await ChatMessage.create({
         content: `<div class="limbuscompany chat-clash"><strong>${this.name}</strong> 理智跌至 ${clamped}——【陷入恐慌】！</div>`,
       });
     }

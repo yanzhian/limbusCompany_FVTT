@@ -110,13 +110,24 @@ export class LimbusActorSheet extends ActorSheet {
     };
 
     const equippedUpper = equippedItems.find(eq => eq.system?.subtype === "upper");
-    context.displayResistances = equippedUpper?.system?.resistanceAdj
-      ? {
-        slash: equippedUpper.system.resistanceAdj.slash ?? system.resistances.slash,
-        blunt: equippedUpper.system.resistanceAdj.blunt ?? system.resistances.blunt,
-        pierce: equippedUpper.system.resistanceAdj.pierce ?? system.resistances.pierce,
-      }
-      : { ...system.resistances };
+    // 只有本回合有效的混乱 BUFF 才影响抗性显示
+    const _buffs         = (system.buffs ?? []).filter(b => b.whenAdded !== "下回合");
+    const hasChaosDouble = _buffs.some(b => b.type === "chaos_double_plus");
+    const hasChaosPlus   = _buffs.some(b => b.type === "chaos_plus");
+    const hasChaos       = _buffs.some(b => b.type === "chaos");
+    context.displayResistances = hasChaosDouble
+      ? { slash: "x3.0", blunt: "x3.0", pierce: "x3.0" }
+      : hasChaosPlus
+        ? { slash: "x2.5", blunt: "x2.5", pierce: "x2.5" }
+        : hasChaos
+          ? { slash: "x2.0", blunt: "x2.0", pierce: "x2.0" }
+          : equippedUpper?.system?.resistanceAdj
+        ? {
+          slash: equippedUpper.system.resistanceAdj.slash ?? system.resistances.slash,
+          blunt: equippedUpper.system.resistanceAdj.blunt ?? system.resistances.blunt,
+          pierce: equippedUpper.system.resistanceAdj.pierce ?? system.resistances.pierce,
+        }
+        : { ...system.resistances };
 
     const stellarMax = 30 + (system.level ?? 1);
     const equippedStellarCost = this._calcEquippedStellarCost();
@@ -417,7 +428,13 @@ export class LimbusActorSheet extends ActorSheet {
 
     // ── HP / 理智 重置 ───────────────────────────────────────────────────
     html.find(".hp-reset").on("click", () => {
-      this.actor.update({ "system.hp.value": this.actor.system.hp.max });
+      const sys = this.actor.system;
+      const defaultThresholds = sys.getDefaultChaosThresholds?.()
+        ?? [{ percent: 60, triggered: false }, { percent: 30, triggered: false }];
+      this.actor.update({
+        "system.hp.value":        sys.hp.max,
+        "system.chaosThresholds": defaultThresholds,
+      });
     });
     html.find(".sanity-reset").on("click", () => {
       this.actor.update({ "system.sanity.value": 50 });
@@ -1328,14 +1345,24 @@ export class LimbusActorSheet extends ActorSheet {
       case "burn": {
         const oldHp = actor.system.hp?.value ?? 0;
         const newHp = Math.max(0, oldHp - intensity);
+        const maxHpBuff       = actor.system.hp?.max ?? 1;
+        const _SH_TYPES       = ["chaos", "chaos_plus", "chaos_double_plus"];
+        const _SH_NAMES       = ["陷入混乱", "陷入混乱+", "陷入混乱++"];
+        const buffChaosCount  = (actor.system.chaosThresholds ?? []).filter(
+          t => !t.triggered && newHp <= maxHpBuff * t.percent / 100
+        ).length;
+        const shExistingType  = (actor.system.buffs ?? []).find(b => _SH_TYPES.includes(b.type))?.type;
+        const shCurrentLevel  = shExistingType ? (_SH_TYPES.indexOf(shExistingType) + 1) : 0;
+        const shNewLevel      = Math.min(3, shCurrentLevel + buffChaosCount);
+        const buffChaosName   = _SH_NAMES[shNewLevel - 1] ?? "陷入混乱";
         await actor.update({ "system.hp.value": newHp });
         await actor.reduceBuffStacks(buff.type);
-        if (actor.checkAndTriggerChaos) await actor.checkAndTriggerChaos(newHp, oldHp);
-        ChatMessage.create({
+        if (actor.checkAndTriggerChaos) await actor.checkAndTriggerChaos(newHp, oldHp, { silent: true });
+        await ChatMessage.create({
           speaker: ChatMessage.getSpeaker({ actor }),
           content: `<div class="limbuscompany chat-clash">
             <strong>${actor.name}</strong>【${buff.name}】触发：受到 <strong>${intensity}</strong> 点固定伤害。
-            （HP ${oldHp} → ${newHp}）
+            （HP ${oldHp} → ${newHp}）${buffChaosCount > 0 ? `　<span style='color:#E84444;font-weight:bold;'>——【${buffChaosName}】！</span>` : ""}
           </div>`,
         });
         break;
@@ -1347,7 +1374,7 @@ export class LimbusActorSheet extends ActorSheet {
         const newSan = Math.max(5, oldSan - intensity);
         await actor.setSanity(oldSan - intensity);
         await actor.reduceBuffStacks("sinking");
-        ChatMessage.create({
+        await ChatMessage.create({
           speaker: ChatMessage.getSpeaker({ actor }),
           content: `<div class="limbuscompany chat-clash">
             <strong>${actor.name}</strong>【沉沦】触发：理智 -${intensity}。
@@ -1361,7 +1388,7 @@ export class LimbusActorSheet extends ActorSheet {
       case "tremor": {
         await actor.triggerSeismicBlast(intensity);
         await actor.reduceBuffStacks("tremor");
-        ChatMessage.create({
+        await ChatMessage.create({
           speaker: ChatMessage.getSpeaker({ actor }),
           content: `<div class="limbuscompany chat-clash">
             <strong>${actor.name}</strong>【震颤】引爆：混乱阈值前移 <strong>${intensity}%</strong>。
@@ -1609,6 +1636,9 @@ function _buffIconPath(type) {
   const base = "systems/limbusCompany_FVTT/assets/icons/Buff_icon/";
   const map  = { strong:"强壮", weak:"虚弱", endure:"忍耐", breach:"破绽",
     swift:"迅捷", bind:"束缚", guard:"守护", fragile:"易损",
+    clashPowerUp:"拼点威力提升", clashPowerDown:"拼点威力降低",
+    atkLevelUp:"攻击等级提升",   atkLevelDown:"攻击等级降低",
+    defLevelUp:"防御等级提升",   defLevelDown:"防御等级降低",
     burn:"烧伤", bleed:"流血", tremor:"震颤", rupture:"破裂",
     sinking:"沉沦", breathing:"呼吸法", charge:"充能",
     chaos:"陷入混乱", panic:"陷入恐慌" };
