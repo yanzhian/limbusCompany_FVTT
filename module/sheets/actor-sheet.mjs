@@ -1469,10 +1469,12 @@ export class LimbusActorSheet extends ActorSheet {
       lockBtn.removeClass("locked").html('<i class="fas fa-lock-open"></i>');
       root.find(".editable-field").prop("disabled", false);
       root.find(".editable-only").show();
+      root.find(".sin-resist-static").hide();
     } else {
       lockBtn.addClass("locked").html('<i class="fas fa-lock"></i>');
       root.find(".editable-field").prop("disabled", true);
       root.find(".editable-only").hide();
+      root.find(".sin-resist-static").show();
     }
 
     // 星芒固定不可编辑

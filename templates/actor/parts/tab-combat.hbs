@@ -155,15 +155,12 @@
           <div class="sin-resist-item" title="{{label}}：{{value}}">
             <img src="{{icon}}" class="sin-resist-icon" alt="{{label}}"
                  style="border-color:{{color}};">
-            {{#if ../isEditable}}
-              <select class="sin-resist-select editable-field" name="{{field}}" disabled>
-                {{#each ../resistanceValues}}
-                  <option value="{{this}}" {{#if (eq this ../value)}}selected{{/if}}>{{this}}</option>
-                {{/each}}
-              </select>
-            {{else}}
-              <span class="sin-resist-val {{#isResistWeak value}}resist-weak{{/isResistWeak}}{{#isResistStrong value}}resist-strong{{/isResistStrong}}">{{value}}</span>
-            {{/if}}
+            <select class="sin-resist-select editable-field editable-only" name="{{field}}" disabled style="display:none">
+              {{#each ../resistanceValues}}
+                <option value="{{this}}" {{#if (eq this ../value)}}selected{{/if}}>{{this}}</option>
+              {{/each}}
+            </select>
+            <span class="sin-resist-val sin-resist-static {{#isResistWeak value}}resist-weak{{/isResistWeak}}{{#isResistStrong value}}resist-strong{{/isResistStrong}}">{{value}}</span>
           </div>
         {{/each}}
       </div>
