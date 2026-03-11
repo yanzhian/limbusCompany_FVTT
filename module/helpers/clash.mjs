@@ -1230,7 +1230,7 @@ export class ClashManager {
         ${ClashManager._chatHeader(actor, "承受")}
         ${ClashManager._goldDivider()}
         ${calcNotes.length > 0 ? `
-        <div style="margin:6px 0 4px;padding:5px 7px;background:rgba(0,0,0,.25);border-radius:3px;border-left:2px solid #C9A84C;">
+        <div style="margin:6px 0 4px;padding:5px 7px;background:rgba(0,0,0,.25);border-radius:3px;">
           <div style="font-size:.65rem;font-weight:bold;color:#C9A84C;margin-bottom:3px;letter-spacing:.05em;">结算说明</div>
           ${calcNotes.map(n => `<div style="font-size:.72rem;color:#9A8462;line-height:1.55;">${n}</div>`).join("")}
         </div>
