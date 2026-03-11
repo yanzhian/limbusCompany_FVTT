@@ -250,14 +250,19 @@ Hooks.on("updateCombat", async (combat, changed) => {
       const dmg   = burnBuff.intensity ?? 0;
       const oldHp = actor.system.hp?.value ?? 0;
       const newHp = Math.max(0, oldHp - dmg);
+      // 预判混乱触发（避免 checkAndTriggerChaos 再创建消息造成 Foundry 清理竞态）
+      const maxHpForBurn = actor.system.hp?.max ?? 1;
+      const chaosTriggeredByBurn = (actor.system.chaosThresholds ?? []).some(
+        t => !t.triggered && newHp <= maxHpForBurn * t.percent / 100
+      );
       await actor.update({ "system.hp.value": newHp });
       await actor.reduceBuffStacks?.("burn");
-      if (actor.checkAndTriggerChaos) await actor.checkAndTriggerChaos(newHp, oldHp);
-      ChatMessage.create({
+      if (actor.checkAndTriggerChaos) await actor.checkAndTriggerChaos(newHp, oldHp, { silent: true });
+      await ChatMessage.create({
         speaker: ChatMessage.getSpeaker({ actor }),
         content: `<div class="limbuscompany chat-clash">
           <strong>${actor.name}</strong>【燃烧】发作：受到 <strong>${dmg}</strong> 点固定伤害。
-          （HP ${oldHp} → ${newHp}）
+          （HP ${oldHp} → ${newHp}）${chaosTriggeredByBurn ? "　<span style='color:#E84444;font-weight:bold;'>——【陷入混乱】！</span>" : ""}
         </div>`,
       });
     }

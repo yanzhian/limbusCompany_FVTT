@@ -127,15 +127,19 @@ export class ClashManager {
     const oldHp = actor.system.hp?.value ?? 0;
     const newHp = Math.max(0, oldHp - dmg);
 
+    const maxHpForBleed = actor.system.hp?.max ?? 1;
+    const chaosTriggeredByBleed = (actor.system.chaosThresholds ?? []).some(
+      t => !t.triggered && newHp <= maxHpForBleed * t.percent / 100
+    );
     await actor.update({ "system.hp.value": newHp });
     await ClashManager._reduceBuffStacks(actor, "bleed");
-    if (actor.checkAndTriggerChaos) await actor.checkAndTriggerChaos(newHp, oldHp);
+    if (actor.checkAndTriggerChaos) await actor.checkAndTriggerChaos(newHp, oldHp, { silent: true });
 
-    ChatMessage.create({
+    await ChatMessage.create({
       speaker: ChatMessage.getSpeaker({ actor }),
       content: `<div class="limbuscompany chat-clash">
         <strong>${actor.name}</strong>【流血】发作：受到 <strong>${dmg}</strong> 点固定伤害。
-        （HP ${oldHp} → ${newHp}）
+        （HP ${oldHp} → ${newHp}）${chaosTriggeredByBleed ? "　<span style='color:#E84444;font-weight:bold;'>——【陷入混乱】！</span>" : ""}
       </div>`,
     });
     return dmg;
@@ -1111,9 +1115,9 @@ export class ClashManager {
       await actor.setSanity((actor.system.sanity?.value ?? 50) - sanityDmg);
     }
 
-    // 触发混乱效果
+    // 触发混乱效果（silent=true：混乱信息已在取血消息中展示，无需额外聊天框，避免双次 ChatMessage.create 触发 Foundry 清理竞态）
     if (chaosTriggered && actor.checkAndTriggerChaos) {
-      await actor.checkAndTriggerChaos(newHp, oldHp);
+      await actor.checkAndTriggerChaos(newHp, oldHp, { silent: true });
     }
 
     await ClashManager._sendTakeMsg(actor, damage, oldHp, newHp, maxHp, chaosTriggered,

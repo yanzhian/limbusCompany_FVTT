@@ -995,8 +995,10 @@ export class LimbusActor extends Actor {
    * 仅在 HP 减少时调用，HP 回升不触发。
    * @param {number} newHP
    * @param {number} oldHP
+   * @param {object} [opts]
+   * @param {boolean} [opts.silent=false] 为 true 时跳过聊天框（调用方自行在消息中显示混乱信息）
    */
-  async checkAndTriggerChaos(newHP, oldHP) {
+  async checkAndTriggerChaos(newHP, oldHP, { silent = false } = {}) {
     if (newHP >= oldHP) return; // HP 没有减少则不检查
 
     const sys        = this.system;
@@ -1037,10 +1039,13 @@ export class LimbusActor extends Actor {
       "system.buffs":           newBuffs,
     });
 
-    // await 确保消息创建完成，防止 Foundry 消息清理竞态
-    await ChatMessage.create({
-      content: `<div class="limbuscompany chat-clash"><strong>${this.name}</strong> 混乱阈值被触发（${thresholds[burnedIdx].percent}%）——【陷入混乱】！</div>`,
-    });
+    // silent=true 时调用方（_applyAndSendTake）已在取血消息中展示混乱触发信息，无需再创建独立消息，
+    // 避免两次 ChatMessage.create() 触发 Foundry 自动清理同一条旧消息导致"does not exist"报错
+    if (!silent) {
+      await ChatMessage.create({
+        content: `<div class="limbuscompany chat-clash"><strong>${this.name}</strong> 混乱阈值被触发（${thresholds[burnedIdx].percent}%）——【陷入混乱】！</div>`,
+      });
+    }
   }
 
   // ─── BUFF 管理 ─────────────────────────────────────────────────────────
