@@ -656,8 +656,11 @@ export class LimbusActor extends Actor {
 
   /**
    * 检查并处理混乱阈值触发。
-   * 同一次伤害可同时跨越多条阈值，全部烧断并按条数决定混乱等级：
-   *   1条 → 陷入混乱（×2.0）  2条 → 陷入混乱+（×2.5）  3条 → 陷入混乱++（×3.0）
+   * 同一次伤害可同时跨越多条阈值，全部烧断；
+   * 若已有混乱 BUFF，则按触发条数升级，依次类推：
+   *   无 + 1条 → 陷入混乱（×2.0）
+   *   无 + 2条 / 陷入混乱 + 1条 → 陷入混乱+（×2.5）
+   *   任意 → 陷入混乱++（×3.0，上限）
    * 仅在 HP 减少时调用，HP 回升不触发。
    * @param {number} newHP
    * @param {number} oldHP
@@ -683,12 +686,18 @@ export class LimbusActor extends Actor {
 
     if (burnedIdxs.length === 0) return;
 
-    // 同时触发的条数决定混乱等级
-    const count     = burnedIdxs.length;
-    const chaosType = count >= 3 ? "chaos_double_plus" : count >= 2 ? "chaos_plus" : "chaos";
-    const chaosName = count >= 3 ? "陷入混乱++" : count >= 2 ? "陷入混乱+" : "陷入混乱";
+    // 混乱等级：0=无 1=陷入混乱 2=陷入混乱+ 3=陷入混乱++
+    const CHAOS_TYPES = ["chaos", "chaos_plus", "chaos_double_plus"];
+    const CHAOS_NAMES = ["陷入混乱", "陷入混乱+", "陷入混乱++"];
 
-    const newBuffs = [...(this.system.buffs ?? [])];
+    const existingChaos = (this.system.buffs ?? []).find(b => CHAOS_TYPES.includes(b.type));
+    const currentLevel  = existingChaos ? (CHAOS_TYPES.indexOf(existingChaos.type) + 1) : 0;
+    const newLevel      = Math.min(3, currentLevel + burnedIdxs.length);
+    const chaosType     = CHAOS_TYPES[newLevel - 1];
+    const chaosName     = CHAOS_NAMES[newLevel - 1];
+
+    // 移除旧混乱 BUFF（如有），加入升级后的 BUFF
+    let newBuffs = (this.system.buffs ?? []).filter(b => !CHAOS_TYPES.includes(b.type));
     newBuffs.push({
       id:        foundry.utils.randomID(),
       type:      chaosType,
@@ -707,9 +716,10 @@ export class LimbusActor extends Actor {
 
     // silent=true 时调用方已在取血消息中展示混乱触发信息，无需再创建独立消息
     if (!silent) {
-      const pctList = burnedIdxs.map(i => thresholds[i].percent + "%").join("、");
+      const pctList  = burnedIdxs.map(i => thresholds[i].percent + "%").join("、");
+      const upgraded = existingChaos ? `（${CHAOS_NAMES[currentLevel - 1]} → ${chaosName}）` : "";
       await ChatMessage.create({
-        content: `<div class="limbuscompany chat-clash"><strong>${this.name}</strong> 混乱阈值被触发（${pctList}）——【${chaosName}】！</div>`,
+        content: `<div class="limbuscompany chat-clash"><strong>${this.name}</strong> 混乱阈值被触发（${pctList}）——【${chaosName}】${upgraded}！</div>`,
       });
     }
   }

@@ -129,11 +129,16 @@ export class ClashManager {
     const oldHp = actor.system.hp?.value ?? 0;
     const newHp = Math.max(0, oldHp - dmg);
 
-    const maxHpForBleed = actor.system.hp?.max ?? 1;
-    const bleedChaosCount = (actor.system.chaosThresholds ?? []).filter(
+    const maxHpForBleed      = actor.system.hp?.max ?? 1;
+    const _BC_TYPES          = ["chaos", "chaos_plus", "chaos_double_plus"];
+    const _BC_NAMES          = ["陷入混乱", "陷入混乱+", "陷入混乱++"];
+    const bleedChaosCount    = (actor.system.chaosThresholds ?? []).filter(
       t => !t.triggered && newHp <= maxHpForBleed * t.percent / 100
     ).length;
-    const bleedChaosName = bleedChaosCount >= 3 ? "陷入混乱++" : bleedChaosCount >= 2 ? "陷入混乱+" : "陷入混乱";
+    const bleedExistingType  = (actor.system.buffs ?? []).find(b => _BC_TYPES.includes(b.type))?.type;
+    const bleedCurrentLevel  = bleedExistingType ? (_BC_TYPES.indexOf(bleedExistingType) + 1) : 0;
+    const bleedNewLevel      = Math.min(3, bleedCurrentLevel + bleedChaosCount);
+    const bleedChaosName     = _BC_NAMES[bleedNewLevel - 1] ?? "陷入混乱";
     await actor.update({ "system.hp.value": newHp });
     await ClashManager._reduceBuffStacks(actor, "bleed");
     if (actor.checkAndTriggerChaos) await actor.checkAndTriggerChaos(newHp, oldHp, { silent: true });
@@ -1104,11 +1109,16 @@ export class ClashManager {
     const oldHp    = sys.hp?.value ?? 0;
     const newHp    = Math.max(0, oldHp - totalDmg);
 
-    // 提前判断混乱阈值（用于聊天框显示）
-    const thresholds  = sys.chaosThresholds ?? [];
-    const chaosCount  = thresholds.filter(t => !t.triggered && newHp <= maxHp * t.percent / 100).length;
+    // 提前判断混乱阈值（用于聊天框显示，含升级逻辑）
+    const _CHAOS_TYPES  = ["chaos", "chaos_plus", "chaos_double_plus"];
+    const _CHAOS_NAMES  = ["陷入混乱", "陷入混乱+", "陷入混乱++"];
+    const thresholds    = sys.chaosThresholds ?? [];
+    const chaosCount    = thresholds.filter(t => !t.triggered && newHp <= maxHp * t.percent / 100).length;
     const chaosTriggered = chaosCount > 0;
-    const chaosName   = chaosCount >= 3 ? "陷入混乱++" : chaosCount >= 2 ? "陷入混乱+" : "陷入混乱";
+    const existingChaosType  = (sys.buffs ?? []).find(b => _CHAOS_TYPES.includes(b.type))?.type;
+    const currentChaosLevel  = existingChaosType ? (_CHAOS_TYPES.indexOf(existingChaosType) + 1) : 0;
+    const newChaosLevel      = Math.min(3, currentChaosLevel + chaosCount);
+    const chaosName          = _CHAOS_NAMES[newChaosLevel - 1] ?? "陷入混乱";
 
     // 更新 HP
     await actor.update({ "system.hp.value": newHp });

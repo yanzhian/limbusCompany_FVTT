@@ -1344,11 +1344,16 @@ export class LimbusActorSheet extends ActorSheet {
       case "burn": {
         const oldHp = actor.system.hp?.value ?? 0;
         const newHp = Math.max(0, oldHp - intensity);
-        const maxHpBuff = actor.system.hp?.max ?? 1;
-        const buffChaosCount = (actor.system.chaosThresholds ?? []).filter(
+        const maxHpBuff       = actor.system.hp?.max ?? 1;
+        const _SH_TYPES       = ["chaos", "chaos_plus", "chaos_double_plus"];
+        const _SH_NAMES       = ["陷入混乱", "陷入混乱+", "陷入混乱++"];
+        const buffChaosCount  = (actor.system.chaosThresholds ?? []).filter(
           t => !t.triggered && newHp <= maxHpBuff * t.percent / 100
         ).length;
-        const buffChaosName = buffChaosCount >= 3 ? "陷入混乱++" : buffChaosCount >= 2 ? "陷入混乱+" : "陷入混乱";
+        const shExistingType  = (actor.system.buffs ?? []).find(b => _SH_TYPES.includes(b.type))?.type;
+        const shCurrentLevel  = shExistingType ? (_SH_TYPES.indexOf(shExistingType) + 1) : 0;
+        const shNewLevel      = Math.min(3, shCurrentLevel + buffChaosCount);
+        const buffChaosName   = _SH_NAMES[shNewLevel - 1] ?? "陷入混乱";
         await actor.update({ "system.hp.value": newHp });
         await actor.reduceBuffStacks(buff.type);
         if (actor.checkAndTriggerChaos) await actor.checkAndTriggerChaos(newHp, oldHp, { silent: true });
