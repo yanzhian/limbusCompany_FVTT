@@ -222,10 +222,10 @@ export class ClashManager {
 
     const content = `
       <div class="limbuscompany clash-dialog-v2">
-        <div style="font-size:16px;font-weight:bold;color:#E8C9A2;margin-bottom:8px;">${item.name}</div>
+        <div style="font-size:24px;font-weight:bold;color:#E8C9A2;margin-bottom:8px;">${item.name}</div>
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;">
-          ${catIcon ? `<img src="${catIcon}" style="width:16px;height:16px;" alt="${catLabel}">` : ""}
-          <span style="font-size:16px;color:#EBBD68;">${formula.toUpperCase()}</span>
+          ${catIcon ? `<img src="${catIcon}" style="width:24px;height:24px;" alt="${catLabel}">` : ""}
+          <span style="font-size:24px;color:#EBBD68;">${formula.toUpperCase()}</span>
         </div>
         <div style="margin-bottom:12px;">
           <label style="display:block;font-size:.75rem;color:#9A8462;margin-bottom:4px;">加值修正</label>
@@ -521,10 +521,10 @@ export class ClashManager {
 
     const content = `
       <div class="limbuscompany clash-dialog-v2">
-        <div style="font-size:16px;font-weight:bold;color:#E8C9A2;margin-bottom:8px;">${defItem.name}</div>
+        <div style="font-size:24px;font-weight:bold;color:#E8C9A2;margin-bottom:8px;">${defItem.name}</div>
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;">
-          ${catIcon ? `<img src="${catIcon}" style="width:16px;height:16px;" alt="${catLabel}">` : ""}
-          <span style="font-size:16px;color:#EBBD68;">${formula.toUpperCase()}</span>
+          ${catIcon ? `<img src="${catIcon}" style="width:24px;height:24px;" alt="${catLabel}">` : ""}
+          <span style="font-size:24px;color:#EBBD68;">${formula.toUpperCase()}</span>
         </div>
         <div style="margin-bottom:12px;">
           <label style="display:block;font-size:.75rem;color:#9A8462;margin-bottom:4px;">加值修正</label>
