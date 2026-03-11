@@ -655,7 +655,9 @@ export class LimbusActor extends Actor {
   // ─── 混乱阈值触发检查（每次 HP 变动时调用） ──────────────────────────────
 
   /**
-   * 检查并处理混乱阈值触发（单次触发逻辑）。
+   * 检查并处理混乱阈值触发。
+   * 同一次伤害可同时跨越多条阈值，全部烧断并按条数决定混乱等级：
+   *   1条 → 陷入混乱（×2.0）  2条 → 陷入混乱+（×2.5）  3条 → 陷入混乱++（×3.0）
    * 仅在 HP 减少时调用，HP 回升不触发。
    * @param {number} newHP
    * @param {number} oldHP
@@ -668,29 +670,29 @@ export class LimbusActor extends Actor {
     const sys        = this.system;
     const maxHP      = sys.hp.max;
     const thresholds = [...sys.chaosThresholds];
-    let triggered    = false;
-    let burnedIdx    = -1;
+    const burnedIdxs = [];
 
+    // 同次伤害可同时跨越多条阈值，全部烧断
     for (let i = 0; i < thresholds.length; i++) {
       const t = thresholds[i];
       if (!t.triggered && newHP <= maxHP * t.percent / 100) {
-        burnedIdx = i;
-        triggered = true;
-        break; // 每次只触发一条
+        burnedIdxs.push(i);
+        thresholds[i] = { ...thresholds[i], triggered: true };
       }
     }
 
-    if (!triggered) return;
+    if (burnedIdxs.length === 0) return;
 
-    thresholds[burnedIdx] = { ...thresholds[burnedIdx], triggered: true };
+    // 同时触发的条数决定混乱等级
+    const count     = burnedIdxs.length;
+    const chaosType = count >= 3 ? "chaos_double_plus" : count >= 2 ? "chaos_plus" : "chaos";
+    const chaosName = count >= 3 ? "陷入混乱++" : count >= 2 ? "陷入混乱+" : "陷入混乱";
 
-    // 将混乱阈值烧断、物理抗性 ×2.0、AP 清零、添加 BUFF 合并为单次 update，
-    // 避免多次 update 连发触发 Foundry 竞态（renderChatMessage / deleteDocuments 报错）
     const newBuffs = [...(this.system.buffs ?? [])];
     newBuffs.push({
       id:        foundry.utils.randomID(),
-      type:      "chaos",
-      name:      "陷入混乱",
+      type:      chaosType,
+      name:      chaosName,
       icon:      "",
       intensity: 0,
       stacks:    1,
@@ -703,11 +705,11 @@ export class LimbusActor extends Actor {
       "system.buffs":           newBuffs,
     });
 
-    // silent=true 时调用方（_applyAndSendTake）已在取血消息中展示混乱触发信息，无需再创建独立消息，
-    // 避免两次 ChatMessage.create() 触发 Foundry 自动清理同一条旧消息导致"does not exist"报错
+    // silent=true 时调用方已在取血消息中展示混乱触发信息，无需再创建独立消息
     if (!silent) {
+      const pctList = burnedIdxs.map(i => thresholds[i].percent + "%").join("、");
       await ChatMessage.create({
-        content: `<div class="limbuscompany chat-clash"><strong>${this.name}</strong> 混乱阈值被触发（${thresholds[burnedIdx].percent}%）——【陷入混乱】！</div>`,
+        content: `<div class="limbuscompany chat-clash"><strong>${this.name}</strong> 混乱阈值被触发（${pctList}）——【${chaosName}】！</div>`,
       });
     }
   }

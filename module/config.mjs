@@ -136,7 +136,7 @@ LIMBUSCOMPANY.ATTRIBUTE_LABELS = {
 
 // ─── 抗性倍率选项 ─────────────────────────────────────────────────────────────
 
-LIMBUSCOMPANY.RESISTANCE_VALUES = ["x0.5", "x1.0", "x2.0"];
+LIMBUSCOMPANY.RESISTANCE_VALUES = ["x0.5", "x1.0", "x2.0", "x2.5", "x3.0"];
 
 // ─── BUFF / DEBUFF 类型 ───────────────────────────────────────────────────────
 

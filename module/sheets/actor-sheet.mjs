@@ -110,10 +110,17 @@ export class LimbusActorSheet extends ActorSheet {
     };
 
     const equippedUpper = equippedItems.find(eq => eq.system?.subtype === "upper");
-    const hasChaos = (system.buffs ?? []).some(b => b.type === "chaos");
-    context.displayResistances = hasChaos
-      ? { slash: "x2.0", blunt: "x2.0", pierce: "x2.0" }
-      : equippedUpper?.system?.resistanceAdj
+    const _buffs         = system.buffs ?? [];
+    const hasChaosDouble = _buffs.some(b => b.type === "chaos_double_plus");
+    const hasChaosPlus   = _buffs.some(b => b.type === "chaos_plus");
+    const hasChaos       = _buffs.some(b => b.type === "chaos");
+    context.displayResistances = hasChaosDouble
+      ? { slash: "x3.0", blunt: "x3.0", pierce: "x3.0" }
+      : hasChaosPlus
+        ? { slash: "x2.5", blunt: "x2.5", pierce: "x2.5" }
+        : hasChaos
+          ? { slash: "x2.0", blunt: "x2.0", pierce: "x2.0" }
+          : equippedUpper?.system?.resistanceAdj
         ? {
           slash: equippedUpper.system.resistanceAdj.slash ?? system.resistances.slash,
           blunt: equippedUpper.system.resistanceAdj.blunt ?? system.resistances.blunt,
@@ -1338,9 +1345,10 @@ export class LimbusActorSheet extends ActorSheet {
         const oldHp = actor.system.hp?.value ?? 0;
         const newHp = Math.max(0, oldHp - intensity);
         const maxHpBuff = actor.system.hp?.max ?? 1;
-        const chaosTriggeredBuff = (actor.system.chaosThresholds ?? []).some(
+        const buffChaosCount = (actor.system.chaosThresholds ?? []).filter(
           t => !t.triggered && newHp <= maxHpBuff * t.percent / 100
-        );
+        ).length;
+        const buffChaosName = buffChaosCount >= 3 ? "陷入混乱++" : buffChaosCount >= 2 ? "陷入混乱+" : "陷入混乱";
         await actor.update({ "system.hp.value": newHp });
         await actor.reduceBuffStacks(buff.type);
         if (actor.checkAndTriggerChaos) await actor.checkAndTriggerChaos(newHp, oldHp, { silent: true });
@@ -1348,7 +1356,7 @@ export class LimbusActorSheet extends ActorSheet {
           speaker: ChatMessage.getSpeaker({ actor }),
           content: `<div class="limbuscompany chat-clash">
             <strong>${actor.name}</strong>【${buff.name}】触发：受到 <strong>${intensity}</strong> 点固定伤害。
-            （HP ${oldHp} → ${newHp}）${chaosTriggeredBuff ? "　<span style='color:#E84444;font-weight:bold;'>——【陷入混乱】！</span>" : ""}
+            （HP ${oldHp} → ${newHp}）${buffChaosCount > 0 ? `　<span style='color:#E84444;font-weight:bold;'>——【${buffChaosName}】！</span>` : ""}
           </div>`,
         });
         break;

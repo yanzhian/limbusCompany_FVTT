@@ -231,6 +231,8 @@ Hooks.on("updateCombat", async (combat, changed) => {
     const actor       = prevTurn?.actor;
     if (actor?.type === "character") {
       actor.removeBuffsByType("chaos");
+      actor.removeBuffsByType("chaos_plus");
+      actor.removeBuffsByType("chaos_double_plus");
       actor.removeBuffsByType("panic");
     }
   }
