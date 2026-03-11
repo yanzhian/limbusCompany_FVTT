@@ -1027,12 +1027,10 @@ export class ClashManager {
     const gs = (actor, type) => ClashManager._getBuffVal(actor, type).stacks;
     const gi = (actor, type) => ClashManager._getBuffVal(actor, type).intensity;
 
-    // ── 攻击方 BUFF 修正 ─────────────────────────────────────────────────
-    const strong  = atkActor ? gs(atkActor, "strong")       : 0;
-    const weak    = atkActor ? gs(atkActor, "weak")         : 0;
-    const pwrUp   = atkActor ? gs(atkActor, "clashPowerUp") : 0;
-    const pwrDn   = atkActor ? gs(atkActor, "clashPowerDown") : 0;
-    const atkDiceMod = strong - weak + pwrUp - pwrDn;
+    // ── 攻击方 BUFF 修正（承受不拼点，拼点威力↑↓不计入）──────────────────
+    const strong  = atkActor ? gs(atkActor, "strong") : 0;
+    const weak    = atkActor ? gs(atkActor, "weak")   : 0;
+    const atkDiceMod = strong - weak;
 
     // ── 等级差加值（防御等级 > 攻击等级时无加成）──────────────────────────
     const atkLv   = atkActor ? ClashManager._effAtkLv(atkActor) : 0;
@@ -1068,8 +1066,6 @@ export class ClashManager {
       const parts = [];
       if (strong > 0) parts.push(`强壮+${strong}`);
       if (weak   > 0) parts.push(`虚弱-${weak}`);
-      if (pwrUp  > 0) parts.push(`拼点威力↑+${pwrUp}`);
-      if (pwrDn  > 0) parts.push(`拼点威力↓-${pwrDn}`);
       step += atkDiceMod;
       calcNotes.push(`攻击方BUFF（${parts.join("，")}）→ 有效骰数 ${step}`);
     }
