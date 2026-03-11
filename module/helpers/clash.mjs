@@ -198,7 +198,7 @@ export class ClashManager {
     const formula  = sys.diceFormula ?? "1d4";
     return `
       <div style="display:flex;align-items:center;gap:12px;margin:8px 0;">
-        <img src="${item.img}" style="width:50px;height:50px;object-fit:cover;display:block;margin:0 auto;border:2px solid ${sinColor};flex-shrink:0;" alt="${item.name}">
+        <img src="${item.img}" style="width:50px;height:50px;object-fit:cover;border:2px solid ${sinColor};flex-shrink:0;" alt="${item.name}">
         <div>
           <div style="font-size:24px;font-weight:bold;color:#E8C9A2;">${item.name}</div>
           <div style="display:flex;align-items:center;gap:6px;margin-top:3px;">
@@ -395,7 +395,7 @@ export class ClashManager {
         <div class="clash-pick-slot ${extraClass}" data-item-id="${item.id}" data-slot-index="${slotIdx}" title="${item.name}"
              style="position:relative;width:52px;height:52px;cursor:pointer;flex-shrink:0;">
           <img src="${item.img}"
-               style="width:52px;height:52px;object-fit:cover;display:block;margin:0 auto;border:2px solid ${sin};"
+               style="width:52px;height:52px;object-fit:cover;border:2px solid ${sin};"
                alt="${item.name}">
           ${hasRel ? `<button class="clash-pick-rel" data-base-id="${item.id}"
                                title="切换相关技能"
