@@ -4130,6 +4130,99 @@ body.game .limbuscompany.app img {
 
 /* ─── §3-P  Activity 编辑器对话框内联表单 ──────────────────────── */
 
+/* ── Activity 编辑器 V2 ────────────────────────────────────────────── */
+
+.ae-dialog .window-content { padding: 0; background: #0D0A06; }
+
+.ae-v2 { font-family: var(--font-main); color: var(--text-main); }
+
+.ae-v2 .ae-title-bar {
+  background: #1A1208; color: var(--text-gold);
+  font-size: 1rem; font-weight: bold; letter-spacing: .06em;
+  padding: 8px 14px;
+}
+.ae-v2 .ae-gold-line { height: 1px; background: var(--border-gold); margin: 0 0 4px; }
+
+.ae-v2 .ae-body {
+  padding: 8px 14px 10px; display: flex; flex-direction: column; gap: 6px;
+  max-height: 70vh; overflow-y: auto;
+}
+
+/* 名称行 */
+.ae-v2 .ae-field-row { display: flex; align-items: center; gap: 8px; }
+.ae-v2 .ae-label { font-size: .72rem; color: var(--text-sub); white-space: nowrap; }
+.ae-v2 .ae-input {
+  flex: 1; background: var(--bg-panel); border: 1px solid #5A4A30;
+  color: var(--text-main); border-radius: 2px; padding: 3px 6px; font-size: .8rem;
+}
+.ae-v2 .ae-input-sm {
+  width: 52px; background: var(--bg-panel); border: 1px solid #5A4A30;
+  color: var(--text-main); border-radius: 2px; padding: 2px 4px;
+  font-size: .75rem; text-align: center;
+}
+.ae-v2 .ae-select {
+  background: var(--bg-panel); border: 1px solid #5A4A30;
+  color: var(--text-main); border-radius: 2px; padding: 3px 6px;
+  font-size: .8rem; font-family: var(--font-main);
+}
+.ae-v2 .ae-sel {
+  background: var(--bg-panel); border: 1px solid #5A4A30;
+  color: var(--text-main); border-radius: 2px; padding: 2px 4px;
+  font-size: .73rem; font-family: var(--font-main);
+}
+
+/* 分区 */
+.ae-v2 .ae-section {
+  border: 1px solid #3A2E1A; border-radius: 3px; padding: 5px 8px 6px;
+  background: #120E07;
+}
+.ae-v2 .ae-section-hd {
+  display: flex; align-items: center; gap: 6px; margin-bottom: 5px;
+}
+.ae-v2 .ae-section-num {
+  font-size: .7rem; color: var(--text-gold); font-weight: bold;
+}
+.ae-v2 .ae-section-title {
+  font-size: .78rem; color: #C9B887; font-weight: bold; flex: 1;
+}
+.ae-v2 .ae-add-btn {
+  background: #3A2E1A; color: var(--text-gold); border: 1px solid #5A4A30;
+  border-radius: 2px; padding: 1px 8px; font-size: .8rem; cursor: pointer;
+}
+.ae-v2 .ae-add-btn:hover { background: #5A3E18; }
+
+/* 行（条件/消耗/效果） */
+.ae-v2 .ae-row {
+  background: #0D0A06; border: 1px solid #2A1E0A; border-radius: 2px;
+  padding: 4px 6px; margin-top: 4px;
+}
+.ae-v2 .ae-row-hd {
+  display: flex; align-items: center; gap: 6px; margin-bottom: 4px;
+}
+.ae-v2 .ae-row-num { font-size: .68rem; color: var(--text-sub); flex: 1; }
+.ae-v2 .ae-del-btn {
+  background: #5A1A1A; color: #FF9A9A; border: none;
+  border-radius: 2px; padding: 0 6px; font-size: .8rem; cursor: pointer; line-height: 1.4;
+}
+.ae-v2 .ae-del-btn:hover { background: #8B2222; }
+
+.ae-v2 .ae-row-fields {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 4px;
+  font-size: .72rem;
+}
+.ae-v2 .ae-row-fields label {
+  color: var(--text-sub); font-size: .68rem; white-space: nowrap;
+}
+.ae-v2 .ae-eff-buff-sec, .ae-v2 .ae-eff-val-sec {
+  display: contents;  /* inline span acts as transparent wrapper */
+}
+
+/* 次数限制 */
+.ae-v2 .ae-limit-body {
+  display: flex; align-items: center; gap: 8px; margin-top: 4px;
+}
+
+/* 旧版 Dialog 样式（保留兼容） */
 .limbuscompany .activity-editor-dialog .form-group { margin-bottom: 8px; }
 .limbuscompany .activity-editor-dialog label { display: block; font-size: .72rem; color: var(--text-sub); margin-bottom: 2px; }
 .limbuscompany .activity-editor-dialog input,
