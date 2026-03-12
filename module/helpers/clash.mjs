@@ -114,6 +114,175 @@ export class ClashManager {
     return actor.update({ "system.buffs": buffs });
   }
 
+  /** 给角色添加或叠加 BUFF。已有同类型则叠加层数、取最大强度；无则新增。 */
+  static async _addBuff(actor, type, intensity = 1, stacks = 1) {
+    if (!actor || !type) return;
+    const buffs = foundry.utils.deepClone(actor.system?.buffs ?? []);
+    const idx   = buffs.findIndex(b => b.type === type);
+    if (idx >= 0) {
+      buffs[idx].stacks    = (buffs[idx].stacks    ?? 0) + stacks;
+      buffs[idx].intensity = Math.max(buffs[idx].intensity ?? 0, intensity);
+    } else {
+      buffs.push({ type, intensity, stacks });
+    }
+    await actor.update({ "system.buffs": buffs });
+  }
+
+  /** 移除角色所有指定类型的 BUFF。 */
+  static async _removeBuff(actor, type) {
+    if (!actor || !type) return;
+    const buffs = (actor.system?.buffs ?? []).filter(b => b.type !== type);
+    await actor.update({ "system.buffs": buffs });
+  }
+
+  /**
+   * 执行 item.system.activities 中与 trigger 匹配的效果。
+   * @param {Item}   item     携带活动效果的技能物品（攻击方或防守方的技能）
+   * @param {string} trigger  触发时机（如 "使用时"、"命中时"）
+   * @param {object} ctx      执行上下文
+   * @param {Actor}  ctx.owner  使用该 item 的角色（攻击方或防守方）
+   * @param {Actor}  [ctx.other]   对立方角色（可为 null）
+   * @param {Actor}  [ctx.atkActor] 攻击方（用于最终上下文判断）
+   * @param {Actor}  [ctx.defActor] 防守方
+   * @param {object} [ctx._fireCounts]  每轮次数计数器（调用方传入同一对象以跨 trigger 共享）
+   */
+  static async _applyActivities(item, trigger, ctx = {}) {
+    const acts = item?.system?.activities;
+    if (!Array.isArray(acts) || acts.length === 0) return;
+
+    const owner  = ctx.owner  ?? ctx.atkActor ?? null;
+    const other  = ctx.other  ?? (owner === ctx.atkActor ? ctx.defActor : ctx.atkActor) ?? null;
+    ctx._fireCounts = ctx._fireCounts ?? {};
+
+    const msgs = [];
+
+    for (const act of acts) {
+      if (!act?.trigger || act.trigger !== trigger) continue;
+
+      // ── 次数限制（perTurn）──────────────────────────────────────────────
+      if (act.limit?.type === "perTurn" && (act.limit.count ?? 0) > 0) {
+        const key   = `${item.id}_${trigger}`;
+        const fired = ctx._fireCounts[key] ?? 0;
+        if (fired >= act.limit.count) continue;
+      }
+
+      // ── 前置条件 ─────────────────────────────────────────────────────
+      // 兼容 V1（单对象 precondition）和 V2（数组 preconditions）
+      const preconditions = Array.isArray(act.preconditions) ? act.preconditions
+        : (act.precondition ? [act.precondition] : []);
+      let precondFail = false;
+      for (const pre of preconditions) {
+        if (!pre?.buff) continue;
+        const precTgt = pre.target === "self" ? owner : other;
+        const buff    = precTgt ? ClashManager._getBuff(precTgt, pre.buff) : null;
+        if (!buff) { precondFail = true; break; }
+        if ((pre.intensity ?? 0) > 0 && (buff.intensity ?? 0) < pre.intensity) { precondFail = true; break; }
+        if ((pre.stacks    ?? 0) > 0 && (buff.stacks    ?? 0) < pre.stacks)    { precondFail = true; break; }
+      }
+      if (precondFail) continue;
+
+      // ── 消耗（cost） ─────────────────────────────────────────────────
+      // 兼容 V1（单对象 cost）和 V2（数组 costs）
+      const costs = Array.isArray(act.costs) ? act.costs
+        : (act.cost ? [act.cost] : []);
+      for (const cost of costs) {
+        if (!cost?.buff || cost.type === "none") continue;
+        const costTgt = cost.target === "self" ? owner : other;
+        if (costTgt) await ClashManager._reduceBuffStacks(costTgt, cost.buff, cost.stacks ?? 1);
+      }
+
+      // ── 效果（effects）────────────────────────────────────────────────
+      // 兼容 V1（单对象 effect）和 V2（数组 effects）
+      const effects = Array.isArray(act.effects) ? act.effects
+        : (act.effect ? [act.effect] : []);
+
+      for (const eff of effects) {
+        if (!eff?.type) continue;
+        const effTgt = eff.target === "self" ? owner : other;
+        if (!effTgt) continue;
+
+        // BUFF 型效果用 intensity/stacks；数值型效果用 value
+        const intensity = Number(eff.intensity ?? eff.value ?? 1);
+        const stacks    = Number(eff.stacks    ?? 1);
+        const buffType  = eff.buff === "custom" ? (eff.buffCustom || "custom") : (eff.buff || "");
+
+        let descStr = "";
+        switch (eff.type) {
+          case "addBuff":
+            await ClashManager._addBuff(effTgt, buffType, intensity, stacks);
+            descStr = `为【${effTgt.name}】添加 ${stacks} 层 ${buffType}（强度 ${intensity}）`;
+            break;
+          case "removeBuff":
+            await ClashManager._removeBuff(effTgt, buffType);
+            descStr = `移除【${effTgt.name}】的 ${buffType}`;
+            break;
+          case "hpAdj": {
+            const val = Number(eff.value ?? eff.intensity ?? 0);
+            const cur = effTgt.system?.hp?.value ?? 0;
+            const max = effTgt.system?.hp?.max   ?? 1;
+            const nv  = Math.max(0, Math.min(max, cur + val));
+            await effTgt.update({ "system.hp.value": nv });
+            descStr = `【${effTgt.name}】HP ${val >= 0 ? "+" : ""}${val}（${cur} → ${nv}）`;
+            break;
+          }
+          case "sanityAdj": {
+            const val = Number(eff.value ?? eff.intensity ?? 0);
+            if (typeof effTgt.setSanity === "function") {
+              const cur = effTgt.system?.sanity?.value ?? 50;
+              await effTgt.setSanity(cur + val);
+            } else {
+              const cur = effTgt.system?.sanity?.value ?? 50;
+              await effTgt.update({ "system.sanity.value": Math.max(5, Math.min(95, cur + val)) });
+            }
+            descStr = `【${effTgt.name}】理智 ${val >= 0 ? "+" : ""}${val}`;
+            break;
+          }
+          case "atkAdj": {
+            const val = Number(eff.value ?? eff.intensity ?? 0);
+            const cur = effTgt.system?.atk?.extra ?? 0;
+            await effTgt.update({ "system.atk.extra": cur + val });
+            descStr = `【${effTgt.name}】攻击等级 ${val >= 0 ? "+" : ""}${val}`;
+            break;
+          }
+          case "defAdj": {
+            const val = Number(eff.value ?? eff.intensity ?? 0);
+            const cur = effTgt.system?.def?.extra ?? 0;
+            await effTgt.update({ "system.def.extra": cur + val });
+            descStr = `【${effTgt.name}】防御等级 ${val >= 0 ? "+" : ""}${val}`;
+            break;
+          }
+          default:
+            // seismicBlast、relatedSkillConvert 等特殊效果暂不在此处理
+            descStr = `${eff.type} 效果触发`;
+            break;
+        }
+
+        const actName = act.name ? `${act.name}：` : "";
+        if (descStr) msgs.push(`${actName}${descStr}`);
+      }
+
+      // 记录触发次数
+      if (act.limit?.type === "perTurn") {
+        const key = `${item.id}_${trigger}`;
+        ctx._fireCounts[key] = (ctx._fireCounts[key] ?? 0) + 1;
+      }
+    }
+
+    if (msgs.length === 0) return;
+
+    await ChatMessage.create({
+      speaker: ChatMessage.getSpeaker({ actor: owner }),
+      content: `
+        <div class="limbus-clash-card" style="font-size:.8rem;line-height:1.7;">
+          <div style="font-size:.9rem;font-weight:bold;color:#C9A84C;margin-bottom:4px;">
+            ⚡ [${trigger}] ${item?.name ?? ""}
+          </div>
+          ${ClashManager._goldDivider()}
+          ${msgs.map(m => `<div style="color:#E8C9A2;">${m}</div>`).join("")}
+        </div>`,
+    });
+  }
+
   /**
    * 处理【流血】：持有 bleed 的角色执行攻击动作时，受到强度点固定伤害，层数-1。
    * @param {Actor} actor  持有 bleed 的攻击方/响应方
@@ -312,6 +481,11 @@ export class ClashManager {
 
     // 流血：发起者执行攻击动作时触发
     await ClashManager._processBleed(actor);
+
+    // ── [使用时] Activity 触发 ──────────────────────────────────────────
+    await ClashManager._applyActivities(item, "使用时", {
+      owner: actor, atkActor: actor, defActor: null, _fireCounts: {},
+    });
 
     // 推进战斗槽 + 扣 AP（若从战斗槽触发）
     if (slotIndex >= 0) {
@@ -624,6 +798,17 @@ export class ClashManager {
     const atkActor    = game.actors.get(initFlags.attackerId);
     const defCategory = sys.category ?? "";
 
+    // 攻击方技能物品（用于 activity 触发）
+    const atkItem = atkActor?.items?.get(initFlags.itemId) ?? null;
+    // 共享的 perTurn 计数器（攻守双方共用，本次对抗内全程共享）
+    const _fc = {};
+    const atkCtx = { atkActor, defActor, owner: atkActor, other: defActor, _fireCounts: _fc };
+    const defCtx = { atkActor, defActor, owner: defActor, other: atkActor, _fireCounts: _fc };
+
+    // ── [攻击前]：玩家B点击【对抗】后，拼点/结算前触发 ──────────────────
+    await ClashManager._applyActivities(atkItem, "攻击前", atkCtx);
+    await ClashManager._applyActivities(defItem, "攻击前", defCtx);
+
     // 反击/防御：不走拼点流程，直接结算
     if (defCategory === "counter") {
       await ClashManager._resolveDirectCounter(atkActor, defActor, initFlags, defItem, defRoll, defFormula);
@@ -633,6 +818,12 @@ export class ClashManager {
       await ClashManager._resolveDirectBlock(atkActor, defActor, initFlags, defItem, defRoll, defFormula);
       return;
     }
+
+    // ── [攻击时] / [拼点时]：进行拼点期间触发 ───────────────────────────
+    await ClashManager._applyActivities(atkItem, "攻击时", atkCtx);
+    await ClashManager._applyActivities(atkItem, "拼点时", atkCtx);
+    await ClashManager._applyActivities(defItem,  "攻击时", defCtx);
+    await ClashManager._applyActivities(defItem,  "拼点时", defCtx);
 
     const resolution = ClashManager._computeResolution({
       atkActor,    atkTotal:    initFlags.rollTotal,   atkFormula:  initFlags.formula,
@@ -655,7 +846,40 @@ export class ClashManager {
       await defActor.update({ "system.ap.value": Math.min(curAp + 1, maxAp) });
     }
 
+    // ── [拼点成功/失败] / [命中时] / [暴击命中时] / [受到伤害时] ────────
+    const { atkWins, isTie, dodgeWin, breatheCrit } = resolution;
+    if (!isTie) {
+      if (atkWins) {
+        // 攻击方拼点胜
+        await ClashManager._applyActivities(atkItem, "拼点成功", atkCtx);
+        await ClashManager._applyActivities(defItem,  "拼点失败", defCtx);
+        // 命中（攻击方对防守方造成伤害）
+        if (!dodgeWin) {
+          await ClashManager._applyActivities(atkItem, "命中时", atkCtx);
+          if (breatheCrit) {
+            await ClashManager._applyActivities(atkItem, "暴击命中时", atkCtx);
+          }
+          // 防守方受到伤害
+          await ClashManager._applyActivities(defItem, "受到伤害时", defCtx);
+        }
+      } else {
+        // 防守方拼点胜（攻击方落败）
+        await ClashManager._applyActivities(atkItem, "拼点失败", atkCtx);
+        await ClashManager._applyActivities(defItem,  "拼点成功", defCtx);
+        // clashCounter：防守方反击命中攻击方
+        if (defCategory === "clashCounter") {
+          await ClashManager._applyActivities(defItem, "命中时", defCtx);
+          // 攻击方受到反击伤害
+          await ClashManager._applyActivities(atkItem, "受到伤害时", atkCtx);
+        }
+      }
+    }
+
     await ClashManager._sendResolveMsg(resolution, initFlags, defActor, defItem, defFormula);
+
+    // ── [攻击后]：结算完对抗结果后触发 ────────────────────────────────
+    await ClashManager._applyActivities(atkItem, "攻击后", atkCtx);
+    await ClashManager._applyActivities(defItem,  "攻击后", defCtx);
   }
 
   /* ─── 阶段五b：拼点结算逻辑 ────────────────────────────────────────────── */
@@ -1113,7 +1337,37 @@ export class ClashManager {
 
     // 优先使用 base actor（确保角色卡与 linked tokens 同步）
     const baseActor = game.actors.get(selActor.id) ?? selActor;
+
+    // ── Activity 触发（承受路径） ─────────────────────────────────────────
+    const atkItem2 = atkActor?.items?.get(initFlags.itemId) ?? null;
+    const _fc2 = {};
+    const atkCtx2 = { atkActor, defActor: baseActor, owner: atkActor, other: baseActor, _fireCounts: _fc2 };
+    const defCtx2 = { atkActor, defActor: baseActor, owner: baseActor, other: atkActor, _fireCounts: _fc2 };
+
+    // [攻击前] [攻击时]：承受时结算伤害前触发
+    await ClashManager._applyActivities(atkItem2, "攻击前", atkCtx2);
+    await ClashManager._applyActivities(atkItem2, "攻击时", atkCtx2);
+
+    // [命中时]：承受始终命中
+    await ClashManager._applyActivities(atkItem2, "命中时", atkCtx2);
+
+    // [暴击命中时]：检查攻击方是否有【呼吸法】触发暴击
+    const breatheBuff2 = atkActor ? ClashManager._getBuff(atkActor, "breathing") : null;
+    if (breatheBuff2 && breatheBuff2.stacks > 0) {
+      const critChance = (breatheBuff2.intensity ?? 0) * 0.05;
+      if (Math.random() < critChance) {
+        await ClashManager._reduceBuffStacks(atkActor, "breathing");
+        await ClashManager._applyActivities(atkItem2, "暴击命中时", atkCtx2);
+      }
+    }
+
+    // [受到伤害时]：承受方受伤
+    await ClashManager._applyActivities(atkItem2, "受到伤害时", defCtx2);
+
     await ClashManager._applyAndSendTake(baseActor, finalDamage, { calcNotes });
+
+    // [攻击后]：结算完毕
+    await ClashManager._applyActivities(atkItem2, "攻击后", atkCtx2);
 
     // 若选中的是非 linked token actor，额外同步该 token 的 HP
     if (selActor !== baseActor && selActor.isToken) {

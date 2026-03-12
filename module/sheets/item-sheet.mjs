@@ -945,7 +945,11 @@ function _buildEffectRow(eff, idx, cfg) {
         </select>
         <span class="ae-eff-buff-sec" ${isBuff ? "" : 'style="display:none"'}>
           <label>BUFF</label>
-          <select class="ae-sel eff-buff">${buffOpts}</select>
+          <select class="ae-sel eff-buff ae-eff-buff-sel">${buffOpts}</select>
+          <input class="ae-input eff-buff-custom" type="text"
+                 placeholder="自定BUFF名称"
+                 value="${_esc(eff?.buffCustom ?? "")}"
+                 style="display:${(eff?.buff ?? "") === "custom" ? "inline-block" : "none"};width:90px;">
           <label>强度</label>
           <input class="ae-input-sm eff-intensity" type="number" value="${eff?.intensity ?? 1}" min="0">
           <label>层数</label>
@@ -1012,6 +1016,15 @@ function _bindEffType(html) {
     const isNoV  = _NOVAL_EFFECTS.has(type);
     row.find(".ae-eff-buff-sec").toggle(isBuff);
     row.find(".ae-eff-val-sec").toggle(!isBuff && !isNoV);
+    // 切换效果类型时也检查自定义 BUFF 输入框
+    const buffVal = row.find(".ae-eff-buff-sel").val();
+    row.find(".eff-buff-custom").toggle(isBuff && buffVal === "custom");
+  });
+  // 监听 BUFF 下拉改变以显示/隐藏自定义输入框
+  html.find(".ae-eff-buff-sel").off("change").on("change", function () {
+    const row    = $(this).closest(".ae-eff-row");
+    const isCustom = $(this).val() === "custom";
+    row.find(".eff-buff-custom").toggle(isCustom);
   });
 }
 
@@ -1045,14 +1058,17 @@ function _readActivityForm(html, original) {
   html.find(".ae-eff-row").each((_, el) => {
     const $r    = $(el);
     const type  = $r.find(".eff-type").val() || "addBuff";
-    const isBuff = _BUFF_EFFECTS.has(type);
+    const isBuff   = _BUFF_EFFECTS.has(type);
+    const buffVal  = isBuff ? ($r.find(".eff-buff").val() || "") : "";
+    const buffCustom = (buffVal === "custom") ? ($r.find(".eff-buff-custom").val()?.trim() || "") : "";
     effects.push({
       type,
-      target:    $r.find(".eff-target").val()   || "self",
-      buff:      isBuff ? ($r.find(".eff-buff").val() || "") : "",
-      intensity: isBuff ? (parseInt($r.find(".eff-intensity").val()) || 1) : 0,
-      stacks:    isBuff ? (parseInt($r.find(".eff-stacks").val())    || 1) : 0,
-      value:    !isBuff ? (parseInt($r.find(".eff-value").val())     || 0) : 0,
+      target:     $r.find(".eff-target").val()   || "self",
+      buff:       buffVal,
+      buffCustom,
+      intensity:  isBuff ? (parseInt($r.find(".eff-intensity").val()) || 1) : 0,
+      stacks:     isBuff ? (parseInt($r.find(".eff-stacks").val())    || 1) : 0,
+      value:     !isBuff ? (parseInt($r.find(".eff-value").val())     || 0) : 0,
     });
   });
 
