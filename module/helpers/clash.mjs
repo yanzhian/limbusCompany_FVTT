@@ -114,6 +114,21 @@ export class ClashManager {
     return actor.update({ "system.buffs": buffs });
   }
 
+  /** 将 BUFF 类型键转换为中文显示名称。 */
+  static _buffLabel(type) {
+    const labels = {
+      strong:"强壮", weak:"虚弱", endure:"忍耐", breach:"破绽",
+      swift:"迅捷", bind:"束缚", guard:"守护", fragile:"易损",
+      clashPowerUp:"拼点威力提升", clashPowerDown:"拼点威力降低",
+      atkLevelUp:"攻击等级提升",   atkLevelDown:"攻击等级降低",
+      defLevelUp:"防御等级提升",   defLevelDown:"防御等级降低",
+      burn:"烧伤", bleed:"流血", tremor:"震颤", rupture:"破裂",
+      sinking:"沉沦", breathing:"呼吸法", charge:"充能",
+      chaos:"陷入混乱", panic:"陷入恐慌",
+    };
+    return labels[type] ?? type;
+  }
+
   /** 给角色添加或叠加 BUFF。已有同类型则叠加层数、取最大强度；无则新增。 */
   static async _addBuff(actor, type, intensity = 1, stacks = 1) {
     if (!actor || !type) return;
@@ -122,8 +137,21 @@ export class ClashManager {
     if (idx >= 0) {
       buffs[idx].stacks    = (buffs[idx].stacks    ?? 0) + stacks;
       buffs[idx].intensity = Math.max(buffs[idx].intensity ?? 0, intensity);
+      if (!buffs[idx].name) buffs[idx].name = ClashManager._buffLabel(type);
     } else {
-      buffs.push({ type, intensity, stacks });
+      // 与 actor.addBuff 字段结构保持一致，确保状态栏正常显示
+      const iconBase = "systems/limbusCompany_FVTT/assets/icons/Buff_icon/";
+      const iconName = ClashManager._buffLabel(type);
+      const icon     = iconName !== type ? `${iconBase}${iconName}.webp` : "";
+      buffs.push({
+        id:        foundry.utils.randomID(),
+        type,
+        name:      iconName,
+        icon,
+        intensity,
+        stacks,
+        whenAdded: "本回合",
+      });
     }
     await actor.update({ "system.buffs": buffs });
   }
@@ -131,6 +159,9 @@ export class ClashManager {
   /** 移除角色所有指定类型的 BUFF。 */
   static async _removeBuff(actor, type) {
     if (!actor || !type) return;
+    if (typeof actor.removeBuffsByType === "function") {
+      return actor.removeBuffsByType(type);
+    }
     const buffs = (actor.system?.buffs ?? []).filter(b => b.type !== type);
     await actor.update({ "system.buffs": buffs });
   }
@@ -335,10 +366,18 @@ export class ClashManager {
   }
 
   static _actStr(act) {
-    const t = act.effect?.type ?? "";
-    const tgt = act.effect?.target === "self" ? "自己" : "目标";
-    if (t === "addBuff") return `为${tgt}添加 ${act.effect.stacks ?? 1} 层 ${act.effect.buff ?? ""}`;
-    if (t === "hpAdj")   return `${tgt}生命值 ${(act.effect.intensity ?? 0) >= 0 ? "+" : ""}${act.effect.intensity}`;
+    // 兼容 V1（单对象 effect）和 V2（数组 effects）
+    const eff = act.effect ?? (Array.isArray(act.effects) ? act.effects[0] : null);
+    if (!eff?.type) return "";
+    const t   = eff.type;
+    const tgt = eff.target === "self" ? "自己" : "目标";
+    const buffName = eff.buff === "custom" ? (eff.buffCustom || "自定义") : ClashManager._buffLabel(eff.buff ?? "");
+    if (t === "addBuff")    return `为${tgt}添加 ${eff.stacks ?? 1} 层 ${buffName}`;
+    if (t === "removeBuff") return `移除${tgt}的${buffName}`;
+    if (t === "hpAdj")    { const v = eff.value ?? eff.intensity ?? 0; return `${tgt}生命值 ${v >= 0 ? "+" : ""}${v}`; }
+    if (t === "sanityAdj"){ const v = eff.value ?? eff.intensity ?? 0; return `${tgt}理智 ${v >= 0 ? "+" : ""}${v}`; }
+    if (t === "atkAdj")   { const v = eff.value ?? eff.intensity ?? 0; return `${tgt}攻击等级 ${v >= 0 ? "+" : ""}${v}`; }
+    if (t === "defAdj")   { const v = eff.value ?? eff.intensity ?? 0; return `${tgt}防御等级 ${v >= 0 ? "+" : ""}${v}`; }
     return "";
   }
 
