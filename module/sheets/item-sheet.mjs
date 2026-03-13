@@ -485,13 +485,13 @@ export class LimbusItemSheet extends ItemSheet {
   async _onActivityAdd(event) {
     const activities = foundry.utils.deepClone(this.item.system.activities ?? []);
     activities.push({
-      id:      foundry.utils.randomID(),
-      name:    "新效果",
-      trigger: "攻击时",
-      precondition: null,
-      cost:         null,
-      effect: { type: "addBuff", target: "self", intensity: 1, stacks: 1 },
-      limit:  { type: "unlimited", count: 0 },
+      id:            foundry.utils.randomID(),
+      name:          "新效果",
+      trigger:       "攻击时",
+      preconditions: [],
+      costs:         [],
+      effects:       [],
+      limit:         { type: "unlimited", count: 0 },
     });
     await this.item.update({ "system.activities": activities });
     this._activitiesExpanded = true;
@@ -518,94 +518,107 @@ export class LimbusItemSheet extends ItemSheet {
     const act = acts[idx];
     const cfg = CONFIG.LIMBUSCOMPANY;
 
-    // 构建触发时机选项
-    const triggerOpts = (cfg.ACTIVITY_TRIGGERS ?? [])
-      .map(t => `<option value="${t}" ${act.trigger === t ? "selected" : ""}>${t}</option>`)
-      .join("");
-
-    // 构建效果类型选项
-    const effectLabels = _activityEffectLabels();
-    const effectOpts   = effectLabels
-      .map(e => `<option value="${e.value}" ${act.effect?.type === e.value ? "selected" : ""}>${e.label}</option>`)
-      .join("");
-
-    // 构建 BUFF 选项
-    const buffOpts = _buildBuffGroupOptions(cfg, act.effect?.buff);
-
-    const preJson  = act.precondition ? JSON.stringify(act.precondition, null, 2) : "";
-    const costJson = act.cost         ? JSON.stringify(act.cost, null, 2)         : "";
+    // 迁移旧数据（单对象字段 → 数组）
+    const preconditions = Array.isArray(act.preconditions)
+      ? foundry.utils.deepClone(act.preconditions)
+      : (act.precondition ? [act.precondition] : []);
+    const costs = Array.isArray(act.costs)
+      ? foundry.utils.deepClone(act.costs)
+      : (act.cost ? [act.cost] : []);
+    const effects = Array.isArray(act.effects)
+      ? foundry.utils.deepClone(act.effects)
+      : (act.effect ? [act.effect] : []);
+    const hasLimit = act.limit?.type === "perTurn";
 
     const content = `
-      <div class="limbuscompany activity-editor-dialog">
-        <div class="form-group">
-          <label>名称</label>
-          <input type="text" name="name" value="${act.name ?? ""}" placeholder="输入本文"/>
-        </div>
-        <div class="form-group">
-          <label>触发时机</label>
-          <select name="trigger">${triggerOpts}</select>
-        </div>
-        <hr/>
-        <div class="form-group">
-          <label>效果类型</label>
-          <select name="effectType">${effectOpts}</select>
-        </div>
-        <div class="form-group">
-          <label>目标</label>
-          <select name="effectTarget">
-            <option value="self"   ${act.effect?.target === "self"   ? "selected" : ""}>自己</option>
-            <option value="target" ${act.effect?.target === "target" ? "selected" : ""}>目标</option>
-          </select>
-        </div>
-        <div class="form-group ae-buff-row">
-          <label>选择BUFF</label>
-          <select name="effectBuff">${buffOpts}</select>
-        </div>
-        <div class="form-group ae-buff-custom" style="display:none">
-          <label>自定义BUFF</label>
-          <input type="text" name="buffCustom" value="${act.effect?.buffCustom ?? ""}" placeholder="输入文本"/>
-        </div>
-        <div class="form-group inline-row">
-          <label>强度</label><input type="number" name="intensity" value="${act.effect?.intensity ?? 1}" style="width:60px"/>
-          <label style="margin-left:8px">层数</label><input type="number" name="stacks" value="${act.effect?.stacks ?? 1}" style="width:60px"/>
-        </div>
-        <div class="form-group">
-          <label>次数限制 (0=不限)</label>
-          <input type="number" name="limitCount" value="${act.limit?.count ?? 0}" style="width:60px"/>
+      <div class="ae-v2 limbuscompany">
+        <div class="ae-title-bar">效果触发编辑器</div>
+        <div class="ae-gold-line"></div>
+        <div class="ae-body">
+
+          <div class="ae-field-row">
+            <label class="ae-label">名称</label>
+            <input class="ae-input" type="text" name="act-name" value="${_esc(act.name ?? "")}">
+          </div>
+
+          <div class="ae-section">
+            <div class="ae-section-hd">
+              <span class="ae-section-num">①</span>
+              <span class="ae-section-title">触发时机</span>
+            </div>
+            <select class="ae-select" name="act-trigger">
+              ${_buildTriggerOpts(act.trigger)}
+            </select>
+          </div>
+
+          <div class="ae-section">
+            <div class="ae-section-hd">
+              <span class="ae-section-num">②</span>
+              <span class="ae-section-title">前置条件</span>
+              <button type="button" class="ae-add-btn ae-add-precond">＋</button>
+            </div>
+            <div class="ae-precond-list">
+              ${preconditions.map((c, i) => _buildCondRow(c, i, cfg)).join("")}
+            </div>
+          </div>
+
+          <div class="ae-section">
+            <div class="ae-section-hd">
+              <span class="ae-section-num">③</span>
+              <span class="ae-section-title">消耗</span>
+              <button type="button" class="ae-add-btn ae-add-cost">＋</button>
+            </div>
+            <div class="ae-cost-list">
+              ${costs.map((c, i) => _buildCostRow(c, i, cfg)).join("")}
+            </div>
+          </div>
+
+          <div class="ae-section">
+            <div class="ae-section-hd">
+              <span class="ae-section-num">④</span>
+              <span class="ae-section-title">效果</span>
+              <button type="button" class="ae-add-btn ae-add-effect">＋</button>
+            </div>
+            <div class="ae-effect-list">
+              ${effects.map((e, i) => _buildEffectRow(e, i, cfg)).join("")}
+            </div>
+          </div>
+
+          <div class="ae-section">
+            <div class="ae-section-hd">
+              <span class="ae-section-num">⑤</span>
+              <span class="ae-section-title">次数限制</span>
+              <button type="button" class="ae-add-btn ae-toggle-limit">＋</button>
+            </div>
+            <div class="ae-limit-body" style="display:${hasLimit ? "flex" : "none"}">
+              <label class="ae-label">每回合上限</label>
+              <input class="ae-input ae-input-sm" type="number" name="act-limit-count"
+                     value="${act.limit?.count ?? 1}" min="1">
+            </div>
+          </div>
+
         </div>
       </div>`;
 
-    new Dialog({
-      title: "效果触发-编辑器",
-      content,
-      buttons: {
-        save: {
-          label: "保存",
-          callback: async (html) => {
-            acts[idx] = {
-              ...act,
-              name:    html.find("[name='name']").val(),
-              trigger: html.find("[name='trigger']").val(),
-              effect: {
-                type:        html.find("[name='effectType']").val(),
-                target:      html.find("[name='effectTarget']").val(),
-                buff:        html.find("[name='effectBuff']").val(),
-                buffCustom:  html.find("[name='buffCustom']").val(),
-                intensity:   parseInt(html.find("[name='intensity']").val()) || 1,
-                stacks:      parseInt(html.find("[name='stacks']").val())    || 1,
-              },
-              limit: {
-                type:  html.find("[name='limitCount']").val() === "0" ? "unlimited" : "perTurn",
-                count: parseInt(html.find("[name='limitCount']").val()) || 0,
-              },
-            };
-            await this.item.update({ "system.activities": acts });
+    return new Promise(resolve => {
+      new Dialog({
+        title: "效果触发编辑器",
+        content,
+        buttons: {
+          save: {
+            label: "保存",
+            callback: async (html) => {
+              acts[idx] = _readActivityForm(html, act);
+              await this.item.update({ "system.activities": acts });
+              resolve(true);
+            },
           },
+          cancel: { label: "取消", callback: () => resolve(false) },
         },
-        cancel: { label: "取消编辑" },
-      },
-      default: "save",
-    }).render(true);
+        default: "save",
+        render: (html) => { _setupAeDialog(html, cfg); },
+      }, { width: 560, classes: ["dialog", "ae-dialog", "limbuscompany"] }).render(true);
+    });
   }
 
   /* ─── 相关技能展开 ──────────────────────────────────────────────────────── */
@@ -786,19 +799,23 @@ function _parseResistanceChanges(egoResistanceChange) {
   return Object.entries(egoResistanceChange).map(([sin, value]) => ({ sin, value }));
 }
 
+/* ─── Activity 编辑器 V2 辅助函数 ────────────────────────────────────────── */
+
+function _esc(s) { return String(s ?? "").replace(/"/g, "&quot;"); }
+
 function _activityEffectLabels() {
   return [
-    { value: "addBuff",           label: "添加BUFF" },
-    { value: "removeBuff",        label: "移除BUFF" },
-    { value: "hpAdj",             label: "生命值调整" },
-    { value: "sanityAdj",         label: "理智值调整" },
-    { value: "atkAdj",            label: "攻击等级调整" },
-    { value: "defAdj",            label: "防御等级调整" },
-    { value: "speedAdj",          label: "速度调整" },
-    { value: "baseValue",         label: "基础值" },
-    { value: "diceAdj",           label: "骰数" },
+    { value: "addBuff",             label: "添加BUFF" },
+    { value: "removeBuff",          label: "移除BUFF" },
+    { value: "hpAdj",               label: "生命值调整" },
+    { value: "sanityAdj",           label: "理智值调整" },
+    { value: "atkAdj",              label: "攻击等级调整" },
+    { value: "defAdj",              label: "防御等级调整" },
+    { value: "speedAdj",            label: "速度调整" },
+    { value: "baseValue",           label: "基础值" },
+    { value: "diceAdj",             label: "骰数" },
     { value: "relatedSkillConvert", label: "相关技能转换" },
-    { value: "seismicBlast",      label: "震颤引爆" },
+    { value: "seismicBlast",        label: "震颤引爆" },
   ];
 }
 
@@ -828,5 +845,246 @@ function _buffLabelMap() {
     burn:"烧伤", bleed:"流血", tremor:"震颤", rupture:"破裂",
     sinking:"沉沦", breathing:"呼吸法", charge:"充能",
     chaos:"陷入混乱", panic:"陷入恐慌", custom:"自定义",
+  };
+}
+
+/** 触发时机下拉（分组：物品 / 技能 / 通用） */
+function _buildTriggerOpts(selected) {
+  const groups = [
+    { label: "── 物品 ──",  values: ["使用时"] },
+    { label: "── 技能 ──",  values: ["使用时", "攻击前", "攻击时", "攻击后",
+                                       "拼点时", "拼点成功", "拼点失败",
+                                       "命中时", "暴击命中时"] },
+    { label: "── 通用 ──",  values: ["回合开始时", "回合结束时", "受到伤害时"] },
+  ];
+  return groups.map(g =>
+    `<optgroup label="${g.label}">${g.values.map(v =>
+      `<option value="${v}" ${selected === v ? "selected" : ""}>${v}</option>`
+    ).join("")}</optgroup>`
+  ).join("");
+}
+
+/** 前置条件行 HTML */
+function _buildCondRow(cond, idx, cfg) {
+  const buffOpts = _buildBuffGroupOptions(cfg, cond?.buff);
+  return `
+    <div class="ae-row ae-cond-row">
+      <div class="ae-row-hd">
+        <span class="ae-row-num">条件 ${idx + 1}</span>
+        <button type="button" class="ae-del-btn ae-del-precond">×</button>
+      </div>
+      <div class="ae-row-fields">
+        <label>目标</label>
+        <select class="ae-sel cond-target">
+          <option value="self"   ${(cond?.target ?? "self") === "self"   ? "selected" : ""}>自己</option>
+          <option value="target" ${cond?.target === "target" ? "selected" : ""}>目标</option>
+        </select>
+        <label>BUFF</label>
+        <select class="ae-sel cond-buff">${buffOpts}</select>
+        <label>强度≥</label>
+        <input class="ae-input-sm cond-intensity" type="number" value="${cond?.intensity ?? 1}" min="0">
+        <label>层数≥</label>
+        <input class="ae-input-sm cond-stacks"    type="number" value="${cond?.stacks ?? 1}"    min="0">
+      </div>
+    </div>`;
+}
+
+/** 消耗行 HTML */
+function _buildCostRow(cost, idx, cfg) {
+  const buffOpts  = _buildBuffGroupOptions(cfg, cost?.buff);
+  const typeOpts  = [["none","无消耗"],["forced","强制消耗"],["optional","可选消耗"]]
+    .map(([v,l]) => `<option value="${v}" ${(cost?.type ?? "forced") === v ? "selected" : ""}>${l}</option>`).join("");
+  return `
+    <div class="ae-row ae-cost-row">
+      <div class="ae-row-hd">
+        <span class="ae-row-num">消耗 ${idx + 1}</span>
+        <button type="button" class="ae-del-btn ae-del-cost">×</button>
+      </div>
+      <div class="ae-row-fields">
+        <label>类型</label>
+        <select class="ae-sel cost-type">${typeOpts}</select>
+        <label>目标</label>
+        <select class="ae-sel cost-target">
+          <option value="self"   ${(cost?.target ?? "self") === "self"   ? "selected" : ""}>自己</option>
+          <option value="target" ${cost?.target === "target" ? "selected" : ""}>目标</option>
+        </select>
+        <label>BUFF</label>
+        <select class="ae-sel cost-buff">${buffOpts}</select>
+        <label>强度</label>
+        <input class="ae-input-sm cost-intensity" type="number" value="${cost?.intensity ?? 1}" min="0">
+        <label>层数</label>
+        <input class="ae-input-sm cost-stacks"    type="number" value="${cost?.stacks ?? 1}"    min="0">
+      </div>
+    </div>`;
+}
+
+const _BUFF_EFFECTS   = new Set(["addBuff", "removeBuff"]);
+const _NOVAL_EFFECTS  = new Set(["relatedSkillConvert"]);
+
+/** 效果行 HTML */
+function _buildEffectRow(eff, idx, cfg) {
+  const type     = eff?.type ?? "addBuff";
+  const isBuff   = _BUFF_EFFECTS.has(type);
+  const isNoVal  = _NOVAL_EFFECTS.has(type);
+  const effOpts  = _activityEffectLabels()
+    .map(e => `<option value="${e.value}" ${type === e.value ? "selected" : ""}>${e.label}</option>`).join("");
+  const buffOpts = _buildBuffGroupOptions(cfg, eff?.buff);
+  return `
+    <div class="ae-row ae-eff-row">
+      <div class="ae-row-hd">
+        <span class="ae-row-num">效果 ${idx + 1}</span>
+        <button type="button" class="ae-del-btn ae-del-effect">×</button>
+      </div>
+      <div class="ae-row-fields">
+        <label>类型</label>
+        <select class="ae-sel ae-eff-type eff-type">${effOpts}</select>
+        <label>目标</label>
+        <select class="ae-sel eff-target">
+          <option value="self"   ${(eff?.target ?? "self") === "self"   ? "selected" : ""}>自己</option>
+          <option value="target" ${eff?.target === "target" ? "selected" : ""}>目标</option>
+        </select>
+        <span class="ae-eff-buff-sec" ${isBuff ? "" : 'style="display:none"'}>
+          <label>BUFF</label>
+          <select class="ae-sel eff-buff ae-eff-buff-sel">${buffOpts}</select>
+          <input class="ae-input eff-buff-custom" type="text"
+                 placeholder="自定BUFF名称"
+                 value="${_esc(eff?.buffCustom ?? "")}"
+                 style="display:${(eff?.buff ?? "") === "custom" ? "inline-block" : "none"};width:90px;">
+          <label>强度</label>
+          <input class="ae-input-sm eff-intensity" type="number" value="${eff?.intensity ?? 1}" min="0">
+          <label>层数</label>
+          <input class="ae-input-sm eff-stacks" type="number" value="${eff?.stacks ?? 1}" min="0">
+        </span>
+        <span class="ae-eff-val-sec" ${(!isBuff && !isNoVal) ? "" : 'style="display:none"'}>
+          <label>数值</label>
+          <input class="ae-input-sm eff-value" type="number" value="${eff?.value ?? 0}">
+        </span>
+      </div>
+    </div>`;
+}
+
+/** 设置 Dialog 动态交互事件 */
+function _setupAeDialog(html, cfg) {
+  // 添加按钮
+  html.find(".ae-add-precond").on("click", () => {
+    const list = html.find(".ae-precond-list");
+    const idx  = list.find(".ae-cond-row").length;
+    list.append(_buildCondRow({}, idx, cfg));
+    _bindDel(html);
+  });
+  html.find(".ae-add-cost").on("click", () => {
+    const list = html.find(".ae-cost-list");
+    const idx  = list.find(".ae-cost-row").length;
+    list.append(_buildCostRow({}, idx, cfg));
+    _bindDel(html);
+  });
+  html.find(".ae-add-effect").on("click", () => {
+    const list = html.find(".ae-effect-list");
+    const idx  = list.find(".ae-eff-row").length;
+    list.append(_buildEffectRow({}, idx, cfg));
+    _bindDel(html);
+    _bindEffType(html);
+  });
+  html.find(".ae-toggle-limit").on("click", () => {
+    html.find(".ae-limit-body").toggle();
+  });
+
+  _bindDel(html);
+  _bindEffType(html);
+}
+
+function _bindDel(html) {
+  html.find(".ae-del-precond").off("click").on("click", function () {
+    $(this).closest(".ae-cond-row").remove();
+    html.find(".ae-cond-row .ae-row-num").each((i, el) => $(el).text(`条件 ${i + 1}`));
+  });
+  html.find(".ae-del-cost").off("click").on("click", function () {
+    $(this).closest(".ae-cost-row").remove();
+    html.find(".ae-cost-row .ae-row-num").each((i, el) => $(el).text(`消耗 ${i + 1}`));
+  });
+  html.find(".ae-del-effect").off("click").on("click", function () {
+    $(this).closest(".ae-eff-row").remove();
+    html.find(".ae-eff-row .ae-row-num").each((i, el) => $(el).text(`效果 ${i + 1}`));
+  });
+}
+
+function _bindEffType(html) {
+  html.find(".ae-eff-type").off("change").on("change", function () {
+    const row    = $(this).closest(".ae-eff-row");
+    const type   = $(this).val();
+    const isBuff = _BUFF_EFFECTS.has(type);
+    const isNoV  = _NOVAL_EFFECTS.has(type);
+    row.find(".ae-eff-buff-sec").toggle(isBuff);
+    row.find(".ae-eff-val-sec").toggle(!isBuff && !isNoV);
+    // 切换效果类型时也检查自定义 BUFF 输入框
+    const buffVal = row.find(".ae-eff-buff-sel").val();
+    row.find(".eff-buff-custom").toggle(isBuff && buffVal === "custom");
+  });
+  // 监听 BUFF 下拉改变以显示/隐藏自定义输入框
+  html.find(".ae-eff-buff-sel").off("change").on("change", function () {
+    const row    = $(this).closest(".ae-eff-row");
+    const isCustom = $(this).val() === "custom";
+    row.find(".eff-buff-custom").toggle(isCustom);
+  });
+}
+
+/** 从 Dialog HTML 读取所有数据并返回 activity 对象 */
+function _readActivityForm(html, original) {
+  const preconditions = [];
+  html.find(".ae-cond-row").each((_, el) => {
+    const $r = $(el);
+    preconditions.push({
+      type:      "hasBuff",
+      target:    $r.find(".cond-target").val()  || "self",
+      buff:      $r.find(".cond-buff").val()    || "",
+      intensity: parseInt($r.find(".cond-intensity").val()) || 1,
+      stacks:    parseInt($r.find(".cond-stacks").val())    || 1,
+    });
+  });
+
+  const costs = [];
+  html.find(".ae-cost-row").each((_, el) => {
+    const $r = $(el);
+    costs.push({
+      type:      $r.find(".cost-type").val()    || "forced",
+      target:    $r.find(".cost-target").val()  || "self",
+      buff:      $r.find(".cost-buff").val()    || "",
+      intensity: parseInt($r.find(".cost-intensity").val()) || 1,
+      stacks:    parseInt($r.find(".cost-stacks").val())    || 1,
+    });
+  });
+
+  const effects = [];
+  html.find(".ae-eff-row").each((_, el) => {
+    const $r    = $(el);
+    const type  = $r.find(".eff-type").val() || "addBuff";
+    const isBuff   = _BUFF_EFFECTS.has(type);
+    const buffVal  = isBuff ? ($r.find(".eff-buff").val() || "") : "";
+    const buffCustom = (buffVal === "custom") ? ($r.find(".eff-buff-custom").val()?.trim() || "") : "";
+    effects.push({
+      type,
+      target:     $r.find(".eff-target").val()   || "self",
+      buff:       buffVal,
+      buffCustom,
+      intensity:  isBuff ? (parseInt($r.find(".eff-intensity").val()) || 1) : 0,
+      stacks:     isBuff ? (parseInt($r.find(".eff-stacks").val())    || 1) : 0,
+      value:     !isBuff ? (parseInt($r.find(".eff-value").val())     || 0) : 0,
+    });
+  });
+
+  const limitVisible = html.find(".ae-limit-body").is(":visible");
+  const limitCount   = parseInt(html.find("[name='act-limit-count']").val()) || 1;
+
+  return {
+    ...original,
+    name:          html.find("[name='act-name']").val()    || "新效果",
+    trigger:       html.find("[name='act-trigger']").val() || "攻击时",
+    preconditions,
+    costs,
+    effects,
+    limit: {
+      type:  limitVisible ? "perTurn" : "unlimited",
+      count: limitVisible ? limitCount : 0,
+    },
   };
 }

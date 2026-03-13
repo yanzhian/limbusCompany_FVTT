@@ -19,20 +19,15 @@
 function makeActivitySchema() {
   const fields = foundry.data.fields;
   return new fields.SchemaField({
-    id:      new fields.StringField({ required: true, initial: () => foundry.utils.randomID() }),
-    name:    new fields.StringField({ required: true, initial: "新效果" }),
-    trigger: new fields.StringField({ required: true, initial: "攻击时" }),
-    precondition: new fields.ObjectField({ required: false, nullable: true, initial: null }),
-    cost:         new fields.ObjectField({ required: false, nullable: true, initial: null }),
-    effect: new fields.ObjectField({ required: true, initial: () => ({
-      type:      "addBuff",
-      target:    "self",
-      intensity: 1,
-      stacks:    1,
-    }) }),
+    id:           new fields.StringField({ required: true, initial: () => foundry.utils.randomID() }),
+    name:         new fields.StringField({ required: true, initial: "新效果" }),
+    trigger:      new fields.StringField({ required: true, initial: "攻击时" }),
+    preconditions: new fields.ArrayField(new fields.ObjectField(), { required: true, initial: [] }),
+    costs:         new fields.ArrayField(new fields.ObjectField(), { required: true, initial: [] }),
+    effects:       new fields.ArrayField(new fields.ObjectField(), { required: true, initial: [] }),
     limit: new fields.SchemaField({
       type:  new fields.StringField({ required: true, initial: "unlimited" }),
-      count: new fields.NumberField({ required: true, integer: true, min: 0, initial: 1 }),
+      count: new fields.NumberField({ required: true, integer: true, min: 0, initial: 0 }),
     }),
   });
 }

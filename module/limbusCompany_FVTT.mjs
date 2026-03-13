@@ -24,6 +24,28 @@ import { ClashManager }     from "./helpers/clash.mjs";
 
 /* ─── Hooks.once("init") ─────────────────────────────────────────────────── */
 
+/* ─── 全局静默 Foundry v13 聊天清理竞态错误 ──────────────────────────────── */
+// Foundry v13 在 ChatMessage.create 后会 fire-and-forget 一个内部清理 Promise。
+// 多条消息并发创建时，该 Promise 因"消息已被删除"产生两种噪音：
+//   1. console.error 直接输出（foundry.mjs 内部调用）→ 过滤 console.error
+//   2. Uncaught (in promise) rejection → unhandledrejection 事件拦截
+// 两种都精确匹配 /ChatMessage "[A-Za-z0-9]+" does not exist!/ 格式，不影响其他错误。
+(function _suppressFoundryChatPurgeNoise() {
+  const _RE = /ChatMessage\s+"[A-Za-z0-9]+" does not exist!/;
+
+  // ① 过滤 console.error 直接输出
+  const _origError = console.error.bind(console);
+  console.error = (...args) => {
+    if (args.length > 0 && typeof args[0] === "string" && _RE.test(args[0])) return;
+    _origError(...args);
+  };
+
+  // ② 拦截未捕获 Promise rejection
+  window.addEventListener("unhandledrejection", (event) => {
+    if (_RE.test(event?.reason?.message ?? "")) event.preventDefault();
+  });
+}());
+
 Hooks.once("init", () => {
   console.log("limbusCompany_FVTT | 初始化系统…");
 
@@ -80,6 +102,16 @@ Hooks.once("setup", () => {
 
 Hooks.once("ready", () => {
   console.log("limbusCompany_FVTT | 系统已就绪。");
+
+  // ── 过滤 ui.notifications 弹出的聊天清理竞态红色警告 ──────────────────
+  // ui.notifications 在 ready 之后才可用，因此在此处 patch
+  const _RE_NOTIFY = /ChatMessage\s+"[A-Za-z0-9]+" does not exist!/;
+  const _origNotifyError = ui.notifications.error.bind(ui.notifications);
+  ui.notifications.error = (msg, ...rest) => {
+    if (typeof msg === "string" && _RE_NOTIFY.test(msg)) return;
+    return _origNotifyError(msg, ...rest);
+  };
+
   _installTokenDoubleClickOpenActorSheet();
   // 某些加载时序下 ready 阶段 Token 原型尚未就绪，做一次延迟补丁兜底
   setTimeout(() => _installTokenDoubleClickOpenActorSheet(), 200);
@@ -277,6 +309,23 @@ Hooks.on("updateCombat", async (combat, changed) => {
     const breatheBuff = freshBuffs.find(b => b.type === "breathing");
     if (breatheBuff && breatheBuff.stacks > 0) {
       await actor.reduceBuffStacks?.("breathing");
+    }
+
+    // ── Activity 触发：[回合结束时] 与 [回合开始时] ─────────────────────
+    // 收集角色当前所有装备技能
+    const sys        = actor.system ?? {};
+    const skillIds   = [
+      ...(sys.skills?.basic ?? []),
+      sys.skills?.defense ?? null,
+      ...Object.values(sys.skills?.ego ?? {}),
+    ].filter(Boolean);
+
+    const roundCtx = { owner: actor, atkActor: actor, defActor: null, _fireCounts: {} };
+    for (const skillId of skillIds) {
+      const skillItem = actor.items.get(skillId);
+      if (!skillItem) continue;
+      await ClashManager._applyActivities(skillItem, "回合结束时", { ...roundCtx, _fireCounts: {} });
+      await ClashManager._applyActivities(skillItem, "回合开始时", { ...roundCtx, _fireCounts: {} });
     }
   }
 });
