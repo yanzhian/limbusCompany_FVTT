@@ -843,12 +843,20 @@ export class LimbusActorSheet extends ActorSheet {
     await this._activateItem(item);
   }
 
-  /** 激活物品：触发 [使用时] Activity 效果。 */
+  /** 激活物品：触发 [使用时] Activity 效果；消耗品数量 -1，归零时自动删除。 */
   async _activateItem(item) {
     if (!item) return;
     await ClashManager._applyActivities(item, "使用时", {
       owner: this.actor, atkActor: this.actor, defActor: null, _fireCounts: {},
     });
+    if (item.type === "consumable") {
+      const qty = (item.system.quantity ?? 1) - 1;
+      if (qty <= 0) {
+        await item.delete();
+      } else {
+        await item.update({ "system.quantity": qty });
+      }
+    }
   }
 
   async _onItemFavorite(event) {
