@@ -792,8 +792,13 @@ export class LimbusActorSheet extends ActorSheet {
     const item   = this.actor.items.get(itemId);
     if (!item) return;
 
-    // 显示发起对抗弹窗
-    await this._showClashDialog(item);
+    // 与战斗 Tab 同步：AP 不足时拦截
+    if ((this.actor.system.ap?.value ?? 0) <= 0) {
+      ui.notifications?.warn("行动值不足，无法发起对抗");
+      return;
+    }
+    // slotIndex = -2：扣 AP 但不推进 6-bag（非战斗槽触发）
+    await this._showClashDialog(item, -2);
   }
 
   async _showClashDialog(item, slotIndex = -1) {
@@ -804,10 +809,15 @@ export class LimbusActorSheet extends ActorSheet {
     const itemId = event.currentTarget.closest("[data-item-id]")?.dataset.itemId;
     const item   = this.actor.items.get(itemId);
     if (!item) return;
-    if (item.type === "equipment") {
-      const isActive = item.system.active ?? false;
-      await item.update({ "system.active": !isActive });
-    }
+    await this._activateItem(item);
+  }
+
+  /** 激活物品：触发 [使用时] Activity 效果。 */
+  async _activateItem(item) {
+    if (!item) return;
+    await ClashManager._applyActivities(item, "使用时", {
+      owner: this.actor, atkActor: this.actor, defActor: null, _fireCounts: {},
+    });
   }
 
   async _onItemFavorite(event) {
@@ -847,7 +857,7 @@ export class LimbusActorSheet extends ActorSheet {
     const menuItems = [
       { name: "卸下",      icon: "<i class='fas fa-times'></i>",     callback: () => this.actor.unequipFromGrid(slotIdx) },
       { name: "查看/编辑", icon: "<i class='fas fa-edit'></i>",      callback: () => item.sheet.render(true) },
-      { name: "激活",      icon: "<i class='fas fa-bolt'></i>",      callback: () => item.update({ "system.active": !(item.system.active ?? false) }) },
+      { name: "激活",      icon: "<i class='fas fa-bolt'></i>",      callback: () => this._activateItem(item) },
       { name: "发送聊天框",icon: "<i class='fas fa-comment'></i>",   callback: () => item.sendToChat?.() },
     ];
     this._renderContextMenu(event, menuItems);
@@ -863,7 +873,10 @@ export class LimbusActorSheet extends ActorSheet {
     const menuItems = [
       { name: "卸下",      icon: "<i class='fas fa-times'></i>",   callback: () => this.actor.unequipSkill(itemId) },
       { name: "查看/编辑", icon: "<i class='fas fa-edit'></i>",    callback: () => item.sheet.render(true) },
-      { name: "发起对抗",  icon: "<i class='fas fa-swords'></i>",  callback: () => this._showClashDialog(item) },
+      { name: "发起对抗",  icon: "<i class='fas fa-swords'></i>",  callback: () => {
+          if ((this.actor.system.ap?.value ?? 0) <= 0) { ui.notifications?.warn("行动值不足，无法发起对抗"); return; }
+          this._showClashDialog(item, -2);
+        } },
       { name: "发送聊天框",icon: "<i class='fas fa-comment'></i>", callback: () => item.sendToChat?.() },
     ];
     this._renderContextMenu(event, menuItems);

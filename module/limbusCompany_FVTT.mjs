@@ -312,20 +312,29 @@ Hooks.on("updateCombat", async (combat, changed) => {
     }
 
     // ── Activity 触发：[回合结束时] 与 [回合开始时] ─────────────────────
-    // 收集角色当前所有装备技能
-    const sys        = actor.system ?? {};
-    const skillIds   = [
+    const sys      = actor.system ?? {};
+    const roundCtx = { owner: actor, atkActor: actor, defActor: null };
+
+    // 已装备技能
+    const skillIds = [
       ...(sys.skills?.basic ?? []),
       sys.skills?.defense ?? null,
       ...Object.values(sys.skills?.ego ?? {}),
     ].filter(Boolean);
-
-    const roundCtx = { owner: actor, atkActor: actor, defActor: null, _fireCounts: {} };
     for (const skillId of skillIds) {
       const skillItem = actor.items.get(skillId);
       if (!skillItem) continue;
       await ClashManager._applyActivities(skillItem, "回合结束时", { ...roundCtx, _fireCounts: {} });
       await ClashManager._applyActivities(skillItem, "回合开始时", { ...roundCtx, _fireCounts: {} });
+    }
+
+    // 装备栏中的物品（只有装入装备格的才触发）
+    for (let i = 0; i < 9; i++) {
+      const eqId   = sys.equipment?.[`slot${i}`];
+      const eqItem = eqId ? actor.items.get(eqId) : null;
+      if (!eqItem) continue;
+      await ClashManager._applyActivities(eqItem, "回合结束时", { ...roundCtx, _fireCounts: {} });
+      await ClashManager._applyActivities(eqItem, "回合开始时", { ...roundCtx, _fireCounts: {} });
     }
   }
 });
