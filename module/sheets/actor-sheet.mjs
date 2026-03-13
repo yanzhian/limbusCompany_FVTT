@@ -508,6 +508,11 @@ export class LimbusActorSheet extends ActorSheet {
     html.find(".ego-combat-section .combat-skill-slot[data-item-id], .combat-defense-slot[data-item-id]")
       .on("click", this._onEgoSkillClick.bind(this));
     html.find(".combat-skill-related-toggle").on("click", this._onRelatedSkillToggle.bind(this));
+
+    // ── 战斗技能槽悬浮 Title 卡（事件委托，兼容动态写入的 data-item-id）────
+    html.find(".tab[data-tab='combat']")
+      .on("mouseenter", ".combat-skill-slot[data-item-id]", (ev) => this._onCombatSlotHover(ev))
+      .on("mouseleave", ".combat-skill-slot[data-item-id]", ()   => this._onItemHoverEnd());
   }
 
   /* ─── 拖放处理 ──────────────────────────────────────────────────────────── */
@@ -1541,26 +1546,65 @@ export class LimbusActorSheet extends ActorSheet {
     this._titleCard = null;
   }
 
+  /** 战斗槽悬浮 Title 卡（基础/EGO/守备） */
+  _onCombatSlotHover(event) {
+    const el     = event.currentTarget;
+    const itemId = el.dataset.itemId;
+    const item   = this.actor.items.get(itemId);
+    if (!item) return;
+
+    this._onItemHoverEnd();
+    this._titleCard = this._buildTitleCard(item);
+
+    // 卡片显示在角色卡左侧；若角色卡左侧空间不足则显示在右侧
+    const rect  = this.element[0].getBoundingClientRect();
+    const cardW = 280;
+    const cardH = 500;
+    let left = rect.left - cardW - 8;
+    if (left < 8) left = rect.right + 8;
+    const top = Math.max(8, Math.min(rect.top, window.innerHeight - cardH - 8));
+
+    this._titleCard.css({ position: "fixed", left, top, zIndex: 99998 });
+    $("body").append(this._titleCard);
+
+    // 允许鼠标在槽位上滚动时滚动描述区
+    this._titleCardWheelEl = el;
+    this._titleCardWheelHandler = (ev) => {
+      const desc = this._titleCard?.find(".tc-desc")[0];
+      if (!desc || desc.scrollHeight <= desc.clientHeight) return;
+      desc.scrollTop += ev.deltaY;
+      ev.preventDefault();
+    };
+    el.addEventListener("wheel", this._titleCardWheelHandler, { passive: false });
+  }
+
   _buildTitleCard(item) {
     const sys = item.system;
     const cfg = CONFIG.LIMBUSCOMPANY;
     const sinColor = cfg.SIN_COLORS?.[sys.sinType] ?? "#5F3E21";
 
     if (item.type === "skill") {
-      const costHtml = item.type === "skill" && sys.type === "ego"
-        ? `<div class="tc-stellar"><i class="fas fa-star-half-alt"></i> ${item.getStellarCost?.() ?? 0}</div>`
-        : `<div class="tc-stellar"><i class="fas fa-star"></i> ${item.getStellarCost?.() ?? 0}</div>`;
+      const stellarCost  = item.getStellarCost?.() ?? 0;
+      const tags = (Array.isArray(sys.tags) ? sys.tags : (sys.tags ?? "").split("/"))
+        .map(t => String(t).trim()).filter(Boolean);
+      const weightCount  = Number(sys.weight ?? 0);
+      const descText     = sys.effectDesc ?? sys.description ?? "";
 
       return $(`<div class="limbus-title-card limbus-title-card-skill">
         <div class="tc-header" style="background:${sinColor}">${item.name}</div>
         <div class="tc-row2">
-          <img src="${_getCategoryIcon(sys.category)}" width="18" height="18" alt="type">
+          <img src="${_getCategoryIcon(sys.category)}" class="tc-cat-icon" alt="">
           <span class="tc-formula">${(sys.diceFormula ?? "").toUpperCase()}</span>
-          <span class="tc-tags">${(Array.isArray(sys.tags) ? sys.tags : (sys.tags ?? "").split("/")).filter(Boolean).map(t => `<span class="tag">${String(t).trim()}</span>`).join("")}</span>
+          <span class="tc-tags">${tags.map(t => `<span class="tc-skill-tag">${t}</span>`).join("")}</span>
         </div>
-        ${sys.weight ? `<div class="tc-weight">${Array.from({length: sys.weight ?? 0}, () => '<span class="weight-sq"></span>').join("")}</div>` : ""}
-        <div class="tc-desc">${sys.effectDesc ?? item.system.description ?? ""}</div>
-        <div class="tc-footer">${costHtml}</div>
+        ${weightCount > 0 ? `<div class="tc-weight"><span class="tc-weight-label">加重值</span>${Array.from({length: weightCount}, () => '<span class="tc-weight-sq"></span>').join("")}</div>` : ""}
+        <div class="tc-gold-divider-skill"></div>
+        <div class="tc-desc">${descText}</div>
+        <div class="tc-gold-divider-skill"></div>
+        <div class="tc-footer">
+          <img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/Starlight.webp" class="tc-starlight-icon" alt="星芒">
+          <span class="tc-stellar-cost">${stellarCost}</span>
+        </div>
       </div>`);
     }
 
