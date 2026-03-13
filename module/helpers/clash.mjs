@@ -282,8 +282,42 @@ export class ClashManager {
             descStr = `【${effTgt.name}】防御等级 ${val >= 0 ? "+" : ""}${val}`;
             break;
           }
+          case "seismicBlast": {
+            // 对目标触发【震颤引爆】N次（N = eff.value）
+            // 每次引爆：消耗目标1层【震颤】，所有混乱阈值前移【震颤强度】%
+            const blastCount = Math.max(1, Math.round(Number(eff.value ?? 1)));
+            const tremorBuff = ClashManager._getBuff(effTgt, "tremor");
+            if (!tremorBuff || (tremorBuff.stacks ?? 0) <= 0) {
+              descStr = `【${effTgt.name}】无【震颤】状态，震颤引爆未触发`;
+              break;
+            }
+            const tremorIntensity = tremorBuff.intensity ?? 1;
+            let actualBlasts = 0;
+            for (let bi = 0; bi < blastCount; bi++) {
+              const currentTremor = ClashManager._getBuff(
+                game.actors.get(effTgt.id) ?? effTgt, "tremor"
+              );
+              if (!currentTremor || (currentTremor.stacks ?? 0) <= 0) break;
+              await (effTgt.triggerSeismicBlast
+                ? effTgt.triggerSeismicBlast(tremorIntensity)
+                : (async () => {
+                    const tList = (effTgt.system?.chaosThresholds ?? []).map(t => ({
+                      percent:   Math.min(100, t.percent + tremorIntensity),
+                      triggered: t.triggered,
+                    }));
+                    await effTgt.update({ "system.chaosThresholds": tList });
+                  })()
+              );
+              await ClashManager._reduceBuffStacks(effTgt, "tremor", 1);
+              actualBlasts++;
+            }
+            descStr = actualBlasts > 0
+              ? `【${effTgt.name}】震颤引爆 ×${actualBlasts}，混乱阈值各前移 ${tremorIntensity}%`
+              : `【${effTgt.name}】震颤引爆未触发（震颤层数不足）`;
+            break;
+          }
           default:
-            // seismicBlast、relatedSkillConvert 等特殊效果暂不在此处理
+            // relatedSkillConvert 等其他特殊效果暂不在此处理
             descStr = `${eff.type} 效果触发`;
             break;
         }
@@ -413,8 +447,9 @@ export class ClashManager {
     if (t === "removeBuff") return `移除${tgt}的${buffName}`;
     if (t === "hpAdj")    { const v = eff.value ?? eff.intensity ?? 0; return `${tgt}生命值 ${v >= 0 ? "+" : ""}${v}`; }
     if (t === "sanityAdj"){ const v = eff.value ?? eff.intensity ?? 0; return `${tgt}理智 ${v >= 0 ? "+" : ""}${v}`; }
-    if (t === "atkAdj")   { const v = eff.value ?? eff.intensity ?? 0; return `${tgt}攻击等级 ${v >= 0 ? "+" : ""}${v}`; }
-    if (t === "defAdj")   { const v = eff.value ?? eff.intensity ?? 0; return `${tgt}防御等级 ${v >= 0 ? "+" : ""}${v}`; }
+    if (t === "atkAdj")      { const v = eff.value ?? eff.intensity ?? 0; return `${tgt}攻击等级 ${v >= 0 ? "+" : ""}${v}`; }
+    if (t === "defAdj")      { const v = eff.value ?? eff.intensity ?? 0; return `${tgt}防御等级 ${v >= 0 ? "+" : ""}${v}`; }
+    if (t === "seismicBlast") return `对${tgt}触发震颤引爆 ×${eff.value ?? 1}`;
     return "";
   }
 
