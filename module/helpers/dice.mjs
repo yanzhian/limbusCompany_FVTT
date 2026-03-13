@@ -113,6 +113,11 @@ export class AttributeCheckDialog {
     const roll    = new Roll(formula);
     await roll.evaluate();
 
+    // DiceSoNice：播放所有硬币的 3D 翻转动画，等待完成后再显示聊天结果
+    if (game.dice3d) {
+      await game.dice3d.showForRoll(roll, game.user, true, null, false);
+    }
+
     // 统计每枚硬币结果
     let headCount   = 0;
     const coinResults = [];

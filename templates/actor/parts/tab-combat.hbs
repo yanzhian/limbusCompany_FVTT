@@ -126,24 +126,36 @@
 
     </div>{{!-- /ego-combat-section --}}
 
-    {{!-- 行动值区 --}}
-    <div class="combat-section ap-section">
+    {{!-- 行动值 / 先攻合并区 --}}
+    <div class="combat-section ap-initiative-section">
       <div class="combat-section-header">
-        <span class="combat-section-title">行动值</span>
+        <span class="combat-section-title">行动值 / 先攻</span>
         <button class="ap-reset-btn" title="恢复行动点至上限">重置</button>
         <button class="ap-clear-btn" title="清零所有行动点">清除</button>
+        <button class="roll-initiative-btn" title="骰掷先攻：1D6 + 敏捷">骰掷先攻</button>
       </div>
-      <div class="ap-coins-row">
-        {{#each apCoins}}
-          <div class="ap-coin {{#if active}}ap-coin-active{{else}}ap-coin-inactive{{/if}}"
-               data-index="{{index}}"
-               title="行动点 {{index}}">
-            <img src="{{#if active}}systems/limbusCompany_FVTT/assets/icons/Base_icon/硬币_正面.webp{{else}}systems/limbusCompany_FVTT/assets/icons/Base_icon/硬币_反面.webp{{/if}}"
-                 width="36" height="36" alt="AP">
-          </div>
-        {{/each}}
+      <div class="ap-initiative-row">
+        {{!-- AP 硬币 --}}
+        <div class="ap-coins-row">
+          {{#each apCoins}}
+            <div class="ap-coin {{#if active}}ap-coin-active{{else}}ap-coin-inactive{{/if}}"
+                 data-index="{{index}}"
+                 title="行动点 {{index}}">
+              <img src="{{#if active}}systems/limbusCompany_FVTT/assets/icons/Base_icon/硬币_正面.webp{{else}}systems/limbusCompany_FVTT/assets/icons/Base_icon/硬币_反面.webp{{/if}}"
+                   width="36" height="36" alt="AP">
+            </div>
+          {{/each}}
+        </div>
+        {{!-- 分隔 --}}
+        <div class="ap-initiative-sep"></div>
+        {{!-- 先攻速度范围 --}}
+        <div class="initiative-display-row">
+          <img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/Speed.webp"
+               class="initiative-speed-icon" alt="速度" width="16" height="16">
+          <span class="initiative-speed-range">{{speedDisplay.min}}–{{speedDisplay.max}}</span>
+        </div>
       </div>
-    </div>{{!-- /ap-section --}}
+    </div>{{!-- /ap-initiative-section --}}
 
     {{!-- 罪孽抗性区 --}}
     <div class="combat-section sin-resist-section">

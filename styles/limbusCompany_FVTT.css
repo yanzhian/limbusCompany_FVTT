@@ -3355,7 +3355,8 @@ body.game .limbuscompany.app img {
 .limbuscompany .combat-activate-btn,
 .limbuscompany .combat-clear-btn,
 .limbuscompany .ap-reset-btn,
-.limbuscompany .ap-clear-btn {
+.limbuscompany .ap-clear-btn,
+.limbuscompany .roll-initiative-btn {
   background: rgba(11,7,7,.6); border: 1px solid var(--border-gold);
   color: var(--text-sub); font-family: var(--font-main); font-size: .65rem;
   padding: 2px 8px; cursor: pointer; border-radius: 2px; transition: all .15s;
@@ -4682,4 +4683,275 @@ body.game .limbuscompany.app img {
 .dialog .dialog-button.clash,
 .dialog .dialog-button.perform {
   flex: 1;
+}
+
+/* ============================================================
+   §3-T  物品 / 技能 发送聊天框卡片 — limbus-item-chat-card
+   ============================================================ */
+
+.chat-message .message-content:has(.limbus-item-chat-card) {
+  padding: 0;
+}
+
+.limbus-item-chat-card {
+  background: linear-gradient(180deg, #1E1812 0%, #0F0C09 100%);
+  border: 1px solid #5A3A1A;
+  border-radius: 6px;
+  overflow: hidden;
+  font-family: var(--font-main);
+  color: var(--text-main);
+}
+
+/* ── 顶部 header ── */
+.limbus-item-chat-card .ic-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px 8px;
+}
+
+.limbus-item-chat-card .ic-actor-avatar {
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid #6B4520;
+  flex-shrink: 0;
+}
+
+.limbus-item-chat-card .ic-actor-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.limbus-item-chat-card .ic-title {
+  font-size: 20px;
+  font-weight: bold;
+  color: #E8C9A2;
+  line-height: 1.2;
+}
+
+.limbus-item-chat-card .ic-player {
+  font-size: 13px;
+  color: #E8CAA1;
+  opacity: 0.65;
+}
+
+/* ── 金色渐变分割线 ── */
+.limbus-item-chat-card .ic-gold-divider {
+  height: 1px;
+  background: linear-gradient(
+    to right,
+    transparent 0%,
+    #A07820 25%,
+    #E5BA25 50%,
+    #A07820 75%,
+    transparent 100%
+  );
+  margin: 0 0 8px;
+}
+
+/* ── 物品行（图标 + 信息） ── */
+.limbus-item-chat-card .ic-item-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 4px 12px 8px;
+}
+
+.limbus-item-chat-card .ic-item-icon {
+  width: 50px;
+  height: 50px;
+  object-fit: cover;
+  border-radius: 4px;
+  border: 1px solid #5A3A1A;
+  flex-shrink: 0;
+}
+
+.limbus-item-chat-card .ic-item-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  justify-content: center;
+  min-height: 50px;
+}
+
+.limbus-item-chat-card .ic-item-name {
+  font-size: 16px;
+  font-weight: bold;
+  color: #E8C9A2;
+  line-height: 1.2;
+}
+
+/* 物品类 meta（类型 · 分类） */
+.limbus-item-chat-card .ic-item-meta {
+  font-size: 16px;
+  font-weight: bold;
+  color: #EBBD68;
+  line-height: 1.2;
+}
+
+/* 技能类 meta（图标 + 骰数，横排对齐） */
+.limbus-item-chat-card .ic-item-meta.skill-meta {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.limbus-item-chat-card .ic-cat-icon {
+  width: 16px;
+  height: 16px;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+
+.limbus-item-chat-card .ic-dice {
+  font-size: 16px;
+  font-weight: bold;
+  color: #EBBD68;
+}
+
+/* ── 描述文本 ── */
+.limbus-item-chat-card .ic-desc {
+  padding: 0 12px 10px;
+  font-size: 13px;
+  color: #9A8462;
+  line-height: 1.6;
+}
+
+.limbus-item-chat-card .ic-desc p {
+  margin: 0 0 4px;
+}
+
+.limbus-item-chat-card .ic-desc p:last-child {
+  margin-bottom: 0;
+}
+
+/* ── 行动值/先攻合并区 ── */
+.limbuscompany .ap-initiative-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 0;
+  flex-wrap: wrap;
+}
+
+.limbuscompany .ap-initiative-sep {
+  width: 1px;
+  height: 36px;
+  background: linear-gradient(to bottom, transparent, #5A3A1A, transparent);
+  flex-shrink: 0;
+}
+
+/* ── 战斗 Tab 先攻区显示行 ── */
+.limbuscompany .initiative-display-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  font-size: .85rem;
+  color: #E8C9A2;
+}
+
+.limbuscompany .initiative-speed-icon {
+  flex-shrink: 0;
+}
+
+.limbuscompany .initiative-speed-range {
+  font-weight: bold;
+  color: #EBBD68;
+}
+
+/* ============================================================
+   §3-U  先攻骰掷聊天卡片 — limbus-initiative-card
+   ============================================================ */
+
+.chat-message .message-content:has(.limbus-initiative-card) {
+  padding: 0;
+}
+
+.limbus-initiative-card {
+  background: linear-gradient(180deg, #1A1E12 0%, #0C0F09 100%);
+  border: 1px solid #3A5A1A;
+  border-radius: 6px;
+  overflow: hidden;
+  font-family: var(--font-main);
+  color: var(--text-main);
+}
+
+.limbus-initiative-card .ic-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px 8px;
+}
+
+.limbus-initiative-card .ic-actor-avatar {
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid #3A5A1A;
+  flex-shrink: 0;
+}
+
+.limbus-initiative-card .ic-actor-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.limbus-initiative-card .ic-title {
+  font-size: 20px;
+  font-weight: bold;
+  color: #E8C9A2;
+  line-height: 1.2;
+}
+
+.limbus-initiative-card .ic-player {
+  font-size: 13px;
+  color: #E8CAA1;
+  opacity: 0.65;
+}
+
+.limbus-initiative-card .ic-gold-divider {
+  height: 1px;
+  background: linear-gradient(
+    to right,
+    transparent 0%,
+    #4A7820 25%,
+    #8ABB35 50%,
+    #4A7820 75%,
+    transparent 100%
+  );
+  margin: 0 0 8px;
+}
+
+/* 结果行：速度图标 + 范围 + 箭头 + 结果数字 */
+.limbus-initiative-card .initiative-result-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 14px 10px;
+}
+
+.limbus-initiative-card .initiative-speed-range {
+  font-size: 14px;
+  color: #9A9A6A;
+}
+
+.limbus-initiative-card .initiative-arrow {
+  font-size: 14px;
+  color: #6A7A4A;
+}
+
+.limbus-initiative-card .initiative-total {
+  font-size: 28px;
+  font-weight: bold;
+  color: #B0D860;
+  line-height: 1;
 }

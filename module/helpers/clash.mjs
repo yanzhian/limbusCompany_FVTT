@@ -592,6 +592,7 @@ export class ClashManager {
           attackerId:  actor.id,
           itemId:      item.id,
           rollTotal:   roll.total,
+          rollData:    roll.toJSON(),
           formula,
           itemName:    item.name,
           itemImg:     item.img,
@@ -852,6 +853,12 @@ export class ClashManager {
               const full     = bonus !== 0 ? `${formula}${bonus >= 0 ? "+" : ""}${bonus}` : formula;
               const roll     = new Roll(full);
               await roll.evaluate();
+              // DiceSoNice: A 先骰 → B 再骰，顺序播放动画
+              if (game.dice3d && initFlags.rollData) {
+                const atkRoll = Roll.fromJSON(JSON.stringify(initFlags.rollData));
+                await game.dice3d.showForRoll(atkRoll, game.user, true, null, false);
+                await game.dice3d.showForRoll(roll,    game.user, true, null, false);
+              }
               await ClashManager._sendResponseAndResolve(
                 defActor, defItem, roll, full, initMsgId, initFlags, slotIdx
               );
@@ -1398,6 +1405,11 @@ export class ClashManager {
 
     const atkActor  = game.actors.get(initFlags.attackerId);
     const defActor  = selActor;
+    // DiceSoNice: 承受时先播攻击方骰子动画
+    if (game.dice3d && initFlags.rollData) {
+      const atkRoll = Roll.fromJSON(JSON.stringify(initFlags.rollData));
+      await game.dice3d.showForRoll(atkRoll, game.user, true, null, false);
+    }
     const rollTotal = initFlags.rollTotal ?? 0;
     const category  = initFlags.category ?? "";
     const sinType   = initFlags.sinType  ?? "";

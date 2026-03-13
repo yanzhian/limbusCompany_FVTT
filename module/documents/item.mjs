@@ -437,25 +437,75 @@ export class LimbusItem extends Item {
    * 将物品信息发送到聊天框
    */
   async sendToChat() {
-    const sys = this.system;
+    const sys  = this.system;
+    const actor = this.actor;
 
-    let content = `<div class="limbuscompany chat-clash">
-      <div class="clash-header">${this.name}</div>`;
+    // ── 头像 & 玩家名 ──────────────────────────────────────────────────
+    const actorImg   = actor?.img ?? "icons/svg/mystery-man.svg";
+    const actorName  = actor?.name ?? this.name;
+    const ownerUser  = actor
+      ? game.users?.find(u => !u.isGM && u.character?.id === actor.id)
+      : null;
+    const playerName = ownerUser?.name ?? game.user?.name ?? actorName;
 
+    // ── 分割线 ─────────────────────────────────────────────────────────
+    const divider = `<div class="ic-gold-divider"></div>`;
+
+    // ── 技能 meta（类型图标 + 骰数）──────────────────────────────────
+    let metaHtml = "";
     if (this.type === "skill") {
-      content += `
-        <div>类型：${sys.type === "ego" ? "EGO技能" : sys.type === "defense" ? "守备技能" : "基础技能"}</div>
-        <div>公式：${this.getDiceFormula()}</div>`;
-      if (sys.effectDesc) content += `<div>${sys.effectDesc}</div>`;
-    } else if (this.type === "equipment") {
-      content += `
-        <div>子类型：${sys.subtype}</div>`;
-      if (sys.effect) content += `<div>${sys.effect}</div>`;
+      const iconPaths = CONFIG.LIMBUSCOMPANY?.CATEGORY_ICON_PATHS ?? {};
+      const catIcon   = iconPaths[sys.category] ?? "";
+      const formula   = this.getDiceFormula();
+      const catImgTag = catIcon
+        ? `<img class="ic-cat-icon" src="${catIcon}" alt="${sys.category}" width="16" height="16">`
+        : "";
+      metaHtml = `<div class="ic-item-meta skill-meta">${catImgTag}<span class="ic-dice">${formula}</span></div>`;
+    } else {
+      // 物品类：type label + category
+      const typeLabels = { equipment:"装备", consumable:"消耗品", material:"材料", container:"容器" };
+      const typeLabel  = typeLabels[this.type] ?? this.type;
+      const catLabel   = sys.category ? ` · ${sys.category}` : "";
+      metaHtml = `<div class="ic-item-meta">${typeLabel}${catLabel}</div>`;
     }
 
-    content += `<div class="text-sub text-xs">☆ ${this.getStellarCost()} 星芒</div></div>`;
+    // ── 描述文本 ───────────────────────────────────────────────────────
+    const descHtml = (() => {
+      const raw =
+        (this.type === "skill"      ? sys.effectDesc : null) ??
+        (this.type === "equipment"  ? sys.effect     : null) ??
+        (this.type === "consumable" ? sys.effect      : null) ??
+        (this.type === "material"   ? sys.description : null) ??
+        "";
+      if (!raw) return "";
+      return `<div class="ic-desc">${raw}</div>`;
+    })();
 
-    return ChatMessage.create({ content, speaker: ChatMessage.getSpeaker() });
+    const content = `
+      <div class="limbus-item-chat-card">
+        <div class="ic-header">
+          <img class="ic-actor-avatar" src="${actorImg}" alt="${actorName}">
+          <div class="ic-actor-info">
+            <div class="ic-title">发送聊天框</div>
+            <div class="ic-player">${playerName}</div>
+          </div>
+        </div>
+        ${divider}
+        <div class="ic-item-row">
+          <img class="ic-item-icon" src="${this.img}" alt="${this.name}">
+          <div class="ic-item-info">
+            <div class="ic-item-name">${this.name}</div>
+            ${metaHtml}
+          </div>
+        </div>
+        ${descHtml}
+        ${divider}
+      </div>`;
+
+    return ChatMessage.create({
+      content,
+      speaker: ChatMessage.getSpeaker({ actor }),
+    });
   }
 
   // ─── 辅助：判断此技能是否为侵蚀形态 ──────────────────────────────────

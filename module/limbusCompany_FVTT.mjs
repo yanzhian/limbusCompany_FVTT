@@ -22,6 +22,23 @@ import { LimbusActorSheet } from "./sheets/actor-sheet.mjs";
 import { LimbusItemSheet }  from "./sheets/item-sheet.mjs";
 import { ClashManager }     from "./helpers/clash.mjs";
 
+/* ─── DiceSoNice 硬币外观注册（d2：1=反面 / 2=正面） ─────────────────────── */
+
+Hooks.once("diceSoNiceReady", (dice3d) => {
+  dice3d.addSystem(
+    { id: "limbusCompany_FVTT", name: "边狱公司" },
+    "preferred"
+  );
+  dice3d.addDicePreset({
+    type: "d2",
+    labels: [
+      "systems/limbusCompany_FVTT/assets/icons/Base_icon/硬币_反面.webp", // face 1
+      "systems/limbusCompany_FVTT/assets/icons/Base_icon/硬币_正面.webp", // face 2
+    ],
+    system: "limbusCompany_FVTT",
+  });
+});
+
 /* ─── Hooks.once("init") ─────────────────────────────────────────────────── */
 
 /* ─── 全局静默 Foundry v13 聊天清理竞态错误 ──────────────────────────────── */
@@ -51,6 +68,10 @@ Hooks.once("init", () => {
 
   // 将常量挂载到全局 CONFIG
   CONFIG.LIMBUSCOMPANY = LIMBUSCOMPANY;
+
+  // 先攻公式：1D6 + 敏捷（战斗跟踪器默认骰掷使用）
+  CONFIG.Combat.initiative.formula = "1d6 + @attributes.agi";
+  CONFIG.Combat.initiative.decimals = 0;
 
   // ── 注册文档类 ─────────────────────────────────────────────────────────
   CONFIG.Actor.documentClass = LimbusActor;
@@ -335,6 +356,16 @@ Hooks.on("updateCombat", async (combat, changed) => {
       if (!eqItem) continue;
       await ClashManager._applyActivities(eqItem, "回合结束时", { ...roundCtx, _fireCounts: {} });
       await ClashManager._applyActivities(eqItem, "回合开始时", { ...roundCtx, _fireCounts: {} });
+    }
+  }
+
+  // ── 每轮开始时重新骰掷所有角色先攻 ─────────────────────────────────────
+  // 第 0 → 1 轮跳过（战斗开始时已由 combatStart 钩子处理），之后每轮重掷
+  if ((changed.round ?? 0) > 1) {
+    for (const combatant of combat.combatants) {
+      const actor = combatant.actor;
+      if (!actor || actor.type !== "character") continue;
+      await actor.rollSpeedInitiative();
     }
   }
 });
