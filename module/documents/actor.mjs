@@ -874,11 +874,6 @@ export class LimbusActor extends Actor {
     const roll     = new Roll("1d6 + @mod", { mod: modifier });
     await roll.evaluate();
 
-    // DiceSoNice 动画
-    if (game.dice3d) {
-      await game.dice3d.showForRoll(roll, game.user, true, null, false);
-    }
-
     // 更新战斗跟踪器先攻值
     const combat = game.combat;
     if (combat) {

@@ -4830,6 +4830,22 @@ body.game .limbuscompany.app img {
   margin-bottom: 0;
 }
 
+/* ── 行动值/先攻合并区 ── */
+.limbuscompany .ap-initiative-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 0;
+  flex-wrap: wrap;
+}
+
+.limbuscompany .ap-initiative-sep {
+  width: 1px;
+  height: 36px;
+  background: linear-gradient(to bottom, transparent, #5A3A1A, transparent);
+  flex-shrink: 0;
+}
+
 /* ── 战斗 Tab 先攻区显示行 ── */
 .limbuscompany .initiative-display-row {
   display: flex;
