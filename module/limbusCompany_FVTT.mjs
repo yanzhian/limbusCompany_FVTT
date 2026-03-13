@@ -24,6 +24,18 @@ import { ClashManager }     from "./helpers/clash.mjs";
 
 /* ─── Hooks.once("init") ─────────────────────────────────────────────────── */
 
+/* ─── 全局捕获 Foundry v13 聊天清理竞态错误 ──────────────────────────────── */
+// Foundry v13 在 ChatMessage.create 后会 fire-and-forget 一个内部清理 Promise，
+// 当多条消息并发创建时该 Promise 可能因"消息已被删除"而 reject，
+// 且该 rejection 不经过调用方 await 链，无法用 try-catch 捕获。
+// 此处注册全局监听器静默拦截，避免红色报错污染控制台。
+window.addEventListener("unhandledrejection", (event) => {
+  const msg = event?.reason?.message ?? "";
+  if (msg.includes("does not exist") && msg.match(/ChatMessage\s+"[A-Za-z0-9]+"/)) {
+    event.preventDefault();
+  }
+});
+
 Hooks.once("init", () => {
   console.log("limbusCompany_FVTT | 初始化系统…");
 
