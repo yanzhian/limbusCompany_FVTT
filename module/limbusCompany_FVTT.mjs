@@ -22,6 +22,23 @@ import { LimbusActorSheet } from "./sheets/actor-sheet.mjs";
 import { LimbusItemSheet }  from "./sheets/item-sheet.mjs";
 import { ClashManager }     from "./helpers/clash.mjs";
 
+/* ─── DiceSoNice 硬币外观注册（d2：1=反面 / 2=正面） ─────────────────────── */
+
+Hooks.once("diceSoNiceReady", (dice3d) => {
+  dice3d.addSystem(
+    { id: "limbusCompany_FVTT", name: "边狱公司" },
+    "preferred"
+  );
+  dice3d.addDicePreset({
+    type: "d2",
+    labels: [
+      "systems/limbusCompany_FVTT/assets/icons/Base_icon/硬币_反面.webp", // face 1
+      "systems/limbusCompany_FVTT/assets/icons/Base_icon/硬币_正面.webp", // face 2
+    ],
+    system: "limbusCompany_FVTT",
+  });
+});
+
 /* ─── Hooks.once("init") ─────────────────────────────────────────────────── */
 
 /* ─── 全局静默 Foundry v13 聊天清理竞态错误 ──────────────────────────────── */
