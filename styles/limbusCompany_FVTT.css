@@ -4040,6 +4040,14 @@ body.game .limbuscompany.app img {
   flex-wrap: wrap;
 }
 
+.limbus-title-card-equip .tce-tags .tc-skill-tag {
+  background: #3B2412;
+  color: #956437;
+  font-size: 11px;
+  padding: 1px 5px;
+  border-radius: 2px;
+}
+
 /* Link direction grid */
 .limbus-title-card-equip .tc-link-dir-group {
   flex-shrink: 0;
@@ -4198,8 +4206,9 @@ body.game .limbuscompany.app img {
   flex-shrink: 0;
 }
 
-.limbus-title-card-skill .tc-starlight-icon {
-  width: 18px; height: 18px;
+.limbus-title-card-skill .tc-starlight-icon,
+.limbus-title-card-equip .tc-starlight-icon {
+  width: 16px; height: 16px;
 }
 
 .limbus-title-card-skill .tc-stellar-cost {

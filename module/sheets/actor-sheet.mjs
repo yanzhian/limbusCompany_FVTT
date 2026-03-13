@@ -1647,11 +1647,6 @@ export class LimbusActorSheet extends ActorSheet {
       }
     }
 
-    const tagList = (Array.isArray(sys.tags) ? sys.tags : String(sys.tags ?? "").split("/"))
-      .map((t) => String(t).trim())
-      .filter(Boolean)
-      .join("/");
-
     const tags = (Array.isArray(sys.tags) ? sys.tags : String(sys.tags ?? "").split("/"))
       .map(t => String(t).trim()).filter(Boolean);
     const tagsHtml    = tags.map(t => `<span class="tc-skill-tag">${t}</span>`).join("");
