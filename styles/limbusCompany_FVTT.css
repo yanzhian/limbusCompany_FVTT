@@ -3057,8 +3057,10 @@ body.game .limbuscompany.app img {
 .limbuscompany .item-row:hover,
 .limbuscompany .skill-row:hover { background: rgba(95,62,33,.2); }
 
-.limbuscompany .item-row.item-row-equipped { background: #3B2412; }
-.limbuscompany .item-row.item-row-equipped:hover { background: #5F3E22; }
+.limbuscompany .item-row.item-row-equipped { background: #3B2412; border: 1px solid #C8860A; border-radius: 3px; }
+.limbuscompany .item-row.item-row-equipped:hover { background: #5F3E22; border-color: #E8A020; }
+.limbuscompany .item-row.skill-row-equipped { background: #1A2C1A; border: 1px solid #4CAF50; border-radius: 3px; }
+.limbuscompany .item-row.skill-row-equipped:hover { background: #243824; border-color: #6FD073; }
 
 
 /* 图标列：32px */

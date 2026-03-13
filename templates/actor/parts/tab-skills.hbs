@@ -134,7 +134,7 @@
         </div>
         <ul class="group-body item-list">
           {{#each items}}
-            <li class="skill-row item-row"
+            <li class="skill-row item-row {{#if isEquipped}}skill-row-equipped{{/if}}"
                 data-item-id="{{_id}}"
                 data-item-name="{{name}}"
                 data-type="{{system.type}}"
