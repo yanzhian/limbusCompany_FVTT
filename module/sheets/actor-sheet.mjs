@@ -510,7 +510,7 @@ export class LimbusActorSheet extends ActorSheet {
     html.find(".combat-skill-related-toggle").on("click", this._onRelatedSkillToggle.bind(this));
 
     // ── 战斗技能槽悬浮 Title 卡（事件委托，兼容动态写入的 data-item-id）────
-    html.find(".tab[data-tab='combat']")
+    html.find(".tab[data-tab='战斗']")
       .on("mouseenter", ".combat-skill-slot[data-item-id]", (ev) => this._onCombatSlotHover(ev))
       .on("mouseleave", ".combat-skill-slot[data-item-id]", ()   => this._onItemHoverEnd());
   }
