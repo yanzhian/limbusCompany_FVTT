@@ -364,6 +364,17 @@ export class LimbusActorSheet extends ActorSheet {
     return total;
   }
 
+  /** 读取 footer-stellar-val 判断剩余星芒是否能负担 item 的费用 */
+  _checkStellarBudget(item) {
+    const remaining = parseInt(this.element?.find(".footer-stellar-val").text()) || 0;
+    const cost = item.getStellarCost?.() ?? 0;
+    if (cost > remaining) {
+      ui.notifications.warn(`星芒不足：需要 ${cost}，当前剩余 ${remaining}`);
+      return false;
+    }
+    return true;
+  }
+
   _isItemGridEquipped(itemId) {
     const sys = this.actor.system;
     return Object.values(sys.equipment ?? {}).includes(itemId);
@@ -611,6 +622,7 @@ export class LimbusActorSheet extends ActorSheet {
       }
 
       // 常规拖入：按装备逻辑处理（含星芒消耗）
+      if (!this._checkStellarBudget(owned)) return;
       await this.actor.equipToGrid(owned.id, slotIdx);
       return;
     }
@@ -641,28 +653,27 @@ export class LimbusActorSheet extends ActorSheet {
         const owned      = ownedItem ?? await this._importItemToActor(item);
         const targetSlot = parseInt(skillSlotWrap.data("slotIndex") ?? "0");
         const fromSlot   = parseInt(data.fromSkillSlot ?? "-1");
-        if (owned) await this.actor.equipSkillToSlot(owned.id, targetSlot, isNaN(fromSlot) ? -1 : fromSlot);
+        if (owned && this._checkStellarBudget(owned)) await this.actor.equipSkillToSlot(owned.id, targetSlot, isNaN(fromSlot) ? -1 : fromSlot);
       }
       // ── EGO / 守备：按类型自动匹配槽位 ──────────────────────────────
       else {
         const owned = ownedItem ?? await this._importItemToActor(item);
-        if (owned) await this.actor.equipSkill(owned.id);
+        if (owned && this._checkStellarBudget(owned)) await this.actor.equipSkill(owned.id);
       }
       return;
     }
 
-    // ── 拖入技能列表（.skill-list-panel）：从外部导入并自动装备 ─────────────
+    // ── 拖入技能列表（.skill-list-panel）：从外部导入，不自动装备 ─────────────
     const droppedIntoSkillList = $target.closest(".skill-list-panel").length > 0;
     if (droppedIntoSkillList) {
       if (item.type !== "skill") {
         ui.notifications.warn("只有技能才能拖入技能列表。");
         return;
       }
-      // 来自已装备槽位的拖拽，忽略（不重复装备）
+      // 来自已装备槽位的拖拽，忽略
       if (data.fromSkillSlotType) return;
-      // 导入（若尚未在 actor 中），然后装备（内部做星芒检查）
-      const owned = ownedItem ?? await this._importItemToActor(item);
-      if (owned) await this.actor.equipSkill(owned.id);
+      // 已在角色中则不重复导入
+      if (!ownedItem) await this._importItemToActor(item);
       return;
     }
 
