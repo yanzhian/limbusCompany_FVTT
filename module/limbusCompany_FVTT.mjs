@@ -102,6 +102,16 @@ Hooks.once("setup", () => {
 
 Hooks.once("ready", () => {
   console.log("limbusCompany_FVTT | 系统已就绪。");
+
+  // ── 过滤 ui.notifications 弹出的聊天清理竞态红色警告 ──────────────────
+  // ui.notifications 在 ready 之后才可用，因此在此处 patch
+  const _RE_NOTIFY = /ChatMessage\s+"[A-Za-z0-9]+" does not exist!/;
+  const _origNotifyError = ui.notifications.error.bind(ui.notifications);
+  ui.notifications.error = (msg, ...rest) => {
+    if (typeof msg === "string" && _RE_NOTIFY.test(msg)) return;
+    return _origNotifyError(msg, ...rest);
+  };
+
   _installTokenDoubleClickOpenActorSheet();
   // 某些加载时序下 ready 阶段 Token 原型尚未就绪，做一次延迟补丁兜底
   setTimeout(() => _installTokenDoubleClickOpenActorSheet(), 200);
