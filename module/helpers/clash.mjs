@@ -301,17 +301,54 @@ export class ClashManager {
 
     if (msgs.length === 0) return;
 
-    await ChatMessage.create({
+    // 若 ctx 提供了共享收集桶，则延迟汇总（避免一次对抗产生多条 ChatMessage 触发 Foundry 清理竞态）
+    if (Array.isArray(ctx._actMsgs)) {
+      ctx._actMsgs.push({ trigger, itemName: item?.name ?? "", ownerName: owner?.name ?? "", msgs });
+      return;
+    }
+
+    // 无收集桶时立即发（兼容 [使用时] 等独立触发场景）
+    await ClashManager._safeChatCreate({
       speaker: ChatMessage.getSpeaker({ actor: owner }),
-      content: `
-        <div class="limbus-clash-card" style="font-size:.8rem;line-height:1.7;">
-          <div style="font-size:.9rem;font-weight:bold;color:#C9A84C;margin-bottom:4px;">
-            ⚡ [${trigger}] ${item?.name ?? ""}
-          </div>
-          ${ClashManager._goldDivider()}
-          ${msgs.map(m => `<div style="color:#E8C9A2;">${m}</div>`).join("")}
-        </div>`,
+      content: ClashManager._buildActMsgContent([{ trigger, itemName: item?.name ?? "", msgs }]),
     });
+  }
+
+  /**
+   * 将收集桶中的活动消息一次性发出（一次对抗只发一条汇总 ChatMessage）。
+   * @param {object[]} actMsgs  ctx._actMsgs 数组
+   * @param {Actor}    speaker  消息发言人（通常为攻击方）
+   */
+  static async _flushActMsgs(actMsgs, speaker) {
+    if (!actMsgs?.length) return;
+    await ClashManager._safeChatCreate({
+      speaker: ChatMessage.getSpeaker({ actor: speaker }),
+      content: ClashManager._buildActMsgContent(actMsgs),
+    });
+  }
+
+  /** 构建活动效果汇总消息的 HTML 内容。 */
+  static _buildActMsgContent(entries) {
+    const rows = entries.map(({ trigger, itemName, msgs }) => `
+      <div style="margin-bottom:4px;">
+        <span style="font-weight:bold;color:#C9A84C;">⚡ [${trigger}] ${itemName}</span>
+        ${msgs.map(m => `<div style="color:#E8C9A2;padding-left:8px;">${m}</div>`).join("")}
+      </div>`).join(ClashManager._goldDivider());
+    return `<div class="limbus-clash-card" style="font-size:.8rem;line-height:1.7;">${rows}</div>`;
+  }
+
+  /**
+   * 包装 ChatMessage.create()，捕获 Foundry v13 自动清理竞态产生的"does not exist"错误，
+   * 避免 Uncaught (in promise) 污染控制台。
+   */
+  static async _safeChatCreate(data) {
+    try {
+      return await ChatMessage.create(data);
+    } catch (err) {
+      // 忽略 Foundry 内部消息清理竞态错误（"ChatMessage X does not exist!"）
+      if (err?.message?.includes("does not exist")) return null;
+      throw err;
+    }
   }
 
   /**
@@ -341,7 +378,7 @@ export class ClashManager {
     await ClashManager._reduceBuffStacks(actor, "bleed");
     if (actor.checkAndTriggerChaos) await actor.checkAndTriggerChaos(newHp, oldHp, { silent: true });
 
-    await ChatMessage.create({
+    await ClashManager._safeChatCreate({
       speaker: ChatMessage.getSpeaker({ actor }),
       content: `<div class="limbuscompany chat-clash">
         <strong>${actor.name}</strong>【流血】发作：受到 <strong>${dmg}</strong> 点固定伤害。
@@ -498,7 +535,7 @@ export class ClashManager {
         ${effectDesc ? `<div style="font-size:.8rem;color:#9A8462;line-height:1.5;">${effectDesc}</div>` : ""}
       </div>`;
 // border:1px solid #C9A84C;
-    const msg = await ChatMessage.create({
+    const msg = await ClashManager._safeChatCreate({
       speaker: ChatMessage.getSpeaker({ actor }),
       content,
       flags: {
@@ -521,9 +558,10 @@ export class ClashManager {
     // 流血：发起者执行攻击动作时触发
     await ClashManager._processBleed(actor);
 
-    // ── [使用时] Activity 触发 ──────────────────────────────────────────
+    // ── [使用时] Activity 触发（单独触发，直接发消息）──────────────────
     await ClashManager._applyActivities(item, "使用时", {
       owner: actor, atkActor: actor, defActor: null, _fireCounts: {},
+      // 无 _actMsgs：使用时独立场景，立即发出
     });
 
     // 推进战斗槽 + 扣 AP（若从战斗槽触发）
@@ -802,7 +840,7 @@ export class ClashManager {
         ${effectDesc ? `<div style="font-size:.8rem;color:#9A8462;line-height:1.5;">${effectDesc}</div>` : ""}
       </div>`;
 
-    await ChatMessage.create({
+    await ClashManager._safeChatCreate({
       speaker: ChatMessage.getSpeaker({ actor: defActor }),
       content: responseContent,
       flags: {
@@ -840,9 +878,11 @@ export class ClashManager {
     // 攻击方技能物品（用于 activity 触发）
     const atkItem = atkActor?.items?.get(initFlags.itemId) ?? null;
     // 共享的 perTurn 计数器（攻守双方共用，本次对抗内全程共享）
-    const _fc = {};
-    const atkCtx = { atkActor, defActor, owner: atkActor, other: defActor, _fireCounts: _fc };
-    const defCtx = { atkActor, defActor, owner: defActor, other: atkActor, _fireCounts: _fc };
+    // _actMsgs：汇总本次对抗所有 activity 消息，结束时统一发一条，避免并发 create 导致 Foundry 清理竞态
+    const _fc      = {};
+    const _actMsgs = [];
+    const atkCtx = { atkActor, defActor, owner: atkActor, other: defActor, _fireCounts: _fc, _actMsgs };
+    const defCtx = { atkActor, defActor, owner: defActor, other: atkActor, _fireCounts: _fc, _actMsgs };
 
     // ── [攻击前]：玩家B点击【对抗】后，拼点/结算前触发 ──────────────────
     await ClashManager._applyActivities(atkItem, "攻击前", atkCtx);
@@ -919,6 +959,9 @@ export class ClashManager {
     // ── [攻击后]：结算完对抗结果后触发 ────────────────────────────────
     await ClashManager._applyActivities(atkItem, "攻击后", atkCtx);
     await ClashManager._applyActivities(defItem,  "攻击后", defCtx);
+
+    // 统一发出本次对抗所有 activity 通知（汇总为一条，避免并发清理竞态）
+    await ClashManager._flushActMsgs(_actMsgs, atkActor);
   }
 
   /* ─── 阶段五b：拼点结算逻辑 ────────────────────────────────────────────── */
@@ -1201,7 +1244,7 @@ export class ClashManager {
         ${takeSection}
       </div>`;
 
-    await ChatMessage.create({
+    await ClashManager._safeChatCreate({
       speaker: ChatMessage.getSpeaker({ actor: atkActor }),
       content,
       flags: {
@@ -1378,10 +1421,11 @@ export class ClashManager {
     const baseActor = game.actors.get(selActor.id) ?? selActor;
 
     // ── Activity 触发（承受路径） ─────────────────────────────────────────
-    const atkItem2 = atkActor?.items?.get(initFlags.itemId) ?? null;
-    const _fc2 = {};
-    const atkCtx2 = { atkActor, defActor: baseActor, owner: atkActor, other: baseActor, _fireCounts: _fc2 };
-    const defCtx2 = { atkActor, defActor: baseActor, owner: baseActor, other: atkActor, _fireCounts: _fc2 };
+    const atkItem2  = atkActor?.items?.get(initFlags.itemId) ?? null;
+    const _fc2      = {};
+    const _actMsgs2 = [];   // 汇总收集桶，避免并发 ChatMessage.create 触发 Foundry 清理竞态
+    const atkCtx2 = { atkActor, defActor: baseActor, owner: atkActor, other: baseActor, _fireCounts: _fc2, _actMsgs: _actMsgs2 };
+    const defCtx2 = { atkActor, defActor: baseActor, owner: baseActor, other: atkActor, _fireCounts: _fc2, _actMsgs: _actMsgs2 };
 
     // [攻击前] [攻击时]：承受时结算伤害前触发
     await ClashManager._applyActivities(atkItem2, "攻击前", atkCtx2);
@@ -1407,6 +1451,9 @@ export class ClashManager {
 
     // [攻击后]：结算完毕
     await ClashManager._applyActivities(atkItem2, "攻击后", atkCtx2);
+
+    // 统一发出本次承受所有 activity 通知
+    await ClashManager._flushActMsgs(_actMsgs2, atkActor);
 
     // 若选中的是非 linked token actor，额外同步该 token 的 HP
     if (selActor !== baseActor && selActor.isToken) {
@@ -1562,7 +1609,7 @@ export class ClashManager {
         </div>
       </div>`;
 
-    await ChatMessage.create({
+    await ClashManager._safeChatCreate({
       speaker: ChatMessage.getSpeaker({ actor }),
       content,
       flags: { limbusCompany_FVTT: { type: "clash-take" } },
@@ -1708,7 +1755,7 @@ export class ClashManager {
         </div>
       </div>`;
 
-    await ChatMessage.create({
+    await ClashManager._safeChatCreate({
       speaker: ChatMessage.getSpeaker({ actor: defActor }),
       content,
       flags: {
@@ -1844,7 +1891,7 @@ export class ClashManager {
              </div>`}
       </div>`;
 
-    await ChatMessage.create({
+    await ClashManager._safeChatCreate({
       speaker: ChatMessage.getSpeaker({ actor: defActor }),
       content,
       flags: {
