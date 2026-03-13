@@ -115,6 +115,19 @@ export class ClashManager {
   }
 
   /** 将 BUFF 类型键转换为中文显示名称。 */
+  /** 返回 actor 装备格中所有已装入的物品（slot0–slot8）。 */
+  static _getEquippedItems(actor) {
+    if (!actor) return [];
+    const eq = actor.system?.equipment ?? {};
+    const items = [];
+    for (let i = 0; i < 9; i++) {
+      const id   = eq[`slot${i}`];
+      const item = id ? actor.items.get(id) : null;
+      if (item) items.push(item);
+    }
+    return items;
+  }
+
   static _buffLabel(type) {
     const labels = {
       strong:"强壮", weak:"虚弱", endure:"忍耐", breach:"破绽",
@@ -599,7 +612,9 @@ export class ClashManager {
       // 无 _actMsgs：使用时独立场景，立即发出
     });
 
-    // 推进战斗槽 + 扣 AP（若从战斗槽触发）
+    // 推进战斗槽 + 扣 AP
+    // slotIndex >= 0：从战斗槽触发，推进 6-bag + 扣 AP（延迟动画后）
+    // slotIndex === -2：从技能列表/右键触发，只扣 AP，不推进 bag
     if (slotIndex >= 0) {
       const sheet = actor.sheet;
       if (sheet?._combatBagState) {
@@ -609,6 +624,9 @@ export class ClashManager {
           if (ap > 0) await actor.update({ "system.ap.value": ap - 1 });
         }, 700);
       }
+    } else if (slotIndex === -2) {
+      const ap = actor.system.ap?.value ?? 0;
+      if (ap > 0) await actor.update({ "system.ap.value": ap - 1 });
     }
   }
 
@@ -973,8 +991,11 @@ export class ClashManager {
           if (breatheCrit) {
             await ClashManager._applyActivities(atkItem, "暴击命中时", atkCtx);
           }
-          // 防守方受到伤害
+          // 防守方受到伤害（技能 + 装备格物品）
           await ClashManager._applyActivities(defItem, "受到伤害时", defCtx);
+          for (const eq of ClashManager._getEquippedItems(defActor)) {
+            await ClashManager._applyActivities(eq, "受到伤害时", defCtx);
+          }
         }
       } else {
         // 防守方拼点胜（攻击方落败）
@@ -983,8 +1004,11 @@ export class ClashManager {
         // clashCounter：防守方反击命中攻击方
         if (defCategory === "clashCounter") {
           await ClashManager._applyActivities(defItem, "命中时", defCtx);
-          // 攻击方受到反击伤害
+          // 攻击方受到反击伤害（技能 + 装备格物品）
           await ClashManager._applyActivities(atkItem, "受到伤害时", atkCtx);
+          for (const eq of ClashManager._getEquippedItems(atkActor)) {
+            await ClashManager._applyActivities(eq, "受到伤害时", atkCtx);
+          }
         }
       }
     }
@@ -1479,8 +1503,11 @@ export class ClashManager {
       }
     }
 
-    // [受到伤害时]：承受方受伤
+    // [受到伤害时]：承受方受伤（技能 + 装备格物品）
     await ClashManager._applyActivities(atkItem2, "受到伤害时", defCtx2);
+    for (const eq of ClashManager._getEquippedItems(baseActor)) {
+      await ClashManager._applyActivities(eq, "受到伤害时", defCtx2);
+    }
 
     await ClashManager._applyAndSendTake(baseActor, finalDamage, { calcNotes });
 

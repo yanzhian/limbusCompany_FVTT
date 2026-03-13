@@ -43,7 +43,7 @@ export class LimbusActorSheet extends ActorSheet {
       width:    880,
       height:   810,
       tabs:     [{ navSelector: ".sheet-tabs", contentSelector: ".sheet-body", initial: "items" }],
-      dragDrop: [{ dragSelector: ".equip-slot[data-item-id], .skill-slot-wrap[data-item-id], .item-row .item-icon, .skill-row .item-icon", dropSelector: ".equip-grid, .item-list-panel, .basic-skill-slots, .ego-skill-grid, .defense-skill-slot" }],
+      dragDrop: [{ dragSelector: ".equip-slot[data-item-id], .skill-slot-wrap[data-item-id], .item-row .item-icon, .skill-row .item-icon", dropSelector: ".equip-grid, .item-list-panel, .skill-list-panel, .basic-skill-slots, .ego-skill-grid, .defense-skill-slot" }],
       scrollY:  [".item-list-panel", ".skill-list-panel", ".buff-list"],
     });
   }
@@ -364,6 +364,17 @@ export class LimbusActorSheet extends ActorSheet {
     return total;
   }
 
+  /** 读取 footer-stellar-val 判断剩余星芒是否能负担 item 的费用 */
+  _checkStellarBudget(item) {
+    const remaining = parseInt(this.element?.find(".footer-stellar-val").text()) || 0;
+    const cost = item.getStellarCost?.() ?? 0;
+    if (cost > remaining) {
+      ui.notifications.warn(`星芒不足：需要 ${cost}，当前剩余 ${remaining}`);
+      return false;
+    }
+    return true;
+  }
+
   _isItemGridEquipped(itemId) {
     const sys = this.actor.system;
     return Object.values(sys.equipment ?? {}).includes(itemId);
@@ -508,6 +519,11 @@ export class LimbusActorSheet extends ActorSheet {
     html.find(".ego-combat-section .combat-skill-slot[data-item-id], .combat-defense-slot[data-item-id]")
       .on("click", this._onEgoSkillClick.bind(this));
     html.find(".combat-skill-related-toggle").on("click", this._onRelatedSkillToggle.bind(this));
+
+    // ── 战斗技能槽悬浮 Title 卡（事件委托，兼容动态写入的 data-item-id）────
+    html.find(".tab[data-tab='战斗']")
+      .on("mouseenter", ".combat-skill-slot[data-item-id]", (ev) => this._onCombatSlotHover(ev))
+      .on("mouseleave", ".combat-skill-slot[data-item-id]", ()   => this._onItemHoverEnd());
   }
 
   /* ─── 拖放处理 ──────────────────────────────────────────────────────────── */
@@ -606,6 +622,7 @@ export class LimbusActorSheet extends ActorSheet {
       }
 
       // 常规拖入：按装备逻辑处理（含星芒消耗）
+      if (!this._checkStellarBudget(owned)) return;
       await this.actor.equipToGrid(owned.id, slotIdx);
       return;
     }
@@ -636,13 +653,27 @@ export class LimbusActorSheet extends ActorSheet {
         const owned      = ownedItem ?? await this._importItemToActor(item);
         const targetSlot = parseInt(skillSlotWrap.data("slotIndex") ?? "0");
         const fromSlot   = parseInt(data.fromSkillSlot ?? "-1");
-        if (owned) await this.actor.equipSkillToSlot(owned.id, targetSlot, isNaN(fromSlot) ? -1 : fromSlot);
+        if (owned && this._checkStellarBudget(owned)) await this.actor.equipSkillToSlot(owned.id, targetSlot, isNaN(fromSlot) ? -1 : fromSlot);
       }
       // ── EGO / 守备：按类型自动匹配槽位 ──────────────────────────────
       else {
         const owned = ownedItem ?? await this._importItemToActor(item);
-        if (owned) await this.actor.equipSkill(owned.id);
+        if (owned && this._checkStellarBudget(owned)) await this.actor.equipSkill(owned.id);
       }
+      return;
+    }
+
+    // ── 拖入技能列表（.skill-list-panel）：从外部导入，不自动装备 ─────────────
+    const droppedIntoSkillList = $target.closest(".skill-list-panel").length > 0;
+    if (droppedIntoSkillList) {
+      if (item.type !== "skill") {
+        ui.notifications.warn("只有技能才能拖入技能列表。");
+        return;
+      }
+      // 来自已装备槽位的拖拽，忽略
+      if (data.fromSkillSlotType) return;
+      // 已在角色中则不重复导入
+      if (!ownedItem) await this._importItemToActor(item);
       return;
     }
 
@@ -792,8 +823,13 @@ export class LimbusActorSheet extends ActorSheet {
     const item   = this.actor.items.get(itemId);
     if (!item) return;
 
-    // 显示发起对抗弹窗
-    await this._showClashDialog(item);
+    // 与战斗 Tab 同步：AP 不足时拦截
+    if ((this.actor.system.ap?.value ?? 0) <= 0) {
+      ui.notifications?.warn("行动值不足，无法发起对抗");
+      return;
+    }
+    // slotIndex = -2：扣 AP 但不推进 6-bag（非战斗槽触发）
+    await this._showClashDialog(item, -2);
   }
 
   async _showClashDialog(item, slotIndex = -1) {
@@ -804,9 +840,22 @@ export class LimbusActorSheet extends ActorSheet {
     const itemId = event.currentTarget.closest("[data-item-id]")?.dataset.itemId;
     const item   = this.actor.items.get(itemId);
     if (!item) return;
-    if (item.type === "equipment") {
-      const isActive = item.system.active ?? false;
-      await item.update({ "system.active": !isActive });
+    await this._activateItem(item);
+  }
+
+  /** 激活物品：触发 [使用时] Activity 效果；消耗品数量 -1，归零时自动删除。 */
+  async _activateItem(item) {
+    if (!item) return;
+    await ClashManager._applyActivities(item, "使用时", {
+      owner: this.actor, atkActor: this.actor, defActor: null, _fireCounts: {},
+    });
+    if (item.type === "consumable") {
+      const qty = (item.system.quantity ?? 1) - 1;
+      if (qty <= 0) {
+        await item.delete();
+      } else {
+        await item.update({ "system.quantity": qty });
+      }
     }
   }
 
@@ -847,7 +896,7 @@ export class LimbusActorSheet extends ActorSheet {
     const menuItems = [
       { name: "卸下",      icon: "<i class='fas fa-times'></i>",     callback: () => this.actor.unequipFromGrid(slotIdx) },
       { name: "查看/编辑", icon: "<i class='fas fa-edit'></i>",      callback: () => item.sheet.render(true) },
-      { name: "激活",      icon: "<i class='fas fa-bolt'></i>",      callback: () => item.update({ "system.active": !(item.system.active ?? false) }) },
+      { name: "激活",      icon: "<i class='fas fa-bolt'></i>",      callback: () => this._activateItem(item) },
       { name: "发送聊天框",icon: "<i class='fas fa-comment'></i>",   callback: () => item.sendToChat?.() },
     ];
     this._renderContextMenu(event, menuItems);
@@ -863,7 +912,10 @@ export class LimbusActorSheet extends ActorSheet {
     const menuItems = [
       { name: "卸下",      icon: "<i class='fas fa-times'></i>",   callback: () => this.actor.unequipSkill(itemId) },
       { name: "查看/编辑", icon: "<i class='fas fa-edit'></i>",    callback: () => item.sheet.render(true) },
-      { name: "发起对抗",  icon: "<i class='fas fa-swords'></i>",  callback: () => this._showClashDialog(item) },
+      { name: "发起对抗",  icon: "<i class='fas fa-swords'></i>",  callback: () => {
+          if ((this.actor.system.ap?.value ?? 0) <= 0) { ui.notifications?.warn("行动值不足，无法发起对抗"); return; }
+          this._showClashDialog(item, -2);
+        } },
       { name: "发送聊天框",icon: "<i class='fas fa-comment'></i>", callback: () => item.sendToChat?.() },
     ];
     this._renderContextMenu(event, menuItems);
@@ -903,8 +955,9 @@ export class LimbusActorSheet extends ActorSheet {
     const query = event.target.value.toLowerCase().trim();
     const panel = $(event.target).closest(".sheet-body").find(".item-list-panel, .skill-list-panel");
     panel.find(".item-row, .skill-row").each((_, row) => {
-      const name = $(row).find(".item-name").text().toLowerCase();
-      $(row).toggle(!query || name.includes(query));
+      const name = $(row).find(".item-name, .col-name.item-name").text().toLowerCase();
+      const tags = ($(row).attr("data-tags") ?? "").toLowerCase();
+      $(row).toggle(!query || name.includes(query) || tags.includes(query));
     });
   }
 
@@ -1506,7 +1559,7 @@ export class LimbusActorSheet extends ActorSheet {
     this._titleCardWheelEl = el;
     this._titleCardWheelHandler = (ev) => {
       if (!this._titleCard?.length) return;
-      const desc = this._titleCard.find(".item-desc-display, .tc-desc")[0];
+      const desc = this._titleCard.find(".tc-desc, .tce-desc, .item-desc-display")[0];
       if (!desc) return;
 
       const hasOverflow = desc.scrollHeight > desc.clientHeight;
@@ -1528,26 +1581,65 @@ export class LimbusActorSheet extends ActorSheet {
     this._titleCard = null;
   }
 
+  /** 战斗槽悬浮 Title 卡（基础/EGO/守备） */
+  _onCombatSlotHover(event) {
+    const el     = event.currentTarget;
+    const itemId = el.dataset.itemId;
+    const item   = this.actor.items.get(itemId);
+    if (!item) return;
+
+    this._onItemHoverEnd();
+    this._titleCard = this._buildTitleCard(item);
+
+    // 卡片显示在角色卡左侧；若角色卡左侧空间不足则显示在右侧
+    const rect  = this.element[0].getBoundingClientRect();
+    const cardW = 280;
+    const cardH = 500;
+    let left = rect.left - cardW - 8;
+    if (left < 8) left = rect.right + 8;
+    const top = Math.max(8, Math.min(rect.top, window.innerHeight - cardH - 8));
+
+    this._titleCard.css({ position: "fixed", left, top, zIndex: 99998 });
+    $("body").append(this._titleCard);
+
+    // 允许鼠标在槽位上滚动时滚动描述区
+    this._titleCardWheelEl = el;
+    this._titleCardWheelHandler = (ev) => {
+      const desc = this._titleCard?.find(".tc-desc")[0];
+      if (!desc || desc.scrollHeight <= desc.clientHeight) return;
+      desc.scrollTop += ev.deltaY;
+      ev.preventDefault();
+    };
+    el.addEventListener("wheel", this._titleCardWheelHandler, { passive: false });
+  }
+
   _buildTitleCard(item) {
     const sys = item.system;
     const cfg = CONFIG.LIMBUSCOMPANY;
     const sinColor = cfg.SIN_COLORS?.[sys.sinType] ?? "#5F3E21";
 
     if (item.type === "skill") {
-      const costHtml = item.type === "skill" && sys.type === "ego"
-        ? `<div class="tc-stellar"><i class="fas fa-star-half-alt"></i> ${item.getStellarCost?.() ?? 0}</div>`
-        : `<div class="tc-stellar"><i class="fas fa-star"></i> ${item.getStellarCost?.() ?? 0}</div>`;
+      const stellarCost  = item.getStellarCost?.() ?? 0;
+      const tags = (Array.isArray(sys.tags) ? sys.tags : (sys.tags ?? "").split("/"))
+        .map(t => String(t).trim()).filter(Boolean);
+      const weightCount  = Number(sys.weight ?? 0);
+      const descText     = sys.effectDesc ?? sys.description ?? "";
 
       return $(`<div class="limbus-title-card limbus-title-card-skill">
         <div class="tc-header" style="background:${sinColor}">${item.name}</div>
         <div class="tc-row2">
-          <img src="${_getCategoryIcon(sys.category)}" width="18" height="18" alt="type">
+          <img src="${_getCategoryIcon(sys.category)}" class="tc-cat-icon" alt="">
           <span class="tc-formula">${(sys.diceFormula ?? "").toUpperCase()}</span>
-          <span class="tc-tags">${(Array.isArray(sys.tags) ? sys.tags : (sys.tags ?? "").split("/")).filter(Boolean).map(t => `<span class="tag">${String(t).trim()}</span>`).join("")}</span>
+          <span class="tc-tags">${tags.map(t => `<span class="tc-skill-tag">${t}</span>`).join("")}</span>
         </div>
-        ${sys.weight ? `<div class="tc-weight">${Array.from({length: sys.weight ?? 0}, () => '<span class="weight-sq"></span>').join("")}</div>` : ""}
-        <div class="tc-desc">${sys.effectDesc ?? item.system.description ?? ""}</div>
-        <div class="tc-footer">${costHtml}</div>
+        ${weightCount > 0 ? `<div class="tc-weight"><span class="tc-weight-label">加重值</span>${Array.from({length: weightCount}, () => '<span class="tc-weight-sq"></span>').join("")}</div>` : ""}
+        <div class="tc-gold-divider-skill"></div>
+        <div class="tc-desc">${descText}</div>
+        <div class="tc-gold-divider-skill"></div>
+        <div class="tc-footer">
+          <img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/Starlight.webp" class="tc-starlight-icon" alt="星芒">
+          <span class="tc-stellar-cost">${stellarCost}</span>
+        </div>
       </div>`);
     }
 
@@ -1590,30 +1682,36 @@ export class LimbusActorSheet extends ActorSheet {
       }
     }
 
-    const tagList = (Array.isArray(sys.tags) ? sys.tags : String(sys.tags ?? "").split("/"))
-      .map((t) => String(t).trim())
-      .filter(Boolean)
-      .join("/");
+    const tags = (Array.isArray(sys.tags) ? sys.tags : String(sys.tags ?? "").split("/"))
+      .map(t => String(t).trim()).filter(Boolean);
+    const tagsHtml    = tags.map(t => `<span class="tc-skill-tag">${t}</span>`).join("");
+    const descText    = sys.effect ?? sys.description ?? "";
+    const stellarCost = sys.stellarCost ?? 0;
 
     return $(`<div class="limbus-title-card limbus-title-card-equip">
-      <div class="tc-header tc-equip-title">${item.name}</div>
-      <div class="tc-equip-main-row">
-        <div class="tc-equip-info-col">
-          <div class="tc-row2 tc-equip-subrow">
-            <span class="equip-subtype-label">【${_subtypeLabel(sys.subtype ?? item.type)}】</span>
-            <span class="equip-category">【${sys.category ?? ""}】</span>
+      <div class="tc-header tce-header">${item.name}</div>
+
+      <div class="tce-info-row">
+        <div class="tce-info-left">
+          <div class="tce-subrow">
+            <span class="tce-subtype">${_subtypeLabel(sys.subtype ?? item.type)}</span>
+            ${sys.category ? `<span class="tce-category">${sys.category}</span>` : ""}
           </div>
-          <div class="tc-modifier-block">
-            <div class="modifier-rows">${modifierRows.join("")}</div>
-          </div>
-          <div class="item-tags-row tc-tags-row">${tagList}</div>
+          ${modifierRows.length ? `<div class="tce-modifiers">${modifierRows.join("")}</div>` : ""}
+          ${tagsHtml ? `<div class="tce-tags">${tagsHtml}</div>` : ""}
         </div>
-        <span class="link-dir-group tc-link-dir-group">${linkButtonsHtml}</span>
+        <div class="tc-link-dir-group">${linkButtonsHtml}</div>
       </div>
-      <div class="tc-gold-divider"></div>
-      <div class="tc-desc item-desc-display">${sys.effect ?? sys.description ?? ""}</div>
-      <div class="tc-gold-divider tc-gold-divider-muted"></div>
-      <div class="tc-footer tc-equip-footer"><img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/Starlight.webp" class="stellar-icon" alt="星芒"><span>${sys.stellarCost ?? 0}</span></div>
+
+      <div class="tc-gold-divider-skill"></div>
+      <div class="tc-desc tce-desc">${descText}</div>
+      <div class="tc-gold-divider-skill"></div>
+
+      <div class="tc-footer tce-footer">
+        <span class="tce-hint">鼠标中间用来编辑/查看</span>
+        <img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/Starlight.webp" class="tc-starlight-icon" alt="星芒">
+        <span class="tc-stellar-cost">${stellarCost}</span>
+      </div>
     </div>`);
   }
 }

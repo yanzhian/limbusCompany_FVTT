@@ -134,11 +134,12 @@
         </div>
         <ul class="group-body item-list">
           {{#each items}}
-            <li class="skill-row item-row"
+            <li class="skill-row item-row {{#if isEquipped}}skill-row-equipped{{/if}}"
                 data-item-id="{{_id}}"
                 data-item-name="{{name}}"
                 data-type="{{system.type}}"
-                data-subtype="{{system.sinType}}">
+                data-subtype="{{system.sinType}}"
+                data-tags="{{system.tags}}">
               <span class="col-icon">
                 <img src="{{skillIcon}}" class="item-icon" data-item-id="{{_id}}" alt="{{name}}">
               </span>
