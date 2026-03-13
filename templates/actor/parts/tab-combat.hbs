@@ -126,6 +126,19 @@
 
     </div>{{!-- /ego-combat-section --}}
 
+    {{!-- 先攻区 --}}
+    <div class="combat-section initiative-section">
+      <div class="combat-section-header">
+        <span class="combat-section-title">先攻</span>
+        <button class="roll-initiative-btn" title="骰掷先攻：1D6 + 敏捷">骰掷先攻</button>
+      </div>
+      <div class="initiative-display-row">
+        <img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/Speed.webp"
+             class="initiative-speed-icon" alt="速度" width="16" height="16">
+        <span class="initiative-speed-range">{{speedDisplay.min}}–{{speedDisplay.max}}</span>
+      </div>
+    </div>{{!-- /initiative-section --}}
+
     {{!-- 行动值区 --}}
     <div class="combat-section ap-section">
       <div class="combat-section-header">

@@ -845,4 +845,76 @@ export class LimbusActor extends Actor {
     }
     return result;
   }
+
+  // ─── 先攻骰掷 ─────────────────────────────────────────────────────────
+
+  /**
+   * 骰掷先攻：1D6 + 敏捷（含装备速度修正 + 迅捷/束缚 BUFF）
+   * 播放 DiceSoNice 动画，发送聊天消息，更新战斗跟踪器先攻值。
+   * @returns {Promise<Roll>}
+   */
+  async rollSpeedInitiative() {
+    const sys = this.system;
+    const agi = sys.attributes?.agi ?? 0;
+
+    // 装备速度修正
+    const equipSpeedAdj = Object.values(sys.equipment ?? {})
+      .filter(Boolean)
+      .map(id => this.items.get(id))
+      .filter(i => i?.type === "equipment")
+      .reduce((acc, eq) => acc + Number(eq.system?.speedAdj ?? 0), 0);
+
+    // BUFF 速度修正（迅捷 swift - 束缚 bind）
+    const bStacks = (type) => (sys.buffs ?? [])
+      .filter(b => b.type === type)
+      .reduce((s, b) => s + (b.stacks ?? 0), 0);
+    const buffSpeedMod = bStacks("swift") - bStacks("bind");
+
+    const modifier = agi + equipSpeedAdj + buffSpeedMod;
+    const roll     = new Roll("1d6 + @mod", { mod: modifier });
+    await roll.evaluate();
+
+    // DiceSoNice 动画
+    if (game.dice3d) {
+      await game.dice3d.showForRoll(roll, game.user, true, null, false);
+    }
+
+    // 更新战斗跟踪器先攻值
+    const combat = game.combat;
+    if (combat) {
+      const combatant = combat.combatants.find(c => c.actorId === this.id);
+      if (combatant) await combatant.update({ initiative: roll.total });
+    }
+
+    // 发送聊天消息
+    const ownerUser  = game.users?.find(u => !u.isGM && u.character?.id === this.id);
+    const playerName = ownerUser?.name ?? game.user?.name ?? this.name;
+    const speedMin   = 1 + modifier;
+    const speedMax   = 6 + modifier;
+
+    await ChatMessage.create({
+      speaker: ChatMessage.getSpeaker({ actor: this }),
+      content: `
+        <div class="limbus-initiative-card">
+          <div class="ic-header">
+            <img class="ic-actor-avatar" src="${this.img}" alt="${this.name}">
+            <div class="ic-actor-info">
+              <div class="ic-title">先攻骰掷</div>
+              <div class="ic-player">${playerName}</div>
+            </div>
+          </div>
+          <div class="ic-gold-divider"></div>
+          <div class="initiative-result-row">
+            <img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/Speed.webp"
+                 class="initiative-speed-icon" alt="速度" width="20" height="20">
+            <span class="initiative-speed-range">${speedMin}–${speedMax}</span>
+            <span class="initiative-arrow">→</span>
+            <span class="initiative-total">${roll.total}</span>
+          </div>
+          <div class="ic-gold-divider"></div>
+        </div>`,
+    });
+
+    return roll;
+  }
 }

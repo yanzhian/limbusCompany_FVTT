@@ -496,6 +496,7 @@ export class LimbusActorSheet extends ActorSheet {
     html.find(".item-create-btn").on("click", this._onItemCreate.bind(this));
 
     // ── 战斗 Tab ─────────────────────────────────────────────────────────
+    html.find(".roll-initiative-btn").on("click",  () => this.actor.rollSpeedInitiative());
     html.find(".combat-activate-btn").on("click", this._onCombatActivate.bind(this));
     html.find(".combat-clear-btn").on("click",    this._onCombatClear.bind(this));
     html.find(".ap-coin").on("click",             this._onApCoinToggle.bind(this));
