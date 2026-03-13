@@ -3961,158 +3961,147 @@ body.game .limbuscompany.app img {
   text-align: center;
 }
 
-.limbus-title-card-equip .tc-equip-title {
-  font-size: 24px;
+/* ── Equipment Title Card (aligned to skill card style) ── */
+.limbus-title-card-equip .tce-header {
+  font-size: 32px;
   color: #E8CAA1;
-  background: transparent !important;
-  padding: 12px 12px 4px;
-  line-height: 1.2;
+  background: #5F3E21;
+  padding: 10px 12px 8px;
+  line-height: 1.1;
+  font-weight: bold;
 }
 
-.limbus-title-card-equip .tc-equip-subrow {
-  border-bottom: none;
-  padding: 0;
-  font-size: 16px;
-  color: #EBBD68;
-  align-items: center;
-  min-height: 16px;
-}
-
-.limbus-title-card-equip .equip-subtype-label,
-.limbus-title-card-equip .equip-category {
-  color: #EBBD68;
-}
-
-.limbus-title-card-equip .tc-equip-main-row {
+/* Info row: left (subtype/category/modifiers/tags) + right (link grid) */
+.limbus-title-card-equip .tce-info-row {
   display: flex;
   justify-content: space-between;
+  align-items: flex-start;
   gap: 8px;
-  padding: 0 12px;
+  padding: 6px 12px 4px;
 }
 
-.limbus-title-card-equip .tc-equip-info-col {
+.limbus-title-card-equip .tce-info-left {
   flex: 1;
   min-width: 0;
   display: flex;
   flex-direction: column;
+  gap: 5px;
+}
+
+/* Subtype + category row */
+.limbus-title-card-equip .tce-subrow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.limbus-title-card-equip .tce-subtype {
+  font-size: 14px;
+  color: #E8CAA1;
+  font-weight: bold;
+  border-bottom: 1px solid rgba(201,168,76,.4);
+  padding-bottom: 2px;
+}
+
+.limbus-title-card-equip .tce-category {
+  font-size: 14px;
+  color: #C9A84C;
+}
+
+/* Modifier values row */
+.limbus-title-card-equip .tce-modifiers {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.limbus-title-card-equip .modifier-row {
+  display: flex;
+  align-items: center;
   gap: 4px;
 }
 
+.limbus-title-card-equip .modifier-row .mod-icon {
+  width: 16px; height: 16px; object-fit: contain;
+}
+
+.limbus-title-card-equip .modifier-row .resist-display,
+.limbus-title-card-equip .modifier-row .mod-val {
+  font-size: 13px;
+  color: #E8CAA1;
+  line-height: 1.2;
+}
+
+/* Tags (same style as skill card) */
+.limbus-title-card-equip .tce-tags {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+/* Link direction grid */
 .limbus-title-card-equip .tc-link-dir-group {
-  margin-left: 0;
   flex-shrink: 0;
   display: grid;
   grid-template-areas: ". up ." "left . right" ". down .";
   grid-template-columns: 16px 16px 16px;
   grid-template-rows: 16px 16px 16px;
   gap: 2px;
+  margin-top: 2px;
 }
 
-.limbus-title-card-equip .tc-link-dir-group .link-dir-up { grid-area: up; }
-.limbus-title-card-equip .tc-link-dir-group .link-dir-down { grid-area: down; }
-.limbus-title-card-equip .tc-link-dir-group .link-dir-left { grid-area: left; }
+.limbus-title-card-equip .tc-link-dir-group .link-dir-up    { grid-area: up; }
+.limbus-title-card-equip .tc-link-dir-group .link-dir-down  { grid-area: down; }
+.limbus-title-card-equip .tc-link-dir-group .link-dir-left  { grid-area: left; }
 .limbus-title-card-equip .tc-link-dir-group .link-dir-right { grid-area: right; }
 
 .limbus-title-card-equip .tc-link-dir-group .link-dir-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid var(--border-gold);
-  border-radius: 2px;
+  display: flex; align-items: center; justify-content: center;
+  border: 1px solid var(--border-gold); border-radius: 2px;
   background: rgba(95,62,33,.45);
 }
 
 .limbus-title-card-equip .tc-link-dir-group .tc-link-arrow-text {
-  color: #EBBD68;
-  font-size: 12px;
-  line-height: 1;
+  color: #EBBD68; font-size: 12px; line-height: 1;
 }
 
 .limbus-title-card-equip .tc-link-dir-group .link-dir-btn.link-active {
   background: var(--gold-mid);
 }
 
-.limbus-title-card-equip .tc-modifier-block {
-  padding: 0;
-}
-
-.limbus-title-card-equip .modifier-rows {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: nowrap;
-  overflow-x: auto;
-}
-
-.limbus-title-card-equip .modifier-row {
-  font-size: 16px;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin: 0;
-}
-
-.limbus-title-card-equip .modifier-row .mod-icon {
-  width: 16px;
-  height: 16px;
-  min-width: 16px;
-  min-height: 16px;
-  object-fit: contain;
-  display: inline-block;
-  vertical-align: middle;
-}
-
-.limbus-title-card-equip .modifier-row .resist-display,
-.limbus-title-card-equip .modifier-row .mod-val {
-  font-size: 16px;
-  line-height: 1.2;
-}
-
-.limbus-title-card-equip .tc-tags-row {
-  display: block;
-  min-height: 16px;
-  background: #3B2412;
-  color: #9A6839;
-  font-size: 16px;
-  line-height: 1;
-  border-radius: 2px;
-  overflow-x: auto;
-  width: 100%;
-  padding: 2px 8px;
-  white-space: nowrap;
-}
-
-.limbus-title-card-equip .tc-gold-divider {
-  height: 1px;
-  margin: 6px 12px;
-  background: linear-gradient(90deg, rgba(235,189,104,0) 0%, rgba(235,189,104,.95) 50%, rgba(235,189,104,0) 100%);
-}
-
-.limbus-title-card-equip .item-desc-display {
-  font-size: 10px;
-  color: #E8CAA1;
+/* Description (same as skill card) */
+.limbus-title-card-equip .tce-desc {
   padding: 6px 12px;
-  line-height: 1.45;
+  font-size: .78rem;
+  color: #E8CAA1;
+  line-height: 1.6;
   flex: 1;
   min-height: 0;
-  overflow: auto;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: thin;
+  scrollbar-color: #5F3E21 transparent;
 }
 
-.limbus-title-card-equip .tc-gold-divider-muted {
-  background: linear-gradient(90deg, rgba(154,104,57,0) 0%, rgba(154,104,57,.95) 50%, rgba(154,104,57,0) 100%);
-  margin-top: auto;
-  margin-bottom: 5px;
-}
+.limbus-title-card-equip .tce-desc::-webkit-scrollbar { width: 4px; }
+.limbus-title-card-equip .tce-desc::-webkit-scrollbar-track { background: transparent; }
+.limbus-title-card-equip .tce-desc::-webkit-scrollbar-thumb { background: #5F3E21; border-radius: 2px; }
 
-.limbus-title-card-equip .tc-equip-footer {
+/* Footer */
+.limbus-title-card-equip .tce-footer {
+  padding: 6px 12px 8px;
   border-top: none;
-  margin-top: 0;
-  padding: 8px 12px 10px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
 }
 
-.limbus-title-card-equip .tc-equip-footer .stellar-icon {
-  width: 16px;
-  height: 16px;
+.limbus-title-card-equip .tce-hint {
+  font-size: 10px;
+  color: #6B5038;
+  flex: 1;
 }
 
 /* ── Skill Title Card overrides ── */

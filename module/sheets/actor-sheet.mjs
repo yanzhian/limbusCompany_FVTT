@@ -1524,7 +1524,7 @@ export class LimbusActorSheet extends ActorSheet {
     this._titleCardWheelEl = el;
     this._titleCardWheelHandler = (ev) => {
       if (!this._titleCard?.length) return;
-      const desc = this._titleCard.find(".item-desc-display, .tc-desc")[0];
+      const desc = this._titleCard.find(".tc-desc, .tce-desc, .item-desc-display")[0];
       if (!desc) return;
 
       const hasOverflow = desc.scrollHeight > desc.clientHeight;
@@ -1652,25 +1652,36 @@ export class LimbusActorSheet extends ActorSheet {
       .filter(Boolean)
       .join("/");
 
+    const tags = (Array.isArray(sys.tags) ? sys.tags : String(sys.tags ?? "").split("/"))
+      .map(t => String(t).trim()).filter(Boolean);
+    const tagsHtml    = tags.map(t => `<span class="tc-skill-tag">${t}</span>`).join("");
+    const descText    = sys.effect ?? sys.description ?? "";
+    const stellarCost = sys.stellarCost ?? 0;
+
     return $(`<div class="limbus-title-card limbus-title-card-equip">
-      <div class="tc-header tc-equip-title">${item.name}</div>
-      <div class="tc-equip-main-row">
-        <div class="tc-equip-info-col">
-          <div class="tc-row2 tc-equip-subrow">
-            <span class="equip-subtype-label">【${_subtypeLabel(sys.subtype ?? item.type)}】</span>
-            <span class="equip-category">【${sys.category ?? ""}】</span>
+      <div class="tc-header tce-header">${item.name}</div>
+
+      <div class="tce-info-row">
+        <div class="tce-info-left">
+          <div class="tce-subrow">
+            <span class="tce-subtype">${_subtypeLabel(sys.subtype ?? item.type)}</span>
+            ${sys.category ? `<span class="tce-category">${sys.category}</span>` : ""}
           </div>
-          <div class="tc-modifier-block">
-            <div class="modifier-rows">${modifierRows.join("")}</div>
-          </div>
-          <div class="item-tags-row tc-tags-row">${tagList}</div>
+          ${modifierRows.length ? `<div class="tce-modifiers">${modifierRows.join("")}</div>` : ""}
+          ${tagsHtml ? `<div class="tce-tags">${tagsHtml}</div>` : ""}
         </div>
-        <span class="link-dir-group tc-link-dir-group">${linkButtonsHtml}</span>
+        <div class="tc-link-dir-group">${linkButtonsHtml}</div>
       </div>
-      <div class="tc-gold-divider"></div>
-      <div class="tc-desc item-desc-display">${sys.effect ?? sys.description ?? ""}</div>
-      <div class="tc-gold-divider tc-gold-divider-muted"></div>
-      <div class="tc-footer tc-equip-footer"><img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/Starlight.webp" class="stellar-icon" alt="星芒"><span>${sys.stellarCost ?? 0}</span></div>
+
+      <div class="tc-gold-divider-skill"></div>
+      <div class="tc-desc tce-desc">${descText}</div>
+      <div class="tc-gold-divider-skill"></div>
+
+      <div class="tc-footer tce-footer">
+        <span class="tce-hint">鼠标中间用来编辑/查看</span>
+        <img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/Starlight.webp" class="tc-starlight-icon" alt="星芒">
+        <span class="tc-stellar-cost">${stellarCost}</span>
+      </div>
     </div>`);
   }
 }
