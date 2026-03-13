@@ -43,7 +43,7 @@ export class LimbusActorSheet extends ActorSheet {
       width:    880,
       height:   810,
       tabs:     [{ navSelector: ".sheet-tabs", contentSelector: ".sheet-body", initial: "items" }],
-      dragDrop: [{ dragSelector: ".equip-slot[data-item-id], .skill-slot-wrap[data-item-id], .item-row .item-icon, .skill-row .item-icon", dropSelector: ".equip-grid, .item-list-panel, .basic-skill-slots, .ego-skill-grid, .defense-skill-slot" }],
+      dragDrop: [{ dragSelector: ".equip-slot[data-item-id], .skill-slot-wrap[data-item-id], .item-row .item-icon, .skill-row .item-icon", dropSelector: ".equip-grid, .item-list-panel, .skill-list-panel, .basic-skill-slots, .ego-skill-grid, .defense-skill-slot" }],
       scrollY:  [".item-list-panel", ".skill-list-panel", ".buff-list"],
     });
   }
@@ -651,6 +651,21 @@ export class LimbusActorSheet extends ActorSheet {
       return;
     }
 
+    // ── 拖入技能列表（.skill-list-panel）：从外部导入并自动装备 ─────────────
+    const droppedIntoSkillList = $target.closest(".skill-list-panel").length > 0;
+    if (droppedIntoSkillList) {
+      if (item.type !== "skill") {
+        ui.notifications.warn("只有技能才能拖入技能列表。");
+        return;
+      }
+      // 来自已装备槽位的拖拽，忽略（不重复装备）
+      if (data.fromSkillSlotType) return;
+      // 导入（若尚未在 actor 中），然后装备（内部做星芒检查）
+      const owned = ownedItem ?? await this._importItemToActor(item);
+      if (owned) await this.actor.equipSkill(owned.id);
+      return;
+    }
+
     // ── 拖入物品列表：
     // 1) 从装备槽拖回列表 → 视为卸下
     // 2) 从 FVTT 物品目录/其他来源拖入 → 复制一份到角色物品
@@ -921,8 +936,9 @@ export class LimbusActorSheet extends ActorSheet {
     const query = event.target.value.toLowerCase().trim();
     const panel = $(event.target).closest(".sheet-body").find(".item-list-panel, .skill-list-panel");
     panel.find(".item-row, .skill-row").each((_, row) => {
-      const name = $(row).find(".item-name").text().toLowerCase();
-      $(row).toggle(!query || name.includes(query));
+      const name = $(row).find(".item-name, .col-name.item-name").text().toLowerCase();
+      const tags = ($(row).attr("data-tags") ?? "").toLowerCase();
+      $(row).toggle(!query || name.includes(query) || tags.includes(query));
     });
   }
 
