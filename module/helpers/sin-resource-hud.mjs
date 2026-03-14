@@ -112,10 +112,11 @@ export class SinResourceHUD extends Application {
 
   /** popOut=false 时需手动将元素注入 body */
   async _injectHTML(html) {
-    // 移除旧实例
     $("#limbus-sin-resource-hud").remove();
     $("body.game").append(html);
     this._element = html;
+    // 恢复上次拖动后的位置（避免重渲染时归零）
+    if (this._savedLeft != null) html.css({ left: this._savedLeft, top: this._savedTop });
   }
 
   activateListeners(html) {
@@ -142,45 +143,37 @@ export class SinResourceHUD extends Application {
       if (!this._dragging) html.removeClass("sin-hud-hover");
     });
 
-    // ── 标题长按拖动 ────────────────────────────────────────────────────────
-    const title    = html.find(".sin-hud-title")[0];
-    let longTimer  = null;
-    let startX     = 0, startY = 0, originLeft = 0, originTop = 0;
+    // ── 标题拖动（直接按下即可拖动） ───────────────────────────────────────
+    const title = html.find(".sin-hud-title")[0];
+    let startX = 0, startY = 0, originLeft = 0, originTop = 0;
 
     const onMouseMove = (e) => {
       if (!this._dragging) return;
-      const dx = e.clientX - startX;
-      const dy = e.clientY - startY;
-      const newLeft = Math.max(0, Math.min(window.innerWidth  - html.outerWidth(),  originLeft + dx));
-      const newTop  = Math.max(0, Math.min(window.innerHeight - html.outerHeight(), originTop  + dy));
+      const newLeft = Math.max(0, Math.min(window.innerWidth  - html.outerWidth(),  originLeft + e.clientX - startX));
+      const newTop  = Math.max(0, Math.min(window.innerHeight - html.outerHeight(), originTop  + e.clientY - startY));
+      this._savedLeft = newLeft;
+      this._savedTop  = newTop;
       html.css({ left: newLeft, top: newTop });
     };
 
     const onMouseUp = () => {
-      clearTimeout(longTimer);
       if (this._dragging) {
         this._dragging = false;
-        html.removeClass("sin-hud-dragging");
-        html.removeClass("sin-hud-hover");
+        html.removeClass("sin-hud-dragging sin-hud-hover");
       }
       $(document).off("mousemove", onMouseMove).off("mouseup", onMouseUp);
     };
 
     $(title).on("mousedown", (e) => {
       if (e.button !== 0) return;
+      e.preventDefault();
       startX     = e.clientX;
       startY     = e.clientY;
       originLeft = parseInt(html.css("left")) || 0;
       originTop  = parseInt(html.css("top"))  || 0;
-      longTimer  = setTimeout(() => {
-        this._dragging = true;
-        html.addClass("sin-hud-dragging");
-        $(document).on("mousemove", onMouseMove).on("mouseup", onMouseUp);
-      }, 300);
-    });
-
-    $(title).on("mouseup mouseleave", () => {
-      if (!this._dragging) clearTimeout(longTimer);
+      this._dragging = true;
+      html.addClass("sin-hud-dragging");
+      $(document).on("mousemove", onMouseMove).on("mouseup", onMouseUp);
     });
   }
 
