@@ -252,6 +252,11 @@ export class QuickActionHUD extends Application {
     };
   }
 
+  async close(options = {}) {
+    this._onHudItemHoverEnd();
+    return super.close(options);
+  }
+
   /* ─── 事件监听 ───────────────────────────────────────────────────────────── */
 
   activateListeners(html) {
@@ -412,6 +417,17 @@ export class QuickActionHUD extends Application {
       if (!item) return;
       await ClashManager.showInitiateDialog(this._actor, item, -2);
     });
+
+    // ── 技能 / 物品悬浮 Title 卡（与角色卡一致） ──────────────────────────
+    const hoverTargets = [
+      ".qa-basic-skill-slot[data-item-id]",
+      ".qa-ego-skill-slot[data-item-id]",
+      ".qa-panel-item[data-item-id]",
+    ].join(", ");
+
+    html.find(hoverTargets)
+      .on("mouseenter", (e) => this._onHudItemHover(e))
+      .on("mouseleave", () => this._onHudItemHoverEnd());
   }
 
   /* ─── 内部辅助 ───────────────────────────────────────────────────────────── */
@@ -426,6 +442,54 @@ export class QuickActionHUD extends Application {
       if (qty <= 0) await item.delete();
       else          await item.update({ "system.quantity": qty });
     }
+  }
+
+  /** HUD 物品/技能悬浮 → 显示与角色卡完全相同的 Title 卡 */
+  _onHudItemHover(event) {
+    const el     = event.currentTarget;
+    const itemId = el.dataset.itemId;
+    if (!itemId || !this._actor) return;
+
+    const item   = this._actor.items.get(itemId);
+    if (!item) return;
+
+    const sheet  = this._actor.sheet;
+    if (!sheet?._buildTitleCard) return;
+
+    this._onHudItemHoverEnd();
+    this._hudTitleCard = sheet._buildTitleCard(item);
+
+    // HUD 尺寸较小，优先显示在 HUD 左侧；空间不足则显示在右侧
+    const hudEl  = this.element?.[0];
+    const rect   = hudEl ? hudEl.getBoundingClientRect() : el.getBoundingClientRect();
+    const cardW  = 280;
+    const cardH  = 500;
+    let   left   = rect.left - cardW - 8;
+    if (left < 8) left = rect.right + 8;
+    const top    = Math.max(8, Math.min(rect.top, window.innerHeight - cardH - 8));
+
+    this._hudTitleCard.css({ position: "fixed", left, top, zIndex: 99999 });
+    $("body").append(this._hudTitleCard);
+
+    // 允许鼠标在图标上滚动时滚动描述区
+    this._hudTitleCardWheelEl = el;
+    this._hudTitleCardWheelHandler = (ev) => {
+      const desc = this._hudTitleCard?.find(".tc-desc, .tce-desc")[0];
+      if (!desc || desc.scrollHeight <= desc.clientHeight) return;
+      desc.scrollTop += ev.deltaY;
+      ev.preventDefault();
+    };
+    el.addEventListener("wheel", this._hudTitleCardWheelHandler, { passive: false });
+  }
+
+  _onHudItemHoverEnd() {
+    if (this._hudTitleCardWheelEl && this._hudTitleCardWheelHandler) {
+      this._hudTitleCardWheelEl.removeEventListener("wheel", this._hudTitleCardWheelHandler);
+    }
+    this._hudTitleCardWheelEl = null;
+    this._hudTitleCardWheelHandler = null;
+    this._hudTitleCard?.remove();
+    this._hudTitleCard = null;
   }
 
   /**
