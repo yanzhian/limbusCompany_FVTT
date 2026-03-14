@@ -545,14 +545,14 @@ export class ClashManager {
       const sanCur  = actor.system?.sanity?.value ?? 50;
       const sanOk   = effectiveSanityCost <= 0 || (sanCur - effectiveSanityCost) >= 5;
       const sanPart = isInPanic && sanityCost > 0
-        ? `<span style="color:#9A8462;margin-left:4px;font-style:italic;">理智消耗已豁免（恐慌）</span>`
+        ? `<span style="color:#9A8462;margin-left:4px;font-style:italic;"></span>`
         : effectiveSanityCost > 0
           ? `<span style="color:${sanOk ? "#C89E70" : "#E84444"};margin-left:4px;">
                理智 -${effectiveSanityCost}（当前 ${sanCur}）
              </span>`
           : "";
       const panicNote = isInPanic
-        ? `<div style="font-size:.7rem;color:#E8A444;margin-bottom:4px;">【陷入恐慌】罪孽消耗 ×1.5，理智消耗豁免</div>`
+        ? `<div style="font-size:.7rem;color:#E8A444;margin-bottom:4px;">【陷入恐慌】罪孽消耗 ×1.5，侵蚀状态</div>`
         : "";
       if (panicNote || sinParts || sanPart) {
         egoCostHtml = `<div style="margin-bottom:10px;padding:6px 8px;border-radius:3px;

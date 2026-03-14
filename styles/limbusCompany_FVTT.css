@@ -5128,7 +5128,7 @@ body.game .limbuscompany.app img {
 /* ── 按钮组（左 / 右） ────────────────────────────────────── */
 .qa-btn-group {
   display:        flex;
-  flex-direction: column;
+  flex-direction: row;
   gap:            6px;
   align-self:     flex-end;
   position:       relative;
@@ -5368,12 +5368,12 @@ body.game .limbuscompany.app img {
   flex-wrap: wrap;
   gap:       2px;
   flex:      1;
-  max-width: 220px; /* 8格 × (24+2) px */
+  max-width: 300px; /* 8格 × (24+2) px */
 }
 
 .qa-buff-slot {
-  width:        24px;
-  height:       24px;
+  width:        32px;
+  height:       32px;
   background:   #201E1B;
   border:       1px solid #2A2520;
   border-radius: 2px;
@@ -5387,8 +5387,8 @@ body.game .limbuscompany.app img {
 .qa-buff-slot--filled:hover { border-color: #E5BA25; }
 
 .qa-buff-icon {
-  width:     16px;
-  height:    16px;
+  width:     24px;
+  height:    24px;
   position:  absolute;
   top:       50%;
   left:      50%;
