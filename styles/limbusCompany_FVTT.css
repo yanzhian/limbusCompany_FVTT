@@ -5043,6 +5043,7 @@ body.game .limbuscompany.app img {
   line-height: 1;
   min-width:   24px;
   text-align:  center;
+  color:       #E5B681;
 }
 
 /* ── GM 可编辑输入框 ── */
@@ -5051,6 +5052,7 @@ body.game .limbuscompany.app img {
   font-weight:  bold;
   line-height:  1;
   width:        46px;
+  color:        #E5B681;
   background:   transparent;
   border:       none;
   border-bottom: 1px solid rgba(200, 158, 112, 0.3);
