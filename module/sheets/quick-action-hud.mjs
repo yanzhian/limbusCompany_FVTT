@@ -367,17 +367,41 @@ export class QuickActionHUD extends Application {
       await this._activateItem(item);
     });
 
-    // ── 基础技能槽点击 → 发起对抗 ────────────────────────────────────────
+    // ── 基础技能槽点击 → 发起对抗（与角色卡战斗Tab 逻辑一致） ────────────
     html.find(".qa-basic-skill-slot[data-item-id]").on("click", async (e) => {
-      const itemId = e.currentTarget.dataset.itemId;
+      const itemId    = e.currentTarget.dataset.itemId;
+      const slotIndex = parseInt(e.currentTarget.dataset.slotIndex ?? "-1");
       if (!itemId || !this._actor) return;
       const item = this._actor.items.get(itemId);
       if (!item) return;
+
+      // 只有激活槽（0, 1）可以发起对抗，预备槽（2）不可点击
+      if (slotIndex > 1) {
+        ui.notifications.warn("只有激活槽中的技能可以发起对抗");
+        return;
+      }
+
       if ((this._actor.system.ap?.value ?? 0) <= 0) {
         ui.notifications.warn("行动值不足，无法发起对抗");
         return;
       }
-      await ClashManager.showInitiateDialog(this._actor, item, -2);
+
+      // 确保战斗袋已初始化
+      this._ensureBagState();
+
+      // 记录 sheet 是否已渲染（用于判断是否需要手动推进袋）
+      const sheetRendered = !!(this._actor.sheet?.rendered && this._actor.sheet?.element?.length);
+
+      // 传入真实 slotIndex，ClashManager 会调用 sheet._animateCombatSkillUse(slotIndex)
+      await ClashManager.showInitiateDialog(this._actor, item, slotIndex);
+
+      // 若 sheet 未渲染（_animateCombatSkillUse 提前 return），手动推进袋状态
+      if (!sheetRendered) {
+        this._advanceBagStateManually(slotIndex);
+      }
+
+      // 在袋状态更新后重渲 HUD（有动画时等 400ms，无动画时稍微延迟）
+      setTimeout(() => this.render(false), sheetRendered ? 420 : 60);
     });
 
     // ── EGO 技能槽点击 → 发起对抗 ────────────────────────────────────────
@@ -402,6 +426,48 @@ export class QuickActionHUD extends Application {
       if (qty <= 0) await item.delete();
       else          await item.update({ "system.quantity": qty });
     }
+  }
+
+  /**
+   * 确保战斗袋状态已初始化（与 actor-sheet._syncCombatSlots 初始化逻辑一致）。
+   * 若 bag state 已存在则跳过。
+   */
+  _ensureBagState() {
+    const actor = this._actor;
+    if (!actor?.sheet) return;
+    if (actor.sheet._combatBagState) return;  // 已存在，不重新初始化
+
+    const basicIds = (actor.system.skills?.basic ?? []).filter(Boolean);
+    if (!basicIds.length) return;
+
+    const bag1 = [...basicIds].sort(() => Math.random() - 0.5);
+    const bag2 = [...basicIds].sort(() => Math.random() - 0.5);
+    actor.sheet._combatBagState = {
+      equipped:    basicIds,
+      slots:       bag1.slice(0, 6),
+      pool:        bag2,
+      relatedMode: {},
+    };
+  }
+
+  /**
+   * 手动推进战斗袋（当角色卡 sheet 未渲染、_animateCombatSkillUse 提前返回时调用）。
+   * 逻辑与 actor-sheet._drawNextFromPool + slots.splice/push 一致。
+   */
+  _advanceBagStateManually(slotIndex) {
+    const state = this._actor?.sheet?._combatBagState;
+    if (!state) return;
+
+    // 移除已使用的槽
+    state.slots.splice(slotIndex, 1);
+
+    // 从 pool 取下一张；pool 耗尽则重洗
+    if (!state.pool.length) {
+      state.pool = [...(state.equipped ?? [])].sort(() => Math.random() - 0.5);
+    }
+    const nextId = state.pool.shift() ?? null;
+    state.slots.push(nextId);
+    // state 是 Map 中对象的引用，直接 mutate 即已生效，无需重新 set
   }
 
   /** 打开角色卡并切换到战斗 Tab */

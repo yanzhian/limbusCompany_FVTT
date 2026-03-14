@@ -79,8 +79,9 @@
                            {{#if item}}qa-skill-slot--filled{{else}}qa-skill-slot--empty{{/if}}
                            {{#if isActive}}qa-skill-active{{else}}qa-skill-pending{{/if}}"
                    data-item-id="{{#if item}}{{item.id}}{{/if}}"
+                   data-slot-index="{{slotIndex}}"
                    style="border-color:{{sinColor}}"
-                   title="{{#if item}}{{item.name}}{{else}}（空）{{/if}}">
+                   title="{{#if item}}{{item.name}}{{#unless isActive}}（预备）{{/unless}}{{else}}（空）{{/if}}">
                 {{#if item}}
                   <img src="{{item.img}}" alt="{{item.name}}" draggable="false">
                 {{/if}}

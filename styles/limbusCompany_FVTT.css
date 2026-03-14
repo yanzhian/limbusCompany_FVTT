@@ -5274,9 +5274,10 @@ body.game .limbuscompany.app img {
   object-fit: cover;
 }
 
-/* 激活槽：金色边框；预备槽：红色边框 */
+/* 激活槽：金色边框；预备槽：红色边框，不可点击 */
 .qa-skill-active  { border-color: #E5BA25 !important; }
-.qa-skill-pending { border-color: #8B2020 !important; }
+.qa-skill-pending { border-color: #8B2020 !important; cursor: default; }
+.qa-skill-pending:hover { filter: none; }
 
 .qa-skill-slot--empty { opacity: 0.35; }
 
