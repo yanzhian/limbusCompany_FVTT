@@ -137,13 +137,50 @@ export class SinResourceHUD extends Application {
     });
 
     // 鼠标移入：显示背景/标题
-    html.on("mouseenter", () => {
-      html.addClass("sin-hud-hover");
+    html.on("mouseenter", () => html.addClass("sin-hud-hover"));
+    html.on("mouseleave", () => {
+      if (!this._dragging) html.removeClass("sin-hud-hover");
     });
 
-    // 鼠标移出：隐藏背景/标题
-    html.on("mouseleave", () => {
-      html.removeClass("sin-hud-hover");
+    // ── 标题长按拖动 ────────────────────────────────────────────────────────
+    const title    = html.find(".sin-hud-title")[0];
+    let longTimer  = null;
+    let startX     = 0, startY = 0, originLeft = 0, originTop = 0;
+
+    const onMouseMove = (e) => {
+      if (!this._dragging) return;
+      const dx = e.clientX - startX;
+      const dy = e.clientY - startY;
+      const newLeft = Math.max(0, Math.min(window.innerWidth  - html.outerWidth(),  originLeft + dx));
+      const newTop  = Math.max(0, Math.min(window.innerHeight - html.outerHeight(), originTop  + dy));
+      html.css({ left: newLeft, top: newTop });
+    };
+
+    const onMouseUp = () => {
+      clearTimeout(longTimer);
+      if (this._dragging) {
+        this._dragging = false;
+        html.removeClass("sin-hud-dragging");
+        html.removeClass("sin-hud-hover");
+      }
+      $(document).off("mousemove", onMouseMove).off("mouseup", onMouseUp);
+    };
+
+    $(title).on("mousedown", (e) => {
+      if (e.button !== 0) return;
+      startX     = e.clientX;
+      startY     = e.clientY;
+      originLeft = parseInt(html.css("left")) || 0;
+      originTop  = parseInt(html.css("top"))  || 0;
+      longTimer  = setTimeout(() => {
+        this._dragging = true;
+        html.addClass("sin-hud-dragging");
+        $(document).on("mousemove", onMouseMove).on("mouseup", onMouseUp);
+      }, 300);
+    });
+
+    $(title).on("mouseup mouseleave", () => {
+      if (!this._dragging) clearTimeout(longTimer);
     });
   }
 

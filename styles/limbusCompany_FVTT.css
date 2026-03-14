@@ -4959,8 +4959,9 @@ body.game .limbuscompany.app img {
 /* ══════════════════════════════════════════════════════════════════════════
    全局罪孽资源 HUD
    位置：left:710px / top:135px（设计图坐标）
-   静止时：标题+背景透明，只显示图标+数值
-   Hover 时：背景+标题渐显
+   静止时：标题透明 + 背景半透明，只保留图标+数值
+   Hover 时：背景加深 + 标题渐显
+   拖动时：cursor: grabbing
 ══════════════════════════════════════════════════════════════════════════ */
 
 #limbus-sin-resource-hud {
@@ -4974,7 +4975,7 @@ body.game .limbuscompany.app img {
   user-select: none;
 }
 
-/* ── 标题 ── */
+/* ── 标题（静止透明，hover 渐显，长按可拖动） ── */
 .limbus-sin-hud .sin-hud-title {
   text-align:   center;
   font-size:    18px;
@@ -4982,16 +4983,21 @@ body.game .limbuscompany.app img {
   color:        #C89E70;
   letter-spacing: 2px;
   margin-bottom: 4px;
-  /* 默认透明，hover 时渐显 */
   opacity:      0;
   transition:   opacity 0.35s ease;
+  cursor:       grab;
 }
 
 #limbus-sin-resource-hud.sin-hud-hover .sin-hud-title {
   opacity: 1;
 }
 
-/* ── 主体横条 ── */
+#limbus-sin-resource-hud.sin-hud-dragging .sin-hud-title {
+  cursor: grabbing;
+  opacity: 1;
+}
+
+/* ── 主体横条（静止半透明，hover 加深） ── */
 .limbus-sin-hud .sin-hud-bar {
   display:         flex;
   align-items:     center;
@@ -5000,14 +5006,15 @@ body.game .limbuscompany.app img {
   height:          52px;
   padding:         0 12px;
   border-radius:   6px;
-  /* 背景默认透明 */
-  background:      rgba(10, 7, 3, 0);
-  border:          1px solid rgba(90, 58, 26, 0);
+  /* 静止时：半透明背景，保留图标+数值可见 */
+  background:      rgba(10, 7, 3, 0.45);
+  border:          1px solid rgba(90, 58, 26, 0.3);
   transition:      background 0.35s ease, border-color 0.35s ease;
 }
 
-#limbus-sin-resource-hud.sin-hud-hover .sin-hud-bar {
-  background:  rgba(10, 7, 3, 0.88);
+#limbus-sin-resource-hud.sin-hud-hover .sin-hud-bar,
+#limbus-sin-resource-hud.sin-hud-dragging .sin-hud-bar {
+  background:   rgba(10, 7, 3, 0.88);
   border-color: rgba(90, 58, 26, 0.7);
 }
 

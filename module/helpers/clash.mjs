@@ -932,6 +932,9 @@ export class ClashManager {
               await ClashManager._sendResponseAndResolve(
                 defActor, defItem, roll, full, initMsgId, initFlags, slotIdx
               );
+              // 进行对抗确认后：+1 对应 sinType 罪孽
+              const sinType = sys.sinType;
+              if (sinType) await SinResourceHUD.addSin(sinType, 1);
               resolve(true);
             },
           },
