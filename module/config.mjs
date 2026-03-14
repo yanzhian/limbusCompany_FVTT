@@ -55,13 +55,13 @@ LIMBUSCOMPANY.CATEGORY_ICON_PATHS = {
 
 /** 七宗罪 UI 颜色（CSS hex） */
 LIMBUSCOMPANY.SIN_COLORS = {
-  wrath:    "#E94545",
-  lust:     "#E8527C",
-  sloth:    "#5F8DB0",
-  gluttony: "#D4703A",
-  gloom:    "#527878",
-  pride:    "#E5BA25",
-  envy:     "#8B5CF6",
+  wrath:    "#FD0001",
+  lust:     "#FA6D07",
+  sloth:    "#c9a110",
+  gluttony: "#77b808",
+  gloom:    "#0a94b3",
+  pride:    "#074BD8",
+  envy:     "#9503DA",
 };
 
 // ─── 物理伤害类型 ─────────────────────────────────────────────────────────────
