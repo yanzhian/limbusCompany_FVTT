@@ -22,6 +22,7 @@ import { LimbusActorSheet } from "./sheets/actor-sheet.mjs";
 import { LimbusItemSheet }  from "./sheets/item-sheet.mjs";
 import { ClashManager }     from "./helpers/clash.mjs";
 import { SinResourceHUD }   from "./helpers/sin-resource-hud.mjs";
+import { QuickActionHUD }   from "./sheets/quick-action-hud.mjs";
 
 /* ─── DiceSoNice 硬币外观注册（d2：1=反面 / 2=正面） ─────────────────────── */
 
@@ -133,6 +134,9 @@ Hooks.once("ready", () => {
 
   // 显示全局罪孽资源 HUD
   SinResourceHUD.create();
+
+  // 创建快捷操作 HUD 单例（选中 Token 时自动渲染）
+  QuickActionHUD.create();
 
   // ── 过滤 ui.notifications 弹出的聊天清理竞态红色警告 ──────────────────
   // ui.notifications 在 ready 之后才可用，因此在此处 patch
@@ -256,6 +260,24 @@ Hooks.on("updateToken", async (token, changed, options) => {
   if (!tokenSystem) return;
 
   await baseActor.update({ system: tokenSystem }, { fromTokenSync: true, diff: false });
+});
+
+/* ─── 快捷操作 HUD 钩子 ─────────────────────────────────────────────────── */
+
+/** 选中 Token 变化 → 更新 HUD 显示 */
+Hooks.on("controlToken", () => {
+  QuickActionHUD.onControlToken();
+});
+
+/** Actor 数据变化 → 刷新 HUD（若追踪的就是该 actor） */
+Hooks.on("updateActor", (actor) => {
+  QuickActionHUD.onActorUpdate(actor);
+});
+
+/** Token 数据变化（非链接 Token）→ 也刷新 HUD */
+Hooks.on("updateToken", (token) => {
+  const actor = token.actor;
+  if (actor) QuickActionHUD.onActorUpdate(actor);
 });
 
 /* ─── 战斗钩子 ───────────────────────────────────────────────────────────── */
@@ -493,6 +515,7 @@ async function _preloadTemplates() {
     "systems/limbusCompany_FVTT/templates/partials/activity-editor.hbs",
     // HUD
     "systems/limbusCompany_FVTT/templates/sin-resource-hud.hbs",
+    "systems/limbusCompany_FVTT/templates/quick-action-hud.hbs",
   ];
   return loadTemplates(templatePaths);
 }

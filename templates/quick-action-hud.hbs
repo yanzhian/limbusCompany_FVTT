@@ -1,0 +1,157 @@
+{{!-- quick-action-hud.hbs — 快捷操作 HUD --}}
+<div id="limbus-quick-action-hud" class="limbus-qa-hud">
+
+  {{!-- AP 硬币行 --}}
+  <div class="qa-ap-row">
+    {{#each apCoins}}
+      <div class="qa-ap-coin {{#if active}}qa-ap-coin--active{{else}}qa-ap-coin--inactive{{/if}}"
+           data-index="{{index}}" title="行动点 {{index}}">
+        <img src="{{#if active}}systems/limbusCompany_FVTT/assets/icons/Base_icon/硬币_正面.webp{{else}}systems/limbusCompany_FVTT/assets/icons/Base_icon/硬币_反面.webp{{/if}}"
+             width="36" height="36" alt="AP" draggable="false">
+      </div>
+    {{/each}}
+  </div>
+
+  {{!-- 中间行：[消耗品↑][装备↑] | [头像] | [基础↑][E.G.O↑] --}}
+  <div class="qa-mid-row">
+
+    {{!-- 左侧按钮组（消耗品 / 装备），面板在按钮上方展开 --}}
+    <div class="qa-btn-group qa-btn-group--left">
+
+      {{!-- 消耗品面板（初始隐藏） --}}
+      <div class="qa-panel" data-panel="consumable" style="display:none">
+        <div class="qa-panel-title">消耗品</div>
+        <div class="qa-panel-divider"></div>
+        <div class="qa-panel-body">
+          {{#each consumableItems}}
+            <div class="qa-panel-item" data-item-id="{{id}}">
+              <img class="qa-item-icon" src="{{img}}" alt="{{name}}" title="{{name}}">
+              <span class="qa-item-name">{{name}}</span>
+              <span class="qa-item-qty">×{{system.quantity}}</span>
+              <button class="qa-consumable-activate" title="使用">▶</button>
+            </div>
+          {{else}}
+            <div class="qa-panel-empty">暂无消耗品</div>
+          {{/each}}
+        </div>
+        <div class="qa-panel-divider"></div>
+      </div>
+
+      {{!-- 装备面板（初始隐藏） --}}
+      <div class="qa-panel" data-panel="equipment" style="display:none">
+        <div class="qa-panel-title">装备</div>
+        <div class="qa-panel-divider"></div>
+        <div class="qa-panel-body">
+          {{#each equipmentItems}}
+            <div class="qa-panel-item" data-item-id="{{id}}">
+              <img class="qa-item-icon" src="{{img}}" alt="{{name}}" title="{{name}}">
+              <span class="qa-item-name">{{name}}</span>
+              <button class="qa-equip-activate" title="激活">▶</button>
+            </div>
+          {{else}}
+            <div class="qa-panel-empty">暂无装备</div>
+          {{/each}}
+        </div>
+        <div class="qa-panel-divider"></div>
+      </div>
+
+      {{!-- 左侧按钮 --}}
+      <button class="qa-btn" data-panel="consumable">消耗品</button>
+      <button class="qa-btn" data-panel="equipment">装备</button>
+    </div>
+
+    {{!-- 角色头像（单击折叠面板 / 双击打开角色卡 / 拖动移动 HUD） --}}
+    <div class="qa-avatar-wrap">
+      <img class="qa-avatar" src="{{actorImg}}" alt="{{actorName}}" title="{{actorName}}" draggable="false">
+    </div>
+
+    {{!-- 右侧按钮组（基础技能 / E.G.O），面板在按钮上方展开 --}}
+    <div class="qa-btn-group qa-btn-group--right">
+
+      {{!-- 基础技能面板（初始隐藏） --}}
+      <div class="qa-panel" data-panel="basic" style="display:none">
+        <div class="qa-panel-title">基础技能</div>
+        <div class="qa-panel-divider"></div>
+        <div class="qa-panel-body">
+          <div class="qa-skills-grid">
+            {{#each basicSkills}}
+              <div class="qa-basic-skill-slot
+                           {{#if item}}qa-skill-slot--filled{{else}}qa-skill-slot--empty{{/if}}
+                           {{#if isActive}}qa-skill-active{{else}}qa-skill-pending{{/if}}"
+                   data-item-id="{{#if item}}{{item.id}}{{/if}}"
+                   style="border-color:{{sinColor}}"
+                   title="{{#if item}}{{item.name}}{{else}}（空）{{/if}}">
+                {{#if item}}
+                  <img src="{{item.img}}" alt="{{item.name}}" draggable="false">
+                {{/if}}
+              </div>
+            {{/each}}
+          </div>
+        </div>
+        <div class="qa-panel-divider"></div>
+      </div>
+
+      {{!-- E.G.O 技能面板（初始隐藏） --}}
+      <div class="qa-panel" data-panel="ego" style="display:none">
+        <div class="qa-panel-title">E.G.O技能</div>
+        <div class="qa-panel-divider"></div>
+        <div class="qa-panel-body">
+          <div class="qa-skills-grid">
+            {{#each egoSkills}}
+              <div class="qa-ego-skill-slot
+                           {{#if item}}qa-skill-slot--filled{{else}}qa-skill-slot--empty{{/if}}"
+                   data-item-id="{{#if item}}{{item.id}}{{/if}}"
+                   data-grade="{{grade}}"
+                   style="border-color:{{sinColor}}"
+                   title="{{#if item}}{{item.name}}（{{grade}}）{{else}}{{grade}}（空）{{/if}}">
+                {{#if item}}
+                  <img src="{{item.img}}" alt="{{item.name}}" draggable="false">
+                {{/if}}
+                <span class="qa-ego-grade">{{grade}}</span>
+              </div>
+            {{/each}}
+          </div>
+        </div>
+        <div class="qa-panel-divider"></div>
+      </div>
+
+      {{!-- 右侧按钮 --}}
+      <button class="qa-btn" data-panel="basic">基础</button>
+      <button class="qa-btn" data-panel="ego">E.G.O</button>
+    </div>
+
+  </div>{{!-- .qa-mid-row --}}
+
+  {{!-- 底部行：HP球 | 状态栏 | 理智球 --}}
+  <div class="qa-bottom-row">
+
+    {{!-- 生命值球 --}}
+    <div class="qa-hp-ball" title="生命值 {{hpValue}}">
+      <span class="qa-ball-value">{{hpValue}}</span>
+    </div>
+
+    {{!-- BUFF 状态栏 --}}
+    <div class="qa-status-bar">
+      {{#each buffSlots}}
+        {{#if buff}}
+          <div class="qa-buff-slot qa-buff-slot--filled"
+               data-buff-id="{{buff.id}}"
+               title="{{buff.name}}&#13;强度:{{buff.intensity}}  层数:{{buff.stacks}}">
+            {{#if icon}}<img class="qa-buff-icon" src="{{icon}}" alt="{{buff.name}}">{{/if}}
+            <span class="qa-buff-intensity">{{buff.intensity}}</span>
+            <span class="qa-buff-stacks">{{buff.stacks}}</span>
+          </div>
+        {{else}}
+          <div class="qa-buff-slot qa-buff-slot--empty" title="点击添加状态BUFF"></div>
+        {{/if}}
+      {{/each}}
+    </div>
+
+    {{!-- 理智球 --}}
+    <div class="qa-san-ball" title="理智值 {{sanValue}}">
+      <span class="qa-ball-value">{{sanValue}}</span>
+    </div>
+
+  </div>{{!-- .qa-bottom-row --}}
+
+</div>{{!-- #limbus-quick-action-hud --}}
