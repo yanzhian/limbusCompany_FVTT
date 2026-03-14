@@ -110,13 +110,36 @@ export class SinResourceHUD extends Application {
     return inner;
   }
 
-  /** popOut=false 时需手动将元素注入 body */
+  /** 将当前 DOM 元素的位置存入实例（re-render 前调用） */
+  _saveCurrentPosition() {
+    const el = $("#limbus-sin-resource-hud");
+    if (!el.length) return;
+    const left = parseInt(el.css("left"));
+    const top  = parseInt(el.css("top"));
+    if (!isNaN(left)) this._savedLeft = left;
+    if (!isNaN(top))  this._savedTop  = top;
+  }
+
+  /** 将实例存储的位置应用到 html 元素 */
+  _applyPosition(html) {
+    if (this._savedLeft != null) html.css({ left: this._savedLeft, top: this._savedTop });
+  }
+
+  /** 首次渲染：注入 body */
   async _injectHTML(html) {
+    this._saveCurrentPosition();
     $("#limbus-sin-resource-hud").remove();
     $("body.game").append(html);
     this._element = html;
-    // 恢复上次拖动后的位置（避免重渲染时归零）
-    if (this._savedLeft != null) html.css({ left: this._savedLeft, top: this._savedTop });
+    this._applyPosition(html);
+  }
+
+  /** 后续 re-render：替换已有元素（Foundry 对已渲染 Application 走这条路） */
+  async _replaceHTML(element, html) {
+    this._saveCurrentPosition();
+    element.replaceWith(html);
+    this._element = html;
+    this._applyPosition(html);
   }
 
   activateListeners(html) {
