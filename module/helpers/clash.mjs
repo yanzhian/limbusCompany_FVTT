@@ -3,6 +3,8 @@
  * 全流程：发起对抗 → 聊天框 → 进行对抗确认 → 进行对抗 → 拼点结算 → 承受
  */
 
+import { SinResourceHUD } from "./sin-resource-hud.mjs";
+
 export class ClashManager {
 
   /* ─── 工具函数 ─────────────────────────────────────────────────────────── */
@@ -509,6 +511,41 @@ export class ClashManager {
     const formula  = sys.diceFormula ?? "1d4";
     const catIcon  = ClashManager._catIcon(sys.category);
     const catLabel = ClashManager._catLabel(sys.category);
+    const isEgo    = sys.type === "ego";
+    const cfg      = CONFIG.LIMBUSCOMPANY ?? {};
+
+    // ── EGO 消耗预览 HTML ────────────────────────────────────────────────
+    let egoCostHtml = "";
+    if (isEgo) {
+      const sinCost    = sys.sinCost    ?? [];
+      const sanityCost = sys.sanityCost ?? 0;
+      const sinParts   = sinCost.map(({ sinType, amount }) => {
+        const icon  = cfg.SIN_ICON_PATHS?.[sinType] ?? "";
+        const color = cfg.SIN_COLORS?.[sinType] ?? "#E8CAA2";
+        const label = cfg.SIN_LABELS_ZH?.[sinType] ?? sinType;
+        const cur   = SinResourceHUD.getSins()[sinType] ?? 0;
+        const ok    = cur >= amount;
+        return `<span style="display:inline-flex;align-items:center;gap:3px;margin-right:6px;
+                              color:${ok ? "#C89E70" : "#E84444"};">
+          ${icon ? `<img src="${icon}" style="width:16px;height:16px;border-radius:50%;vertical-align:middle;">` : ""}
+          <strong>${amount}</strong><span style="font-size:.7rem;color:#9A8462;">(${cur})</span>
+        </span>`;
+      }).join("");
+      const sanCur = actor.system?.sanity?.value ?? 50;
+      const sanOk  = sanityCost <= 0 || (sanCur - sanityCost) >= 5;
+      const sanPart = sanityCost > 0
+        ? `<span style="color:${sanOk ? "#C89E70" : "#E84444"};margin-left:4px;">
+             理智 -${sanityCost}（当前 ${sanCur}）
+           </span>`
+        : "";
+      if (sinParts || sanPart) {
+        egoCostHtml = `<div style="margin-bottom:10px;padding:6px 8px;border-radius:3px;
+                                    background:rgba(30,15,5,0.6);border:1px solid #3A2510;">
+          <span style="font-size:.7rem;color:#9A8462;margin-right:6px;">EGO消耗：</span>
+          ${sinParts}${sanPart}
+        </div>`;
+      }
+    }
 
     const content = `
       <div class="limbuscompany clash-dialog-v2">
@@ -517,6 +554,7 @@ export class ClashManager {
           ${catIcon ? `<img src="${catIcon}" style="width:24px;height:24px;" alt="${catLabel}">` : ""}
           <span style="font-size:24px;color:#EBBD68;">${formula.toUpperCase()}</span>
         </div>
+        ${egoCostHtml}
         <div style="margin-bottom:12px;">
           <label style="display:block;font-size:.75rem;color:#9A8462;margin-bottom:4px;">加值修正</label>
           <input type="text" name="bonus" placeholder="±N 或 1d4+2"
@@ -536,13 +574,45 @@ export class ClashManager {
               const bonusStr = dlg.find("[name='bonus']").val()?.trim() || "";
               const bonus    = parseInt(bonusStr) || 0;
               const full     = bonus !== 0 ? `${formula}${bonus >= 0 ? "+" : ""}${bonus}` : formula;
-              const roll     = new Roll(full);
+
+              // ── EGO 前置检查：罪孽资源 + 理智 ──────────────────────────
+              if (isEgo) {
+                const sinCost    = sys.sinCost ?? [];
+                const sanityCost = sys.sanityCost ?? 0;
+                if (!SinResourceHUD.canAffordSins(sinCost)) {
+                  ui.notifications.warn("罪孽资源不足，无法使用此 EGO 技能！");
+                  resolve(false);
+                  return;
+                }
+                const sanCur = actor.system?.sanity?.value ?? 50;
+                if (sanityCost > 0 && (sanCur - sanityCost) < 5) {
+                  ui.notifications.warn(`理智不足（当前 ${sanCur}，需消耗 ${sanityCost}，最低保持 5）！`);
+                  resolve(false);
+                  return;
+                }
+                // 扣除罪孽资源
+                await SinResourceHUD.consumeSins(sinCost);
+                // 扣除理智
+                if (sanityCost > 0) {
+                  await actor.setSanity?.((sanCur - sanityCost));
+                }
+              }
+
+              const roll = new Roll(full);
               await roll.evaluate();
               await ClashManager._sendInitiateMsg(actor, item, roll, full, slotIndex);
+
               // EGO 技能使用后，将 egoResistanceAdj 应用到角色的罪孽抗性
-              if (item.system?.type === "ego") {
+              if (isEgo) {
                 await ClashManager._applyEgoResistanceChanges(actor, item);
               }
+
+              // ── 技能使用后：获取对应罪孽资源 +1 ─────────────────────────
+              const sinType = sys.sinType;
+              if (sinType) {
+                await SinResourceHUD.addSin(sinType, 1);
+              }
+
               resolve(true);
             },
           },
@@ -862,6 +932,9 @@ export class ClashManager {
               await ClashManager._sendResponseAndResolve(
                 defActor, defItem, roll, full, initMsgId, initFlags, slotIdx
               );
+              // 进行对抗确认后：+1 对应 sinType 罪孽
+              const sinType = sys.sinType;
+              if (sinType) await SinResourceHUD.addSin(sinType, 1);
               resolve(true);
             },
           },

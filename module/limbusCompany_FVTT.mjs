@@ -21,6 +21,7 @@ import {
 import { LimbusActorSheet } from "./sheets/actor-sheet.mjs";
 import { LimbusItemSheet }  from "./sheets/item-sheet.mjs";
 import { ClashManager }     from "./helpers/clash.mjs";
+import { SinResourceHUD }   from "./helpers/sin-resource-hud.mjs";
 
 /* ─── DiceSoNice 硬币外观注册（d2：1=反面 / 2=正面） ─────────────────────── */
 
@@ -68,6 +69,12 @@ Hooks.once("init", () => {
 
   // 将常量挂载到全局 CONFIG
   CONFIG.LIMBUSCOMPANY = LIMBUSCOMPANY;
+
+  // 暴露 SinResourceHUD 到全局，供宏/控制台调用
+  globalThis.SinResourceHUD = SinResourceHUD;
+
+  // 注册全局罪孽资源 setting + socket（需在 init 阶段注册 setting）
+  SinResourceHUD.init();
 
   // 先攻公式：1D6 + 敏捷（战斗跟踪器默认骰掷使用）
   CONFIG.Combat.initiative.formula = "1d6 + @attributes.agi";
@@ -123,6 +130,9 @@ Hooks.once("setup", () => {
 
 Hooks.once("ready", () => {
   console.log("limbusCompany_FVTT | 系统已就绪。");
+
+  // 显示全局罪孽资源 HUD
+  SinResourceHUD.create();
 
   // ── 过滤 ui.notifications 弹出的聊天清理竞态红色警告 ──────────────────
   // ui.notifications 在 ready 之后才可用，因此在此处 patch
@@ -444,18 +454,10 @@ async function _migrateTokenLinks() {
 /* ─── 内部辅助函数 ───────────────────────────────────────────────────────── */
 
 /**
- * 注册游戏系统设置
+ * 注册游戏系统设置（globalSins 已由 SinResourceHUD.init() 在 init 钩子中注册）
  */
 function _registerSettings() {
   // 保留槽位，后续阶段按需添加
-  // 示例：
-  // game.settings.register("limbusCompany_FVTT", "globalSins", {
-  //   name: "全局罪孽资源",
-  //   scope: "world",
-  //   config: false,
-  //   type: Object,
-  //   default: { wrath:0, lust:0, sloth:0, gluttony:0, gloom:0, pride:0, envy:0 },
-  // });
 }
 
 /**
@@ -479,6 +481,8 @@ async function _preloadTemplates() {
     // Partials
     "systems/limbusCompany_FVTT/templates/partials/title-card.hbs",
     "systems/limbusCompany_FVTT/templates/partials/activity-editor.hbs",
+    // HUD
+    "systems/limbusCompany_FVTT/templates/sin-resource-hud.hbs",
   ];
   return loadTemplates(templatePaths);
 }

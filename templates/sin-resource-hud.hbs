@@ -1,0 +1,33 @@
+{{!-- sin-resource-hud.hbs — 全局罪孽资源浮动面板 --}}
+<div id="limbus-sin-resource-hud" class="limbus-sin-hud">
+
+  {{!-- 标题（hover 时显示，idle 时渐隐） --}}
+  <div class="sin-hud-title">罪孽资源</div>
+
+  {{!-- 主体条 --}}
+  <div class="sin-hud-bar">
+
+    {{#each entries}}
+      <div class="sin-hud-entry" title="{{label}}">
+        <img class="sin-hud-icon" src="{{icon}}" alt="{{label}}"
+             style="border-color: {{color}};">
+        {{#if ../isGM}}
+          <input class="sin-hud-value-input" type="number"
+                 data-sin="{{key}}" value="{{value}}" min="0">
+        {{else}}
+          <span class="sin-hud-value" style="color: {{color}};">{{value}}</span>
+        {{/if}}
+      </div>
+    {{/each}}
+
+    {{!-- 重置按钮（仅 GM 可见） --}}
+    {{#if isGM}}
+      <button class="sin-hud-reset" title="重置所有罪孽资源为零">
+        <img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/重置.webp"
+             alt="重置" width="28" height="28">
+      </button>
+    {{/if}}
+
+  </div>{{!-- /sin-hud-bar --}}
+
+</div>
