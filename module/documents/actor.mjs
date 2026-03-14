@@ -802,12 +802,12 @@ export class LimbusActor extends Actor {
     const clamped = Math.min(95, Math.max(5, value));
     await this.update({ "system.sanity.value": clamped });
 
-    if (clamped <= 5 && !this.system.isInPanic) {
-      // 触发恐慌：清空行动点，EGO 相关技能切换为侵蚀形态
-      await this.update({ "system.ap.value": 0 });
-      await this.addBuff({ type: "panic", name: "陷入恐慌", intensity: 1, stacks: 1, whenAdded: "本回合" });
+    // 理智降至5时，为角色添加「下回合」恐慌 BUFF（避免重复添加）
+    const alreadyHasPanic = (this.system.buffs ?? []).some(b => b.type === "panic");
+    if (clamped <= 5 && !alreadyHasPanic) {
+      await this.addBuff({ type: "panic", name: "陷入恐慌", intensity: 1, stacks: 1, whenAdded: "下回合" });
       await ChatMessage.create({
-        content: `<div class="limbuscompany chat-clash"><strong>${this.name}</strong> 理智跌至 ${clamped}——【陷入恐慌】！</div>`,
+        content: `<div class="limbuscompany chat-clash"><strong>${this.name}</strong> 理智跌至 ${clamped}——下回合将【陷入恐慌】！</div>`,
       });
     }
   }

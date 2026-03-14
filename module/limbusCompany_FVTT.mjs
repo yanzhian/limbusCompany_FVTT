@@ -300,10 +300,20 @@ Hooks.on("updateCombat", async (combat, changed) => {
 
     // ── 回合结束 BUFF 清理与晋升 ────────────────────────────────────────
     // 移除本轮有效的临时 BUFF（强壮/虚弱/混乱/恐慌等），将下回合 BUFF 转为本回合
+    const panicActivating = buffs.some(b => b.type === "panic" && b.whenAdded === "下回合");
     const updatedBuffs = buffs
       .filter(b => !(TURN_END.has(b.type) && b.whenAdded !== "下回合"))
       .map(b => b.whenAdded === "下回合" ? { ...b, whenAdded: "本回合" } : b);
     await actor.update({ "system.buffs": updatedBuffs });
+
+    // 恐慌 BUFF 本回合首次激活：清空 AP 并公告
+    if (panicActivating) {
+      await actor.update({ "system.ap.value": 0 });
+      await ChatMessage.create({
+        speaker: ChatMessage.getSpeaker({ actor }),
+        content: `<div class="limbuscompany chat-clash"><strong>${actor.name}</strong>【陷入恐慌】！无法使用基础及守备技能，E.G.O 不消耗理智但罪孽资源 ×1.5。</div>`,
+      });
+    }
 
     // 更新后重新读取 buffs（上面 update 已改变数据）
     const freshBuffs = actor.system.buffs ?? [];
