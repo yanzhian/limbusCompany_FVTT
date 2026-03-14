@@ -5134,9 +5134,13 @@ body.game .limbuscompany.app img {
   position:       relative;
 }
 
-/* ── 功能面板（向上展开） ─────────────────────────────────── */
+/* ── 功能面板（绝对定位浮层，向上展开，不影响 HUD 布局） ──── */
 .qa-panel {
-  display:          flex;
+  position:         absolute;
+  bottom:           100%;
+  margin-bottom:    6px;
+  z-index:          200;
+  display:          none;   /* JS 控制切换为 flex */
   flex-direction:   column;
   gap:              0;
   background:       #201E1B;
@@ -5148,6 +5152,11 @@ body.game .limbuscompany.app img {
   max-height:       480px;
   overflow-y:       auto;
 }
+/* 左侧按钮组：面板左对齐 */
+.qa-btn-group--left  .qa-panel { left:  0; }
+/* 右侧按钮组：面板右对齐 */
+.qa-btn-group--right .qa-panel { right: 0; }
+
 .qa-panel[data-panel="basic"],
 .qa-panel[data-panel="ego"] {
   min-width: 400px;
