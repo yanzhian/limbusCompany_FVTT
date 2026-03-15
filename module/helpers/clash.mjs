@@ -514,34 +514,50 @@ export class ClashManager {
     const isEgo    = sys.type === "ego";
     const cfg      = CONFIG.LIMBUSCOMPANY ?? {};
 
+    // ── 恐慌状态检查：恐慌时只能使用 EGO 技能 ──────────────────────────
+    const isInPanic = !!ClashManager._getBuff(actor, "panic");
+    if (isInPanic && !isEgo) {
+      ui.notifications.warn(`【陷入恐慌】${actor.name} 只能使用 E.G.O 技能！`);
+      return false;
+    }
+
     // ── EGO 消耗预览 HTML ────────────────────────────────────────────────
     let egoCostHtml = "";
     if (isEgo) {
       const sinCost    = sys.sinCost    ?? [];
       const sanityCost = sys.sanityCost ?? 0;
-      const sinParts   = sinCost.map(({ sinType, amount }) => {
-        const icon  = cfg.SIN_ICON_PATHS?.[sinType] ?? "";
-        const color = cfg.SIN_COLORS?.[sinType] ?? "#E8CAA2";
-        const label = cfg.SIN_LABELS_ZH?.[sinType] ?? sinType;
-        const cur   = SinResourceHUD.getSins()[sinType] ?? 0;
-        const ok    = cur >= amount;
+      // 恐慌时：罪孽资源 ×1.5，理智消耗豁免
+      const effectiveSinCost      = isInPanic ? sinCost.map(e => ({ ...e, amount: Math.ceil(e.amount * 1.5) })) : sinCost;
+      const effectiveSanityCost   = isInPanic ? 0 : sanityCost;
+      const sinParts   = effectiveSinCost.map(({ sinType, amount }) => {
+        const icon     = cfg.SIN_ICON_PATHS?.[sinType] ?? "";
+        const cur      = SinResourceHUD.getSins()[sinType] ?? 0;
+        const ok       = cur >= amount;
+        const origAmt  = sinCost.find(e => e.sinType === sinType)?.amount ?? amount;
+        const suffix   = isInPanic && amount !== origAmt
+          ? `<span style="font-size:.65rem;color:#E88844;"> ×1.5</span>` : "";
         return `<span style="display:inline-flex;align-items:center;gap:3px;margin-right:6px;
                               color:${ok ? "#C89E70" : "#E84444"};">
           ${icon ? `<img src="${icon}" style="width:16px;height:16px;border-radius:50%;vertical-align:middle;">` : ""}
-          <strong>${amount}</strong><span style="font-size:.7rem;color:#9A8462;">(${cur})</span>
+          <strong>${amount}</strong>${suffix}<span style="font-size:.7rem;color:#9A8462;">(${cur})</span>
         </span>`;
       }).join("");
-      const sanCur = actor.system?.sanity?.value ?? 50;
-      const sanOk  = sanityCost <= 0 || (sanCur - sanityCost) >= 5;
-      const sanPart = sanityCost > 0
-        ? `<span style="color:${sanOk ? "#C89E70" : "#E84444"};margin-left:4px;">
-             理智 -${sanityCost}（当前 ${sanCur}）
-           </span>`
+      const sanCur  = actor.system?.sanity?.value ?? 50;
+      const sanOk   = effectiveSanityCost <= 0 || (sanCur - effectiveSanityCost) >= 5;
+      const sanPart = isInPanic && sanityCost > 0
+        ? `<span style="color:#9A8462;margin-left:4px;font-style:italic;"></span>`
+        : effectiveSanityCost > 0
+          ? `<span style="color:${sanOk ? "#C89E70" : "#E84444"};margin-left:4px;">
+               理智 -${effectiveSanityCost}（当前 ${sanCur}）
+             </span>`
+          : "";
+      const panicNote = isInPanic
+        ? `<div style="font-size:.7rem;color:#E8A444;margin-bottom:4px;">【陷入恐慌】罪孽消耗 ×1.5，侵蚀状态</div>`
         : "";
-      if (sinParts || sanPart) {
+      if (panicNote || sinParts || sanPart) {
         egoCostHtml = `<div style="margin-bottom:10px;padding:6px 8px;border-radius:3px;
                                     background:rgba(30,15,5,0.6);border:1px solid #3A2510;">
-          <span style="font-size:.7rem;color:#9A8462;margin-right:6px;">EGO消耗：</span>
+          ${panicNote}<span style="font-size:.7rem;color:#9A8462;margin-right:6px;">EGO消耗：</span>
           ${sinParts}${sanPart}
         </div>`;
       }
@@ -575,26 +591,30 @@ export class ClashManager {
               const bonus    = parseInt(bonusStr) || 0;
               const full     = bonus !== 0 ? `${formula}${bonus >= 0 ? "+" : ""}${bonus}` : formula;
 
-              // ── EGO 前置检查：罪孽资源 + 理智 ──────────────────────────
+              // ── EGO 前置检查：罪孽资源 + 理智（恐慌时罪孽×1.5、免理智）──
               if (isEgo) {
-                const sinCost    = sys.sinCost ?? [];
-                const sanityCost = sys.sanityCost ?? 0;
-                if (!SinResourceHUD.canAffordSins(sinCost)) {
+                const sinCost         = sys.sinCost ?? [];
+                const sanityCost      = sys.sanityCost ?? 0;
+                const effectiveSinCost = isInPanic
+                  ? sinCost.map(e => ({ ...e, amount: Math.ceil(e.amount * 1.5) }))
+                  : sinCost;
+                const effectiveSanityCost = isInPanic ? 0 : sanityCost;
+                if (!SinResourceHUD.canAffordSins(effectiveSinCost)) {
                   ui.notifications.warn("罪孽资源不足，无法使用此 EGO 技能！");
                   resolve(false);
                   return;
                 }
                 const sanCur = actor.system?.sanity?.value ?? 50;
-                if (sanityCost > 0 && (sanCur - sanityCost) < 5) {
-                  ui.notifications.warn(`理智不足（当前 ${sanCur}，需消耗 ${sanityCost}，最低保持 5）！`);
+                if (effectiveSanityCost > 0 && (sanCur - effectiveSanityCost) < 5) {
+                  ui.notifications.warn(`理智不足（当前 ${sanCur}，需消耗 ${effectiveSanityCost}，最低保持 5）！`);
                   resolve(false);
                   return;
                 }
                 // 扣除罪孽资源
-                await SinResourceHUD.consumeSins(sinCost);
-                // 扣除理智
-                if (sanityCost > 0) {
-                  await actor.setSanity?.((sanCur - sanityCost));
+                await SinResourceHUD.consumeSins(effectiveSinCost);
+                // 扣除理智（恐慌时跳过）
+                if (effectiveSanityCost > 0) {
+                  await actor.setSanity?.((sanCur - effectiveSanityCost));
                 }
               }
 
@@ -721,18 +741,30 @@ export class ClashManager {
       return;
     }
 
-    // 行动值不足则无法进行对抗
-    if ((defActor.system.ap?.value ?? 0) <= 0) {
+    // 恐慌时只能用 EGO 响应（不需要 AP）；普通情况 AP 不足则无法对抗
+    const isInPanic = !!ClashManager._getBuff(defActor, "panic");
+    if ((defActor.system.ap?.value ?? 0) <= 0 && !isInPanic) {
       ui.notifications.warn(`${defActor.name} 行动值不足，无法进行对抗`);
       return;
+    }
+    if (isInPanic) {
+      const cfg    = CONFIG.LIMBUSCOMPANY ?? {};
+      const hasEgo = (cfg.EGO_GRADES ?? []).some(grade => {
+        const egoId = defActor.system.skills?.ego?.[grade];
+        return egoId && defActor.items.get(egoId);
+      });
+      if (!hasEgo) {
+        ui.notifications.warn(`【陷入恐慌】${defActor.name} 没有可用的 E.G.O 技能，只能承受伤害！`);
+        return;
+      }
     }
 
     ClashManager._buildPickerDialog(defActor, (chosenItem, slotIdx) => {
       ClashManager.showPerformDialog(defActor, chosenItem, msgId, initFlags, slotIdx);
-    });
+    }, isInPanic);
   }
 
-  static _buildPickerDialog(actor, onPick) {
+  static _buildPickerDialog(actor, onPick, panicMode = false) {
     const sheet    = actor.sheet;
     const bagState = sheet?._combatBagState;
     const sys      = actor.system;
@@ -764,11 +796,22 @@ export class ClashManager {
 
     // ─── slot HTML 工厂 ───
     // slotIdx: 对应 bagState.slots 的下标（-1 = 守备/EGO，不属于 6-bag）
-    const octaSlotHtml = (item, extraClass = "", slotIdx = -1) => {
+    const octaSlotHtml = (item, extraClass = "", slotIdx = -1, disabled = false) => {
       if (!item) {
         return `<div class="clash-pick-slot clash-pick-empty" style="width:52px;height:52px;"></div>`;
       }
       const sin = ClashManager._sinColor(item.system?.sinType);
+      if (disabled) {
+        return `
+          <div class="clash-pick-slot clash-pick-disabled" data-item-id="${item.id}" data-slot-index="${slotIdx}"
+               title="${item.name}（恐慌中无法使用）"
+               style="position:relative;width:52px;height:52px;cursor:not-allowed;flex-shrink:0;
+                      opacity:0.35;filter:grayscale(1);">
+            <img src="${item.img}"
+                 style="width:52px;height:52px;object-fit:cover;border:2px solid ${sin};"
+                 alt="${item.name}">
+          </div>`;
+      }
       const hasRel = !!(item.system?.relatedSkill?.itemUuid);
       return `
         <div class="clash-pick-slot ${extraClass}" data-item-id="${item.id}" data-slot-index="${slotIdx}" title="${item.name}"
@@ -802,18 +845,25 @@ export class ClashManager {
         </div>`;
     };
 
+    const panicNotice = panicMode
+      ? `<div style="font-size:.75rem;color:#E8A444;text-align:center;padding:4px 0 6px;font-style:italic;">
+           【陷入恐慌】只能使用 E.G.O 技能
+         </div>`
+      : "";
+
     const topRow = `
+      ${panicNotice}
       <div style="display:flex;gap:16px;justify-content:center;padding:10px 0 28px;">
-        ${octaSlotHtml(active0, "clash-pick-active", 0)}
-        ${octaSlotHtml(active1, "clash-pick-active", 1)}
-        ${octaSlotHtml(defItem, "", -1)}
+        ${octaSlotHtml(active0, "clash-pick-active", 0, panicMode)}
+        ${octaSlotHtml(active1, "clash-pick-active", 1, panicMode)}
+        ${octaSlotHtml(defItem, "", -1, panicMode)}
       </div>`;
 
     const expandedHtml = `
       <div class="clash-pick-expanded" style="display:none;">
         ${ClashManager._goldDivider()}
         <div style="display:flex;flex-wrap:wrap;gap:16px;justify-content:center;padding:8px 0 16px;">
-          ${restItems.map((it, j) => octaSlotHtml(it, "", 2 + j)).join("")}
+          ${restItems.map((it, j) => octaSlotHtml(it, "", 2 + j, panicMode)).join("")}
         </div>
         ${egoEntries.some(e => e.item) ? `
           <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;padding:4px 0 8px;">
@@ -844,8 +894,13 @@ export class ClashManager {
           $(e.currentTarget).text(open ? "▼" : "▲");
         });
 
+        // 恐慌时禁用槽点击提示
+        dlgHtml.on("click", ".clash-pick-disabled", () => {
+          ui.notifications.warn("【陷入恐慌】无法使用基础或守备技能！");
+        });
+
         // 选中技能（携带 slotIdx 供后续推进战斗袋）
-        dlgHtml.on("click", ".clash-pick-slot:not(.clash-pick-empty)", (e) => {
+        dlgHtml.on("click", ".clash-pick-slot:not(.clash-pick-empty):not(.clash-pick-disabled)", (e) => {
           if ($(e.target).hasClass("clash-pick-rel")) return; // 不触发 related toggle
           const itemId  = e.currentTarget.dataset.itemId;
           const slotIdx = parseInt(e.currentTarget.dataset.slotIndex ?? "-1");
@@ -890,10 +945,12 @@ export class ClashManager {
   /* ─── 阶段四：进行对抗弹窗（与发起对抗一致，标题/按钮不同） ─────────── */
 
   static async showPerformDialog(defActor, defItem, initMsgId, initFlags, slotIdx = -1) {
-    const sys     = defItem.system ?? {};
-    const formula = sys.diceFormula ?? "1d4";
-    const catIcon = ClashManager._catIcon(sys.category);
-    const catLabel = ClashManager._catLabel(sys.category);
+    const sys       = defItem.system ?? {};
+    const formula   = sys.diceFormula ?? "1d4";
+    const catIcon   = ClashManager._catIcon(sys.category);
+    const catLabel  = ClashManager._catLabel(sys.category);
+    const isEgo     = sys.type === "ego";
+    const isInPanic = isEgo && !!ClashManager._getBuff(defActor, "panic");
 
     const content = `
       <div class="limbuscompany clash-dialog-v2">
@@ -918,6 +975,31 @@ export class ClashManager {
           perform: {
             label: "进行对抗",
             callback: async (dlg) => {
+              // ── 防守方使用 EGO 时的前置检查（含恐慌调整）────────────────
+              if (isEgo) {
+                const sinCost          = sys.sinCost ?? [];
+                const sanityCost       = sys.sanityCost ?? 0;
+                const effectiveSinCost = isInPanic
+                  ? sinCost.map(e => ({ ...e, amount: Math.ceil(e.amount * 1.5) }))
+                  : sinCost;
+                const effectiveSanityCost = isInPanic ? 0 : sanityCost;
+                if (!SinResourceHUD.canAffordSins(effectiveSinCost)) {
+                  ui.notifications.warn("罪孽资源不足，无法使用此 EGO 技能！");
+                  resolve(false);
+                  return;
+                }
+                const sanCur = defActor.system?.sanity?.value ?? 50;
+                if (effectiveSanityCost > 0 && (sanCur - effectiveSanityCost) < 5) {
+                  ui.notifications.warn(`理智不足（当前 ${sanCur}，需消耗 ${effectiveSanityCost}，最低保持 5）！`);
+                  resolve(false);
+                  return;
+                }
+                await SinResourceHUD.consumeSins(effectiveSinCost);
+                if (effectiveSanityCost > 0) {
+                  await defActor.setSanity?.((sanCur - effectiveSanityCost));
+                }
+              }
+
               const bonusStr = dlg.find("[name='bonus']").val()?.trim() || "";
               const bonus    = parseInt(bonusStr) || 0;
               const full     = bonus !== 0 ? `${formula}${bonus >= 0 ? "+" : ""}${bonus}` : formula;
@@ -994,9 +1076,13 @@ export class ClashManager {
     // 流血：防守方进行对抗也是攻击动作，同样触发
     await ClashManager._processBleed(defActor);
 
-    // 扣防守方 AP
-    const defAp = defActor.system.ap?.value ?? 0;
-    if (defAp > 0) await defActor.update({ "system.ap.value": defAp - 1 });
+    // 扣防守方 AP（恐慌时使用 EGO 免 AP 消耗）
+    const defIsEgo     = (defItem.system?.type === "ego");
+    const defIsInPanic = defIsEgo && !!ClashManager._getBuff(defActor, "panic");
+    if (!defIsInPanic) {
+      const defAp = defActor.system.ap?.value ?? 0;
+      if (defAp > 0) await defActor.update({ "system.ap.value": defAp - 1 });
+    }
 
     // 推进防守方战斗袋（技能消失，后面的技能填充）
     if (slotIdx >= 0) {

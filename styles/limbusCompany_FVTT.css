@@ -5086,3 +5086,327 @@ body.game .limbuscompany.app img {
   opacity:   1;
   transform: rotate(180deg);
 }
+
+/* ============================================================
+   快捷操作 HUD — Quick Action HUD
+   ============================================================ */
+
+/* ── 根容器 ───────────────────────────────────────────────── */
+#limbus-quick-action-hud {
+  position:        fixed;
+  z-index:         100;
+  display:         flex;
+  flex-direction:  column;
+  align-items:     center;
+  gap:             4px;
+  user-select:     none;
+  pointer-events:  auto;
+}
+
+/* ── AP 硬币行 ────────────────────────────────────────────── */
+.qa-ap-row {
+  display:         flex;
+  gap:             4px;
+  justify-content: center;
+}
+
+.qa-ap-coin {
+  cursor:     pointer;
+  transition: filter 0.15s;
+  line-height: 0;
+}
+.qa-ap-coin:hover          { filter: brightness(1.25); }
+.qa-ap-coin--inactive img  { opacity: 0.45; }
+
+/* ── 中间行 ───────────────────────────────────────────────── */
+.qa-mid-row {
+  display:     flex;
+  align-items: flex-end;
+  gap:         8px;
+}
+
+/* ── 按钮组（左 / 右） ────────────────────────────────────── */
+.qa-btn-group {
+  display:        flex;
+  flex-direction: row;
+  gap:            6px;
+  align-self:     flex-end;
+  position:       relative;
+}
+
+/* ── 功能面板（绝对定位浮层，向上展开，不影响 HUD 布局） ──── */
+.qa-panel {
+  position:         absolute;
+  bottom:           100%;
+  margin-bottom:    6px;
+  z-index:          200;
+  display:          none;   /* JS 控制切换为 flex */
+  flex-direction:   column;
+  gap:              0;
+  background:       #201E1B;
+  border:           1px solid #3A2510;
+  border-radius:    4px;
+  padding:          8px 10px;
+  min-width:        280px;
+  min-height:       80px;
+  max-height:       480px;
+  overflow-y:       auto;
+}
+/* 左侧按钮组：面板左对齐 */
+.qa-btn-group--left  .qa-panel { left:  0; }
+/* 右侧按钮组：面板右对齐 */
+.qa-btn-group--right .qa-panel { right: 0; }
+
+.qa-panel[data-panel="basic"],
+.qa-panel[data-panel="ego"] {
+  min-width: 400px;
+}
+
+.qa-panel-title {
+  font-size:   32px;
+  color:       #E8CAA1;
+  font-weight: bold;
+  margin:      0 0 4px;
+  line-height: 1.1;
+}
+
+.qa-panel-divider {
+  height:     1px;
+  background: linear-gradient(to right, transparent, #C9A84C 30%, #C9A84C 70%, transparent);
+  margin:     6px 0;
+  flex-shrink: 0;
+}
+
+.qa-panel-body {
+  display:        flex;
+  flex-direction: column;
+  gap:            2px;
+}
+
+.qa-panel-empty {
+  font-size:  12px;
+  color:      #6B5A42;
+  text-align: center;
+  padding:    10px 0;
+}
+
+/* ── 面板物品行 ───────────────────────────────────────────── */
+.qa-panel-item {
+  display:     flex;
+  align-items: center;
+  gap:         8px;
+  padding:     3px 0;
+}
+
+.qa-item-icon {
+  width:       16px;
+  height:      16px;
+  object-fit:  cover;
+  flex-shrink: 0;
+}
+
+.qa-item-name {
+  font-size: 16px;
+  color:     #EBBD68;
+  flex:      1;
+  overflow:  hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.qa-item-qty {
+  font-size:   12px;
+  color:       #9A8462;
+  flex-shrink: 0;
+}
+
+.qa-equip-activate,
+.qa-consumable-activate {
+  background:  none;
+  border:      1px solid #C9A84C;
+  color:       #C9A84C;
+  border-radius: 3px;
+  width:       22px;
+  height:      22px;
+  cursor:      pointer;
+  font-size:   10px;
+  padding:     0;
+  line-height: 1;
+  flex-shrink: 0;
+  transition:  background 0.15s;
+}
+.qa-equip-activate:hover,
+.qa-consumable-activate:hover {
+  background: rgba(201, 168, 76, 0.2);
+}
+
+/* ── 技能格子（基础 / EGO 面板内） ────────────────────────── */
+.qa-skills-grid {
+  display:   flex;
+  gap:       8px;
+  flex-wrap: wrap;
+  padding:   4px 0;
+}
+
+.qa-basic-skill-slot,
+.qa-ego-skill-slot {
+  width:           52px;
+  height:          52px;
+  border:          2px solid #443322;
+  border-radius:   3px;
+  background:      #0B0707;
+  cursor:          pointer;
+  position:        relative;
+  overflow:        hidden;
+  display:         flex;
+  align-items:     center;
+  justify-content: center;
+  flex-shrink:     0;
+  transition:      filter 0.15s;
+}
+.qa-basic-skill-slot:hover,
+.qa-ego-skill-slot:hover     { filter: brightness(1.2); }
+
+.qa-basic-skill-slot img,
+.qa-ego-skill-slot img {
+  width:      100%;
+  height:     100%;
+  object-fit: cover;
+}
+
+/* 激活槽：金色边框；预备槽：红色边框，不可点击 */
+.qa-skill-active  { border-color: #E5BA25 !important; }
+.qa-skill-pending { border-color: #8B2020 !important; cursor: default; }
+.qa-skill-pending:hover { filter: none; }
+
+.qa-skill-slot--empty { opacity: 0.35; }
+
+.qa-ego-grade {
+  position:         absolute;
+  bottom:           1px;
+  right:            2px;
+  font-size:        8px;
+  color:            #E8C9A2;
+  background:       rgba(0,0,0,0.65);
+  padding:          0 2px;
+  border-radius:    2px;
+  pointer-events:   none;
+  line-height:      1.2;
+}
+
+/* ── 功能按钮 ─────────────────────────────────────────────── */
+.qa-btn {
+  background:    #1C1C1A;
+  color:         #E8CAA2;
+  border:        1px solid #443322;
+  border-radius: 4px;
+  padding:       6px 12px;
+  font-size:     14px;
+  cursor:        pointer;
+  white-space:   nowrap;
+  transition:    background 0.15s, border-color 0.15s, color 0.15s;
+}
+.qa-btn:hover      { background: #2A2520; border-color: #C9A84C; }
+.qa-btn--active    { background: #3A2510; border-color: #E5BA25; color: #E5BA25; }
+
+/* ── 头像包装 ─────────────────────────────────────────────── */
+.qa-avatar-wrap { position: relative; }
+
+.qa-avatar {
+  width:         90px;
+  height:        90px;
+  border-radius: 50%;
+  object-fit:    cover;
+  border:        2px solid #C9A84C;
+  display:       block;
+  cursor:        pointer;
+  transition:    border-color 0.15s;
+}
+.qa-avatar:hover { border-color: #E5BA25; }
+
+/* ── 底部行 ───────────────────────────────────────────────── */
+.qa-bottom-row {
+  display:     flex;
+  align-items: center;
+  gap:         6px;
+  margin-top:  2px;
+}
+
+/* ── HP / 理智 球 ──────────────────────────────────────────── */
+.qa-hp-ball,
+.qa-san-ball {
+  width:           32px;
+  height:          32px;
+  border-radius:   50%;
+  background:      #201E1B;
+  display:         flex;
+  align-items:     center;
+  justify-content: center;
+  cursor:          pointer;
+  flex-shrink:     0;
+  border:          2px solid;
+  transition:      filter 0.15s;
+}
+.qa-hp-ball:hover,
+.qa-san-ball:hover { filter: brightness(1.15); }
+
+.qa-hp-ball  { border-color: #B43822; box-shadow: 0 0 5px rgba(180,56,34,.4); }
+.qa-san-ball { border-color: #4F7A9C; box-shadow: 0 0 5px rgba(79,122,156,.4); }
+
+.qa-ball-value {
+  font-size:   24px;
+  font-weight: bold;
+  color:       #ECE4D6;
+  line-height: 1;
+  /* 数字较大时自动缩放，保证不超出球体 */
+  transform-origin: center;
+}
+
+/* ── BUFF 状态栏 ───────────────────────────────────────────── */
+.qa-status-bar {
+  display:   flex;
+  flex-wrap: wrap;
+  gap:       2px;
+  flex:      1;
+  max-width: 300px; /* 8格 × (24+2) px */
+}
+
+.qa-buff-slot {
+  width:        32px;
+  height:       32px;
+  background:   #201E1B;
+  border:       1px solid #2A2520;
+  border-radius: 2px;
+  position:     relative;
+  overflow:     visible;
+  cursor:       pointer;
+  flex-shrink:  0;
+  transition:   border-color 0.15s;
+}
+.qa-buff-slot--empty:hover  { border-color: #C9A84C; }
+.qa-buff-slot--filled:hover { border-color: #E5BA25; }
+
+.qa-buff-icon {
+  width:     24px;
+  height:    24px;
+  position:  absolute;
+  top:       50%;
+  left:      50%;
+  transform: translate(-50%, -50%);
+  object-fit: cover;
+  pointer-events: none;
+}
+
+.qa-buff-intensity,
+.qa-buff-stacks {
+  position:   absolute;
+  bottom:     0;
+  font-size:  9px;
+  color:      #ECE4D6;
+  line-height: 1;
+  background: rgba(0,0,0,0.6);
+  padding:    0 1px;
+  pointer-events: none;
+}
+.qa-buff-intensity { left:  0; border-radius: 0 2px 0 2px; }
+.qa-buff-stacks    { right: 0; border-radius: 2px 0 2px 0; }
