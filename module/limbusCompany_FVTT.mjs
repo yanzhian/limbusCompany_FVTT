@@ -333,6 +333,9 @@ Hooks.on("updateCombat", async (combat, changed) => {
     if (!actor || actor.type !== "character") continue;
     const buffs = actor.system.buffs ?? [];
 
+    // 每轮重置拼点胜利计数（用于理智增加量递增计算）
+    await actor.unsetFlag("limbusCompany_FVTT", "clashWinsThisRound");
+
     // ── 回合结束 BUFF 清理与晋升 ────────────────────────────────────────
     // 移除本轮有效的临时 BUFF（强壮/虚弱/混乱/恐慌等），将下回合 BUFF 转为本回合
     const panicActivating = buffs.some(b => b.type === "panic" && b.whenAdded === "下回合");

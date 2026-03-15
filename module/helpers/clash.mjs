@@ -183,6 +183,40 @@ export class ClashManager {
   }
 
   /**
+   * 拼点胜负后理智变化。
+   * 胜者：+round(10 × 1.2^(本轮胜利次数-1))，通过 actor flag "clashWinsThisRound" 追踪。
+   * 败者：-(10 + floor(max(0, 胜者攻击等级 - 败者防御等级) / 3))。
+   * @returns {{ gainNote:string, lossNote:string }}
+   */
+  static async _applySanityFromClash(winner, loser) {
+    let gainNote = "";
+    let lossNote = "";
+
+    if (winner?.type === "character") {
+      const prevWins  = (winner.getFlag?.("limbusCompany_FVTT", "clashWinsThisRound") ?? 0);
+      await winner.setFlag?.("limbusCompany_FVTT", "clashWinsThisRound", prevWins + 1);
+      const gain      = Math.round(10 * Math.pow(1.2, prevWins));
+      const oldSanity = winner.system?.sanity?.value ?? 50;
+      await winner.setSanity?.(oldSanity + gain);
+      const roundNote = prevWins > 0 ? `，本轮第 ${prevWins + 1} 次拼点胜利` : "";
+      gainNote = `⬆ ${winner.name} 理智 <span style="color:#6EE06E">+${gain}</span>${roundNote}`;
+    }
+
+    if (loser?.type === "character") {
+      const winAtkLv  = winner ? ClashManager._effAtkLv(winner) : 0;
+      const losDefLv  = ClashManager._effDefLv(loser);
+      const lvBonus   = Math.floor(Math.max(0, winAtkLv - losDefLv) / 3);
+      const loss      = 10 + lvBonus;
+      const oldSanity = loser.system?.sanity?.value ?? 50;
+      await loser.setSanity?.(oldSanity - loss);
+      const lvNote = lvBonus > 0 ? `，等级差 +${lvBonus}` : "";
+      lossNote = `⬇ ${loser.name} 理智 <span style="color:#E84444">-${loss}</span>（基础 10${lvNote}）`;
+    }
+
+    return { gainNote, lossNote };
+  }
+
+  /**
    * 执行 item.system.activities 中与 trigger 匹配的效果。
    * @param {Item}   item     携带活动效果的技能物品（攻击方或防守方的技能）
    * @param {string} trigger  触发时机（如 "使用时"、"命中时"）
@@ -1190,6 +1224,15 @@ export class ClashManager {
           }
         }
       }
+    }
+
+    // ── 拼点理智变化（非平局、非闪避胜利时结算）──────────────────────────
+    if (!isTie && !dodgeWin) {
+      const { gainNote, lossNote } = await ClashManager._applySanityFromClash(
+        resolution.winner, resolution.loser
+      );
+      if (gainNote) resolution.notes.push(gainNote);
+      if (lossNote) resolution.notes.push(lossNote);
     }
 
     await ClashManager._sendResolveMsg(resolution, initFlags, defActor, defItem, defFormula);
