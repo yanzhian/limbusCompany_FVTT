@@ -344,11 +344,37 @@ Hooks.on("updateCombat", async (combat, changed) => {
 
     // ── 回合结束 BUFF 清理与晋升 ────────────────────────────────────────
     // 移除本轮有效的临时 BUFF（强壮/虚弱/混乱/恐慌等），将下回合 BUFF 转为本回合
+    const panicWasActive  = buffs.some(b => b.type === "panic" && b.whenAdded !== "下回合");
     const panicActivating = buffs.some(b => b.type === "panic" && b.whenAdded === "下回合");
-    const updatedBuffs = buffs
-      .filter(b => !(TURN_END.has(b.type) && b.whenAdded !== "下回合"))
-      .map(b => b.whenAdded === "下回合" ? { ...b, whenAdded: "本回合" } : b);
+
+    // Step 1: 移除本回合结束即清除的 BUFF
+    const afterRemove = buffs.filter(b => !(TURN_END.has(b.type) && b.whenAdded !== "下回合"));
+
+    // Step 2: 将下回合 BUFF 晋升为本回合
+    const promoted = afterRemove.map(b => b.whenAdded === "下回合" ? { ...b, whenAdded: "本回合" } : b);
+
+    // Step 3: 合并同类型 BUFF（intensity 与 stacks 相加，保留先出现者的 id/name/icon）
+    const mergedMap = new Map();
+    for (const b of promoted) {
+      if (mergedMap.has(b.type)) {
+        const ex = mergedMap.get(b.type);
+        ex.intensity = (ex.intensity ?? 0) + (b.intensity ?? 0);
+        ex.stacks    = (ex.stacks    ?? 0) + (b.stacks    ?? 0);
+      } else {
+        mergedMap.set(b.type, { ...b });
+      }
+    }
+    const updatedBuffs = [...mergedMap.values()];
     await actor.update({ "system.buffs": updatedBuffs });
+
+    // 恐慌结束（上回合有恐慌，且本轮没有新的下回合恐慌）：恢复理智至 50
+    if (panicWasActive && !panicActivating) {
+      await actor.update({ "system.sanity.value": 50 });
+      await ChatMessage.create({
+        speaker: ChatMessage.getSpeaker({ actor }),
+        content: `<div class="limbuscompany chat-clash"><strong>${actor.name}</strong> 恢复神志，理智恢复至 <strong>50</strong>。</div>`,
+      });
+    }
 
     // 恐慌 BUFF 本回合首次激活：清空 AP 并公告
     if (panicActivating) {
