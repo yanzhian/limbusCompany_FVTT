@@ -176,6 +176,13 @@ Hooks.on("renderChatMessage", (_message, html, _data) => {
     });
   }
 
+  // ── 加重扩散承受聊天框 ──
+  if (flags.type === "clash-weight-spread") {
+    html.find(".clash-btn-weight-take").on("click", () => {
+      ClashManager.handleWeightTake(_message.id, flags);
+    });
+  }
+
   // ── 拼点结算聊天框：承受（扣血） / 再次骰掷（平局） ──
   if (flags.type === "clash-resolve") {
     html.find(".clash-btn-apply-damage").on("click", (e) => {

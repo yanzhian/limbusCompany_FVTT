@@ -698,6 +698,7 @@ export class ClashManager {
           itemImg:     item.img,
           category:    sys.category ?? "",
           sinType:     sys.sinType  ?? "",
+          weight:      sys.weight   ?? 1,
           effectDesc,
           slotIndex,
         },
@@ -1702,6 +1703,171 @@ export class ClashManager {
     if (selActor !== baseActor && selActor.isToken) {
       const th = selActor.system?.hp?.value ?? 0;
       await selActor.update({ "system.hp.value": Math.max(0, th - finalDamage) });
+    }
+
+    // ── 加重扩散：weight>=2 时发出额外承受卡 ──────────────────────────────
+    const weight = initFlags.weight ?? 1;
+    if (weight >= 2) {
+      await ClashManager._sendWeightSpreadCard(initFlags, atkActor);
+    }
+  }
+
+  /* ─── 加重扩散承受 ──────────────────────────────────────────────────────── */
+
+  /** 构建加重扩散卡 HTML（remainingUses 可变，复用于更新消息内容）。 */
+  static _buildWeightSpreadContent(flags, remainingUses, atkActor) {
+    const actor      = atkActor ?? game.actors.get(flags.attackerId);
+    const btnDisabled = remainingUses <= 0;
+    const btnStyle   = btnDisabled
+      ? "background:#555;color:#888;border:none;cursor:not-allowed;opacity:.6;"
+      : "background:#B84444;color:#fff;border:none;cursor:pointer;";
+    const btnLabel   = btnDisabled ? "（已用尽）" : `承受（×${remainingUses}）`;
+    return `
+      <div class="limbus-clash-card" data-clash-type="weight-spread">
+        ${ClashManager._chatHeader(actor, "加重扩散")}
+        ${ClashManager._goldDivider()}
+        <div style="font-size:.85rem;color:#E8C9A2;margin:4px 0 6px;">
+          ⚔️ <strong>${flags.itemName ?? "技能"}</strong> 加重命中！<br>
+          <span style="color:#C9A84C;">扩散承受剩余：<strong>${remainingUses}</strong> 次</span>
+        </div>
+        <div style="margin-bottom:4px;">
+          <button class="clash-btn-weight-take"
+                  style="height:30px;padding:0 14px;${btnStyle}font-size:.85rem;border-radius:2px;"
+                  ${btnDisabled ? "disabled" : ""}>
+            ${btnLabel}
+          </button>
+        </div>
+        <div style="font-size:.72rem;color:#9A8462;margin-top:2px;">选中目标 Token 后点击按钮进行扩散承受</div>
+        ${ClashManager._goldDivider()}
+      </div>`;
+  }
+
+  /** 发送加重扩散承受聊天卡。 */
+  static async _sendWeightSpreadCard(initFlags, atkActor) {
+    const remainingUses = (initFlags.weight ?? 1) - 1;
+    const spreadFlags = {
+      type:          "clash-weight-spread",
+      attackerId:    initFlags.attackerId,
+      itemId:        initFlags.itemId,
+      itemName:      initFlags.itemName,
+      itemImg:       initFlags.itemImg,
+      rollTotal:     initFlags.rollTotal,
+      category:      initFlags.category,
+      sinType:       initFlags.sinType,
+      remainingUses,
+    };
+    await ClashManager._safeChatCreate({
+      speaker: ChatMessage.getSpeaker({ actor: atkActor }),
+      content: ClashManager._buildWeightSpreadContent(spreadFlags, remainingUses, atkActor),
+      flags:   { limbusCompany_FVTT: spreadFlags },
+    });
+  }
+
+  /** 玩家选中 Token 后点击扩散卡承受按钮的处理逻辑。 */
+  static async handleWeightTake(msgId, flags) {
+    if ((flags.remainingUses ?? 0) <= 0) {
+      ui.notifications.warn("扩散承受次数已用尽");
+      return;
+    }
+
+    const selActor = game.user.character ?? canvas.tokens?.controlled?.[0]?.actor ?? null;
+    if (!selActor) {
+      ui.notifications.warn("请先选中承受伤害的 Token");
+      return;
+    }
+    if (selActor.id === flags.attackerId) {
+      ui.notifications.warn("发起对抗的角色不能承受自己的攻击");
+      return;
+    }
+
+    const atkActor = game.actors.get(flags.attackerId);
+    const defActor = game.actors.get(selActor.id) ?? selActor;
+
+    const rollTotal = flags.rollTotal ?? 0;
+    const category  = flags.category  ?? "";
+    const sinType   = flags.sinType   ?? "";
+    const PHYS_CATS   = ["slash", "blunt", "pierce"];
+    const SIN_TYPES   = ["wrath","lust","sloth","gluttony","gloom","pride","envy"];
+    const PHYS_LABELS = { slash: "斩击", blunt: "打击", pierce: "突刺" };
+    const SIN_LABELS  = { wrath:"暴怒", lust:"色欲", sloth:"怠惰",
+                          gluttony:"暴食", gloom:"忧郁", pride:"傲慢", envy:"嫉妒" };
+
+    const gs = (actor, type) => ClashManager._getBuffVal(actor, type).stacks;
+
+    // 攻击方 BUFF 修正
+    const strong     = atkActor ? gs(atkActor, "strong") : 0;
+    const weak       = atkActor ? gs(atkActor, "weak")   : 0;
+    const atkDiceMod = strong - weak;
+
+    // 等级差
+    const atkLv   = atkActor ? ClashManager._effAtkLv(atkActor) : 0;
+    const defLv   = ClashManager._effDefLv(defActor);
+    const lvBonus = Math.floor(Math.max(0, atkLv - defLv) / 3);
+
+    // 有效骰数
+    const effectiveAtk = rollTotal + atkDiceMod + lvBonus;
+
+    // 守护 / 易损
+    const guard       = gs(defActor, "guard");
+    const fragile     = gs(defActor, "fragile");
+    const adjustedAtk = Math.max(0, effectiveAtk + fragile - guard);
+
+    // 物理抗性 & 罪孽抗性
+    const effRes     = ClashManager._getEffectiveResistances(defActor);
+    const physResStr = PHYS_CATS.includes(category) ? (effRes[category] ?? "x1.0") : "x1.0";
+    const sinResStr  = SIN_TYPES.includes(sinType)
+      ? (defActor.system?.egoResistances?.[sinType] ?? "x1.0") : "x1.0";
+    const physMult   = ClashManager._parseResistance(physResStr);
+    const sinMult    = ClashManager._parseResistance(sinResStr);
+
+    const finalDamage = Math.max(0, Math.round(adjustedAtk * physMult * sinMult));
+
+    // 结算说明
+    const calcNotes = [`骰点结果：${rollTotal}（加重扩散）`];
+    let step = rollTotal;
+    if (atkDiceMod !== 0) {
+      step += atkDiceMod;
+      const parts = [];
+      if (strong > 0) parts.push(`强壮+${strong}`);
+      if (weak   > 0) parts.push(`虚弱-${weak}`);
+      calcNotes.push(`攻击方BUFF（${parts.join("，")}）→ 有效骰数 ${step}`);
+    }
+    if (lvBonus > 0) {
+      step += lvBonus;
+      calcNotes.push(`等级差（攻Lv${atkLv} vs 防Lv${defLv}，差${atkLv - defLv}，+${lvBonus}）→ ${step}`);
+    } else if (defLv > atkLv) {
+      calcNotes.push(`等级差：防御等级${defLv} > 攻击等级${atkLv}，无加成`);
+    }
+    if (fragile > 0 || guard > 0) {
+      const prev  = step;
+      step = adjustedAtk;
+      const parts = [];
+      if (fragile > 0) parts.push(`易损+${fragile}`);
+      if (guard   > 0) parts.push(`守护-${guard}`);
+      calcNotes.push(`${parts.join("，")}：${prev} → ${step}`);
+    }
+    if (physMult !== 1.0 || sinMult !== 1.0) {
+      const resParts = [];
+      if (physMult !== 1.0) resParts.push(`${PHYS_LABELS[category] ?? category}抗性${physResStr}`);
+      if (sinMult  !== 1.0) resParts.push(`${SIN_LABELS[sinType]  ?? sinType}罪孽抗性${sinResStr}`);
+      calcNotes.push(`${resParts.join(" × ")}：${step} → ${finalDamage}`);
+    }
+
+    await ClashManager._applyAndSendTake(defActor, finalDamage, { calcNotes });
+
+    // 若是非 linked token，额外同步 HP
+    if (selActor !== defActor && selActor.isToken) {
+      const cur = selActor.system?.hp?.value ?? 0;
+      await selActor.update({ "system.hp.value": Math.max(0, cur - finalDamage) });
+    }
+
+    // 更新扩散卡剩余次数
+    const newRemaining = (flags.remainingUses ?? 1) - 1;
+    const message = game.messages.get(msgId);
+    if (message) {
+      const newFlags  = { ...flags, remainingUses: newRemaining };
+      const newContent = ClashManager._buildWeightSpreadContent(newFlags, newRemaining, atkActor);
+      await message.update({ flags: { limbusCompany_FVTT: newFlags }, content: newContent });
     }
   }
 
