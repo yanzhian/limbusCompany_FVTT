@@ -20,6 +20,7 @@
             {{#if item}}<img src="{{skillImg}}"
                  alt="{{item.name}}"
                  class="skill-slot-img">{{/if}}
+            <img src="{{frameImg}}" alt="" class="skill-slot-frame" draggable="false">
           </div>
         </div>
       {{/each}}
@@ -43,6 +44,7 @@
             {{#if item}}<img src="{{skillImg}}"
                  alt="{{item.name}}"
                  class="skill-slot-img">{{/if}}
+            <img src="{{frameImg}}" alt="" class="skill-slot-frame" draggable="false">
           </div>
           <div class="ego-grade-label">{{grade}}</div>
         </div>
@@ -60,6 +62,7 @@
           {{#if defenseSkill.item}}<img src="{{defenseSkill.skillImg}}"
                alt="{{defenseSkill.item.name}}"
                class="skill-slot-img">{{/if}}
+          <img src="{{defenseSkill.frameImg}}" alt="" class="skill-slot-frame" draggable="false">
         </div>
         {{#if defenseSkill.item}}
           <div class="ego-grade-label defense-cat-label">

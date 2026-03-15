@@ -3196,6 +3196,18 @@ body.game .limbuscompany.app img {
   filter: drop-shadow(0 0 1px rgba(0,0,0,.7));
 }
 
+/* 框架装饰图（叠加在技能图标之上，白底用 multiply 变透明） */
+.limbuscompany .skill-slot-frame {
+  position: absolute;
+  inset: 0;
+  width: 100%; height: 100%;
+  object-fit: contain;
+  mix-blend-mode: multiply;
+  pointer-events: none;
+  z-index: 2;
+  display: block;
+}
+
 /* 空槽：暗淡 */
 .limbuscompany .skill-slot-empty .skill-slot-octa,
 .limbuscompany .skill-slot-empty .skill-slot-circle { opacity: .45; }

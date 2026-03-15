@@ -151,6 +151,7 @@ export class LimbusActorSheet extends ActorSheet {
         item:      bItem,
         itemId:    id ?? null,
         skillImg:  bItem?.img ?? "",
+        frameImg:  this._resolveFrameImg(bItem, "basic"),
       };
     });
 
@@ -159,6 +160,7 @@ export class LimbusActorSheet extends ActorSheet {
       item:     defItem,
       itemId:   system.skills?.defense ?? null,
       skillImg: defItem?.img ?? "",
+      frameImg: this._resolveFrameImg(defItem, "defense"),
     };
 
     context.egoSkills = cfg.EGO_GRADES.map(grade => {
@@ -171,6 +173,7 @@ export class LimbusActorSheet extends ActorSheet {
         skillImg:   egoItem?.img ?? "",
         erodeUuid,
         hasRelated: !!(egoItem?.system?.relatedSkill?.itemUuid),
+        frameImg:   this._resolveFrameImg(egoItem, "ego"),
       };
     });
 
@@ -211,7 +214,29 @@ export class LimbusActorSheet extends ActorSheet {
     return context;
   }
 
-  /* ─── 技能图标解析辅助 ──────────────────────────────────────────────────── */
+  /* ─── 技能图标 / 框架图解析辅助 ───────────────────────────────────────────── */
+
+  /**
+   * 解析技能框架图路径（叠加在技能图标上方的环形装饰）。
+   * @param {Item|null} item  技能物品
+   * @param {"basic"|"ego"|"defense"} slotType  槽位类型
+   * @returns {string}  图片路径
+   */
+  _resolveFrameImg(item, slotType = "basic") {
+    const BASE = "systems/limbusCompany_FVTT/assets/icons/Skill/";
+    // EGO 槽固定用圆形框（有技能时也一样）
+    if (slotType === "ego") return `${BASE}E.G.O.webp`;
+    // 空槽 / 无罪孽类型 → 通用框
+    if (!item || !item.system?.sinType) return `${BASE}Normalsin.webp`;
+    const sinCapMap = {
+      wrath:"Wrath", lust:"Lust", sloth:"Sloth",
+      gluttony:"Gluttony", gloom:"Gloom", pride:"Pride", envy:"Envy",
+    };
+    const sinCap = sinCapMap[item.system.sinType];
+    if (!sinCap) return `${BASE}Normalsin.webp`;
+    const lv = Math.min(3, Math.max(1, parseInt(item.system?.level) || 1));
+    return `${BASE}${sinCap}_lv${lv}.webp`;
+  }
 
   /**
    * 解析技能图标路径：
