@@ -220,8 +220,9 @@ export class ClashManager {
       let precondFail = false;
       for (const pre of preconditions) {
         if (!pre?.buff) continue;
+        const preBuffType = pre.buff === "custom" ? (pre.buffCustom || "custom") : pre.buff;
         const precTgt = pre.target === "self" ? owner : other;
-        const buff    = precTgt ? ClashManager._getBuff(precTgt, pre.buff) : null;
+        const buff    = precTgt ? ClashManager._getBuff(precTgt, preBuffType) : null;
         if (!buff) { precondFail = true; break; }
         if ((pre.intensity ?? 0) > 0 && (buff.intensity ?? 0) < pre.intensity) { precondFail = true; break; }
         if ((pre.stacks    ?? 0) > 0 && (buff.stacks    ?? 0) < pre.stacks)    { precondFail = true; break; }
@@ -234,8 +235,9 @@ export class ClashManager {
         : (act.cost ? [act.cost] : []);
       for (const cost of costs) {
         if (!cost?.buff || cost.type === "none") continue;
+        const costBuffType = cost.buff === "custom" ? (cost.buffCustom || "custom") : cost.buff;
         const costTgt = cost.target === "self" ? owner : other;
-        if (costTgt) await ClashManager._reduceBuffStacks(costTgt, cost.buff, cost.stacks ?? 1);
+        if (costTgt) await ClashManager._reduceBuffStacks(costTgt, costBuffType, cost.stacks ?? 1);
       }
 
       // ── 效果（effects）────────────────────────────────────────────────

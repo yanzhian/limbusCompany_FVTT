@@ -881,6 +881,10 @@ function _buildCondRow(cond, idx, cfg) {
         </select>
         <label>BUFF</label>
         <select class="ae-sel cond-buff">${buffOpts}</select>
+        <input class="ae-input cond-buff-custom" type="text"
+               placeholder="自定BUFF名称"
+               value="${_esc(cond?.buffCustom ?? "")}"
+               style="display:${(cond?.buff ?? "") === "custom" ? "inline-block" : "none"};width:90px;">
         <label>强度≥</label>
         <input class="ae-input-sm cond-intensity" type="number" value="${cond?.intensity ?? 1}" min="0">
         <label>层数≥</label>
@@ -910,6 +914,10 @@ function _buildCostRow(cost, idx, cfg) {
         </select>
         <label>BUFF</label>
         <select class="ae-sel cost-buff">${buffOpts}</select>
+        <input class="ae-input cost-buff-custom" type="text"
+               placeholder="自定BUFF名称"
+               value="${_esc(cost?.buffCustom ?? "")}"
+               style="display:${(cost?.buff ?? "") === "custom" ? "inline-block" : "none"};width:90px;">
         <label>强度</label>
         <input class="ae-input-sm cost-intensity" type="number" value="${cost?.intensity ?? 1}" min="0">
         <label>层数</label>
@@ -983,12 +991,14 @@ function _setupAeDialog(html, cfg) {
     const idx  = list.find(".ae-cond-row").length;
     list.append(_buildCondRow({}, idx, cfg));
     _bindDel(html);
+    _bindCondCostBuff(html);
   });
   html.find(".ae-add-cost").on("click", () => {
     const list = html.find(".ae-cost-list");
     const idx  = list.find(".ae-cost-row").length;
     list.append(_buildCostRow({}, idx, cfg));
     _bindDel(html);
+    _bindCondCostBuff(html);
   });
   html.find(".ae-add-effect").on("click", () => {
     const list = html.find(".ae-effect-list");
@@ -1003,6 +1013,16 @@ function _setupAeDialog(html, cfg) {
 
   _bindDel(html);
   _bindEffType(html);
+  _bindCondCostBuff(html);
+}
+
+function _bindCondCostBuff(html) {
+  html.find(".cond-buff").off("change").on("change", function () {
+    $(this).closest(".ae-cond-row").find(".cond-buff-custom").toggle($(this).val() === "custom");
+  });
+  html.find(".cost-buff").off("change").on("change", function () {
+    $(this).closest(".ae-cost-row").find(".cost-buff-custom").toggle($(this).val() === "custom");
+  });
 }
 
 function _bindDel(html) {
@@ -1046,25 +1066,29 @@ function _bindEffType(html) {
 function _readActivityForm(html, original) {
   const preconditions = [];
   html.find(".ae-cond-row").each((_, el) => {
-    const $r = $(el);
+    const $r      = $(el);
+    const buffVal = $r.find(".cond-buff").val() || "";
     preconditions.push({
-      type:      "hasBuff",
-      target:    $r.find(".cond-target").val()  || "self",
-      buff:      $r.find(".cond-buff").val()    || "",
-      intensity: parseInt($r.find(".cond-intensity").val()) || 1,
-      stacks:    parseInt($r.find(".cond-stacks").val())    || 1,
+      type:       "hasBuff",
+      target:     $r.find(".cond-target").val()  || "self",
+      buff:       buffVal,
+      buffCustom: buffVal === "custom" ? ($r.find(".cond-buff-custom").val()?.trim() || "") : "",
+      intensity:  parseInt($r.find(".cond-intensity").val()) || 1,
+      stacks:     parseInt($r.find(".cond-stacks").val())    || 1,
     });
   });
 
   const costs = [];
   html.find(".ae-cost-row").each((_, el) => {
-    const $r = $(el);
+    const $r      = $(el);
+    const buffVal = $r.find(".cost-buff").val() || "";
     costs.push({
-      type:      $r.find(".cost-type").val()    || "forced",
-      target:    $r.find(".cost-target").val()  || "self",
-      buff:      $r.find(".cost-buff").val()    || "",
-      intensity: parseInt($r.find(".cost-intensity").val()) || 1,
-      stacks:    parseInt($r.find(".cost-stacks").val())    || 1,
+      type:       $r.find(".cost-type").val()    || "forced",
+      target:     $r.find(".cost-target").val()  || "self",
+      buff:       buffVal,
+      buffCustom: buffVal === "custom" ? ($r.find(".cost-buff-custom").val()?.trim() || "") : "",
+      intensity:  parseInt($r.find(".cost-intensity").val()) || 1,
+      stacks:     parseInt($r.find(".cost-stacks").val())    || 1,
     });
   });
 
