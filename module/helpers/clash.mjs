@@ -1416,11 +1416,26 @@ export class ClashManager {
       atkItemName, atkItemImg,
       atkCategory: initFlags.category ?? "",
       atkSinType:  initFlags.sinType  ?? "",
+      atkWeight:   initFlags.weight   ?? 1,
+      atkRollBase: initFlags.rollTotal ?? 0,
+      atkItemId:   initFlags.itemId   ?? "",
       defActorId:  defActor?.id  ?? "",
       defFormula:  defFormula    ?? "",
       defItemName, defItemImg,
       defCategory: defCat,
       defSinType:  defItem?.system?.sinType ?? "",
+    } : null;
+
+    // 加重扩散信息：仅攻击方胜且非平局才携带
+    const weightSpread = atkWins && !isTie ? {
+      attackerId: atkActor?.id      ?? "",
+      rollTotal:  initFlags.rollTotal ?? 0,
+      category:   initFlags.category  ?? "",
+      sinType:    initFlags.sinType   ?? "",
+      weight:     initFlags.weight    ?? 1,
+      itemId:     initFlags.itemId    ?? "",
+      itemName:   initFlags.itemName  ?? "",
+      itemImg:    initFlags.itemImg   ?? "",
     } : null;
 
     const takeSection = isTie
@@ -1489,6 +1504,7 @@ export class ClashManager {
           targetActorId: loser?.id ?? "",
           damage:        finalDamage,
           rerollData,
+          weightSpread,
         },
       },
     });
@@ -1547,7 +1563,15 @@ export class ClashManager {
     }
 
     await ClashManager._sendResolveMsg(resolution,
-      { category: atkCategory, sinType: atkSinType },
+      {
+        category:  atkCategory,
+        sinType:   atkSinType,
+        weight:    rerollData.atkWeight   ?? 1,
+        rollTotal: rerollData.atkRollBase ?? atkRoll.total,
+        itemId:    rerollData.atkItemId   ?? "",
+        itemName:  atkItemName,
+        itemImg:   atkItemImg,
+      },
       defActor,
       { img: defItemImg, name: defItemName, system: { category: defCategory, sinType: defSinType } },
       defFormula,

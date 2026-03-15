@@ -185,10 +185,16 @@ Hooks.on("renderChatMessage", (_message, html, _data) => {
 
   // ── 拼点结算聊天框：承受（扣血） / 再次骰掷（平局） ──
   if (flags.type === "clash-resolve") {
-    html.find(".clash-btn-apply-damage").on("click", (e) => {
+    html.find(".clash-btn-apply-damage").on("click", async (e) => {
       const targetActorId = e.currentTarget.dataset.targetActorId ?? flags.targetActorId;
       const damage        = parseInt(e.currentTarget.dataset.damage ?? flags.damage) || 0;
-      ClashManager.handleApplyDamage(targetActorId, damage);
+      await ClashManager.handleApplyDamage(targetActorId, damage);
+      // 加重扩散：攻击方赢且 weight>=2 时，在扣血后发出扩散承受卡
+      const ws = flags.weightSpread;
+      if (ws && (ws.weight ?? 1) >= 2) {
+        const atkActor = game.actors.get(ws.attackerId);
+        await ClashManager._sendWeightSpreadCard(ws, atkActor);
+      }
     });
     html.find(".clash-btn-reroll").on("click", () => {
       ClashManager.rerollClash(flags.rerollData);
