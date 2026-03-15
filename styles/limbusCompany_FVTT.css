@@ -5159,7 +5159,7 @@ body.game .limbuscompany.app img {
 
 .qa-panel[data-panel="basic"],
 .qa-panel[data-panel="ego"] {
-  min-width: 400px;
+  min-width: 320px;
 }
 
 .qa-panel-title {
