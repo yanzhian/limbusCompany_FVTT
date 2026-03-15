@@ -3166,9 +3166,9 @@ body.game .limbuscompany.app img {
 
 .limbuscompany .skill-slot-octa::before {
   content: "";
-  position: absolute;
+  /* position: absolute; */
   inset: 0;
-  background: #181511;
+  /* background: #181511; */
   border: none;
   /* 正七边形蒙版，尖朝下 */
   clip-path: polygon(50% 100%, 89% 81%, 99% 39%, 72% 5%, 28% 5%, 1% 39%, 11% 81%);
@@ -3193,7 +3193,7 @@ body.game .limbuscompany.app img {
   position: absolute;
   top: 50%; left: 50%;
   transform: translate(-50%, -50%);
-  width: 80%; height: 80%;
+  width: 50%; height: 50%;
   object-fit: contain;
   z-index: 1;
   display: block;
@@ -3212,7 +3212,7 @@ body.game .limbuscompany.app img {
   transform: translate(-50%, -50%);
   width: 220%; height: 220%;
   object-fit: contain;
-  mix-blend-mode: multiply;
+  /* mix-blend-mode: multiply; */
   pointer-events: none;
   z-index: 2;
   display: block;
