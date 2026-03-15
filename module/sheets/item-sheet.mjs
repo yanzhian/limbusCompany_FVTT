@@ -921,14 +921,21 @@ function _buildCostRow(cost, idx, cfg) {
 const _BUFF_EFFECTS   = new Set(["addBuff", "removeBuff"]);
 const _NOVAL_EFFECTS  = new Set(["relatedSkillConvert"]);
 
+const _ROUND_OPTIONS = ["本回合", "下回合", "本回合和下回合"];
+
 /** 效果行 HTML */
 function _buildEffectRow(eff, idx, cfg) {
-  const type     = eff?.type ?? "addBuff";
-  const isBuff   = _BUFF_EFFECTS.has(type);
-  const isNoVal  = _NOVAL_EFFECTS.has(type);
-  const effOpts  = _activityEffectLabels()
+  const type       = eff?.type ?? "addBuff";
+  const isBuff     = _BUFF_EFFECTS.has(type);
+  const isAddBuff  = type === "addBuff";
+  const isNoVal    = _NOVAL_EFFECTS.has(type);
+  const effOpts    = _activityEffectLabels()
     .map(e => `<option value="${e.value}" ${type === e.value ? "selected" : ""}>${e.label}</option>`).join("");
-  const buffOpts = _buildBuffGroupOptions(cfg, eff?.buff);
+  const buffOpts   = _buildBuffGroupOptions(cfg, eff?.buff);
+  const roundVal   = eff?.round ?? "本回合";
+  const roundOpts  = _ROUND_OPTIONS
+    .map(v => `<option value="${v}" ${roundVal === v ? "selected" : ""}>${v}</option>`).join("");
+  const formulaVal = _esc(eff?.value ?? "");
   return `
     <div class="ae-row ae-eff-row">
       <div class="ae-row-hd">
@@ -943,6 +950,10 @@ function _buildEffectRow(eff, idx, cfg) {
           <option value="self"   ${(eff?.target ?? "self") === "self"   ? "selected" : ""}>自己</option>
           <option value="target" ${eff?.target === "target" ? "selected" : ""}>目标</option>
         </select>
+        <span class="ae-eff-round-sec" ${isAddBuff ? "" : 'style="display:none"'}>
+          <label>回合</label>
+          <select class="ae-sel eff-round">${roundOpts}</select>
+        </span>
         <span class="ae-eff-buff-sec" ${isBuff ? "" : 'style="display:none"'}>
           <label>BUFF</label>
           <select class="ae-sel eff-buff ae-eff-buff-sel">${buffOpts}</select>
@@ -956,8 +967,9 @@ function _buildEffectRow(eff, idx, cfg) {
           <input class="ae-input-sm eff-stacks" type="number" value="${eff?.stacks ?? 1}" min="0">
         </span>
         <span class="ae-eff-val-sec" ${(!isBuff && !isNoVal) ? "" : 'style="display:none"'}>
-          <label>数值</label>
-          <input class="ae-input-sm eff-value" type="number" value="${eff?.value ?? 0}">
+          <label>相关数值</label>
+          <input class="ae-input eff-value" type="text" placeholder="数值或公式，如 1D4+2"
+                 value="${formulaVal}" style="width:110px;">
         </span>
       </div>
     </div>`;
@@ -1010,10 +1022,12 @@ function _bindDel(html) {
 
 function _bindEffType(html) {
   html.find(".ae-eff-type").off("change").on("change", function () {
-    const row    = $(this).closest(".ae-eff-row");
-    const type   = $(this).val();
-    const isBuff = _BUFF_EFFECTS.has(type);
-    const isNoV  = _NOVAL_EFFECTS.has(type);
+    const row       = $(this).closest(".ae-eff-row");
+    const type      = $(this).val();
+    const isBuff    = _BUFF_EFFECTS.has(type);
+    const isAddBuff = type === "addBuff";
+    const isNoV     = _NOVAL_EFFECTS.has(type);
+    row.find(".ae-eff-round-sec").toggle(isAddBuff);
     row.find(".ae-eff-buff-sec").toggle(isBuff);
     row.find(".ae-eff-val-sec").toggle(!isBuff && !isNoV);
     // 切换效果类型时也检查自定义 BUFF 输入框
@@ -1061,14 +1075,16 @@ function _readActivityForm(html, original) {
     const isBuff   = _BUFF_EFFECTS.has(type);
     const buffVal  = isBuff ? ($r.find(".eff-buff").val() || "") : "";
     const buffCustom = (buffVal === "custom") ? ($r.find(".eff-buff-custom").val()?.trim() || "") : "";
+    const isAddBuff = type === "addBuff";
     effects.push({
       type,
-      target:     $r.find(".eff-target").val()   || "self",
+      target:     $r.find(".eff-target").val()    || "self",
+      round:      isAddBuff ? ($r.find(".eff-round").val() || "本回合") : undefined,
       buff:       buffVal,
       buffCustom,
-      intensity:  isBuff ? (parseInt($r.find(".eff-intensity").val()) || 1) : 0,
-      stacks:     isBuff ? (parseInt($r.find(".eff-stacks").val())    || 1) : 0,
-      value:     !isBuff ? (parseInt($r.find(".eff-value").val())     || 0) : 0,
+      intensity:  isBuff  ? (parseInt($r.find(".eff-intensity").val()) || 1) : 0,
+      stacks:     isBuff  ? (parseInt($r.find(".eff-stacks").val())    || 1) : 0,
+      value:     !isBuff  ? ($r.find(".eff-value").val()?.trim() || "") : "",
     });
   });
 
