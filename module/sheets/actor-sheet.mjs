@@ -693,6 +693,7 @@ export class LimbusActorSheet extends ActorSheet {
         : parseInt(data.fromSkillSlot ?? "-1");
       const fromOwnedSlots = data.fromSkillSlotType || (Number.isInteger(fromSkillSlot) && fromSkillSlot >= 0);
       if (!fromOwnedSlots) {
+        if (ownedItem) return;  // 已属于该角色，忽略原地拖拽
         await this._importItemToActor(item, { forceDuplicate: true });
         return;
       }
