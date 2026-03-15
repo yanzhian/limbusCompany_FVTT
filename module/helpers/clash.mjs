@@ -145,10 +145,11 @@ export class ClashManager {
   }
 
   /** 给角色添加或叠加 BUFF。已有同类型则叠加层数、取最大强度；无则新增。 */
-  static async _addBuff(actor, type, intensity = 1, stacks = 1) {
+  static async _addBuff(actor, type, intensity = 1, stacks = 1, whenAdded = "本回合") {
     if (!actor || !type) return;
     const buffs = foundry.utils.deepClone(actor.system?.buffs ?? []);
-    const idx   = buffs.findIndex(b => b.type === type);
+    // 按 type + whenAdded 精确匹配，防止本/下回合同类 BUFF 错误合并
+    const idx   = buffs.findIndex(b => b.type === type && (b.whenAdded ?? "本回合") === whenAdded);
     if (idx >= 0) {
       buffs[idx].stacks    = (buffs[idx].stacks    ?? 0) + stacks;
       buffs[idx].intensity = Math.max(buffs[idx].intensity ?? 0, intensity);
@@ -165,7 +166,7 @@ export class ClashManager {
         icon,
         intensity,
         stacks,
-        whenAdded: "本回合",
+        whenAdded,
       });
     }
     await actor.update({ "system.buffs": buffs });
@@ -179,6 +180,40 @@ export class ClashManager {
     }
     const buffs = (actor.system?.buffs ?? []).filter(b => b.type !== type);
     await actor.update({ "system.buffs": buffs });
+  }
+
+  /**
+   * 拼点胜负后理智变化。
+   * 胜者：+round(10 × 1.2^(本轮胜利次数-1))，通过 actor flag "clashWinsThisRound" 追踪。
+   * 败者：-(10 + max(0, 败者等级 - 胜者等级))，等级差为 actor.system.level 的直接差值。
+   * @returns {{ gainNote:string, lossNote:string }}
+   */
+  static async _applySanityFromClash(winner, loser) {
+    let gainNote = "";
+    let lossNote = "";
+
+    if (winner?.type === "character") {
+      const prevWins  = (winner.getFlag?.("limbusCompany_FVTT", "clashWinsThisRound") ?? 0);
+      await winner.setFlag?.("limbusCompany_FVTT", "clashWinsThisRound", prevWins + 1);
+      const gain      = Math.round(10 * Math.pow(1.2, prevWins));
+      const oldSanity = winner.system?.sanity?.value ?? 50;
+      await winner.setSanity?.(oldSanity + gain);
+      const roundNote = prevWins > 0 ? `，本轮第 ${prevWins + 1} 次拼点胜利` : "";
+      gainNote = `<span style="color:#6EE06E">⬆ ${winner.name} 理智 +${gain}${roundNote}</span>`;
+    }
+
+    if (loser?.type === "character") {
+      const winLv   = winner?.system?.level  ?? 0;
+      const losLv   = loser.system?.level    ?? 0;
+      const extra   = Math.max(0, losLv - winLv);
+      const loss    = 10 + extra;
+      const oldSanity = loser.system?.sanity?.value ?? 50;
+      await loser.setSanity?.(oldSanity - loss);
+      const lvNote = extra > 0 ? `，等级差 +${extra}（${losLv}-${winLv}）` : "";
+      lossNote = `<span style="color:#E84444">⬇ ${loser.name} 理智 -${loss}（基础 10${lvNote}）</span>`;
+    }
+
+    return { gainNote, lossNote };
   }
 
   /**
@@ -219,8 +254,9 @@ export class ClashManager {
       let precondFail = false;
       for (const pre of preconditions) {
         if (!pre?.buff) continue;
+        const preBuffType = pre.buff === "custom" ? (pre.buffCustom || "custom") : pre.buff;
         const precTgt = pre.target === "self" ? owner : other;
-        const buff    = precTgt ? ClashManager._getBuff(precTgt, pre.buff) : null;
+        const buff    = precTgt ? ClashManager._getBuff(precTgt, preBuffType) : null;
         if (!buff) { precondFail = true; break; }
         if ((pre.intensity ?? 0) > 0 && (buff.intensity ?? 0) < pre.intensity) { precondFail = true; break; }
         if ((pre.stacks    ?? 0) > 0 && (buff.stacks    ?? 0) < pre.stacks)    { precondFail = true; break; }
@@ -233,8 +269,9 @@ export class ClashManager {
         : (act.cost ? [act.cost] : []);
       for (const cost of costs) {
         if (!cost?.buff || cost.type === "none") continue;
+        const costBuffType = cost.buff === "custom" ? (cost.buffCustom || "custom") : cost.buff;
         const costTgt = cost.target === "self" ? owner : other;
-        if (costTgt) await ClashManager._reduceBuffStacks(costTgt, cost.buff, cost.stacks ?? 1);
+        if (costTgt) await ClashManager._reduceBuffStacks(costTgt, costBuffType, cost.stacks ?? 1);
       }
 
       // ── 效果（effects）────────────────────────────────────────────────
@@ -254,10 +291,19 @@ export class ClashManager {
 
         let descStr = "";
         switch (eff.type) {
-          case "addBuff":
-            await ClashManager._addBuff(effTgt, buffType, intensity, stacks);
-            descStr = `为【${effTgt.name}】添加 ${stacks} 层 ${buffType}（强度 ${intensity}）`;
+          case "addBuff": {
+            const round = eff.round ?? "本回合";
+            if (round === "本回合和下回合") {
+              // 分别写入两条同类 BUFF，本回合立即生效，下回合在回合结束时晋升
+              await ClashManager._addBuff(effTgt, buffType, intensity, stacks, "本回合");
+              await ClashManager._addBuff(effTgt, buffType, intensity, stacks, "下回合");
+            } else {
+              await ClashManager._addBuff(effTgt, buffType, intensity, stacks, round);
+            }
+            const roundLabel = round === "本回合" ? "" : `（${round}）`;
+            descStr = `为【${effTgt.name}】添加 ${stacks} 层 ${buffType}（强度 ${intensity}）${roundLabel}`;
             break;
+          }
           case "removeBuff":
             await ClashManager._removeBuff(effTgt, buffType);
             descStr = `移除【${effTgt.name}】的 ${buffType}`;
@@ -688,6 +734,7 @@ export class ClashManager {
           itemImg:     item.img,
           category:    sys.category ?? "",
           sinType:     sys.sinType  ?? "",
+          weight:      sys.weight   ?? 1,
           effectDesc,
           slotIndex,
         },
@@ -1179,7 +1226,17 @@ export class ClashManager {
       }
     }
 
-    await ClashManager._sendResolveMsg(resolution, initFlags, defActor, defItem, defFormula);
+    // ── 拼点理智变化（非平局、非闪避胜利时结算）──────────────────────────
+    const sanityNotes = [];
+    if (!isTie && !dodgeWin) {
+      const { gainNote, lossNote } = await ClashManager._applySanityFromClash(
+        resolution.winner, resolution.loser
+      );
+      if (gainNote) sanityNotes.push(gainNote);
+      if (lossNote) sanityNotes.push(lossNote);
+    }
+
+    await ClashManager._sendResolveMsg(resolution, initFlags, defActor, defItem, defFormula, sanityNotes);
 
     // ── [攻击后]：结算完对抗结果后触发 ────────────────────────────────
     await ClashManager._applyActivities(atkItem, "攻击后", atkCtx);
@@ -1366,7 +1423,7 @@ export class ClashManager {
 
   /* ─── 阶段五c：拼点结算聊天框 ──────────────────────────────────────────── */
 
-  static async _sendResolveMsg(res, initFlags, defActor, defItem, defFormula) {
+  static async _sendResolveMsg(res, initFlags, defActor, defItem, defFormula, sanityNotes = []) {
     const {
       atkWins, isTie, atkTotal, defTotal,
       atkItemName, atkItemImg, atkFormula, atkActor,
@@ -1405,11 +1462,26 @@ export class ClashManager {
       atkItemName, atkItemImg,
       atkCategory: initFlags.category ?? "",
       atkSinType:  initFlags.sinType  ?? "",
+      atkWeight:   initFlags.weight   ?? 1,
+      atkRollBase: initFlags.rollTotal ?? 0,
+      atkItemId:   initFlags.itemId   ?? "",
       defActorId:  defActor?.id  ?? "",
       defFormula:  defFormula    ?? "",
       defItemName, defItemImg,
       defCategory: defCat,
       defSinType:  defItem?.system?.sinType ?? "",
+    } : null;
+
+    // 加重扩散信息：仅攻击方胜且非平局才携带
+    const weightSpread = atkWins && !isTie ? {
+      attackerId: atkActor?.id      ?? "",
+      rollTotal:  initFlags.rollTotal ?? 0,
+      category:   initFlags.category  ?? "",
+      sinType:    initFlags.sinType   ?? "",
+      weight:     initFlags.weight    ?? 1,
+      itemId:     initFlags.itemId    ?? "",
+      itemName:   initFlags.itemName  ?? "",
+      itemImg:    initFlags.itemImg   ?? "",
     } : null;
 
     const takeSection = isTie
@@ -1466,6 +1538,19 @@ export class ClashManager {
         <div style="font-size:.8rem;color:#9A8462;line-height:1.7;margin:4px 0 8px;">
           ${notes.map(n => `<div>${n}</div>`).join("")}
         </div>
+        ${sanityNotes.length ? `
+        <div class="limbus-sanity-toggle-row"
+             style="display:flex;align-items:center;gap:6px;cursor:pointer;margin:4px 0 0;user-select:none;">
+          <div style="flex:1;height:1px;background:linear-gradient(to right,transparent,#C9A84C);"></div>
+          <span class="limbus-sanity-toggle"
+                style="font-size:.72rem;color:#C9A84C;padding:0 4px;line-height:1;">▼ 理智</span>
+          <div style="flex:1;height:1px;background:linear-gradient(to left,transparent,#C9A84C);"></div>
+        </div>
+        <div class="limbus-sanity-section"
+             style="display:none;font-size:.8rem;line-height:1.8;padding:4px 6px;
+                    background:rgba(0,0,0,.25);border-radius:3px;margin-bottom:4px;">
+          ${sanityNotes.map(n => `<div>${n}</div>`).join("")}
+        </div>` : ""}
         ${takeSection}
       </div>`;
 
@@ -1478,6 +1563,7 @@ export class ClashManager {
           targetActorId: loser?.id ?? "",
           damage:        finalDamage,
           rerollData,
+          weightSpread,
         },
       },
     });
@@ -1536,7 +1622,15 @@ export class ClashManager {
     }
 
     await ClashManager._sendResolveMsg(resolution,
-      { category: atkCategory, sinType: atkSinType },
+      {
+        category:  atkCategory,
+        sinType:   atkSinType,
+        weight:    rerollData.atkWeight   ?? 1,
+        rollTotal: rerollData.atkRollBase ?? atkRoll.total,
+        itemId:    rerollData.atkItemId   ?? "",
+        itemName:  atkItemName,
+        itemImg:   atkItemImg,
+      },
       defActor,
       { img: defItemImg, name: defItemName, system: { category: defCategory, sinType: defSinType } },
       defFormula,
@@ -1692,6 +1786,171 @@ export class ClashManager {
     if (selActor !== baseActor && selActor.isToken) {
       const th = selActor.system?.hp?.value ?? 0;
       await selActor.update({ "system.hp.value": Math.max(0, th - finalDamage) });
+    }
+
+    // ── 加重扩散：weight>=2 时发出额外承受卡 ──────────────────────────────
+    const weight = initFlags.weight ?? 1;
+    if (weight >= 2) {
+      await ClashManager._sendWeightSpreadCard(initFlags, atkActor);
+    }
+  }
+
+  /* ─── 加重扩散承受 ──────────────────────────────────────────────────────── */
+
+  /** 构建加重扩散卡 HTML（remainingUses 可变，复用于更新消息内容）。 */
+  static _buildWeightSpreadContent(flags, remainingUses, atkActor) {
+    const actor      = atkActor ?? game.actors.get(flags.attackerId);
+    const btnDisabled = remainingUses <= 0;
+    const btnStyle   = btnDisabled
+      ? "background:#555;color:#888;border:none;cursor:not-allowed;opacity:.6;"
+      : "background:#B84444;color:#fff;border:none;cursor:pointer;";
+    const btnLabel   = btnDisabled ? "（已用尽）" : `承受（×${remainingUses}）`;
+    return `
+      <div class="limbus-clash-card" data-clash-type="weight-spread">
+        ${ClashManager._chatHeader(actor, "加重扩散")}
+        ${ClashManager._goldDivider()}
+        <div style="font-size:.85rem;color:#E8C9A2;margin:4px 0 6px;">
+          ⚔️ <strong>${flags.itemName ?? "技能"}</strong> 加重命中！<br>
+          <span style="color:#C9A84C;">扩散承受剩余：<strong>${remainingUses}</strong> 次</span>
+        </div>
+        <div style="margin-bottom:4px;">
+          <button class="clash-btn-weight-take"
+                  style="height:30px;padding:0 14px;${btnStyle}font-size:.85rem;border-radius:2px;"
+                  ${btnDisabled ? "disabled" : ""}>
+            ${btnLabel}
+          </button>
+        </div>
+        <div style="font-size:.72rem;color:#9A8462;margin-top:2px;">选中目标 Token 后点击按钮进行扩散承受</div>
+        ${ClashManager._goldDivider()}
+      </div>`;
+  }
+
+  /** 发送加重扩散承受聊天卡。 */
+  static async _sendWeightSpreadCard(initFlags, atkActor) {
+    const remainingUses = (initFlags.weight ?? 1) - 1;
+    const spreadFlags = {
+      type:          "clash-weight-spread",
+      attackerId:    initFlags.attackerId,
+      itemId:        initFlags.itemId,
+      itemName:      initFlags.itemName,
+      itemImg:       initFlags.itemImg,
+      rollTotal:     initFlags.rollTotal,
+      category:      initFlags.category,
+      sinType:       initFlags.sinType,
+      remainingUses,
+    };
+    await ClashManager._safeChatCreate({
+      speaker: ChatMessage.getSpeaker({ actor: atkActor }),
+      content: ClashManager._buildWeightSpreadContent(spreadFlags, remainingUses, atkActor),
+      flags:   { limbusCompany_FVTT: spreadFlags },
+    });
+  }
+
+  /** 玩家选中 Token 后点击扩散卡承受按钮的处理逻辑。 */
+  static async handleWeightTake(msgId, flags) {
+    if ((flags.remainingUses ?? 0) <= 0) {
+      ui.notifications.warn("扩散承受次数已用尽");
+      return;
+    }
+
+    const selActor = game.user.character ?? canvas.tokens?.controlled?.[0]?.actor ?? null;
+    if (!selActor) {
+      ui.notifications.warn("请先选中承受伤害的 Token");
+      return;
+    }
+    if (selActor.id === flags.attackerId) {
+      ui.notifications.warn("发起对抗的角色不能承受自己的攻击");
+      return;
+    }
+
+    const atkActor = game.actors.get(flags.attackerId);
+    const defActor = game.actors.get(selActor.id) ?? selActor;
+
+    const rollTotal = flags.rollTotal ?? 0;
+    const category  = flags.category  ?? "";
+    const sinType   = flags.sinType   ?? "";
+    const PHYS_CATS   = ["slash", "blunt", "pierce"];
+    const SIN_TYPES   = ["wrath","lust","sloth","gluttony","gloom","pride","envy"];
+    const PHYS_LABELS = { slash: "斩击", blunt: "打击", pierce: "突刺" };
+    const SIN_LABELS  = { wrath:"暴怒", lust:"色欲", sloth:"怠惰",
+                          gluttony:"暴食", gloom:"忧郁", pride:"傲慢", envy:"嫉妒" };
+
+    const gs = (actor, type) => ClashManager._getBuffVal(actor, type).stacks;
+
+    // 攻击方 BUFF 修正
+    const strong     = atkActor ? gs(atkActor, "strong") : 0;
+    const weak       = atkActor ? gs(atkActor, "weak")   : 0;
+    const atkDiceMod = strong - weak;
+
+    // 等级差
+    const atkLv   = atkActor ? ClashManager._effAtkLv(atkActor) : 0;
+    const defLv   = ClashManager._effDefLv(defActor);
+    const lvBonus = Math.floor(Math.max(0, atkLv - defLv) / 3);
+
+    // 有效骰数
+    const effectiveAtk = rollTotal + atkDiceMod + lvBonus;
+
+    // 守护 / 易损
+    const guard       = gs(defActor, "guard");
+    const fragile     = gs(defActor, "fragile");
+    const adjustedAtk = Math.max(0, effectiveAtk + fragile - guard);
+
+    // 物理抗性 & 罪孽抗性
+    const effRes     = ClashManager._getEffectiveResistances(defActor);
+    const physResStr = PHYS_CATS.includes(category) ? (effRes[category] ?? "x1.0") : "x1.0";
+    const sinResStr  = SIN_TYPES.includes(sinType)
+      ? (defActor.system?.egoResistances?.[sinType] ?? "x1.0") : "x1.0";
+    const physMult   = ClashManager._parseResistance(physResStr);
+    const sinMult    = ClashManager._parseResistance(sinResStr);
+
+    const finalDamage = Math.max(0, Math.round(adjustedAtk * physMult * sinMult));
+
+    // 结算说明
+    const calcNotes = [`骰点结果：${rollTotal}（加重扩散）`];
+    let step = rollTotal;
+    if (atkDiceMod !== 0) {
+      step += atkDiceMod;
+      const parts = [];
+      if (strong > 0) parts.push(`强壮+${strong}`);
+      if (weak   > 0) parts.push(`虚弱-${weak}`);
+      calcNotes.push(`攻击方BUFF（${parts.join("，")}）→ 有效骰数 ${step}`);
+    }
+    if (lvBonus > 0) {
+      step += lvBonus;
+      calcNotes.push(`等级差（攻Lv${atkLv} vs 防Lv${defLv}，差${atkLv - defLv}，+${lvBonus}）→ ${step}`);
+    } else if (defLv > atkLv) {
+      calcNotes.push(`等级差：防御等级${defLv} > 攻击等级${atkLv}，无加成`);
+    }
+    if (fragile > 0 || guard > 0) {
+      const prev  = step;
+      step = adjustedAtk;
+      const parts = [];
+      if (fragile > 0) parts.push(`易损+${fragile}`);
+      if (guard   > 0) parts.push(`守护-${guard}`);
+      calcNotes.push(`${parts.join("，")}：${prev} → ${step}`);
+    }
+    if (physMult !== 1.0 || sinMult !== 1.0) {
+      const resParts = [];
+      if (physMult !== 1.0) resParts.push(`${PHYS_LABELS[category] ?? category}抗性${physResStr}`);
+      if (sinMult  !== 1.0) resParts.push(`${SIN_LABELS[sinType]  ?? sinType}罪孽抗性${sinResStr}`);
+      calcNotes.push(`${resParts.join(" × ")}：${step} → ${finalDamage}`);
+    }
+
+    await ClashManager._applyAndSendTake(defActor, finalDamage, { calcNotes });
+
+    // 若是非 linked token，额外同步 HP
+    if (selActor !== defActor && selActor.isToken) {
+      const cur = selActor.system?.hp?.value ?? 0;
+      await selActor.update({ "system.hp.value": Math.max(0, cur - finalDamage) });
+    }
+
+    // 更新扩散卡剩余次数
+    const newRemaining = (flags.remainingUses ?? 1) - 1;
+    const message = game.messages.get(msgId);
+    if (message) {
+      const newFlags  = { ...flags, remainingUses: newRemaining };
+      const newContent = ClashManager._buildWeightSpreadContent(newFlags, newRemaining, atkActor);
+      await message.update({ flags: { limbusCompany_FVTT: newFlags }, content: newContent });
     }
   }
 

@@ -176,15 +176,34 @@ Hooks.on("renderChatMessage", (_message, html, _data) => {
     });
   }
 
+  // ── 加重扩散承受聊天框 ──
+  if (flags.type === "clash-weight-spread") {
+    html.find(".clash-btn-weight-take").on("click", () => {
+      ClashManager.handleWeightTake(_message.id, flags);
+    });
+  }
+
   // ── 拼点结算聊天框：承受（扣血） / 再次骰掷（平局） ──
   if (flags.type === "clash-resolve") {
-    html.find(".clash-btn-apply-damage").on("click", (e) => {
+    html.find(".clash-btn-apply-damage").on("click", async (e) => {
       const targetActorId = e.currentTarget.dataset.targetActorId ?? flags.targetActorId;
       const damage        = parseInt(e.currentTarget.dataset.damage ?? flags.damage) || 0;
-      ClashManager.handleApplyDamage(targetActorId, damage);
+      await ClashManager.handleApplyDamage(targetActorId, damage);
+      // 加重扩散：攻击方赢且 weight>=2 时，在扣血后发出扩散承受卡
+      const ws = flags.weightSpread;
+      if (ws && (ws.weight ?? 1) >= 2) {
+        const atkActor = game.actors.get(ws.attackerId);
+        await ClashManager._sendWeightSpreadCard(ws, atkActor);
+      }
     });
     html.find(".clash-btn-reroll").on("click", () => {
       ClashManager.rerollClash(flags.rerollData);
+    });
+    // 理智变化折叠行
+    html.find(".limbus-sanity-toggle-row").on("click", function () {
+      const $sec = $(this).next(".limbus-sanity-section");
+      const open = $sec.toggle().is(":visible");
+      $(this).find(".limbus-sanity-toggle").text(open ? "▲ 理智" : "▼ 理智");
     });
   }
 
@@ -319,6 +338,9 @@ Hooks.on("updateCombat", async (combat, changed) => {
     const actor = combatant.actor;
     if (!actor || actor.type !== "character") continue;
     const buffs = actor.system.buffs ?? [];
+
+    // 每轮重置拼点胜利计数（用于理智增加量递增计算）
+    await actor.unsetFlag("limbusCompany_FVTT", "clashWinsThisRound");
 
     // ── 回合结束 BUFF 清理与晋升 ────────────────────────────────────────
     // 移除本轮有效的临时 BUFF（强壮/虚弱/混乱/恐慌等），将下回合 BUFF 转为本回合

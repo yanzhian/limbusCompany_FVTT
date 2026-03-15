@@ -3253,6 +3253,44 @@ body.game .limbuscompany.app img {
   text-align: center; text-transform: uppercase;
 }
 
+/* ─── EGO 侵蚀形态转换条 ─────────────────────────────────────────── */
+.limbuscompany .ego-erode-bar {
+  display: flex; align-items: center; gap: 6px;
+  margin: 4px 2px 2px;
+}
+.limbuscompany .ego-erode-divider-l {
+  flex: 1; height: 1px;
+  background: linear-gradient(to right, transparent, #C9A84C);
+}
+.limbuscompany .ego-erode-divider-r {
+  flex: 1; height: 1px;
+  background: linear-gradient(to left, transparent, #C9A84C);
+}
+.limbuscompany .ego-erode-toggle-btn {
+  padding: 1px 10px; font-size: .65rem;
+  background: transparent; color: #C9A84C;
+  border: 1px solid #C9A84C; border-radius: 3px;
+  cursor: pointer; white-space: nowrap; line-height: 1.6;
+  transition: background .15s, color .15s;
+}
+.limbuscompany .ego-erode-toggle-btn:hover {
+  background: rgba(201,168,76,.15);
+}
+.limbuscompany .ego-erode-toggle-btn.erode-active {
+  background: rgba(184,68,68,.25); color: #E84444; border-color: #E84444;
+}
+.limbuscompany .ego-erode-toggle-btn.erode-active:hover {
+  background: rgba(184,68,68,.4);
+}
+/* 恐慌时且未切换：金色闪烁提示 */
+.limbuscompany .ego-erode-toggle-btn.panic-hint:not(.erode-active) {
+  animation: ego-panic-hint 1.2s ease-in-out infinite alternate;
+}
+@keyframes ego-panic-hint {
+  from { border-color: #C9A84C; color: #C9A84C; }
+  to   { border-color: #E84444; color: #E84444; box-shadow: 0 0 4px rgba(232,68,68,.5); }
+}
+
 /* ─── §3-H  战斗 Tab ─────────────────────────────────────────────── */
 
 .limbuscompany .combat-status-panel {
@@ -5159,7 +5197,7 @@ body.game .limbuscompany.app img {
 
 .qa-panel[data-panel="basic"],
 .qa-panel[data-panel="ego"] {
-  min-width: 400px;
+  min-width: 320px;
 }
 
 .qa-panel-title {

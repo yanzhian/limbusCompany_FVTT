@@ -881,6 +881,10 @@ function _buildCondRow(cond, idx, cfg) {
         </select>
         <label>BUFF</label>
         <select class="ae-sel cond-buff">${buffOpts}</select>
+        <input class="ae-input cond-buff-custom" type="text"
+               placeholder="自定BUFF名称"
+               value="${_esc(cond?.buffCustom ?? "")}"
+               style="display:${(cond?.buff ?? "") === "custom" ? "inline-block" : "none"};width:90px;">
         <label>强度≥</label>
         <input class="ae-input-sm cond-intensity" type="number" value="${cond?.intensity ?? 1}" min="0">
         <label>层数≥</label>
@@ -910,6 +914,10 @@ function _buildCostRow(cost, idx, cfg) {
         </select>
         <label>BUFF</label>
         <select class="ae-sel cost-buff">${buffOpts}</select>
+        <input class="ae-input cost-buff-custom" type="text"
+               placeholder="自定BUFF名称"
+               value="${_esc(cost?.buffCustom ?? "")}"
+               style="display:${(cost?.buff ?? "") === "custom" ? "inline-block" : "none"};width:90px;">
         <label>强度</label>
         <input class="ae-input-sm cost-intensity" type="number" value="${cost?.intensity ?? 1}" min="0">
         <label>层数</label>
@@ -921,14 +929,21 @@ function _buildCostRow(cost, idx, cfg) {
 const _BUFF_EFFECTS   = new Set(["addBuff", "removeBuff"]);
 const _NOVAL_EFFECTS  = new Set(["relatedSkillConvert"]);
 
+const _ROUND_OPTIONS = ["本回合", "下回合", "本回合和下回合"];
+
 /** 效果行 HTML */
 function _buildEffectRow(eff, idx, cfg) {
-  const type     = eff?.type ?? "addBuff";
-  const isBuff   = _BUFF_EFFECTS.has(type);
-  const isNoVal  = _NOVAL_EFFECTS.has(type);
-  const effOpts  = _activityEffectLabels()
+  const type       = eff?.type ?? "addBuff";
+  const isBuff     = _BUFF_EFFECTS.has(type);
+  const isAddBuff  = type === "addBuff";
+  const isNoVal    = _NOVAL_EFFECTS.has(type);
+  const effOpts    = _activityEffectLabels()
     .map(e => `<option value="${e.value}" ${type === e.value ? "selected" : ""}>${e.label}</option>`).join("");
-  const buffOpts = _buildBuffGroupOptions(cfg, eff?.buff);
+  const buffOpts   = _buildBuffGroupOptions(cfg, eff?.buff);
+  const roundVal   = eff?.round ?? "本回合";
+  const roundOpts  = _ROUND_OPTIONS
+    .map(v => `<option value="${v}" ${roundVal === v ? "selected" : ""}>${v}</option>`).join("");
+  const formulaVal = _esc(eff?.value ?? "");
   return `
     <div class="ae-row ae-eff-row">
       <div class="ae-row-hd">
@@ -943,6 +958,10 @@ function _buildEffectRow(eff, idx, cfg) {
           <option value="self"   ${(eff?.target ?? "self") === "self"   ? "selected" : ""}>自己</option>
           <option value="target" ${eff?.target === "target" ? "selected" : ""}>目标</option>
         </select>
+        <span class="ae-eff-round-sec" ${isAddBuff ? "" : 'style="display:none"'}>
+          <label>回合</label>
+          <select class="ae-sel eff-round">${roundOpts}</select>
+        </span>
         <span class="ae-eff-buff-sec" ${isBuff ? "" : 'style="display:none"'}>
           <label>BUFF</label>
           <select class="ae-sel eff-buff ae-eff-buff-sel">${buffOpts}</select>
@@ -956,8 +975,9 @@ function _buildEffectRow(eff, idx, cfg) {
           <input class="ae-input-sm eff-stacks" type="number" value="${eff?.stacks ?? 1}" min="0">
         </span>
         <span class="ae-eff-val-sec" ${(!isBuff && !isNoVal) ? "" : 'style="display:none"'}>
-          <label>数值</label>
-          <input class="ae-input-sm eff-value" type="number" value="${eff?.value ?? 0}">
+          <label>相关数值</label>
+          <input class="ae-input eff-value" type="text" placeholder="数值或公式，如 1D4+2"
+                 value="${formulaVal}" style="width:110px;">
         </span>
       </div>
     </div>`;
@@ -971,12 +991,14 @@ function _setupAeDialog(html, cfg) {
     const idx  = list.find(".ae-cond-row").length;
     list.append(_buildCondRow({}, idx, cfg));
     _bindDel(html);
+    _bindCondCostBuff(html);
   });
   html.find(".ae-add-cost").on("click", () => {
     const list = html.find(".ae-cost-list");
     const idx  = list.find(".ae-cost-row").length;
     list.append(_buildCostRow({}, idx, cfg));
     _bindDel(html);
+    _bindCondCostBuff(html);
   });
   html.find(".ae-add-effect").on("click", () => {
     const list = html.find(".ae-effect-list");
@@ -991,6 +1013,16 @@ function _setupAeDialog(html, cfg) {
 
   _bindDel(html);
   _bindEffType(html);
+  _bindCondCostBuff(html);
+}
+
+function _bindCondCostBuff(html) {
+  html.find(".cond-buff").off("change").on("change", function () {
+    $(this).closest(".ae-cond-row").find(".cond-buff-custom").toggle($(this).val() === "custom");
+  });
+  html.find(".cost-buff").off("change").on("change", function () {
+    $(this).closest(".ae-cost-row").find(".cost-buff-custom").toggle($(this).val() === "custom");
+  });
 }
 
 function _bindDel(html) {
@@ -1010,10 +1042,12 @@ function _bindDel(html) {
 
 function _bindEffType(html) {
   html.find(".ae-eff-type").off("change").on("change", function () {
-    const row    = $(this).closest(".ae-eff-row");
-    const type   = $(this).val();
-    const isBuff = _BUFF_EFFECTS.has(type);
-    const isNoV  = _NOVAL_EFFECTS.has(type);
+    const row       = $(this).closest(".ae-eff-row");
+    const type      = $(this).val();
+    const isBuff    = _BUFF_EFFECTS.has(type);
+    const isAddBuff = type === "addBuff";
+    const isNoV     = _NOVAL_EFFECTS.has(type);
+    row.find(".ae-eff-round-sec").toggle(isAddBuff);
     row.find(".ae-eff-buff-sec").toggle(isBuff);
     row.find(".ae-eff-val-sec").toggle(!isBuff && !isNoV);
     // 切换效果类型时也检查自定义 BUFF 输入框
@@ -1032,25 +1066,29 @@ function _bindEffType(html) {
 function _readActivityForm(html, original) {
   const preconditions = [];
   html.find(".ae-cond-row").each((_, el) => {
-    const $r = $(el);
+    const $r      = $(el);
+    const buffVal = $r.find(".cond-buff").val() || "";
     preconditions.push({
-      type:      "hasBuff",
-      target:    $r.find(".cond-target").val()  || "self",
-      buff:      $r.find(".cond-buff").val()    || "",
-      intensity: parseInt($r.find(".cond-intensity").val()) || 1,
-      stacks:    parseInt($r.find(".cond-stacks").val())    || 1,
+      type:       "hasBuff",
+      target:     $r.find(".cond-target").val()  || "self",
+      buff:       buffVal,
+      buffCustom: buffVal === "custom" ? ($r.find(".cond-buff-custom").val()?.trim() || "") : "",
+      intensity:  parseInt($r.find(".cond-intensity").val()) || 1,
+      stacks:     parseInt($r.find(".cond-stacks").val())    || 1,
     });
   });
 
   const costs = [];
   html.find(".ae-cost-row").each((_, el) => {
-    const $r = $(el);
+    const $r      = $(el);
+    const buffVal = $r.find(".cost-buff").val() || "";
     costs.push({
-      type:      $r.find(".cost-type").val()    || "forced",
-      target:    $r.find(".cost-target").val()  || "self",
-      buff:      $r.find(".cost-buff").val()    || "",
-      intensity: parseInt($r.find(".cost-intensity").val()) || 1,
-      stacks:    parseInt($r.find(".cost-stacks").val())    || 1,
+      type:       $r.find(".cost-type").val()    || "forced",
+      target:     $r.find(".cost-target").val()  || "self",
+      buff:       buffVal,
+      buffCustom: buffVal === "custom" ? ($r.find(".cost-buff-custom").val()?.trim() || "") : "",
+      intensity:  parseInt($r.find(".cost-intensity").val()) || 1,
+      stacks:     parseInt($r.find(".cost-stacks").val())    || 1,
     });
   });
 
@@ -1061,14 +1099,16 @@ function _readActivityForm(html, original) {
     const isBuff   = _BUFF_EFFECTS.has(type);
     const buffVal  = isBuff ? ($r.find(".eff-buff").val() || "") : "";
     const buffCustom = (buffVal === "custom") ? ($r.find(".eff-buff-custom").val()?.trim() || "") : "";
+    const isAddBuff = type === "addBuff";
     effects.push({
       type,
-      target:     $r.find(".eff-target").val()   || "self",
+      target:     $r.find(".eff-target").val()    || "self",
+      round:      isAddBuff ? ($r.find(".eff-round").val() || "本回合") : undefined,
       buff:       buffVal,
       buffCustom,
-      intensity:  isBuff ? (parseInt($r.find(".eff-intensity").val()) || 1) : 0,
-      stacks:     isBuff ? (parseInt($r.find(".eff-stacks").val())    || 1) : 0,
-      value:     !isBuff ? (parseInt($r.find(".eff-value").val())     || 0) : 0,
+      intensity:  isBuff  ? (parseInt($r.find(".eff-intensity").val()) || 1) : 0,
+      stacks:     isBuff  ? (parseInt($r.find(".eff-stacks").val())    || 1) : 0,
+      value:     !isBuff  ? ($r.find(".eff-value").val()?.trim() || "") : "",
     });
   });
 
