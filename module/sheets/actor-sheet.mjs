@@ -161,15 +161,23 @@ export class LimbusActorSheet extends ActorSheet {
       skillImg: defItem?.img ?? "",
     };
 
+    const isEgoEroded = !!actor.getFlag("limbusCompany_FVTT", "egoErodeMode");
     context.egoSkills = cfg.EGO_GRADES.map(grade => {
-      const egoItem = system.skills?.ego?.[grade] ? actor.items.get(system.skills.ego[grade]) : null;
+      const egoItem    = system.skills?.ego?.[grade] ? actor.items.get(system.skills.ego[grade]) : null;
+      const erodeUuid  = egoItem?.system?.relatedSkill?.erodeUuid ?? null;
       return {
         grade,
-        item:     egoItem,
-        itemId:   system.skills?.ego?.[grade] ?? null,
-        skillImg: egoItem?.img ?? "",
+        item:        egoItem,
+        itemId:      system.skills?.ego?.[grade] ?? null,
+        skillImg:    egoItem?.img ?? "",
+        erodeUuid,
       };
     });
+    context.hasEgoErode = context.egoSkills.some(s => s.erodeUuid);
+    context.isEgoEroded = isEgoEroded;
+    // 角色处于恐慌且有侵蚀形态时，给 GM/玩家提示
+    const hasPanic = (system.buffs ?? []).some(b => b.type === "panic" && b.whenAdded !== "下回合");
+    context.egoPanicActive = hasPanic && context.hasEgoErode;
 
     // ── 物品分组（物品 Tab） ───────────────────────────────────────────────
     context.itemGroups  = this._groupEquipmentItems();
@@ -476,6 +484,9 @@ export class LimbusActorSheet extends ActorSheet {
 
     // ── 技能槽右键菜单 ────────────────────────────────────────────────────
     html.find(".skill-slot-wrap[data-item-id]").on("contextmenu", this._onSkillSlotContextMenu.bind(this));
+
+    // ── EGO 侵蚀形态转换按钮 ──────────────────────────────────────────────
+    html.find(".ego-erode-toggle-btn").on("click", this._onEgoErodeToggle.bind(this));
 
     // ── 过滤面板 ──────────────────────────────────────────────────────────
     html.find(".filter-toggle-btn").on("click", this._onFilterToggle.bind(this));
@@ -1275,9 +1286,31 @@ export class LimbusActorSheet extends ActorSheet {
     // EGO / 守备技能：直接发起对抗，不推进 bag，不消耗行动值
     const itemId = event.currentTarget.dataset.itemId;
     if (!itemId) return;
-    const item = this.actor.items.get(itemId);
+    let item = this.actor.items.get(itemId);
     if (!item) return;
+
+    // 若处于侵蚀模式且该 EGO 技能有侵蚀形态相关技能，使用侵蚀 UUID 标记传入
+    // （相关技能本身的触发逻辑在 clash 系统中读取，这里只标记当前技能的上下文）
+    const erodeMode = !!this.actor.getFlag("limbusCompany_FVTT", "egoErodeMode");
+    const erodeUuid = item.system?.relatedSkill?.erodeUuid;
+    if (erodeMode && erodeUuid) {
+      // 使用原 EGO 技能发起对抗，但将侵蚀 UUID 存入临时状态供 clash 读取
+      if (!this._egoErodeContext) this._egoErodeContext = {};
+      this._egoErodeContext[item.id] = erodeUuid;
+    } else {
+      if (this._egoErodeContext) delete this._egoErodeContext[item.id];
+    }
+
     this._showClashDialog(item, -1);  // slotIndex = -1 → 不触发 bag 动画/AP 消耗
+  }
+
+  async _onEgoErodeToggle(event) {
+    event.preventDefault();
+    const current = !!this.actor.getFlag("limbusCompany_FVTT", "egoErodeMode");
+    await this.actor.setFlag("limbusCompany_FVTT", "egoErodeMode", !current);
+    // 切换时同步更新 _egoErodeContext
+    if (current) this._egoErodeContext = {};
+    // 角色卡会因 flag 更新自动重渲
   }
 
   _onRelatedSkillToggle(event) {
