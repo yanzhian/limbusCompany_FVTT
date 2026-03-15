@@ -199,6 +199,12 @@ Hooks.on("renderChatMessage", (_message, html, _data) => {
     html.find(".clash-btn-reroll").on("click", () => {
       ClashManager.rerollClash(flags.rerollData);
     });
+    // 理智变化折叠行
+    html.find(".limbus-sanity-toggle-row").on("click", function () {
+      const $sec = $(this).next(".limbus-sanity-section");
+      const open = $sec.toggle().is(":visible");
+      $(this).find(".limbus-sanity-toggle").text(open ? "▲ 理智" : "▼ 理智");
+    });
   }
 
   // ── 反击聊天框：双方承受按钮 ──

@@ -1539,8 +1539,16 @@ export class ClashManager {
           ${notes.map(n => `<div>${n}</div>`).join("")}
         </div>
         ${sanityNotes.length ? `
-        <div style="font-size:.8rem;line-height:1.8;padding:4px 6px;
-                    background:rgba(0,0,0,.25);border-radius:3px;margin-bottom:6px;">
+        <div class="limbus-sanity-toggle-row"
+             style="display:flex;align-items:center;gap:6px;cursor:pointer;margin:4px 0 0;user-select:none;">
+          <div style="flex:1;height:1px;background:linear-gradient(to right,transparent,#C9A84C);"></div>
+          <span class="limbus-sanity-toggle"
+                style="font-size:.72rem;color:#C9A84C;padding:0 4px;line-height:1;">▼ 理智</span>
+          <div style="flex:1;height:1px;background:linear-gradient(to left,transparent,#C9A84C);"></div>
+        </div>
+        <div class="limbus-sanity-section"
+             style="display:none;font-size:.8rem;line-height:1.8;padding:4px 6px;
+                    background:rgba(0,0,0,.25);border-radius:3px;margin-bottom:4px;">
           ${sanityNotes.map(n => `<div>${n}</div>`).join("")}
         </div>` : ""}
         ${takeSection}
