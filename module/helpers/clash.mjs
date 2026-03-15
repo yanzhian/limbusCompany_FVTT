@@ -145,10 +145,11 @@ export class ClashManager {
   }
 
   /** 给角色添加或叠加 BUFF。已有同类型则叠加层数、取最大强度；无则新增。 */
-  static async _addBuff(actor, type, intensity = 1, stacks = 1) {
+  static async _addBuff(actor, type, intensity = 1, stacks = 1, whenAdded = "本回合") {
     if (!actor || !type) return;
     const buffs = foundry.utils.deepClone(actor.system?.buffs ?? []);
-    const idx   = buffs.findIndex(b => b.type === type);
+    // 按 type + whenAdded 精确匹配，防止本/下回合同类 BUFF 错误合并
+    const idx   = buffs.findIndex(b => b.type === type && (b.whenAdded ?? "本回合") === whenAdded);
     if (idx >= 0) {
       buffs[idx].stacks    = (buffs[idx].stacks    ?? 0) + stacks;
       buffs[idx].intensity = Math.max(buffs[idx].intensity ?? 0, intensity);
@@ -165,7 +166,7 @@ export class ClashManager {
         icon,
         intensity,
         stacks,
-        whenAdded: "本回合",
+        whenAdded,
       });
     }
     await actor.update({ "system.buffs": buffs });
@@ -254,10 +255,19 @@ export class ClashManager {
 
         let descStr = "";
         switch (eff.type) {
-          case "addBuff":
-            await ClashManager._addBuff(effTgt, buffType, intensity, stacks);
-            descStr = `为【${effTgt.name}】添加 ${stacks} 层 ${buffType}（强度 ${intensity}）`;
+          case "addBuff": {
+            const round = eff.round ?? "本回合";
+            if (round === "本回合和下回合") {
+              // 分别写入两条同类 BUFF，本回合立即生效，下回合在回合结束时晋升
+              await ClashManager._addBuff(effTgt, buffType, intensity, stacks, "本回合");
+              await ClashManager._addBuff(effTgt, buffType, intensity, stacks, "下回合");
+            } else {
+              await ClashManager._addBuff(effTgt, buffType, intensity, stacks, round);
+            }
+            const roundLabel = round === "本回合" ? "" : `（${round}）`;
+            descStr = `为【${effTgt.name}】添加 ${stacks} 层 ${buffType}（强度 ${intensity}）${roundLabel}`;
             break;
+          }
           case "removeBuff":
             await ClashManager._removeBuff(effTgt, buffType);
             descStr = `移除【${effTgt.name}】的 ${buffType}`;
