@@ -3196,7 +3196,7 @@ body.game .limbuscompany.app img {
   object-fit: contain;
   z-index: 1;
   display: block;
-  filter: drop-shadow(0 0 1px rgba(0,0,0,.7));
+  filter: drop-shadow(0 0 1px rgba(0, 0, 0, 0.7));
 }
 
 /* 框架装饰图：居中放大 200%，补偿图片白边使环形填满槽位 */
