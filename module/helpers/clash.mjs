@@ -185,7 +185,7 @@ export class ClashManager {
   /**
    * 拼点胜负后理智变化。
    * 胜者：+round(10 × 1.2^(本轮胜利次数-1))，通过 actor flag "clashWinsThisRound" 追踪。
-   * 败者：-(10 + floor(max(0, 胜者攻击等级 - 败者防御等级) / 3))。
+   * 败者：-(10 + max(0, 败者等级 - 胜者等级))，等级差为 actor.system.level 的直接差值。
    * @returns {{ gainNote:string, lossNote:string }}
    */
   static async _applySanityFromClash(winner, loser) {
@@ -199,18 +199,18 @@ export class ClashManager {
       const oldSanity = winner.system?.sanity?.value ?? 50;
       await winner.setSanity?.(oldSanity + gain);
       const roundNote = prevWins > 0 ? `，本轮第 ${prevWins + 1} 次拼点胜利` : "";
-      gainNote = `⬆ ${winner.name} 理智 <span style="color:#6EE06E">+${gain}</span>${roundNote}`;
+      gainNote = `<span style="color:#6EE06E">⬆ ${winner.name} 理智 +${gain}${roundNote}</span>`;
     }
 
     if (loser?.type === "character") {
-      const winAtkLv  = winner ? ClashManager._effAtkLv(winner) : 0;
-      const losDefLv  = ClashManager._effDefLv(loser);
-      const lvBonus   = Math.floor(Math.max(0, winAtkLv - losDefLv) / 3);
-      const loss      = 10 + lvBonus;
+      const winLv   = winner?.system?.level  ?? 0;
+      const losLv   = loser.system?.level    ?? 0;
+      const extra   = Math.max(0, losLv - winLv);
+      const loss    = 10 + extra;
       const oldSanity = loser.system?.sanity?.value ?? 50;
       await loser.setSanity?.(oldSanity - loss);
-      const lvNote = lvBonus > 0 ? `，等级差 +${lvBonus}` : "";
-      lossNote = `⬇ ${loser.name} 理智 <span style="color:#E84444">-${loss}</span>（基础 10${lvNote}）`;
+      const lvNote = extra > 0 ? `，等级差 +${extra}（${losLv}-${winLv}）` : "";
+      lossNote = `<span style="color:#E84444">⬇ ${loser.name} 理智 -${loss}（基础 10${lvNote}）</span>`;
     }
 
     return { gainNote, lossNote };
@@ -1227,15 +1227,16 @@ export class ClashManager {
     }
 
     // ── 拼点理智变化（非平局、非闪避胜利时结算）──────────────────────────
+    const sanityNotes = [];
     if (!isTie && !dodgeWin) {
       const { gainNote, lossNote } = await ClashManager._applySanityFromClash(
         resolution.winner, resolution.loser
       );
-      if (gainNote) resolution.notes.push(gainNote);
-      if (lossNote) resolution.notes.push(lossNote);
+      if (gainNote) sanityNotes.push(gainNote);
+      if (lossNote) sanityNotes.push(lossNote);
     }
 
-    await ClashManager._sendResolveMsg(resolution, initFlags, defActor, defItem, defFormula);
+    await ClashManager._sendResolveMsg(resolution, initFlags, defActor, defItem, defFormula, sanityNotes);
 
     // ── [攻击后]：结算完对抗结果后触发 ────────────────────────────────
     await ClashManager._applyActivities(atkItem, "攻击后", atkCtx);
@@ -1422,7 +1423,7 @@ export class ClashManager {
 
   /* ─── 阶段五c：拼点结算聊天框 ──────────────────────────────────────────── */
 
-  static async _sendResolveMsg(res, initFlags, defActor, defItem, defFormula) {
+  static async _sendResolveMsg(res, initFlags, defActor, defItem, defFormula, sanityNotes = []) {
     const {
       atkWins, isTie, atkTotal, defTotal,
       atkItemName, atkItemImg, atkFormula, atkActor,
@@ -1537,6 +1538,11 @@ export class ClashManager {
         <div style="font-size:.8rem;color:#9A8462;line-height:1.7;margin:4px 0 8px;">
           ${notes.map(n => `<div>${n}</div>`).join("")}
         </div>
+        ${sanityNotes.length ? `
+        <div style="font-size:.8rem;line-height:1.8;padding:4px 6px;
+                    background:rgba(0,0,0,.25);border-radius:3px;margin-bottom:6px;">
+          ${sanityNotes.map(n => `<div>${n}</div>`).join("")}
+        </div>` : ""}
         ${takeSection}
       </div>`;
 
