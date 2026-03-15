@@ -3170,6 +3170,8 @@ body.game .limbuscompany.app img {
   inset: 0;
   background: #181511;
   border: none;
+  /* 正七边形蒙版，尖朝下 */
+  clip-path: polygon(50% 100%, 89% 81%, 99% 39%, 72% 5%, 28% 5%, 1% 39%, 11% 81%);
   box-shadow: inset 0 0 0 2px #5F3E22,
               inset 0 0 0 2px rgba(0,0,0,.35);
 }
@@ -3196,6 +3198,11 @@ body.game .limbuscompany.app img {
   z-index: 1;
   display: block;
   filter: drop-shadow(0 0 1px rgba(0, 0, 0, 0.7));
+}
+
+/* 方形槽图标：七边形蒙版（尖朝下） */
+.limbuscompany .skill-slot-octa .skill-slot-img {
+  clip-path: polygon(50% 100%, 89% 81%, 99% 39%, 72% 5%, 28% 5%, 1% 39%, 11% 81%);
 }
 
 /* 框架装饰图：居中放大 200%，补偿图片白边使环形填满槽位 */
