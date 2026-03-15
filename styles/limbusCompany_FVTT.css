@@ -3187,20 +3187,21 @@ body.game .limbuscompany.app img {
   flex-shrink: 0;
 }
 
-/* 图标（普通 flex 子元素，无 position: absolute 避免尺寸冲突） */
+/* 图标：充满槽位内圈，absolute 定位居中 */
 .limbuscompany .skill-slot-img {
-  position: relative;
-  z-index: 1;
-  width: 72%; height: 72%;
-  object-fit: contain; display: block;
-  filter: drop-shadow(0 0 1px rgba(0,0,0,.7));
-}
-
-/* 框架装饰图（叠加在技能图标之上，白底用 multiply 变透明） */
-.limbuscompany .skill-slot-frame {
   position: absolute;
   inset: 0;
   width: 100%; height: 100%;
+  object-fit: contain;
+  z-index: 1;
+  display: block;
+  filter: drop-shadow(0 0 1px rgba(0,0,0,.7));
+}
+
+/* 框架装饰图：溢出槽位边缘以补偿图片内白边，白底用 multiply 变透明 */
+.limbuscompany .skill-slot-frame {
+  position: absolute;
+  inset: -12%;
   object-fit: contain;
   mix-blend-mode: multiply;
   pointer-events: none;
