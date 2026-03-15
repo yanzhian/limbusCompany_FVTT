@@ -3516,6 +3516,9 @@ body.game .limbuscompany.app img {
   box-shadow: 0 0 4px 1px rgba(200,50,50,.5);
 }
 
+/* 通用隐藏辅助类 */
+.hidden { display: none !important; }
+
 /* 相关技能切换按钮 */
 .limbuscompany .combat-skill-related-toggle {
   background: none; border: 1px solid var(--border-gold);
@@ -5330,6 +5333,22 @@ body.game .limbuscompany.app img {
   border-radius:    2px;
   pointer-events:   none;
   line-height:      1.2;
+}
+
+/* EGO 槽包装容器（用于放置相关技能切换按钮） */
+.qa-ego-skill-wrap {
+  position: relative;
+  display:  inline-flex;
+}
+/* 快捷 HUD 上的 EGO 相关技能切换按钮（右上角） */
+.qa-ego-related-toggle {
+  position:  absolute;
+  top:       -5px;
+  right:     -5px;
+  z-index:   10;
+  width:     14px;
+  height:    14px;
+  font-size: .55rem;
 }
 
 /* ── 功能按钮 ─────────────────────────────────────────────── */

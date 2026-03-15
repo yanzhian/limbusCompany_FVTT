@@ -178,6 +178,44 @@ export class QuickActionHUD extends Application {
       html.find(`.qa-panel[data-panel="${p}"]`).css("display", "flex");
       html.find(`.qa-btn[data-panel="${p}"]`).addClass("qa-btn--active");
     });
+    this._syncEgoRelatedHud(html);
+  }
+
+  /** 恢复 EGO 相关技能切换按钮状态，恐慌时自动激活侵蚀形态 */
+  _syncEgoRelatedHud(html) {
+    if (!this._actor) return;
+    if (!this._egoRelatedHudMode) this._egoRelatedHudMode = {};
+
+    const sys      = this._actor.system;
+    const cfg      = CONFIG.LIMBUSCOMPANY ?? {};
+    const hasPanic = (sys.buffs ?? []).some(b => b.type === "panic" && b.whenAdded !== "下回合");
+
+    // 恐慌时自动激活有侵蚀形态的 EGO 槽
+    if (hasPanic) {
+      for (const grade of (cfg.EGO_GRADES ?? [])) {
+        const itemId  = sys.skills?.ego?.[grade];
+        if (!itemId) continue;
+        const egoItem = this._actor.items.get(itemId);
+        if (egoItem?.system?.relatedSkill?.erodeUuid) {
+          this._egoRelatedHudMode[itemId] = true;
+        }
+      }
+    }
+
+    // 将状态应用到 DOM
+    for (const [itemId, isRelated] of Object.entries(this._egoRelatedHudMode)) {
+      if (!isRelated) continue;
+      const $btn  = html.find(`.qa-ego-related-toggle[data-item-id="${itemId}"]`);
+      const $slot = html.find(`.qa-ego-skill-slot[data-item-id="${itemId}"] img`);
+      $btn.addClass("related-active");
+      const mainItem = this._actor.items.get(itemId);
+      if (!mainItem) continue;
+      const uuid = (hasPanic && mainItem.system?.relatedSkill?.erodeUuid)
+        ? mainItem.system.relatedSkill.erodeUuid
+        : mainItem.system?.relatedSkill?.itemUuid;
+      const relItem = uuid && typeof fromUuidSync !== "undefined" ? fromUuidSync(uuid) : null;
+      if (relItem) $slot.attr("src", relItem.img ?? "");
+    }
   }
 
   /* ─── 数据准备 ───────────────────────────────────────────────────────────── */
@@ -234,7 +272,8 @@ export class QuickActionHUD extends Application {
       return {
         grade,
         item,
-        sinColor: item ? (cfg.SIN_COLORS?.[item.system?.sinType] ?? "#443322") : "#443322",
+        sinColor:   item ? (cfg.SIN_COLORS?.[item.system?.sinType] ?? "#443322") : "#443322",
+        hasRelated: !!(item?.system?.relatedSkill?.itemUuid),
       };
     });
 
@@ -413,9 +452,59 @@ export class QuickActionHUD extends Application {
     html.find(".qa-ego-skill-slot[data-item-id]").on("click", async (e) => {
       const itemId = e.currentTarget.dataset.itemId;
       if (!itemId || !this._actor) return;
-      const item = this._actor.items.get(itemId);
+      let item = this._actor.items.get(itemId);
       if (!item) return;
+
+      // 若处于相关技能模式，使用相关技能（恐慌时用侵蚀形态）
+      if (this._egoRelatedHudMode?.[itemId]) {
+        const hasPanic = (this._actor.system.buffs ?? []).some(
+          b => b.type === "panic" && b.whenAdded !== "下回合"
+        );
+        const uuid = (hasPanic && item.system?.relatedSkill?.erodeUuid)
+          ? item.system.relatedSkill.erodeUuid
+          : item.system?.relatedSkill?.itemUuid;
+        if (uuid) {
+          const relItem = typeof fromUuidSync !== "undefined" ? fromUuidSync(uuid) : null;
+          if (relItem) item = relItem;
+        }
+      }
       await ClashManager.showInitiateDialog(this._actor, item, -2);
+    });
+
+    // ── EGO 相关技能切换按钮 ────────────────────────────────────────────
+    html.find(".qa-ego-related-toggle").on("click", (e) => {
+      e.stopPropagation();
+      const itemId = e.currentTarget.dataset.itemId;
+      if (!itemId || !this._actor) return;
+      if (!this._egoRelatedHudMode) this._egoRelatedHudMode = {};
+
+      const isNowRelated = !this._egoRelatedHudMode[itemId];
+      this._egoRelatedHudMode[itemId] = isNowRelated;
+      $(e.currentTarget).toggleClass("related-active", isNowRelated);
+
+      // 同步到角色卡 sheet 状态
+      const sheet = this._actor.sheet;
+      if (sheet) {
+        if (!sheet._egoRelatedMode) sheet._egoRelatedMode = {};
+        sheet._egoRelatedMode[itemId] = isNowRelated;
+      }
+
+      // 更新 EGO 槽图片
+      const mainItem = this._actor.items.get(itemId);
+      if (!mainItem) return;
+      const hasPanic = (this._actor.system.buffs ?? []).some(
+        b => b.type === "panic" && b.whenAdded !== "下回合"
+      );
+      const $slot = html.find(`.qa-ego-skill-slot[data-item-id="${itemId}"] img`);
+      if (isNowRelated) {
+        const uuid = (hasPanic && mainItem.system?.relatedSkill?.erodeUuid)
+          ? mainItem.system.relatedSkill.erodeUuid
+          : mainItem.system?.relatedSkill?.itemUuid;
+        const relItem = uuid && typeof fromUuidSync !== "undefined" ? fromUuidSync(uuid) : null;
+        if (relItem) $slot.attr("src", relItem.img ?? "");
+      } else {
+        $slot.attr("src", mainItem.img ?? "");
+      }
     });
 
     // ── 技能 / 物品悬浮 Title 卡（与角色卡一致） ──────────────────────────

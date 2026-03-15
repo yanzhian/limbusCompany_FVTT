@@ -161,23 +161,18 @@ export class LimbusActorSheet extends ActorSheet {
       skillImg: defItem?.img ?? "",
     };
 
-    const isEgoEroded = !!actor.getFlag("limbusCompany_FVTT", "egoErodeMode");
     context.egoSkills = cfg.EGO_GRADES.map(grade => {
-      const egoItem    = system.skills?.ego?.[grade] ? actor.items.get(system.skills.ego[grade]) : null;
-      const erodeUuid  = egoItem?.system?.relatedSkill?.erodeUuid ?? null;
+      const egoItem   = system.skills?.ego?.[grade] ? actor.items.get(system.skills.ego[grade]) : null;
+      const erodeUuid = egoItem?.system?.relatedSkill?.erodeUuid ?? null;
       return {
         grade,
-        item:        egoItem,
-        itemId:      system.skills?.ego?.[grade] ?? null,
-        skillImg:    egoItem?.img ?? "",
+        item:       egoItem,
+        itemId:     system.skills?.ego?.[grade] ?? null,
+        skillImg:   egoItem?.img ?? "",
         erodeUuid,
+        hasRelated: !!(egoItem?.system?.relatedSkill?.itemUuid),
       };
     });
-    context.hasEgoErode = context.egoSkills.some(s => s.erodeUuid);
-    context.isEgoEroded = isEgoEroded;
-    // 角色处于恐慌且有侵蚀形态时，给 GM/玩家提示
-    const hasPanic = (system.buffs ?? []).some(b => b.type === "panic" && b.whenAdded !== "下回合");
-    context.egoPanicActive = hasPanic && context.hasEgoErode;
 
     // ── 物品分组（物品 Tab） ───────────────────────────────────────────────
     context.itemGroups  = this._groupEquipmentItems();
@@ -446,6 +441,10 @@ export class LimbusActorSheet extends ActorSheet {
       setTimeout(() => this._renderCombatSlots(this.element), 80);
     }
 
+    // EGO 相关技能槽：恢复状态，并在陷入恐慌时自动激活侵蚀形态
+    this._autoActivateEgoPanicToggles();
+    setTimeout(() => this._applyEgoRelatedToDom(this.element), 90);
+
     // ── 非 GM/非编辑：只读分支结束 ────────────────────────────────────────
     if (!this.isEditable) return;
 
@@ -484,9 +483,6 @@ export class LimbusActorSheet extends ActorSheet {
 
     // ── 技能槽右键菜单 ────────────────────────────────────────────────────
     html.find(".skill-slot-wrap[data-item-id]").on("contextmenu", this._onSkillSlotContextMenu.bind(this));
-
-    // ── EGO 侵蚀形态转换按钮 ──────────────────────────────────────────────
-    html.find(".ego-erode-toggle-btn").on("click", this._onEgoErodeToggle.bind(this));
 
     // ── 过滤面板 ──────────────────────────────────────────────────────────
     html.find(".filter-toggle-btn").on("click", this._onFilterToggle.bind(this));
@@ -1289,59 +1285,129 @@ export class LimbusActorSheet extends ActorSheet {
     let item = this.actor.items.get(itemId);
     if (!item) return;
 
-    // 若处于侵蚀模式且该 EGO 技能有侵蚀形态相关技能，使用侵蚀 UUID 标记传入
-    // （相关技能本身的触发逻辑在 clash 系统中读取，这里只标记当前技能的上下文）
-    const erodeMode = !!this.actor.getFlag("limbusCompany_FVTT", "egoErodeMode");
-    const erodeUuid = item.system?.relatedSkill?.erodeUuid;
-    if (erodeMode && erodeUuid) {
-      // 使用原 EGO 技能发起对抗，但将侵蚀 UUID 存入临时状态供 clash 读取
-      if (!this._egoErodeContext) this._egoErodeContext = {};
-      this._egoErodeContext[item.id] = erodeUuid;
-    } else {
-      if (this._egoErodeContext) delete this._egoErodeContext[item.id];
+    // 若该 EGO 槽处于相关技能模式，使用相关技能（恐慌时用侵蚀形态）
+    if (this._egoRelatedMode?.[itemId]) {
+      const hasPanic = (this.actor.system.buffs ?? []).some(
+        b => b.type === "panic" && b.whenAdded !== "下回合"
+      );
+      const uuid = (hasPanic && item.system?.relatedSkill?.erodeUuid)
+        ? item.system.relatedSkill.erodeUuid
+        : item.system?.relatedSkill?.itemUuid;
+      if (uuid) {
+        const relItem = typeof fromUuidSync !== "undefined" ? fromUuidSync(uuid) : null;
+        if (relItem) item = relItem;
+      }
     }
 
     this._showClashDialog(item, -1);  // slotIndex = -1 → 不触发 bag 动画/AP 消耗
   }
 
-  async _onEgoErodeToggle(event) {
-    event.preventDefault();
-    const current = !!this.actor.getFlag("limbusCompany_FVTT", "egoErodeMode");
-    await this.actor.setFlag("limbusCompany_FVTT", "egoErodeMode", !current);
-    // 切换时同步更新 _egoErodeContext
-    if (current) this._egoErodeContext = {};
-    // 角色卡会因 flag 更新自动重渲
-  }
-
   _onRelatedSkillToggle(event) {
     event.stopPropagation();
-    const $btn   = $(event.currentTarget);
-    const $wrap  = $btn.closest(".combat-skill-slot-wrap");
-    const $slot  = $wrap.find(".combat-skill-slot");
-    const slotIndex = parseInt($slot.attr("data-slot-index") ?? "0");
+    const $btn  = $(event.currentTarget);
+    const $wrap = $btn.closest(".combat-skill-slot-wrap");
+    const $slot = $wrap.find(".combat-skill-slot");
 
-    const state = this._combatBagState;
-    if (!state) return;
-    if (!state.relatedMode) state.relatedMode = {};
+    const slotIndexRaw = $slot.attr("data-slot-index");
+    const isBasicSlot  = slotIndexRaw !== undefined && slotIndexRaw !== "";
 
-    const isNowRelated = !state.relatedMode[slotIndex];
-    state.relatedMode[slotIndex] = isNowRelated;
-    $btn.toggleClass("related-active", isNowRelated);
+    if (isBasicSlot) {
+      // ── 基础技能槽 ──────────────────────────────────────────────────────
+      const slotIndex = parseInt(slotIndexRaw);
+      const state = this._combatBagState;
+      if (!state) return;
+      if (!state.relatedMode) state.relatedMode = {};
 
-    // 取主技能和相关技能，更新槽位显示
-    const mainId   = state.slots[slotIndex];
-    const mainItem = mainId ? this.actor.items.get(mainId) : null;
-    if (!mainItem) return;
+      const isNowRelated = !state.relatedMode[slotIndex];
+      state.relatedMode[slotIndex] = isNowRelated;
+      $btn.toggleClass("related-active", isNowRelated);
 
-    let displayItem = mainItem;
-    if (isNowRelated) {
-      const relUuid = mainItem.system?.relatedSkill?.itemUuid;
-      const relItem = relUuid && typeof fromUuidSync !== "undefined" ? fromUuidSync(relUuid) : null;
-      if (relItem) displayItem = relItem;
+      const mainId   = state.slots[slotIndex];
+      const mainItem = mainId ? this.actor.items.get(mainId) : null;
+      if (!mainItem) return;
+
+      let displayItem = mainItem;
+      if (isNowRelated) {
+        const relUuid = mainItem.system?.relatedSkill?.itemUuid;
+        const relItem = relUuid && typeof fromUuidSync !== "undefined" ? fromUuidSync(relUuid) : null;
+        if (relItem) displayItem = relItem;
+      }
+      $slot.find("img").attr("src", displayItem.img ?? "");
+      $wrap.find(".combat-slot-name").text(displayItem.name ?? "");
+
+    } else {
+      // ── EGO / 守备技能槽 ─────────────────────────────────────────────
+      const itemId = $slot.attr("data-item-id");
+      if (!itemId) return;
+      if (!this._egoRelatedMode) this._egoRelatedMode = {};
+
+      const isNowRelated = !this._egoRelatedMode[itemId];
+      this._egoRelatedMode[itemId] = isNowRelated;
+      $btn.toggleClass("related-active", isNowRelated);
+
+      const mainItem = this.actor.items.get(itemId);
+      if (!mainItem) return;
+
+      const hasPanic = (this.actor.system.buffs ?? []).some(
+        b => b.type === "panic" && b.whenAdded !== "下回合"
+      );
+      let displayItem = mainItem;
+      if (isNowRelated) {
+        const uuid = (hasPanic && mainItem.system?.relatedSkill?.erodeUuid)
+          ? mainItem.system.relatedSkill.erodeUuid
+          : mainItem.system?.relatedSkill?.itemUuid;
+        const relItem = uuid && typeof fromUuidSync !== "undefined" ? fromUuidSync(uuid) : null;
+        if (relItem) displayItem = relItem;
+      }
+      $slot.find("img").attr("src", displayItem.img ?? "");
     }
+  }
 
-    $slot.find("img").attr("src", displayItem.img ?? "");
-    $wrap.find(".combat-slot-name").text(displayItem.name ?? "");
+  /**
+   * 若角色当前处于【陷入恐慌】，自动将所有拥有侵蚀形态（erodeUuid）的 EGO 技能
+   * 切换到相关技能模式。脱离恐慌后不自动还原（玩家手动切回）。
+   */
+  _autoActivateEgoPanicToggles() {
+    const hasPanic = (this.actor.system.buffs ?? []).some(
+      b => b.type === "panic" && b.whenAdded !== "下回合"
+    );
+    if (!hasPanic) return;
+    if (!this._egoRelatedMode) this._egoRelatedMode = {};
+    const cfg = CONFIG.LIMBUSCOMPANY;
+    const sys = this.actor.system;
+    for (const grade of (cfg.EGO_GRADES ?? [])) {
+      const itemId = sys.skills?.ego?.[grade];
+      if (!itemId) continue;
+      const egoItem = this.actor.items.get(itemId);
+      if (egoItem?.system?.relatedSkill?.erodeUuid) {
+        this._egoRelatedMode[itemId] = true;
+      }
+    }
+  }
+
+  /** 将 _egoRelatedMode 状态同步到 DOM 中的 EGO 战斗槽 */
+  _applyEgoRelatedToDom(html) {
+    if (!this._egoRelatedMode || !html?.length) return;
+    const hasPanic = (this.actor.system.buffs ?? []).some(
+      b => b.type === "panic" && b.whenAdded !== "下回合"
+    );
+    html.find(".ego-combat-section .combat-skill-slot-wrap").each((_, wrap) => {
+      const $wrap  = $(wrap);
+      const $slot  = $wrap.find(".combat-skill-slot");
+      const $btn   = $wrap.find(".combat-skill-related-toggle");
+      const itemId = $slot.attr("data-item-id");
+      if (!itemId) return;
+      const isRelated = !!this._egoRelatedMode[itemId];
+      $btn.toggleClass("related-active", isRelated);
+      if (!isRelated) return;
+      const mainItem = this.actor.items.get(itemId);
+      if (!mainItem) return;
+      const uuid = (hasPanic && mainItem.system?.relatedSkill?.erodeUuid)
+        ? mainItem.system.relatedSkill.erodeUuid
+        : mainItem.system?.relatedSkill?.itemUuid;
+      const relItem = uuid && typeof fromUuidSync !== "undefined" ? fromUuidSync(uuid) : null;
+      if (relItem) $slot.find("img").attr("src", relItem.img ?? "");
+    });
   }
 
   /* ─── 行动值（AP） ──────────────────────────────────────────────────────── */
