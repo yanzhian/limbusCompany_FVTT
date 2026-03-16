@@ -3866,13 +3866,29 @@ body.game .limbuscompany.app img {
 
 /* 背景格 */
 .limbuscompany .cg-cell {
-  background: rgba(11,7,7,.5);
-  border: 1px solid rgba(95,62,33,.25);
+  background: #5F3E22;
+  border: 1px solid rgba(95,62,33,.45);
   box-sizing: border-box;
   transition: background .1s, border-color .1s;
+  cursor: default;
 }
 .limbuscompany .cg-cell.cg-occupied {
-  background: rgba(95,62,33,.08);
+  background: rgba(95,62,33,.25);
+}
+.limbuscompany .cg-cell.cg-locked {
+  background: #15110E;
+  border-color: rgba(21,17,14,.8);
+  cursor: pointer;
+}
+.limbuscompany .cg-cell.cg-locked:hover {
+  background: #1f1813;
+}
+/* 解锁状态：非锁定、非占用的空格子显示可交互光标 */
+.limbuscompany .cg-wrap.cg-edit-unlocked .cg-cell:not(.cg-occupied):not(.cg-locked) {
+  cursor: pointer;
+}
+.limbuscompany .cg-wrap.cg-edit-unlocked .cg-cell:not(.cg-occupied):not(.cg-locked):hover {
+  background: rgba(95,62,33,.6);
 }
 .limbuscompany .cg-cell.cg-drag-over {
   background: rgba(229,186,37,.18);

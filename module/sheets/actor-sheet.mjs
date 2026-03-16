@@ -654,6 +654,32 @@ export class LimbusActorSheet extends ActorSheet {
     // 是否已在 actor.items 中
     const ownedItem = this.actor.items.get(item.id) ?? null;
 
+    // ── 容器图块拖入物品列表：从源容器移除，添加到本 Actor ───────────────
+    if (data.fromContainer) {
+      const { actorId, containerId, placementIdx } = data.fromContainer;
+      const $target = $(event.target);
+      const droppedIntoItemList = $target.closest(".item-list-panel").length > 0
+        || $target.closest(".sheet-body").length > 0;
+      if (droppedIntoItemList || !$target.closest(".cg-cell,.cg-item-tile,.equip-slot,.skill-slot-wrap").length) {
+        // 移除源容器中的占位
+        const srcActor     = actorId ? (game.actors?.get(actorId) ?? this.actor) : this.actor;
+        const srcContainer = srcActor.items.get(containerId);
+        if (srcContainer) {
+          const srcContents = foundry.utils.deepClone(srcContainer.system.contents ?? []);
+          srcContents.splice(placementIdx, 1);
+          await srcContainer.update({ "system.contents": srcContents });
+        }
+        // 跨 Actor：物品已在本 actor（由跨 actor drop 逻辑创建），或需从源 actor 移动
+        if (srcActor.id !== this.actor.id && !ownedItem) {
+          const itemData = item.toObject();
+          await Item.create(itemData, { parent: this.actor });
+          await item.delete();
+        }
+        // 同 Actor：物品依然在 actor.items 中，无需额外操作（移出容器即回到列表）
+        return;
+      }
+    }
+
     const $target = $(event.target);
 
     // ── 拖入九宫格装备槽 ─────────────────────────────────────────────────

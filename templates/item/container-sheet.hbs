@@ -57,9 +57,10 @@
 
     {{!-- 背景格（全部渲染，作拖放目标）--}}
     {{#each allCells}}
-      <div class="cg-cell {{#if occupied}}cg-occupied{{/if}}"
+      <div class="cg-cell {{#if occupied}}cg-occupied{{/if}} {{#if locked}}cg-locked{{/if}}"
            style="grid-column:{{col}}; grid-row:{{row}}"
-           data-x="{{x}}" data-y="{{y}}">
+           data-x="{{x}}" data-y="{{y}}"
+           data-locked="{{#if locked}}true{{else}}false{{/if}}">
       </div>
     {{/each}}
 
