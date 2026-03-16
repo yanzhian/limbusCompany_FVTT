@@ -3207,7 +3207,7 @@ body.game .limbuscompany.app img {
 
 /* EGO技能 图标尺寸（可独立调整） */
 .limbuscompany .ego-skill-grid .ego-skill-slot-wrap .skill-slot-img {
-  width: 50%; height: 50%;
+  width: 70%; height: 70%;
 }
 
 /* 方形槽图标：七边形蒙版（尖朝下） */
