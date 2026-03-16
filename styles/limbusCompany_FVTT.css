@@ -3623,8 +3623,9 @@ body.game .limbuscompany.app img {
 .limbuscompany .footer-stellar-max {
   font-size: .85rem; font-weight: bold; color: var(--text-main);
 }
-/* 背包容量组（footer 内） */
-.limbuscompany .footer-inventory { display: flex; align-items: center; gap: 3px; }
+/* 背包容量组 & 星芒组（footer 内，结构一致） */
+.limbuscompany .footer-inventory,
+.limbuscompany .footer-stellar-group { display: flex; align-items: center; gap: 3px; }
 .limbuscompany .footer-inv-val,
 .limbuscompany .footer-inv-max  { font-size: .85rem; font-weight: bold; color: var(--text-main); }
 .limbuscompany .footer-inventory.cap-over .footer-inv-val { color: #E5BA25; }
