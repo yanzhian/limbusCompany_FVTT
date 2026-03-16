@@ -5757,3 +5757,9 @@ body.game .limbuscompany.app img {
 }
 .qa-buff-intensity { left:  0; border-radius: 0 2px 0 2px; }
 .qa-buff-stacks    { right: 0; border-radius: 2px 0 2px 0; }
+
+/* ── Item Piles CSS 变量覆盖 ──────────────────────────────────────────────── */
+:root {
+  --color-text-dark-primary:          #E8C9A2;
+  --item-piles-text-light-highlight:  #3B2412;
+}
