@@ -32,15 +32,6 @@
   {{!-- ── 右侧：物品列表 ──────────────────────────────────────────── --}}
   <div class="list-panel item-list-panel">
 
-    {{!-- 背包容量状态栏 --}}
-    <div class="inventory-cap-bar {{#if inventoryOverCapacity}}cap-over{{/if}}">
-      <span class="cap-bar-icon">🎒</span>
-      <span class="cap-bar-text">背包容量：{{inventoryUsed}} / {{inventoryMax}}</span>
-      {{#if inventoryOverCapacity}}
-        <span class="cap-over-tip">⚠ 超出容量，无法添加物品</span>
-      {{/if}}
-    </div>
-
     {{!-- 工具栏 --}}
     <div class="list-toolbar">
       <input type="text" class="item-search" placeholder="搜索物品…"/>

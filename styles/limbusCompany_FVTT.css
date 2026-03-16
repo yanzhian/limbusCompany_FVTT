@@ -3623,6 +3623,18 @@ body.game .limbuscompany.app img {
 .limbuscompany .footer-stellar-max {
   font-size: .85rem; font-weight: bold; color: var(--text-main);
 }
+/* 背包容量组（footer 内） */
+.limbuscompany .footer-inventory { display: flex; align-items: center; gap: 3px; }
+.limbuscompany .footer-inv-val,
+.limbuscompany .footer-inv-max  { font-size: .85rem; font-weight: bold; color: var(--text-main); }
+.limbuscompany .footer-inventory.cap-over .footer-inv-val { color: #E5BA25; }
+.limbuscompany .footer-inv-warn { font-size: .8rem; color: #E5BA25; }
+/* 竖分隔线 */
+.limbuscompany .footer-sep-v {
+  width: 1px; height: 14px; background: rgba(95,62,33,.5); margin: 0 3px;
+}
+/* 背包容量状态栏样式（已搬到 footer，保留选择器供可能复用） */
+.limbuscompany .cap-over-text { color: #E5BA25; }
 .limbuscompany .footer-currency {
   background: transparent; border: none; border-bottom: 1px solid var(--border-gold);
   width: 70px; color: var(--text-main); font-size: .85rem; text-align: center;
