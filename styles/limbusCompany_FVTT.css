@@ -516,16 +516,6 @@
   height: 24px;
   object-fit: contain;
   cursor: pointer;
-  transition: opacity 0.15s, filter 0.15s;
-}
-
-/* 编辑锁锁定时：图标显示放大镜光标，悬停提亮提示可查看插图 */
-.limbuscompany.edit-locked .item-list .item-row .item-icon {
-  cursor: zoom-in;
-}
-.limbuscompany.edit-locked .item-list .item-row .item-icon:hover {
-  opacity: 0.85;
-  filter: brightness(1.25) drop-shadow(0 0 4px rgba(232, 201, 162, 0.7));
 }
 
 .limbuscompany .item-list .item-row .item-name {
@@ -3693,6 +3683,15 @@ body.game .limbuscompany.app img {
 .limbuscompany .item-sheet-icon {
   width: 48px; height: 48px; object-fit: cover; border-radius: 3px;
   border: 1px solid var(--border-gold); cursor: pointer; flex-shrink: 0;
+  transition: opacity 0.15s, filter 0.15s;
+}
+/* 锁定状态：图标显示放大镜光标，悬停发光提示可查看插图 */
+.item-sheet-locked .item-sheet-icon {
+  cursor: zoom-in;
+}
+.item-sheet-locked .item-sheet-icon:hover {
+  opacity: 0.85;
+  filter: brightness(1.25) drop-shadow(0 0 5px rgba(232, 201, 162, 0.75));
 }
 .limbuscompany .item-name-input {
   flex: 1; background: transparent; border: none;

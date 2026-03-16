@@ -265,6 +265,19 @@ export class LimbusItemSheet extends ItemSheet {
     // ── 编辑锁切换 ────────────────────────────────────────────────────────
     html.find(".sheet-lock-icon").on("click", this._onToggleLock.bind(this));
 
+    // ── 图标点击：锁定时查看插图，解锁时由 Foundry data-edit 处理 ─────────
+    html.find(".item-sheet-icon").on("click", (event) => {
+      if (!this.isLocked) return;       // 解锁状态：让 data-edit="img" 正常触发
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      const img = this.item.img;
+      if (img) new ImagePopout(img, { title: this.item.name }).render(true);
+    });
+
+    // 根元素同步锁定 class（供 CSS 选择器使用）
+    if (this.isLocked) html.closest(".app").addClass("item-sheet-locked");
+    else               html.closest(".app").removeClass("item-sheet-locked");
+
     // ── Activity 编辑区折叠 ───────────────────────────────────────────────
     html.find(".activity-edit-toggle").on("click", this._onActivityToggle.bind(this));
     html.find(".activity-add-btn").on("click",    this._onActivityAdd.bind(this));
