@@ -14,14 +14,6 @@ const ICON_BASE = "systems/limbusCompany_FVTT/assets/icons/Base_icon";
 export function registerItemPiles() {
   if (!game.itempiles?.API) return;
 
-  // ── preCreateActor 兜底：Item Piles v3 有时创建堆 Actor 时不携带 type ──
-  // Foundry v13 要求 type 必须存在，此钩子保证堆 Actor 始终是 "character"
-  Hooks.on("preCreateActor", (document, data, _options, _userId) => {
-    if (!data.type) {
-      document.updateSource({ type: "character" });
-    }
-  });
-
   game.itempiles.API.registerSystem({
 
     // ── API 版本（Item Piles v3.x 使用 "1"）────────────────────────────
