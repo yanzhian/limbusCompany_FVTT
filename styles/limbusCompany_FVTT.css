@@ -516,6 +516,16 @@
   height: 24px;
   object-fit: contain;
   cursor: pointer;
+  transition: opacity 0.15s, filter 0.15s;
+}
+
+/* 编辑锁锁定时：图标显示放大镜光标，悬停提亮提示可查看插图 */
+.limbuscompany.edit-locked .item-list .item-row .item-icon {
+  cursor: zoom-in;
+}
+.limbuscompany.edit-locked .item-list .item-row .item-icon:hover {
+  opacity: 0.85;
+  filter: brightness(1.25) drop-shadow(0 0 4px rgba(232, 201, 162, 0.7));
 }
 
 .limbuscompany .item-list .item-row .item-name {

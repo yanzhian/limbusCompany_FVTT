@@ -1003,7 +1003,13 @@ export class LimbusActorSheet extends ActorSheet {
   _onItemOpen(event) {
     const itemId = event.currentTarget.closest("[data-item-id]")?.dataset.itemId;
     const item   = this.actor.items.get(itemId);
-    item?.sheet?.render(true);
+    if (!item) return;
+    // 锁定状态下点击图标：弹出物品插图查看器
+    if (!this._editUnlocked && event.currentTarget.classList.contains("item-icon") && item.img) {
+      new ImagePopout(item.img, { title: item.name }).render(true);
+      return;
+    }
+    item.sheet.render(true);
   }
 
   /* ─── 装备槽右键菜单 ────────────────────────────────────────────────────── */
@@ -1738,11 +1744,13 @@ export class LimbusActorSheet extends ActorSheet {
       root.find(".editable-field").prop("disabled", false);
       root.find(".editable-only").show();
       root.find(".sin-resist-static").hide();
+      root.removeClass("edit-locked");
     } else {
       lockBtn.addClass("locked").html('<i class="fas fa-lock"></i>');
       root.find(".editable-field").prop("disabled", true);
       root.find(".editable-only").hide();
       root.find(".sin-resist-static").show();
+      root.addClass("edit-locked");
     }
 
     // 星芒固定不可编辑
