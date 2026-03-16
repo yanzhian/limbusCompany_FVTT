@@ -14,22 +14,29 @@ const ICON_BASE = "systems/limbusCompany_FVTT/assets/icons/Base_icon";
 export function registerItemPiles() {
   if (!game.itempiles?.API) return;
 
+  // ── preCreateActor 兜底：Item Piles v3 有时创建堆 Actor 时不携带 type ──
+  // Foundry v13 要求 type 必须存在，此钩子保证堆 Actor 始终是 "character"
+  Hooks.on("preCreateActor", (document, data, _options, _userId) => {
+    if (!data.type) {
+      document.updateSource({ type: "character" });
+    }
+  });
+
   game.itempiles.API.registerSystem({
 
-    // ── API 版本（Item Piles v2.x）─────────────────────────────────────
-    VERSION: "1.0.0",
+    // ── API 版本（Item Piles v3.x 使用 "1"）────────────────────────────
+    VERSION: "1",
 
     // ── 创建 Pile Actor 时默认使用的角色类型 ──────────────────────────
     ACTOR_CLASS_TYPE: "character",
 
-    // ── 物品数量字段路径（消耗品、材料、装备均使用此路径）────────────
+    // ── 物品数量字段路径 ──────────────────────────────────────────────
     ITEM_QUANTITY_ATTRIBUTE: "system.quantity",
 
-    // ── 物品眼价格字段路径（用于商人定价）───────────────────────────
+    // ── 物品眼价格字段路径（用于商人定价）────────────────────────────
     ITEM_PRICE_ATTRIBUTE: "system.cost",
 
     // ── 金库格占用：映射到物品容量字段 ───────────────────────────────
-    // Item Piles 会据此在 Vault 网格中为物品分配对应格数
     ITEM_COLUMNS_ATTRIBUTE: "system.capacity.w",
     ITEM_ROWS_ATTRIBUTE:    "system.capacity.h",
 
@@ -54,7 +61,7 @@ export function registerItemPiles() {
       },
     ],
 
-    // ── 金库外观风格（可在 Item Piles 界面中选择）────────────────────
+    // ── 金库外观风格 ──────────────────────────────────────────────────
     VAULT_STYLES: [
       {
         label:   "边狱公司",
@@ -68,17 +75,20 @@ export function registerItemPiles() {
       },
     ],
 
-    // ── 默认战利品堆设置（可选，覆盖 Item Piles 默认值）────────────
+    // ── 默认战利品堆设置 ──────────────────────────────────────────────
     PILE_DEFAULTS: {
-      // 初始状态为关闭的容器，需与人物互动才打开
-      closed:          true,
-      closedImage:     `${ICON_BASE}/bag.webp`,
-      openedImage:     `${ICON_BASE}/bag.webp`,
-      // 堆文字标签
-      tokenName:       "战利品",
+      closed:      true,
+      closedImage: `${ICON_BASE}/bag.webp`,
+      openedImage: `${ICON_BASE}/bag.webp`,
     },
 
   });
+
+  // 确保 Item Piles 的 actorClassType 设置也同步为 "character"
+  // （部分 v3 版本从 game.settings 读取而非 registerSystem 的值）
+  if (game.user?.isGM) {
+    game.settings.set("item-piles", "actorClassType", "character").catch(() => {});
+  }
 
   console.log("limbusCompany_FVTT | Item Piles 联动注册完成。");
 }
