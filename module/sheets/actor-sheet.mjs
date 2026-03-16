@@ -647,6 +647,29 @@ export class LimbusActorSheet extends ActorSheet {
   async _onDropItem(event, data) {
     if (!this.isEditable) return;
 
+    // ── 世界金库取出：无 UUID，itemData 携带完整物品数据 ─────────────────────
+    if (data.fromContainer?.isWorldContainer) {
+      const { containerId, placementIdx } = data.fromContainer;
+      const $target = $(event.target);
+      const droppedIntoItemList = $target.closest(".item-list-panel").length > 0
+        || $target.closest(".sheet-body").length > 0;
+      if (droppedIntoItemList || !$target.closest(".cg-cell,.cg-item-tile,.equip-slot,.skill-slot-wrap").length) {
+        const vault = game.items.get(containerId);
+        if (!vault) return;
+        const srcContents = foundry.utils.deepClone(vault.system.contents ?? []);
+        const entry = srcContents[placementIdx];
+        srcContents.splice(placementIdx, 1);
+        await vault.update({ "system.contents": srcContents });
+        const itemData = data.itemData ?? entry?.itemData;
+        if (itemData) {
+          const newData = foundry.utils.deepClone(itemData);
+          delete newData._id;
+          await Item.create(newData, { parent: this.actor });
+        }
+        return;
+      }
+    }
+
     // 解析拖入的 item
     const item = await Item.fromDropData(data);
     if (!item) return;

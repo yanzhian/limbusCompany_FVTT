@@ -190,8 +190,13 @@ export class LimbusItemSheet extends ItemSheet {
 
     for (let idx = 0; idx < placements.length; idx++) {
       const p = placements[idx];
-      if (!p?.uuid) continue;
-      const item = await fromUuid(p.uuid).catch(() => null);
+      // 世界金库物品：无 UUID，改用 itemData 显示
+      let item = null;
+      if (p?.uuid) {
+        item = await fromUuid(p.uuid).catch(() => null);
+      } else if (p?.itemData) {
+        item = { id: null, name: p.itemData.name ?? "未知物品", img: p.itemData.img ?? "icons/svg/item-bag.svg" };
+      }
       if (!item) continue;
 
       const w = Math.max(1, p.w ?? 1);
@@ -206,7 +211,7 @@ export class LimbusItemSheet extends ItemSheet {
       const show = !q || item.name.toLowerCase().includes(q);
 
       placedItems.push({
-        idx, uuid: p.uuid,
+        idx, uuid: p.uuid ?? "",
         x: p.x, y: p.y, w, h,
         col: p.x + 1, row: p.y + 1,   // CSS grid 1-indexed
         rotated: p.rotated ?? false,
@@ -834,6 +839,7 @@ export class LimbusItemSheet extends ItemSheet {
     const containerActor = this.item.parent;
     const sourceActor    = dropped.parent;
     let storedUuid       = dropped.uuid;
+    let storedItemData   = null;
 
     // 跨 Actor 拖入：将物品转移到容器所属 Actor，删除源物品
     if (containerActor && sourceActor && sourceActor.id !== containerActor.id) {
@@ -852,6 +858,23 @@ export class LimbusItemSheet extends ItemSheet {
       }
       await dropped.delete();
     }
+    // 世界金库拖入：容器为世界物品（无 Actor），物品来自某个 Actor → 存储完整数据并删除源物品
+    else if (!containerActor && sourceActor) {
+      storedItemData = dropped.toObject();
+      storedUuid = "";
+      // 若物品来自某个 Actor 内的容器，先从源容器移除占位
+      if (raw.fromContainer) {
+        const { containerId: srcId, placementIdx: srcIdx, actorId: srcActId } = raw.fromContainer;
+        const srcActor2 = srcActId ? (game.actors?.get(srcActId) ?? sourceActor) : sourceActor;
+        const srcCont = srcActor2?.items.get(srcId);
+        if (srcCont) {
+          const sc = foundry.utils.deepClone(srcCont.system.contents ?? []);
+          sc.splice(srcIdx, 1);
+          await srcCont.update({ "system.contents": sc });
+        }
+      }
+      await dropped.delete();
+    }
     // 同 Actor 从另一容器图块拖入：先从源容器移除占用，物品不删除
     else if (raw.fromContainer && raw.fromContainer.containerId !== this.item.id) {
       const { containerId, placementIdx } = raw.fromContainer;
@@ -865,7 +888,9 @@ export class LimbusItemSheet extends ItemSheet {
     }
 
     const contents = foundry.utils.deepClone(sys.contents ?? []);
-    contents.push({ uuid: storedUuid, x: targetX, y: targetY, w, h, rotated: false });
+    const entry = { uuid: storedUuid, x: targetX, y: targetY, w, h, rotated: false };
+    if (storedItemData) entry.itemData = storedItemData;
+    contents.push(entry);
     await this.item.update({ "system.contents": contents });
   }
 
@@ -879,17 +904,21 @@ export class LimbusItemSheet extends ItemSheet {
     const step  = 46;   // --cg-cell + --cg-gap
     const offX  = Math.floor((event.clientX - rect.left)  / step);
     const offY  = Math.floor((event.clientY - rect.top)   / step);
-    // 发出 Item 类型拖拽数据（同时携带 fromContainer 元数据供跨表处理）
-    event.originalEvent.dataTransfer.setData("text/plain", JSON.stringify({
+    // 世界金库物品：携带 itemData 供拖出时创建
+    const p = this.item.system?.contents?.[idx] ?? {};
+    const payload = {
       type: "Item",
-      uuid,
       fromContainer: {
-        actorId:       this.item.parent?.id ?? null,
-        containerId:   this.item.id,
-        placementIdx:  idx,
+        isWorldContainer: !this.item.parent,
+        actorId:          this.item.parent?.id ?? null,
+        containerId:      this.item.id,
+        placementIdx:     idx,
         offX, offY,
       },
-    }));
+    };
+    if (uuid) payload.uuid = uuid;
+    if (p.itemData) payload.itemData = p.itemData;
+    event.originalEvent.dataTransfer.setData("text/plain", JSON.stringify(payload));
     event.originalEvent.dataTransfer.effectAllowed = "move";
   }
 
@@ -965,14 +994,20 @@ export class LimbusItemSheet extends ItemSheet {
     event.preventDefault();
     const tile  = $(event.currentTarget);
     const idx   = parseInt(tile.data("placement-idx") ?? -1);
-    const uuid  = tile.data("item-uuid");
+    const uuid  = tile.data("item-uuid") ?? "";
     const iname = tile.data("item-name") ?? "";
-    if (idx < 0 || !uuid) return;
+    if (idx < 0) return;
+
+    // 判断是否世界金库物品（无 UUID，只有 itemData）
+    const entry = this.item.system?.contents?.[idx] ?? {};
+    const isVaultItem = !uuid && !!entry.itemData;
 
     $(".cg-ctx-menu").remove();
 
+    // 世界金库物品的"取出"会将物品发送到当前玩家角色
+    const takeoutLabel = isVaultItem ? "取出到我的角色" : "取出";
     const menu = $(`<ul class="cg-ctx-menu">
-      <li data-action="takeout"><i class="fas fa-box-open"></i> 取出</li>
+      <li data-action="takeout"><i class="fas fa-box-open"></i> ${takeoutLabel}</li>
       <li data-action="edit"><i class="fas fa-edit"></i> 编辑 / 查看</li>
       <li data-action="chat"><i class="fas fa-comment"></i> 发送聊天框</li>
       <li class="cg-ctx-sep"></li>
@@ -991,28 +1026,54 @@ export class LimbusItemSheet extends ItemSheet {
       const contents = foundry.utils.deepClone(this.item.system.contents ?? []);
 
       if (action === "takeout") {
+        if (isVaultItem) {
+          // 世界金库取出：放入当前玩家角色
+          const character = game.user?.character;
+          if (!character) {
+            ui.notifications.warn("你没有绑定角色，无法取出物品。请在玩家设置中绑定角色。");
+            return;
+          }
+          const newData = foundry.utils.deepClone(entry.itemData);
+          delete newData._id;
+          await Item.create(newData, { parent: character });
+        }
         contents.splice(idx, 1);
         await this.item.update({ "system.contents": contents });
 
       } else if (action === "edit") {
-        const itm = await fromUuid(uuid).catch(() => null);
-        itm?.sheet?.render(true);
+        if (isVaultItem) {
+          // 临时创建世界物品以供查看（只读），查看后自动清理
+          ui.notifications.info(`${iname}（查看模式）`);
+          const tempData = foundry.utils.deepClone(entry.itemData);
+          delete tempData._id;
+          const tempItem = await Item.create(tempData, { temporary: true });
+          tempItem?.sheet?.render(true);
+        } else {
+          const itm = await fromUuid(uuid).catch(() => null);
+          itm?.sheet?.render(true);
+        }
 
       } else if (action === "chat") {
-        const itm = await fromUuid(uuid).catch(() => null);
-        if (itm?.sendToChat) await itm.sendToChat();
+        const itm = uuid ? await fromUuid(uuid).catch(() => null) : null;
+        if (itm?.sendToChat) {
+          await itm.sendToChat();
+        } else if (isVaultItem && entry.itemData) {
+          // 从存储数据生成聊天消息
+          ChatMessage.create({ content: `<b>${iname}</b>`, speaker: ChatMessage.getSpeaker() });
+        }
 
       } else if (action === "delete") {
-        const itm = await fromUuid(uuid).catch(() => null);
-        if (!itm) return;
         const confirmed = await Dialog.confirm({
           title: "删除物品",
-          content: `<p>确定永久删除 <strong>${iname}</strong>？</p>`,
+          content: `<p>确定从金库删除 <strong>${iname}</strong>？${isVaultItem ? "该物品将永久消失。" : ""}</p>`,
         });
         if (!confirmed) return;
         contents.splice(idx, 1);
         await this.item.update({ "system.contents": contents });
-        await itm.delete();
+        if (!isVaultItem && uuid) {
+          const itm = await fromUuid(uuid).catch(() => null);
+          await itm?.delete();
+        }
       }
     });
   }

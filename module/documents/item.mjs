@@ -291,15 +291,17 @@ export class ContainerData extends foundry.abstract.TypeDataModel {
         width:  new fields.NumberField({ required: true, integer: true, min: 1, max: 10, initial: 3 }),
         height: new fields.NumberField({ required: true, integer: true, min: 1, max: 10, initial: 3 }),
       }),
-      // 内容物：放置记录 { uuid, x, y, w, h, rotated }
+      // 内容物：放置记录 { uuid, x, y, w, h, rotated, itemData? }
+      // uuid 用于 Actor 内嵌容器；itemData 用于世界金库（物品完整数据，无需 UUID）
       contents: new fields.ArrayField(
         new fields.SchemaField({
-          uuid:    new fields.StringField({ required: true, initial: "" }),
-          x:       new fields.NumberField({ required: true, integer: true, min: 0, initial: 0 }),
-          y:       new fields.NumberField({ required: true, integer: true, min: 0, initial: 0 }),
-          w:       new fields.NumberField({ required: true, integer: true, min: 1, initial: 1 }),
-          h:       new fields.NumberField({ required: true, integer: true, min: 1, initial: 1 }),
-          rotated: new fields.BooleanField({ initial: false }),
+          uuid:     new fields.StringField({ required: true, initial: "" }),
+          x:        new fields.NumberField({ required: true, integer: true, min: 0, initial: 0 }),
+          y:        new fields.NumberField({ required: true, integer: true, min: 0, initial: 0 }),
+          w:        new fields.NumberField({ required: true, integer: true, min: 1, initial: 1 }),
+          h:        new fields.NumberField({ required: true, integer: true, min: 1, initial: 1 }),
+          rotated:  new fields.BooleanField({ initial: false }),
+          itemData: new fields.ObjectField({ required: false, nullable: true, initial: null }),
         }),
         { required: true, initial: [] }
       ),
