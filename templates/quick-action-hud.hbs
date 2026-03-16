@@ -99,16 +99,23 @@
         <div class="qa-panel-body">
           <div class="qa-skills-grid">
             {{#each egoSkills}}
-              <div class="qa-ego-skill-slot
-                           {{#if item}}qa-skill-slot--filled{{else}}qa-skill-slot--empty{{/if}}"
-                   data-item-id="{{#if item}}{{item.id}}{{/if}}"
-                   data-grade="{{grade}}"
-                   style="border-color:{{sinColor}}"
-                   title="{{#if item}}{{item.name}}（{{grade}}）{{else}}{{grade}}（空）{{/if}}">
-                {{#if item}}
-                  <img src="{{item.img}}" alt="{{item.name}}" draggable="false">
+              <div class="qa-ego-skill-wrap">
+                <div class="qa-ego-skill-slot
+                             {{#if item}}qa-skill-slot--filled{{else}}qa-skill-slot--empty{{/if}}"
+                     data-item-id="{{#if item}}{{item.id}}{{/if}}"
+                     data-grade="{{grade}}"
+                     style="border-color:{{sinColor}}"
+                     title="{{#if item}}{{item.name}}（{{grade}}）{{else}}{{grade}}（空）{{/if}}">
+                  {{#if item}}
+                    <img src="{{item.img}}" alt="{{item.name}}" draggable="false">
+                  {{/if}}
+                  <span class="qa-ego-grade">{{grade}}</span>
+                </div>
+                {{#if hasRelated}}
+                  <button class="qa-ego-related-toggle combat-skill-related-toggle"
+                          data-item-id="{{item.id}}"
+                          title="切换相关技能">↺</button>
                 {{/if}}
-                <span class="qa-ego-grade">{{grade}}</span>
               </div>
             {{/each}}
           </div>

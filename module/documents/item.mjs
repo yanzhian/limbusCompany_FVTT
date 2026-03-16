@@ -93,6 +93,15 @@ export class EquipmentData extends foundry.abstract.TypeDataModel {
 
       // 收藏
       favorited: new fields.BooleanField({ required: true, initial: false }),
+
+      // 物品容量（占用角色背包格数，默认 1×1）
+      capacity: new fields.SchemaField({
+        w: new fields.NumberField({ required: true, integer: true, min: 1, max: 10, initial: 1 }),
+        h: new fields.NumberField({ required: true, integer: true, min: 1, max: 10, initial: 1 }),
+      }),
+
+      // 眼价格（供 Item Piles 商人/市场使用）
+      cost: new fields.NumberField({ required: true, integer: true, min: 0, initial: 0 }),
     };
   }
 }
@@ -233,6 +242,14 @@ export class ConsumableData extends foundry.abstract.TypeDataModel {
       // 激活效果触发列表
       activities: new fields.ArrayField(makeActivitySchema(), { required: true, initial: [] }),
       favorited:  new fields.BooleanField({ required: true, initial: false }),
+      // 物品容量
+      capacity: new fields.SchemaField({
+        w: new fields.NumberField({ required: true, integer: true, min: 1, max: 10, initial: 1 }),
+        h: new fields.NumberField({ required: true, integer: true, min: 1, max: 10, initial: 1 }),
+      }),
+
+      // 眼价格（供 Item Piles 商人/市场使用）
+      cost: new fields.NumberField({ required: true, integer: true, min: 0, initial: 0 }),
     };
   }
 }
@@ -249,6 +266,14 @@ export class MaterialData extends foundry.abstract.TypeDataModel {
       description: new fields.HTMLField({ required: false, initial: "" }),
       quantity:    new fields.NumberField({ required: true, integer: true, min: 0, initial: 1 }),
       favorited:   new fields.BooleanField({ required: true, initial: false }),
+      // 物品容量
+      capacity: new fields.SchemaField({
+        w: new fields.NumberField({ required: true, integer: true, min: 1, max: 10, initial: 1 }),
+        h: new fields.NumberField({ required: true, integer: true, min: 1, max: 10, initial: 1 }),
+      }),
+
+      // 眼价格（供 Item Piles 商人/市场使用）
+      cost: new fields.NumberField({ required: true, integer: true, min: 0, initial: 0 }),
     };
   }
 }
@@ -266,12 +291,38 @@ export class ContainerData extends foundry.abstract.TypeDataModel {
         width:  new fields.NumberField({ required: true, integer: true, min: 1, max: 10, initial: 3 }),
         height: new fields.NumberField({ required: true, integer: true, min: 1, max: 10, initial: 3 }),
       }),
-      // 内容物（存储物品 UUID 数组，顺序对应格子位置，null 表示空格）
+      // 内容物：放置记录 { uuid, x, y, w, h, rotated, itemData? }
+      // uuid 用于 Actor 内嵌容器；itemData 用于世界金库（物品完整数据，无需 UUID）
       contents: new fields.ArrayField(
-        new fields.StringField({ nullable: true }),
+        new fields.SchemaField({
+          uuid:     new fields.StringField({ required: true, initial: "" }),
+          x:        new fields.NumberField({ required: true, integer: true, min: 0, initial: 0 }),
+          y:        new fields.NumberField({ required: true, integer: true, min: 0, initial: 0 }),
+          w:        new fields.NumberField({ required: true, integer: true, min: 1, initial: 1 }),
+          h:        new fields.NumberField({ required: true, integer: true, min: 1, initial: 1 }),
+          rotated:  new fields.BooleanField({ initial: false }),
+          itemData: new fields.ObjectField({ required: false, nullable: true, initial: null }),
+        }),
         { required: true, initial: [] }
       ),
       favorited: new fields.BooleanField({ required: true, initial: false }),
+      // 物品容量（容器本身占用角色背包格数，与内部 gridSize 无关）
+      capacity: new fields.SchemaField({
+        w: new fields.NumberField({ required: true, integer: true, min: 1, max: 10, initial: 1 }),
+        h: new fields.NumberField({ required: true, integer: true, min: 1, max: 10, initial: 1 }),
+      }),
+
+      // 眼价格（供 Item Piles 商人/市场使用）
+      cost: new fields.NumberField({ required: true, integer: true, min: 0, initial: 0 }),
+
+      // 锁定格：禁止放置物品的格子坐标列表
+      lockedCells: new fields.ArrayField(
+        new fields.SchemaField({
+          x: new fields.NumberField({ required: true, integer: true, min: 0, initial: 0 }),
+          y: new fields.NumberField({ required: true, integer: true, min: 0, initial: 0 }),
+        }),
+        { required: true, initial: [] }
+      ),
     };
   }
 }

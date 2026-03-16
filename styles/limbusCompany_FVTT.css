@@ -72,10 +72,10 @@
 
   /* 布局尺寸 */
   --sheet-width:        880px;
-  --sheet-height:       810px;
+  --sheet-height:       840px;
   --card-width:         17.5rem;
   --card-height:        28.75rem;
-  --header-height:      210px;
+  --header-height:      270px;
   --bottom-bar-height:  36px;
   --list-row-height:    25px;
 
@@ -3024,9 +3024,9 @@ body.game .limbuscompany.app img {
   padding: 0 4px 2px; border-bottom: 1px solid rgba(95,62,33,.4);
   flex-shrink: 0; text-transform: uppercase; letter-spacing: .04em;
 }
-/* 图标32px / 名称自适应 / 分类80px / 链接60px / 数量50px / 星芒50px / 操作80px */
+/* 图标32px / 名称自适应 / 分类80px / 链接60px / 数量50px / 容量45px / 星芒50px / 操作80px */
 .limbuscompany {
-  --item-list-columns: 32px 1fr 130px 50px 40px 70px 80px;
+  --item-list-columns: 32px 1fr 130px 50px 40px 45px 70px 80px;
 }
 .limbuscompany .item-list-header  { grid-template-columns: var(--item-list-columns); gap: 4px; }
 .limbuscompany .skill-list-header { grid-template-columns: 32px 1fr 80px 60px 50px 50px 80px; gap: 4px; }
@@ -3090,11 +3090,13 @@ body.game .limbuscompany.app img {
 .limbuscompany .item-list-header .col-cat,
 .limbuscompany .item-list-header .col-link,
 .limbuscompany .item-list-header .col-qty,
+.limbuscompany .item-list-header .col-cap,
 .limbuscompany .item-list-header .col-stellar,
 .limbuscompany .item-list-header .col-actions,
 .limbuscompany .item-row .col-cat,
 .limbuscompany .item-row .col-link,
 .limbuscompany .item-row .col-qty,
+.limbuscompany .item-row .col-cap,
 .limbuscompany .item-row .col-stellar,
 .limbuscompany .item-row .col-actions {
   justify-self: center;
@@ -3166,11 +3168,12 @@ body.game .limbuscompany.app img {
 
 .limbuscompany .skill-slot-octa::before {
   content: "";
-  position: absolute;
+  /* position: absolute; */
   inset: 0;
-  background: #181511;
+  /* background: #181511; */
   border: none;
-  /* clip-path: polygon(28% 0, 72% 0, 100% 24%, 100% 68%, 50% 100%, 0 68%, 0 24%); */
+  /* 正七边形蒙版，尖朝下 */
+  clip-path: polygon(50% 100%, 89% 81%, 99% 39%, 72% 5%, 28% 5%, 1% 39%, 11% 81%);
   box-shadow: inset 0 0 0 2px #5F3E22,
               inset 0 0 0 2px rgba(0,0,0,.35);
 }
@@ -3187,13 +3190,44 @@ body.game .limbuscompany.app img {
   flex-shrink: 0;
 }
 
-/* 图标（普通 flex 子元素，无 position: absolute 避免尺寸冲突） */
+/* 图标：公共布局属性（位置、层级、显示） */
 .limbuscompany .skill-slot-img {
-  position: relative;
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  object-fit: contain;
   z-index: 1;
-  width: 72%; height: 72%;
-  object-fit: contain; display: block;
-  filter: drop-shadow(0 0 1px rgba(0,0,0,.7));
+  display: block;
+  filter: drop-shadow(0 0 1px rgba(0, 0, 0, 0.7));
+}
+
+/* 基础技能 & 守备技能 图标尺寸（可独立调整） */
+.limbuscompany .basic-skill-slots .skill-slot-img,
+.limbuscompany .ego-skill-grid .defense-skill-slot .skill-slot-img {
+  width: 50%; height: 50%;
+}
+
+/* EGO技能 图标尺寸（可独立调整） */
+.limbuscompany .ego-skill-grid .ego-skill-slot-wrap .skill-slot-img {
+  width: 70%; height: 70%;
+}
+
+/* 方形槽图标：七边形蒙版（尖朝下） */
+.limbuscompany .skill-slot-octa .skill-slot-img {
+  clip-path: polygon(50% 100%, 89% 81%, 99% 39%, 72% 5%, 28% 5%, 1% 39%, 11% 81%);
+}
+
+/* 框架装饰图：居中放大 200%，补偿图片白边使环形填满槽位 */
+.limbuscompany .skill-slot-frame {
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  width: 220%; height: 220%;
+  object-fit: contain;
+  /* mix-blend-mode: multiply; */
+  pointer-events: none;
+  z-index: 2;
+  display: block;
 }
 
 /* 空槽：暗淡 */
@@ -3239,7 +3273,7 @@ body.game .limbuscompany.app img {
 /* 基础技能格内：充满网格格子 */
 .limbuscompany .basic-skill-slots .skill-slot-wrap { min-width: 0; }
 .limbuscompany .basic-skill-slots .skill-slot-octa {
-  width: 100%; height: auto; aspect-ratio: 1;
+  width: 140%; height: auto; aspect-ratio: 1;
 }
 
 /* EGO/守备网格内：48px */
@@ -3516,6 +3550,9 @@ body.game .limbuscompany.app img {
   box-shadow: 0 0 4px 1px rgba(200,50,50,.5);
 }
 
+/* 通用隐藏辅助类 */
+.hidden { display: none !important; }
+
 /* 相关技能切换按钮 */
 .limbuscompany .combat-skill-related-toggle {
   background: none; border: 1px solid var(--border-gold);
@@ -3574,7 +3611,7 @@ body.game .limbuscompany.app img {
 
 .limbuscompany .sheet-footer {
   display: flex; justify-content: space-between; align-items: center;
-  height: 36px; padding: 0 12px;
+  height: 36px; padding: 0 24px;
   background: #0A0605; border-top: 1px solid var(--border-gold);
   flex-shrink: 0;
 }
@@ -3586,6 +3623,19 @@ body.game .limbuscompany.app img {
 .limbuscompany .footer-stellar-max {
   font-size: .85rem; font-weight: bold; color: var(--text-main);
 }
+/* 背包容量组 & 星芒组（footer 内，结构一致） */
+.limbuscompany .footer-inventory,
+.limbuscompany .footer-stellar-group { display: flex; align-items: center; gap: 3px; }
+.limbuscompany .footer-inv-val,
+.limbuscompany .footer-inv-max  { font-size: .85rem; font-weight: bold; color: var(--text-main); }
+.limbuscompany .footer-inventory.cap-over .footer-inv-val { color: #E5BA25; }
+.limbuscompany .footer-inv-warn { font-size: .8rem; color: #E5BA25; }
+/* 竖分隔线 */
+.limbuscompany .footer-sep-v {
+  width: 1px; height: 14px; background: rgba(95,62,33,.5); margin: 0 3px;
+}
+/* 背包容量状态栏样式（已搬到 footer，保留选择器供可能复用） */
+.limbuscompany .cap-over-text { color: #E5BA25; }
 .limbuscompany .footer-currency {
   background: transparent; border: none; border-bottom: 1px solid var(--border-gold);
   width: 70px; color: var(--text-main); font-size: .85rem; text-align: center;
@@ -3707,7 +3757,13 @@ body.game .limbuscompany.app img {
 .limbuscompany .resist-display { font-size: .8rem; }
 
 /* 标签行 */
-.limbuscompany .item-tags-row { display: flex; flex-wrap: wrap; gap: 3px; padding: 3px 10px; min-height: 20px; }
+.limbuscompany .item-tags-row {
+  display: flex; align-items: center; gap: 6px;
+  padding: 3px 10px; min-height: 24px; flex-wrap: nowrap;
+}
+.limbuscompany .item-tags-row .tags-area {
+  flex: 1; display: flex; flex-wrap: wrap; gap: 3px; min-width: 0;
+}
 .limbuscompany .tag {
   font-size: .65rem; background: rgba(95,62,33,.3);
   border: 1px solid var(--border-gold); border-radius: 8px; padding: 0 6px;
@@ -3719,6 +3775,243 @@ body.game .limbuscompany.app img {
   font-size: .72rem; font-family: var(--font-main);
 }
 .limbuscompany .tags-input-sm { width: 100px; background: transparent; border: none; border-bottom: 1px dashed var(--border-gold); color: var(--text-sub); font-size: .72rem; font-family: var(--font-main); }
+
+/* ── 物品容量控件 ──────────────────────────────────────────────── */
+.limbuscompany .item-capacity-group {
+  display: flex; align-items: center; gap: 3px;
+  flex-shrink: 0; white-space: nowrap;
+}
+.limbuscompany .cap-label {
+  font-size: .6rem; color: var(--text-sub);
+  padding: 0 3px; border: 1px solid rgba(95,62,33,.4);
+  border-radius: 3px; background: rgba(95,62,33,.15);
+}
+.limbuscompany .cap-input {
+  width: 28px; background: transparent;
+  border: none; border-bottom: 1px dashed var(--border-gold);
+  color: var(--text-main); font-size: .72rem; text-align: center;
+  padding: 0 2px;
+}
+.limbuscompany .cap-input::-webkit-inner-spin-button,
+.limbuscompany .cap-input::-webkit-outer-spin-button { -webkit-appearance: none; }
+.limbuscompany .cap-sep {
+  font-size: .7rem; color: var(--text-sub);
+}
+.limbuscompany .cap-display {
+  font-size: .72rem; color: var(--text-main);
+  padding: 0 2px;
+}
+
+/* ── 眼价格（Item Piles 商人价格）────────────────────────────── */
+.limbuscompany .item-cost-group {
+  display: flex; align-items: center; gap: 3px;
+  flex-shrink: 0; white-space: nowrap; margin-left: 6px;
+}
+.limbuscompany .cost-eye-icon {
+  width: 14px; height: 14px; object-fit: contain; flex-shrink: 0;
+}
+.limbuscompany .cost-input {
+  width: 36px; background: transparent;
+  border: none; border-bottom: 1px dashed var(--border-gold);
+  color: var(--text-main); font-size: .72rem; text-align: center;
+  padding: 0 2px;
+}
+.limbuscompany .cost-input::-webkit-inner-spin-button,
+.limbuscompany .cost-input::-webkit-outer-spin-button { -webkit-appearance: none; }
+.limbuscompany .cost-display {
+  font-size: .72rem; color: var(--text-main); padding: 0 2px;
+}
+
+/* ── 背包容量状态栏（tab-items）──────────────────────────────── */
+.limbuscompany .inventory-cap-bar {
+  display: flex; align-items: center; gap: 6px;
+  padding: 3px 8px; font-size: .7rem;
+  color: var(--text-sub);
+  border-bottom: 1px solid rgba(95,62,33,.25);
+  background: transparent;
+}
+.limbuscompany .inventory-cap-bar.cap-over {
+  background: rgba(229,186,37,.12);
+  border-color: #E5BA25;
+  color: #E5BA25;
+}
+.limbuscompany .cap-bar-icon { font-size: .8rem; }
+.limbuscompany .cap-over-tip {
+  margin-left: auto; font-size: .67rem;
+  color: #E5BA25; font-weight: bold;
+}
+.limbuscompany .btn-cap-blocked {
+  opacity: .45; cursor: not-allowed;
+}
+
+/* ── 容器物品卡专属 ────────────────────────────────────────────── */
+.limbuscompany .container-size-row {
+  display: flex; align-items: center; gap: 5px;
+  padding: 4px 10px;
+}
+.limbuscompany .container-size-label {
+  font-size: .7rem; color: var(--text-sub);
+}
+.limbuscompany .grid-dim-input {
+  width: 36px; background: transparent;
+  border: none; border-bottom: 1px dashed var(--border-gold);
+  color: var(--text-main); font-size: .8rem; text-align: center;
+}
+.limbuscompany .grid-dim-input::-webkit-inner-spin-button,
+.limbuscompany .grid-dim-input::-webkit-outer-spin-button { -webkit-appearance: none; }
+.limbuscompany .grid-size-display {
+  font-size: .8rem; color: var(--text-main);
+}
+.limbuscompany .container-cap-summary {
+  font-size: .65rem; color: var(--text-sub); margin-left: auto;
+}
+.limbuscompany .container-used-label {
+  font-size: .62rem; color: var(--text-sub); margin-left: 6px;
+}
+
+/* ═══ 容器网格（Diablo 风格二层布局）═══════════════════════════════ */
+.limbuscompany .cg-wrap {
+  --cg-cell: 44px;
+  --cg-gap:  2px;
+  --cg-step: calc(var(--cg-cell) + var(--cg-gap));
+  display: grid;
+  grid-template-columns: repeat(var(--grid-cols), var(--cg-cell));
+  grid-template-rows:    repeat(var(--grid-rows), var(--cg-cell));
+  gap: var(--cg-gap);
+  padding: 6px 10px;
+  overflow: auto;
+  width: fit-content;
+  max-width: 100%;
+}
+
+/* 背景格 */
+.limbuscompany .cg-cell {
+  background: #5F3E22;
+  border: 1px solid rgba(95,62,33,.45);
+  box-sizing: border-box;
+  transition: background .1s, border-color .1s;
+  cursor: default;
+}
+.limbuscompany .cg-cell.cg-occupied {
+  background: rgba(95,62,33,.25);
+}
+.limbuscompany .cg-cell.cg-locked {
+  background: #15110E;
+  border-color: rgba(21,17,14,.8);
+  cursor: pointer;
+}
+.limbuscompany .cg-cell.cg-locked:hover {
+  background: #1f1813;
+}
+/* 解锁状态：非锁定、非占用的空格子显示可交互光标 */
+.limbuscompany .cg-wrap.cg-edit-unlocked .cg-cell:not(.cg-occupied):not(.cg-locked) {
+  cursor: pointer;
+}
+.limbuscompany .cg-wrap.cg-edit-unlocked .cg-cell:not(.cg-occupied):not(.cg-locked):hover {
+  background: rgba(95,62,33,.6);
+}
+.limbuscompany .cg-cell.cg-drag-over {
+  background: rgba(229,186,37,.18);
+  border-color: var(--gold-active);
+}
+
+/* 物品图块（跨格，z-index 叠在格子上方）*/
+.limbuscompany .cg-item-tile {
+  background: rgba(24,15,8,.9);
+  border: 1px solid var(--border-gold);
+  border-radius: 3px;
+  box-shadow: inset 0 0 0 1px rgba(95,62,33,.4);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  cursor: grab;
+  position: relative;
+  z-index: 10;
+  box-sizing: border-box;
+  transition: border-color .1s, box-shadow .1s;
+  user-select: none;
+}
+.limbuscompany .cg-item-tile:hover {
+  border-color: var(--gold-active);
+  box-shadow: inset 0 0 0 1px var(--gold-active), 0 0 6px rgba(229,186,37,.3);
+}
+.limbuscompany .cg-item-tile.cg-hidden { display: none; }
+
+/* 图标：填满格子 70% */
+.limbuscompany .cg-tile-icon {
+  width: 70%; height: 70%;
+  object-fit: contain;
+  pointer-events: none;
+  flex-shrink: 0;
+}
+
+/* 名称标签 */
+.limbuscompany .cg-tile-name {
+  font-size: .5rem;
+  color: var(--text-sub);
+  text-align: center;
+  line-height: 1.2;
+  padding: 0 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+  pointer-events: none;
+}
+
+/* 旋转按钮（悬停时显示）*/
+.limbuscompany .cg-rotate-btn {
+  position: absolute;
+  top: 2px; right: 2px;
+  width: 16px; height: 16px;
+  background: rgba(95,62,33,.7);
+  border: 1px solid var(--border-gold);
+  border-radius: 3px;
+  color: var(--text-sub);
+  font-size: .65rem;
+  cursor: pointer;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 0; line-height: 1;
+  z-index: 20;
+}
+.limbuscompany .cg-item-tile:hover .cg-rotate-btn { display: flex; }
+.limbuscompany .cg-rotate-btn:hover { background: rgba(229,186,37,.3); color: var(--gold-active); }
+
+/* 右键菜单 */
+.cg-ctx-menu {
+  position: fixed;
+  z-index: 99999;
+  min-width: 140px;
+  background: #1A130D;
+  border: 1px solid #5F3E22;
+  border-radius: 4px;
+  padding: 4px 0;
+  list-style: none;
+  margin: 0;
+  box-shadow: 0 4px 12px rgba(0,0,0,.6);
+  font-size: .78rem;
+}
+.cg-ctx-menu li {
+  padding: 5px 14px;
+  cursor: pointer;
+  color: #E8CAA2;
+  display: flex; align-items: center; gap: 7px;
+  white-space: nowrap;
+}
+.cg-ctx-menu li:hover { background: rgba(95,62,33,.4); }
+.cg-ctx-sep {
+  height: 1px;
+  background: rgba(95,62,33,.4);
+  padding: 0 !important;
+  margin: 3px 0;
+  cursor: default !important;
+}
+.cg-ctx-danger { color: #E94745 !important; }
+.cg-ctx-danger:hover { background: rgba(233,71,69,.15) !important; }
 
 /* 描述区 */
 .limbuscompany .item-desc-block {
@@ -5332,6 +5625,22 @@ body.game .limbuscompany.app img {
   line-height:      1.2;
 }
 
+/* EGO 槽包装容器（用于放置相关技能切换按钮） */
+.qa-ego-skill-wrap {
+  position: relative;
+  display:  inline-flex;
+}
+/* 快捷 HUD 上的 EGO 相关技能切换按钮（右上角） */
+.qa-ego-related-toggle {
+  position:  absolute;
+  top:       -5px;
+  right:     -5px;
+  z-index:   10;
+  width:     14px;
+  height:    14px;
+  font-size: .55rem;
+}
+
 /* ── 功能按钮 ─────────────────────────────────────────────── */
 .qa-btn {
   background:    #1C1C1A;
@@ -5448,3 +5757,16 @@ body.game .limbuscompany.app img {
 }
 .qa-buff-intensity { left:  0; border-radius: 0 2px 0 2px; }
 .qa-buff-stacks    { right: 0; border-radius: 2px 0 2px 0; }
+
+/* ── Item Piles CSS 变量覆盖 ──────────────────────────────────────────────── */
+:root {
+  --color-text-dark-primary:          #E8C9A2;
+  --item-piles-text-light-highlight:  #3B2412;
+}
+
+/* Item Piles 数量输入框：覆盖蓝灰背景 */
+input.item-piles-quantity {
+  background: rgba(59, 36, 18, 0.6) !important;
+  color:      #E8C9A2 !important;
+  border:     1px solid #7A5C3A !important;
+}

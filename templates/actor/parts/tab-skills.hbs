@@ -20,6 +20,7 @@
             {{#if item}}<img src="{{skillImg}}"
                  alt="{{item.name}}"
                  class="skill-slot-img">{{/if}}
+            <img src="{{frameImg}}" alt="" class="skill-slot-frame" draggable="false">
           </div>
         </div>
       {{/each}}
@@ -43,6 +44,7 @@
             {{#if item}}<img src="{{skillImg}}"
                  alt="{{item.name}}"
                  class="skill-slot-img">{{/if}}
+            <img src="{{frameImg}}" alt="" class="skill-slot-frame" draggable="false">
           </div>
           <div class="ego-grade-label">{{grade}}</div>
         </div>
@@ -60,6 +62,7 @@
           {{#if defenseSkill.item}}<img src="{{defenseSkill.skillImg}}"
                alt="{{defenseSkill.item.name}}"
                class="skill-slot-img">{{/if}}
+          <img src="{{defenseSkill.frameImg}}" alt="" class="skill-slot-frame" draggable="false">
         </div>
         {{#if defenseSkill.item}}
           <div class="ego-grade-label defense-cat-label">
@@ -73,20 +76,6 @@
       </div>
 
     </div>{{!-- /ego-skill-grid --}}
-
-    {{!-- EGO 侵蚀形态转换按钮（仅当有 erodeUuid 时显示） --}}
-    {{#if hasEgoErode}}
-    <div class="ego-erode-bar">
-      <div class="ego-erode-divider-l"></div>
-      <button class="ego-erode-toggle-btn
-                     {{#if isEgoEroded}}erode-active{{/if}}
-                     {{#if egoPanicActive}}panic-hint{{/if}}"
-              title="{{#if isEgoEroded}}点击切换回正常相关技能{{else}}点击切换为侵蚀形态相关技能{{/if}}">
-        {{#if isEgoEroded}}侵蚀{{else}}相关技能{{/if}}
-      </button>
-      <div class="ego-erode-divider-r"></div>
-    </div>
-    {{/if}}
 
   </div>{{!-- /skill-panel --}}
 

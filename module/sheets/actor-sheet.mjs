@@ -151,6 +151,7 @@ export class LimbusActorSheet extends ActorSheet {
         item:      bItem,
         itemId:    id ?? null,
         skillImg:  bItem?.img ?? "",
+        frameImg:  this._resolveFrameImg(bItem, "basic"),
       };
     });
 
@@ -159,28 +160,31 @@ export class LimbusActorSheet extends ActorSheet {
       item:     defItem,
       itemId:   system.skills?.defense ?? null,
       skillImg: defItem?.img ?? "",
+      frameImg: this._resolveFrameImg(defItem, "defense"),
     };
 
-    const isEgoEroded = !!actor.getFlag("limbusCompany_FVTT", "egoErodeMode");
     context.egoSkills = cfg.EGO_GRADES.map(grade => {
-      const egoItem    = system.skills?.ego?.[grade] ? actor.items.get(system.skills.ego[grade]) : null;
-      const erodeUuid  = egoItem?.system?.relatedSkill?.erodeUuid ?? null;
+      const egoItem   = system.skills?.ego?.[grade] ? actor.items.get(system.skills.ego[grade]) : null;
+      const erodeUuid = egoItem?.system?.relatedSkill?.erodeUuid ?? null;
       return {
         grade,
-        item:        egoItem,
-        itemId:      system.skills?.ego?.[grade] ?? null,
-        skillImg:    egoItem?.img ?? "",
+        item:       egoItem,
+        itemId:     system.skills?.ego?.[grade] ?? null,
+        skillImg:   egoItem?.img ?? "",
         erodeUuid,
+        hasRelated: !!(egoItem?.system?.relatedSkill?.itemUuid),
+        frameImg:   this._resolveFrameImg(egoItem, "ego"),
       };
     });
-    context.hasEgoErode = context.egoSkills.some(s => s.erodeUuid);
-    context.isEgoEroded = isEgoEroded;
-    // 角色处于恐慌且有侵蚀形态时，给 GM/玩家提示
-    const hasPanic = (system.buffs ?? []).some(b => b.type === "panic" && b.whenAdded !== "下回合");
-    context.egoPanicActive = hasPanic && context.hasEgoErode;
 
     // ── 物品分组（物品 Tab） ───────────────────────────────────────────────
     context.itemGroups  = this._groupEquipmentItems();
+    // ── 背包容量（物品 Tab） ───────────────────────────────────────────────
+    const INVENTORY_MAX = 36; // 角色固定 6×6
+    const inventoryUsed = this._calcInventoryCapacity();
+    context.inventoryMax  = INVENTORY_MAX;
+    context.inventoryUsed = inventoryUsed;
+    context.inventoryOverCapacity = inventoryUsed > INVENTORY_MAX;
     // ── 技能分组（技能 Tab） ───────────────────────────────────────────────
     context.skillGroups = this._groupSkillItems();
 
@@ -216,7 +220,29 @@ export class LimbusActorSheet extends ActorSheet {
     return context;
   }
 
-  /* ─── 技能图标解析辅助 ──────────────────────────────────────────────────── */
+  /* ─── 技能图标 / 框架图解析辅助 ───────────────────────────────────────────── */
+
+  /**
+   * 解析技能框架图路径（叠加在技能图标上方的环形装饰）。
+   * @param {Item|null} item  技能物品
+   * @param {"basic"|"ego"|"defense"} slotType  槽位类型
+   * @returns {string}  图片路径
+   */
+  _resolveFrameImg(item, slotType = "basic") {
+    const BASE = "systems/limbusCompany_FVTT/assets/icons/Skill/";
+    // EGO 槽固定用圆形框（有技能时也一样）
+    if (slotType === "ego") return `${BASE}E.G.O.webp`;
+    // 空槽 / 无罪孽类型 → 通用框
+    if (!item || !item.system?.sinType) return `${BASE}Normalsin.webp`;
+    const sinCapMap = {
+      wrath:"Wrath", lust:"Lust", sloth:"Sloth",
+      gluttony:"Gluttony", gloom:"Gloom", pride:"Pride", envy:"Envy",
+    };
+    const sinCap = sinCapMap[item.system.sinType];
+    if (!sinCap) return `${BASE}Normalsin.webp`;
+    const lv = Math.min(3, Math.max(1, parseInt(item.system?.level) || 1));
+    return `${BASE}${sinCap}_lv${lv}.webp`;
+  }
 
   /**
    * 解析技能图标路径：
@@ -252,6 +278,31 @@ export class LimbusActorSheet extends ActorSheet {
 
   /* ─── 物品分组辅助 ──────────────────────────────────────────────────────── */
 
+  /** 返回所有被放入容器内的物品 UUID Set（这些物品不计入背包容量）。 */
+  _getItemsInContainers() {
+    const inContainer = new Set();
+    for (const item of this.actor.items) {
+      if (item.type !== "container") continue;
+      for (const p of (item.system?.contents ?? [])) {
+        if (p?.uuid) inContainer.add(p.uuid);
+      }
+    }
+    return inContainer;
+  }
+
+  _calcInventoryCapacity() {
+    const inContainer  = this._getItemsInContainers();
+    let total = 0;
+    const nonSkillTypes = ["equipment", "consumable", "material", "container"];
+    for (const item of this.actor.items) {
+      if (!nonSkillTypes.includes(item.type)) continue;
+      if (inContainer.has(item.uuid)) continue; // 容器内物品不占背包容量
+      const cap = item.system?.capacity;
+      total += (cap?.w ?? 1) * (cap?.h ?? 1);
+    }
+    return total;
+  }
+
   _groupEquipmentItems() {
     const subtypeOrder = ["weapon", "upper", "lower", "accessory"];
     const labelMap = {
@@ -265,10 +316,12 @@ export class LimbusActorSheet extends ActorSheet {
     };
 
     const groups = {};
-    const nonSkillTypes = ["equipment", "consumable", "material", "container"];
+    const nonSkillTypes  = ["equipment", "consumable", "material", "container"];
+    const inContainer    = this._getItemsInContainers();
 
     for (const item of this.actor.items) {
       if (!nonSkillTypes.includes(item.type)) continue;
+      if (inContainer.has(item.uuid)) continue; // 容器内物品不出现在列表
 
       let key;
       if (item.type === "equipment") key = item.system.subtype ?? "weapon";
@@ -329,6 +382,9 @@ export class LimbusActorSheet extends ActorSheet {
     const catRaw   = sys.category ?? "";
     const catLabel = cfg.CATEGORY_LABELS_ZH?.[catRaw] ?? catRaw;
 
+    const capW = sys.capacity?.w ?? 1;
+    const capH = sys.capacity?.h ?? 1;
+
     return {
       _id:         item.id,
       name:        item.name,
@@ -343,6 +399,7 @@ export class LimbusActorSheet extends ActorSheet {
       sinLabel,
       catLabel,
       skillIcon:   item.img,
+      capacityLabel: `${capW}×${capH}`,
     };
   }
 
@@ -446,6 +503,10 @@ export class LimbusActorSheet extends ActorSheet {
       setTimeout(() => this._renderCombatSlots(this.element), 80);
     }
 
+    // EGO 相关技能槽：恢复状态，并在陷入恐慌时自动激活侵蚀形态
+    this._autoActivateEgoPanicToggles();
+    setTimeout(() => this._applyEgoRelatedToDom(this.element), 90);
+
     // ── 非 GM/非编辑：只读分支结束 ────────────────────────────────────────
     if (!this.isEditable) return;
 
@@ -484,9 +545,6 @@ export class LimbusActorSheet extends ActorSheet {
 
     // ── 技能槽右键菜单 ────────────────────────────────────────────────────
     html.find(".skill-slot-wrap[data-item-id]").on("contextmenu", this._onSkillSlotContextMenu.bind(this));
-
-    // ── EGO 侵蚀形态转换按钮 ──────────────────────────────────────────────
-    html.find(".ego-erode-toggle-btn").on("click", this._onEgoErodeToggle.bind(this));
 
     // ── 过滤面板 ──────────────────────────────────────────────────────────
     html.find(".filter-toggle-btn").on("click", this._onFilterToggle.bind(this));
@@ -589,12 +647,61 @@ export class LimbusActorSheet extends ActorSheet {
   async _onDropItem(event, data) {
     if (!this.isEditable) return;
 
+    // ── 世界金库取出：无 UUID，itemData 携带完整物品数据 ─────────────────────
+    if (data.fromContainer?.isWorldContainer) {
+      const { containerId, placementIdx } = data.fromContainer;
+      const $target = $(event.target);
+      const droppedIntoItemList = $target.closest(".item-list-panel").length > 0
+        || $target.closest(".sheet-body").length > 0;
+      if (droppedIntoItemList || !$target.closest(".cg-cell,.cg-item-tile,.equip-slot,.skill-slot-wrap").length) {
+        const vault = game.items.get(containerId);
+        if (!vault) return;
+        const srcContents = foundry.utils.deepClone(vault.system.contents ?? []);
+        const entry = srcContents[placementIdx];
+        srcContents.splice(placementIdx, 1);
+        await vault.update({ "system.contents": srcContents });
+        const itemData = data.itemData ?? entry?.itemData;
+        if (itemData) {
+          const newData = foundry.utils.deepClone(itemData);
+          delete newData._id;
+          await Item.create(newData, { parent: this.actor });
+        }
+        return;
+      }
+    }
+
     // 解析拖入的 item
     const item = await Item.fromDropData(data);
     if (!item) return;
 
     // 是否已在 actor.items 中
     const ownedItem = this.actor.items.get(item.id) ?? null;
+
+    // ── 容器图块拖入物品列表：从源容器移除，添加到本 Actor ───────────────
+    if (data.fromContainer) {
+      const { actorId, containerId, placementIdx } = data.fromContainer;
+      const $target = $(event.target);
+      const droppedIntoItemList = $target.closest(".item-list-panel").length > 0
+        || $target.closest(".sheet-body").length > 0;
+      if (droppedIntoItemList || !$target.closest(".cg-cell,.cg-item-tile,.equip-slot,.skill-slot-wrap").length) {
+        // 移除源容器中的占位
+        const srcActor     = actorId ? (game.actors?.get(actorId) ?? this.actor) : this.actor;
+        const srcContainer = srcActor.items.get(containerId);
+        if (srcContainer) {
+          const srcContents = foundry.utils.deepClone(srcContainer.system.contents ?? []);
+          srcContents.splice(placementIdx, 1);
+          await srcContainer.update({ "system.contents": srcContents });
+        }
+        // 跨 Actor：物品已在本 actor（由跨 actor drop 逻辑创建），或需从源 actor 移动
+        if (srcActor.id !== this.actor.id && !ownedItem) {
+          const itemData = item.toObject();
+          await Item.create(itemData, { parent: this.actor });
+          await item.delete();
+        }
+        // 同 Actor：物品依然在 actor.items 中，无需额外操作（移出容器即回到列表）
+        return;
+      }
+    }
 
     const $target = $(event.target);
 
@@ -705,7 +812,10 @@ export class LimbusActorSheet extends ActorSheet {
       const fromOwnedSlots = data.fromSkillSlotType || (Number.isInteger(fromSkillSlot) && fromSkillSlot >= 0);
       if (!fromOwnedSlots) {
         if (ownedItem) return;  // 已属于该角色，忽略原地拖拽
+        const sourceActor = item.parent;
         await this._importItemToActor(item, { forceDuplicate: true });
+        // 跨 Actor 移动：删除源角色物品
+        if (sourceActor && sourceActor.id !== this.actor.id) await item.delete();
         return;
       }
     }
@@ -1289,59 +1399,129 @@ export class LimbusActorSheet extends ActorSheet {
     let item = this.actor.items.get(itemId);
     if (!item) return;
 
-    // 若处于侵蚀模式且该 EGO 技能有侵蚀形态相关技能，使用侵蚀 UUID 标记传入
-    // （相关技能本身的触发逻辑在 clash 系统中读取，这里只标记当前技能的上下文）
-    const erodeMode = !!this.actor.getFlag("limbusCompany_FVTT", "egoErodeMode");
-    const erodeUuid = item.system?.relatedSkill?.erodeUuid;
-    if (erodeMode && erodeUuid) {
-      // 使用原 EGO 技能发起对抗，但将侵蚀 UUID 存入临时状态供 clash 读取
-      if (!this._egoErodeContext) this._egoErodeContext = {};
-      this._egoErodeContext[item.id] = erodeUuid;
-    } else {
-      if (this._egoErodeContext) delete this._egoErodeContext[item.id];
+    // 若该 EGO 槽处于相关技能模式，使用相关技能（恐慌时用侵蚀形态）
+    if (this._egoRelatedMode?.[itemId]) {
+      const hasPanic = (this.actor.system.buffs ?? []).some(
+        b => b.type === "panic" && b.whenAdded !== "下回合"
+      );
+      const uuid = (hasPanic && item.system?.relatedSkill?.erodeUuid)
+        ? item.system.relatedSkill.erodeUuid
+        : item.system?.relatedSkill?.itemUuid;
+      if (uuid) {
+        const relItem = typeof fromUuidSync !== "undefined" ? fromUuidSync(uuid) : null;
+        if (relItem) item = relItem;
+      }
     }
 
     this._showClashDialog(item, -1);  // slotIndex = -1 → 不触发 bag 动画/AP 消耗
   }
 
-  async _onEgoErodeToggle(event) {
-    event.preventDefault();
-    const current = !!this.actor.getFlag("limbusCompany_FVTT", "egoErodeMode");
-    await this.actor.setFlag("limbusCompany_FVTT", "egoErodeMode", !current);
-    // 切换时同步更新 _egoErodeContext
-    if (current) this._egoErodeContext = {};
-    // 角色卡会因 flag 更新自动重渲
-  }
-
   _onRelatedSkillToggle(event) {
     event.stopPropagation();
-    const $btn   = $(event.currentTarget);
-    const $wrap  = $btn.closest(".combat-skill-slot-wrap");
-    const $slot  = $wrap.find(".combat-skill-slot");
-    const slotIndex = parseInt($slot.attr("data-slot-index") ?? "0");
+    const $btn  = $(event.currentTarget);
+    const $wrap = $btn.closest(".combat-skill-slot-wrap");
+    const $slot = $wrap.find(".combat-skill-slot");
 
-    const state = this._combatBagState;
-    if (!state) return;
-    if (!state.relatedMode) state.relatedMode = {};
+    const slotIndexRaw = $slot.attr("data-slot-index");
+    const isBasicSlot  = slotIndexRaw !== undefined && slotIndexRaw !== "";
 
-    const isNowRelated = !state.relatedMode[slotIndex];
-    state.relatedMode[slotIndex] = isNowRelated;
-    $btn.toggleClass("related-active", isNowRelated);
+    if (isBasicSlot) {
+      // ── 基础技能槽 ──────────────────────────────────────────────────────
+      const slotIndex = parseInt(slotIndexRaw);
+      const state = this._combatBagState;
+      if (!state) return;
+      if (!state.relatedMode) state.relatedMode = {};
 
-    // 取主技能和相关技能，更新槽位显示
-    const mainId   = state.slots[slotIndex];
-    const mainItem = mainId ? this.actor.items.get(mainId) : null;
-    if (!mainItem) return;
+      const isNowRelated = !state.relatedMode[slotIndex];
+      state.relatedMode[slotIndex] = isNowRelated;
+      $btn.toggleClass("related-active", isNowRelated);
 
-    let displayItem = mainItem;
-    if (isNowRelated) {
-      const relUuid = mainItem.system?.relatedSkill?.itemUuid;
-      const relItem = relUuid && typeof fromUuidSync !== "undefined" ? fromUuidSync(relUuid) : null;
-      if (relItem) displayItem = relItem;
+      const mainId   = state.slots[slotIndex];
+      const mainItem = mainId ? this.actor.items.get(mainId) : null;
+      if (!mainItem) return;
+
+      let displayItem = mainItem;
+      if (isNowRelated) {
+        const relUuid = mainItem.system?.relatedSkill?.itemUuid;
+        const relItem = relUuid && typeof fromUuidSync !== "undefined" ? fromUuidSync(relUuid) : null;
+        if (relItem) displayItem = relItem;
+      }
+      $slot.find("img").attr("src", displayItem.img ?? "");
+      $wrap.find(".combat-slot-name").text(displayItem.name ?? "");
+
+    } else {
+      // ── EGO / 守备技能槽 ─────────────────────────────────────────────
+      const itemId = $slot.attr("data-item-id");
+      if (!itemId) return;
+      if (!this._egoRelatedMode) this._egoRelatedMode = {};
+
+      const isNowRelated = !this._egoRelatedMode[itemId];
+      this._egoRelatedMode[itemId] = isNowRelated;
+      $btn.toggleClass("related-active", isNowRelated);
+
+      const mainItem = this.actor.items.get(itemId);
+      if (!mainItem) return;
+
+      const hasPanic = (this.actor.system.buffs ?? []).some(
+        b => b.type === "panic" && b.whenAdded !== "下回合"
+      );
+      let displayItem = mainItem;
+      if (isNowRelated) {
+        const uuid = (hasPanic && mainItem.system?.relatedSkill?.erodeUuid)
+          ? mainItem.system.relatedSkill.erodeUuid
+          : mainItem.system?.relatedSkill?.itemUuid;
+        const relItem = uuid && typeof fromUuidSync !== "undefined" ? fromUuidSync(uuid) : null;
+        if (relItem) displayItem = relItem;
+      }
+      $slot.find("img").attr("src", displayItem.img ?? "");
     }
+  }
 
-    $slot.find("img").attr("src", displayItem.img ?? "");
-    $wrap.find(".combat-slot-name").text(displayItem.name ?? "");
+  /**
+   * 若角色当前处于【陷入恐慌】，自动将所有拥有侵蚀形态（erodeUuid）的 EGO 技能
+   * 切换到相关技能模式。脱离恐慌后不自动还原（玩家手动切回）。
+   */
+  _autoActivateEgoPanicToggles() {
+    const hasPanic = (this.actor.system.buffs ?? []).some(
+      b => b.type === "panic" && b.whenAdded !== "下回合"
+    );
+    if (!hasPanic) return;
+    if (!this._egoRelatedMode) this._egoRelatedMode = {};
+    const cfg = CONFIG.LIMBUSCOMPANY;
+    const sys = this.actor.system;
+    for (const grade of (cfg.EGO_GRADES ?? [])) {
+      const itemId = sys.skills?.ego?.[grade];
+      if (!itemId) continue;
+      const egoItem = this.actor.items.get(itemId);
+      if (egoItem?.system?.relatedSkill?.erodeUuid) {
+        this._egoRelatedMode[itemId] = true;
+      }
+    }
+  }
+
+  /** 将 _egoRelatedMode 状态同步到 DOM 中的 EGO 战斗槽 */
+  _applyEgoRelatedToDom(html) {
+    if (!this._egoRelatedMode || !html?.length) return;
+    const hasPanic = (this.actor.system.buffs ?? []).some(
+      b => b.type === "panic" && b.whenAdded !== "下回合"
+    );
+    html.find(".ego-combat-section .combat-skill-slot-wrap").each((_, wrap) => {
+      const $wrap  = $(wrap);
+      const $slot  = $wrap.find(".combat-skill-slot");
+      const $btn   = $wrap.find(".combat-skill-related-toggle");
+      const itemId = $slot.attr("data-item-id");
+      if (!itemId) return;
+      const isRelated = !!this._egoRelatedMode[itemId];
+      $btn.toggleClass("related-active", isRelated);
+      if (!isRelated) return;
+      const mainItem = this.actor.items.get(itemId);
+      if (!mainItem) return;
+      const uuid = (hasPanic && mainItem.system?.relatedSkill?.erodeUuid)
+        ? mainItem.system.relatedSkill.erodeUuid
+        : mainItem.system?.relatedSkill?.itemUuid;
+      const relItem = uuid && typeof fromUuidSync !== "undefined" ? fromUuidSync(uuid) : null;
+      if (relItem) $slot.find("img").attr("src", relItem.img ?? "");
+    });
   }
 
   /* ─── 行动值（AP） ──────────────────────────────────────────────────────── */

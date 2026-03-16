@@ -40,7 +40,10 @@
         <button class="filter-toggle-btn toolbar-btn" title="过滤"><i class="fas fa-filter" aria-hidden="true"></i></button>
         <button class="filter-expand-all toolbar-btn" title="全部展开"><i class="fas fa-expand-alt" aria-hidden="true"></i></button>
         <button class="filter-collapse-all toolbar-btn" title="全部折叠"><i class="fas fa-compress-alt" aria-hidden="true"></i></button>
-        <button class="item-create-btn toolbar-btn" title="新建物品" data-type="equipment">＋</button>
+        <button class="item-create-btn toolbar-btn {{#if inventoryOverCapacity}}btn-cap-blocked{{/if}}"
+                title="{{#if inventoryOverCapacity}}背包已满，无法添加{{else}}新建物品{{/if}}"
+                data-type="equipment"
+                {{#if inventoryOverCapacity}}disabled{{/if}}>＋</button>
       </div>
 
       {{!-- 过滤面板（默认隐藏，245×255px） --}}
@@ -87,6 +90,7 @@
       <span class="col-cat">分类</span>
       <span class="col-link">链接</span>
       <span class="col-qty">数量</span>
+      <span class="col-cap">容量</span>
       <span class="col-stellar">星芒</span>
       <span class="col-actions">操作</span>
     </div>
@@ -122,6 +126,8 @@
               </span>
               {{!-- 数量 --}}
               <span class="col-qty item-qty">{{system.quantity}}</span>
+              {{!-- 容量 --}}
+              <span class="col-cap item-cap">{{capacityLabel}}</span>
               {{!-- 星芒 --}}
               <span class="col-stellar item-stellar">{{stellarCost}}</span>
               {{!-- 操作 --}}

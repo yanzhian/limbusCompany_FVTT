@@ -156,12 +156,17 @@ export class LimbusItemSheet extends ItemSheet {
 
     // ── 容器专用数据 ──────────────────────────────────────────────────────
     if (item.type === "container") {
-      const [cols, rows] = _parseGridSize(sys.gridSize ?? "6x6");
+      const cols = Math.max(1, Math.min(10, sys.gridSize?.width  ?? 3));
+      const rows = Math.max(1, Math.min(10, sys.gridSize?.height ?? 3));
       context.gridCols  = cols;
       context.gridRows  = rows;
-      context.gridCells = await this._buildContainerGrid(sys.contents ?? [], cols * rows);
-      context.gridSizeLabel = `${cols} x ${rows}`;
+      context.gridSizeLabel   = `${cols} × ${rows}`;
       context.containerSearch = this._containerSearch ?? "";
+      const { placedItems, allCells } = await this._buildContainerGrid(sys.contents ?? [], cols, rows, sys.lockedCells ?? []);
+      context.placedItems    = placedItems;
+      context.allCells       = allCells;
+      context.containerUsed  = placedItems.length;
+      context.containerMax   = cols * rows;
     }
 
     // ── Activity 触发时机 & 效果类型选项 ─────────────────────────────────
@@ -174,16 +179,77 @@ export class LimbusItemSheet extends ItemSheet {
 
   /* ─── 容器网格构建 ──────────────────────────────────────────────────────── */
 
-  async _buildContainerGrid(contentIds, totalCells) {
-    const cells = [];
-    for (let i = 0; i < totalCells; i++) {
-      const id   = contentIds[i] ?? null;
-      const item = id ? await fromUuid(id).catch(() => null) : null;
-      const query = (this._containerSearch ?? "").toLowerCase();
-      const show  = !query || !item || item.name.toLowerCase().includes(query);
-      cells.push({ index: i, item, itemId: id, show });
+  /**
+   * 将 contents 放置记录解析为模板所需数据。
+   * @returns {{ placedItems: Array, allCells: Array }}
+   */
+  async _buildContainerGrid(placements, cols, rows, lockedCells = []) {
+    const placedItems = [];
+    const occupied    = new Set(); // "x,y"
+    const lockedSet   = new Set(lockedCells.map(c => `${c.x},${c.y}`));
+
+    for (let idx = 0; idx < placements.length; idx++) {
+      const p = placements[idx];
+      // 世界金库物品：无 UUID，改用 itemData 显示
+      let item = null;
+      if (p?.uuid) {
+        item = await fromUuid(p.uuid).catch(() => null);
+      } else if (p?.itemData) {
+        item = { id: null, name: p.itemData.name ?? "未知物品", img: p.itemData.img ?? "icons/svg/item-bag.svg" };
+      }
+      if (!item) continue;
+
+      const w = Math.max(1, p.w ?? 1);
+      const h = Math.max(1, p.h ?? 1);
+      if (p.x + w > cols || p.y + h > rows || p.x < 0 || p.y < 0) continue;
+
+      for (let dy = 0; dy < h; dy++)
+        for (let dx = 0; dx < w; dx++)
+          occupied.add(`${p.x + dx},${p.y + dy}`);
+
+      const q = (this._containerSearch ?? "").toLowerCase();
+      const show = !q || item.name.toLowerCase().includes(q);
+
+      placedItems.push({
+        idx, uuid: p.uuid ?? "",
+        x: p.x, y: p.y, w, h,
+        col: p.x + 1, row: p.y + 1,   // CSS grid 1-indexed
+        rotated: p.rotated ?? false,
+        show,
+        item: { _id: item.id, name: item.name, img: item.img },
+      });
     }
-    return cells;
+
+    const allCells = [];
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        allCells.push({ x: c, y: r, col: c + 1, row: r + 1,
+          occupied: occupied.has(`${c},${r}`),
+          locked: lockedSet.has(`${c},${r}`) });
+      }
+    }
+    return { placedItems, allCells };
+  }
+
+  /** 同步碰撞检测（使用已持久化的 w/h，同时检查锁定格）。 */
+  _cgCanPlace(x, y, w, h, cols, rows, excludeIdx = -1) {
+    if (x < 0 || y < 0 || x + w > cols || y + h > rows) return false;
+    const contents    = this.item.system.contents ?? [];
+    const lockedCells = this.item.system.lockedCells ?? [];
+    const lockedSet   = new Set(lockedCells.map(c => `${c.x},${c.y}`));
+    // 检查是否覆盖锁定格
+    for (let dy = 0; dy < h; dy++)
+      for (let dx = 0; dx < w; dx++)
+        if (lockedSet.has(`${x + dx},${y + dy}`)) return false;
+    // 检查与已有物品的碰撞
+    for (let i = 0; i < contents.length; i++) {
+      if (i === excludeIdx) continue;
+      const p = contents[i];
+      const pw = p.w ?? 1, ph = p.h ?? 1;
+      const noOverlap = x + w <= p.x || p.x + pw <= x || y + h <= p.y || p.y + ph <= y;
+      if (!noOverlap) return false;
+    }
+    return true;
   }
 
   /* ─── 事件绑定 ──────────────────────────────────────────────────────────── */
@@ -253,10 +319,20 @@ export class LimbusItemSheet extends ItemSheet {
     // ── 容器搜索 ──────────────────────────────────────────────────────────
     html.find(".container-search").on("input", this._onContainerSearch.bind(this));
 
-    // ── 容器网格拖放 ──────────────────────────────────────────────────────
-    html.find(".container-cell").on("dragover", e => e.preventDefault());
-    html.find(".container-cell").on("drop", this._onContainerCellDrop.bind(this));
-    html.find(".container-cell[data-item-id]").on("contextmenu", this._onContainerCellMenu.bind(this));
+    // ── 容器网格（新）─────────────────────────────────────────────────────
+    html.find(".cg-cell").on("dragover",  this._onCgCellDragOver.bind(this));
+    html.find(".cg-cell").on("dragleave", this._onCgCellDragLeave.bind(this));
+    html.find(".cg-cell").on("drop",      this._onCgCellDrop.bind(this));
+    html.find(".cg-cell").on("click",     this._onCgCellClick.bind(this));
+    html.find(".cg-item-tile").on("dragstart",   this._onCgTileDragStart.bind(this));
+    html.find(".cg-item-tile").on("contextmenu", this._onCgTileMenu.bind(this));
+    html.find(".cg-item-tile").on("mouseenter",  this._onCgTileHover.bind(this));
+    html.find(".cg-item-tile").on("mouseleave",  this._onCgTileHoverEnd.bind(this));
+    html.find(".cg-rotate-btn").on("click",      this._onCgTileRotate.bind(this));
+    // 解锁状态下，空格子显示 pointer 光标（提示可点击锁定）
+    if (!this.isLocked && this.item.type === "container") {
+      html.find(".cg-wrap").addClass("cg-edit-unlocked");
+    }
   }
 
 
@@ -355,6 +431,13 @@ export class LimbusItemSheet extends ItemSheet {
     return super._updateObject(event, formData);
   }
 
+
+  /* ─── 关闭时清理 ───────────────────────────────────────────────────────── */
+
+  async close(options = {}) {
+    this._onCgTileHoverEnd();
+    return super.close(options);
+  }
 
   /* ─── 锁切换 ────────────────────────────────────────────────────────────── */
 
@@ -691,51 +774,356 @@ export class LimbusItemSheet extends ItemSheet {
   _onContainerSearch(event) {
     this._containerSearch = event.target.value;
     const q = this._containerSearch.toLowerCase();
-    this.element.find(".container-cell").each((_, cell) => {
-      const name = $(cell).data("item-name") ?? "";
-      $(cell).toggle(!q || name.toLowerCase().includes(q));
+    this.element.find(".cg-item-tile").each((_, tile) => {
+      const name = $(tile).data("item-name") ?? "";
+      $(tile).toggle(!q || name.toLowerCase().includes(q));
     });
   }
 
-  /* ─── 容器格拖放 ────────────────────────────────────────────────────────── */
+  /* ─── 容器格：拖入高亮 ──────────────────────────────────────────────────── */
 
-  async _onContainerCellDrop(event) {
+  _onCgCellDragOver(event) {
     event.preventDefault();
-    const data   = TextEditor.getDragEventData(event);
-    const droppedItem = await Item.fromDropData(data).catch(() => null);
-    if (!droppedItem || droppedItem.type === "container") return;
+    event.originalEvent.dataTransfer.dropEffect = "move";
+    $(event.currentTarget).addClass("cg-drag-over");
+  }
 
-    const cellIdx = parseInt($(event.currentTarget).data("cell-index") ?? -1);
-    if (cellIdx < 0) return;
+  _onCgCellDragLeave(event) {
+    $(event.currentTarget).removeClass("cg-drag-over");
+  }
 
-    const contents = foundry.utils.deepClone(this.item.system.contents ?? []);
-    contents[cellIdx] = droppedItem.uuid;
+  /* ─── 容器格：放置 ──────────────────────────────────────────────────────── */
+
+  async _onCgCellDrop(event) {
+    event.preventDefault();
+    $(event.currentTarget).removeClass("cg-drag-over");
+
+    // 检查锁定格
+    const cell    = event.currentTarget;
+    if (cell.dataset.locked === "true") return;
+
+    const targetX = parseInt(cell.dataset.x ?? 0);
+    const targetY = parseInt(cell.dataset.y ?? 0);
+    const sys     = this.item.system;
+    const cols    = sys.gridSize?.width  ?? 3;
+    const rows    = sys.gridSize?.height ?? 3;
+
+    let raw;
+    try { raw = JSON.parse(event.originalEvent.dataTransfer.getData("text/plain")); }
+    catch { return; }
+
+    // ── 容器图块：同容器内部重新定位 ───────────────────────────────────
+    if (raw.type === "Item" && raw.fromContainer?.containerId === this.item.id) {
+      const { placementIdx: idx, offX = 0, offY = 0 } = raw.fromContainer;
+      const contents = foundry.utils.deepClone(sys.contents ?? []);
+      const p = contents[idx];
+      if (!p) return;
+      const nx = targetX - offX, ny = targetY - offY;
+      if (!this._cgCanPlace(nx, ny, p.w ?? 1, p.h ?? 1, cols, rows, idx))
+        return void ui.notifications.warn("此位置无法放置（超出边界或与其他物品重叠）");
+      p.x = nx; p.y = ny;
+      return void await this.item.update({ "system.contents": contents });
+    }
+
+    // ── 金库物品拖入（带 itemData，无 UUID）────────────────────────────────
+    // 来自世界金库的物品没有有效 UUID，fromDropData 无法解析，需在此提前处理
+    if (raw.type === "Item" && raw.itemData && raw.fromContainer
+        && raw.fromContainer.containerId !== this.item.id) {
+      const itemDataSrc = raw.itemData;
+      if (itemDataSrc.type === "container") return;           // 禁止容器嵌套
+
+      const cap = itemDataSrc.system?.capacity ?? { w: 1, h: 1 };
+      const w = Math.max(1, cap.w ?? 1), h = Math.max(1, cap.h ?? 1);
+      if (!this._cgCanPlace(targetX, targetY, w, h, cols, rows))
+        return void ui.notifications.warn("此位置无法放置（超出边界或与其他物品重叠）");
+
+      // 从源容器移除占位
+      const { containerId: srcId, placementIdx: srcIdx,
+              isWorldContainer: srcIsWorld, actorId: srcActorId } = raw.fromContainer;
+      if (srcIsWorld) {
+        const srcVault = game.items.get(srcId);
+        if (srcVault) {
+          const sc = foundry.utils.deepClone(srcVault.system.contents ?? []);
+          sc.splice(srcIdx, 1);
+          await srcVault.update({ "system.contents": sc });
+        }
+      } else {
+        const srcActor2 = srcActorId ? game.actors?.get(srcActorId) : null;
+        const srcCont   = srcActor2?.items.get(srcId);
+        if (srcCont) {
+          const sc = foundry.utils.deepClone(srcCont.system.contents ?? []);
+          sc.splice(srcIdx, 1);
+          await srcCont.update({ "system.contents": sc });
+        }
+      }
+
+      // 放入目标容器
+      const dstActor  = this.item.parent;
+      const contents  = foundry.utils.deepClone(sys.contents ?? []);
+      if (dstActor) {
+        // 目标是 Actor 内容器：创建嵌入物品，存 UUID
+        const newData = foundry.utils.deepClone(itemDataSrc);
+        delete newData._id;
+        const [newItem] = await dstActor.createEmbeddedDocuments("Item", [newData]);
+        contents.push({ uuid: newItem.uuid, x: targetX, y: targetY, w, h, rotated: false });
+      } else {
+        // 目标也是世界金库：保持 itemData 存储
+        contents.push({ uuid: "", itemData: itemDataSrc, x: targetX, y: targetY, w, h, rotated: false });
+      }
+      return void await this.item.update({ "system.contents": contents });
+    }
+
+    // ── 从物品列表或其他容器拖入 ────────────────────────────────────────
+    const dropped = await Item.fromDropData(raw).catch(() => null);
+    if (!dropped || dropped.type === "container") return;
+    if (dropped.uuid === this.item.uuid) return;            // 禁止自引用
+
+    const cap = dropped.system?.capacity ?? { w: 1, h: 1 };
+    const w = Math.max(1, cap.w ?? 1), h = Math.max(1, cap.h ?? 1);
+
+    if (!this._cgCanPlace(targetX, targetY, w, h, cols, rows))
+      return void ui.notifications.warn("此位置无法放置（超出边界或与其他物品重叠）");
+
+    const containerActor = this.item.parent;
+    const sourceActor    = dropped.parent;
+    let storedUuid       = dropped.uuid;
+    let storedItemData   = null;
+
+    // 跨 Actor 拖入：将物品转移到容器所属 Actor，删除源物品
+    if (containerActor && sourceActor && sourceActor.id !== containerActor.id) {
+      const itemData = dropped.toObject();
+      const [newItem] = await containerActor.createEmbeddedDocuments("Item", [itemData]);
+      storedUuid = newItem.uuid;
+      // 若物品来自另一容器，先从源容器移除
+      if (raw.fromContainer) {
+        const { containerId, placementIdx } = raw.fromContainer;
+        const srcContainer = sourceActor.items.get(containerId);
+        if (srcContainer) {
+          const srcContents = foundry.utils.deepClone(srcContainer.system.contents ?? []);
+          srcContents.splice(placementIdx, 1);
+          await srcContainer.update({ "system.contents": srcContents });
+        }
+      }
+      await dropped.delete();
+    }
+    // 世界金库拖入：容器为世界物品（无 Actor），物品来自某个 Actor → 存储完整数据并删除源物品
+    else if (!containerActor && sourceActor) {
+      storedItemData = dropped.toObject();
+      storedUuid = "";
+      // 若物品来自某个 Actor 内的容器，先从源容器移除占位
+      if (raw.fromContainer) {
+        const { containerId: srcId, placementIdx: srcIdx, actorId: srcActId } = raw.fromContainer;
+        const srcActor2 = srcActId ? (game.actors?.get(srcActId) ?? sourceActor) : sourceActor;
+        const srcCont = srcActor2?.items.get(srcId);
+        if (srcCont) {
+          const sc = foundry.utils.deepClone(srcCont.system.contents ?? []);
+          sc.splice(srcIdx, 1);
+          await srcCont.update({ "system.contents": sc });
+        }
+      }
+      await dropped.delete();
+    }
+    // 同 Actor 从另一容器图块拖入：先从源容器移除占用，物品不删除
+    else if (raw.fromContainer && raw.fromContainer.containerId !== this.item.id) {
+      const { containerId, placementIdx } = raw.fromContainer;
+      const srcContainer = containerActor?.items.get(containerId)
+        ?? sourceActor?.items.get(containerId);
+      if (srcContainer) {
+        const srcContents = foundry.utils.deepClone(srcContainer.system.contents ?? []);
+        srcContents.splice(placementIdx, 1);
+        await srcContainer.update({ "system.contents": srcContents });
+      }
+    }
+
+    const contents = foundry.utils.deepClone(sys.contents ?? []);
+    const entry = { uuid: storedUuid, x: targetX, y: targetY, w, h, rotated: false };
+    if (storedItemData) entry.itemData = storedItemData;
+    contents.push(entry);
     await this.item.update({ "system.contents": contents });
   }
 
-  async _onContainerCellMenu(event) {
+  /* ─── 物品格：开始拖拽（内部重定位）────────────────────────────────────── */
+
+  _onCgTileDragStart(event) {
+    const tile  = event.currentTarget;
+    const idx   = parseInt(tile.dataset.placementIdx ?? 0);
+    const uuid  = tile.dataset.itemUuid ?? "";
+    const rect  = tile.getBoundingClientRect();
+    const step  = 46;   // --cg-cell + --cg-gap
+    const offX  = Math.floor((event.clientX - rect.left)  / step);
+    const offY  = Math.floor((event.clientY - rect.top)   / step);
+    // 世界金库物品：携带 itemData 供拖出时创建
+    const p = this.item.system?.contents?.[idx] ?? {};
+    const payload = {
+      type: "Item",
+      fromContainer: {
+        isWorldContainer: !this.item.parent,
+        actorId:          this.item.parent?.id ?? null,
+        containerId:      this.item.id,
+        placementIdx:     idx,
+        offX, offY,
+      },
+    };
+    if (uuid) payload.uuid = uuid;
+    if (p.itemData) payload.itemData = p.itemData;
+    event.originalEvent.dataTransfer.setData("text/plain", JSON.stringify(payload));
+    event.originalEvent.dataTransfer.effectAllowed = "move";
+  }
+
+  /* ─── 物品格：旋转 ──────────────────────────────────────────────────────── */
+
+  async _onCgTileRotate(event) {
     event.preventDefault();
-    const cell    = $(event.currentTarget);
-    const cellIdx = parseInt(cell.data("cell-index") ?? -1);
-    const contents = foundry.utils.deepClone(this.item.system.contents ?? []);
+    event.stopPropagation();
+    const idx  = parseInt(event.currentTarget.dataset.placementIdx ?? -1);
+    if (idx < 0) return;
+    const sys  = this.item.system;
+    const cols = sys.gridSize?.width  ?? 3;
+    const rows = sys.gridSize?.height ?? 3;
+    const contents = foundry.utils.deepClone(sys.contents ?? []);
+    const p = contents[idx];
+    if (!p) return;
+    const nw = p.h ?? 1, nh = p.w ?? 1;
+    if (!this._cgCanPlace(p.x, p.y, nw, nh, cols, rows, idx))
+      return void ui.notifications.warn("旋转后无法放置（超出边界或与其他物品重叠）");
+    p.w = nw; p.h = nh; p.rotated = !p.rotated;
+    await this.item.update({ "system.contents": contents });
+  }
 
-    const menuItems = [
-      { name: "取出", icon: "<i class='fas fa-box-open'></i>", callback: async () => {
-        contents[cellIdx] = null;
-        await this.item.update({ "system.contents": contents });
-      }},
-    ];
+  /* ─── 容器格：左键锁定切换 ──────────────────────────────────────────────── */
 
-    const menu = $('<nav class="limbus-context-menu context-menu"></nav>');
-    for (const mi of menuItems) {
-      const li = $(`<li class="context-item">${mi.icon} ${mi.name}</li>`);
-      li.on("click", (e) => { e.stopPropagation(); menu.remove(); mi.callback(); });
-      menu.append(li);
-    }
-    menu.css({ position: "fixed", left: event.clientX, top: event.clientY, zIndex: 99999 });
+  async _onCgCellClick(event) {
+    // 仅当编辑锁已解开时才允许锁定/解锁格子
+    if (this.isLocked) return;
+    const cell = event.currentTarget;
+    const x = parseInt(cell.dataset.x ?? 0);
+    const y = parseInt(cell.dataset.y ?? 0);
+    const lockedCells = foundry.utils.deepClone(this.item.system.lockedCells ?? []);
+    const existIdx = lockedCells.findIndex(c => c.x === x && c.y === y);
+    if (existIdx >= 0) lockedCells.splice(existIdx, 1);
+    else lockedCells.push({ x, y });
+    await this.item.update({ "system.lockedCells": lockedCells });
+  }
+
+  /* ─── 物品图块：悬停 Title 卡 ───────────────────────────────────────────── */
+
+  async _onCgTileHover(event) {
+    const tile = event.currentTarget;
+    const uuid = tile.dataset.itemUuid;
+    if (!uuid) return;
+
+    this._onCgTileHoverEnd();
+
+    const item = await fromUuid(uuid).catch(() => null);
+    if (!item) return;
+
+    this._cgTitleCard = _buildItemTitleCard(item);
+    if (!this._cgTitleCard) return;
+
+    // 定位：在物品卡左侧，不够则右侧
+    const rect  = this.element[0].getBoundingClientRect();
+    const cardW = 280, cardH = 500;
+    let left = rect.left - cardW - 8;
+    if (left < 8) left = rect.right + 8;
+    const top = Math.max(8, Math.min(rect.top, window.innerHeight - cardH - 8));
+
+    this._cgTitleCard.css({ position: "fixed", left, top, zIndex: 99998 });
+    $("body").append(this._cgTitleCard);
+  }
+
+  _onCgTileHoverEnd() {
+    this._cgTitleCard?.remove();
+    this._cgTitleCard = null;
+  }
+
+  /* ─── 物品格：右键菜单 ──────────────────────────────────────────────────── */
+
+  async _onCgTileMenu(event) {
+    event.preventDefault();
+    const tile  = $(event.currentTarget);
+    const idx   = parseInt(tile.data("placement-idx") ?? -1);
+    const uuid  = tile.data("item-uuid") ?? "";
+    const iname = tile.data("item-name") ?? "";
+    if (idx < 0) return;
+
+    // 判断是否世界金库物品（无 UUID，只有 itemData）
+    const entry = this.item.system?.contents?.[idx] ?? {};
+    const isVaultItem = !uuid && !!entry.itemData;
+
+    $(".cg-ctx-menu").remove();
+
+    // 世界金库物品的"取出"会将物品发送到当前玩家角色
+    const takeoutLabel = isVaultItem ? "取出到我的角色" : "取出";
+    const menu = $(`<ul class="cg-ctx-menu">
+      <li data-action="takeout"><i class="fas fa-box-open"></i> ${takeoutLabel}</li>
+      <li data-action="edit"><i class="fas fa-edit"></i> 编辑 / 查看</li>
+      <li data-action="chat"><i class="fas fa-comment"></i> 发送聊天框</li>
+      <li class="cg-ctx-sep"></li>
+      <li data-action="delete" class="cg-ctx-danger"><i class="fas fa-trash"></i> 删除</li>
+    </ul>`).css({ top: event.clientY, left: event.clientX });
     $("body").append(menu);
-    const close = (e) => { if (!$(e.target).closest(".limbus-context-menu").length) { menu.remove(); $(document).off("click", close); } };
-    setTimeout(() => $(document).on("click", close), 10);
+
+    const close = () => { menu.remove(); $(document).off("click.cgctx"); };
+    setTimeout(() => $(document).on("click.cgctx", close), 10);
+
+    menu.on("click", "li[data-action]", async e => {
+      e.stopPropagation();
+      const action = $(e.currentTarget).data("action");
+      close();
+
+      const contents = foundry.utils.deepClone(this.item.system.contents ?? []);
+
+      if (action === "takeout") {
+        if (isVaultItem) {
+          // 世界金库取出：放入当前玩家角色
+          const character = game.user?.character;
+          if (!character) {
+            ui.notifications.warn("你没有绑定角色，无法取出物品。请在玩家设置中绑定角色。");
+            return;
+          }
+          const newData = foundry.utils.deepClone(entry.itemData);
+          delete newData._id;
+          await Item.create(newData, { parent: character });
+        }
+        contents.splice(idx, 1);
+        await this.item.update({ "system.contents": contents });
+
+      } else if (action === "edit") {
+        if (isVaultItem) {
+          // 临时创建世界物品以供查看（只读），查看后自动清理
+          ui.notifications.info(`${iname}（查看模式）`);
+          const tempData = foundry.utils.deepClone(entry.itemData);
+          delete tempData._id;
+          const tempItem = await Item.create(tempData, { temporary: true });
+          tempItem?.sheet?.render(true);
+        } else {
+          const itm = await fromUuid(uuid).catch(() => null);
+          itm?.sheet?.render(true);
+        }
+
+      } else if (action === "chat") {
+        const itm = uuid ? await fromUuid(uuid).catch(() => null) : null;
+        if (itm?.sendToChat) {
+          await itm.sendToChat();
+        } else if (isVaultItem && entry.itemData) {
+          // 从存储数据生成聊天消息
+          ChatMessage.create({ content: `<b>${iname}</b>`, speaker: ChatMessage.getSpeaker() });
+        }
+
+      } else if (action === "delete") {
+        const confirmed = await Dialog.confirm({
+          title: "删除物品",
+          content: `<p>确定从金库删除 <strong>${iname}</strong>？${isVaultItem ? "该物品将永久消失。" : ""}</p>`,
+        });
+        if (!confirmed) return;
+        contents.splice(idx, 1);
+        await this.item.update({ "system.contents": contents });
+        if (!isVaultItem && uuid) {
+          const itm = await fromUuid(uuid).catch(() => null);
+          await itm?.delete();
+        }
+      }
+    });
   }
 }
 
@@ -766,6 +1154,116 @@ function _getCategoryIcon(category) {
 function _subtypeLabel(sub) {
   return { weapon:"武器", upper:"上装", lower:"下装", accessory:"饰品",
            consumable:"消耗品", material:"材料", container:"容器" }[sub] ?? sub;
+}
+
+/**
+ * 为任意 Item 构建悬浮 Title 卡（与 actor-sheet._buildTitleCard 风格一致）。
+ * 用于容器内物品图块的悬停提示。
+ * @param {Item} item
+ * @returns {jQuery|null}
+ */
+function _buildItemTitleCard(item) {
+  if (!item) return null;
+  const sys = item.system;
+  const cfg = CONFIG.LIMBUSCOMPANY ?? {};
+
+  if (item.type === "skill") {
+    const sinColor    = cfg.SIN_COLORS?.[sys.sinType] ?? "#5F3E21";
+    const stellarCost = item.getStellarCost?.() ?? sys.stellarCost ?? 0;
+    const tags = (Array.isArray(sys.tags) ? sys.tags : String(sys.tags ?? "").split("/"))
+      .map(t => String(t).trim()).filter(Boolean);
+    const weightCount = Number(sys.weight ?? 0);
+    const descText    = sys.effectDesc ?? sys.description ?? "";
+    return $(`<div class="limbus-title-card limbus-title-card-skill">
+      <div class="tc-header" style="background:${sinColor}">${item.name}</div>
+      <div class="tc-row2">
+        <img src="${_getCategoryIcon(sys.category)}" class="tc-cat-icon" alt="">
+        <span class="tc-formula">${(sys.diceFormula ?? "").toUpperCase()}</span>
+        <span class="tc-tags">${tags.map(t => `<span class="tc-skill-tag">${t}</span>`).join("")}</span>
+      </div>
+      ${weightCount > 0 ? `<div class="tc-weight"><span class="tc-weight-label">加重值</span>${Array.from({length: weightCount}, () => '<span class="tc-weight-sq"></span>').join("")}</div>` : ""}
+      <div class="tc-gold-divider-skill"></div>
+      <div class="tc-desc">${descText}</div>
+      <div class="tc-gold-divider-skill"></div>
+      <div class="tc-footer">
+        <img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/Starlight.webp" class="tc-starlight-icon" alt="星芒">
+        <span class="tc-stellar-cost">${stellarCost}</span>
+      </div>
+    </div>`);
+  }
+
+  // 装备 / 消耗品 / 材料 / 容器
+  const typeLabels   = { equipment:"装备", consumable:"消耗品", material:"材料", container:"容器" };
+  const stellarCost  = sys.stellarCost ?? 0;
+  const tags = (Array.isArray(sys.tags) ? sys.tags : String(sys.tags ?? "").split("/"))
+    .map(t => String(t).trim()).filter(Boolean);
+  const descText     = sys.effect ?? sys.description ?? sys.effectDesc ?? "";
+
+  if (item.type === "equipment") {
+    const linkDirs   = ["up", "left", "right", "down"];
+    const linkArrows = { up:"↑", down:"↓", left:"←", right:"→" };
+    const linkBtnsHtml = linkDirs.map(dir => {
+      const active = sys.links?.[dir] ? "link-active" : "";
+      return `<span class="link-dir-btn link-dir-${dir} ${active}"><span class="tc-link-arrow-text">${linkArrows[dir]}</span></span>`;
+    }).join("");
+    const fmt = v => { const n = Number(v) || 0; return `${n > 0 ? "+" : ""}${n}`; };
+    const modRows = [];
+    if (sys.subtype === "upper") {
+      modRows.push(`<div class="modifier-row">
+        <img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/slash.webp" class="mod-icon" alt="斩"><span class="resist-display">${sys.resistanceAdj?.slash ?? "1.0"}</span>
+        <img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/blunt.webp" class="mod-icon" alt="打"><span class="resist-display">${sys.resistanceAdj?.blunt ?? "1.0"}</span>
+        <img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/pierce.webp" class="mod-icon" alt="突"><span class="resist-display">${sys.resistanceAdj?.pierce ?? "1.0"}</span>
+      </div>`);
+      modRows.push(`<div class="modifier-row"><img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/Defense_Level.webp" class="mod-icon" alt="DEF"><span class="mod-val">${fmt(sys.defAdj)}</span></div>`);
+    } else {
+      if (sys.subtype !== "lower") modRows.push(`<div class="modifier-row"><img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/Offense_Level.webp" class="mod-icon" alt="ATK"><span class="mod-val">${fmt(sys.atkAdj)}</span></div>`);
+      modRows.push(`<div class="modifier-row"><img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/Defense_Level.webp" class="mod-icon" alt="DEF"><span class="mod-val">${fmt(sys.defAdj)}</span></div>`);
+      if (sys.subtype !== "upper") modRows.push(`<div class="modifier-row"><img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/Speed.webp" class="mod-icon" alt="SPD"><span class="mod-val">${fmt(sys.speedAdj)}</span></div>`);
+    }
+    const tagsHtml = tags.map(t => `<span class="tc-skill-tag">${t}</span>`).join("");
+    return $(`<div class="limbus-title-card limbus-title-card-equip">
+      <div class="tc-header tce-header">${item.name}</div>
+      <div class="tce-info-row">
+        <div class="tce-info-left">
+          <div class="tce-subrow">
+            <span class="tce-subtype">${_subtypeLabel(sys.subtype ?? item.type)}</span>
+            ${sys.category ? `<span class="tce-category">${sys.category}</span>` : ""}
+          </div>
+          ${modRows.length ? `<div class="tce-modifiers">${modRows.join("")}</div>` : ""}
+          ${tagsHtml ? `<div class="tce-tags">${tagsHtml}</div>` : ""}
+        </div>
+        <div class="tc-link-dir-group">${linkBtnsHtml}</div>
+      </div>
+      <div class="tc-gold-divider-skill"></div>
+      <div class="tc-desc tce-desc">${descText}</div>
+      <div class="tc-gold-divider-skill"></div>
+      <div class="tc-footer tce-footer">
+        <img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/Starlight.webp" class="tc-starlight-icon" alt="星芒">
+        <span class="tc-stellar-cost">${stellarCost}</span>
+      </div>
+    </div>`);
+  }
+
+  // 消耗品 / 材料 / 容器 — 简单卡片
+  const typeLabel = typeLabels[item.type] ?? item.type;
+  const catLabel  = sys.category ? ` · ${sys.category}` : "";
+  const tagsHtml  = tags.map(t => `<span class="tc-skill-tag">${t}</span>`).join("");
+  return $(`<div class="limbus-title-card limbus-title-card-equip">
+    <div class="tc-header tce-header">${item.name}</div>
+    <div class="tce-info-row">
+      <div class="tce-info-left">
+        <div class="tce-subrow"><span class="tce-subtype">${typeLabel}${catLabel}</span></div>
+        ${tagsHtml ? `<div class="tce-tags">${tagsHtml}</div>` : ""}
+      </div>
+    </div>
+    <div class="tc-gold-divider-skill"></div>
+    <div class="tc-desc tce-desc">${descText}</div>
+    <div class="tc-gold-divider-skill"></div>
+    <div class="tc-footer tce-footer">
+      <img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/Starlight.webp" class="tc-starlight-icon" alt="星芒">
+      <span class="tc-stellar-cost">${stellarCost}</span>
+    </div>
+  </div>`);
 }
 
 function _parseGridSize(str) {

@@ -39,10 +39,23 @@
       {{/if}}
     </div>
     <div class="footer-right">
-      <img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/Starlight.webp" class="footer-icon" alt="星芒">
-      <span class="footer-stellar-val">{{footerStellarVal}}</span>
-      <span class="footer-stellar-sep">/</span>
-      <span class="footer-stellar-max">{{footerStellarMax}}</span>
+      {{!-- 背包容量（星芒左侧） --}}
+      <div class="footer-inventory {{#if inventoryOverCapacity}}cap-over{{/if}}" title="背包容量{{#if inventoryOverCapacity}}：已超出！{{/if}}">
+        <img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/bag.webp" class="footer-icon" alt="背包">
+        <span class="footer-inv-val {{#if inventoryOverCapacity}}cap-over-text{{/if}}">{{inventoryUsed}}</span>
+        <span class="footer-stellar-sep">/</span>
+        <span class="footer-inv-max">{{inventoryMax}}</span>
+        {{#if inventoryOverCapacity}}
+          <span class="footer-inv-warn">⚠</span>
+        {{/if}}
+      </div>
+      <div class="footer-sep-v"></div>
+      <div class="footer-stellar-group">
+        <img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/Starlight.webp" class="footer-icon" alt="星芒">
+        <span class="footer-stellar-val">{{footerStellarVal}}</span>
+        <span class="footer-stellar-sep">/</span>
+        <span class="footer-stellar-max">{{footerStellarMax}}</span>
+      </div>
     </div>
   </div>
 

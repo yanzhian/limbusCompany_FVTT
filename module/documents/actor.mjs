@@ -286,6 +286,16 @@ export class CharacterData extends foundry.abstract.TypeDataModel {
 export class LimbusActor extends Actor {
 
   /**
+   * Item Piles v3 creates pile actors without a 'type' field.
+   * cleanData() runs before validation, so we can safely default it here.
+   * @override
+   */
+  static cleanData(source = {}, options = {}) {
+    if (!source.type) source.type = "character";
+    return super.cleanData(source, options);
+  }
+
+  /**
    * @override
    * 新建角色时强制 prototypeToken.actorLink = true，
    * 确保拖拽到场景时 Token 与角色卡共享数据，不会产生独立的 Token 副本。
