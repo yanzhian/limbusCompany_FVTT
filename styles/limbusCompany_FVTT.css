@@ -3719,7 +3719,7 @@ body.game .limbuscompany.app img {
 
 /* 图标：装备卡 100×100，其他卡 48×48 */
 .limbuscompany .item-sheet-icon {
-  width: 48px; height: 48px; object-fit: cover; border-radius: 3px;
+  width: 100px; height: 100px; object-fit: cover; border-radius: 3px;
   border: 1px solid var(--border-gold); cursor: pointer; flex-shrink: 0;
   transition: opacity 0.15s, filter 0.15s;
 }
