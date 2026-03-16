@@ -70,10 +70,6 @@
   --skill-ready-glow:   #8B2020;   /* 预备槽暗红发光 */
   --skill-related-border: #22C55E; /* 相关技能边框（绿色） */
 
-  /* 技能槽尺寸（独立控制，互不影响） */
-  --basic-slot-size:    72px;   /* 基础技能 & 守备技能槽边长 */
-  --ego-slot-size:      80px;   /* EGO技能槽边长 */
-
   /* 布局尺寸 */
   --sheet-width:        880px;
   --sheet-height:       840px;
@@ -3139,16 +3135,14 @@ body.game .limbuscompany.app img {
   margin-bottom: 4px; user-select: none; flex-shrink: 0;
 }
 
-/* 基础技能：3×2 网格，列宽独立（仅受 --basic-slot-size 控制） */
+/* 基础技能：3×2 网格 */
 .limbuscompany .basic-skill-slots {
-  display: grid; grid-template-columns: repeat(3, var(--basic-slot-size)); gap: 6px;
-  justify-content: center;
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px;
 }
 
-/* EGO（×5）+ 守备（×1）— 3×2 网格，列宽独立（仅受 --ego-slot-size 控制） */
+/* EGO（×5）+ 守备（×1）— 3×2 网格，与基础技能列对齐 */
 .limbuscompany .ego-skill-grid {
-  display: grid; grid-template-columns: repeat(3, var(--ego-slot-size)); gap: 6px;
-  justify-content: center;
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px;
   border-top: 1px solid rgba(95,62,33,.25);
   padding-top: 6px;
 }
@@ -3194,16 +3188,26 @@ body.game .limbuscompany.app img {
   flex-shrink: 0;
 }
 
-/* 图标：80% 居中，框架环形在外层覆盖边缘 */
+/* 图标：公共布局属性（位置、层级、显示） */
 .limbuscompany .skill-slot-img {
   position: absolute;
   top: 50%; left: 50%;
   transform: translate(-50%, -50%);
-  width: 50%; height: 50%;
   object-fit: contain;
   z-index: 1;
   display: block;
   filter: drop-shadow(0 0 1px rgba(0, 0, 0, 0.7));
+}
+
+/* 基础技能 & 守备技能 图标尺寸（可独立调整） */
+.limbuscompany .basic-skill-slots .skill-slot-img,
+.limbuscompany .ego-skill-grid .defense-skill-slot .skill-slot-img {
+  width: 50%; height: 50%;
+}
+
+/* EGO技能 图标尺寸（可独立调整） */
+.limbuscompany .ego-skill-grid .ego-skill-slot-wrap .skill-slot-img {
+  width: 50%; height: 50%;
 }
 
 /* 方形槽图标：七边形蒙版（尖朝下） */
@@ -3270,10 +3274,10 @@ body.game .limbuscompany.app img {
   width: 140%; height: auto; aspect-ratio: 1;
 }
 
-/* EGO网格内：由 --ego-slot-size 独立控制 */
+/* EGO/守备网格内：48px */
 .limbuscompany .ego-skill-grid .skill-slot-circle,
 .limbuscompany .ego-skill-grid .skill-slot-octa {
-  width: var(--ego-slot-size); height: var(--ego-slot-size);
+  width: 80px; height: 80px;
 }
 
 .limbuscompany .ego-grade-label {
