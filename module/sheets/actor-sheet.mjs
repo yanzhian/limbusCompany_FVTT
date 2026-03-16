@@ -278,11 +278,25 @@ export class LimbusActorSheet extends ActorSheet {
 
   /* ─── 物品分组辅助 ──────────────────────────────────────────────────────── */
 
+  /** 返回所有被放入容器内的物品 UUID Set（这些物品不计入背包容量）。 */
+  _getItemsInContainers() {
+    const inContainer = new Set();
+    for (const item of this.actor.items) {
+      if (item.type !== "container") continue;
+      for (const p of (item.system?.contents ?? [])) {
+        if (p?.uuid) inContainer.add(p.uuid);
+      }
+    }
+    return inContainer;
+  }
+
   _calcInventoryCapacity() {
+    const inContainer  = this._getItemsInContainers();
     let total = 0;
     const nonSkillTypes = ["equipment", "consumable", "material", "container"];
     for (const item of this.actor.items) {
       if (!nonSkillTypes.includes(item.type)) continue;
+      if (inContainer.has(item.uuid)) continue; // 容器内物品不占背包容量
       const cap = item.system?.capacity;
       total += (cap?.w ?? 1) * (cap?.h ?? 1);
     }
@@ -302,10 +316,12 @@ export class LimbusActorSheet extends ActorSheet {
     };
 
     const groups = {};
-    const nonSkillTypes = ["equipment", "consumable", "material", "container"];
+    const nonSkillTypes  = ["equipment", "consumable", "material", "container"];
+    const inContainer    = this._getItemsInContainers();
 
     for (const item of this.actor.items) {
       if (!nonSkillTypes.includes(item.type)) continue;
+      if (inContainer.has(item.uuid)) continue; // 容器内物品不出现在列表
 
       let key;
       if (item.type === "equipment") key = item.system.subtype ?? "weapon";

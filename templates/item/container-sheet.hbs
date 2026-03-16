@@ -16,7 +16,6 @@
     {{else}}
       <img src="{{item.img}}" class="item-sheet-icon" alt="icon">
     {{/if}}
-
     {{#if (and isEditable (not isLocked))}}
       <input type="text" name="name" value="{{item.name}}" class="item-name-input"/>
     {{else}}
@@ -26,7 +25,7 @@
 
   {{!-- ── 第二行：内部尺寸 + 占用容量 ────────────────────────────── --}}
   <div class="item-row-2 container-size-row">
-    <span class="container-size-label">内部尺寸</span>
+    <span class="container-size-label">内部</span>
     {{#if (and isEditable (not isLocked))}}
       <input type="number" name="system.gridSize.width"  value="{{system.gridSize.width}}"  class="grid-dim-input" min="1" max="10"/>
       <span class="cap-sep">×</span>
@@ -34,7 +33,7 @@
     {{else}}
       <span class="grid-size-display">{{gridSizeLabel}}</span>
     {{/if}}
-    {{!-- 占用容量（背包格数）--}}
+    <span class="container-used-label">{{ containerUsed }} / {{ containerMax }} 格已用</span>
     <div class="item-capacity-group" style="margin-left:auto">
       <span class="cap-label">容量</span>
       {{#if (and isEditable (not isLocked))}}
@@ -50,30 +49,38 @@
 
   {{!-- ── 搜索栏 ──────────────────────────────────────────────────── --}}
   <div class="container-toolbar">
-    <input type="text" class="container-search" placeholder="搜索容器内物品…"/>
-    <span class="container-cap-summary">已用 {{containerUsed}} / {{containerMax}} 格</span>
+    <input type="text" class="container-search" placeholder="搜索容器内物品…" value="{{containerSearch}}"/>
   </div>
 
-  {{!-- ── 主体：物品网格 ──────────────────────────────────────────── --}}
-  <div class="container-grid" style="--grid-cols:{{gridCols}}">
-    {{#each gridCells}}
-      <div class="container-cell {{#if item}}cell-filled{{else}}cell-empty{{/if}}"
-           data-cell-index="{{index}}"
-           {{#if item}}
-             data-item-id="{{item._id}}"
-             data-item-name="{{item.name}}"
-           {{/if}}
-           {{#unless show}}style="display:none"{{/unless}}
-           title="{{#if item}}{{item.name}}{{else}}空槽{{/if}}">
-        {{#if item}}
-          <img src="{{item.img}}" class="container-cell-icon" alt="{{item.name}}">
-          <div class="container-cell-name">{{item.name}}</div>
-        {{/if}}
+  {{!-- ── 物品网格（背景格 + 物品图块叠加）──────────────────────── --}}
+  <div class="cg-wrap" style="--grid-cols:{{gridCols}}; --grid-rows:{{gridRows}}">
+
+    {{!-- 背景格（全部渲染，作拖放目标）--}}
+    {{#each allCells}}
+      <div class="cg-cell {{#if occupied}}cg-occupied{{/if}}"
+           style="grid-column:{{col}}; grid-row:{{row}}"
+           data-x="{{x}}" data-y="{{y}}">
       </div>
     {{/each}}
-  </div>
 
-  {{!-- ── 底部按钮栏 ──────────────────────────────────────────────── --}}
+    {{!-- 物品图块（按 w×h 跨格）--}}
+    {{#each placedItems}}
+      <div class="cg-item-tile {{#unless show}}cg-hidden{{/unless}}"
+           style="grid-column:{{col}} / span {{w}}; grid-row:{{row}} / span {{h}}"
+           data-placement-idx="{{idx}}"
+           data-item-uuid="{{uuid}}"
+           data-item-name="{{item.name}}"
+           draggable="true"
+           title="{{item.name}}">
+        <img src="{{item.img}}" class="cg-tile-icon" alt="{{item.name}}">
+        <span class="cg-tile-name">{{item.name}}</span>
+        <button type="button" class="cg-rotate-btn" data-placement-idx="{{idx}}" title="旋转">↻</button>
+      </div>
+    {{/each}}
+
+  </div>{{!-- /cg-wrap --}}
+
+  {{!-- ── 底部 ────────────────────────────────────────────────────── --}}
   <div class="item-sheet-footer">
     <div class="footer-actions">
       <button class="item-send-chat sheet-btn">发送聊天框</button>

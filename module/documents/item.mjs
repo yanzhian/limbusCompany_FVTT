@@ -282,9 +282,16 @@ export class ContainerData extends foundry.abstract.TypeDataModel {
         width:  new fields.NumberField({ required: true, integer: true, min: 1, max: 10, initial: 3 }),
         height: new fields.NumberField({ required: true, integer: true, min: 1, max: 10, initial: 3 }),
       }),
-      // 内容物（存储物品 UUID 数组，顺序对应格子位置，null 表示空格）
+      // 内容物：放置记录 { uuid, x, y, w, h, rotated }
       contents: new fields.ArrayField(
-        new fields.StringField({ nullable: true }),
+        new fields.SchemaField({
+          uuid:    new fields.StringField({ required: true, initial: "" }),
+          x:       new fields.NumberField({ required: true, integer: true, min: 0, initial: 0 }),
+          y:       new fields.NumberField({ required: true, integer: true, min: 0, initial: 0 }),
+          w:       new fields.NumberField({ required: true, integer: true, min: 1, initial: 1 }),
+          h:       new fields.NumberField({ required: true, integer: true, min: 1, initial: 1 }),
+          rotated: new fields.BooleanField({ initial: false }),
+        }),
         { required: true, initial: [] }
       ),
       favorited: new fields.BooleanField({ required: true, initial: false }),
