@@ -72,10 +72,10 @@
 
   /* 布局尺寸 */
   --sheet-width:        880px;
-  --sheet-height:       810px;
+  --sheet-height:       840px;
   --card-width:         17.5rem;
   --card-height:        28.75rem;
-  --header-height:      210px;
+  --header-height:      270px;
   --bottom-bar-height:  36px;
   --list-row-height:    25px;
 
@@ -3261,7 +3261,7 @@ body.game .limbuscompany.app img {
 /* 基础技能格内：充满网格格子 */
 .limbuscompany .basic-skill-slots .skill-slot-wrap { min-width: 0; }
 .limbuscompany .basic-skill-slots .skill-slot-octa {
-  width: 100%; height: auto; aspect-ratio: 1;
+  width: 140%; height: auto; aspect-ratio: 1;
 }
 
 /* EGO/守备网格内：48px */
@@ -3599,7 +3599,7 @@ body.game .limbuscompany.app img {
 
 .limbuscompany .sheet-footer {
   display: flex; justify-content: space-between; align-items: center;
-  height: 36px; padding: 0 12px;
+  height: 36px; padding: 0 24px;
   background: #0A0605; border-top: 1px solid var(--border-gold);
   flex-shrink: 0;
 }
