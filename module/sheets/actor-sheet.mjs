@@ -789,7 +789,10 @@ export class LimbusActorSheet extends ActorSheet {
       const fromOwnedSlots = data.fromSkillSlotType || (Number.isInteger(fromSkillSlot) && fromSkillSlot >= 0);
       if (!fromOwnedSlots) {
         if (ownedItem) return;  // 已属于该角色，忽略原地拖拽
+        const sourceActor = item.parent;
         await this._importItemToActor(item, { forceDuplicate: true });
+        // 跨 Actor 移动：删除源角色物品
+        if (sourceActor && sourceActor.id !== this.actor.id) await item.delete();
         return;
       }
     }

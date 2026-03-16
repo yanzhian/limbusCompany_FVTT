@@ -427,6 +427,13 @@ export class LimbusItemSheet extends ItemSheet {
   }
 
 
+  /* ─── 关闭时清理 ───────────────────────────────────────────────────────── */
+
+  async close(options = {}) {
+    this._onCgTileHoverEnd();
+    return super.close(options);
+  }
+
   /* ─── 锁切换 ────────────────────────────────────────────────────────────── */
 
   async _onToggleLock(event) {
