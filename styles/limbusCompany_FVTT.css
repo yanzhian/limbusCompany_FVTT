@@ -70,6 +70,10 @@
   --skill-ready-glow:   #8B2020;   /* 预备槽暗红发光 */
   --skill-related-border: #22C55E; /* 相关技能边框（绿色） */
 
+  /* 技能槽尺寸（独立控制，互不影响） */
+  --basic-slot-size:    72px;   /* 基础技能 & 守备技能槽边长 */
+  --ego-slot-size:      80px;   /* EGO技能槽边长 */
+
   /* 布局尺寸 */
   --sheet-width:        880px;
   --sheet-height:       840px;
@@ -3135,14 +3139,16 @@ body.game .limbuscompany.app img {
   margin-bottom: 4px; user-select: none; flex-shrink: 0;
 }
 
-/* 基础技能：3×2 网格 */
+/* 基础技能：3×2 网格，列宽独立（仅受 --basic-slot-size 控制） */
 .limbuscompany .basic-skill-slots {
-  display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px;
+  display: grid; grid-template-columns: repeat(3, var(--basic-slot-size)); gap: 6px;
+  justify-content: center;
 }
 
-/* EGO（×5）+ 守备（×1）— 3×2 网格，与基础技能列对齐 */
+/* EGO（×5）+ 守备（×1）— 3×2 网格，列宽独立（仅受 --ego-slot-size 控制） */
 .limbuscompany .ego-skill-grid {
-  display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px;
+  display: grid; grid-template-columns: repeat(3, var(--ego-slot-size)); gap: 6px;
+  justify-content: center;
   border-top: 1px solid rgba(95,62,33,.25);
   padding-top: 6px;
 }
@@ -3264,10 +3270,10 @@ body.game .limbuscompany.app img {
   width: 140%; height: auto; aspect-ratio: 1;
 }
 
-/* EGO/守备网格内：48px */
+/* EGO网格内：由 --ego-slot-size 独立控制 */
 .limbuscompany .ego-skill-grid .skill-slot-circle,
 .limbuscompany .ego-skill-grid .skill-slot-octa {
-  width: 80px; height: 80px;
+  width: var(--ego-slot-size); height: var(--ego-slot-size);
 }
 
 .limbuscompany .ego-grade-label {
