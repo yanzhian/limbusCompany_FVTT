@@ -825,6 +825,54 @@ export class LimbusItemSheet extends ItemSheet {
       return void await this.item.update({ "system.contents": contents });
     }
 
+    // ── 金库物品拖入（带 itemData，无 UUID）────────────────────────────────
+    // 来自世界金库的物品没有有效 UUID，fromDropData 无法解析，需在此提前处理
+    if (raw.type === "Item" && raw.itemData && raw.fromContainer
+        && raw.fromContainer.containerId !== this.item.id) {
+      const itemDataSrc = raw.itemData;
+      if (itemDataSrc.type === "container") return;           // 禁止容器嵌套
+
+      const cap = itemDataSrc.system?.capacity ?? { w: 1, h: 1 };
+      const w = Math.max(1, cap.w ?? 1), h = Math.max(1, cap.h ?? 1);
+      if (!this._cgCanPlace(targetX, targetY, w, h, cols, rows))
+        return void ui.notifications.warn("此位置无法放置（超出边界或与其他物品重叠）");
+
+      // 从源容器移除占位
+      const { containerId: srcId, placementIdx: srcIdx,
+              isWorldContainer: srcIsWorld, actorId: srcActorId } = raw.fromContainer;
+      if (srcIsWorld) {
+        const srcVault = game.items.get(srcId);
+        if (srcVault) {
+          const sc = foundry.utils.deepClone(srcVault.system.contents ?? []);
+          sc.splice(srcIdx, 1);
+          await srcVault.update({ "system.contents": sc });
+        }
+      } else {
+        const srcActor2 = srcActorId ? game.actors?.get(srcActorId) : null;
+        const srcCont   = srcActor2?.items.get(srcId);
+        if (srcCont) {
+          const sc = foundry.utils.deepClone(srcCont.system.contents ?? []);
+          sc.splice(srcIdx, 1);
+          await srcCont.update({ "system.contents": sc });
+        }
+      }
+
+      // 放入目标容器
+      const dstActor  = this.item.parent;
+      const contents  = foundry.utils.deepClone(sys.contents ?? []);
+      if (dstActor) {
+        // 目标是 Actor 内容器：创建嵌入物品，存 UUID
+        const newData = foundry.utils.deepClone(itemDataSrc);
+        delete newData._id;
+        const [newItem] = await dstActor.createEmbeddedDocuments("Item", [newData]);
+        contents.push({ uuid: newItem.uuid, x: targetX, y: targetY, w, h, rotated: false });
+      } else {
+        // 目标也是世界金库：保持 itemData 存储
+        contents.push({ uuid: "", itemData: itemDataSrc, x: targetX, y: targetY, w, h, rotated: false });
+      }
+      return void await this.item.update({ "system.contents": contents });
+    }
+
     // ── 从物品列表或其他容器拖入 ────────────────────────────────────────
     const dropped = await Item.fromDropData(raw).catch(() => null);
     if (!dropped || dropped.type === "container") return;
