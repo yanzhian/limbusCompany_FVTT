@@ -9,98 +9,116 @@
     <span class="sheet-type-label">{{typeLabel}}</span>
   </div>
 
-  {{!-- ── 第一行：图标 + 名字 + 数量 ──────────────────────────────── --}}
-  <div class="item-row-1">
-    {{#if isEditable}}
-      <img src="{{item.img}}" class="item-sheet-icon" data-edit="img" title="更换图标" alt="icon">
-    {{else}}
-      <img src="{{item.img}}" class="item-sheet-icon" alt="icon">
-    {{/if}}
+  {{!-- ── 可滚动主体 ──────────────────────────────────────────────── --}}
+  <div class="equip-body">
 
-    {{#if (and isEditable (not isLocked))}}
-      <input type="text" name="name" value="{{item.name}}" class="item-name-input"/>
-    {{else}}
-      <div class="item-name-display">{{item.name}}</div>
-    {{/if}}
+    {{!-- 顶部：图标（100×100）+ 右侧信息列 --}}
+    <div class="equip-header">
 
-    <div class="item-qty-block">
-      <span class="qty-x">×</span>
+      {{!-- 图标 --}}
+      <div class="equip-icon-col">
+        {{#if isEditable}}
+          <img src="{{item.img}}" class="item-sheet-icon" data-edit="img" title="更换图标" alt="icon">
+        {{else}}
+          <img src="{{item.img}}" class="item-sheet-icon" alt="icon">
+        {{/if}}
+      </div>
+
+      {{!-- 右侧信息列 --}}
+      <div class="equip-info-col">
+
+        {{!-- 名字 + × + 数量 --}}
+        <div class="equip-name-row">
+          {{#if (and isEditable (not isLocked))}}
+            <input type="text" name="name" value="{{item.name}}" class="item-name-input"/>
+          {{else}}
+            <div class="item-name-display">{{item.name}}</div>
+          {{/if}}
+          <span class="qty-x">×</span>
+          {{#if (and isEditable (not isLocked))}}
+            <input type="number" name="system.quantity" value="{{system.quantity}}" class="qty-input" min="0" style="width:50px"/>
+          {{else}}
+            <span class="qty-value">{{system.quantity}}</span>
+          {{/if}}
+        </div>
+
+        {{!-- 类型 + 分类 --}}
+        <div class="equip-type-row">
+          {{#if (and isEditable (not isLocked))}}
+            <input type="text" name="system.typeName" value="{{system.typeName}}" class="equip-subtype-sel" placeholder="{{typeLabel}}"/>
+            <input type="text" name="system.category" value="{{system.category}}" class="equip-category-input" placeholder="分类"/>
+          {{else}}
+            <span class="equip-subtype-label">{{typeLabel}}</span>
+            <span class="equip-sep">　</span>
+            <span class="equip-category">{{system.category}}</span>
+          {{/if}}
+        </div>
+
+      </div>
+    </div>
+
+    {{!-- ── 标签 + 容量 + 眼 ──────────────────────────────────────── --}}
+    <div class="item-tags-row">
+      <div class="tags-area">
+        {{#if (and isEditable (not isLocked))}}
+          <input type="text" name="system.tags" value="{{system.tags}}" class="tags-input" placeholder="标签1/标签2"/>
+        {{else}}
+          {{#each (split system.tags '/')}}
+            <span class="tag">{{trim this}}</span>
+          {{/each}}
+        {{/if}}
+      </div>
+      <div class="item-capacity-group">
+        <span class="cap-label">容量</span>
+        {{#if (and isEditable (not isLocked))}}
+          <input type="number" name="system.capacity.w" value="{{system.capacity.w}}" class="cap-input" min="1" max="10"/>
+          <span class="cap-sep">×</span>
+          <input type="number" name="system.capacity.h" value="{{system.capacity.h}}" class="cap-input" min="1" max="10"/>
+        {{else}}
+          <span class="cap-display">{{system.capacity.w}}×{{system.capacity.h}}</span>
+        {{/if}}
+      </div>
+      <div class="item-cost-group">
+        <img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/眼.webp" class="cost-eye-icon" alt="眼">
+        {{#if (and isEditable (not isLocked))}}
+          <input type="number" name="system.cost" value="{{system.cost}}" class="cost-input" min="0"/>
+        {{else}}
+          <span class="cost-display">{{system.cost}}</span>
+        {{/if}}
+      </div>
+    </div>
+
+    {{!-- ── 分割线 ──────────────────────────────────────────────────── --}}
+    <div class="equip-divider"></div>
+
+    {{!-- ── 描述区 ──────────────────────────────────────────────────── --}}
+    <div class="item-desc-block">
       {{#if (and isEditable (not isLocked))}}
-        <input type="number" name="system.quantity" value="{{system.quantity}}" class="qty-input" min="0" style="width:50px"/>
+        {{editor system.effect target="system.effect" button=false editable=true engine="prosemirror"}}
       {{else}}
-        <span class="qty-value">{{system.quantity}}</span>
+        <div class="item-desc-display">{{{system.effect}}}</div>
       {{/if}}
     </div>
-  </div>
 
-  {{!-- ── 第二行：类型 + 分类 ──────────────────────────────────────── --}}
-  <div class="item-row-2">
-    {{#if (and isEditable (not isLocked))}}
-      <input type="text" name="system.typeName" value="{{system.typeName}}" class="type-input" placeholder="{{typeLabel}}"/>
-      <input type="text" name="system.category" value="{{system.category}}" class="category-input" placeholder="分类"/>
-    {{else}}
-      <span class="item-type-label">{{typeLabel}}</span>
-      <span class="item-sep">　</span>
-      <span class="item-category">{{system.category}}</span>
+    {{!-- ── 分割线 ──────────────────────────────────────────────────── --}}
+    <div class="equip-divider"></div>
+
+    {{!-- ── 激活效果编辑器（消耗品，展开时显示在底部上方）────────── --}}
+    {{#if (and isConsumable activitiesExpanded)}}
+      {{> systems/limbusCompany_FVTT/templates/partials/activity-editor.hbs}}
     {{/if}}
-  </div>
-  <div class="item-row-divider"></div>
 
-  {{!-- ── 标签 + 容量 ─────────────────────────────────────────────── --}}
-  <div class="item-tags-row">
-    <div class="tags-area">
-      {{#if (and isEditable (not isLocked))}}
-        <input type="text" name="system.tags" value="{{system.tags}}" class="tags-input" placeholder="标签1/标签2"/>
-      {{else}}
-        {{#each (split system.tags '/')}}
-          <span class="tag">{{trim this}}</span>
-        {{/each}}
-      {{/if}}
-    </div>
-    <div class="item-capacity-group">
-      <span class="cap-label">容量</span>
-      {{#if (and isEditable (not isLocked))}}
-        <input type="number" name="system.capacity.w" value="{{system.capacity.w}}" class="cap-input" min="1" max="10"/>
-        <span class="cap-sep">×</span>
-        <input type="number" name="system.capacity.h" value="{{system.capacity.h}}" class="cap-input" min="1" max="10"/>
-      {{else}}
-        <span class="cap-display">{{system.capacity.w}}×{{system.capacity.h}}</span>
-      {{/if}}
-    </div>
-    <div class="item-cost-group">
-      <img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/眼.webp" class="cost-eye-icon" alt="眼">
-      {{#if (and isEditable (not isLocked))}}
-        <input type="number" name="system.cost" value="{{system.cost}}" class="cost-input" min="0"/>
-      {{else}}
-        <span class="cost-display">{{system.cost}}</span>
-      {{/if}}
-    </div>
-  </div>
+  </div>{{!-- /equip-body --}}
 
-  {{!-- ── 描述区 ──────────────────────────────────────────────────── --}}
-  <div class="item-desc-block">
-    {{#if (and isEditable (not isLocked))}}
-      {{editor system.effect target="system.effect" button=false editable=true engine="prosemirror"}}
-    {{else}}
-      <div class="item-desc-display">{{{system.effect}}}</div>
-    {{/if}}
-  </div>
-
-  {{!-- ── 底部按钮栏 ──────────────────────────────────────────────── --}}
+  {{!-- ── 固定底部按钮栏 ─────────────────────────────────────────── --}}
   <div class="item-sheet-footer">
     <div class="footer-actions">
       <button class="item-send-chat sheet-btn">发送聊天框</button>
       {{#if isConsumable}}
-        <button class="item-use-btn sheet-btn">使用</button>
-        <button class="activity-edit-toggle sheet-btn">编辑激活效果 {{#if activitiesExpanded}}▲{{else}}▼{{/if}}</button>
+        <button class="item-activate sheet-btn">激活</button>
+        <button class="activity-edit-toggle sheet-btn">编辑激活效果 {{#if activitiesExpanded}}▼{{else}}▲{{/if}}</button>
       {{/if}}
     </div>
-    {{!-- 消耗品/材料无星芒消耗，底部右侧留空 --}}
   </div>
-
-  {{!-- ── 活动编辑器（消耗品专用，折叠区） ──────────────────────── --}}
-  {{#if (and isConsumable activitiesExpanded)}}
-    {{> systems/limbusCompany_FVTT/templates/partials/activity-editor.hbs}}
-  {{/if}}
 
 </form>

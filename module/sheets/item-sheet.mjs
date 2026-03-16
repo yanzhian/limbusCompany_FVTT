@@ -167,6 +167,7 @@ export class LimbusItemSheet extends ItemSheet {
       context.allCells       = allCells;
       context.containerUsed  = placedItems.length;
       context.containerMax   = cols * rows;
+      context.containerAvail = allCells.filter(c => !c.occupied && !c.locked).length;
     }
 
     // ── Activity 触发时机 & 效果类型选项 ─────────────────────────────────

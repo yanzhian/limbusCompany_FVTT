@@ -3888,10 +3888,24 @@ body.game .limbuscompany.app img {
   opacity: .45; cursor: not-allowed;
 }
 
+/* ── 消耗品/材料卡 & 容器卡：flex 纵向布局（同装备卡） ──────── */
+.limbuscompany .consumable-sheet,
+.limbuscompany .container-sheet {
+  display: flex; flex-direction: column; height: 100%;
+}
+/* 消耗品数量 */
+.limbuscompany .qty-x { color: var(--text-sub); margin: 0 2px; }
+.limbuscompany .qty-value { font-size: .9rem; font-weight: bold; }
+.limbuscompany .qty-input {
+  background: transparent; border: none;
+  border-bottom: 1px dashed var(--border-gold);
+  color: var(--text-main); font-size: .85rem; font-weight: bold;
+  width: 46px; text-align: center; font-family: var(--font-main);
+}
+
 /* ── 容器物品卡专属 ────────────────────────────────────────────── */
 .limbuscompany .container-size-row {
-  display: flex; align-items: center; gap: 5px;
-  padding: 4px 10px;
+  display: flex; align-items: center; gap: 5px; font-size: .8rem;
 }
 .limbuscompany .container-size-label {
   font-size: .7rem; color: var(--text-sub);
@@ -3906,12 +3920,13 @@ body.game .limbuscompany.app img {
 .limbuscompany .grid-size-display {
   font-size: .8rem; color: var(--text-main);
 }
-.limbuscompany .container-cap-summary {
-  font-size: .65rem; color: var(--text-sub); margin-left: auto;
+/* 剩余容量行 */
+.limbuscompany .container-avail-row {
+  display: flex; align-items: center; gap: 4px; font-size: .72rem; color: var(--text-sub);
 }
-.limbuscompany .container-used-label {
-  font-size: .62rem; color: var(--text-sub); margin-left: 6px;
-}
+.limbuscompany .container-avail-val { color: var(--gold-active); font-weight: bold; }
+.limbuscompany .container-avail-max { color: var(--text-main); }
+.limbuscompany .container-avail-sep { color: var(--text-dim); }
 
 /* ═══ 容器网格（Diablo 风格二层布局）═══════════════════════════════ */
 .limbuscompany .cg-wrap {
@@ -4193,25 +4208,7 @@ body.game .limbuscompany.app img {
   font-family: monospace;
 }
 
-/* ─── §3-L  消耗品/材料卡 ───────────────────────────────────────── */
-
-.limbuscompany .item-qty-block { display: flex; align-items: center; gap: 3px; margin-left: auto; }
-.limbuscompany .qty-x { color: var(--text-sub); }
-.limbuscompany .qty-value { font-size: .9rem; font-weight: bold; }
-.limbuscompany .qty-input {
-  background: transparent; border: none; border-bottom: 1px solid var(--border-gold);
-  color: var(--text-main); font-size: .85rem; text-align: center;
-  font-family: var(--font-main);
-}
-.limbuscompany .type-input,
-.limbuscompany .category-input {
-  background: transparent; border: none; border-bottom: 1px dashed var(--border-gold);
-  color: var(--text-sub); font-size: .78rem; font-family: var(--font-main);
-  width: 80px;
-}
-.limbuscompany .item-type-label,
-.limbuscompany .item-category { color: var(--text-sub); font-size: .8rem; }
-.limbuscompany .item-sep { color: var(--text-dim); }
+/* ─── §3-L  消耗品/材料卡（样式已迁移至装备卡共用区）───────────── */
 
 /* ─── §3-M  容器卡 ───────────────────────────────────────────────── */
 
