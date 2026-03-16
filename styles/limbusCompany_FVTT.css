@@ -5763,3 +5763,10 @@ body.game .limbuscompany.app img {
   --color-text-dark-primary:          #E8C9A2;
   --item-piles-text-light-highlight:  #3B2412;
 }
+
+/* Item Piles 数量输入框：覆盖蓝灰背景 */
+input.item-piles-quantity {
+  background: rgba(59, 36, 18, 0.6) !important;
+  color:      #E8C9A2 !important;
+  border:     1px solid #7A5C3A !important;
+}
