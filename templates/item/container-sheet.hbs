@@ -9,22 +9,49 @@
     <span class="sheet-type-label">容器</span>
   </div>
 
-  {{!-- ── 第一行：名字 + 网格尺寸 ──────────────────────────────────── --}}
-  <div class="container-header-row">
+  {{!-- ── 第一行：图标 + 名字 ────────────────────────────────────── --}}
+  <div class="item-row-1">
+    {{#if isEditable}}
+      <img src="{{item.img}}" class="item-sheet-icon" data-edit="img" title="更换图标" alt="icon">
+    {{else}}
+      <img src="{{item.img}}" class="item-sheet-icon" alt="icon">
+    {{/if}}
+
     {{#if (and isEditable (not isLocked))}}
       <input type="text" name="name" value="{{item.name}}" class="item-name-input"/>
-      <label style="margin-left:8px">尺寸</label>
-      <input type="text" name="system.gridSize" value="{{system.gridSize}}" class="grid-size-input" placeholder="6x6" style="width:50px"/>
     {{else}}
       <div class="item-name-display">{{item.name}}</div>
-      <div class="grid-size-display">{{gridSizeLabel}}</div>
     {{/if}}
   </div>
 
-  {{!-- ── 第二行：搜索栏 + 更多按钮 ────────────────────────────────── --}}
+  {{!-- ── 第二行：内部尺寸 + 占用容量 ────────────────────────────── --}}
+  <div class="item-row-2 container-size-row">
+    <span class="container-size-label">内部尺寸</span>
+    {{#if (and isEditable (not isLocked))}}
+      <input type="number" name="system.gridSize.width"  value="{{system.gridSize.width}}"  class="grid-dim-input" min="1" max="10"/>
+      <span class="cap-sep">×</span>
+      <input type="number" name="system.gridSize.height" value="{{system.gridSize.height}}" class="grid-dim-input" min="1" max="10"/>
+    {{else}}
+      <span class="grid-size-display">{{gridSizeLabel}}</span>
+    {{/if}}
+    {{!-- 占用容量（背包格数）--}}
+    <div class="item-capacity-group" style="margin-left:auto">
+      <span class="cap-label">容量</span>
+      {{#if (and isEditable (not isLocked))}}
+        <input type="number" name="system.capacity.w" value="{{system.capacity.w}}" class="cap-input" min="1" max="10"/>
+        <span class="cap-sep">×</span>
+        <input type="number" name="system.capacity.h" value="{{system.capacity.h}}" class="cap-input" min="1" max="10"/>
+      {{else}}
+        <span class="cap-display">{{system.capacity.w}}×{{system.capacity.h}}</span>
+      {{/if}}
+    </div>
+  </div>
+  <div class="item-row-divider"></div>
+
+  {{!-- ── 搜索栏 ──────────────────────────────────────────────────── --}}
   <div class="container-toolbar">
     <input type="text" class="container-search" placeholder="搜索容器内物品…"/>
-    <button class="container-more-btn" title="更多">⋮</button>
+    <span class="container-cap-summary">已用 {{containerUsed}} / {{containerMax}} 格</span>
   </div>
 
   {{!-- ── 主体：物品网格 ──────────────────────────────────────────── --}}
@@ -44,6 +71,13 @@
         {{/if}}
       </div>
     {{/each}}
+  </div>
+
+  {{!-- ── 底部按钮栏 ──────────────────────────────────────────────── --}}
+  <div class="item-sheet-footer">
+    <div class="footer-actions">
+      <button class="item-send-chat sheet-btn">发送聊天框</button>
+    </div>
   </div>
 
 </form>

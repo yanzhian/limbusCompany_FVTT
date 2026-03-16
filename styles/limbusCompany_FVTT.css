@@ -3024,9 +3024,9 @@ body.game .limbuscompany.app img {
   padding: 0 4px 2px; border-bottom: 1px solid rgba(95,62,33,.4);
   flex-shrink: 0; text-transform: uppercase; letter-spacing: .04em;
 }
-/* 图标32px / 名称自适应 / 分类80px / 链接60px / 数量50px / 星芒50px / 操作80px */
+/* 图标32px / 名称自适应 / 分类80px / 链接60px / 数量50px / 容量45px / 星芒50px / 操作80px */
 .limbuscompany {
-  --item-list-columns: 32px 1fr 130px 50px 40px 70px 80px;
+  --item-list-columns: 32px 1fr 130px 50px 40px 45px 70px 80px;
 }
 .limbuscompany .item-list-header  { grid-template-columns: var(--item-list-columns); gap: 4px; }
 .limbuscompany .skill-list-header { grid-template-columns: 32px 1fr 80px 60px 50px 50px 80px; gap: 4px; }
@@ -3090,11 +3090,13 @@ body.game .limbuscompany.app img {
 .limbuscompany .item-list-header .col-cat,
 .limbuscompany .item-list-header .col-link,
 .limbuscompany .item-list-header .col-qty,
+.limbuscompany .item-list-header .col-cap,
 .limbuscompany .item-list-header .col-stellar,
 .limbuscompany .item-list-header .col-actions,
 .limbuscompany .item-row .col-cat,
 .limbuscompany .item-row .col-link,
 .limbuscompany .item-row .col-qty,
+.limbuscompany .item-row .col-cap,
 .limbuscompany .item-row .col-stellar,
 .limbuscompany .item-row .col-actions {
   justify-self: center;
@@ -3742,7 +3744,13 @@ body.game .limbuscompany.app img {
 .limbuscompany .resist-display { font-size: .8rem; }
 
 /* 标签行 */
-.limbuscompany .item-tags-row { display: flex; flex-wrap: wrap; gap: 3px; padding: 3px 10px; min-height: 20px; }
+.limbuscompany .item-tags-row {
+  display: flex; align-items: center; gap: 6px;
+  padding: 3px 10px; min-height: 24px; flex-wrap: nowrap;
+}
+.limbuscompany .item-tags-row .tags-area {
+  flex: 1; display: flex; flex-wrap: wrap; gap: 3px; min-width: 0;
+}
 .limbuscompany .tag {
   font-size: .65rem; background: rgba(95,62,33,.3);
   border: 1px solid var(--border-gold); border-radius: 8px; padding: 0 6px;
@@ -3754,6 +3762,76 @@ body.game .limbuscompany.app img {
   font-size: .72rem; font-family: var(--font-main);
 }
 .limbuscompany .tags-input-sm { width: 100px; background: transparent; border: none; border-bottom: 1px dashed var(--border-gold); color: var(--text-sub); font-size: .72rem; font-family: var(--font-main); }
+
+/* ── 物品容量控件 ──────────────────────────────────────────────── */
+.limbuscompany .item-capacity-group {
+  display: flex; align-items: center; gap: 3px;
+  flex-shrink: 0; white-space: nowrap;
+}
+.limbuscompany .cap-label {
+  font-size: .6rem; color: var(--text-sub);
+  padding: 0 3px; border: 1px solid rgba(95,62,33,.4);
+  border-radius: 3px; background: rgba(95,62,33,.15);
+}
+.limbuscompany .cap-input {
+  width: 28px; background: transparent;
+  border: none; border-bottom: 1px dashed var(--border-gold);
+  color: var(--text-main); font-size: .72rem; text-align: center;
+  padding: 0 2px;
+}
+.limbuscompany .cap-input::-webkit-inner-spin-button,
+.limbuscompany .cap-input::-webkit-outer-spin-button { -webkit-appearance: none; }
+.limbuscompany .cap-sep {
+  font-size: .7rem; color: var(--text-sub);
+}
+.limbuscompany .cap-display {
+  font-size: .72rem; color: var(--text-main);
+  padding: 0 2px;
+}
+
+/* ── 背包容量状态栏（tab-items）──────────────────────────────── */
+.limbuscompany .inventory-cap-bar {
+  display: flex; align-items: center; gap: 6px;
+  padding: 3px 8px; font-size: .7rem;
+  color: var(--text-sub);
+  border-bottom: 1px solid rgba(95,62,33,.25);
+  background: transparent;
+}
+.limbuscompany .inventory-cap-bar.cap-over {
+  background: rgba(229,186,37,.12);
+  border-color: #E5BA25;
+  color: #E5BA25;
+}
+.limbuscompany .cap-bar-icon { font-size: .8rem; }
+.limbuscompany .cap-over-tip {
+  margin-left: auto; font-size: .67rem;
+  color: #E5BA25; font-weight: bold;
+}
+.limbuscompany .btn-cap-blocked {
+  opacity: .45; cursor: not-allowed;
+}
+
+/* ── 容器物品卡专属 ────────────────────────────────────────────── */
+.limbuscompany .container-size-row {
+  display: flex; align-items: center; gap: 5px;
+  padding: 4px 10px;
+}
+.limbuscompany .container-size-label {
+  font-size: .7rem; color: var(--text-sub);
+}
+.limbuscompany .grid-dim-input {
+  width: 36px; background: transparent;
+  border: none; border-bottom: 1px dashed var(--border-gold);
+  color: var(--text-main); font-size: .8rem; text-align: center;
+}
+.limbuscompany .grid-dim-input::-webkit-inner-spin-button,
+.limbuscompany .grid-dim-input::-webkit-outer-spin-button { -webkit-appearance: none; }
+.limbuscompany .grid-size-display {
+  font-size: .8rem; color: var(--text-main);
+}
+.limbuscompany .container-cap-summary {
+  font-size: .65rem; color: var(--text-sub); margin-left: auto;
+}
 
 /* 描述区 */
 .limbuscompany .item-desc-block {

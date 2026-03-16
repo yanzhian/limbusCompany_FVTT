@@ -179,6 +179,12 @@ export class LimbusActorSheet extends ActorSheet {
 
     // ── 物品分组（物品 Tab） ───────────────────────────────────────────────
     context.itemGroups  = this._groupEquipmentItems();
+    // ── 背包容量（物品 Tab） ───────────────────────────────────────────────
+    const INVENTORY_MAX = 36; // 角色固定 6×6
+    const inventoryUsed = this._calcInventoryCapacity();
+    context.inventoryMax  = INVENTORY_MAX;
+    context.inventoryUsed = inventoryUsed;
+    context.inventoryOverCapacity = inventoryUsed > INVENTORY_MAX;
     // ── 技能分组（技能 Tab） ───────────────────────────────────────────────
     context.skillGroups = this._groupSkillItems();
 
@@ -272,6 +278,17 @@ export class LimbusActorSheet extends ActorSheet {
 
   /* ─── 物品分组辅助 ──────────────────────────────────────────────────────── */
 
+  _calcInventoryCapacity() {
+    let total = 0;
+    const nonSkillTypes = ["equipment", "consumable", "material", "container"];
+    for (const item of this.actor.items) {
+      if (!nonSkillTypes.includes(item.type)) continue;
+      const cap = item.system?.capacity;
+      total += (cap?.w ?? 1) * (cap?.h ?? 1);
+    }
+    return total;
+  }
+
   _groupEquipmentItems() {
     const subtypeOrder = ["weapon", "upper", "lower", "accessory"];
     const labelMap = {
@@ -349,6 +366,9 @@ export class LimbusActorSheet extends ActorSheet {
     const catRaw   = sys.category ?? "";
     const catLabel = cfg.CATEGORY_LABELS_ZH?.[catRaw] ?? catRaw;
 
+    const capW = sys.capacity?.w ?? 1;
+    const capH = sys.capacity?.h ?? 1;
+
     return {
       _id:         item.id,
       name:        item.name,
@@ -363,6 +383,7 @@ export class LimbusActorSheet extends ActorSheet {
       sinLabel,
       catLabel,
       skillIcon:   item.img,
+      capacityLabel: `${capW}×${capH}`,
     };
   }
 

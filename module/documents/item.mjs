@@ -93,6 +93,12 @@ export class EquipmentData extends foundry.abstract.TypeDataModel {
 
       // 收藏
       favorited: new fields.BooleanField({ required: true, initial: false }),
+
+      // 物品容量（占用角色背包格数，默认 1×1）
+      capacity: new fields.SchemaField({
+        w: new fields.NumberField({ required: true, integer: true, min: 1, max: 10, initial: 1 }),
+        h: new fields.NumberField({ required: true, integer: true, min: 1, max: 10, initial: 1 }),
+      }),
     };
   }
 }
@@ -233,6 +239,11 @@ export class ConsumableData extends foundry.abstract.TypeDataModel {
       // 激活效果触发列表
       activities: new fields.ArrayField(makeActivitySchema(), { required: true, initial: [] }),
       favorited:  new fields.BooleanField({ required: true, initial: false }),
+      // 物品容量
+      capacity: new fields.SchemaField({
+        w: new fields.NumberField({ required: true, integer: true, min: 1, max: 10, initial: 1 }),
+        h: new fields.NumberField({ required: true, integer: true, min: 1, max: 10, initial: 1 }),
+      }),
     };
   }
 }
@@ -249,6 +260,11 @@ export class MaterialData extends foundry.abstract.TypeDataModel {
       description: new fields.HTMLField({ required: false, initial: "" }),
       quantity:    new fields.NumberField({ required: true, integer: true, min: 0, initial: 1 }),
       favorited:   new fields.BooleanField({ required: true, initial: false }),
+      // 物品容量
+      capacity: new fields.SchemaField({
+        w: new fields.NumberField({ required: true, integer: true, min: 1, max: 10, initial: 1 }),
+        h: new fields.NumberField({ required: true, integer: true, min: 1, max: 10, initial: 1 }),
+      }),
     };
   }
 }
@@ -272,6 +288,11 @@ export class ContainerData extends foundry.abstract.TypeDataModel {
         { required: true, initial: [] }
       ),
       favorited: new fields.BooleanField({ required: true, initial: false }),
+      // 物品容量（容器本身占用角色背包格数，与内部 gridSize 无关）
+      capacity: new fields.SchemaField({
+        w: new fields.NumberField({ required: true, integer: true, min: 1, max: 10, initial: 1 }),
+        h: new fields.NumberField({ required: true, integer: true, min: 1, max: 10, initial: 1 }),
+      }),
     };
   }
 }

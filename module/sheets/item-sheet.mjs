@@ -156,12 +156,19 @@ export class LimbusItemSheet extends ItemSheet {
 
     // ── 容器专用数据 ──────────────────────────────────────────────────────
     if (item.type === "container") {
-      const [cols, rows] = _parseGridSize(sys.gridSize ?? "6x6");
+      // gridSize 为 SchemaField 对象 { width, height }
+      const cols = Math.max(1, Math.min(10, sys.gridSize?.width  ?? 3));
+      const rows = Math.max(1, Math.min(10, sys.gridSize?.height ?? 3));
       context.gridCols  = cols;
       context.gridRows  = rows;
-      context.gridCells = await this._buildContainerGrid(sys.contents ?? [], cols * rows);
-      context.gridSizeLabel = `${cols} x ${rows}`;
+      const cells = await this._buildContainerGrid(sys.contents ?? [], cols * rows);
+      context.gridCells     = cells;
+      context.gridSizeLabel = `${cols} × ${rows}`;
       context.containerSearch = this._containerSearch ?? "";
+      // 容器内部已用格数
+      const filledCount = cells.filter(c => c.item).length;
+      context.containerUsed = filledCount;
+      context.containerMax  = cols * rows;
     }
 
     // ── Activity 触发时机 & 效果类型选项 ─────────────────────────────────
