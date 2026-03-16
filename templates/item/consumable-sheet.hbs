@@ -67,6 +67,14 @@
         <span class="cap-display">{{system.capacity.w}}×{{system.capacity.h}}</span>
       {{/if}}
     </div>
+    <div class="item-cost-group">
+      <img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/眼.webp" class="cost-eye-icon" alt="眼">
+      {{#if (and isEditable (not isLocked))}}
+        <input type="number" name="system.cost" value="{{system.cost}}" class="cost-input" min="0"/>
+      {{else}}
+        <span class="cost-display">{{system.cost}}</span>
+      {{/if}}
+    </div>
   </div>
 
   {{!-- ── 描述区 ──────────────────────────────────────────────────── --}}

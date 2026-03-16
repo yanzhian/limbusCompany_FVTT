@@ -99,6 +99,9 @@ export class EquipmentData extends foundry.abstract.TypeDataModel {
         w: new fields.NumberField({ required: true, integer: true, min: 1, max: 10, initial: 1 }),
         h: new fields.NumberField({ required: true, integer: true, min: 1, max: 10, initial: 1 }),
       }),
+
+      // 眼价格（供 Item Piles 商人/市场使用）
+      cost: new fields.NumberField({ required: true, integer: true, min: 0, initial: 0 }),
     };
   }
 }
@@ -244,6 +247,9 @@ export class ConsumableData extends foundry.abstract.TypeDataModel {
         w: new fields.NumberField({ required: true, integer: true, min: 1, max: 10, initial: 1 }),
         h: new fields.NumberField({ required: true, integer: true, min: 1, max: 10, initial: 1 }),
       }),
+
+      // 眼价格（供 Item Piles 商人/市场使用）
+      cost: new fields.NumberField({ required: true, integer: true, min: 0, initial: 0 }),
     };
   }
 }
@@ -265,6 +271,9 @@ export class MaterialData extends foundry.abstract.TypeDataModel {
         w: new fields.NumberField({ required: true, integer: true, min: 1, max: 10, initial: 1 }),
         h: new fields.NumberField({ required: true, integer: true, min: 1, max: 10, initial: 1 }),
       }),
+
+      // 眼价格（供 Item Piles 商人/市场使用）
+      cost: new fields.NumberField({ required: true, integer: true, min: 0, initial: 0 }),
     };
   }
 }
@@ -300,6 +309,10 @@ export class ContainerData extends foundry.abstract.TypeDataModel {
         w: new fields.NumberField({ required: true, integer: true, min: 1, max: 10, initial: 1 }),
         h: new fields.NumberField({ required: true, integer: true, min: 1, max: 10, initial: 1 }),
       }),
+
+      // 眼价格（供 Item Piles 商人/市场使用）
+      cost: new fields.NumberField({ required: true, integer: true, min: 0, initial: 0 }),
+
       // 锁定格：禁止放置物品的格子坐标列表
       lockedCells: new fields.ArrayField(
         new fields.SchemaField({

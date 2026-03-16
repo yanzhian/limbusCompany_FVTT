@@ -23,6 +23,11 @@ import { LimbusItemSheet }  from "./sheets/item-sheet.mjs";
 import { ClashManager }     from "./helpers/clash.mjs";
 import { SinResourceHUD }   from "./helpers/sin-resource-hud.mjs";
 import { QuickActionHUD }   from "./sheets/quick-action-hud.mjs";
+import { registerItemPiles } from "./helpers/item-piles.mjs";
+
+/* ─── Item Piles 联动注册 ─────────────────────────────────────────────────── */
+
+Hooks.once("item-piles-ready", registerItemPiles);
 
 /* ─── DiceSoNice 硬币外观注册（d2：1=反面 / 2=正面） ─────────────────────── */
 

@@ -3802,6 +3802,26 @@ body.game .limbuscompany.app img {
   padding: 0 2px;
 }
 
+/* ── 眼价格（Item Piles 商人价格）────────────────────────────── */
+.limbuscompany .item-cost-group {
+  display: flex; align-items: center; gap: 3px;
+  flex-shrink: 0; white-space: nowrap; margin-left: 6px;
+}
+.limbuscompany .cost-eye-icon {
+  width: 14px; height: 14px; object-fit: contain; flex-shrink: 0;
+}
+.limbuscompany .cost-input {
+  width: 36px; background: transparent;
+  border: none; border-bottom: 1px dashed var(--border-gold);
+  color: var(--text-main); font-size: .72rem; text-align: center;
+  padding: 0 2px;
+}
+.limbuscompany .cost-input::-webkit-inner-spin-button,
+.limbuscompany .cost-input::-webkit-outer-spin-button { -webkit-appearance: none; }
+.limbuscompany .cost-display {
+  font-size: .72rem; color: var(--text-main); padding: 0 2px;
+}
+
 /* ── 背包容量状态栏（tab-items）──────────────────────────────── */
 .limbuscompany .inventory-cap-bar {
   display: flex; align-items: center; gap: 6px;
