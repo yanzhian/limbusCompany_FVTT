@@ -417,20 +417,6 @@ export class LimbusItemSheet extends ItemSheet {
         }
       }
 
-      // 调试：请把这条日志（equipment submit）内容反馈给我定位现场数据
-      console.warn("[LimbusItemSheet][equipment submit]", {
-        itemId: this.item.id,
-        itemName: this.item.name,
-        isLocked: this.isLocked,
-        subtypeBefore: this.item.system.subtype,
-        subtypeAfter: expanded.system?.subtype,
-        subtypeFlat: flatSubtype,
-        subtypeDOM: domSubtype,
-        subtypeLastChanged: this._debugSubtypeLast,
-        changedInputName: event?.target?.name ?? event?.currentTarget?.name ?? null,
-        resistanceBefore: this.item.system.resistanceAdj,
-        resistanceAfter: expanded.system?.resistanceAdj,
-      });
 
       if (formData.system) {
         Object.assign(formData, expanded);
@@ -478,15 +464,7 @@ export class LimbusItemSheet extends ItemSheet {
   /* ─── 锁切换 ────────────────────────────────────────────────────────────── */
 
   async _onToggleLock(event) {
-    // 变更：不在锁切换时强制提交，避免锁定流程触发二次回写（导致抗性回退）
     this.isLocked = !this.isLocked;
-    console.warn("[LimbusItemSheet][lock-toggle]", {
-      itemId: this.item.id,
-      itemName: this.item.name,
-      nowLocked: this.isLocked,
-      subtype: this.item.system.subtype,
-      resistance: this.item.system.resistanceAdj,
-    });
     this.render(false);
   }
 
