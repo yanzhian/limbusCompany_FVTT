@@ -234,7 +234,8 @@ export class LimbusItemSheet extends ItemSheet {
 
   /**
    * 自动扫描容器，找到第一个可放入的位置。
-   * 按行优先顺序扫描：先以原始尺寸尝试，找不到则以旋转尺寸再次扫描。
+   * 列优先扫描（a1→a2→a3→b1→b2→…）：先扫完每一列再换下一列，
+   * 先以原始尺寸尝试，找不到则以旋转尺寸（交换 w/h）再次尝试。
    * @param {number} w @param {number} h @param {number} [excludeIdx=-1]
    * @returns {{ x:number, y:number, w:number, h:number, rotated:boolean }|null}
    */
@@ -242,8 +243,8 @@ export class LimbusItemSheet extends ItemSheet {
     const sys  = this.item.system;
     const cols = sys.gridSize?.width  ?? 3;
     const rows = sys.gridSize?.height ?? 3;
-    for (let y = 0; y < rows; y++) {
-      for (let x = 0; x < cols; x++) {
+    for (let x = 0; x < cols; x++) {
+      for (let y = 0; y < rows; y++) {
         if (this._cgCanPlace(x, y, w, h, cols, rows, excludeIdx))
           return { x, y, w, h, rotated: false };
         if (w !== h && this._cgCanPlace(x, y, h, w, cols, rows, excludeIdx))
