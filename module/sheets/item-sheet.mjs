@@ -450,6 +450,17 @@ export class LimbusItemSheet extends ItemSheet {
       }
     }
 
+    // ── consumable / material：将 "tag1/tag2" 字符串转为数组
+    if (this.item.type === "consumable" || this.item.type === "material") {
+      const _isFlat = !formData.system;
+      const raw = _isFlat ? formData["system.tags"] : formData.system?.tags;
+      if (raw !== undefined && !Array.isArray(raw)) {
+        const arr = String(raw).split("/").map(t => t.trim()).filter(Boolean);
+        if (_isFlat) formData["system.tags"] = arr;
+        else         formData.system.tags = arr;
+      }
+    }
+
     return super._updateObject(event, formData);
   }
 
