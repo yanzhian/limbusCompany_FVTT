@@ -1084,6 +1084,23 @@ export class ClashManager {
   /* ─── 阶段五：进行对抗聊天框 + 自动拼点结算 ─────────────────────────── */
 
   static async _sendResponseAndResolve(defActor, defItem, defRoll, defFormula, initMsgId, initFlags, slotIdx = -1) {
+    // 非 GM 玩家无权直接更新 GM 控制的 Actor（攻击方），委托 GM 执行整个结算流程
+    if (!game.user.isGM) {
+      game.socket.emit("system.limbusCompany_FVTT", {
+        type: "clashResolve",
+        data: {
+          defActorId:   defActor.id,
+          defItemId:    defItem.id,
+          defRollTotal: defRoll.total,
+          defFormula,
+          initMsgId,
+          initFlags,
+          slotIdx,
+        },
+      });
+      return;
+    }
+
     const sys        = defItem.system ?? {};
     const effectDesc = ClashManager._effectDesc(defItem);
 
@@ -2393,6 +2410,23 @@ export class ClashManager {
           damage:        finalDamage,
         },
       },
+    });
+  }
+
+  /* ─── Socket 监听：由 ready hook 注册，GM 代为执行玩家无权限的对抗结算 ─── */
+
+  static registerSocketListeners() {
+    game.socket.on("system.limbusCompany_FVTT", async (msg) => {
+      if (msg.type !== "clashResolve" || !game.user.isGM) return;
+      const { defActorId, defItemId, defRollTotal, defFormula, initMsgId, initFlags, slotIdx } = msg.data;
+      const defActor = game.actors.get(defActorId);
+      const defItem  = defActor?.items.get(defItemId);
+      if (!defActor || !defItem) return;
+      // 重建只含 total 的 roll 代理对象（结算流程仅使用 .total）
+      const defRoll = { total: defRollTotal };
+      await ClashManager._sendResponseAndResolve(
+        defActor, defItem, defRoll, defFormula, initMsgId, initFlags, slotIdx ?? -1
+      );
     });
   }
 }
