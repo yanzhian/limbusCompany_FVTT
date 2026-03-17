@@ -283,7 +283,7 @@ export class LimbusItemSheet extends ItemSheet {
     // ── 只读 ─────────────────────────────────────────────────────────────
     html.find(".item-send-chat").on("click", this._onSendToChat.bind(this));
     html.find(".item-start-clash").on("click", this._onStartClash.bind(this));
-    html.find(".item-use-btn").on("click", this._onUseItem.bind(this));
+    html.find(".item-activate").on("click", this._onUseItem.bind(this));
 
     // ── 编辑锁切换 ────────────────────────────────────────────────────────
     html.find(".sheet-lock-icon").on("click", this._onToggleLock.bind(this));
@@ -507,10 +507,13 @@ export class LimbusItemSheet extends ItemSheet {
           </div>
         </div>`;
     } else {
+      // consumable → sys.effect；material → sys.description；其他类型取任意可用字段
+      const body = sys.effect ?? sys.description ?? "";
+      const qty  = sys.quantity != null ? ` × ${sys.quantity}` : "";
       content = `
         <div class="limbuscompany-card">
-          <div class="card-title">${item.name} × ${sys.quantity ?? 1}</div>
-          <div class="card-body">${sys.description ?? ""}</div>
+          <div class="card-title">${item.name}${qty}</div>
+          <div class="card-body">${body}</div>
         </div>`;
     }
 
