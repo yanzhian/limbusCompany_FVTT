@@ -11,6 +11,8 @@
  *   - 容器：自定义网格
  */
 
+import { ClashManager } from "../helpers/clash.mjs";
+
 export class LimbusItemSheet extends ItemSheet {
 
   /* ─── 默认选项 ──────────────────────────────────────────────────────────── */
@@ -482,45 +484,8 @@ export class LimbusItemSheet extends ItemSheet {
   /* ─── 发送聊天框 ────────────────────────────────────────────────────────── */
 
   async _onSendToChat(event) {
-    const item = this.item;
-    const sys  = item.system;
-
-    let content = "";
-    if (item.type === "skill") {
-      const sinColor = CONFIG.LIMBUSCOMPANY.SIN_COLORS?.[sys.sinType] ?? "#5F3E21";
-      content = `
-        <div class="limbuscompany-card">
-          <div class="card-title" style="background:${sinColor}">${item.name}</div>
-          <div class="card-body">
-            <div><img src="${_getCategoryIcon(sys.category)}" width="16" alt=""> ${(sys.diceFormula ?? "").toUpperCase()}</div>
-            <div style="color:var(--text-sub);font-size:.75rem">${sys.tags ?? ""}</div>
-            <div style="margin-top:4px">${sys.description ?? sys.effectDesc ?? ""}</div>
-          </div>
-        </div>`;
-    } else if (item.type === "equipment") {
-      content = `
-        <div class="limbuscompany-card">
-          <div class="card-title tc-equip-header">${item.name}</div>
-          <div class="card-body">
-            <div>${_subtypeLabel(sys.subtype)}　${sys.category ?? ""}</div>
-            <div style="margin-top:4px">${sys.description ?? ""}</div>
-          </div>
-        </div>`;
-    } else {
-      // consumable → sys.effect；material → sys.description；其他类型取任意可用字段
-      const body = sys.effect ?? sys.description ?? "";
-      const qty  = sys.quantity != null ? ` × ${sys.quantity}` : "";
-      content = `
-        <div class="limbuscompany-card">
-          <div class="card-title">${item.name}${qty}</div>
-          <div class="card-body">${body}</div>
-        </div>`;
-    }
-
-    ChatMessage.create({
-      speaker: { alias: game.user.name },
-      content,
-    });
+    // 统一走 LimbusItem.sendToChat()，复用完整卡片结构（头像+金线+图标+meta+描述）
+    await this.item.sendToChat();
   }
 
   /* ─── 发起对抗 ──────────────────────────────────────────────────────────── */
@@ -571,19 +536,23 @@ export class LimbusItemSheet extends ItemSheet {
     }).render(true);
   }
 
-  /* ─── 使用消耗品 ────────────────────────────────────────────────────────── */
+  /* ─── 激活物品（使用时 Activity）───────────────────────────────────────── */
 
   async _onUseItem(event) {
-    const item = this.item;
-    const qty  = item.system.quantity ?? 0;
-    if (qty <= 0) { ui.notifications.warn("数量不足。"); return; }
+    const item  = this.item;
+    const actor = item.parent ?? null;
 
-    await item.update({ "system.quantity": qty - 1 });
-    ChatMessage.create({
-      content: `<div class="limbuscompany-card"><div class="card-title">${item.name}</div><div class="card-body">使用了 1 个 ${item.name}。</div></div>`,
+    // 触发 [使用时] Activity 效果
+    await ClashManager._applyActivities(item, "使用时", {
+      owner: actor, atkActor: actor, defActor: null, _fireCounts: {},
     });
 
-    // 触发消耗品的效果（Activity 系统在阶段7实现）
+    // 消耗品：数量 -1，归零时删除
+    if (item.type === "consumable") {
+      const qty = (item.system.quantity ?? 1) - 1;
+      if (qty <= 0) await item.delete();
+      else          await item.update({ "system.quantity": qty });
+    }
   }
 
   /* ─── Activity 编辑区 ───────────────────────────────────────────────────── */
