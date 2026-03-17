@@ -307,21 +307,6 @@ export class LimbusActor extends Actor {
     }
   }
 
-  /**
-   * @override
-   * 重写 update()：若当前用户不是该 Actor 的 Owner，
-   * 则通过 socket 委托 GM 代写，避免权限报错。
-   */
-  async update(data, options = {}) {
-    if (this.isOwner) return super.update(data, options);
-    game.socket.emit("system.limbusCompany_FVTT", {
-      type: "actorUpdate",
-      actorId: this.id,
-      updateData: data,
-      options,
-    });
-  }
-
   /** @override */
   prepareData() {
     super.prepareData();
