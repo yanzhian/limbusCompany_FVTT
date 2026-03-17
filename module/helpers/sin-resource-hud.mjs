@@ -57,7 +57,7 @@ export class SinResourceHUD extends Application {
     });
   }
 
-  /** 初始化：注册 setting + socket，创建单例并渲染 */
+  /** 初始化：注册 setting（socket 监听统一在主入口 ready 阶段注册） */
   static init() {
     // 注册全局罪孽资源 setting
     game.settings.register("limbusCompany_FVTT", SETTING_KEY, {
@@ -68,13 +68,13 @@ export class SinResourceHUD extends Application {
       default: _defaultSins(),
       onChange: () => SinResourceHUD.instance?.render(false),
     });
+  }
 
-    // GM 监听 socket，代替非 GM 玩家写入 setting
-    game.socket.on("system.limbusCompany_FVTT", async (msg) => {
-      if (msg.type === "setSins" && game.user.isGM) {
-        await game.settings.set("limbusCompany_FVTT", SETTING_KEY, { ..._getSins(), ...msg.data });
-      }
-    });
+  /** GM 端处理 setSins socket 消息 */
+  static async handleSocketMsg(msg) {
+    if (msg.type === "setSins" && game.user.isGM) {
+      await game.settings.set("limbusCompany_FVTT", SETTING_KEY, { ..._getSins(), ...msg.data });
+    }
   }
 
   /** ready 阶段调用，创建并渲染单例 */

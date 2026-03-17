@@ -137,8 +137,11 @@ Hooks.once("setup", () => {
 Hooks.once("ready", () => {
   console.log("limbusCompany_FVTT | 系统已就绪。");
 
-  // 注册对抗结算的 socket 监听（GM 代替无权限玩家执行 actor 更新）
-  ClashManager.registerSocketListeners();
+  // 注册唯一的系统 socket 监听器（统一处理所有消息类型，避免多次注册冲突）
+  game.socket.on("system.limbusCompany_FVTT", async (msg) => {
+    await SinResourceHUD.handleSocketMsg(msg);
+    await ClashManager.handleSocketMsg(msg);
+  });
 
   // 显示全局罪孽资源 HUD
   SinResourceHUD.create();

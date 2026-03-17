@@ -2413,20 +2413,27 @@ export class ClashManager {
     });
   }
 
-  /* ─── Socket 监听：由 ready hook 注册，GM 代为执行玩家无权限的对抗结算 ─── */
+  /* ─── Socket 消息处理：由主入口统一注册单一监听器后调用 ─────────────── */
 
-  static registerSocketListeners() {
-    game.socket.on("system.limbusCompany_FVTT", async (msg) => {
-      if (msg.type !== "clashResolve" || !game.user.isGM) return;
+  /** GM 端处理 clashResolve socket 消息 */
+  static async handleSocketMsg(msg) {
+    if (msg.type !== "clashResolve" || !game.user.isGM) return;
+    try {
       const { defActorId, defItemId, defRollTotal, defFormula, initMsgId, initFlags, slotIdx } = msg.data;
       const defActor = game.actors.get(defActorId);
       const defItem  = defActor?.items.get(defItemId);
-      if (!defActor || !defItem) return;
+      if (!defActor || !defItem) {
+        console.error("[ClashManager] clashResolve: 找不到 defActor/defItem", { defActorId, defItemId });
+        return;
+      }
       // 重建只含 total 的 roll 代理对象（结算流程仅使用 .total）
       const defRoll = { total: defRollTotal };
       await ClashManager._sendResponseAndResolve(
         defActor, defItem, defRoll, defFormula, initMsgId, initFlags, slotIdx ?? -1
       );
-    });
+    } catch (err) {
+      console.error("[ClashManager] clashResolve 结算出错:", err);
+      ui.notifications?.error("对抗结算出错，请检查控制台日志");
+    }
   }
 }
