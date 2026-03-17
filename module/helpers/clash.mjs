@@ -1614,6 +1614,12 @@ export class ClashManager {
     await atkRoll.evaluate();
     await defRoll.evaluate();
 
+    // DiceSoNice: 再次骰掷时，攻击方先播 → 防守方再播
+    if (game.dice3d) {
+      await game.dice3d.showForRoll(atkRoll, game.user, true, null, false);
+      await game.dice3d.showForRoll(defRoll, game.user, true, null, false);
+    }
+
     const resolution = ClashManager._computeResolution({
       atkActor,    atkTotal:    atkRoll.total,  atkFormula,
       atkItemName, atkItemImg,  atkCategory,    atkSinType,
