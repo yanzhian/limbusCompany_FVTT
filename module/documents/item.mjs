@@ -250,6 +250,12 @@ export class ConsumableData extends foundry.abstract.TypeDataModel {
 
       // 眼价格（供 Item Piles 商人/市场使用）
       cost: new fields.NumberField({ required: true, integer: true, min: 0, initial: 0 }),
+
+      // 标签（用 "/" 分隔的字符串，存为数组）
+      tags: new fields.ArrayField(
+        new fields.StringField({ required: true }),
+        { required: true, initial: [] }
+      ),
     };
   }
 }
@@ -274,6 +280,12 @@ export class MaterialData extends foundry.abstract.TypeDataModel {
 
       // 眼价格（供 Item Piles 商人/市场使用）
       cost: new fields.NumberField({ required: true, integer: true, min: 0, initial: 0 }),
+
+      // 标签（用 "/" 分隔的字符串，存为数组）
+      tags: new fields.ArrayField(
+        new fields.StringField({ required: true }),
+        { required: true, initial: [] }
+      ),
     };
   }
 }

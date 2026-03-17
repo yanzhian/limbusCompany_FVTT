@@ -11,6 +11,8 @@
  *   - 容器：自定义网格
  */
 
+import { ClashManager } from "../helpers/clash.mjs";
+
 export class LimbusItemSheet extends ItemSheet {
 
   /* ─── 默认选项 ──────────────────────────────────────────────────────────── */
@@ -234,7 +236,8 @@ export class LimbusItemSheet extends ItemSheet {
 
   /**
    * 自动扫描容器，找到第一个可放入的位置。
-   * 按行优先顺序扫描：先以原始尺寸尝试，找不到则以旋转尺寸再次扫描。
+   * 列优先扫描（a1→a2→a3→b1→b2→…）：先扫完每一列再换下一列，
+   * 先以原始尺寸尝试，找不到则以旋转尺寸（交换 w/h）再次尝试。
    * @param {number} w @param {number} h @param {number} [excludeIdx=-1]
    * @returns {{ x:number, y:number, w:number, h:number, rotated:boolean }|null}
    */
@@ -242,8 +245,8 @@ export class LimbusItemSheet extends ItemSheet {
     const sys  = this.item.system;
     const cols = sys.gridSize?.width  ?? 3;
     const rows = sys.gridSize?.height ?? 3;
-    for (let y = 0; y < rows; y++) {
-      for (let x = 0; x < cols; x++) {
+    for (let x = 0; x < cols; x++) {
+      for (let y = 0; y < rows; y++) {
         if (this._cgCanPlace(x, y, w, h, cols, rows, excludeIdx))
           return { x, y, w, h, rotated: false };
         if (w !== h && this._cgCanPlace(x, y, h, w, cols, rows, excludeIdx))
@@ -282,7 +285,7 @@ export class LimbusItemSheet extends ItemSheet {
     // ── 只读 ─────────────────────────────────────────────────────────────
     html.find(".item-send-chat").on("click", this._onSendToChat.bind(this));
     html.find(".item-start-clash").on("click", this._onStartClash.bind(this));
-    html.find(".item-use-btn").on("click", this._onUseItem.bind(this));
+    html.find(".item-activate").on("click", this._onUseItem.bind(this));
 
     // ── 编辑锁切换 ────────────────────────────────────────────────────────
     html.find(".sheet-lock-icon").on("click", this._onToggleLock.bind(this));
@@ -416,20 +419,6 @@ export class LimbusItemSheet extends ItemSheet {
         }
       }
 
-      // 调试：请把这条日志（equipment submit）内容反馈给我定位现场数据
-      console.warn("[LimbusItemSheet][equipment submit]", {
-        itemId: this.item.id,
-        itemName: this.item.name,
-        isLocked: this.isLocked,
-        subtypeBefore: this.item.system.subtype,
-        subtypeAfter: expanded.system?.subtype,
-        subtypeFlat: flatSubtype,
-        subtypeDOM: domSubtype,
-        subtypeLastChanged: this._debugSubtypeLast,
-        changedInputName: event?.target?.name ?? event?.currentTarget?.name ?? null,
-        resistanceBefore: this.item.system.resistanceAdj,
-        resistanceAfter: expanded.system?.resistanceAdj,
-      });
 
       if (formData.system) {
         Object.assign(formData, expanded);
@@ -463,6 +452,17 @@ export class LimbusItemSheet extends ItemSheet {
       }
     }
 
+    // ── consumable / material：将 "tag1/tag2" 字符串转为数组
+    if (this.item.type === "consumable" || this.item.type === "material") {
+      const _isFlat = !formData.system;
+      const raw = _isFlat ? formData["system.tags"] : formData.system?.tags;
+      if (raw !== undefined && !Array.isArray(raw)) {
+        const arr = String(raw).split("/").map(t => t.trim()).filter(Boolean);
+        if (_isFlat) formData["system.tags"] = arr;
+        else         formData.system.tags = arr;
+      }
+    }
+
     return super._updateObject(event, formData);
   }
 
@@ -477,57 +477,15 @@ export class LimbusItemSheet extends ItemSheet {
   /* ─── 锁切换 ────────────────────────────────────────────────────────────── */
 
   async _onToggleLock(event) {
-    // 变更：不在锁切换时强制提交，避免锁定流程触发二次回写（导致抗性回退）
     this.isLocked = !this.isLocked;
-    console.warn("[LimbusItemSheet][lock-toggle]", {
-      itemId: this.item.id,
-      itemName: this.item.name,
-      nowLocked: this.isLocked,
-      subtype: this.item.system.subtype,
-      resistance: this.item.system.resistanceAdj,
-    });
     this.render(false);
   }
 
   /* ─── 发送聊天框 ────────────────────────────────────────────────────────── */
 
   async _onSendToChat(event) {
-    const item = this.item;
-    const sys  = item.system;
-
-    let content = "";
-    if (item.type === "skill") {
-      const sinColor = CONFIG.LIMBUSCOMPANY.SIN_COLORS?.[sys.sinType] ?? "#5F3E21";
-      content = `
-        <div class="limbuscompany-card">
-          <div class="card-title" style="background:${sinColor}">${item.name}</div>
-          <div class="card-body">
-            <div><img src="${_getCategoryIcon(sys.category)}" width="16" alt=""> ${(sys.diceFormula ?? "").toUpperCase()}</div>
-            <div style="color:var(--text-sub);font-size:.75rem">${sys.tags ?? ""}</div>
-            <div style="margin-top:4px">${sys.description ?? sys.effectDesc ?? ""}</div>
-          </div>
-        </div>`;
-    } else if (item.type === "equipment") {
-      content = `
-        <div class="limbuscompany-card">
-          <div class="card-title tc-equip-header">${item.name}</div>
-          <div class="card-body">
-            <div>${_subtypeLabel(sys.subtype)}　${sys.category ?? ""}</div>
-            <div style="margin-top:4px">${sys.description ?? ""}</div>
-          </div>
-        </div>`;
-    } else {
-      content = `
-        <div class="limbuscompany-card">
-          <div class="card-title">${item.name} × ${sys.quantity ?? 1}</div>
-          <div class="card-body">${sys.description ?? ""}</div>
-        </div>`;
-    }
-
-    ChatMessage.create({
-      speaker: { alias: game.user.name },
-      content,
-    });
+    // 统一走 LimbusItem.sendToChat()，复用完整卡片结构（头像+金线+图标+meta+描述）
+    await this.item.sendToChat();
   }
 
   /* ─── 发起对抗 ──────────────────────────────────────────────────────────── */
@@ -578,19 +536,23 @@ export class LimbusItemSheet extends ItemSheet {
     }).render(true);
   }
 
-  /* ─── 使用消耗品 ────────────────────────────────────────────────────────── */
+  /* ─── 激活物品（使用时 Activity）───────────────────────────────────────── */
 
   async _onUseItem(event) {
-    const item = this.item;
-    const qty  = item.system.quantity ?? 0;
-    if (qty <= 0) { ui.notifications.warn("数量不足。"); return; }
+    const item  = this.item;
+    const actor = item.parent ?? null;
 
-    await item.update({ "system.quantity": qty - 1 });
-    ChatMessage.create({
-      content: `<div class="limbuscompany-card"><div class="card-title">${item.name}</div><div class="card-body">使用了 1 个 ${item.name}。</div></div>`,
+    // 触发 [使用时] Activity 效果
+    await ClashManager._applyActivities(item, "使用时", {
+      owner: actor, atkActor: actor, defActor: null, _fireCounts: {},
     });
 
-    // 触发消耗品的效果（Activity 系统在阶段7实现）
+    // 消耗品：数量 -1，归零时删除
+    if (item.type === "consumable") {
+      const qty = (item.system.quantity ?? 1) - 1;
+      if (qty <= 0) await item.delete();
+      else          await item.update({ "system.quantity": qty });
+    }
   }
 
   /* ─── Activity 编辑区 ───────────────────────────────────────────────────── */

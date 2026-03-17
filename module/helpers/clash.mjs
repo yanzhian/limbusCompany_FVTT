@@ -7,6 +7,23 @@ import { SinResourceHUD } from "./sin-resource-hud.mjs";
 
 export class ClashManager {
 
+  /* ─── Actor 安全更新（非 Owner 时通过 socket 委托 GM 代写） ────────────── */
+
+  /**
+   * 无论当前玩家是否拥有该 Actor，均能安全地对其执行 update。
+   * - 若当前用户是 Owner：直接 await actor.update()
+   * - 否则：向 GM 发送 socket 消息由 GM 代写（fire-and-forget）
+   */
+  static async _safeActorUpdate(actor, data, options = {}) {
+    if (actor.isOwner) return actor.update(data, options);
+    game.socket.emit("system.limbusCompany_FVTT", {
+      type: "actorUpdate",
+      actorId: actor.id,
+      updateData: data,
+      options,
+    });
+  }
+
   /* ─── 工具函数 ─────────────────────────────────────────────────────────── */
 
   static _catIcon(cat) {
@@ -113,7 +130,7 @@ export class ClashManager {
     const next = Math.max(0, (buffs[idx].stacks ?? 1) - amount);
     if (next <= 0) buffs.splice(idx, 1);
     else           buffs[idx] = { ...buffs[idx], stacks: next };
-    return actor.update({ "system.buffs": buffs });
+    return ClashManager._safeActorUpdate(actor, { "system.buffs": buffs });
   }
 
   /** 将 BUFF 类型键转换为中文显示名称。 */
@@ -169,7 +186,7 @@ export class ClashManager {
         whenAdded,
       });
     }
-    await actor.update({ "system.buffs": buffs });
+    await ClashManager._safeActorUpdate(actor, { "system.buffs": buffs });
   }
 
   /** 移除角色所有指定类型的 BUFF。 */
@@ -179,7 +196,7 @@ export class ClashManager {
       return actor.removeBuffsByType(type);
     }
     const buffs = (actor.system?.buffs ?? []).filter(b => b.type !== type);
-    await actor.update({ "system.buffs": buffs });
+    await ClashManager._safeActorUpdate(actor, { "system.buffs": buffs });
   }
 
   /**
@@ -313,7 +330,7 @@ export class ClashManager {
             const cur = effTgt.system?.hp?.value ?? 0;
             const max = effTgt.system?.hp?.max   ?? 1;
             const nv  = Math.max(0, Math.min(max, cur + val));
-            await effTgt.update({ "system.hp.value": nv });
+            await ClashManager._safeActorUpdate(effTgt, { "system.hp.value": nv });
             descStr = `【${effTgt.name}】HP ${val >= 0 ? "+" : ""}${val}（${cur} → ${nv}）`;
             break;
           }
@@ -324,7 +341,7 @@ export class ClashManager {
               await effTgt.setSanity(cur + val);
             } else {
               const cur = effTgt.system?.sanity?.value ?? 50;
-              await effTgt.update({ "system.sanity.value": Math.max(5, Math.min(95, cur + val)) });
+              await ClashManager._safeActorUpdate(effTgt, { "system.sanity.value": Math.max(5, Math.min(95, cur + val)) });
             }
             descStr = `【${effTgt.name}】理智 ${val >= 0 ? "+" : ""}${val}`;
             break;
@@ -332,14 +349,14 @@ export class ClashManager {
           case "atkAdj": {
             const val = Number(eff.value ?? eff.intensity ?? 0);
             const cur = effTgt.system?.atk?.extra ?? 0;
-            await effTgt.update({ "system.atk.extra": cur + val });
+            await ClashManager._safeActorUpdate(effTgt, { "system.atk.extra": cur + val });
             descStr = `【${effTgt.name}】攻击等级 ${val >= 0 ? "+" : ""}${val}`;
             break;
           }
           case "defAdj": {
             const val = Number(eff.value ?? eff.intensity ?? 0);
             const cur = effTgt.system?.def?.extra ?? 0;
-            await effTgt.update({ "system.def.extra": cur + val });
+            await ClashManager._safeActorUpdate(effTgt, { "system.def.extra": cur + val });
             descStr = `【${effTgt.name}】防御等级 ${val >= 0 ? "+" : ""}${val}`;
             break;
           }
@@ -366,7 +383,7 @@ export class ClashManager {
                       percent:   Math.min(100, t.percent + tremorIntensity),
                       triggered: t.triggered,
                     }));
-                    await effTgt.update({ "system.chaosThresholds": tList });
+                    await ClashManager._safeActorUpdate(effTgt, { "system.chaosThresholds": tList });
                   })()
               );
               await ClashManager._reduceBuffStacks(effTgt, "tremor", 1);
@@ -469,7 +486,7 @@ export class ClashManager {
     const bleedCurrentLevel  = bleedExistingType ? (_BC_TYPES.indexOf(bleedExistingType) + 1) : 0;
     const bleedNewLevel      = Math.min(3, bleedCurrentLevel + bleedChaosCount);
     const bleedChaosName     = _BC_NAMES[bleedNewLevel - 1] ?? "陷入混乱";
-    await actor.update({ "system.hp.value": newHp });
+    await ClashManager._safeActorUpdate(actor, { "system.hp.value": newHp });
     await ClashManager._reduceBuffStacks(actor, "bleed");
     if (actor.checkAndTriggerChaos) await actor.checkAndTriggerChaos(newHp, oldHp, { silent: true });
 
@@ -485,16 +502,25 @@ export class ClashManager {
 
   static _effectDesc(item) {
     const sys = item?.system ?? {};
-    const parts = [];
-    if (sys.effectDesc) parts.push(sys.effectDesc);
+    const actParts = [];
     if (Array.isArray(sys.activities)) {
       for (const act of sys.activities) {
         if (!act.trigger) continue;
         const effStr = ClashManager._actStr(act);
-        if (effStr) parts.push(`[${act.trigger}] ${effStr}`);
+        if (effStr) actParts.push(`[${act.trigger}] ${effStr}`);
       }
     }
-    return parts.join(" | ");
+    const mainDesc = sys.effectDesc ?? "";
+    const actHtml  = actParts.length
+      ? `<details class="ic-activities" style="margin-top:4px;">
+           <summary style="cursor:pointer;font-size:.75rem;color:#C9A84C;list-style:none;padding:2px 0;">▶ 触发效果</summary>
+           <div style="font-size:.75rem;color:#9A8462;line-height:1.5;padding-left:8px;">
+             ${actParts.map(p => `<div>${p}</div>`).join("")}
+           </div>
+         </details>`
+      : "";
+    if (!mainDesc && !actHtml) return "";
+    return `${mainDesc}${actHtml}`;
   }
 
   static _actStr(act) {
@@ -759,12 +785,12 @@ export class ClashManager {
         sheet._animateCombatSkillUse?.(slotIndex);
         setTimeout(async () => {
           const ap = actor.system.ap?.value ?? 0;
-          if (ap > 0) await actor.update({ "system.ap.value": ap - 1 });
+          if (ap > 0) await ClashManager._safeActorUpdate(actor, { "system.ap.value": ap - 1 });
         }, 700);
       }
     } else if (slotIndex === -2) {
       const ap = actor.system.ap?.value ?? 0;
-      if (ap > 0) await actor.update({ "system.ap.value": ap - 1 });
+      if (ap > 0) await ClashManager._safeActorUpdate(actor, { "system.ap.value": ap - 1 });
     }
   }
 
@@ -1128,7 +1154,7 @@ export class ClashManager {
     const defIsInPanic = defIsEgo && !!ClashManager._getBuff(defActor, "panic");
     if (!defIsInPanic) {
       const defAp = defActor.system.ap?.value ?? 0;
-      if (defAp > 0) await defActor.update({ "system.ap.value": defAp - 1 });
+      if (defAp > 0) await ClashManager._safeActorUpdate(defActor, { "system.ap.value": defAp - 1 });
     }
 
     // 推进防守方战斗袋（技能消失，后面的技能填充）
@@ -1188,7 +1214,7 @@ export class ClashManager {
     if (resolution.dodgeWin) {
       const curAp = defActor.system.ap?.value ?? 0;
       const maxAp = defActor.system.ap?.max ?? 3;
-      await defActor.update({ "system.ap.value": Math.min(curAp + 1, maxAp) });
+      await ClashManager._safeActorUpdate(defActor, { "system.ap.value": Math.min(curAp + 1, maxAp) });
     }
 
     // ── [拼点成功/失败] / [命中时] / [暴击命中时] / [受到伤害时] ────────
@@ -1470,6 +1496,7 @@ export class ClashManager {
       defItemName, defItemImg,
       defCategory: defCat,
       defSinType:  defItem?.system?.sinType ?? "",
+      defItemId:   defItem?.id    ?? "",
     } : null;
 
     // 加重扩散信息：仅攻击方胜且非平局才携带
@@ -1580,7 +1607,7 @@ export class ClashManager {
       if (!sinType || !VALID.includes(multiplier)) continue;
       update[`system.egoResistances.${sinType}`] = multiplier;
     }
-    if (Object.keys(update).length) await actor.update(update);
+    if (Object.keys(update).length) await ClashManager._safeActorUpdate(actor, update);
   }
 
   /* ─── 再次骰掷（平局时重新计算） ─────────────────────────────────────── */
@@ -1604,6 +1631,12 @@ export class ClashManager {
     await atkRoll.evaluate();
     await defRoll.evaluate();
 
+    // DiceSoNice: 再次骰掷时，攻击方先播 → 防守方再播
+    if (game.dice3d) {
+      await game.dice3d.showForRoll(atkRoll, game.user, true, null, false);
+      await game.dice3d.showForRoll(defRoll, game.user, true, null, false);
+    }
+
     const resolution = ClashManager._computeResolution({
       atkActor,    atkTotal:    atkRoll.total,  atkFormula,
       atkItemName, atkItemImg,  atkCategory,    atkSinType,
@@ -1618,7 +1651,7 @@ export class ClashManager {
     if (resolution.dodgeWin) {
       const curAp = defActor.system.ap?.value ?? 0;
       const maxAp = defActor.system.ap?.max ?? 3;
-      await defActor.update({ "system.ap.value": Math.min(curAp + 1, maxAp) });
+      await ClashManager._safeActorUpdate(defActor, { "system.ap.value": Math.min(curAp + 1, maxAp) });
     }
 
     await ClashManager._sendResolveMsg(resolution,
@@ -1635,6 +1668,46 @@ export class ClashManager {
       { img: defItemImg, name: defItemName, system: { category: defCategory, sinType: defSinType } },
       defFormula,
     );
+
+    // ── Activity 触发（再次骰掷后，仅非平局时触发）──────────────────────
+    const { atkWins, isTie: newTie, dodgeWin, breatheCrit } = resolution;
+    if (!newTie) {
+      const atkItem = atkActor.items?.get(rerollData.atkItemId) ?? null;
+      const defItem = defActor.items?.get(rerollData.defItemId) ?? null;
+      const _fc = {};
+      const _actMsgs = [];
+      const atkCtx = { atkActor, defActor, owner: atkActor, other: defActor, _fireCounts: _fc, _actMsgs };
+      const defCtx = { atkActor, defActor, owner: defActor, other: atkActor, _fireCounts: _fc, _actMsgs };
+
+      if (atkWins) {
+        await ClashManager._applyActivities(atkItem, "拼点成功", atkCtx);
+        await ClashManager._applyActivities(defItem,  "拼点失败", defCtx);
+        if (!dodgeWin) {
+          await ClashManager._applyActivities(atkItem, "命中时", atkCtx);
+          if (breatheCrit) {
+            await ClashManager._applyActivities(atkItem, "暴击命中时", atkCtx);
+          }
+          await ClashManager._applyActivities(defItem, "受到伤害时", defCtx);
+          for (const eq of ClashManager._getEquippedItems(defActor)) {
+            await ClashManager._applyActivities(eq, "受到伤害时", defCtx);
+          }
+        }
+      } else {
+        await ClashManager._applyActivities(atkItem, "拼点失败", atkCtx);
+        await ClashManager._applyActivities(defItem,  "拼点成功", defCtx);
+        if (defCategory === "clashCounter") {
+          await ClashManager._applyActivities(defItem, "命中时", defCtx);
+          await ClashManager._applyActivities(atkItem, "受到伤害时", atkCtx);
+          for (const eq of ClashManager._getEquippedItems(atkActor)) {
+            await ClashManager._applyActivities(eq, "受到伤害时", atkCtx);
+          }
+        }
+      }
+
+      await ClashManager._applyActivities(atkItem, "攻击后", atkCtx);
+      await ClashManager._applyActivities(defItem,  "攻击后", defCtx);
+      await ClashManager._flushActMsgs(_actMsgs, atkActor);
+    }
   }
 
   /* ─── 阶段六：直接承受（跳过对抗，玩家B点聊天框承受） ────────────────── */
@@ -1785,7 +1858,7 @@ export class ClashManager {
     // 若选中的是非 linked token actor，额外同步该 token 的 HP
     if (selActor !== baseActor && selActor.isToken) {
       const th = selActor.system?.hp?.value ?? 0;
-      await selActor.update({ "system.hp.value": Math.max(0, th - finalDamage) });
+      await ClashManager._safeActorUpdate(selActor, { "system.hp.value": Math.max(0, th - finalDamage) });
     }
 
     // ── 加重扩散：weight>=2 时发出额外承受卡 ──────────────────────────────
@@ -1941,7 +2014,7 @@ export class ClashManager {
     // 若是非 linked token，额外同步 HP
     if (selActor !== defActor && selActor.isToken) {
       const cur = selActor.system?.hp?.value ?? 0;
-      await selActor.update({ "system.hp.value": Math.max(0, cur - finalDamage) });
+      await ClashManager._safeActorUpdate(selActor, { "system.hp.value": Math.max(0, cur - finalDamage) });
     }
 
     // 更新扩散卡剩余次数
@@ -1973,7 +2046,7 @@ export class ClashManager {
     // 若选中的是非 linked token actor（与 base actor 为不同文档），额外同步该 token 的 HP
     if (selActor && selActor !== actor && selActor.isToken) {
       const th = selActor.system?.hp?.value ?? 0;
-      await selActor.update({ "system.hp.value": Math.max(0, th - damage) });
+      await ClashManager._safeActorUpdate(selActor, { "system.hp.value": Math.max(0, th - damage) });
     }
   }
 
@@ -2033,7 +2106,7 @@ export class ClashManager {
     const chaosName          = _CHAOS_NAMES[newChaosLevel - 1] ?? "陷入混乱";
 
     // 更新 HP
-    await actor.update({ "system.hp.value": newHp });
+    await ClashManager._safeActorUpdate(actor, { "system.hp.value": newHp });
 
     // 沉沦：更新理智值（setSanity 内部会检查恐慌状态）
     if (sanityDmg > 0 && typeof actor.setSanity === "function") {
