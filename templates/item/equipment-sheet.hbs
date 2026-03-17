@@ -1,7 +1,7 @@
 {{!-- equipment-sheet.hbs — 装备物品卡 --}}
 <form class="limbuscompany item-sheet equipment-sheet" autocomplete="off">
 
-  {{!-- ── 标题栏 ──────────────────────────────────────────────────── --}}
+  {{!-- ── 标题栏 ─────────────────────────────────────────────────── --}}
   <div class="item-sheet-titlebar">
     <span class="sheet-lock-icon {{#if isLocked}}locked{{else}}unlocked{{/if}}" title="{{#if isLocked}}点击解锁{{else}}点击锁定{{/if}}">
       <i class="fas fa-{{#if isLocked}}lock{{else}}lock-open{{/if}}"></i>
@@ -9,175 +9,189 @@
     <span class="sheet-type-label">装备</span>
   </div>
 
-  {{!-- ── 第一行：图标 + 名字 + 链接方向 ──────────────────────────── --}}
-  <div class="item-row-1">
-    {{!-- 图标 --}}
-    {{#if isEditable}}
-      <img src="{{item.img}}" class="item-sheet-icon" data-edit="img" title="更换图标" alt="icon">
-    {{else}}
-      <img src="{{item.img}}" class="item-sheet-icon" alt="icon">
-    {{/if}}
+  {{!-- ── 可滚动主体 ──────────────────────────────────────────────── --}}
+  <div class="equip-body">
 
-    {{!-- 名字 --}}
-    {{#if (and isEditable (not isLocked))}}
-      <input type="text" name="name" value="{{item.name}}" class="item-name-input"/>
-    {{else}}
-      <div class="item-name-display">{{item.name}}</div>
-    {{/if}}
+    {{!-- 顶部：图标（100×100）+ 右侧信息列 --}}
+    <div class="equip-header">
 
-    {{!-- 链接方向箭头（右上角） --}}
-    <div class="link-dir-group" role="group" aria-label="链接方向">
-      {{#each linkDirs}}
-        <button type="button" class="link-dir-btn link-dir-{{this}} {{#if (lookup ../linksActive this)}}link-active{{/if}}"
-                data-dir="{{this}}"
-                {{#if (or ../isLocked (not ../isEditable))}}disabled{{/if}}
-                title="链接 {{this}}">
-          <img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/Link.svg" class="link-dir-icon" alt="链接 {{this}}">
-        </button>
-      {{/each}}
-    </div>
-  </div>
-
-  {{!-- ── 第二行：类型 + 分类 ───────────────────────────────────────── --}}
-  <div class="item-row-2">
-    {{#if (and isEditable (not isLocked))}}
-      <select name="system.subtype" class="equip-subtype-sel">
-        {{#each subtypes}}
-          <option value="{{@key}}" {{#eq @key ../system.subtype}}selected{{/eq}}>{{this}}</option>
-        {{/each}}
-      </select>
-      <input type="text" name="system.category" value="{{system.category}}" class="equip-category-input" placeholder="分类"/>
-    {{else}}
-      <span class="equip-subtype-label">{{subtypeLabel}}</span>
-      <span class="equip-sep">　</span>
-      <span class="equip-category">{{system.category}}</span>
-    {{/if}}
-  </div>
-  <div class="item-row-divider"></div>
-
-  {{!-- ── 第三行：数值修正 ────────────────────────────────────────── --}}
-  <div class="item-row-3 modifier-block">
-
-    {{!-- 上装：物理抗性 --}}
-    {{#if isUpper}}
-      <div class="modifier-upper">
-        {{#if (and isEditable (not isLocked))}}
-          <div class="modifier-row">
-            <img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/slash.webp" class="mod-icon" alt="斩">
-            <select name="system.resistanceAdj.slash" class="resist-sel">
-              {{selectOptions resistanceValues selected=system.resistanceAdj.slash}}
-            </select>
-            <img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/blunt.webp" class="mod-icon" alt="打" style="margin-left:6px">
-            <select name="system.resistanceAdj.blunt" class="resist-sel">
-              {{selectOptions resistanceValues selected=system.resistanceAdj.blunt}}
-            </select>
-            <img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/pierce.webp" class="mod-icon" alt="突" style="margin-left:6px">
-            <select name="system.resistanceAdj.pierce" class="resist-sel">
-              {{selectOptions resistanceValues selected=system.resistanceAdj.pierce}}
-            </select>
-          </div>
+      {{!-- 图标 --}}
+      <div class="equip-icon-col">
+        {{#if isEditable}}
+          <img src="{{item.img}}" class="item-sheet-icon" data-edit="img" title="更换图标" alt="icon">
         {{else}}
-          <div class="modifier-row">
-            <img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/slash.webp" class="mod-icon" alt="斩">
-            <span class="resist-display {{#isResistWeak system.resistanceAdj.slash}}resist-weak{{/isResistWeak}}">{{system.resistanceAdj.slash}}</span>
-            <img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/blunt.webp" class="mod-icon" alt="打" style="margin-left:6px">
-            <span class="resist-display {{#isResistWeak system.resistanceAdj.blunt}}resist-weak{{/isResistWeak}}">{{system.resistanceAdj.blunt}}</span>
-            <img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/pierce.webp" class="mod-icon" alt="突" style="margin-left:6px">
-            <span class="resist-display {{#isResistWeak system.resistanceAdj.pierce}}resist-weak{{/isResistWeak}}">{{system.resistanceAdj.pierce}}</span>
+          <img src="{{item.img}}" class="item-sheet-icon" alt="icon">
+        {{/if}}
+      </div>
+
+      {{!-- 右侧信息列 --}}
+      <div class="equip-info-col">
+
+        {{!-- 名字 --}}
+        <div class="equip-name-row">
+          {{#if (and isEditable (not isLocked))}}
+            <input type="text" name="name" value="{{item.name}}" class="item-name-input"/>
+          {{else}}
+            <div class="item-name-display">{{item.name}}</div>
+          {{/if}}
+        </div>
+
+        {{!-- 类型 + 分类 --}}
+        <div class="equip-type-row">
+          {{#if (and isEditable (not isLocked))}}
+            <select name="system.subtype" class="equip-subtype-sel">
+              {{#each subtypes}}
+                <option value="{{@key}}" {{#eq @key ../system.subtype}}selected{{/eq}}>{{this}}</option>
+              {{/each}}
+            </select>
+            <input type="text" name="system.category" value="{{system.category}}" class="equip-category-input" placeholder="分类"/>
+          {{else}}
+            <span class="equip-subtype-label">{{subtypeLabel}}</span>
+            <span class="equip-sep">　</span>
+            <span class="equip-category">{{system.category}}</span>
+          {{/if}}
+        </div>
+
+        {{!-- 数值修正 + 链接方向 --}}
+        <div class="equip-stats-links-row">
+          <div class="equip-stats">
+            {{!-- 攻击（上装和下装无攻击修正） --}}
+            {{#unless isUpper}}{{#unless isLower}}
+              <div class="modifier-row">
+                <img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/Offense_Level.webp" class="mod-icon" alt="ATK">
+                {{#if (and isEditable (not isLocked))}}
+                  <input type="number" name="system.atkAdj" value="{{system.atkAdj}}" class="mod-input" style="width:46px"/>
+                {{else}}
+                  <span class="mod-val {{#if (gt system.atkAdj 0)}}mod-pos{{/if}}">{{#if (gt system.atkAdj 0)}}+{{/if}}{{system.atkAdj}}</span>
+                {{/if}}
+              </div>
+            {{/unless}}{{/unless}}
+
+            {{!-- 防御 --}}
+            <div class="modifier-row">
+              <img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/Defense_Level.webp" class="mod-icon" alt="DEF">
+              {{#if (and isEditable (not isLocked))}}
+                <input type="number" name="system.defAdj" value="{{system.defAdj}}" class="mod-input" style="width:46px"/>
+              {{else}}
+                <span class="mod-val {{#if (gt system.defAdj 0)}}mod-pos{{/if}}">{{#if (gt system.defAdj 0)}}+{{/if}}{{system.defAdj}}</span>
+              {{/if}}
+            </div>
+
+            {{!-- 速度（上装无速度修正） --}}
+            {{#unless isUpper}}
+              <div class="modifier-row">
+                <img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/Speed.webp" class="mod-icon" alt="SPD">
+                {{#if (and isEditable (not isLocked))}}
+                  <input type="number" name="system.speedAdj" value="{{system.speedAdj}}" class="mod-input" style="width:46px"/>
+                {{else}}
+                  <span class="mod-val {{#if (gt system.speedAdj 0)}}mod-pos{{/if}}">{{#if (gt system.speedAdj 0)}}+{{/if}}{{system.speedAdj}}</span>
+                {{/if}}
+              </div>
+            {{/unless}}
+          </div>
+
+          {{!-- 链接方向（右侧对齐） --}}
+          <div class="link-dir-group" role="group" aria-label="链接方向">
+            {{#each linkDirs}}
+              <button type="button" class="link-dir-btn link-dir-{{this}} {{#if (lookup ../linksActive this)}}link-active{{/if}}"
+                      data-dir="{{this}}"
+                      {{#if (or ../isLocked (not ../isEditable))}}disabled{{/if}}
+                      title="链接 {{this}}">
+                <img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/Link.svg" class="link-dir-icon" alt="链接 {{this}}">
+              </button>
+            {{/each}}
+          </div>
+        </div>
+
+        {{!-- 物理抗性（仅上装） --}}
+        {{#if isUpper}}
+          <div class="equip-resist-row">
+            {{#if (and isEditable (not isLocked))}}
+              <img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/slash.webp" class="mod-icon" alt="斩">
+              <select name="system.resistanceAdj.slash" class="resist-sel">
+                {{selectOptions resistanceValues selected=system.resistanceAdj.slash}}
+              </select>
+              <img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/blunt.webp" class="mod-icon" alt="打" style="margin-left:4px">
+              <select name="system.resistanceAdj.blunt" class="resist-sel">
+                {{selectOptions resistanceValues selected=system.resistanceAdj.blunt}}
+              </select>
+              <img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/pierce.webp" class="mod-icon" alt="突" style="margin-left:4px">
+              <select name="system.resistanceAdj.pierce" class="resist-sel">
+                {{selectOptions resistanceValues selected=system.resistanceAdj.pierce}}
+              </select>
+            {{else}}
+              <img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/slash.webp" class="mod-icon" alt="斩">
+              <span class="resist-display {{#isResistWeak system.resistanceAdj.slash}}resist-weak{{/isResistWeak}}">{{system.resistanceAdj.slash}}</span>
+              <img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/blunt.webp" class="mod-icon" alt="打" style="margin-left:4px">
+              <span class="resist-display {{#isResistWeak system.resistanceAdj.blunt}}resist-weak{{/isResistWeak}}">{{system.resistanceAdj.blunt}}</span>
+              <img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/pierce.webp" class="mod-icon" alt="突" style="margin-left:4px">
+              <span class="resist-display {{#isResistWeak system.resistanceAdj.pierce}}resist-weak{{/isResistWeak}}">{{system.resistanceAdj.pierce}}</span>
+            {{/if}}
           </div>
         {{/if}}
-        {{!-- 上装也有防御修正 --}}
-        <div class="modifier-row">
-          <img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/Defense_Level.webp" class="mod-icon" alt="DEF">
-          {{#if (and isEditable (not isLocked))}}
-            <input type="number" name="system.defAdj" value="{{system.defAdj}}" class="mod-input" style="width:55px"/>
-          {{else}}
-            <span class="mod-val {{#if (gt system.defAdj 0)}}mod-pos{{/if}}">{{#if (gt system.defAdj 0)}}+{{/if}}{{system.defAdj}}</span>
-          {{/if}}
-        </div>
+
+      </div>{{!-- /equip-info-col --}}
+    </div>{{!-- /equip-header --}}
+
+    {{!-- ── 标签 + 容量 + 眼 ──────────────────────────────────────── --}}
+    <div class="item-tags-row">
+      <div class="tags-area">
+        {{#if (and isEditable (not isLocked))}}
+          <input type="text" name="system.tags" value="{{system.tags}}" class="tags-input" placeholder="标签1/标签2"/>
+        {{else}}
+          {{#each (split system.tags '/')}}
+            <span class="tag">{{trim this}}</span>
+          {{/each}}
+        {{/if}}
       </div>
-    {{else}}
-      {{!-- 其他类型：ATK/DEF/SPD（按类型选择显示） --}}
-      <div class="modifier-rows">
-        {{#unless isLower}}
-          <div class="modifier-row">
-            <img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/Offense_Level.webp" class="mod-icon" alt="ATK">
-            {{#if (and isEditable (not isLocked))}}
-              <input type="number" name="system.atkAdj" value="{{system.atkAdj}}" class="mod-input" style="width:55px"/>
-            {{else}}
-              <span class="mod-val {{#if (gt system.atkAdj 0)}}mod-pos{{/if}}">{{#if (gt system.atkAdj 0)}}+{{/if}}{{system.atkAdj}}</span>
-            {{/if}}
-          </div>
-        {{/unless}}
-        <div class="modifier-row">
-          <img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/Defense_Level.webp" class="mod-icon" alt="DEF">
-          {{#if (and isEditable (not isLocked))}}
-            <input type="number" name="system.defAdj" value="{{system.defAdj}}" class="mod-input" style="width:55px"/>
-          {{else}}
-            <span class="mod-val {{#if (gt system.defAdj 0)}}mod-pos{{/if}}">{{#if (gt system.defAdj 0)}}+{{/if}}{{system.defAdj}}</span>
-          {{/if}}
-        </div>
-        {{#unless isUpper}}
-          <div class="modifier-row">
-            <img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/Speed.webp" class="mod-icon" alt="SPD">
-            {{#if (and isEditable (not isLocked))}}
-              <input type="number" name="system.speedAdj" value="{{system.speedAdj}}" class="mod-input" style="width:55px"/>
-            {{else}}
-              <span class="mod-val {{#if (gt system.speedAdj 0)}}mod-pos{{/if}}">{{#if (gt system.speedAdj 0)}}+{{/if}}{{system.speedAdj}}</span>
-            {{/if}}
-          </div>
-        {{/unless}}
+      <div class="item-capacity-group">
+        <span class="cap-label">容量</span>
+        {{#if (and isEditable (not isLocked))}}
+          <input type="number" name="system.capacity.w" value="{{system.capacity.w}}" class="cap-input" min="1" max="10"/>
+          <span class="cap-sep">×</span>
+          <input type="number" name="system.capacity.h" value="{{system.capacity.h}}" class="cap-input" min="1" max="10"/>
+        {{else}}
+          <span class="cap-display">{{system.capacity.w}}×{{system.capacity.h}}</span>
+        {{/if}}
       </div>
+      <div class="item-cost-group">
+        <img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/眼.webp" class="cost-eye-icon" alt="眼">
+        {{#if (and isEditable (not isLocked))}}
+          <input type="number" name="system.cost" value="{{system.cost}}" class="cost-input" min="0"/>
+        {{else}}
+          <span class="cost-display">{{system.cost}}</span>
+        {{/if}}
+      </div>
+    </div>
+
+    {{!-- ── 分割线 ──────────────────────────────────────────────────── --}}
+    <div class="equip-divider"></div>
+
+    {{!-- ── 描述区 ──────────────────────────────────────────────────── --}}
+    <div class="item-desc-block">
+      {{#if (and isEditable (not isLocked))}}
+        {{editor system.effect target="system.effect" button=false editable=true engine="prosemirror"}}
+      {{else}}
+        <div class="item-desc-display">{{{system.effect}}}</div>
+      {{/if}}
+    </div>
+
+    {{!-- ── 分割线 ──────────────────────────────────────────────────── --}}
+    <div class="equip-divider"></div>
+
+    {{!-- ── 激活效果编辑器（展开时显示在底部按钮上方） ────────────── --}}
+    {{#if activitiesExpanded}}
+      {{> systems/limbusCompany_FVTT/templates/partials/activity-editor.hbs}}
     {{/if}}
 
-  </div>
+  </div>{{!-- /equip-body --}}
 
-  {{!-- ── 标签 + 容量 ─────────────────────────────────────────────── --}}
-  <div class="item-tags-row">
-    <div class="tags-area">
-      {{#if (and isEditable (not isLocked))}}
-        <input type="text" name="system.tags" value="{{system.tags}}" class="tags-input" placeholder="标签1/标签2"/>
-      {{else}}
-        {{#each (split system.tags '/')}}
-          <span class="tag">{{trim this}}</span>
-        {{/each}}
-      {{/if}}
-    </div>
-    <div class="item-capacity-group">
-      <span class="cap-label">容量</span>
-      {{#if (and isEditable (not isLocked))}}
-        <input type="number" name="system.capacity.w" value="{{system.capacity.w}}" class="cap-input" min="1" max="10"/>
-        <span class="cap-sep">×</span>
-        <input type="number" name="system.capacity.h" value="{{system.capacity.h}}" class="cap-input" min="1" max="10"/>
-      {{else}}
-        <span class="cap-display">{{system.capacity.w}}×{{system.capacity.h}}</span>
-      {{/if}}
-    </div>
-    <div class="item-cost-group">
-      <img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/眼.webp" class="cost-eye-icon" alt="眼">
-      {{#if (and isEditable (not isLocked))}}
-        <input type="number" name="system.cost" value="{{system.cost}}" class="cost-input" min="0"/>
-      {{else}}
-        <span class="cost-display">{{system.cost}}</span>
-      {{/if}}
-    </div>
-  </div>
-
-  {{!-- ── 描述区 ──────────────────────────────────────────────────── --}}
-  <div class="item-desc-block">
-    {{#if (and isEditable (not isLocked))}}
-      {{editor system.effect target="system.effect" button=false editable=true engine="prosemirror"}}
-    {{else}}
-      <div class="item-desc-display">{{{system.effect}}}</div>
-    {{/if}}
-  </div>
-
-  {{!-- ── 底部按钮栏 ──────────────────────────────────────────────── --}}
+  {{!-- ── 固定底部按钮栏 ─────────────────────────────────────────── --}}
   <div class="item-sheet-footer">
     <div class="footer-actions">
       <button class="item-send-chat sheet-btn">发送聊天框</button>
       <button class="item-activate sheet-btn">激活</button>
-      <button class="activity-edit-toggle sheet-btn">编辑激活效果 {{#if activitiesExpanded}}▲{{else}}▼{{/if}}</button>
+      <button class="activity-edit-toggle sheet-btn">编辑激活效果 {{#if activitiesExpanded}}▼{{else}}▲{{/if}}</button>
     </div>
     <div class="footer-stellar">
       <img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/Starlight.webp" class="stellar-icon" alt="星芒">
@@ -188,10 +202,5 @@
       {{/if}}
     </div>
   </div>
-
-  {{!-- ── 活动编辑器（折叠区） ──────────────────────────────────── --}}
-  {{#if activitiesExpanded}}
-    {{> systems/limbusCompany_FVTT/templates/partials/activity-editor.hbs}}
-  {{/if}}
 
 </form>

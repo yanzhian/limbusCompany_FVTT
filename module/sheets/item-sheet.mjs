@@ -167,6 +167,7 @@ export class LimbusItemSheet extends ItemSheet {
       context.allCells       = allCells;
       context.containerUsed  = placedItems.length;
       context.containerMax   = cols * rows;
+      context.containerAvail = allCells.filter(c => !c.occupied && !c.locked).length;
     }
 
     // ── Activity 触发时机 & 效果类型选项 ─────────────────────────────────
@@ -231,6 +232,27 @@ export class LimbusItemSheet extends ItemSheet {
     return { placedItems, allCells };
   }
 
+  /**
+   * 自动扫描容器，找到第一个可放入的位置。
+   * 按行优先顺序扫描：先以原始尺寸尝试，找不到则以旋转尺寸再次扫描。
+   * @param {number} w @param {number} h @param {number} [excludeIdx=-1]
+   * @returns {{ x:number, y:number, w:number, h:number, rotated:boolean }|null}
+   */
+  _cgAutoPlace(w, h, excludeIdx = -1) {
+    const sys  = this.item.system;
+    const cols = sys.gridSize?.width  ?? 3;
+    const rows = sys.gridSize?.height ?? 3;
+    for (let y = 0; y < rows; y++) {
+      for (let x = 0; x < cols; x++) {
+        if (this._cgCanPlace(x, y, w, h, cols, rows, excludeIdx))
+          return { x, y, w, h, rotated: false };
+        if (w !== h && this._cgCanPlace(x, y, h, w, cols, rows, excludeIdx))
+          return { x, y, w: h, h: w, rotated: true };
+      }
+    }
+    return null;
+  }
+
   /** 同步碰撞检测（使用已持久化的 w/h，同时检查锁定格）。 */
   _cgCanPlace(x, y, w, h, cols, rows, excludeIdx = -1) {
     if (x < 0 || y < 0 || x + w > cols || y + h > rows) return false;
@@ -264,6 +286,19 @@ export class LimbusItemSheet extends ItemSheet {
 
     // ── 编辑锁切换 ────────────────────────────────────────────────────────
     html.find(".sheet-lock-icon").on("click", this._onToggleLock.bind(this));
+
+    // ── 图标点击：锁定时查看插图，解锁时由 Foundry data-edit 处理 ─────────
+    html.find(".item-sheet-icon").on("click", (event) => {
+      if (!this.isLocked) return;       // 解锁状态：让 data-edit="img" 正常触发
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      const img = this.item.img;
+      if (img) new ImagePopout(img, { title: this.item.name }).render(true);
+    });
+
+    // 根元素同步锁定 class（供 CSS 选择器使用）
+    if (this.isLocked) html.closest(".app").addClass("item-sheet-locked");
+    else               html.closest(".app").removeClass("item-sheet-locked");
 
     // ── Activity 编辑区折叠 ───────────────────────────────────────────────
     html.find(".activity-edit-toggle").on("click", this._onActivityToggle.bind(this));
@@ -798,10 +833,7 @@ export class LimbusItemSheet extends ItemSheet {
     event.preventDefault();
     $(event.currentTarget).removeClass("cg-drag-over");
 
-    // 检查锁定格
     const cell    = event.currentTarget;
-    if (cell.dataset.locked === "true") return;
-
     const targetX = parseInt(cell.dataset.x ?? 0);
     const targetY = parseInt(cell.dataset.y ?? 0);
     const sys     = this.item.system;
@@ -834,8 +866,11 @@ export class LimbusItemSheet extends ItemSheet {
 
       const cap = itemDataSrc.system?.capacity ?? { w: 1, h: 1 };
       const w = Math.max(1, cap.w ?? 1), h = Math.max(1, cap.h ?? 1);
-      if (!this._cgCanPlace(targetX, targetY, w, h, cols, rows))
-        return void ui.notifications.warn("此位置无法放置（超出边界或与其他物品重叠）");
+      // 目标格有效则直接用，否则自动寻找第一个可放入的位置（含旋转尝试）
+      const place = this._cgCanPlace(targetX, targetY, w, h, cols, rows)
+        ? { x: targetX, y: targetY, w, h, rotated: false }
+        : this._cgAutoPlace(w, h);
+      if (!place) return void ui.notifications.warn("容器空间不足，无法放置该物品。");
 
       // 从源容器移除占位
       const { containerId: srcId, placementIdx: srcIdx,
@@ -865,10 +900,10 @@ export class LimbusItemSheet extends ItemSheet {
         const newData = foundry.utils.deepClone(itemDataSrc);
         delete newData._id;
         const [newItem] = await dstActor.createEmbeddedDocuments("Item", [newData]);
-        contents.push({ uuid: newItem.uuid, x: targetX, y: targetY, w, h, rotated: false });
+        contents.push({ uuid: newItem.uuid, x: place.x, y: place.y, w: place.w, h: place.h, rotated: place.rotated });
       } else {
         // 目标也是世界金库：保持 itemData 存储
-        contents.push({ uuid: "", itemData: itemDataSrc, x: targetX, y: targetY, w, h, rotated: false });
+        contents.push({ uuid: "", itemData: itemDataSrc, x: place.x, y: place.y, w: place.w, h: place.h, rotated: place.rotated });
       }
       return void await this.item.update({ "system.contents": contents });
     }
@@ -881,8 +916,11 @@ export class LimbusItemSheet extends ItemSheet {
     const cap = dropped.system?.capacity ?? { w: 1, h: 1 };
     const w = Math.max(1, cap.w ?? 1), h = Math.max(1, cap.h ?? 1);
 
-    if (!this._cgCanPlace(targetX, targetY, w, h, cols, rows))
-      return void ui.notifications.warn("此位置无法放置（超出边界或与其他物品重叠）");
+    // 目标格有效则直接用，否则自动寻找第一个可放入的位置（含旋转尝试）
+    const place = this._cgCanPlace(targetX, targetY, w, h, cols, rows)
+      ? { x: targetX, y: targetY, w, h, rotated: false }
+      : this._cgAutoPlace(w, h);
+    if (!place) return void ui.notifications.warn("容器空间不足，无法放置该物品。");
 
     const containerActor = this.item.parent;
     const sourceActor    = dropped.parent;
@@ -936,7 +974,7 @@ export class LimbusItemSheet extends ItemSheet {
     }
 
     const contents = foundry.utils.deepClone(sys.contents ?? []);
-    const entry = { uuid: storedUuid, x: targetX, y: targetY, w, h, rotated: false };
+    const entry = { uuid: storedUuid, x: place.x, y: place.y, w: place.w, h: place.h, rotated: place.rotated };
     if (storedItemData) entry.itemData = storedItemData;
     contents.push(entry);
     await this.item.update({ "system.contents": contents });
@@ -1052,8 +1090,7 @@ export class LimbusItemSheet extends ItemSheet {
 
     $(".cg-ctx-menu").remove();
 
-    // 世界金库物品的"取出"会将物品发送到当前玩家角色
-    const takeoutLabel = isVaultItem ? "取出到我的角色" : "取出";
+    const takeoutLabel = "取出到我的角色";
     const menu = $(`<ul class="cg-ctx-menu">
       <li data-action="takeout"><i class="fas fa-box-open"></i> ${takeoutLabel}</li>
       <li data-action="edit"><i class="fas fa-edit"></i> 编辑 / 查看</li>
@@ -1074,16 +1111,28 @@ export class LimbusItemSheet extends ItemSheet {
       const contents = foundry.utils.deepClone(this.item.system.contents ?? []);
 
       if (action === "takeout") {
+        const character = game.user?.character;
+        if (!character) {
+          ui.notifications.warn("你没有绑定角色，无法取出物品。请在玩家设置中绑定角色。");
+          return;
+        }
         if (isVaultItem) {
-          // 世界金库取出：放入当前玩家角色
-          const character = game.user?.character;
-          if (!character) {
-            ui.notifications.warn("你没有绑定角色，无法取出物品。请在玩家设置中绑定角色。");
-            return;
-          }
+          // itemData 直接存储（世界金库），创建新物品
           const newData = foundry.utils.deepClone(entry.itemData);
           delete newData._id;
           await Item.create(newData, { parent: character });
+        } else {
+          const srcItem = await fromUuid(uuid).catch(() => null);
+          if (!srcItem) {
+            ui.notifications.warn(`找不到物品「${iname}」，可能已被删除。`);
+            return;
+          }
+          // 物品已属于该角色（拖入容器的角色自有物品），只需移除引用，不重复创建
+          if (srcItem.parent?.id !== character.id) {
+            const newData = srcItem.toObject();
+            delete newData._id;
+            await Item.create(newData, { parent: character });
+          }
         }
         contents.splice(idx, 1);
         await this.item.update({ "system.contents": contents });

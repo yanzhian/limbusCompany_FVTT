@@ -796,6 +796,34 @@ export class LimbusActorSheet extends ActorSheet {
       return;
     }
 
+    // ── 拖入物品列表中的容器行：自动寻位存入 ──────────────────────────────
+    const containerRow = $target.closest('.item-row[data-type="container"]');
+    if (containerRow.length && item.type !== "container") {
+      const containerId = String(containerRow.data("item-id") ?? containerRow.attr("data-item-id"));
+      const container = this.actor.items.get(containerId);
+      if (!container) return;
+      // 确保物品已属于该角色
+      const owned = ownedItem ?? await this._importItemToActor(item);
+      if (!owned) return;
+      const w = owned.system?.capacity?.w ?? 1;
+      const h = owned.system?.capacity?.h ?? 1;
+      const slot = this._findContainerSlot(container, w, h);
+      if (!slot) {
+        ui.notifications.warn(`容器「${container.name}」空间不足，无法存入「${owned.name}」。`);
+        return;
+      }
+      const contents = foundry.utils.deepClone(container.system.contents ?? []);
+      contents.push({
+        uuid: owned.uuid,
+        x: slot.x, y: slot.y,
+        w: slot.rotated ? h : w,
+        h: slot.rotated ? w : h,
+        rotated: slot.rotated,
+      });
+      await container.update({ "system.contents": contents });
+      return;
+    }
+
     // ── 拖入物品列表：
     // 1) 从装备槽拖回列表 → 视为卸下
     // 2) 从 FVTT 物品目录/其他来源拖入 → 复制一份到角色物品
@@ -831,6 +859,47 @@ export class LimbusActorSheet extends ActorSheet {
     if (forceDuplicate || this.actor.items.get(itemData._id)) delete itemData._id;
     const created = await Item.create(itemData, { parent: this.actor });
     return created;
+  }
+
+  /**
+   * 在容器网格中寻找能容纳 itemW×itemH 物品的第一个空位。
+   * 先尝试不旋转，再尝试旋转（仅当 w≠h 时）。
+   * @returns {{ x, y, rotated: boolean } | null}
+   */
+  _findContainerSlot(container, itemW, itemH) {
+    const sys  = container.system;
+    const cols = sys.gridSize?.width  ?? 5;
+    const rows = sys.gridSize?.height ?? 5;
+
+    // 构建已占用格子集合
+    const occupied = new Set();
+    for (const p of (sys.contents ?? [])) {
+      const pw = p.w ?? 1, ph = p.h ?? 1;
+      for (let dy = 0; dy < ph; dy++)
+        for (let dx = 0; dx < pw; dx++)
+          occupied.add(`${p.x + dx},${p.y + dy}`);
+    }
+
+    const fits = (x, y, w, h) => {
+      if (x + w > cols || y + h > rows) return false;
+      for (let dy = 0; dy < h; dy++)
+        for (let dx = 0; dx < w; dx++)
+          if (occupied.has(`${x + dx},${y + dy}`)) return false;
+      return true;
+    };
+
+    // 不旋转：行优先扫描
+    for (let y = 0; y < rows; y++)
+      for (let x = 0; x < cols; x++)
+        if (fits(x, y, itemW, itemH)) return { x, y, rotated: false };
+
+    // 旋转（仅当 w≠h）
+    if (itemW !== itemH)
+      for (let y = 0; y < rows; y++)
+        for (let x = 0; x < cols; x++)
+          if (fits(x, y, itemH, itemW)) return { x, y, rotated: true };
+
+    return null;
   }
 
   /* ─── 鉴定对话框 ────────────────────────────────────────────────────────── */
