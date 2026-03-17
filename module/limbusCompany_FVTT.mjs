@@ -179,8 +179,9 @@ Hooks.on("createChatMessage", async (message) => {
   const flags = message.flags?.limbusCompany_FVTT;
   if (flags?.type !== "clashResolveTrigger") return;
 
-  // 立即删除触发消息，避免残留在聊天记录
-  message.delete().catch(() => {});
+  // 延迟删除触发消息：让 Foundry 完成当前渲染周期后再删，
+  // 避免 #postNotification 在消息被删除后仍试图操作 DOM 产生竞态错误
+  setTimeout(() => message.delete().catch(() => {}), 300);
 
   const defActor = game.actors.get(flags.defActorId);
   const defItem  = defActor?.items.get(flags.defItemId);
