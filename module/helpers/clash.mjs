@@ -1086,18 +1086,21 @@ export class ClashManager {
   static async _sendResponseAndResolve(defActor, defItem, defRoll, defFormula, initMsgId, initFlags, slotIdx = -1) {
     // 非 GM 玩家无权直接更新 GM 控制的 Actor（攻击方），委托 GM 执行整个结算流程
     if (!game.user.isGM) {
-      console.log("[ClashManager] 非GM玩家，通过 socket 委托 GM 执行对抗结算 | defActor:", defActor.id, "| defItem:", defItem.id);
-      game.socket.emit("system.limbusCompany_FVTT", {
-        type: "clashResolve",
-        data: {
-          defActorId:   defActor.id,
-          defItemId:    defItem.id,
-          defRollTotal: defRoll.total,
-          defFormula,
-          initMsgId,
-          initFlags:    JSON.parse(JSON.stringify(initFlags)),
-          slotIdx,
-        },
+      console.log("[ClashManager] 非GM玩家，通过 ChatMessage 委托 GM 执行对抗结算 | defActor:", defActor.id, "| defItem:", defItem.id);
+      const payload = JSON.parse(JSON.stringify({
+        defActorId:   defActor.id,
+        defItemId:    defItem.id,
+        defRollTotal: defRoll.total,
+        defFormula,
+        initMsgId,
+        initFlags,
+        slotIdx,
+      }));
+      // 创建仅 GM 可见的空白触发消息，GM 端的 createChatMessage hook 捕获并处理
+      await ChatMessage.create({
+        content: "",
+        whisper: game.users.filter(u => u.active && u.isGM).map(u => u.id),
+        flags: { limbusCompany_FVTT: { type: "clashResolveTrigger", ...payload } },
       });
       return;
     }

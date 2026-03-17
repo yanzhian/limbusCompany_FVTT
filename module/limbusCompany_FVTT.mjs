@@ -172,6 +172,37 @@ Hooks.on("canvasReady", () => {
   _installTokenDoubleClickOpenActorSheet();
 });
 
+/* ─── 对抗结算触发：GM 端捕获玩家委托的结算请求 ──────────────────────────── */
+
+Hooks.on("createChatMessage", async (message) => {
+  if (!game.user.isGM) return;
+  const flags = message.flags?.limbusCompany_FVTT;
+  if (flags?.type !== "clashResolveTrigger") return;
+
+  // 立即删除触发消息，避免残留在聊天记录
+  message.delete().catch(() => {});
+
+  const defActor = game.actors.get(flags.defActorId);
+  const defItem  = defActor?.items.get(flags.defItemId);
+  if (!defActor || !defItem) {
+    console.error("[ClashManager] clashResolveTrigger: 找不到 defActor/defItem", flags);
+    ui.notifications.error("对抗结算出错：找不到角色或技能");
+    return;
+  }
+
+  console.log("[ClashManager] GM 收到结算触发，开始执行 | defActor:", defActor.name, "| defItem:", defItem.name);
+  try {
+    const defRoll = { total: flags.defRollTotal };
+    await ClashManager._sendResponseAndResolve(
+      defActor, defItem, defRoll, flags.defFormula,
+      flags.initMsgId, flags.initFlags, flags.slotIdx ?? -1
+    );
+  } catch (err) {
+    console.error("[ClashManager] 对抗结算出错:", err);
+    ui.notifications.error("对抗结算出错，请检查控制台日志");
+  }
+});
+
 /* ─── 对抗聊天框按钮交互 ─────────────────────────────────────────────────── */
 
 Hooks.on("renderChatMessage", (_message, html, _data) => {
