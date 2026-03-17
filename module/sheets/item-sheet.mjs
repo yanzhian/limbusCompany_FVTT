@@ -1089,7 +1089,7 @@ export class LimbusItemSheet extends ItemSheet {
 
       if (action === "takeout") {
         if (isVaultItem) {
-          // 世界金库取出：放入当前玩家角色
+          // 世界金库取出：从 itemData 创建物品给当前绑定角色
           const character = game.user?.character;
           if (!character) {
             ui.notifications.warn("你没有绑定角色，无法取出物品。请在玩家设置中绑定角色。");
@@ -1098,6 +1098,20 @@ export class LimbusItemSheet extends ItemSheet {
           const newData = foundry.utils.deepClone(entry.itemData);
           delete newData._id;
           await Item.create(newData, { parent: character });
+        } else {
+          // UUID 引用物品：取出到容器的所属角色
+          const actor = this.item.parent;
+          if (actor) {
+            const srcItem = await fromUuid(uuid).catch(() => null);
+            if (!srcItem) {
+              ui.notifications.warn(`找不到物品「${iname}」，可能已被删除。`);
+              return;
+            }
+            const newData = srcItem.toObject();
+            delete newData._id;
+            await Item.create(newData, { parent: actor });
+          }
+          // 若容器是世界物品（无 actor 父级），仅从 contents 移除记录，世界物品本身保留
         }
         contents.splice(idx, 1);
         await this.item.update({ "system.contents": contents });
