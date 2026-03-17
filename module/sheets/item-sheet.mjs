@@ -232,6 +232,27 @@ export class LimbusItemSheet extends ItemSheet {
     return { placedItems, allCells };
   }
 
+  /**
+   * 自动扫描容器，找到第一个可放入的位置。
+   * 按行优先顺序扫描：先以原始尺寸尝试，找不到则以旋转尺寸再次扫描。
+   * @param {number} w @param {number} h @param {number} [excludeIdx=-1]
+   * @returns {{ x:number, y:number, w:number, h:number, rotated:boolean }|null}
+   */
+  _cgAutoPlace(w, h, excludeIdx = -1) {
+    const sys  = this.item.system;
+    const cols = sys.gridSize?.width  ?? 3;
+    const rows = sys.gridSize?.height ?? 3;
+    for (let y = 0; y < rows; y++) {
+      for (let x = 0; x < cols; x++) {
+        if (this._cgCanPlace(x, y, w, h, cols, rows, excludeIdx))
+          return { x, y, w, h, rotated: false };
+        if (w !== h && this._cgCanPlace(x, y, h, w, cols, rows, excludeIdx))
+          return { x, y, w: h, h: w, rotated: true };
+      }
+    }
+    return null;
+  }
+
   /** 同步碰撞检测（使用已持久化的 w/h，同时检查锁定格）。 */
   _cgCanPlace(x, y, w, h, cols, rows, excludeIdx = -1) {
     if (x < 0 || y < 0 || x + w > cols || y + h > rows) return false;
@@ -812,10 +833,7 @@ export class LimbusItemSheet extends ItemSheet {
     event.preventDefault();
     $(event.currentTarget).removeClass("cg-drag-over");
 
-    // 检查锁定格
     const cell    = event.currentTarget;
-    if (cell.dataset.locked === "true") return;
-
     const targetX = parseInt(cell.dataset.x ?? 0);
     const targetY = parseInt(cell.dataset.y ?? 0);
     const sys     = this.item.system;
@@ -848,8 +866,11 @@ export class LimbusItemSheet extends ItemSheet {
 
       const cap = itemDataSrc.system?.capacity ?? { w: 1, h: 1 };
       const w = Math.max(1, cap.w ?? 1), h = Math.max(1, cap.h ?? 1);
-      if (!this._cgCanPlace(targetX, targetY, w, h, cols, rows))
-        return void ui.notifications.warn("此位置无法放置（超出边界或与其他物品重叠）");
+      // 目标格有效则直接用，否则自动寻找第一个可放入的位置（含旋转尝试）
+      const place = this._cgCanPlace(targetX, targetY, w, h, cols, rows)
+        ? { x: targetX, y: targetY, w, h, rotated: false }
+        : this._cgAutoPlace(w, h);
+      if (!place) return void ui.notifications.warn("容器空间不足，无法放置该物品。");
 
       // 从源容器移除占位
       const { containerId: srcId, placementIdx: srcIdx,
@@ -879,10 +900,10 @@ export class LimbusItemSheet extends ItemSheet {
         const newData = foundry.utils.deepClone(itemDataSrc);
         delete newData._id;
         const [newItem] = await dstActor.createEmbeddedDocuments("Item", [newData]);
-        contents.push({ uuid: newItem.uuid, x: targetX, y: targetY, w, h, rotated: false });
+        contents.push({ uuid: newItem.uuid, x: place.x, y: place.y, w: place.w, h: place.h, rotated: place.rotated });
       } else {
         // 目标也是世界金库：保持 itemData 存储
-        contents.push({ uuid: "", itemData: itemDataSrc, x: targetX, y: targetY, w, h, rotated: false });
+        contents.push({ uuid: "", itemData: itemDataSrc, x: place.x, y: place.y, w: place.w, h: place.h, rotated: place.rotated });
       }
       return void await this.item.update({ "system.contents": contents });
     }
@@ -895,8 +916,11 @@ export class LimbusItemSheet extends ItemSheet {
     const cap = dropped.system?.capacity ?? { w: 1, h: 1 };
     const w = Math.max(1, cap.w ?? 1), h = Math.max(1, cap.h ?? 1);
 
-    if (!this._cgCanPlace(targetX, targetY, w, h, cols, rows))
-      return void ui.notifications.warn("此位置无法放置（超出边界或与其他物品重叠）");
+    // 目标格有效则直接用，否则自动寻找第一个可放入的位置（含旋转尝试）
+    const place = this._cgCanPlace(targetX, targetY, w, h, cols, rows)
+      ? { x: targetX, y: targetY, w, h, rotated: false }
+      : this._cgAutoPlace(w, h);
+    if (!place) return void ui.notifications.warn("容器空间不足，无法放置该物品。");
 
     const containerActor = this.item.parent;
     const sourceActor    = dropped.parent;
@@ -950,7 +974,7 @@ export class LimbusItemSheet extends ItemSheet {
     }
 
     const contents = foundry.utils.deepClone(sys.contents ?? []);
-    const entry = { uuid: storedUuid, x: targetX, y: targetY, w, h, rotated: false };
+    const entry = { uuid: storedUuid, x: place.x, y: place.y, w: place.w, h: place.h, rotated: place.rotated };
     if (storedItemData) entry.itemData = storedItemData;
     contents.push(entry);
     await this.item.update({ "system.contents": contents });
