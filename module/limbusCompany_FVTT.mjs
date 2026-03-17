@@ -79,8 +79,15 @@ Hooks.once("init", () => {
   // 暴露 SinResourceHUD 到全局，供宏/控制台调用
   globalThis.SinResourceHUD = SinResourceHUD;
 
-  // 注册全局罪孽资源 setting + socket（需在 init 阶段注册 setting）
+  // 注册全局罪孽资源 setting（需在 init 阶段注册 setting）
   SinResourceHUD.init();
+
+  // 注册系统 socket 监听器（在 init 阶段注册，与原 setSins 监听时机一致）
+  // 单一监听器统一处理所有消息类型，避免多次 game.socket.on 的冲突风险
+  game.socket.on("system.limbusCompany_FVTT", async (msg) => {
+    await SinResourceHUD.handleSocketMsg(msg);
+    await ClashManager.handleSocketMsg(msg);
+  });
 
   // 先攻公式：1D6 + 敏捷（战斗跟踪器默认骰掷使用）
   CONFIG.Combat.initiative.formula = "1d6 + @attributes.agi";
@@ -136,12 +143,6 @@ Hooks.once("setup", () => {
 
 Hooks.once("ready", () => {
   console.log("limbusCompany_FVTT | 系统已就绪。");
-
-  // 注册唯一的系统 socket 监听器（统一处理所有消息类型，避免多次注册冲突）
-  game.socket.on("system.limbusCompany_FVTT", async (msg) => {
-    await SinResourceHUD.handleSocketMsg(msg);
-    await ClashManager.handleSocketMsg(msg);
-  });
 
   // 显示全局罪孽资源 HUD
   SinResourceHUD.create();

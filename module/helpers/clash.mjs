@@ -1086,6 +1086,7 @@ export class ClashManager {
   static async _sendResponseAndResolve(defActor, defItem, defRoll, defFormula, initMsgId, initFlags, slotIdx = -1) {
     // 非 GM 玩家无权直接更新 GM 控制的 Actor（攻击方），委托 GM 执行整个结算流程
     if (!game.user.isGM) {
+      console.log("[ClashManager] 非GM玩家，通过 socket 委托 GM 执行对抗结算 | defActor:", defActor.id, "| defItem:", defItem.id);
       game.socket.emit("system.limbusCompany_FVTT", {
         type: "clashResolve",
         data: {
@@ -1094,7 +1095,7 @@ export class ClashManager {
           defRollTotal: defRoll.total,
           defFormula,
           initMsgId,
-          initFlags,
+          initFlags:    JSON.parse(JSON.stringify(initFlags)),
           slotIdx,
         },
       });
@@ -2417,15 +2418,19 @@ export class ClashManager {
 
   /** GM 端处理 clashResolve socket 消息 */
   static async handleSocketMsg(msg) {
-    if (msg.type !== "clashResolve" || !game.user.isGM) return;
+    if (msg.type !== "clashResolve") return;
+    console.log("[ClashManager] 收到 clashResolve socket 消息 | isGM:", game.user.isGM, "| data:", msg.data);
+    if (!game.user.isGM) return;
     try {
       const { defActorId, defItemId, defRollTotal, defFormula, initMsgId, initFlags, slotIdx } = msg.data;
       const defActor = game.actors.get(defActorId);
       const defItem  = defActor?.items.get(defItemId);
       if (!defActor || !defItem) {
         console.error("[ClashManager] clashResolve: 找不到 defActor/defItem", { defActorId, defItemId });
+        ui.notifications?.error("对抗结算出错：找不到角色或技能，请检查控制台");
         return;
       }
+      console.log("[ClashManager] GM 开始执行对抗结算 | defActor:", defActor.name, "| defItem:", defItem.name);
       // 重建只含 total 的 roll 代理对象（结算流程仅使用 .total）
       const defRoll = { total: defRollTotal };
       await ClashManager._sendResponseAndResolve(
