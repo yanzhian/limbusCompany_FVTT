@@ -1092,19 +1092,24 @@ export class LimbusItemSheet extends ItemSheet {
           ui.notifications.warn("你没有绑定角色，无法取出物品。请在玩家设置中绑定角色。");
           return;
         }
-        let newData;
         if (isVaultItem) {
-          newData = foundry.utils.deepClone(entry.itemData);
+          // itemData 直接存储（世界金库），创建新物品
+          const newData = foundry.utils.deepClone(entry.itemData);
+          delete newData._id;
+          await Item.create(newData, { parent: character });
         } else {
           const srcItem = await fromUuid(uuid).catch(() => null);
           if (!srcItem) {
             ui.notifications.warn(`找不到物品「${iname}」，可能已被删除。`);
             return;
           }
-          newData = srcItem.toObject();
+          // 物品已属于该角色（拖入容器的角色自有物品），只需移除引用，不重复创建
+          if (srcItem.parent?.id !== character.id) {
+            const newData = srcItem.toObject();
+            delete newData._id;
+            await Item.create(newData, { parent: character });
+          }
         }
-        delete newData._id;
-        await Item.create(newData, { parent: character });
         contents.splice(idx, 1);
         await this.item.update({ "system.contents": contents });
 
