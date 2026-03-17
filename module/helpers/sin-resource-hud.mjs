@@ -69,10 +69,14 @@ export class SinResourceHUD extends Application {
       onChange: () => SinResourceHUD.instance?.render(false),
     });
 
-    // GM 监听 socket，代替非 GM 玩家写入 setting
+    // GM 监听 socket，代替非 GM 玩家写入 setting 或更新 Actor
     game.socket.on("system.limbusCompany_FVTT", async (msg) => {
-      if (msg.type === "setSins" && game.user.isGM) {
+      if (!game.user.isGM) return;
+      if (msg.type === "setSins") {
         await game.settings.set("limbusCompany_FVTT", SETTING_KEY, { ..._getSins(), ...msg.data });
+      } else if (msg.type === "actorUpdate") {
+        const actor = game.actors.get(msg.actorId);
+        if (actor) await actor.update(msg.updateData, msg.options ?? {});
       }
     });
   }
