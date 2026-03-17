@@ -485,16 +485,25 @@ export class ClashManager {
 
   static _effectDesc(item) {
     const sys = item?.system ?? {};
-    const parts = [];
-    if (sys.effectDesc) parts.push(sys.effectDesc);
+    const actParts = [];
     if (Array.isArray(sys.activities)) {
       for (const act of sys.activities) {
         if (!act.trigger) continue;
         const effStr = ClashManager._actStr(act);
-        if (effStr) parts.push(`[${act.trigger}] ${effStr}`);
+        if (effStr) actParts.push(`[${act.trigger}] ${effStr}`);
       }
     }
-    return parts.join(" | ");
+    const mainDesc = sys.effectDesc ?? "";
+    const actHtml  = actParts.length
+      ? `<details class="ic-activities" style="margin-top:4px;">
+           <summary style="cursor:pointer;font-size:.75rem;color:#C9A84C;list-style:none;padding:2px 0;">▶ 触发效果</summary>
+           <div style="font-size:.75rem;color:#9A8462;line-height:1.5;padding-left:8px;">
+             ${actParts.map(p => `<div>${p}</div>`).join("")}
+           </div>
+         </details>`
+      : "";
+    if (!mainDesc && !actHtml) return "";
+    return `${mainDesc}${actHtml}`;
   }
 
   static _actStr(act) {
@@ -1470,6 +1479,7 @@ export class ClashManager {
       defItemName, defItemImg,
       defCategory: defCat,
       defSinType:  defItem?.system?.sinType ?? "",
+      defItemId:   defItem?.id    ?? "",
     } : null;
 
     // 加重扩散信息：仅攻击方胜且非平局才携带
@@ -1635,6 +1645,46 @@ export class ClashManager {
       { img: defItemImg, name: defItemName, system: { category: defCategory, sinType: defSinType } },
       defFormula,
     );
+
+    // ── Activity 触发（再次骰掷后，仅非平局时触发）──────────────────────
+    const { atkWins, isTie: newTie, dodgeWin, breatheCrit } = resolution;
+    if (!newTie) {
+      const atkItem = atkActor.items?.get(rerollData.atkItemId) ?? null;
+      const defItem = defActor.items?.get(rerollData.defItemId) ?? null;
+      const _fc = {};
+      const _actMsgs = [];
+      const atkCtx = { atkActor, defActor, owner: atkActor, other: defActor, _fireCounts: _fc, _actMsgs };
+      const defCtx = { atkActor, defActor, owner: defActor, other: atkActor, _fireCounts: _fc, _actMsgs };
+
+      if (atkWins) {
+        await ClashManager._applyActivities(atkItem, "拼点成功", atkCtx);
+        await ClashManager._applyActivities(defItem,  "拼点失败", defCtx);
+        if (!dodgeWin) {
+          await ClashManager._applyActivities(atkItem, "命中时", atkCtx);
+          if (breatheCrit) {
+            await ClashManager._applyActivities(atkItem, "暴击命中时", atkCtx);
+          }
+          await ClashManager._applyActivities(defItem, "受到伤害时", defCtx);
+          for (const eq of ClashManager._getEquippedItems(defActor)) {
+            await ClashManager._applyActivities(eq, "受到伤害时", defCtx);
+          }
+        }
+      } else {
+        await ClashManager._applyActivities(atkItem, "拼点失败", atkCtx);
+        await ClashManager._applyActivities(defItem,  "拼点成功", defCtx);
+        if (defCategory === "clashCounter") {
+          await ClashManager._applyActivities(defItem, "命中时", defCtx);
+          await ClashManager._applyActivities(atkItem, "受到伤害时", atkCtx);
+          for (const eq of ClashManager._getEquippedItems(atkActor)) {
+            await ClashManager._applyActivities(eq, "受到伤害时", atkCtx);
+          }
+        }
+      }
+
+      await ClashManager._applyActivities(atkItem, "攻击后", atkCtx);
+      await ClashManager._applyActivities(defItem,  "攻击后", defCtx);
+      await ClashManager._flushActMsgs(_actMsgs, atkActor);
+    }
   }
 
   /* ─── 阶段六：直接承受（跳过对抗，玩家B点聊天框承受） ────────────────── */
