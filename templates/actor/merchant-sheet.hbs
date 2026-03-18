@@ -312,7 +312,12 @@
       <div class="merchant-currency-display">
         <img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/眼.webp"
              class="currency-icon" alt="眼" onerror="this.style.display='none'">
-        <span class="merchant-currency-value">{{merchantCurrency}}</span>
+        {{#if editUnlocked}}
+          <input type="number" class="merchant-currency-value merchant-currency-input"
+                 name="system.merchantCurrency" value="{{merchantCurrency}}" min="0">
+        {{else}}
+          <span class="merchant-currency-value">{{merchantCurrency}}</span>
+        {{/if}}
       </div>
     {{else}}
       <div class="merchant-buyer-select">

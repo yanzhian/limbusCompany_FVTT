@@ -6321,6 +6321,17 @@ input.item-piles-quantity {
   text-align: right;
 }
 
+.merchant-currency-input {
+  width: 70px;
+  text-align: right;
+  background: transparent;
+  border: 1px solid var(--gold-active);
+  color: var(--gold-active);
+  font-size: 0.9rem;
+  font-weight: 600;
+  padding: 0 2px;
+}
+
 /* 玩家角色选择器 */
 .merchant-buyer-select {
   display:     flex;
