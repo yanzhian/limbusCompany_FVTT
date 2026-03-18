@@ -1517,7 +1517,7 @@ function _buildEffectRow(eff, idx, cfg) {
                  value="${_esc(eff?.buffCustom ?? "")}"
                  style="display:${(eff?.buff ?? "") === "custom" ? "inline-block" : "none"};width:90px;">
           <label>强度</label>
-          <input class="ae-input-sm eff-intensity" type="number" value="${eff?.intensity ?? 1}" min="0">
+          <input class="ae-input-sm eff-intensity" type="number" value="${eff?.intensity ?? 0}" min="0">
           <label>层数</label>
           <input class="ae-input-sm eff-stacks" type="number" value="${eff?.stacks ?? 1}" min="0">
         </span>
