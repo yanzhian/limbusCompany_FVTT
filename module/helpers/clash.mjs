@@ -576,16 +576,34 @@ export class ClashManager {
 
   static _effectDesc(item) {
     const sys = item?.system ?? {};
-    const parts = [];
-    if (sys.effectDesc) parts.push(sys.effectDesc);
+    const manualDesc = sys.effectDesc ?? "";
+
+    const actLines = [];
     if (Array.isArray(sys.activities)) {
       for (const act of sys.activities) {
         if (!act.trigger) continue;
         const effStr = ClashManager._actStr(act);
-        if (effStr) parts.push(`[${act.trigger}] ${effStr}`);
+        if (effStr) actLines.push(`[${act.trigger}] ${effStr}`);
       }
     }
-    return parts.join(" | ");
+
+    // 无任何描述：返回空字符串
+    if (!manualDesc && !actLines.length) return "";
+
+    // 手写描述直接显示；Activity 自动描述折叠隐藏
+    const manualHtml = manualDesc
+      ? `<div style="color:#9A8462;">${manualDesc}</div>`
+      : "";
+    const actHtml = actLines.length
+      ? `<details style="margin-top:2px;">
+           <summary style="cursor:pointer;color:#6A7A5A;font-size:.75rem;list-style:none;">
+             ▸ 技能效果详情
+           </summary>
+           ${actLines.map(l => `<div style="color:#6A7A5A;padding-left:6px;">${l}</div>`).join("")}
+         </details>`
+      : "";
+
+    return manualHtml + actHtml;
   }
 
   static _actStr(act) {
@@ -810,7 +828,7 @@ export class ClashManager {
                          border:none;cursor:pointer;font-size:.85rem;border-radius:2px;">承受</button>
         </div>
         ${ClashManager._goldDivider()}
-        ${effectDesc ? `<div style="font-size:.8rem;color:#9A8462;line-height:1.5;">${effectDesc}</div>` : ""}
+        ${effectDesc ? `<div style="font-size:.8rem;line-height:1.5;">${effectDesc}</div>` : ""}
       </div>`;
 // border:1px solid #C9A84C;
     const msg = await ClashManager._safeChatCreate({
@@ -1215,7 +1233,7 @@ export class ClashManager {
                                   border-radius:2px;">对抗</button>
         </div>
         ${ClashManager._goldDivider()}
-        ${effectDesc ? `<div style="font-size:.8rem;color:#9A8462;line-height:1.5;">${effectDesc}</div>` : ""}
+        ${effectDesc ? `<div style="font-size:.8rem;line-height:1.5;">${effectDesc}</div>` : ""}
       </div>`;
 
     await ClashManager._safeChatCreate({
