@@ -9,6 +9,27 @@ export class ClashManager {
 
   /* ─── 工具函数 ─────────────────────────────────────────────────────────── */
 
+  /**
+   * 将效果值解析为数字。若 val 包含骰子公式（如 "1D6+2"），则通过 Roll 求值；
+   * 否则直接转换为 Number。
+   * @param {string|number} val
+   * @returns {Promise<number>}
+   */
+  static async _evalValue(val) {
+    if (val === undefined || val === null || val === "") return 0;
+    const n = Number(val);
+    if (!Number.isNaN(n)) return n;
+    // 包含骰子公式，用 Foundry Roll 求值
+    try {
+      const roll = new Roll(String(val));
+      await roll.evaluate();
+      return roll.total ?? 0;
+    } catch (e) {
+      console.warn("ClashManager._evalValue: 无法解析值", val, e);
+      return 0;
+    }
+  }
+
   static _catIcon(cat) {
     return CONFIG.LIMBUSCOMPANY?.CATEGORY_ICON_PATHS?.[cat] ?? "";
   }
@@ -309,7 +330,7 @@ export class ClashManager {
             descStr = `移除【${effTgt.name}】的 ${buffType}`;
             break;
           case "hpAdj": {
-            const val = Number(eff.value ?? eff.intensity ?? 0);
+            const val = Math.round(await ClashManager._evalValue(eff.value ?? eff.intensity ?? 0));
             const cur = effTgt.system?.hp?.value ?? 0;
             const max = effTgt.system?.hp?.max   ?? 1;
             const nv  = Math.max(0, Math.min(max, cur + val));
@@ -318,7 +339,7 @@ export class ClashManager {
             break;
           }
           case "sanityAdj": {
-            const val = Number(eff.value ?? eff.intensity ?? 0);
+            const val = Math.round(await ClashManager._evalValue(eff.value ?? eff.intensity ?? 0));
             if (typeof effTgt.setSanity === "function") {
               const cur = effTgt.system?.sanity?.value ?? 50;
               await effTgt.setSanity(cur + val);
