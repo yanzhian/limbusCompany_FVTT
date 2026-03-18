@@ -46,8 +46,9 @@ export class LimbusMerchantSheet extends ActorSheet {
     const sys    = actor.system;
     const isGM   = game.user.isGM;
 
-    ctx.isGM        = isGM;
-    ctx.shopDesc    = sys.shopDesc ?? "";
+    ctx.isGM             = isGM;
+    ctx.showHidden       = this._showHidden;   // 模板用 showHidden（无下划线）
+    ctx.shopDesc         = sys.shopDesc ?? "";
     ctx.merchantCurrency = sys.merchantCurrency ?? 0;
 
     // ── 货物列表 ─────────────────────────────────────────────────────────

@@ -65,9 +65,9 @@
         <i class="fas fa-search merchant-search-icon"></i>
         {{#if isGM}}
           <button type="button"
-                  class="merchant-hidden-toggle {{#if _showHidden}}active{{/if}}"
-                  title="{{#if _showHidden}}隐藏：显示中{{else}}隐藏：已过滤{{/if}}">
-            <i class="fas fa-lock{{#unless _showHidden}}-open{{/unless}}"></i>
+                  class="merchant-hidden-toggle {{#if showHidden}}active{{/if}}"
+                  title="{{#if showHidden}}隐藏：显示中{{else}}隐藏：已过滤{{/if}}">
+            <i class="fas fa-lock{{#unless showHidden}}-open{{/unless}}"></i>
           </button>
         {{/if}}
       </div>
