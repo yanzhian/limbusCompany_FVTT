@@ -1292,17 +1292,7 @@ export class ClashManager {
     await ClashManager._applyActivities(atkItem, "攻击前", atkCtx);
     await ClashManager._applyActivities(defItem, "攻击前", defCtx);
 
-    // 反击/防御：不走拼点流程，直接结算
-    if (defCategory === "counter") {
-      await ClashManager._resolveDirectCounter(atkActor, defActor, initFlags, defItem, defRoll, defFormula);
-      return;
-    }
-    if (defCategory === "block") {
-      await ClashManager._resolveDirectBlock(atkActor, defActor, initFlags, defItem, defRoll, defFormula);
-      return;
-    }
-
-    // ── [攻击时] / [拼点时]：进行拼点期间触发 ───────────────────────────
+    // ── [攻击时] / [拼点时]：无论对抗类型，攻击时效果均应在此触发 ───────
     await ClashManager._applyActivities(atkItem, "攻击时", atkCtx);
     await ClashManager._applyActivities(atkItem, "拼点时", atkCtx);
     await ClashManager._applyActivities(defItem,  "攻击时", defCtx);
@@ -1334,6 +1324,23 @@ export class ClashManager {
       defFinalTotal   = rerollDef.total;
       defFinalFormula = newDefFull;
       _actMsgs.push({ trigger: "公式重投", itemName: defItem?.name ?? "防守方", msgs: [`公式变化（${defBaseFormulaOrig} → ${newDefBase}），重新投骰：${rerollDef.result} = <b>${rerollDef.total}</b>`] });
+    }
+
+    // 若骰子公式发生变化，构建含更新值的 initFlags（传给 direct 结算函数）
+    const effectiveInitFlags = (atkFinalTotal !== initFlags.rollTotal || atkFinalFormula !== initFlags.formula)
+      ? { ...initFlags, rollTotal: atkFinalTotal, formula: atkFinalFormula }
+      : initFlags;
+
+    // 反击/防御：不走拼点流程，直接结算
+    if (defCategory === "counter") {
+      await ClashManager._resolveDirectCounter(atkActor, defActor, effectiveInitFlags, defItem, defRoll, defFormula);
+      await ClashManager._flushActMsgs(_actMsgs, atkActor);
+      return;
+    }
+    if (defCategory === "block") {
+      await ClashManager._resolveDirectBlock(atkActor, defActor, effectiveInitFlags, defItem, defRoll, defFormula);
+      await ClashManager._flushActMsgs(_actMsgs, atkActor);
+      return;
     }
 
     const resolution = ClashManager._computeResolution({
