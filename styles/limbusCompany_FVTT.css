@@ -6132,7 +6132,7 @@ input.item-piles-quantity {
 .merchant-table .col-name    { }              /* 弹性宽 */
 .merchant-table .col-stock   { width: 60px; text-align: center; }
 .merchant-table .col-price   { width: 64px; text-align: right; }
-.merchant-table .col-actions { width: 100px; text-align: right; white-space: nowrap; }
+.merchant-table .col-actions { width: 180px; text-align: right; white-space: nowrap; }
 
 /* 行悬停 */
 .merchant-item-row {
