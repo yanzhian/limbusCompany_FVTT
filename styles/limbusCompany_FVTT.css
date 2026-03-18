@@ -6076,6 +6076,7 @@ input.item-piles-quantity {
   font-size:   0.78rem;
   line-height: 1;
   transition:  color .15s, border-color .15s;
+  max-width: 10px;
 }
 .merchant-hidden-toggle:hover  { color: var(--text-main); border-color: var(--text-sub); }
 .merchant-hidden-toggle.active { color: var(--gold-active); border-color: var(--gold-active); }
@@ -6191,6 +6192,7 @@ input.item-piles-quantity {
   cursor:        pointer;
   transition:    background .15s, border-color .15s;
   line-height:   1.5;
+  max-width:     50px;
 }
 .btn-sm:hover           { background: rgba(59,36,18,0.9); border-color: var(--text-sub); }
 .btn-sm:disabled        { color: var(--text-dim); cursor: not-allowed; opacity: 0.5; }
