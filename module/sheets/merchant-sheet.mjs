@@ -37,6 +37,9 @@ export class LimbusMerchantSheet extends ActorSheet {
   /** 玩家选择的购买角色 ID */
   _selectedCharId = null;
 
+  /** 编辑锁（false = 锁定，true = 解锁可编辑） */
+  _editUnlocked = false;
+
   /* ─── getData ────────────────────────────────────────────────────────── */
 
   /** @override */
@@ -47,7 +50,8 @@ export class LimbusMerchantSheet extends ActorSheet {
     const isGM   = game.user.isGM;
 
     ctx.isGM             = isGM;
-    ctx.showHidden       = this._showHidden;   // 模板用 showHidden（无下划线）
+    ctx.showHidden       = this._showHidden;
+    ctx.editUnlocked     = this._editUnlocked; // 编辑锁：true = 可编辑
     ctx.shopDesc         = sys.shopDesc ?? "";
     ctx.merchantCurrency = sys.merchantCurrency ?? 0;
 
@@ -123,10 +127,37 @@ export class LimbusMerchantSheet extends ActorSheet {
       this.render(false);
     });
 
+    // ── 编辑锁（GM 专用）────────────────────────────────────────────────
     if (isGM) {
+      html.find(".merchant-lock-toggle").on("click", () => {
+        this._editUnlocked = !this._editUnlocked;
+        this._applyEditLockState(html);
+      });
+      // 渲染完成后立即应用当前锁状态（保持上次的 unlock 状态）
+      this._applyEditLockState(html);
       this._activateGMListeners(html);
     } else {
       this._activatePlayerListeners(html);
+    }
+  }
+
+  /* ─── 编辑锁 ─────────────────────────────────────────────────────────── */
+
+  _applyEditLockState(html) {
+    const root = html?.find ? html : this.element;
+    if (!root?.length) return;
+
+    const btn = root.find(".merchant-lock-toggle");
+    if (this._editUnlocked) {
+      btn.removeClass("locked").html('<i class="fas fa-lock-open"></i>');
+      root.find(".merchant-editable-only").show();
+      root.find(".merchant-locked-only").hide();
+      root.find(".merchant-editable-field").prop("disabled", false);
+    } else {
+      btn.addClass("locked").html('<i class="fas fa-lock"></i>');
+      root.find(".merchant-editable-only").hide();
+      root.find(".merchant-locked-only").show();
+      root.find(".merchant-editable-field").prop("disabled", true);
     }
   }
 

@@ -4,12 +4,25 @@
   {{!-- ═══════════════ 标题栏 ═══════════════ --}}
   <header class="merchant-header">
     <h1 class="merchant-title">
+      {{!-- 解锁时：可编辑输入框 --}}
       {{#if isGM}}
-        <input type="text" name="name" value="{{actor.name}}" class="merchant-name-input">
+        <input type="text" name="name" value="{{actor.name}}"
+               class="merchant-name-input merchant-editable-field merchant-editable-only"
+               {{#unless editUnlocked}}disabled{{/unless}}>
+        {{!-- 锁定时：纯文字显示 --}}
+        <span class="merchant-locked-only" {{#if editUnlocked}}style="display:none"{{/if}}>{{actor.name}}</span>
       {{else}}
         <span>{{actor.name}}</span>
       {{/if}}
     </h1>
+    {{!-- GM 编辑锁按钮 --}}
+    {{#if isGM}}
+      <button type="button"
+              class="merchant-lock-toggle {{#unless editUnlocked}}locked{{/unless}}"
+              title="{{#if editUnlocked}}点击锁定（禁止编辑）{{else}}点击解锁（允许编辑）{{/if}}">
+        <i class="fas fa-lock{{#if editUnlocked}}-open{{/if}}"></i>
+      </button>
+    {{/if}}
   </header>
 
   {{!-- ═══════════════ 主体：两栏 ═══════════════ --}}
@@ -32,11 +45,18 @@
       {{!-- 立绘区域 --}}
       <div class="merchant-portrait-wrap">
         {{#if isGM}}
-          <img class="merchant-portrait"
+          {{!-- 解锁时：可点击更换头像 --}}
+          <img class="merchant-portrait merchant-editable-only"
                src="{{actor.img}}"
                alt="{{actor.name}}"
                title="点击更换立绘"
-               data-action="portrait">
+               data-action="portrait"
+               {{#unless editUnlocked}}style="display:none"{{/unless}}>
+          {{!-- 锁定时：只读头像 --}}
+          <img class="merchant-portrait merchant-locked-only"
+               src="{{actor.img}}"
+               alt="{{actor.name}}"
+               {{#if editUnlocked}}style="display:none"{{/if}}>
         {{else}}
           <img class="merchant-portrait" src="{{actor.img}}" alt="{{actor.name}}">
         {{/if}}
@@ -45,7 +65,13 @@
       {{!-- 店铺描述 --}}
       <div class="merchant-desc-wrap">
         {{#if isGM}}
-          {{editor shopDesc target="system.shopDesc" button=false editable=true}}
+          {{!-- 解锁时：富文本编辑器 --}}
+          <div class="merchant-editable-only" {{#unless editUnlocked}}style="display:none"{{/unless}}>
+            {{editor shopDesc target="system.shopDesc" button=false editable=true}}
+          </div>
+          {{!-- 锁定时：只读文本 --}}
+          <div class="merchant-desc-text merchant-locked-only"
+               {{#if editUnlocked}}style="display:none"{{/if}}>{{{shopDesc}}}</div>
         {{else}}
           <div class="merchant-desc-text">{{{shopDesc}}}</div>
         {{/if}}
