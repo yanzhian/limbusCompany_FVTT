@@ -9,7 +9,7 @@
  */
 
 import { LIMBUSCOMPANY }   from "./config.mjs";
-import { LimbusActor, CharacterData }  from "./documents/actor.mjs";
+import { LimbusActor, CharacterData, MerchantData }  from "./documents/actor.mjs";
 import {
   LimbusItem,
   EquipmentData,
@@ -18,8 +18,9 @@ import {
   MaterialData,
   ContainerData,
 } from "./documents/item.mjs";
-import { LimbusActorSheet } from "./sheets/actor-sheet.mjs";
-import { LimbusItemSheet }  from "./sheets/item-sheet.mjs";
+import { LimbusActorSheet }   from "./sheets/actor-sheet.mjs";
+import { LimbusItemSheet }    from "./sheets/item-sheet.mjs";
+import { LimbusMerchantSheet } from "./sheets/merchant-sheet.mjs";
 import { ClashManager }     from "./helpers/clash.mjs";
 import { SinResourceHUD }   from "./helpers/sin-resource-hud.mjs";
 import { QuickActionHUD }   from "./sheets/quick-action-hud.mjs";
@@ -87,6 +88,7 @@ Hooks.once("init", () => {
   game.socket.on("system.limbusCompany_FVTT", async (msg) => {
     await SinResourceHUD.handleSocketMsg(msg);
     await ClashManager.handleSocketMsg(msg);
+    await _handleMerchantSocketMsg(msg);
   });
 
   // 先攻公式：1D6 + 敏捷（战斗跟踪器默认骰掷使用）
@@ -100,6 +102,7 @@ Hooks.once("init", () => {
   // ── 注册 TypeDataModel（数据模型） ────────────────────────────────────
   CONFIG.Actor.dataModels = {
     character: CharacterData,
+    merchant:  MerchantData,
   };
 
   CONFIG.Item.dataModels = {
@@ -115,6 +118,12 @@ Hooks.once("init", () => {
     types:       ["character"],
     makeDefault: true,
     label:       "LIMBUSCOMPANY.Sheet.Character",
+  });
+
+  Actors.registerSheet("limbusCompany_FVTT", LimbusMerchantSheet, {
+    types:       ["merchant"],
+    makeDefault: true,
+    label:       "LIMBUSCOMPANY.Sheet.Merchant",
   });
 
   // ── 注册 Item Sheet ────────────────────────────────────────────────────
@@ -590,6 +599,7 @@ function _registerSettings() {
 async function _preloadTemplates() {
   const templatePaths = [
     // Actor sheets
+    "systems/limbusCompany_FVTT/templates/actor/merchant-sheet.hbs",
     "systems/limbusCompany_FVTT/templates/actor/character-sheet.hbs",
     "systems/limbusCompany_FVTT/templates/actor/parts/header.hbs",
     "systems/limbusCompany_FVTT/templates/actor/parts/tab-items.hbs",
@@ -637,6 +647,28 @@ function _localizeConfig() {
   for (const [key, i18nKey] of Object.entries(cfg.SKILL_TYPES)) {
     cfg.SKILL_TYPES[key] = game.i18n.localize(i18nKey);
   }
+}
+
+/* ─── 商人购买 Socket 处理（GM 端执行库存扣减） ──────────────────────────── */
+
+/**
+ * 处理来自玩家的商人购买 socket 消息。
+ * 仅 GM 执行，负责更新 merchant actor 上对应 Item 的 stock。
+ * @param {object} msg
+ */
+async function _handleMerchantSocketMsg(msg) {
+  if (msg.type !== "merchantPurchase") return;
+  if (!game.user.isGM) return;
+
+  const merchant = game.actors.get(msg.merchantId);
+  const item     = merchant?.items.get(msg.itemId);
+  if (!item) return;
+
+  const currentStock = item.system.stock ?? -1;
+  if (currentStock === -1) return; // 无限库存，不处理
+
+  const newStock = Math.max(0, currentStock - 1);
+  await item.update({ "system.stock": newStock });
 }
 
 /* ─── Handlebars 辅助函数注册 ────────────────────────────────────────────── */

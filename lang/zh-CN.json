@@ -3,7 +3,8 @@
     "SystemName": "边狱巴士都市规则",
 
     "ActorTypes": {
-      "character": "玩家角色"
+      "character": "玩家角色",
+      "merchant":  "NPC商人"
     },
 
     "ItemTypes": {
@@ -105,6 +106,7 @@
     },
 
     "Sheet": {
+      "Merchant": "NPC商人",
       "Character": {
         "TabItems":    "物品",
         "TabSkills":   "技能",
@@ -234,6 +236,10 @@
       "character": {
         "label":  "玩家角色",
         "plural": "角色"
+      },
+      "merchant": {
+        "label":  "NPC商人",
+        "plural": "商人"
       }
     },
     "Item": {

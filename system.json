@@ -27,7 +27,8 @@
   ],
   "documentTypes": {
     "Actor": {
-      "character": {}
+      "character": {},
+      "merchant": {}
     },
     "Item": {
       "equipment": {},
@@ -37,7 +38,7 @@
       "container": {}
     }
   },
-  "socket": false,
+  "socket": true,
   "url": "",
   "manifest": "",
   "download": ""

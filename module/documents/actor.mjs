@@ -280,6 +280,25 @@ export class CharacterData extends foundry.abstract.TypeDataModel {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+//  MerchantData — TypeDataModel（NPC商人数据模型）
+// ═══════════════════════════════════════════════════════════════════════════
+
+export class MerchantData extends foundry.abstract.TypeDataModel {
+
+  /** 定义数据模型结构 */
+  static defineSchema() {
+    const fields = foundry.data.fields;
+    return {
+      // 店铺描述（富文本，显示在左侧立绘下方）
+      shopDesc: new fields.HTMLField({ required: false, initial: "" }),
+
+      // 商人自己持有的货币（眼），显示在 GM 底栏
+      merchantCurrency: new fields.NumberField({ required: true, integer: true, min: 0, initial: 0 }),
+    };
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 //  LimbusActor — Actor 文档类
 // ═══════════════════════════════════════════════════════════════════════════
 
