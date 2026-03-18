@@ -9,7 +9,7 @@
  */
 
 import { LIMBUSCOMPANY }   from "./config.mjs";
-import { LimbusActor, CharacterData }  from "./documents/actor.mjs";
+import { LimbusActor, CharacterData, MerchantData }  from "./documents/actor.mjs";
 import {
   LimbusItem,
   EquipmentData,
@@ -18,8 +18,9 @@ import {
   MaterialData,
   ContainerData,
 } from "./documents/item.mjs";
-import { LimbusActorSheet } from "./sheets/actor-sheet.mjs";
-import { LimbusItemSheet }  from "./sheets/item-sheet.mjs";
+import { LimbusActorSheet }   from "./sheets/actor-sheet.mjs";
+import { LimbusItemSheet }    from "./sheets/item-sheet.mjs";
+import { LimbusMerchantSheet } from "./sheets/merchant-sheet.mjs";
 import { ClashManager }     from "./helpers/clash.mjs";
 import { SinResourceHUD }   from "./helpers/sin-resource-hud.mjs";
 import { QuickActionHUD }   from "./sheets/quick-action-hud.mjs";
@@ -79,8 +80,16 @@ Hooks.once("init", () => {
   // 暴露 SinResourceHUD 到全局，供宏/控制台调用
   globalThis.SinResourceHUD = SinResourceHUD;
 
-  // 注册全局罪孽资源 setting + socket（需在 init 阶段注册 setting）
+  // 注册全局罪孽资源 setting（需在 init 阶段注册 setting）
   SinResourceHUD.init();
+
+  // 注册系统 socket 监听器（在 init 阶段注册，与原 setSins 监听时机一致）
+  // 单一监听器统一处理所有消息类型，避免多次 game.socket.on 的冲突风险
+  game.socket.on("system.limbusCompany_FVTT", async (msg) => {
+    await SinResourceHUD.handleSocketMsg(msg);
+    await ClashManager.handleSocketMsg(msg);
+    await _handleMerchantSocketMsg(msg);
+  });
 
   // 先攻公式：1D6 + 敏捷（战斗跟踪器默认骰掷使用）
   CONFIG.Combat.initiative.formula = "1d6 + @attributes.agi";
@@ -93,6 +102,7 @@ Hooks.once("init", () => {
   // ── 注册 TypeDataModel（数据模型） ────────────────────────────────────
   CONFIG.Actor.dataModels = {
     character: CharacterData,
+    merchant:  MerchantData,
   };
 
   CONFIG.Item.dataModels = {
@@ -108,6 +118,12 @@ Hooks.once("init", () => {
     types:       ["character"],
     makeDefault: true,
     label:       "LIMBUSCOMPANY.Sheet.Character",
+  });
+
+  Actors.registerSheet("limbusCompany_FVTT", LimbusMerchantSheet, {
+    types:       ["merchant"],
+    makeDefault: true,
+    label:       "LIMBUSCOMPANY.Sheet.Merchant",
   });
 
   // ── 注册 Item Sheet ────────────────────────────────────────────────────
@@ -137,9 +153,6 @@ Hooks.once("setup", () => {
 Hooks.once("ready", () => {
   console.log("limbusCompany_FVTT | 系统已就绪。");
 
-  // 注册对抗结算的 socket 监听（GM 代替无权限玩家执行 actor 更新）
-  ClashManager.registerSocketListeners();
-
   // 显示全局罪孽资源 HUD
   SinResourceHUD.create();
 
@@ -166,6 +179,38 @@ Hooks.once("ready", () => {
 // 画布每次就绪时再次确保双击补丁存在（重连/重载场景后仍生效）
 Hooks.on("canvasReady", () => {
   _installTokenDoubleClickOpenActorSheet();
+});
+
+/* ─── 对抗结算触发：GM 端捕获玩家委托的结算请求 ──────────────────────────── */
+
+Hooks.on("createChatMessage", async (message) => {
+  if (!game.user.isGM) return;
+  const flags = message.flags?.limbusCompany_FVTT;
+  if (flags?.type !== "clashResolveTrigger") return;
+
+  // 延迟删除触发消息：让 Foundry 完成当前渲染周期后再删，
+  // 避免 #postNotification 在消息被删除后仍试图操作 DOM 产生竞态错误
+  setTimeout(() => message.delete().catch(() => {}), 300);
+
+  const defActor = game.actors.get(flags.defActorId);
+  const defItem  = defActor?.items.get(flags.defItemId);
+  if (!defActor || !defItem) {
+    console.error("[ClashManager] clashResolveTrigger: 找不到 defActor/defItem", flags);
+    ui.notifications.error("对抗结算出错：找不到角色或技能");
+    return;
+  }
+
+  console.log("[ClashManager] GM 收到结算触发，开始执行 | defActor:", defActor.name, "| defItem:", defItem.name);
+  try {
+    const defRoll = { total: flags.defRollTotal };
+    await ClashManager._sendResponseAndResolve(
+      defActor, defItem, defRoll, flags.defFormula,
+      flags.initMsgId, flags.initFlags, flags.slotIdx ?? -1
+    );
+  } catch (err) {
+    console.error("[ClashManager] 对抗结算出错:", err);
+    ui.notifications.error("对抗结算出错，请检查控制台日志");
+  }
 });
 
 /* ─── 对抗聊天框按钮交互 ─────────────────────────────────────────────────── */
@@ -554,6 +599,7 @@ function _registerSettings() {
 async function _preloadTemplates() {
   const templatePaths = [
     // Actor sheets
+    "systems/limbusCompany_FVTT/templates/actor/merchant-sheet.hbs",
     "systems/limbusCompany_FVTT/templates/actor/character-sheet.hbs",
     "systems/limbusCompany_FVTT/templates/actor/parts/header.hbs",
     "systems/limbusCompany_FVTT/templates/actor/parts/tab-items.hbs",
@@ -601,6 +647,28 @@ function _localizeConfig() {
   for (const [key, i18nKey] of Object.entries(cfg.SKILL_TYPES)) {
     cfg.SKILL_TYPES[key] = game.i18n.localize(i18nKey);
   }
+}
+
+/* ─── 商人购买 Socket 处理（GM 端执行库存扣减） ──────────────────────────── */
+
+/**
+ * 处理来自玩家的商人购买 socket 消息。
+ * 仅 GM 执行，负责更新 merchant actor 上对应 Item 的 stock。
+ * @param {object} msg
+ */
+async function _handleMerchantSocketMsg(msg) {
+  if (msg.type !== "merchantPurchase") return;
+  if (!game.user.isGM) return;
+
+  const merchant = game.actors.get(msg.merchantId);
+  const item     = merchant?.items.get(msg.itemId);
+  if (!item) return;
+
+  const currentStock = item.system.stock ?? -1;
+  if (currentStock === -1) return; // 无限库存，不处理
+
+  const newStock = Math.max(0, currentStock - 1);
+  await item.update({ "system.stock": newStock });
 }
 
 /* ─── Handlebars 辅助函数注册 ────────────────────────────────────────────── */

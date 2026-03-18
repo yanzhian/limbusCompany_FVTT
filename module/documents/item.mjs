@@ -102,6 +102,14 @@ export class EquipmentData extends foundry.abstract.TypeDataModel {
 
       // 眼价格（供 Item Piles 商人/市场使用）
       cost: new fields.NumberField({ required: true, integer: true, min: 0, initial: 0 }),
+
+      // ── 商人货架字段 ────────────────────────────────────────────────────
+      // price：商人售卖单价（眼）
+      price:  new fields.NumberField({ required: true, integer: true, min: 0, initial: 0 }),
+      // stock：库存数量，-1 = 无限，0 = 售罄，N = 剩余 N 件
+      stock:  new fields.NumberField({ required: true, integer: true, min: -1, initial: -1 }),
+      // hidden：是否对玩家隐藏（GM可见，玩家不可见）
+      hidden: new fields.BooleanField({ required: true, initial: false }),
     };
   }
 }
@@ -208,6 +216,11 @@ export class SkillData extends foundry.abstract.TypeDataModel {
 
       // 收藏
       favorited: new fields.BooleanField({ required: true, initial: false }),
+
+      // ── 商人货架字段 ────────────────────────────────────────────────────
+      price:  new fields.NumberField({ required: true, integer: true, min: 0, initial: 0 }),
+      stock:  new fields.NumberField({ required: true, integer: true, min: -1, initial: -1 }),
+      hidden: new fields.BooleanField({ required: true, initial: false }),
     };
   }
 
@@ -250,6 +263,11 @@ export class ConsumableData extends foundry.abstract.TypeDataModel {
 
       // 眼价格（供 Item Piles 商人/市场使用）
       cost: new fields.NumberField({ required: true, integer: true, min: 0, initial: 0 }),
+
+      // ── 商人货架字段 ────────────────────────────────────────────────────
+      price:  new fields.NumberField({ required: true, integer: true, min: 0, initial: 0 }),
+      stock:  new fields.NumberField({ required: true, integer: true, min: -1, initial: -1 }),
+      hidden: new fields.BooleanField({ required: true, initial: false }),
     };
   }
 }
@@ -274,6 +292,11 @@ export class MaterialData extends foundry.abstract.TypeDataModel {
 
       // 眼价格（供 Item Piles 商人/市场使用）
       cost: new fields.NumberField({ required: true, integer: true, min: 0, initial: 0 }),
+
+      // ── 商人货架字段 ────────────────────────────────────────────────────
+      price:  new fields.NumberField({ required: true, integer: true, min: 0, initial: 0 }),
+      stock:  new fields.NumberField({ required: true, integer: true, min: -1, initial: -1 }),
+      hidden: new fields.BooleanField({ required: true, initial: false }),
     };
   }
 }
@@ -314,6 +337,11 @@ export class ContainerData extends foundry.abstract.TypeDataModel {
 
       // 眼价格（供 Item Piles 商人/市场使用）
       cost: new fields.NumberField({ required: true, integer: true, min: 0, initial: 0 }),
+
+      // ── 商人货架字段 ────────────────────────────────────────────────────
+      price:  new fields.NumberField({ required: true, integer: true, min: 0, initial: 0 }),
+      stock:  new fields.NumberField({ required: true, integer: true, min: -1, initial: -1 }),
+      hidden: new fields.BooleanField({ required: true, initial: false }),
 
       // 锁定格：禁止放置物品的格子坐标列表
       lockedCells: new fields.ArrayField(

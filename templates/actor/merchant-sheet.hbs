@@ -1,0 +1,332 @@
+{{!-- merchant-sheet.hbs — NPC 商人角色卡模板 --}}
+<form class="merchant-sheet" autocomplete="off">
+
+  {{!-- ═══════════════ 标题栏 ═══════════════ --}}
+  <header class="merchant-header">
+    <h1 class="merchant-title">
+      {{!-- 解锁时：可编辑输入框 --}}
+      {{#if isGM}}
+        <input type="text" name="name" value="{{actor.name}}"
+               class="merchant-name-input merchant-editable-field merchant-editable-only"
+               {{#unless editUnlocked}}disabled{{/unless}}>
+        {{!-- 锁定时：纯文字显示 --}}
+        <span class="merchant-locked-only" {{#if editUnlocked}}style="display:none"{{/if}}>{{actor.name}}</span>
+      {{else}}
+        <span>{{actor.name}}</span>
+      {{/if}}
+    </h1>
+    {{!-- GM 编辑锁按钮 --}}
+    {{#if isGM}}
+      <button type="button"
+              class="merchant-lock-toggle {{#unless editUnlocked}}locked{{/unless}}"
+              title="{{#if editUnlocked}}点击锁定（禁止编辑）{{else}}点击解锁（允许编辑）{{/if}}">
+        <i class="fas fa-lock{{#if editUnlocked}}-open{{/if}}"></i>
+      </button>
+    {{/if}}
+  </header>
+
+  {{!-- ═══════════════ 主体：两栏 ═══════════════ --}}
+  <div class="merchant-body">
+
+    {{!-- ───── 左栏：Tab + 立绘 + 描述 ───── --}}
+    <div class="merchant-left">
+
+      {{!-- Tab 导航 --}}
+      <nav class="merchant-tabs tabs" data-group="primary">
+        {{#if isGM}}
+          <a class="item active" data-tab="sell">正在出售</a>
+          <a class="item" data-tab="stock">填充物品</a>
+        {{else}}
+          <a class="item active" data-tab="buy">买入</a>
+          <a class="item" data-tab="player-sell">卖出</a>
+        {{/if}}
+      </nav>
+
+      {{!-- 立绘区域 --}}
+      <div class="merchant-portrait-wrap">
+        {{#if isGM}}
+          {{!-- 解锁时：可点击更换头像 --}}
+          <img class="merchant-portrait merchant-editable-only"
+               src="{{actor.img}}"
+               alt="{{actor.name}}"
+               title="点击更换立绘"
+               data-action="portrait"
+               {{#unless editUnlocked}}style="display:none"{{/unless}}>
+          {{!-- 锁定时：只读头像 --}}
+          <img class="merchant-portrait merchant-locked-only"
+               src="{{actor.img}}"
+               alt="{{actor.name}}"
+               {{#if editUnlocked}}style="display:none"{{/if}}>
+        {{else}}
+          <img class="merchant-portrait" src="{{actor.img}}" alt="{{actor.name}}">
+        {{/if}}
+      </div>
+
+      {{!-- 店铺描述 --}}
+      <div class="merchant-desc-wrap">
+        {{#if isGM}}
+          {{!-- 解锁时：富文本编辑器 --}}
+          <div class="merchant-editable-only" {{#unless editUnlocked}}style="display:none"{{/unless}}>
+            {{editor shopDesc target="system.shopDesc" button=false editable=true}}
+          </div>
+          {{!-- 锁定时：只读文本 --}}
+          <div class="merchant-desc-text merchant-locked-only"
+               {{#if editUnlocked}}style="display:none"{{/if}}>{{{shopDesc}}}</div>
+        {{else}}
+          <div class="merchant-desc-text">{{{shopDesc}}}</div>
+        {{/if}}
+      </div>
+
+    </div>{{!-- /merchant-left --}}
+
+    {{!-- ───── 右栏：Tab 内容区 ───── --}}
+    <div class="merchant-right">
+
+      {{!-- 搜索栏 --}}
+      <div class="merchant-search-bar">
+        <input type="text"
+               class="merchant-search"
+               placeholder="搜索物品…"
+               value="">
+        <i class="fas fa-search merchant-search-icon"></i>
+        {{#if isGM}}
+          <button type="button"
+                  class="merchant-hidden-toggle {{#if showHidden}}active{{/if}}"
+                  title="{{#if showHidden}}隐藏：显示中{{else}}隐藏：已过滤{{/if}}">
+            <i class="fas fa-lock{{#unless showHidden}}-open{{/unless}}"></i>
+          </button>
+        {{/if}}
+      </div>
+
+      {{!-- Tab 内容 --}}
+      <div class="merchant-tab-body">
+
+        {{!-- ── GM: 正在出售 ── --}}
+        {{#if isGM}}
+        <section class="merchant-tab-content tab active" data-tab="sell">
+          <table class="merchant-table">
+            <thead>
+              <tr>
+                <th class="col-icon">图标</th>
+                <th class="col-name">名称</th>
+                <th class="col-stock">数量</th>
+                <th class="col-price">价格</th>
+                <th class="col-actions">操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              {{#each shopItems}}
+              <tr class="merchant-item-row {{#if hidden}}is-hidden{{/if}} {{#if isSoldOut}}is-soldout{{/if}}"
+                  data-item-id="{{id}}">
+                <td class="col-icon">
+                  <img class="merchant-item-icon" src="{{img}}" alt="{{name}}" title="{{name}}">
+                </td>
+                <td class="col-name">
+                  {{name}}
+                  {{#if hidden}}<span class="hidden-badge" title="对玩家隐藏"><i class="fas fa-eye-slash"></i></span>{{/if}}
+                </td>
+                <td class="col-stock">
+                  {{#if (eq stock -1)}}
+                    <span class="stock-unlimited">∞</span>
+                  {{else if isSoldOut}}
+                    <span class="stock-soldout">售罄</span>
+                  {{else}}
+                    {{stock}}
+                  {{/if}}
+                </td>
+                <td class="col-price">{{price}}</td>
+                <td class="col-actions">
+                  <button type="button" class="merchant-item-edit btn-sm" title="编辑价格/库存">
+                    编辑
+                  </button>
+                  <button type="button" class="merchant-item-hide btn-sm {{#if hidden}}btn-show{{/if}}"
+                          title="{{#if hidden}}显示给玩家{{else}}对玩家隐藏{{/if}}">
+                    {{#if hidden}}显示{{else}}隐藏{{/if}}
+                  </button>
+                </td>
+              </tr>
+              {{else}}
+              <tr class="merchant-empty-row">
+                <td colspan="5">暂无货物，请在「填充物品」页拖入</td>
+              </tr>
+              {{/each}}
+            </tbody>
+          </table>
+        </section>
+
+        {{!-- ── GM: 填充物品 ── --}}
+        <section class="merchant-tab-content tab" data-tab="stock">
+          <div class="merchant-dropzone" data-drop-type="Item">
+            <div class="merchant-dropzone-hint">
+              <i class="fas fa-arrow-down"></i>
+              <span>从物品侧边栏拖入物品</span>
+            </div>
+            {{#if shopItems.length}}
+            <table class="merchant-table">
+              <thead>
+                <tr>
+                  <th class="col-icon">图标</th>
+                  <th class="col-name">名称</th>
+                  <th class="col-stock">数量</th>
+                  <th class="col-price">价格</th>
+                  <th class="col-actions">操作</th>
+                </tr>
+              </thead>
+              <tbody>
+                {{#each shopItems}}
+                <tr class="merchant-item-row {{#if hidden}}is-hidden{{/if}}"
+                    data-item-id="{{id}}">
+                  <td class="col-icon">
+                    <img class="merchant-item-icon" src="{{img}}" alt="{{name}}">
+                  </td>
+                  <td class="col-name">{{name}}</td>
+                  <td class="col-stock">
+                    {{#if (eq stock -1)}}<span class="stock-unlimited">∞</span>
+                    {{else if isSoldOut}}<span class="stock-soldout">售罄</span>
+                    {{else}}{{stock}}{{/if}}
+                  </td>
+                  <td class="col-price">{{price}}</td>
+                  <td class="col-actions">
+                    <button type="button" class="merchant-item-edit btn-sm">编辑</button>
+                    <button type="button" class="merchant-item-hide btn-sm {{#if hidden}}btn-show{{/if}}">
+                      {{#if hidden}}显示{{else}}隐藏{{/if}}
+                    </button>
+                  </td>
+                </tr>
+                {{/each}}
+              </tbody>
+            </table>
+            {{/if}}
+          </div>
+        </section>
+
+        {{!-- ── 玩家: 买入 ── --}}
+        {{else}}
+        <section class="merchant-tab-content tab active" data-tab="buy">
+          <table class="merchant-table">
+            <thead>
+              <tr>
+                <th class="col-icon">图标</th>
+                <th class="col-name">名称</th>
+                <th class="col-stock">数量</th>
+                <th class="col-price">价格</th>
+                <th class="col-actions">操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              {{#each shopItems}}
+              <tr class="merchant-item-row {{#if isSoldOut}}is-soldout{{/if}}"
+                  data-item-id="{{id}}">
+                <td class="col-icon">
+                  <img class="merchant-item-icon" src="{{img}}" alt="{{name}}" title="{{name}}">
+                </td>
+                <td class="col-name">{{name}}</td>
+                <td class="col-stock">
+                  {{#if (eq stock -1)}}<span class="stock-unlimited">∞</span>
+                  {{else if isSoldOut}}<span class="stock-soldout">售罄</span>
+                  {{else}}{{stock}}{{/if}}
+                </td>
+                <td class="col-price">{{price}}</td>
+                <td class="col-actions">
+                  {{#if isSoldOut}}
+                    <button type="button" class="btn-sm" disabled title="已售罄">售罄</button>
+                  {{else}}
+                    <button type="button" class="merchant-item-buy btn-sm" title="购买此物品">
+                      购买
+                    </button>
+                  {{/if}}
+                </td>
+              </tr>
+              {{else}}
+              <tr class="merchant-empty-row">
+                <td colspan="5">商人暂无可售货物</td>
+              </tr>
+              {{/each}}
+            </tbody>
+          </table>
+        </section>
+
+        {{!-- ── 玩家: 卖出 ── --}}
+        <section class="merchant-tab-content tab" data-tab="player-sell">
+          <table class="merchant-table">
+            <thead>
+              <tr>
+                <th class="col-icon">图标</th>
+                <th class="col-name">名称</th>
+                <th class="col-type">类型</th>
+                <th class="col-price">售价</th>
+                <th class="col-actions">操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              {{#each sellItems}}
+              <tr class="merchant-item-row" data-char-item-id="{{id}}">
+                <td class="col-icon">
+                  <img class="merchant-item-icon" src="{{img}}" alt="{{name}}" title="{{name}}">
+                </td>
+                <td class="col-name">{{name}}</td>
+                <td class="col-type sell-type-label">{{type}}</td>
+                <td class="col-price">
+                  {{#if sellPrice}}
+                    {{sellPrice}}
+                  {{else}}
+                    <span class="sell-no-price" title="该物品未设定出售价格">—</span>
+                  {{/if}}
+                </td>
+                <td class="col-actions">
+                  {{#if sellPrice}}
+                    <button type="button" class="merchant-item-sell btn-sm" title="出售此物品">
+                      卖出
+                    </button>
+                  {{else}}
+                    <button type="button" class="btn-sm" disabled title="该物品未设定出售价格">
+                      不可售
+                    </button>
+                  {{/if}}
+                </td>
+              </tr>
+              {{else}}
+              <tr class="merchant-empty-row">
+                <td colspan="5">背包中没有可出售的物品</td>
+              </tr>
+              {{/each}}
+            </tbody>
+          </table>
+        </section>
+        {{/if}}
+
+      </div>{{!-- /merchant-tab-body --}}
+    </div>{{!-- /merchant-right --}}
+
+  </div>{{!-- /merchant-body --}}
+
+  {{!-- ═══════════════ 底栏 ═══════════════ --}}
+  <footer class="merchant-footer">
+    {{#if isGM}}
+      <button type="button" class="merchant-restock-currency btn-footer" title="给商人补充货币">
+        <i class="fas fa-plus"></i> 补充货币
+      </button>
+      <div class="merchant-currency-display">
+        <img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/眼.webp"
+             class="currency-icon" alt="眼" onerror="this.style.display='none'">
+        <span class="merchant-currency-value">{{merchantCurrency}}</span>
+      </div>
+    {{else}}
+      <div class="merchant-buyer-select">
+        <span>以</span>
+        <select class="merchant-char-select">
+          {{#each ownedCharacters}}
+            <option value="{{id}}" {{#if (eq id ../selectedCharId)}}selected{{/if}}>{{name}}</option>
+          {{/each}}
+        </select>
+        <span>身份购买</span>
+      </div>
+      <div class="merchant-currency-display">
+        <img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/眼.webp"
+             class="currency-icon" alt="眼" onerror="this.style.display='none'">
+        <span class="merchant-player-currency">{{selectedCharCurrency}}</span>
+      </div>
+    {{/if}}
+  </footer>
+
+</form>

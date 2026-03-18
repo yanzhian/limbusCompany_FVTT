@@ -346,13 +346,6 @@ x
 
 
 
-
-
-
-
-
-
-
 我需要变更要求我需要你帮助我完成物品title和技能title
 两个titel标准尺寸 280px x 500px 显示位置永远在角色卡的左边
 
@@ -375,3 +368,123 @@ item-desc-display 10px 字体颜色 跟 物品颜色一样，如果字数太多 
 右下角的星芒 将⭐换成 systems/limbusCompany_FVTT/assets/icons/Base_icon/Starlight.webp
 
 顶部是技能名字 24px 字体颜色 #E8CAA1
+
+
+//new//
+
+重新制作 物品栏格式
+    图标100px x 100px  名字
+                       类型  分类 
+                       攻击等级/防御等级/速度       链接
+    图标100px x 100p    物理抗性
+    标签                容量        眼
+    （分割线）
+    描述文本
+    （分割线）
+
+    【发送聊天框】【激活】【编辑激活效果↑】      星芒
+
+材料/消耗品
+    图标100px x 100px   名字   x   [数量]
+                        类型  分类
+    标签                容量        眼
+    （分割线）
+    描述文本
+    （分割线）
+
+    【发送聊天框】【激活】【编辑激活效果↑】（材料只有发送聊天框）
+
+容器
+    图标100px x 100px   名字
+                        内部容量
+                        剩余容量（未被锁定和未被占领的格子）
+    标签                容量        眼
+    （分割线）
+    【格子】
+    （分割线）
+    【发送聊天框】
+
+基础技能
+    
+    图标100px x 100px   名字
+                        分类    骰数
+                        类型    罪孽    等级
+                        加重值
+    标签
+    （分割线）
+    描述文本
+    （分割线）
+
+    【发送聊天框】【发起对抗】【编辑激活效果↑】
+
+守备技能
+        图标100px x 100px   名字
+                        分类    骰数
+                        反击分类（如果为反击或者可拼点反击）
+                        类型    罪孽
+    标签
+    （分割线）
+    描述文本
+    （分割线）
+
+    【发送聊天框】【编辑激活效果↑】
+
+E.G.O技能
+
+    图标100px x 100px   名字
+                        分类    骰数
+                        类型    罪孽    等级
+                        加重值
+    罪孽消耗
+    理智消耗
+    调整罪孽抗性
+    标签
+    （分割线）
+    描述文本
+    （分割线）
+
+    【发送聊天框】【发起对抗】【编辑激活效果↑】
+
+力量 → 力量
+敏捷 → 敏捷
+体质 → 灵巧
+感知 → 本能
+智力 → 学识
+魅力 → 风度
+
+
+对抗结束所有人都可以点击
+
+
+出现了一个BUG，玩家发起对抗GM选择经行对抗没有问题，GM发起对抗玩家选择进行对抗的时候会报错：
+是玩家没有什么权限吗？还是什么其他问题？（另外如果打平了玩家点击依旧可以正常运行）
+limbusCompany_FVTT.mjs:64 User 不二 lacks permission to update Actor [JVPlyz4qnpXazp6q] 
+console.error @ limbusCompany_FVTT.mjs:64
+#fetch @ foundry.mjs:115122
+notify @ foundry.mjs:114981
+error @ foundry.mjs:115021
+ui.notifications.error @ limbusCompany_FVTT.mjs:152
+#handleError @ foundry.mjs:58516
+(匿名) @ foundry.mjs:58499
+o.onack @ socket.js:580
+o.onpacket @ socket.js:499
+I.emit @ index.js:136
+(匿名) @ manager.js:209
+Promise.then
+R @ globals.js:4
+i.ondecoded @ manager.js:208
+I.emit @ index.js:136
+i.add @ index.js:142
+i.ondata @ manager.js:195
+I.emit @ index.js:136
+i.H @ socket.js:259
+I.emit @ index.js:136
+i.onPacket @ transport.js:99
+i.onData @ transport.js:91
+ws.onmessage @ websocket.js:48
+clash.mjs:1094 Uncaught (in promise) Error: User 不二 lacks permission to update Actor [JVPlyz4qnpXazp6q]
+[No packages detected]
+    at /D:/Program%20Files/Foundry%20Virtual%20Tabletop/resources/app/dist/database/backend/server-backend.mjs:1:5632
+    at async Promise.all (index 0)
+    at async ServerDatabaseBackend._updateDocuments (/D:/Program%20Files/Foundry%20Virtual%20Tabletop/resources/app/dist/database/backend/server-backend.mjs:1:5384)
+    at async #try (/D:/Program%20Files/Foundry%20Virtual%20Tabletop/resources/app/common/utils/semaphore.mjs:98:17)

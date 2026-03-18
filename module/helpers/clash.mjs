@@ -1086,17 +1086,21 @@ export class ClashManager {
   static async _sendResponseAndResolve(defActor, defItem, defRoll, defFormula, initMsgId, initFlags, slotIdx = -1) {
     // 非 GM 玩家无权直接更新 GM 控制的 Actor（攻击方），委托 GM 执行整个结算流程
     if (!game.user.isGM) {
-      game.socket.emit("system.limbusCompany_FVTT", {
-        type: "clashResolve",
-        data: {
-          defActorId:   defActor.id,
-          defItemId:    defItem.id,
-          defRollTotal: defRoll.total,
-          defFormula,
-          initMsgId,
-          initFlags,
-          slotIdx,
-        },
+      console.log("[ClashManager] 非GM玩家，通过 ChatMessage 委托 GM 执行对抗结算 | defActor:", defActor.id, "| defItem:", defItem.id);
+      const payload = JSON.parse(JSON.stringify({
+        defActorId:   defActor.id,
+        defItemId:    defItem.id,
+        defRollTotal: defRoll.total,
+        defFormula,
+        initMsgId,
+        initFlags,
+        slotIdx,
+      }));
+      // 创建仅 GM 可见的空白触发消息，GM 端的 createChatMessage hook 捕获并处理
+      await ChatMessage.create({
+        content: "",
+        whisper: game.users.filter(u => u.active && u.isGM).map(u => u.id),
+        flags: { limbusCompany_FVTT: { type: "clashResolveTrigger", ...payload } },
       });
       return;
     }
@@ -2413,20 +2417,31 @@ export class ClashManager {
     });
   }
 
-  /* ─── Socket 监听：由 ready hook 注册，GM 代为执行玩家无权限的对抗结算 ─── */
+  /* ─── Socket 消息处理：由主入口统一注册单一监听器后调用 ─────────────── */
 
-  static registerSocketListeners() {
-    game.socket.on("system.limbusCompany_FVTT", async (msg) => {
-      if (msg.type !== "clashResolve" || !game.user.isGM) return;
+  /** GM 端处理 clashResolve socket 消息 */
+  static async handleSocketMsg(msg) {
+    if (msg.type !== "clashResolve") return;
+    console.log("[ClashManager] 收到 clashResolve socket 消息 | isGM:", game.user.isGM, "| data:", msg.data);
+    if (!game.user.isGM) return;
+    try {
       const { defActorId, defItemId, defRollTotal, defFormula, initMsgId, initFlags, slotIdx } = msg.data;
       const defActor = game.actors.get(defActorId);
       const defItem  = defActor?.items.get(defItemId);
-      if (!defActor || !defItem) return;
+      if (!defActor || !defItem) {
+        console.error("[ClashManager] clashResolve: 找不到 defActor/defItem", { defActorId, defItemId });
+        ui.notifications?.error("对抗结算出错：找不到角色或技能，请检查控制台");
+        return;
+      }
+      console.log("[ClashManager] GM 开始执行对抗结算 | defActor:", defActor.name, "| defItem:", defItem.name);
       // 重建只含 total 的 roll 代理对象（结算流程仅使用 .total）
       const defRoll = { total: defRollTotal };
       await ClashManager._sendResponseAndResolve(
         defActor, defItem, defRoll, defFormula, initMsgId, initFlags, slotIdx ?? -1
       );
-    });
+    } catch (err) {
+      console.error("[ClashManager] clashResolve 结算出错:", err);
+      ui.notifications?.error("对抗结算出错，请检查控制台日志");
+    }
   }
 }
