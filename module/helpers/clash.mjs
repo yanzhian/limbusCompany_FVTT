@@ -390,6 +390,23 @@ export class ClashManager {
             descStr = `【${effTgt.name}】防御等级 ${val >= 0 ? "+" : ""}${val}`;
             break;
           }
+          case "apAdj": {
+            const val = Math.round(await ClashManager._evalValue(eff.value ?? eff.intensity ?? 0));
+            const cur = effTgt.system?.ap?.value ?? 0;
+            const max = effTgt.system?.ap?.max   ?? 3;
+            const nv  = Math.max(0, Math.min(max, cur + val));
+            await effTgt.update({ "system.ap.value": nv });
+            descStr = `【${effTgt.name}】行动值 ${val >= 0 ? "+" : ""}${val}（${cur} → ${nv}）`;
+            break;
+          }
+          case "weightAdj": {
+            const val = Math.round(await ClashManager._evalValue(eff.value ?? eff.intensity ?? 0));
+            const cur = item.system?.weight ?? 0;
+            const nv  = Math.max(0, cur + val);
+            await item.update({ "system.weight": nv });
+            descStr = `【${item.name}】加重值 ${val >= 0 ? "+" : ""}${val}（${cur} → ${nv}）`;
+            break;
+          }
           case "seismicBlast": {
             // 对目标触发【震颤引爆】N次（N = eff.value）
             // 每次引爆：消耗目标1层【震颤】，所有混乱阈值前移【震颤强度】%
@@ -557,6 +574,8 @@ export class ClashManager {
     if (t === "sanityAdj"){ const v = eff.value ?? eff.intensity ?? 0; return `${tgt}理智 ${v >= 0 ? "+" : ""}${v}`; }
     if (t === "atkAdj")      { const v = eff.value ?? eff.intensity ?? 0; return `${tgt}攻击等级 ${v >= 0 ? "+" : ""}${v}`; }
     if (t === "defAdj")      { const v = eff.value ?? eff.intensity ?? 0; return `${tgt}防御等级 ${v >= 0 ? "+" : ""}${v}`; }
+    if (t === "apAdj")       { const v = eff.value ?? eff.intensity ?? 0; return `${tgt}行动值 ${v >= 0 ? "+" : ""}${v}`; }
+    if (t === "weightAdj")   { const v = eff.value ?? eff.intensity ?? 0; return `技能加重值 ${v >= 0 ? "+" : ""}${v}`; }
     if (t === "seismicBlast") return `对${tgt}触发震颤引爆 ×${eff.value ?? 1}`;
     return "";
   }

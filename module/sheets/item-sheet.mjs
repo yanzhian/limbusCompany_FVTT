@@ -1352,17 +1352,18 @@ function _esc(s) { return String(s ?? "").replace(/"/g, "&quot;"); }
 
 function _activityEffectLabels() {
   return [
-    { value: "addBuff",             label: "添加BUFF" },
-    { value: "removeBuff",          label: "移除BUFF" },
-    { value: "hpAdj",               label: "生命值调整" },
-    { value: "sanityAdj",           label: "理智值调整" },
-    { value: "atkAdj",              label: "攻击等级调整" },
-    { value: "defAdj",              label: "防御等级调整" },
-    { value: "speedAdj",            label: "速度调整" },
-    { value: "baseValue",           label: "基础值" },
-    { value: "diceAdj",             label: "骰数" },
-    { value: "relatedSkillConvert", label: "相关技能转换" },
-    { value: "seismicBlast",        label: "震颤引爆" },
+    { value: "addBuff",      label: "添加BUFF" },
+    { value: "removeBuff",   label: "移除BUFF" },
+    { value: "hpAdj",        label: "生命值调整" },
+    { value: "sanityAdj",    label: "理智值调整" },
+    { value: "atkAdj",       label: "攻击等级调整" },
+    { value: "defAdj",       label: "防御等级调整" },
+    { value: "speedAdj",     label: "速度调整" },
+    { value: "apAdj",        label: "行动值" },
+    { value: "weightAdj",    label: "加重值" },
+    { value: "baseValue",    label: "基础值" },
+    { value: "diceAdj",      label: "骰数" },
+    { value: "seismicBlast", label: "震颤引爆" },
   ];
 }
 
@@ -1474,7 +1475,6 @@ function _buildCostRow(cost, idx, cfg) {
 }
 
 const _BUFF_EFFECTS   = new Set(["addBuff", "removeBuff"]);
-const _NOVAL_EFFECTS  = new Set(["relatedSkillConvert"]);
 
 const _ROUND_OPTIONS = ["本回合", "下回合", "本回合和下回合"];
 
@@ -1483,7 +1483,6 @@ function _buildEffectRow(eff, idx, cfg) {
   const type       = eff?.type ?? "addBuff";
   const isBuff     = _BUFF_EFFECTS.has(type);
   const isAddBuff  = type === "addBuff";
-  const isNoVal    = _NOVAL_EFFECTS.has(type);
   const effOpts    = _activityEffectLabels()
     .map(e => `<option value="${e.value}" ${type === e.value ? "selected" : ""}>${e.label}</option>`).join("");
   const buffOpts   = _buildBuffGroupOptions(cfg, eff?.buff);
@@ -1521,7 +1520,7 @@ function _buildEffectRow(eff, idx, cfg) {
           <label>层数</label>
           <input class="ae-input-sm eff-stacks" type="number" value="${eff?.stacks ?? 1}" min="0">
         </span>
-        <span class="ae-eff-val-sec" ${(!isBuff && !isNoVal) ? "" : 'style="display:none"'}>
+        <span class="ae-eff-val-sec" ${!isBuff ? "" : 'style="display:none"'}>
           <label>相关数值</label>
           <input class="ae-input eff-value" type="text" placeholder="数值或公式，如 1D4+2"
                  value="${formulaVal}" style="width:110px;">
@@ -1593,10 +1592,9 @@ function _bindEffType(html) {
     const type      = $(this).val();
     const isBuff    = _BUFF_EFFECTS.has(type);
     const isAddBuff = type === "addBuff";
-    const isNoV     = _NOVAL_EFFECTS.has(type);
     row.find(".ae-eff-round-sec").toggle(isAddBuff);
     row.find(".ae-eff-buff-sec").toggle(isBuff);
-    row.find(".ae-eff-val-sec").toggle(!isBuff && !isNoV);
+    row.find(".ae-eff-val-sec").toggle(!isBuff);
     // 切换效果类型时也检查自定义 BUFF 输入框
     const buffVal = row.find(".ae-eff-buff-sel").val();
     row.find(".eff-buff-custom").toggle(isBuff && buffVal === "custom");
