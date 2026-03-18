@@ -163,6 +163,18 @@ export class LimbusMerchantSheet extends ActorSheet {
 
   /** GM 专属交互 */
   _activateGMListeners(html) {
+    // 立绘点击 → 弹出图片选择器
+    html.find('[data-action="portrait"]').on("click", () => {
+      const fp = new FilePicker({
+        type: "image",
+        current: this.actor.img,
+        callback: async (path) => {
+          await this.actor.update({ img: path });
+        },
+      });
+      fp.browse();
+    });
+
     // 切换"显示隐藏物品"锁图标
     html.find(".merchant-hidden-toggle").on("click", () => {
       this._showHidden = !this._showHidden;
