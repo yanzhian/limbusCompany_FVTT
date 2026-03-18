@@ -824,6 +824,7 @@ export class ClashManager {
           rollTotal:   roll.total,
           rollData:    roll.toJSON(),
           formula,
+          baseFormula: sys.diceFormula ?? "1d4",
           itemName:    item.name,
           itemImg:     item.img,
           category:    sys.category ?? "",
@@ -1265,6 +1266,10 @@ export class ClashManager {
     const atkCtx = { atkActor, defActor, owner: atkActor, other: defActor, _fireCounts: _fc, _actMsgs };
     const defCtx = { atkActor, defActor, owner: defActor, other: atkActor, _fireCounts: _fc, _actMsgs };
 
+    // 在任何 activity 触发前，记录攻守双方当前骰子公式（用于之后检测公式变化后重投）
+    const atkBaseFormulaOrig = initFlags.baseFormula ?? initFlags.formula;
+    const defBaseFormulaOrig = defItem?.system?.diceFormula ?? defFormula;
+
     // ── [攻击前]：玩家B点击【对抗】后，拼点/结算前触发 ──────────────────
     await ClashManager._applyActivities(atkItem, "攻击前", atkCtx);
     await ClashManager._applyActivities(defItem, "攻击前", defCtx);
@@ -1285,11 +1290,39 @@ export class ClashManager {
     await ClashManager._applyActivities(defItem,  "攻击时", defCtx);
     await ClashManager._applyActivities(defItem,  "拼点时", defCtx);
 
+    // ── [攻击时/拼点时] 可能修改骰子公式（diceAdj/diceFacesAdj/baseValue）──
+    // 若公式与发起时不同，重新投骰，保留手动加值部分
+    let atkFinalTotal   = initFlags.rollTotal;
+    let atkFinalFormula = initFlags.formula;
+    const newAtkBase = atkItem?.system?.diceFormula ?? atkBaseFormulaOrig;
+    if (newAtkBase !== atkBaseFormulaOrig) {
+      const bonusPart  = initFlags.formula.slice(atkBaseFormulaOrig.length); // 手动加值部分，如 "+3" 或 ""
+      const newAtkFull = newAtkBase + bonusPart;
+      const rerollAtk  = new Roll(newAtkFull);
+      await rerollAtk.evaluate();
+      atkFinalTotal   = rerollAtk.total;
+      atkFinalFormula = newAtkFull;
+      _actMsgs.push(`⚁ 【${atkItem?.name ?? "攻击方"}】公式变化（${atkBaseFormulaOrig} → ${newAtkBase}），重新投骰：${rerollAtk.result} = **${rerollAtk.total}**`);
+    }
+
+    let defFinalTotal   = defRoll.total;
+    let defFinalFormula = defFormula;
+    const newDefBase = defItem?.system?.diceFormula ?? defBaseFormulaOrig;
+    if (newDefBase !== defBaseFormulaOrig) {
+      const defBonusPart = defFormula.slice(defBaseFormulaOrig.length); // 手动加值部分
+      const newDefFull   = newDefBase + defBonusPart;
+      const rerollDef    = new Roll(newDefFull);
+      await rerollDef.evaluate();
+      defFinalTotal   = rerollDef.total;
+      defFinalFormula = newDefFull;
+      _actMsgs.push(`⚁ 【${defItem?.name ?? "防守方"}】公式变化（${defBaseFormulaOrig} → ${newDefBase}），重新投骰：${rerollDef.result} = **${rerollDef.total}**`);
+    }
+
     const resolution = ClashManager._computeResolution({
-      atkActor,    atkTotal:    initFlags.rollTotal,   atkFormula:  initFlags.formula,
+      atkActor,    atkTotal:    atkFinalTotal,   atkFormula:  atkFinalFormula,
       atkItemName: initFlags.itemName, atkItemImg: initFlags.itemImg,
       atkCategory: initFlags.category ?? "",           atkSinType:  initFlags.sinType ?? "",
-      defActor,    defTotal:    defRoll.total,         defFormula,
+      defActor,    defTotal:    defFinalTotal,          defFormula:  defFinalFormula,
       defItemName: defItem.name,       defItemImg: defItem.img,
       defCategory,                                     defSinType:  sys.sinType ?? "",
     });
