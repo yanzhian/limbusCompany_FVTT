@@ -5893,6 +5893,7 @@ input.item-piles-quantity {
   line-height:   1;
   transition:    color .15s, border-color .15s;
   margin-left:   auto; /* 推到最右侧 */
+  max-width: 20px;
 }
 .merchant-lock-toggle:hover        { color: var(--text-main); border-color: var(--text-sub); }
 .merchant-lock-toggle.locked       { color: var(--text-dim); }
@@ -6292,6 +6293,7 @@ input.item-piles-quantity {
   color:         var(--text-main);
   cursor:        pointer;
   transition:    background .15s;
+  max-width: 140px;
 }
 .btn-footer:hover { background: rgba(59,36,18,0.9); }
 
