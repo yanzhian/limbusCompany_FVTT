@@ -191,6 +191,9 @@
                     <button type="button" class="merchant-item-hide btn-sm {{#if hidden}}btn-show{{/if}}">
                       {{#if hidden}}显示{{else}}隐藏{{/if}}
                     </button>
+                    <button type="button" class="merchant-item-remove btn-sm btn-danger" title="移除此商品">
+                      移除
+                    </button>
                   </td>
                 </tr>
                 {{/each}}
@@ -309,7 +312,12 @@
       <div class="merchant-currency-display">
         <img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/眼.webp"
              class="currency-icon" alt="眼" onerror="this.style.display='none'">
-        <span class="merchant-currency-value">{{merchantCurrency}}</span>
+        {{#if editUnlocked}}
+          <input type="number" class="merchant-currency-value merchant-currency-input"
+                 name="system.merchantCurrency" value="{{merchantCurrency}}" min="0">
+        {{else}}
+          <span class="merchant-currency-value">{{merchantCurrency}}</span>
+        {{/if}}
       </div>
     {{else}}
       <div class="merchant-buyer-select">
