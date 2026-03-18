@@ -49,8 +49,10 @@ function _buffLabel(type) {
   return labels[type] ?? type;
 }
 
-function _buffIconPath(type) {
-  return _buffIcon(type, "");
+function _buffIconPath(type, name = "") {
+  if (BUFF_ICON_MAP[type]) return BUFF_ICON_BASE + BUFF_ICON_MAP[type];
+  const customName = name || type;
+  return customName ? `${BUFF_ICON_BASE}Custom_buffs/${customName}.webp` : "";
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -690,7 +692,7 @@ export class QuickActionHUD extends Application {
             const stacks    = parseInt(html.find("[name='stacks']").val())    || 1;
             const name      = type === "custom" ? (custom || "自定义") : _buffLabel(type);
             await actor.addBuff({ type, name, intensity, stacks, whenAdded,
-              icon: _buffIconPath(type) });
+              icon: _buffIconPath(type, name) });
           },
         },
         cancel: { label: "取消" },

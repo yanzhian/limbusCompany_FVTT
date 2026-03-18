@@ -179,7 +179,9 @@ export class ClashManager {
       // 与 actor.addBuff 字段结构保持一致，确保状态栏正常显示
       const iconBase = "systems/limbusCompany_FVTT/assets/icons/Buff_icon/";
       const iconName = ClashManager._buffLabel(type);
-      const icon     = iconName !== type ? `${iconBase}${iconName}.webp` : "";
+      const icon     = iconName !== type
+        ? `${iconBase}${iconName}.webp`
+        : `${iconBase}Custom_buffs/${type}.webp`;
       buffs.push({
         id:        foundry.utils.randomID(),
         type,
