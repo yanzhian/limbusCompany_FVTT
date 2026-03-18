@@ -407,6 +407,33 @@ export class ClashManager {
             descStr = `【${item.name}】加重值 ${val >= 0 ? "+" : ""}${val}（${cur} → ${nv}）`;
             break;
           }
+          case "diceAdj": {
+            // 骰数：累加骰子数量，下限 1
+            const val = Math.round(await ClashManager._evalValue(eff.value ?? eff.intensity ?? 0));
+            const cur = item.system?.diceCount ?? 1;
+            const nv  = Math.max(1, cur + val);
+            await item.update({ "system.diceCount": nv });
+            descStr = `【${item.name}】骰数 ${val >= 0 ? "+" : ""}${val}（${cur}d → ${nv}d）`;
+            break;
+          }
+          case "diceFacesAdj": {
+            // 面数：覆盖骰子面数（设定为指定值），下限 2
+            const val = Math.round(await ClashManager._evalValue(eff.value ?? eff.intensity ?? 0));
+            const cur = item.system?.diceFaces ?? 4;
+            const nv  = Math.max(2, val);
+            await item.update({ "system.diceFaces": nv });
+            descStr = `【${item.name}】面数 d${cur} → d${nv}`;
+            break;
+          }
+          case "baseValue": {
+            // 基础值：累加骰子公式固定加值，允许负数
+            const val = Math.round(await ClashManager._evalValue(eff.value ?? eff.intensity ?? 0));
+            const cur = item.system?.baseValue ?? 0;
+            const nv  = cur + val;
+            await item.update({ "system.baseValue": nv });
+            descStr = `【${item.name}】基础值 ${val >= 0 ? "+" : ""}${val}（${cur} → ${nv}）`;
+            break;
+          }
           case "seismicBlast": {
             // 对目标触发【震颤引爆】N次（N = eff.value）
             // 每次引爆：消耗目标1层【震颤】，所有混乱阈值前移【震颤强度】%
@@ -572,10 +599,11 @@ export class ClashManager {
     if (t === "removeBuff") return `移除${tgt}的${buffName}`;
     if (t === "hpAdj")    { const v = eff.value ?? eff.intensity ?? 0; return `${tgt}生命值 ${v >= 0 ? "+" : ""}${v}`; }
     if (t === "sanityAdj"){ const v = eff.value ?? eff.intensity ?? 0; return `${tgt}理智 ${v >= 0 ? "+" : ""}${v}`; }
-    if (t === "atkAdj")      { const v = eff.value ?? eff.intensity ?? 0; return `${tgt}攻击等级 ${v >= 0 ? "+" : ""}${v}`; }
-    if (t === "defAdj")      { const v = eff.value ?? eff.intensity ?? 0; return `${tgt}防御等级 ${v >= 0 ? "+" : ""}${v}`; }
     if (t === "apAdj")       { const v = eff.value ?? eff.intensity ?? 0; return `${tgt}行动值 ${v >= 0 ? "+" : ""}${v}`; }
     if (t === "weightAdj")   { const v = eff.value ?? eff.intensity ?? 0; return `技能加重值 ${v >= 0 ? "+" : ""}${v}`; }
+    if (t === "diceAdj")     { const v = eff.value ?? eff.intensity ?? 0; return `技能骰数 ${v >= 0 ? "+" : ""}${v}`; }
+    if (t === "diceFacesAdj"){ const v = eff.value ?? eff.intensity ?? 0; return `技能面数 → d${v}`; }
+    if (t === "baseValue")   { const v = eff.value ?? eff.intensity ?? 0; return `技能基础值 ${v >= 0 ? "+" : ""}${v}`; }
     if (t === "seismicBlast") return `对${tgt}触发震颤引爆 ×${eff.value ?? 1}`;
     return "";
   }

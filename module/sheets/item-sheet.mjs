@@ -1356,13 +1356,11 @@ function _activityEffectLabels() {
     { value: "removeBuff",   label: "移除BUFF" },
     { value: "hpAdj",        label: "生命值调整" },
     { value: "sanityAdj",    label: "理智值调整" },
-    { value: "atkAdj",       label: "攻击等级调整" },
-    { value: "defAdj",       label: "防御等级调整" },
-    { value: "speedAdj",     label: "速度调整" },
     { value: "apAdj",        label: "行动值" },
     { value: "weightAdj",    label: "加重值" },
-    { value: "baseValue",    label: "基础值" },
     { value: "diceAdj",      label: "骰数" },
+    { value: "diceFacesAdj", label: "面数" },
+    { value: "baseValue",    label: "基础值" },
     { value: "seismicBlast", label: "震颤引爆" },
   ];
 }
