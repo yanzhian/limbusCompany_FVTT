@@ -197,6 +197,18 @@ export class LimbusMerchantSheet extends ActorSheet {
       await item.update({ "system.hidden": !item.system.hidden });
     });
 
+    // [移除] 按钮 → 从商人库存中删除该商品
+    html.find(".merchant-item-remove").on("click", async (e) => {
+      const itemId = e.currentTarget.closest("[data-item-id]").dataset.itemId;
+      const item   = this.actor.items.get(itemId);
+      if (!item) return;
+      const confirmed = await Dialog.confirm({
+        title: "移除商品",
+        content: `<p>确定要从货物列表中移除「${item.name}」吗？</p>`,
+      });
+      if (confirmed) await item.delete();
+    });
+
     // [+补充货币] 按钮
     html.find(".merchant-restock-currency").on("click", async () => {
       await this._onRestockCurrencyDialog();
