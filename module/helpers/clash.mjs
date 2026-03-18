@@ -290,11 +290,21 @@ export class ClashManager {
       // 兼容 V1（单对象 cost）和 V2（数组 costs）
       const costs = Array.isArray(act.costs) ? act.costs
         : (act.cost ? [act.cost] : []);
+      let perStackMultiplier = 1;
       for (const cost of costs) {
-        if (!cost?.buff || cost.type === "none") continue;
+        if (!cost?.buff) continue;
         const costBuffType = cost.buff === "custom" ? (cost.buffCustom || "custom") : cost.buff;
         const costTgt = cost.target === "self" ? owner : other;
-        if (costTgt) await ClashManager._reduceBuffStacks(costTgt, costBuffType, cost.stacks ?? 1);
+        if (!costTgt) continue;
+        if (cost.type === "perStack") {
+          // 消耗全部层数，将消耗量作为效果倍数
+          const existing = ClashManager._getBuff(costTgt, costBuffType);
+          const consumed = existing?.stacks ?? 0;
+          await ClashManager._removeBuff(costTgt, costBuffType);
+          perStackMultiplier = consumed;
+        } else if (cost.type !== "none") {
+          await ClashManager._reduceBuffStacks(costTgt, costBuffType, cost.stacks ?? 1);
+        }
       }
 
       // ── 效果（effects）────────────────────────────────────────────────
@@ -308,8 +318,9 @@ export class ClashManager {
         if (!effTgt) continue;
 
         // BUFF 型效果用 intensity/stacks；数值型效果用 value
+        // 若存在【每】消耗，stacks 按消耗层数等比放大
         const intensity = Number(eff.intensity ?? eff.value ?? 1);
-        const stacks    = Number(eff.stacks    ?? 1);
+        const stacks    = Number(eff.stacks    ?? 1) * perStackMultiplier;
         const buffType  = eff.buff === "custom" ? (eff.buffCustom || "custom") : (eff.buff || "");
 
         let descStr = "";

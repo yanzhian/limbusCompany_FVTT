@@ -1443,7 +1443,7 @@ function _buildCondRow(cond, idx, cfg) {
 /** 消耗行 HTML */
 function _buildCostRow(cost, idx, cfg) {
   const buffOpts  = _buildBuffGroupOptions(cfg, cost?.buff);
-  const typeOpts  = [["none","无消耗"],["forced","强制消耗"],["optional","可选消耗"]]
+  const typeOpts  = [["perStack","【每】"],["forced","强制消耗"],["optional","可选消耗"]]
     .map(([v,l]) => `<option value="${v}" ${(cost?.type ?? "forced") === v ? "selected" : ""}>${l}</option>`).join("");
   return `
     <div class="ae-row ae-cost-row">
