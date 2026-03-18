@@ -1302,7 +1302,7 @@ export class ClashManager {
       await rerollAtk.evaluate();
       atkFinalTotal   = rerollAtk.total;
       atkFinalFormula = newAtkFull;
-      _actMsgs.push(`⚁ 【${atkItem?.name ?? "攻击方"}】公式变化（${atkBaseFormulaOrig} → ${newAtkBase}），重新投骰：${rerollAtk.result} = **${rerollAtk.total}**`);
+      _actMsgs.push({ trigger: "公式重投", itemName: atkItem?.name ?? "攻击方", msgs: [`公式变化（${atkBaseFormulaOrig} → ${newAtkBase}），重新投骰：${rerollAtk.result} = <b>${rerollAtk.total}</b>`] });
     }
 
     let defFinalTotal   = defRoll.total;
@@ -1315,7 +1315,7 @@ export class ClashManager {
       await rerollDef.evaluate();
       defFinalTotal   = rerollDef.total;
       defFinalFormula = newDefFull;
-      _actMsgs.push(`⚁ 【${defItem?.name ?? "防守方"}】公式变化（${defBaseFormulaOrig} → ${newDefBase}），重新投骰：${rerollDef.result} = **${rerollDef.total}**`);
+      _actMsgs.push({ trigger: "公式重投", itemName: defItem?.name ?? "防守方", msgs: [`公式变化（${defBaseFormulaOrig} → ${newDefBase}），重新投骰：${rerollDef.result} = <b>${rerollDef.total}</b>`] });
     }
 
     const resolution = ClashManager._computeResolution({
