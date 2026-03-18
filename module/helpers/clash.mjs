@@ -290,6 +290,19 @@ export class ClashManager {
       // 兼容 V1（单对象 cost）和 V2（数组 costs）
       const costs = Array.isArray(act.costs) ? act.costs
         : (act.cost ? [act.cost] : []);
+
+      // 强制消耗：先校验层数是否充足，不足则跳过整条 Activity
+      let forcedFail = false;
+      for (const cost of costs) {
+        if (!cost?.buff || cost.type !== "forced") continue;
+        const costBuffType = cost.buff === "custom" ? (cost.buffCustom || "custom") : cost.buff;
+        const costTgt = cost.target === "self" ? owner : other;
+        if (!costTgt) { forcedFail = true; break; }
+        const existing = ClashManager._getBuff(costTgt, costBuffType);
+        if ((existing?.stacks ?? 0) < (cost.stacks ?? 1)) { forcedFail = true; break; }
+      }
+      if (forcedFail) continue;
+
       let perStackMultiplier = 1;
       for (const cost of costs) {
         if (!cost?.buff) continue;
