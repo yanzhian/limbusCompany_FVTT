@@ -88,10 +88,22 @@ export class LimbusMerchantSheet extends ActorSheet {
       if (!this._selectedCharId && ctx.ownedCharacters.length > 0) {
         this._selectedCharId = ctx.ownedCharacters[0].id;
       }
-      ctx.selectedCharId = this._selectedCharId;
+      ctx.selectedCharId       = this._selectedCharId;
       const selectedChar = game.actors.get(this._selectedCharId);
       ctx.selectedCharCurrency = selectedChar?.system?.currency ?? 0;
       ctx.selectedCharName     = selectedChar?.name ?? "—";
+
+      // ── 卖出Tab：读取选中角色的背包物品 ─────────────────────────────────
+      ctx.sellItems = (selectedChar?.items.contents ?? [])
+        .map(item => ({
+          id:        item.id,
+          name:      item.name,
+          img:       item.img,
+          type:      item.type,
+          sellPrice: item.system.cost ?? 0,   // item-cost-group 字段
+          quantity:  item.system.quantity ?? 1,
+        }))
+        .filter(i => i.type !== "skill");      // 技能不可出售（无实体）
     }
 
     return ctx;
@@ -171,6 +183,13 @@ export class LimbusMerchantSheet extends ActorSheet {
       const itemId = e.currentTarget.closest("[data-item-id]").dataset.itemId;
       await this._onPurchase(itemId);
     });
+
+    // [卖出] 按钮
+    html.find(".merchant-item-sell").on("click", async (e) => {
+      const row    = e.currentTarget.closest("[data-char-item-id]");
+      const itemId = row.dataset.charItemId;
+      await this._onSell(itemId);
+    });
   }
 
   /* ─── 购买逻辑 ───────────────────────────────────────────────────────── */
@@ -242,6 +261,61 @@ export class LimbusMerchantSheet extends ActorSheet {
     }
 
     ui.notifications.info(`购买成功：${item.name}`);
+  }
+
+  /* ─── 卖出逻辑 ───────────────────────────────────────────────────────── */
+
+  async _onSell(itemId) {
+    const char = game.actors.get(this._selectedCharId);
+    if (!char) { ui.notifications.warn("请先选择卖出角色！"); return; }
+
+    const item = char.items.get(itemId);
+    if (!item) return;
+
+    const sellPrice = item.system.cost ?? 0;
+    const itemName  = item.name;
+    const itemImg   = item.img;
+
+    // 确认对话框
+    const confirmed = await Dialog.confirm({
+      title:   "确认出售",
+      content: `<p>确定以 <strong>${sellPrice}</strong> 眼出售「${itemName}」？</p>`,
+      yes:     () => true,
+      no:      () => false,
+    });
+    if (!confirmed) return;
+
+    // ① 删除物品
+    await char.deleteEmbeddedDocuments("Item", [itemId]);
+
+    // ② 增加货币
+    const currentCurrency = char.system.currency ?? 0;
+    await char.update({ "system.currency": currentCurrency + sellPrice });
+
+    // ③ 聊天公告
+    const merchantName = this.actor.name;
+    await ChatMessage.create({
+      content: `
+        <div class="limbus-merchant-purchase-card">
+          <div class="purchase-header">
+            <img src="${this.actor.img}" class="purchase-merchant-img" alt="${merchantName}">
+            <div class="purchase-title">
+              <span class="purchase-name">${char.name}</span>
+              <span class="purchase-sub">卖给 ${merchantName}</span>
+            </div>
+          </div>
+          <div class="ic-gold-divider"></div>
+          <div class="purchase-item-row">
+            <img src="${itemImg}" class="purchase-item-icon" alt="${itemName}">
+            <span class="purchase-item-name">${itemName}</span>
+            <span class="purchase-item-price">获得 <strong>${sellPrice}</strong> 眼</span>
+          </div>
+          <div class="ic-gold-divider"></div>
+        </div>`,
+      speaker: ChatMessage.getSpeaker({ actor: char }),
+    });
+
+    ui.notifications.info(`出售成功：${itemName} → +${sellPrice} 眼`);
   }
 
   /* ─── GM 对话框：编辑价格/库存 ──────────────────────────────────────── */

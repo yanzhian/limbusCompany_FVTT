@@ -220,12 +220,52 @@
           </table>
         </section>
 
-        {{!-- ── 玩家: 卖出（占位）── --}}
+        {{!-- ── 玩家: 卖出 ── --}}
         <section class="merchant-tab-content tab" data-tab="player-sell">
-          <div class="merchant-coming-soon">
-            <i class="fas fa-tools"></i>
-            <span>卖出功能即将推出</span>
-          </div>
+          <table class="merchant-table">
+            <thead>
+              <tr>
+                <th class="col-icon">图标</th>
+                <th class="col-name">名称</th>
+                <th class="col-type">类型</th>
+                <th class="col-price">售价</th>
+                <th class="col-actions">操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              {{#each sellItems}}
+              <tr class="merchant-item-row" data-char-item-id="{{id}}">
+                <td class="col-icon">
+                  <img class="merchant-item-icon" src="{{img}}" alt="{{name}}" title="{{name}}">
+                </td>
+                <td class="col-name">{{name}}</td>
+                <td class="col-type sell-type-label">{{type}}</td>
+                <td class="col-price">
+                  {{#if sellPrice}}
+                    {{sellPrice}}
+                  {{else}}
+                    <span class="sell-no-price" title="该物品未设定出售价格">—</span>
+                  {{/if}}
+                </td>
+                <td class="col-actions">
+                  {{#if sellPrice}}
+                    <button type="button" class="merchant-item-sell btn-sm" title="出售此物品">
+                      卖出
+                    </button>
+                  {{else}}
+                    <button type="button" class="btn-sm" disabled title="该物品未设定出售价格">
+                      不可售
+                    </button>
+                  {{/if}}
+                </td>
+              </tr>
+              {{else}}
+              <tr class="merchant-empty-row">
+                <td colspan="5">背包中没有可出售的物品</td>
+              </tr>
+              {{/each}}
+            </tbody>
+          </table>
         </section>
         {{/if}}
 

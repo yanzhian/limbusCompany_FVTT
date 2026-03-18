@@ -6188,7 +6188,33 @@ input.item-piles-quantity {
   background:       rgba(229,186,37,0.04);
 }
 
-/* ── 卖出占位 ─────────────────────────────────────────────────── */
+/* ── 卖出 Tab ─────────────────────────────────────────────────── */
+
+/* 卖出按钮（绿色调强调） */
+.merchant-item-sell {
+  background:   rgba(20,50,20,0.7);
+  border-color: #2a6a2a;
+  color:        #6ec26e;
+  font-weight:  600;
+}
+.merchant-item-sell:hover {
+  background:   rgba(30,70,30,0.9);
+  border-color: #4ec24e;
+}
+
+/* 类型标签 */
+.sell-type-label {
+  font-size:  0.75rem;
+  color:      var(--text-sub);
+}
+
+/* 未设定价格提示 */
+.sell-no-price {
+  color:     var(--text-dim);
+  font-size: 0.82rem;
+}
+
+/* ── （保留旧占位选择器） ──────────────────────────────────────── */
 .merchant-coming-soon {
   display:        flex;
   flex-direction: column;
