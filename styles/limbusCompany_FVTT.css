@@ -6525,7 +6525,7 @@ input.item-piles-quantity {
   overflow:       hidden;
 }
 .camp-warehouse-panel {
-  flex:            0 0 44%;
+  flex:            0 0 52%;
   border-right:    1px solid var(--border-gold);
 }
 .camp-recipe-panel {
@@ -6550,74 +6550,82 @@ input.item-piles-quantity {
   font-weight: normal;
 }
 
-/* ── 仓库区域 ─────────────────────────────────────────────────── */
-.camp-warehouse-area {
-  flex:       1;
-  overflow-y: auto;
-  padding:    6px;
-  min-height: 60px;
+/* ── 仓库：工具栏 + 搜索 ─────────────────────────────────────── */
+.camp-warehouse-toolbar {
+  padding:     4px 8px;
+  border-bottom: 1px solid var(--border-gold);
+  flex-shrink:  0;
 }
-.camp-warehouse-item {
-  display:       flex;
-  align-items:   center;
-  gap:           6px;
-  padding:       4px 6px;
-  border-radius: 4px;
-  cursor:        grab;
-  transition:    background 0.1s;
-  border:        1px solid transparent;
-}
-.camp-warehouse-item:hover {
-  background: rgba(255,255,255,0.05);
-  border-color: var(--border-gold);
-}
-.camp-item-icon {
-  width:         28px;
-  height:        28px;
-  object-fit:    cover;
+.camp-warehouse-search {
+  width:         100%;
+  box-sizing:    border-box;
+  background:    rgba(255,255,255,0.05);
+  border:        1px solid #3B2412;
   border-radius: 3px;
-  flex-shrink:   0;
+  color:         var(--text-main);
+  padding:       3px 8px;
+  font-size:     0.8rem;
 }
-.camp-item-info {
-  flex:           1;
-  min-width:      0;
-  display:        flex;
-  flex-direction: column;
-  gap:            1px;
+.camp-warehouse-search:focus { outline: none; border-color: var(--gold-active); }
+
+.camp-warehouse-stats {
+  font-size:   0.72rem;
+  color:       var(--text-dim);
+  font-weight: normal;
+  margin-left: 4px;
 }
-.camp-item-name {
-  font-size:    0.82rem;
-  white-space:  nowrap;
-  overflow:     hidden;
-  text-overflow:ellipsis;
+.camp-grid-size-edit {
+  display:     flex;
+  align-items: center;
+  gap:         3px;
+  margin-left: auto;
+  font-size:   0.75rem;
 }
-.camp-item-qty-row {
-  display:    flex;
-  align-items:center;
-}
-.camp-item-qty-display {
-  font-size: 0.75rem;
-  color:     var(--text-sub);
-}
-.camp-item-qty-input {
-  width:         48px;
-  font-size:     0.78rem;
-  padding:       1px 4px;
+.camp-grid-dim {
+  width:         38px;
+  padding:       1px 3px;
   background:    rgba(255,255,255,0.06);
   border:        1px solid #3B2412;
   border-radius: 2px;
   color:         var(--text-main);
+  font-size:     0.78rem;
+  text-align:    center;
 }
-.camp-warehouse-remove {
-  flex-shrink: 0;
-  padding:     2px 5px;
-  font-size:   0.75rem;
-  background:  transparent;
-  border:      none;
+.camp-grid-size-label {
+  font-size:   0.72rem;
   color:       var(--text-dim);
-  cursor:      pointer;
-  border-radius: 2px;
+  margin-left: auto;
 }
+
+/* ── 仓库网格容器 ─────────────────────────────────────────────── */
+.camp-warehouse-grid-wrap {
+  flex:       1;
+  overflow:   auto;
+  padding:    6px;
+}
+/* camp 专用：cg-wrap 单元格稍小，适应 7×7 */
+.camp-cg {
+  --cell-size: 36px;
+}
+.camp-warehouse-drag-hint {
+  text-align:  center;
+  font-size:   0.72rem;
+  color:       var(--text-dim);
+  padding:     4px;
+  flex-shrink: 0;
+}
+
+/* 数量徽章（图块右下角） */
+.cg-tile-qty {
+  position:    absolute;
+  bottom:      1px;
+  right:       2px;
+  font-size:   0.65rem;
+  color:       var(--gold-active);
+  line-height: 1;
+  pointer-events: none;
+}
+
 .camp-warehouse-remove:hover {
   color:      #E84444;
   background: rgba(232, 68, 68, 0.1);

@@ -17,49 +17,73 @@
   {{!-- ── 主体：仓库（左） + 配方（右） ──────────────────────────────────── --}}
   <div class="camp-body">
 
-    {{!-- ── 左栏：仓库 ──────────────────────────────────────────────────── --}}
+    {{!-- ══ 左栏：仓库 ═══════════════════════════════════════════════════════ --}}
     <div class="camp-warehouse-panel">
+
+      {{!-- 仓库顶部工具栏 --}}
       <div class="camp-panel-header">
         <i class="fas fa-boxes"></i> 仓库
+        <span class="camp-warehouse-stats">{{warehouseUsed}} 件 / 剩余 {{warehouseAvail}} 格</span>
         {{#if (and isGM editUnlocked)}}
-          <span class="camp-panel-hint">（将物品拖入此处）</span>
+          <span class="camp-grid-size-edit">
+            <input type="number" class="camp-grid-dim" data-axis="width"
+                   value="{{gridCols}}" min="1" max="20" title="列数">
+            <span>×</span>
+            <input type="number" class="camp-grid-dim" data-axis="height"
+                   value="{{gridRows}}" min="1" max="20" title="行数">
+          </span>
+        {{else}}
+          <span class="camp-grid-size-label">{{gridSizeLabel}}</span>
         {{/if}}
       </div>
 
-      <div class="camp-warehouse-area">
-        {{#each warehouseItems}}
-          <div class="camp-warehouse-item" data-item-id="{{id}}" draggable="true">
-            <img src="{{img}}" alt="{{name}}" class="camp-item-icon" title="{{name}}">
-            <div class="camp-item-info">
-              <span class="camp-item-name">{{name}}</span>
-              <div class="camp-item-qty-row">
-                {{#if (and ../isGM ../editUnlocked)}}
-                  <input type="number" class="camp-item-qty-input" value="{{quantity}}"
-                         min="0" data-item-id="{{id}}" title="修改数量（设为0删除）">
-                {{else}}
-                  <span class="camp-item-qty-display">×{{quantity}}</span>
-                {{/if}}
-              </div>
-            </div>
-            {{#if (and ../isGM ../editUnlocked)}}
-              <button type="button" class="camp-warehouse-remove icon-btn" data-item-id="{{id}}" title="移除">
-                <i class="fas fa-times"></i>
-              </button>
-            {{/if}}
-          </div>
-        {{else}}
-          <div class="camp-empty-hint">
-            {{#if (and isGM editUnlocked)}}
-              仓库为空，将物品拖入上方区域来添加
-            {{else}}
-              仓库暂无物品
-            {{/if}}
-          </div>
-        {{/each}}
+      {{!-- 仓库搜索 --}}
+      <div class="camp-warehouse-toolbar">
+        <input type="text" class="camp-warehouse-search" placeholder="搜索仓库物品…" value="{{warehouseSearch}}"/>
       </div>
-    </div>
 
-    {{!-- ── 右栏：配方 ──────────────────────────────────────────────────── --}}
+      {{!-- 仓库网格（与容器完全相同的 cg-wrap 结构） --}}
+      <div class="camp-warehouse-grid-wrap">
+        <div class="cg-wrap camp-cg" style="--grid-cols:{{gridCols}}; --grid-rows:{{gridRows}}">
+
+          {{!-- 背景格（拖放目标） --}}
+          {{#each allCells}}
+            <div class="cg-cell {{#if occupied}}cg-occupied{{/if}}"
+                 style="grid-column:{{col}}; grid-row:{{row}}"
+                 data-x="{{x}}" data-y="{{y}}">
+            </div>
+          {{/each}}
+
+          {{!-- 物品图块 --}}
+          {{#each placedItems}}
+            <div class="cg-item-tile {{#unless show}}cg-hidden{{/unless}}"
+                 style="grid-column:{{col}} / span {{w}}; grid-row:{{row}} / span {{h}}"
+                 data-placement-idx="{{idx}}"
+                 data-item-uuid="{{uuid}}"
+                 data-item-name="{{item.name}}"
+                 draggable="true"
+                 title="{{item.name}}（右键取出）">
+              <img src="{{item.img}}" class="cg-tile-icon" alt="{{item.name}}">
+              <span class="cg-tile-name">{{item.name}}</span>
+              {{#if item.quantity}}<span class="cg-tile-qty">×{{item.quantity}}</span>{{/if}}
+              {{#if (and ../isGM ../editUnlocked)}}
+                <button type="button" class="cg-rotate-btn" data-placement-idx="{{idx}}" title="旋转">↻</button>
+              {{/if}}
+            </div>
+          {{/each}}
+
+        </div>{{!-- /cg-wrap --}}
+      </div>
+
+      {{#if (and isGM editUnlocked)}}
+        <div class="camp-warehouse-drag-hint">
+          <i class="fas fa-arrow-down"></i> 将物品拖入网格以存入仓库
+        </div>
+      {{/if}}
+
+    </div>{{!-- /camp-warehouse-panel --}}
+
+    {{!-- ══ 右栏：配方 ════════════════════════════════════════════════════════ --}}
     <div class="camp-recipe-panel">
       <div class="camp-panel-header">
         <i class="fas fa-flask"></i> 配方
@@ -107,10 +131,9 @@
             <div class="camp-recipe-detail-row">
               {{#each ingDetails}}
                 <span class="camp-ing-chip {{#unless sufficient}}ing-insufficient{{/unless}}"
-                      title="{{name}} 需要{{quantity}}，仓库有{{available}}">
+                      title="需要 {{quantity}}，仓库有 {{available}}">
                   <img src="{{img}}" width="14" height="14">
                   {{name}}×{{quantity}}
-                  {{#unless sufficient}}<span class="ing-lack">（缺{{quantity}}）</span>{{/unless}}
                 </span>
               {{/each}}
               {{#if ingDetails.length}}
@@ -133,7 +156,7 @@
           </div>
         {{/each}}
       </div>
-    </div>
+    </div>{{!-- /camp-recipe-panel --}}
 
   </div>{{!-- /camp-body --}}
 

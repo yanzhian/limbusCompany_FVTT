@@ -328,6 +328,24 @@ export class CampData extends foundry.abstract.TypeDataModel {
     });
 
     return {
+      // 仓库网格尺寸（默认 7×7）
+      warehouseSize: new fields.SchemaField({
+        width:  new fields.NumberField({ required: true, integer: true, min: 1, max: 20, initial: 7 }),
+        height: new fields.NumberField({ required: true, integer: true, min: 1, max: 20, initial: 7 }),
+      }),
+      // 仓库内容物（放置记录，与容器 contents 格式相同）
+      // { uuid, x, y, w, h, rotated }  uuid 指向该 camp actor 的嵌入物品
+      warehouseContents: new fields.ArrayField(
+        new fields.SchemaField({
+          uuid:    new fields.StringField({ required: true, initial: "" }),
+          x:       new fields.NumberField({ required: true, integer: true, min: 0, initial: 0 }),
+          y:       new fields.NumberField({ required: true, integer: true, min: 0, initial: 0 }),
+          w:       new fields.NumberField({ required: true, integer: true, min: 1, initial: 1 }),
+          h:       new fields.NumberField({ required: true, integer: true, min: 1, initial: 1 }),
+          rotated: new fields.BooleanField({ initial: false }),
+        }),
+        { required: true, initial: [] }
+      ),
       description: new fields.HTMLField({ required: false, initial: "" }),
       recipes:     new fields.ArrayField(recipeSchema, { required: true, initial: [] }),
     };
