@@ -1042,11 +1042,12 @@ export class LimbusActorSheet extends ActorSheet {
       owner: this.actor, atkActor: this.actor, defActor: null, _fireCounts: {},
     });
     if (item.type === "consumable") {
-      const qty = (item.system.quantity ?? 1) - 1;
-      if (qty <= 0) {
+      const qty      = (item.system.quantity ?? 1) - 1;
+      const reusable = item.system.reusable ?? false;
+      if (qty <= 0 && !reusable) {
         await item.delete();
       } else {
-        await item.update({ "system.quantity": qty });
+        await item.update({ "system.quantity": Math.max(0, qty) });
       }
     }
   }
