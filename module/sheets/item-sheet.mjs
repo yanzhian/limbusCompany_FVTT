@@ -1352,17 +1352,17 @@ function _esc(s) { return String(s ?? "").replace(/"/g, "&quot;"); }
 
 function _activityEffectLabels() {
   return [
-    { value: "addBuff",             label: "添加BUFF" },
-    { value: "removeBuff",          label: "移除BUFF" },
-    { value: "hpAdj",               label: "生命值调整" },
-    { value: "sanityAdj",           label: "理智值调整" },
-    { value: "atkAdj",              label: "攻击等级调整" },
-    { value: "defAdj",              label: "防御等级调整" },
-    { value: "speedAdj",            label: "速度调整" },
-    { value: "baseValue",           label: "基础值" },
-    { value: "diceAdj",             label: "骰数" },
-    { value: "relatedSkillConvert", label: "相关技能转换" },
-    { value: "seismicBlast",        label: "震颤引爆" },
+    { value: "addBuff",      label: "添加BUFF" },
+    { value: "removeBuff",   label: "移除BUFF" },
+    { value: "hpAdj",        label: "生命值调整" },
+    { value: "sanityAdj",    label: "理智值调整" },
+    { value: "apAdj",        label: "行动值" },
+    { value: "weightAdj",    label: "加重值" },
+    { value: "diceAdj",      label: "骰数" },
+    { value: "diceFacesAdj", label: "面数" },
+    { value: "baseValue",    label: "基础值" },
+    { value: "seismicBlast", label: "震颤引爆" },
+    { value: "triggerBuff",  label: "触发BUFF" },
   ];
 }
 
@@ -1380,6 +1380,16 @@ function _buildBuffGroupOptions(cfg, selected) {
       `<option value="${k}" ${selected === k ? "selected" : ""}>${labels[k] ?? k}</option>`
     ).join("")}</optgroup>`
   ).join("");
+}
+
+/** 触发BUFF专用下拉：只含特殊BUFF（排除震颤）+ 自定义 */
+function _buildTriggerBuffOptions(cfg, selected) {
+  const labels  = _buffLabelMap();
+  const special = (cfg.BUFF_GROUPS?.special ?? []).filter(k => k !== "tremor");
+  const opts    = special.map(k =>
+    `<option value="${k}" ${selected === k ? "selected" : ""}>${labels[k] ?? k}</option>`
+  ).join("");
+  return opts + `<option value="custom" ${selected === "custom" ? "selected" : ""}>自定义</option>`;
 }
 
 function _buffLabelMap() {
@@ -1443,7 +1453,7 @@ function _buildCondRow(cond, idx, cfg) {
 /** 消耗行 HTML */
 function _buildCostRow(cost, idx, cfg) {
   const buffOpts  = _buildBuffGroupOptions(cfg, cost?.buff);
-  const typeOpts  = [["none","无消耗"],["forced","强制消耗"],["optional","可选消耗"]]
+  const typeOpts  = [["perStack","【每】"],["forced","强制消耗"],["optional","可选消耗"]]
     .map(([v,l]) => `<option value="${v}" ${(cost?.type ?? "forced") === v ? "selected" : ""}>${l}</option>`).join("");
   return `
     <div class="ae-row ae-cost-row">
@@ -1474,19 +1484,19 @@ function _buildCostRow(cost, idx, cfg) {
 }
 
 const _BUFF_EFFECTS   = new Set(["addBuff", "removeBuff"]);
-const _NOVAL_EFFECTS  = new Set(["relatedSkillConvert"]);
 
 const _ROUND_OPTIONS = ["本回合", "下回合", "本回合和下回合"];
 
 /** 效果行 HTML */
 function _buildEffectRow(eff, idx, cfg) {
-  const type       = eff?.type ?? "addBuff";
-  const isBuff     = _BUFF_EFFECTS.has(type);
-  const isAddBuff  = type === "addBuff";
-  const isNoVal    = _NOVAL_EFFECTS.has(type);
+  const type           = eff?.type ?? "addBuff";
+  const isBuff         = _BUFF_EFFECTS.has(type);
+  const isAddBuff      = type === "addBuff";
+  const isTriggerBuff  = type === "triggerBuff";
   const effOpts    = _activityEffectLabels()
     .map(e => `<option value="${e.value}" ${type === e.value ? "selected" : ""}>${e.label}</option>`).join("");
-  const buffOpts   = _buildBuffGroupOptions(cfg, eff?.buff);
+  const buffOpts      = _buildBuffGroupOptions(cfg, eff?.buff);
+  const trigBuffOpts  = _buildTriggerBuffOptions(cfg, eff?.trigBuff);
   const roundVal   = eff?.round ?? "本回合";
   const roundOpts  = _ROUND_OPTIONS
     .map(v => `<option value="${v}" ${roundVal === v ? "selected" : ""}>${v}</option>`).join("");
@@ -1517,14 +1527,24 @@ function _buildEffectRow(eff, idx, cfg) {
                  value="${_esc(eff?.buffCustom ?? "")}"
                  style="display:${(eff?.buff ?? "") === "custom" ? "inline-block" : "none"};width:90px;">
           <label>强度</label>
-          <input class="ae-input-sm eff-intensity" type="number" value="${eff?.intensity ?? 1}" min="0">
+          <input class="ae-input-sm eff-intensity" type="number" value="${eff?.intensity ?? 0}" min="0">
           <label>层数</label>
           <input class="ae-input-sm eff-stacks" type="number" value="${eff?.stacks ?? 1}" min="0">
         </span>
-        <span class="ae-eff-val-sec" ${(!isBuff && !isNoVal) ? "" : 'style="display:none"'}>
+        <span class="ae-eff-val-sec" ${(!isBuff && !isTriggerBuff) ? "" : 'style="display:none"'}>
           <label>相关数值</label>
           <input class="ae-input eff-value" type="text" placeholder="数值或公式，如 1D4+2"
                  value="${formulaVal}" style="width:110px;">
+        </span>
+        <span class="ae-eff-trig-sec" ${isTriggerBuff ? "" : 'style="display:none"'}>
+          <label>BUFF</label>
+          <select class="ae-sel eff-trig-buff ae-eff-trig-buff-sel">${trigBuffOpts}</select>
+          <input class="ae-input eff-trig-buff-custom" type="text"
+                 placeholder="自定BUFF名称"
+                 value="${_esc(eff?.trigBuffCustom ?? "")}"
+                 style="display:${(eff?.trigBuff ?? "") === "custom" ? "inline-block" : "none"};width:90px;">
+          <label>层数</label>
+          <input class="ae-input-sm eff-trig-stacks" type="number" value="${eff?.trigStacks ?? 1}" min="1">
         </span>
       </div>
     </div>`;
@@ -1589,23 +1609,28 @@ function _bindDel(html) {
 
 function _bindEffType(html) {
   html.find(".ae-eff-type").off("change").on("change", function () {
-    const row       = $(this).closest(".ae-eff-row");
-    const type      = $(this).val();
-    const isBuff    = _BUFF_EFFECTS.has(type);
-    const isAddBuff = type === "addBuff";
-    const isNoV     = _NOVAL_EFFECTS.has(type);
+    const row           = $(this).closest(".ae-eff-row");
+    const type          = $(this).val();
+    const isBuff        = _BUFF_EFFECTS.has(type);
+    const isAddBuff     = type === "addBuff";
+    const isTriggerBuff = type === "triggerBuff";
     row.find(".ae-eff-round-sec").toggle(isAddBuff);
     row.find(".ae-eff-buff-sec").toggle(isBuff);
-    row.find(".ae-eff-val-sec").toggle(!isBuff && !isNoV);
+    row.find(".ae-eff-val-sec").toggle(!isBuff && !isTriggerBuff);
+    row.find(".ae-eff-trig-sec").toggle(isTriggerBuff);
     // 切换效果类型时也检查自定义 BUFF 输入框
     const buffVal = row.find(".ae-eff-buff-sel").val();
     row.find(".eff-buff-custom").toggle(isBuff && buffVal === "custom");
+    const trigVal = row.find(".ae-eff-trig-buff-sel").val();
+    row.find(".eff-trig-buff-custom").toggle(isTriggerBuff && trigVal === "custom");
   });
-  // 监听 BUFF 下拉改变以显示/隐藏自定义输入框
+  // 监听普通 BUFF 下拉改变
   html.find(".ae-eff-buff-sel").off("change").on("change", function () {
-    const row    = $(this).closest(".ae-eff-row");
-    const isCustom = $(this).val() === "custom";
-    row.find(".eff-buff-custom").toggle(isCustom);
+    $(this).closest(".ae-eff-row").find(".eff-buff-custom").toggle($(this).val() === "custom");
+  });
+  // 监听触发BUFF下拉改变
+  html.find(".ae-eff-trig-buff-sel").off("change").on("change", function () {
+    $(this).closest(".ae-eff-row").find(".eff-trig-buff-custom").toggle($(this).val() === "custom");
   });
 }
 
@@ -1641,21 +1666,27 @@ function _readActivityForm(html, original) {
 
   const effects = [];
   html.find(".ae-eff-row").each((_, el) => {
-    const $r    = $(el);
-    const type  = $r.find(".eff-type").val() || "addBuff";
-    const isBuff   = _BUFF_EFFECTS.has(type);
-    const buffVal  = isBuff ? ($r.find(".eff-buff").val() || "") : "";
-    const buffCustom = (buffVal === "custom") ? ($r.find(".eff-buff-custom").val()?.trim() || "") : "";
-    const isAddBuff = type === "addBuff";
+    const $r            = $(el);
+    const type          = $r.find(".eff-type").val() || "addBuff";
+    const isBuff        = _BUFF_EFFECTS.has(type);
+    const isTriggerBuff = type === "triggerBuff";
+    const buffVal       = isBuff ? ($r.find(".eff-buff").val() || "") : "";
+    const buffCustom    = (buffVal === "custom") ? ($r.find(".eff-buff-custom").val()?.trim() || "") : "";
+    const isAddBuff     = type === "addBuff";
+    const trigBuffVal   = isTriggerBuff ? ($r.find(".eff-trig-buff").val() || "") : "";
+    const trigBuffCustom = (trigBuffVal === "custom") ? ($r.find(".eff-trig-buff-custom").val()?.trim() || "") : "";
     effects.push({
       type,
-      target:     $r.find(".eff-target").val()    || "self",
-      round:      isAddBuff ? ($r.find(".eff-round").val() || "本回合") : undefined,
-      buff:       buffVal,
+      target:         $r.find(".eff-target").val()    || "self",
+      round:          isAddBuff     ? ($r.find(".eff-round").val() || "本回合") : undefined,
+      buff:           buffVal,
       buffCustom,
-      intensity:  isBuff  ? (parseInt($r.find(".eff-intensity").val()) || 1) : 0,
-      stacks:     isBuff  ? (parseInt($r.find(".eff-stacks").val())    || 1) : 0,
-      value:     !isBuff  ? ($r.find(".eff-value").val()?.trim() || "") : "",
+      intensity:      isBuff        ? (parseInt($r.find(".eff-intensity").val()) || 1) : 0,
+      stacks:         isBuff        ? (parseInt($r.find(".eff-stacks").val())    || 1) : 0,
+      value:          (!isBuff && !isTriggerBuff) ? ($r.find(".eff-value").val()?.trim() || "") : "",
+      trigBuff:       trigBuffVal,
+      trigBuffCustom,
+      trigStacks:     isTriggerBuff ? (parseInt($r.find(".eff-trig-stacks").val()) || 1) : 0,
     });
   });
 

@@ -179,7 +179,9 @@ export class ClashManager {
       // 与 actor.addBuff 字段结构保持一致，确保状态栏正常显示
       const iconBase = "systems/limbusCompany_FVTT/assets/icons/Buff_icon/";
       const iconName = ClashManager._buffLabel(type);
-      const icon     = iconName !== type ? `${iconBase}${iconName}.webp` : "";
+      const icon     = iconName !== type
+        ? `${iconBase}${iconName}.webp`
+        : `${iconBase}Custom_buffs/${type}.webp`;
       buffs.push({
         id:        foundry.utils.randomID(),
         type,
@@ -288,11 +290,34 @@ export class ClashManager {
       // 兼容 V1（单对象 cost）和 V2（数组 costs）
       const costs = Array.isArray(act.costs) ? act.costs
         : (act.cost ? [act.cost] : []);
+
+      // 强制消耗：先校验层数是否充足，不足则跳过整条 Activity
+      let forcedFail = false;
       for (const cost of costs) {
-        if (!cost?.buff || cost.type === "none") continue;
+        if (!cost?.buff || cost.type !== "forced") continue;
         const costBuffType = cost.buff === "custom" ? (cost.buffCustom || "custom") : cost.buff;
         const costTgt = cost.target === "self" ? owner : other;
-        if (costTgt) await ClashManager._reduceBuffStacks(costTgt, costBuffType, cost.stacks ?? 1);
+        if (!costTgt) { forcedFail = true; break; }
+        const existing = ClashManager._getBuff(costTgt, costBuffType);
+        if ((existing?.stacks ?? 0) < (cost.stacks ?? 1)) { forcedFail = true; break; }
+      }
+      if (forcedFail) continue;
+
+      let perStackMultiplier = 1;
+      for (const cost of costs) {
+        if (!cost?.buff) continue;
+        const costBuffType = cost.buff === "custom" ? (cost.buffCustom || "custom") : cost.buff;
+        const costTgt = cost.target === "self" ? owner : other;
+        if (!costTgt) continue;
+        if (cost.type === "perStack") {
+          // 消耗全部层数，将消耗量作为效果倍数
+          const existing = ClashManager._getBuff(costTgt, costBuffType);
+          const consumed = existing?.stacks ?? 0;
+          await ClashManager._removeBuff(costTgt, costBuffType);
+          perStackMultiplier = consumed;
+        } else if (cost.type !== "none") {
+          await ClashManager._reduceBuffStacks(costTgt, costBuffType, cost.stacks ?? 1);
+        }
       }
 
       // ── 效果（effects）────────────────────────────────────────────────
@@ -306,8 +331,9 @@ export class ClashManager {
         if (!effTgt) continue;
 
         // BUFF 型效果用 intensity/stacks；数值型效果用 value
+        // 若存在【每】消耗，stacks 按消耗层数等比放大
         const intensity = Number(eff.intensity ?? eff.value ?? 1);
-        const stacks    = Number(eff.stacks    ?? 1);
+        const stacks    = Number(eff.stacks    ?? 1) * perStackMultiplier;
         const buffType  = eff.buff === "custom" ? (eff.buffCustom || "custom") : (eff.buff || "");
 
         let descStr = "";
@@ -364,6 +390,50 @@ export class ClashManager {
             descStr = `【${effTgt.name}】防御等级 ${val >= 0 ? "+" : ""}${val}`;
             break;
           }
+          case "apAdj": {
+            const val = Math.round(await ClashManager._evalValue(eff.value ?? eff.intensity ?? 0));
+            const cur = effTgt.system?.ap?.value ?? 0;
+            const max = effTgt.system?.ap?.max   ?? 3;
+            const nv  = Math.max(0, Math.min(max, cur + val));
+            await effTgt.update({ "system.ap.value": nv });
+            descStr = `【${effTgt.name}】行动值 ${val >= 0 ? "+" : ""}${val}（${cur} → ${nv}）`;
+            break;
+          }
+          case "weightAdj": {
+            const val = Math.round(await ClashManager._evalValue(eff.value ?? eff.intensity ?? 0));
+            const cur = item.system?.weight ?? 0;
+            const nv  = Math.max(0, cur + val);
+            await item.update({ "system.weight": nv });
+            descStr = `【${item.name}】加重值 ${val >= 0 ? "+" : ""}${val}（${cur} → ${nv}）`;
+            break;
+          }
+          case "diceAdj": {
+            // 骰数：累加骰子数量，下限 1
+            const val = Math.round(await ClashManager._evalValue(eff.value ?? eff.intensity ?? 0));
+            const cur = item.system?.diceCount ?? 1;
+            const nv  = Math.max(1, cur + val);
+            await item.update({ "system.diceCount": nv });
+            descStr = `【${item.name}】骰数 ${val >= 0 ? "+" : ""}${val}（${cur}d → ${nv}d）`;
+            break;
+          }
+          case "diceFacesAdj": {
+            // 面数：覆盖骰子面数（设定为指定值），下限 2
+            const val = Math.round(await ClashManager._evalValue(eff.value ?? eff.intensity ?? 0));
+            const cur = item.system?.diceFaces ?? 4;
+            const nv  = Math.max(2, val);
+            await item.update({ "system.diceFaces": nv });
+            descStr = `【${item.name}】面数 d${cur} → d${nv}`;
+            break;
+          }
+          case "baseValue": {
+            // 基础值：累加骰子公式固定加值，允许负数
+            const val = Math.round(await ClashManager._evalValue(eff.value ?? eff.intensity ?? 0));
+            const cur = item.system?.baseValue ?? 0;
+            const nv  = cur + val;
+            await item.update({ "system.baseValue": nv });
+            descStr = `【${item.name}】基础值 ${val >= 0 ? "+" : ""}${val}（${cur} → ${nv}）`;
+            break;
+          }
           case "seismicBlast": {
             // 对目标触发【震颤引爆】N次（N = eff.value）
             // 每次引爆：消耗目标1层【震颤】，所有混乱阈值前移【震颤强度】%
@@ -396,6 +466,46 @@ export class ClashManager {
             descStr = actualBlasts > 0
               ? `【${effTgt.name}】震颤引爆 ×${actualBlasts}，混乱阈值各前移 ${tremorIntensity}%`
               : `【${effTgt.name}】震颤引爆未触发（震颤层数不足）`;
+            break;
+          }
+          case "triggerBuff": {
+            // 触发目标/自身身上 N 层指定BUFF：消耗层数，并立即造成对应伤害
+            // 震颤不参与此效果（使用 seismicBlast）
+            const buffType = eff.trigBuff === "custom"
+              ? (eff.trigBuffCustom?.trim() ?? "")
+              : (eff.trigBuff ?? "");
+            if (!buffType) { descStr = `触发BUFF：未指定BUFF类型`; break; }
+
+            const wantStacks  = Math.max(1, Math.round(Number(eff.trigStacks ?? 1)));
+            const existBuff   = ClashManager._getBuff(effTgt, buffType);
+            if (!existBuff || (existBuff.stacks ?? 0) <= 0) {
+              descStr = `【${effTgt.name}】无【${ClashManager._buffLabel(buffType)}】，触发未生效`;
+              break;
+            }
+
+            const actualStacks = Math.min(wantStacks, existBuff.stacks ?? 0);
+            const intensity    = existBuff.intensity ?? 0;
+            await ClashManager._reduceBuffStacks(effTgt, buffType, actualStacks);
+
+            // 各特殊BUFF对应的即时伤害规则
+            const HP_DMG_BUFFS = new Set(["burn", "bleed", "rupture"]);
+            let totalDmg = 0;
+            let dmgNote  = "";
+            if (HP_DMG_BUFFS.has(buffType) && intensity > 0) {
+              totalDmg = actualStacks * intensity;
+              dmgNote  = `，受到 ${totalDmg} 点伤害（${actualStacks}×${intensity}）`;
+            } else if (buffType === "sinking" && intensity > 0) {
+              const sanity = effTgt.system?.sanity?.value ?? 50;
+              totalDmg = actualStacks * intensity * sanity;
+              dmgNote  = `，受到 ${totalDmg} 点理智伤害（${actualStacks}×${intensity}×${sanity}）`;
+            }
+            if (totalDmg > 0) {
+              const curHp = effTgt.system?.hp?.value ?? 0;
+              await effTgt.update({ "system.hp.value": Math.max(0, curHp - totalDmg) });
+            }
+
+            const buffLabel = ClashManager._buffLabel(buffType);
+            descStr = `【${effTgt.name}】触发 ${actualStacks} 层【${buffLabel}】${dmgNote}`;
             break;
           }
           default:
@@ -506,16 +616,34 @@ export class ClashManager {
 
   static _effectDesc(item) {
     const sys = item?.system ?? {};
-    const parts = [];
-    if (sys.effectDesc) parts.push(sys.effectDesc);
+    const manualDesc = sys.effectDesc ?? "";
+
+    const actLines = [];
     if (Array.isArray(sys.activities)) {
       for (const act of sys.activities) {
         if (!act.trigger) continue;
         const effStr = ClashManager._actStr(act);
-        if (effStr) parts.push(`[${act.trigger}] ${effStr}`);
+        if (effStr) actLines.push(`[${act.trigger}] ${effStr}`);
       }
     }
-    return parts.join(" | ");
+
+    // 无任何描述：返回空字符串
+    if (!manualDesc && !actLines.length) return "";
+
+    // 手写描述直接显示；Activity 自动描述折叠隐藏
+    const manualHtml = manualDesc
+      ? `<div style="color:#9A8462;">${manualDesc}</div>`
+      : "";
+    const actHtml = actLines.length
+      ? `<details style="margin-top:2px;">
+           <summary style="cursor:pointer;color:#6A7A5A;font-size:.75rem;list-style:none;">
+             ▸ 技能效果详情
+           </summary>
+           ${actLines.map(l => `<div style="color:#6A7A5A;padding-left:6px;">${l}</div>`).join("")}
+         </details>`
+      : "";
+
+    return manualHtml + actHtml;
   }
 
   static _actStr(act) {
@@ -529,9 +657,16 @@ export class ClashManager {
     if (t === "removeBuff") return `移除${tgt}的${buffName}`;
     if (t === "hpAdj")    { const v = eff.value ?? eff.intensity ?? 0; return `${tgt}生命值 ${v >= 0 ? "+" : ""}${v}`; }
     if (t === "sanityAdj"){ const v = eff.value ?? eff.intensity ?? 0; return `${tgt}理智 ${v >= 0 ? "+" : ""}${v}`; }
-    if (t === "atkAdj")      { const v = eff.value ?? eff.intensity ?? 0; return `${tgt}攻击等级 ${v >= 0 ? "+" : ""}${v}`; }
-    if (t === "defAdj")      { const v = eff.value ?? eff.intensity ?? 0; return `${tgt}防御等级 ${v >= 0 ? "+" : ""}${v}`; }
+    if (t === "apAdj")       { const v = eff.value ?? eff.intensity ?? 0; return `${tgt}行动值 ${v >= 0 ? "+" : ""}${v}`; }
+    if (t === "weightAdj")   { const v = eff.value ?? eff.intensity ?? 0; return `技能加重值 ${v >= 0 ? "+" : ""}${v}`; }
+    if (t === "diceAdj")     { const v = eff.value ?? eff.intensity ?? 0; return `技能骰数 ${v >= 0 ? "+" : ""}${v}`; }
+    if (t === "diceFacesAdj"){ const v = eff.value ?? eff.intensity ?? 0; return `技能面数 → d${v}`; }
+    if (t === "baseValue")   { const v = eff.value ?? eff.intensity ?? 0; return `技能基础值 ${v >= 0 ? "+" : ""}${v}`; }
     if (t === "seismicBlast") return `对${tgt}触发震颤引爆 ×${eff.value ?? 1}`;
+    if (t === "triggerBuff") {
+      const bn = eff.trigBuff === "custom" ? (eff.trigBuffCustom || "自定义") : ClashManager._buffLabel(eff.trigBuff ?? "");
+      return `触发${tgt} ${eff.trigStacks ?? 1} 层 ${bn}`;
+    }
     return "";
   }
 
@@ -737,7 +872,7 @@ export class ClashManager {
                          border:none;cursor:pointer;font-size:.85rem;border-radius:2px;">承受</button>
         </div>
         ${ClashManager._goldDivider()}
-        ${effectDesc ? `<div style="font-size:.8rem;color:#9A8462;line-height:1.5;">${effectDesc}</div>` : ""}
+        ${effectDesc ? `<div style="font-size:.8rem;line-height:1.5;">${effectDesc}</div>` : ""}
       </div>`;
 // border:1px solid #C9A84C;
     const msg = await ClashManager._safeChatCreate({
@@ -751,6 +886,7 @@ export class ClashManager {
           rollTotal:   roll.total,
           rollData:    roll.toJSON(),
           formula,
+          baseFormula: sys.diceFormula ?? "1d4",
           itemName:    item.name,
           itemImg:     item.img,
           category:    sys.category ?? "",
@@ -1141,7 +1277,7 @@ export class ClashManager {
                                   border-radius:2px;">对抗</button>
         </div>
         ${ClashManager._goldDivider()}
-        ${effectDesc ? `<div style="font-size:.8rem;color:#9A8462;line-height:1.5;">${effectDesc}</div>` : ""}
+        ${effectDesc ? `<div style="font-size:.8rem;line-height:1.5;">${effectDesc}</div>` : ""}
       </div>`;
 
     await ClashManager._safeChatCreate({
@@ -1192,31 +1328,75 @@ export class ClashManager {
     const atkCtx = { atkActor, defActor, owner: atkActor, other: defActor, _fireCounts: _fc, _actMsgs };
     const defCtx = { atkActor, defActor, owner: defActor, other: atkActor, _fireCounts: _fc, _actMsgs };
 
+    // 在任何 activity 触发前，记录攻守双方当前骰子公式（用于之后检测公式变化后重投）
+    const atkBaseFormulaOrig = initFlags.baseFormula ?? initFlags.formula;
+    const defBaseFormulaOrig = defItem?.system?.diceFormula ?? defFormula;
+
     // ── [攻击前]：玩家B点击【对抗】后，拼点/结算前触发 ──────────────────
     await ClashManager._applyActivities(atkItem, "攻击前", atkCtx);
     await ClashManager._applyActivities(defItem, "攻击前", defCtx);
 
-    // 反击/防御：不走拼点流程，直接结算
-    if (defCategory === "counter") {
-      await ClashManager._resolveDirectCounter(atkActor, defActor, initFlags, defItem, defRoll, defFormula);
-      return;
-    }
-    if (defCategory === "block") {
-      await ClashManager._resolveDirectBlock(atkActor, defActor, initFlags, defItem, defRoll, defFormula);
-      return;
-    }
-
-    // ── [攻击时] / [拼点时]：进行拼点期间触发 ───────────────────────────
+    // ── [攻击时] / [拼点时]：无论对抗类型，攻击时效果均应在此触发 ───────
     await ClashManager._applyActivities(atkItem, "攻击时", atkCtx);
     await ClashManager._applyActivities(atkItem, "拼点时", atkCtx);
     await ClashManager._applyActivities(defItem,  "攻击时", defCtx);
     await ClashManager._applyActivities(defItem,  "拼点时", defCtx);
 
+    // ── [攻击时/拼点时] 可能修改骰子公式（diceAdj/diceFacesAdj/baseValue）──
+    // 若公式与发起时不同，重新投骰，保留手动加值部分
+    let atkFinalTotal   = initFlags.rollTotal;
+    let atkFinalFormula = initFlags.formula;
+    const newAtkBase = atkItem?.system?.diceFormula ?? atkBaseFormulaOrig;
+    if (newAtkBase !== atkBaseFormulaOrig) {
+      const bonusPart  = initFlags.formula.slice(atkBaseFormulaOrig.length); // 手动加值部分，如 "+3" 或 ""
+      const newAtkFull = newAtkBase + bonusPart;
+      const rerollAtk  = new Roll(newAtkFull);
+      await rerollAtk.evaluate();
+      atkFinalTotal   = rerollAtk.total;
+      atkFinalFormula = newAtkFull;
+      _actMsgs.push({ trigger: "公式重投", itemName: atkItem?.name ?? "攻击方", msgs: [`公式变化（${atkBaseFormulaOrig} → ${newAtkBase}），重新投骰：${rerollAtk.result} = <b>${rerollAtk.total}</b>`] });
+    }
+
+    let defFinalTotal   = defRoll.total;
+    let defFinalFormula = defFormula;
+    const newDefBase = defItem?.system?.diceFormula ?? defBaseFormulaOrig;
+    if (newDefBase !== defBaseFormulaOrig) {
+      const defBonusPart = defFormula.slice(defBaseFormulaOrig.length); // 手动加值部分
+      const newDefFull   = newDefBase + defBonusPart;
+      const rerollDef    = new Roll(newDefFull);
+      await rerollDef.evaluate();
+      defFinalTotal   = rerollDef.total;
+      defFinalFormula = newDefFull;
+      _actMsgs.push({ trigger: "公式重投", itemName: defItem?.name ?? "防守方", msgs: [`公式变化（${defBaseFormulaOrig} → ${newDefBase}），重新投骰：${rerollDef.result} = <b>${rerollDef.total}</b>`] });
+    }
+
+    // 汇总 [攻击时/拼点时] 后所有可能被修改的攻击方字段，统一覆盖 initFlags
+    // 目前覆盖字段：rollTotal / formula（骰子公式变化重投）、weight（weightAdj 修改加重值）
+    const atkWeightCur = atkItem?.system?.weight ?? initFlags.weight;
+    const effectiveInitFlags = (
+      atkFinalTotal   !== initFlags.rollTotal ||
+      atkFinalFormula !== initFlags.formula   ||
+      atkWeightCur    !== initFlags.weight
+    ) ? { ...initFlags, rollTotal: atkFinalTotal, formula: atkFinalFormula, weight: atkWeightCur }
+      : initFlags;
+
+    // 反击/防御：不走拼点流程，直接结算
+    if (defCategory === "counter") {
+      await ClashManager._resolveDirectCounter(atkActor, defActor, effectiveInitFlags, defItem, defRoll, defFormula);
+      await ClashManager._flushActMsgs(_actMsgs, atkActor);
+      return;
+    }
+    if (defCategory === "block") {
+      await ClashManager._resolveDirectBlock(atkActor, defActor, effectiveInitFlags, defItem, defRoll, defFormula);
+      await ClashManager._flushActMsgs(_actMsgs, atkActor);
+      return;
+    }
+
     const resolution = ClashManager._computeResolution({
-      atkActor,    atkTotal:    initFlags.rollTotal,   atkFormula:  initFlags.formula,
+      atkActor,    atkTotal:    atkFinalTotal,   atkFormula:  atkFinalFormula,
       atkItemName: initFlags.itemName, atkItemImg: initFlags.itemImg,
       atkCategory: initFlags.category ?? "",           atkSinType:  initFlags.sinType ?? "",
-      defActor,    defTotal:    defRoll.total,         defFormula,
+      defActor,    defTotal:    defFinalTotal,          defFormula:  defFinalFormula,
       defItemName: defItem.name,       defItemImg: defItem.img,
       defCategory,                                     defSinType:  sys.sinType ?? "",
     });
@@ -1278,7 +1458,7 @@ export class ClashManager {
       if (lossNote) sanityNotes.push(lossNote);
     }
 
-    await ClashManager._sendResolveMsg(resolution, initFlags, defActor, defItem, defFormula, sanityNotes);
+    await ClashManager._sendResolveMsg(resolution, effectiveInitFlags, defActor, defItem, defFormula, sanityNotes);
 
     // ── [攻击后]：结算完对抗结果后触发 ────────────────────────────────
     await ClashManager._applyActivities(atkItem, "攻击后", atkCtx);

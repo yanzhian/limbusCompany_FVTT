@@ -1665,7 +1665,7 @@ export class LimbusActorSheet extends ActorSheet {
             const name      = type === "custom" ? (custom || "自定义") : _buffLabel(type);
 
             await this.actor.addBuff({ type, name, intensity, stacks, whenAdded,
-              icon: _buffIconPath(type) });
+              icon: _buffIconPath(type, name) });
           },
         },
         cancel: { label: "取消" },
@@ -2035,7 +2035,7 @@ function _buffLabel(type) {
   return labels[type] ?? type;
 }
 
-function _buffIconPath(type) {
+function _buffIconPath(type, name = "") {
   const base = "systems/limbusCompany_FVTT/assets/icons/Buff_icon/";
   const map  = { strong:"强壮", weak:"虚弱", endure:"忍耐", breach:"破绽",
     swift:"迅捷", bind:"束缚", guard:"守护", fragile:"易损",
@@ -2045,7 +2045,9 @@ function _buffIconPath(type) {
     burn:"烧伤", bleed:"流血", tremor:"震颤", rupture:"破裂",
     sinking:"沉沦", breathing:"呼吸法", charge:"充能",
     chaos:"陷入混乱", panic:"陷入恐慌" };
-  return map[type] ? `${base}${map[type]}.webp` : "";
+  if (map[type]) return `${base}${map[type]}.webp`;
+  const customName = name || type;
+  return customName ? `${base}Custom_buffs/${customName}.webp` : "";
 }
 
 function _getCategoryIcon(category) {
