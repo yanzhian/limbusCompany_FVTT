@@ -11,6 +11,8 @@
  *   - 容器：自定义网格
  */
 
+import { ClashManager } from "../helpers/clash.mjs";
+
 export class LimbusItemSheet extends ItemSheet {
 
   /* ─── 默认选项 ──────────────────────────────────────────────────────────── */
@@ -280,9 +282,10 @@ export class LimbusItemSheet extends ItemSheet {
     super.activateListeners(html);
 
     // ── 只读 ─────────────────────────────────────────────────────────────
-    html.find(".item-send-chat").on("click", this._onSendToChat.bind(this));
+    html.find(".item-send-chat").on("click", () => this.item.sendToChat?.());
     html.find(".item-start-clash").on("click", this._onStartClash.bind(this));
-    html.find(".item-use-btn").on("click", this._onUseItem.bind(this));
+    html.find(".item-activate").on("click",   this._onActivateItem.bind(this));
+    html.find(".item-use-btn").on("click",    this._onUseItem.bind(this));
 
     // ── 编辑锁切换 ────────────────────────────────────────────────────────
     html.find(".sheet-lock-icon").on("click", this._onToggleLock.bind(this));
@@ -578,7 +581,31 @@ export class LimbusItemSheet extends ItemSheet {
     }).render(true);
   }
 
-  /* ─── 使用消耗品 ────────────────────────────────────────────────────────── */
+  /* ─── 激活消耗品（与角色卡背包激活逻辑一致）────────────────────────────── */
+
+  async _onActivateItem(event) {
+    const item  = this.item;
+    const actor = item.parent ?? null;
+    if (item.type === "consumable") {
+      const qty      = item.system.quantity ?? 0;
+      const reusable = item.system.reusable ?? false;
+      if (qty <= 0 && !reusable) { ui.notifications.warn("数量不足。"); return; }
+    }
+    await ClashManager._applyActivities(item, "使用时", {
+      owner: actor, atkActor: actor, defActor: null, _fireCounts: {}, _actMsgs: [],
+    });
+    if (item.type === "consumable") {
+      const qty      = (item.system.quantity ?? 1) - 1;
+      const reusable = item.system.reusable ?? false;
+      if (qty <= 0 && !reusable) {
+        await item.delete();
+      } else {
+        await item.update({ "system.quantity": Math.max(0, qty) });
+      }
+    }
+  }
+
+  /* ─── 使用消耗品（旧路径，保留备用）──────────────────────────────────────── */
 
   async _onUseItem(event) {
     const item     = this.item;
