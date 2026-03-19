@@ -533,52 +533,17 @@ export class LimbusItemSheet extends ItemSheet {
     });
   }
 
-  /* ─── 发起对抗 ──────────────────────────────────────────────────────────── */
+  /* ─── 发起对抗（与角色卡 item-start-clash 逻辑一致）────────────────────── */
 
   async _onStartClash(event) {
-    const item    = this.item;
-    const formula = item.system.diceFormula ?? "1d4";
-
-    const content = `
-      <div class="limbuscompany clash-dialog">
-        <div class="clash-skill-info"><strong>${item.name}</strong> <span>${formula.toUpperCase()}</span></div>
-        <div class="form-group">
-          <label>加值修正</label>
-          <input type="text" name="bonus" placeholder="加值修正?"/>
-        </div>
-      </div>`;
-
-    new Dialog({
-      title: "发起对抗",
-      content,
-      buttons: {
-        go: {
-          label: "发起对抗",
-          callback: async (html) => {
-            const bonus  = parseInt(html.find("[name='bonus']").val()) || 0;
-            const full   = bonus !== 0 ? `${formula}${bonus >= 0 ? "+" : ""}${bonus}` : formula;
-            const roll   = new Roll(full);
-            await roll.evaluate();
-
-            ChatMessage.create({
-              content: `
-              <div class="limbuscompany clash-card">
-                <div class="clash-header">发起对抗</div>
-                <div class="card-body">
-                  <div><strong>${item.name}</strong>　${full.toUpperCase()}</div>
-                  <div class="clash-action-btns" data-roll-total="${roll.total}" data-formula="${full}">
-                    <button class="clash-action-btn" data-action="clash">对抗</button>
-                    <button class="clash-action-btn danger" data-action="take">承受</button>
-                  </div>
-                </div>
-              </div>`,
-              flags: { limbusCompany_FVTT: { type: "clash-initiate", itemId: item.id, rollTotal: roll.total } },
-            });
-          },
-        },
-      },
-      default: "go",
-    }).render(true);
+    const item  = this.item;
+    const actor = item.parent ?? null;
+    if (!actor) { ui.notifications.warn("请从角色卡背包发起对抗。"); return; }
+    if ((actor.system.ap?.value ?? 0) <= 0) {
+      ui.notifications.warn("行动值不足，无法发起对抗");
+      return;
+    }
+    await ClashManager.showInitiateDialog(actor, item, -2);
   }
 
   /* ─── 激活消耗品（与角色卡背包激活逻辑一致）────────────────────────────── */
