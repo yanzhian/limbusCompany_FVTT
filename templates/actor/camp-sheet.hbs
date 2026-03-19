@@ -1,0 +1,140 @@
+{{!-- camp-sheet.hbs — 营地角色卡 --}}
+<form class="limbuscompany actor-sheet camp-sheet" autocomplete="off">
+
+  {{!-- ── 标题栏 ────────────────────────────────────────────────────────── --}}
+  <div class="camp-titlebar">
+    {{#if isGM}}
+      <span class="camp-lock-toggle {{#if editUnlocked}}unlocked{{else}}locked{{/if}}"
+            title="{{#if editUnlocked}}点击锁定编辑{{else}}点击解锁编辑{{/if}}">
+        <i class="fas fa-{{#if editUnlocked}}lock-open{{else}}lock{{/if}}"></i>
+      </span>
+    {{/if}}
+    <img src="{{actor.img}}" class="camp-title-icon" alt="camp">
+    <span class="camp-title-name">{{actor.name}}</span>
+    <span class="camp-title-label">营地</span>
+  </div>
+
+  {{!-- ── 主体：仓库（左） + 配方（右） ──────────────────────────────────── --}}
+  <div class="camp-body">
+
+    {{!-- ── 左栏：仓库 ──────────────────────────────────────────────────── --}}
+    <div class="camp-warehouse-panel">
+      <div class="camp-panel-header">
+        <i class="fas fa-boxes"></i> 仓库
+        {{#if (and isGM editUnlocked)}}
+          <span class="camp-panel-hint">（将物品拖入此处）</span>
+        {{/if}}
+      </div>
+
+      <div class="camp-warehouse-area">
+        {{#each warehouseItems}}
+          <div class="camp-warehouse-item" data-item-id="{{id}}" draggable="true">
+            <img src="{{img}}" alt="{{name}}" class="camp-item-icon" title="{{name}}">
+            <div class="camp-item-info">
+              <span class="camp-item-name">{{name}}</span>
+              <div class="camp-item-qty-row">
+                {{#if (and ../isGM ../editUnlocked)}}
+                  <input type="number" class="camp-item-qty-input" value="{{quantity}}"
+                         min="0" data-item-id="{{id}}" title="修改数量（设为0删除）">
+                {{else}}
+                  <span class="camp-item-qty-display">×{{quantity}}</span>
+                {{/if}}
+              </div>
+            </div>
+            {{#if (and ../isGM ../editUnlocked)}}
+              <button type="button" class="camp-warehouse-remove icon-btn" data-item-id="{{id}}" title="移除">
+                <i class="fas fa-times"></i>
+              </button>
+            {{/if}}
+          </div>
+        {{else}}
+          <div class="camp-empty-hint">
+            {{#if (and isGM editUnlocked)}}
+              仓库为空，将物品拖入上方区域来添加
+            {{else}}
+              仓库暂无物品
+            {{/if}}
+          </div>
+        {{/each}}
+      </div>
+    </div>
+
+    {{!-- ── 右栏：配方 ──────────────────────────────────────────────────── --}}
+    <div class="camp-recipe-panel">
+      <div class="camp-panel-header">
+        <i class="fas fa-flask"></i> 配方
+        {{#if (and isGM editUnlocked)}}
+          <button type="button" class="camp-add-recipe icon-btn" title="添加配方">
+            <i class="fas fa-plus"></i>
+          </button>
+        {{/if}}
+      </div>
+
+      <div class="camp-recipe-list">
+        {{#each recipes}}
+          <div class="camp-recipe-row {{#if hidden}}recipe-hidden{{/if}}" data-recipe-id="{{id}}">
+
+            {{!-- 配方头部行 --}}
+            <div class="camp-recipe-header-row">
+              <img src="{{outputImg}}" alt="{{outputName}}" class="camp-recipe-output-icon" title="{{outputName}}">
+              <span class="camp-recipe-name">{{name}}</span>
+              {{#if hidden}}<span class="camp-recipe-hidden-badge">已隐藏</span>{{/if}}
+
+              <div class="camp-recipe-btns">
+                {{#if (and ../isGM ../editUnlocked)}}
+                  <button type="button" class="camp-recipe-hide icon-btn" data-recipe-id="{{id}}"
+                          title="{{#if hidden}}取消隐藏{{else}}对玩家隐藏{{/if}}">
+                    <i class="fas fa-{{#if hidden}}eye{{else}}eye-slash{{/if}}"></i>
+                  </button>
+                  <button type="button" class="camp-recipe-edit icon-btn" data-recipe-id="{{id}}" title="编辑配方">
+                    <i class="fas fa-edit"></i>
+                  </button>
+                  <button type="button" class="camp-recipe-delete icon-btn" data-recipe-id="{{id}}" title="删除配方">
+                    <i class="fas fa-trash"></i>
+                  </button>
+                {{/if}}
+                <button type="button"
+                        class="camp-craft-btn sheet-btn {{#unless canCraft}}camp-craft-disabled{{/unless}}"
+                        data-recipe-id="{{id}}"
+                        {{#unless canCraft}}disabled{{/unless}}
+                        title="{{#if canCraft}}点击制作{{else}}原料不足或未绑定产出物品{{/if}}">
+                  制作
+                </button>
+              </div>
+            </div>
+
+            {{!-- 原料 + 产出行 --}}
+            <div class="camp-recipe-detail-row">
+              {{#each ingDetails}}
+                <span class="camp-ing-chip {{#unless sufficient}}ing-insufficient{{/unless}}"
+                      title="{{name}} 需要{{quantity}}，仓库有{{available}}">
+                  <img src="{{img}}" width="14" height="14">
+                  {{name}}×{{quantity}}
+                  {{#unless sufficient}}<span class="ing-lack">（缺{{quantity}}）</span>{{/unless}}
+                </span>
+              {{/each}}
+              {{#if ingDetails.length}}
+                <span class="camp-recipe-arrow">→</span>
+              {{/if}}
+              <span class="camp-output-chip">
+                <img src="{{outputImg}}" width="14" height="14">
+                {{outputName}}×{{outputQuantity}}
+              </span>
+            </div>
+
+          </div>
+        {{else}}
+          <div class="camp-empty-hint">
+            {{#if (and isGM editUnlocked)}}
+              暂无配方，点击右上角 + 添加
+            {{else}}
+              暂无可用配方
+            {{/if}}
+          </div>
+        {{/each}}
+      </div>
+    </div>
+
+  </div>{{!-- /camp-body --}}
+
+</form>

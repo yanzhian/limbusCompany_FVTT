@@ -28,7 +28,8 @@
   "documentTypes": {
     "Actor": {
       "character": {},
-      "merchant": {}
+      "merchant": {},
+      "camp": {}
     },
     "Item": {
       "equipment": {},

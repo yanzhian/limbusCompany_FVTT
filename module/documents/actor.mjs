@@ -299,6 +299,42 @@ export class MerchantData extends foundry.abstract.TypeDataModel {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+//  CampData — TypeDataModel（营地数据模型）
+// ═══════════════════════════════════════════════════════════════════════════
+
+export class CampData extends foundry.abstract.TypeDataModel {
+
+  static defineSchema() {
+    const fields = foundry.data.fields;
+
+    // 配方原料条目
+    const ingredientSchema = new fields.SchemaField({
+      name:     new fields.StringField({ required: true, initial: "" }),
+      img:      new fields.StringField({ required: false, initial: "icons/svg/item-bag.svg" }),
+      quantity: new fields.NumberField({ required: true, integer: true, min: 1, initial: 1 }),
+    });
+
+    // 配方条目
+    const recipeSchema = new fields.SchemaField({
+      id:             new fields.StringField({ required: true, initial: () => foundry.utils.randomID() }),
+      name:           new fields.StringField({ required: true, initial: "新配方" }),
+      hidden:         new fields.BooleanField({ required: true, initial: false }),
+      ingredients:    new fields.ArrayField(ingredientSchema, { required: true, initial: [] }),
+      outputName:     new fields.StringField({ required: true, initial: "" }),
+      outputImg:      new fields.StringField({ required: false, initial: "icons/svg/item-bag.svg" }),
+      outputQuantity: new fields.NumberField({ required: true, integer: true, min: 1, initial: 1 }),
+      // 产出物品完整数据快照（GM 拖拽物品时自动填入）
+      outputItemData: new fields.ObjectField({ required: false, nullable: true, initial: null }),
+    });
+
+    return {
+      description: new fields.HTMLField({ required: false, initial: "" }),
+      recipes:     new fields.ArrayField(recipeSchema, { required: true, initial: [] }),
+    };
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 //  LimbusActor — Actor 文档类
 // ═══════════════════════════════════════════════════════════════════════════
 
