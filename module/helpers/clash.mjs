@@ -468,6 +468,46 @@ export class ClashManager {
               : `【${effTgt.name}】震颤引爆未触发（震颤层数不足）`;
             break;
           }
+          case "triggerBuff": {
+            // 触发目标/自身身上 N 层指定BUFF：消耗层数，并立即造成对应伤害
+            // 震颤不参与此效果（使用 seismicBlast）
+            const buffType = eff.trigBuff === "custom"
+              ? (eff.trigBuffCustom?.trim() ?? "")
+              : (eff.trigBuff ?? "");
+            if (!buffType) { descStr = `触发BUFF：未指定BUFF类型`; break; }
+
+            const wantStacks  = Math.max(1, Math.round(Number(eff.trigStacks ?? 1)));
+            const existBuff   = ClashManager._getBuff(effTgt, buffType);
+            if (!existBuff || (existBuff.stacks ?? 0) <= 0) {
+              descStr = `【${effTgt.name}】无【${ClashManager._buffLabel(buffType)}】，触发未生效`;
+              break;
+            }
+
+            const actualStacks = Math.min(wantStacks, existBuff.stacks ?? 0);
+            const intensity    = existBuff.intensity ?? 0;
+            await ClashManager._reduceBuffStacks(effTgt, buffType, actualStacks);
+
+            // 各特殊BUFF对应的即时伤害规则
+            const HP_DMG_BUFFS = new Set(["burn", "bleed", "rupture"]);
+            let totalDmg = 0;
+            let dmgNote  = "";
+            if (HP_DMG_BUFFS.has(buffType) && intensity > 0) {
+              totalDmg = actualStacks * intensity;
+              dmgNote  = `，受到 ${totalDmg} 点伤害（${actualStacks}×${intensity}）`;
+            } else if (buffType === "sinking" && intensity > 0) {
+              const sanity = effTgt.system?.sanity?.value ?? 50;
+              totalDmg = actualStacks * intensity * sanity;
+              dmgNote  = `，受到 ${totalDmg} 点理智伤害（${actualStacks}×${intensity}×${sanity}）`;
+            }
+            if (totalDmg > 0) {
+              const curHp = effTgt.system?.hp?.value ?? 0;
+              await effTgt.update({ "system.hp.value": Math.max(0, curHp - totalDmg) });
+            }
+
+            const buffLabel = ClashManager._buffLabel(buffType);
+            descStr = `【${effTgt.name}】触发 ${actualStacks} 层【${buffLabel}】${dmgNote}`;
+            break;
+          }
           default:
             // relatedSkillConvert 等其他特殊效果暂不在此处理
             descStr = `${eff.type} 效果触发`;
@@ -623,6 +663,10 @@ export class ClashManager {
     if (t === "diceFacesAdj"){ const v = eff.value ?? eff.intensity ?? 0; return `技能面数 → d${v}`; }
     if (t === "baseValue")   { const v = eff.value ?? eff.intensity ?? 0; return `技能基础值 ${v >= 0 ? "+" : ""}${v}`; }
     if (t === "seismicBlast") return `对${tgt}触发震颤引爆 ×${eff.value ?? 1}`;
+    if (t === "triggerBuff") {
+      const bn = eff.trigBuff === "custom" ? (eff.trigBuffCustom || "自定义") : ClashManager._buffLabel(eff.trigBuff ?? "");
+      return `触发${tgt} ${eff.trigStacks ?? 1} 层 ${bn}`;
+    }
     return "";
   }
 
