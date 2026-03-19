@@ -11,6 +11,8 @@
  *   - 容器：自定义网格
  */
 
+import { ClashManager } from "../helpers/clash.mjs";
+
 export class LimbusItemSheet extends ItemSheet {
 
   /* ─── 默认选项 ──────────────────────────────────────────────────────────── */
@@ -280,9 +282,10 @@ export class LimbusItemSheet extends ItemSheet {
     super.activateListeners(html);
 
     // ── 只读 ─────────────────────────────────────────────────────────────
-    html.find(".item-send-chat").on("click", this._onSendToChat.bind(this));
+    html.find(".item-send-chat").on("click", () => this.item.sendToChat?.());
     html.find(".item-start-clash").on("click", this._onStartClash.bind(this));
-    html.find(".item-use-btn").on("click", this._onUseItem.bind(this));
+    html.find(".item-activate").on("click",   this._onActivateItem.bind(this));
+    html.find(".item-use-btn").on("click",    this._onUseItem.bind(this));
 
     // ── 编辑锁切换 ────────────────────────────────────────────────────────
     html.find(".sheet-lock-icon").on("click", this._onToggleLock.bind(this));
@@ -530,65 +533,60 @@ export class LimbusItemSheet extends ItemSheet {
     });
   }
 
-  /* ─── 发起对抗 ──────────────────────────────────────────────────────────── */
+  /* ─── 发起对抗（与角色卡 item-start-clash 逻辑一致）────────────────────── */
 
   async _onStartClash(event) {
-    const item    = this.item;
-    const formula = item.system.diceFormula ?? "1d4";
-
-    const content = `
-      <div class="limbuscompany clash-dialog">
-        <div class="clash-skill-info"><strong>${item.name}</strong> <span>${formula.toUpperCase()}</span></div>
-        <div class="form-group">
-          <label>加值修正</label>
-          <input type="text" name="bonus" placeholder="加值修正?"/>
-        </div>
-      </div>`;
-
-    new Dialog({
-      title: "发起对抗",
-      content,
-      buttons: {
-        go: {
-          label: "发起对抗",
-          callback: async (html) => {
-            const bonus  = parseInt(html.find("[name='bonus']").val()) || 0;
-            const full   = bonus !== 0 ? `${formula}${bonus >= 0 ? "+" : ""}${bonus}` : formula;
-            const roll   = new Roll(full);
-            await roll.evaluate();
-
-            ChatMessage.create({
-              content: `
-              <div class="limbuscompany clash-card">
-                <div class="clash-header">发起对抗</div>
-                <div class="card-body">
-                  <div><strong>${item.name}</strong>　${full.toUpperCase()}</div>
-                  <div class="clash-action-btns" data-roll-total="${roll.total}" data-formula="${full}">
-                    <button class="clash-action-btn" data-action="clash">对抗</button>
-                    <button class="clash-action-btn danger" data-action="take">承受</button>
-                  </div>
-                </div>
-              </div>`,
-              flags: { limbusCompany_FVTT: { type: "clash-initiate", itemId: item.id, rollTotal: roll.total } },
-            });
-          },
-        },
-      },
-      default: "go",
-    }).render(true);
+    const item  = this.item;
+    const actor = item.parent ?? null;
+    if (!actor) { ui.notifications.warn("请从角色卡背包发起对抗。"); return; }
+    if ((actor.system.ap?.value ?? 0) <= 0) {
+      ui.notifications.warn("行动值不足，无法发起对抗");
+      return;
+    }
+    await ClashManager.showInitiateDialog(actor, item, -2);
   }
 
-  /* ─── 使用消耗品 ────────────────────────────────────────────────────────── */
+  /* ─── 激活消耗品（与角色卡背包激活逻辑一致）────────────────────────────── */
+
+  async _onActivateItem(event) {
+    const item  = this.item;
+    const actor = item.parent ?? null;
+    if (item.type === "consumable") {
+      const qty = item.system.quantity ?? 0;
+      if (qty <= 0) { ui.notifications.warn("数量不足。"); return; }
+    }
+    await ClashManager._applyActivities(item, "使用时", {
+      owner: actor, atkActor: actor, defActor: null, _fireCounts: {}, _actMsgs: [],
+    });
+    if (item.type === "consumable") {
+      const qty      = (item.system.quantity ?? 1) - 1;
+      const reusable = item.system.reusable ?? false;
+      if (qty <= 0 && !reusable) {
+        await item.delete();
+      } else {
+        await item.update({ "system.quantity": Math.max(0, qty) });
+      }
+    }
+  }
+
+  /* ─── 使用消耗品（旧路径，保留备用）──────────────────────────────────────── */
 
   async _onUseItem(event) {
-    const item = this.item;
-    const qty  = item.system.quantity ?? 0;
+    const item     = this.item;
+    const qty      = item.system.quantity ?? 0;
+    const reusable = item.system.reusable ?? false;
     if (qty <= 0) { ui.notifications.warn("数量不足。"); return; }
 
-    await item.update({ "system.quantity": qty - 1 });
+    const newQty = qty - 1;
+    await item.update({ "system.quantity": newQty });
     ChatMessage.create({
       content: `<div class="limbuscompany-card"><div class="card-title">${item.name}</div><div class="card-body">使用了 1 个 ${item.name}。</div></div>`,
     });
+
+    // 普通消耗品数量归零时，自动从拥有者背包中移除
+    if (newQty <= 0 && !reusable && item.parent) {
+      await item.delete();
+    }
 
     // 触发消耗品的效果（Activity 系统在阶段7实现）
   }

@@ -251,6 +251,7 @@ export class ConsumableData extends foundry.abstract.TypeDataModel {
     return {
       category: new fields.StringField({ required: false, initial: "" }),
       quantity: new fields.NumberField({ required: true, integer: true, min: 0, initial: 1 }),
+      reusable: new fields.BooleanField({ required: true, initial: false }),
       effect:   new fields.HTMLField({ required: false, initial: "" }),
       // 激活效果触发列表
       activities: new fields.ArrayField(makeActivitySchema(), { required: true, initial: [] }),
