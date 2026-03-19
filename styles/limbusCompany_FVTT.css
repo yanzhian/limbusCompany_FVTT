@@ -3745,6 +3745,15 @@ body.game .limbuscompany.app img {
 .limbuscompany .equip-subtype-label,
 .limbuscompany .equip-category { color: var(--text-sub); }
 .limbuscompany .equip-sep { color: var(--text-dim); }
+.limbuscompany .reusable-label {
+  display: inline-flex; align-items: center; gap: 3px;
+  font-size: .72rem; color: var(--text-sub); cursor: pointer; white-space: nowrap;
+}
+.limbuscompany .reusable-label input[type="checkbox"] { margin: 0; cursor: pointer; }
+.limbuscompany .reusable-badge {
+  font-size: .7rem; color: #7AAB6A; background: rgba(80,120,60,.18);
+  border: 1px solid #4A7A3A; border-radius: 3px; padding: 0 4px;
+}
 .limbuscompany .equip-subtype-sel,
 .limbuscompany .equip-category-input {
   background: var(--bg-panel); border: 1px solid var(--border-gold);

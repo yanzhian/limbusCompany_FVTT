@@ -42,13 +42,18 @@
           {{/if}}
         </div>
 
-        {{!-- 类型 + 分类 --}}
+        {{!-- 类型 + 可复用 + 分类 --}}
         <div class="equip-type-row">
           {{#if (and isEditable (not isLocked))}}
             <input type="text" name="system.typeName" value="{{system.typeName}}" class="equip-subtype-sel" placeholder="{{typeLabel}}"/>
+            <label class="reusable-label" title="可复用道具：数量归零时不会从背包移除">
+              <input type="checkbox" name="system.reusable" {{#if system.reusable}}checked{{/if}}/>
+              可复用
+            </label>
             <input type="text" name="system.category" value="{{system.category}}" class="equip-category-input" placeholder="分类"/>
           {{else}}
             <span class="equip-subtype-label">{{typeLabel}}</span>
+            {{#if system.reusable}}<span class="reusable-badge">♻ 可复用</span>{{/if}}
             <span class="equip-sep">　</span>
             <span class="equip-category">{{system.category}}</span>
           {{/if}}

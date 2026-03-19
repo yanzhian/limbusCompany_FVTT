@@ -581,14 +581,21 @@ export class LimbusItemSheet extends ItemSheet {
   /* ─── 使用消耗品 ────────────────────────────────────────────────────────── */
 
   async _onUseItem(event) {
-    const item = this.item;
-    const qty  = item.system.quantity ?? 0;
+    const item     = this.item;
+    const qty      = item.system.quantity ?? 0;
+    const reusable = item.system.reusable ?? false;
     if (qty <= 0) { ui.notifications.warn("数量不足。"); return; }
 
-    await item.update({ "system.quantity": qty - 1 });
+    const newQty = qty - 1;
+    await item.update({ "system.quantity": newQty });
     ChatMessage.create({
       content: `<div class="limbuscompany-card"><div class="card-title">${item.name}</div><div class="card-body">使用了 1 个 ${item.name}。</div></div>`,
     });
+
+    // 普通消耗品数量归零时，自动从拥有者背包中移除
+    if (newQty <= 0 && !reusable && item.parent) {
+      await item.delete();
+    }
 
     // 触发消耗品的效果（Activity 系统在阶段7实现）
   }
