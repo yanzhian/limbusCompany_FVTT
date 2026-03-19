@@ -1038,6 +1038,9 @@ export class LimbusActorSheet extends ActorSheet {
   /** 激活物品：触发 [使用时] Activity 效果；消耗品数量 -1，归零时自动删除。 */
   async _activateItem(item) {
     if (!item) return;
+    if (item.type === "consumable" && (item.system.quantity ?? 0) <= 0) {
+      ui.notifications.warn("数量不足。"); return;
+    }
     await ClashManager._applyActivities(item, "使用时", {
       owner: this.actor, atkActor: this.actor, defActor: null, _fireCounts: {},
     });

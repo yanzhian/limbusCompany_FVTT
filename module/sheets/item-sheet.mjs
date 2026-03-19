@@ -552,9 +552,8 @@ export class LimbusItemSheet extends ItemSheet {
     const item  = this.item;
     const actor = item.parent ?? null;
     if (item.type === "consumable") {
-      const qty      = item.system.quantity ?? 0;
-      const reusable = item.system.reusable ?? false;
-      if (qty <= 0 && !reusable) { ui.notifications.warn("数量不足。"); return; }
+      const qty = item.system.quantity ?? 0;
+      if (qty <= 0) { ui.notifications.warn("数量不足。"); return; }
     }
     await ClashManager._applyActivities(item, "使用时", {
       owner: actor, atkActor: actor, defActor: null, _fireCounts: {}, _actMsgs: [],
