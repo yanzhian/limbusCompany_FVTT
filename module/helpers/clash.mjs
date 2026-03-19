@@ -1326,9 +1326,14 @@ export class ClashManager {
       _actMsgs.push({ trigger: "公式重投", itemName: defItem?.name ?? "防守方", msgs: [`公式变化（${defBaseFormulaOrig} → ${newDefBase}），重新投骰：${rerollDef.result} = <b>${rerollDef.total}</b>`] });
     }
 
-    // 若骰子公式发生变化，构建含更新值的 initFlags（传给 direct 结算函数）
-    const effectiveInitFlags = (atkFinalTotal !== initFlags.rollTotal || atkFinalFormula !== initFlags.formula)
-      ? { ...initFlags, rollTotal: atkFinalTotal, formula: atkFinalFormula }
+    // 汇总 [攻击时/拼点时] 后所有可能被修改的攻击方字段，统一覆盖 initFlags
+    // 目前覆盖字段：rollTotal / formula（骰子公式变化重投）、weight（weightAdj 修改加重值）
+    const atkWeightCur = atkItem?.system?.weight ?? initFlags.weight;
+    const effectiveInitFlags = (
+      atkFinalTotal   !== initFlags.rollTotal ||
+      atkFinalFormula !== initFlags.formula   ||
+      atkWeightCur    !== initFlags.weight
+    ) ? { ...initFlags, rollTotal: atkFinalTotal, formula: atkFinalFormula, weight: atkWeightCur }
       : initFlags;
 
     // 反击/防御：不走拼点流程，直接结算
@@ -1409,7 +1414,7 @@ export class ClashManager {
       if (lossNote) sanityNotes.push(lossNote);
     }
 
-    await ClashManager._sendResolveMsg(resolution, initFlags, defActor, defItem, defFormula, sanityNotes);
+    await ClashManager._sendResolveMsg(resolution, effectiveInitFlags, defActor, defItem, defFormula, sanityNotes);
 
     // ── [攻击后]：结算完对抗结果后触发 ────────────────────────────────
     await ClashManager._applyActivities(atkItem, "攻击后", atkCtx);
