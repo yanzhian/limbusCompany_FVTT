@@ -6460,3 +6460,375 @@ input.item-piles-quantity {
   border-color: var(--gold-active);
 }
 
+/* ══════════════════════════════════════════════════════════════
+   §  营地（Camp）角色卡
+   ══════════════════════════════════════════════════════════════ */
+
+/* ── 外框 ─────────────────────────────────────────────────────── */
+.camp-sheet {
+  display:        flex;
+  flex-direction: column;
+  height:         100%;
+  background:     var(--bg-dark);
+  color:          var(--text-main);
+}
+
+/* ── 标题栏 ───────────────────────────────────────────────────── */
+.camp-titlebar {
+  display:         flex;
+  align-items:     center;
+  gap:             8px;
+  background:      var(--bg-title-bar);
+  padding:         6px 10px;
+  border-bottom:   1px solid var(--border-gold);
+  flex-shrink:     0;
+}
+.camp-title-icon {
+  width:         28px;
+  height:        28px;
+  border-radius: 4px;
+  object-fit:    cover;
+}
+.camp-title-name {
+  font-size:   1.05rem;
+  font-weight: 600;
+  color:       var(--text-main);
+  flex:        1;
+}
+.camp-title-label {
+  font-size: 0.75rem;
+  color:     var(--text-sub);
+}
+.camp-lock-toggle {
+  cursor:    pointer;
+  font-size: 0.9rem;
+  padding:   2px 4px;
+  color:     var(--text-sub);
+  transition: color 0.15s;
+}
+.camp-lock-toggle.unlocked { color: var(--gold-active); }
+.camp-lock-toggle:hover    { color: var(--text-main); }
+
+/* ── 主体双栏 ─────────────────────────────────────────────────── */
+.camp-body {
+  display:        flex;
+  flex:           1;
+  overflow:       hidden;
+  gap:            0;
+}
+
+/* ── 通用：面板 ───────────────────────────────────────────────── */
+.camp-warehouse-panel,
+.camp-recipe-panel {
+  display:        flex;
+  flex-direction: column;
+  overflow:       hidden;
+}
+.camp-warehouse-panel {
+  flex:            0 0 52%;
+  border-right:    1px solid var(--border-gold);
+}
+.camp-recipe-panel {
+  flex:            1;
+}
+
+.camp-panel-header {
+  display:      flex;
+  align-items:  center;
+  gap:          6px;
+  padding:      6px 10px;
+  font-size:    0.8rem;
+  font-weight:  600;
+  color:        var(--text-sub);
+  background:   var(--bg-panel);
+  border-bottom:1px solid var(--border-gold);
+  flex-shrink:  0;
+}
+.camp-panel-hint {
+  font-size:   0.72rem;
+  color:       var(--text-dim);
+  font-weight: normal;
+}
+
+/* ── 仓库：工具栏 + 搜索 ─────────────────────────────────────── */
+.camp-warehouse-toolbar {
+  padding:     4px 8px;
+  border-bottom: 1px solid var(--border-gold);
+  flex-shrink:  0;
+}
+.camp-warehouse-search {
+  width:         100%;
+  box-sizing:    border-box;
+  background:    rgba(255,255,255,0.05);
+  border:        1px solid #3B2412;
+  border-radius: 3px;
+  color:         var(--text-main);
+  padding:       3px 8px;
+  font-size:     0.8rem;
+}
+.camp-warehouse-search:focus { outline: none; border-color: var(--gold-active); }
+
+.camp-warehouse-stats {
+  font-size:   0.72rem;
+  color:       var(--text-dim);
+  font-weight: normal;
+  margin-left: 4px;
+}
+.camp-grid-size-edit {
+  display:     flex;
+  align-items: center;
+  gap:         3px;
+  margin-left: auto;
+  font-size:   0.75rem;
+}
+.camp-grid-dim {
+  width:         38px;
+  padding:       1px 3px;
+  background:    rgba(255,255,255,0.06);
+  border:        1px solid #3B2412;
+  border-radius: 2px;
+  color:         var(--text-main);
+  font-size:     0.78rem;
+  text-align:    center;
+}
+.camp-grid-size-label {
+  font-size:   0.72rem;
+  color:       var(--text-dim);
+  margin-left: auto;
+}
+
+/* ── 仓库网格容器 ─────────────────────────────────────────────── */
+.camp-warehouse-grid-wrap {
+  flex:       1;
+  overflow:   auto;
+  padding:    6px;
+}
+/* camp 专用：cg-wrap 单元格稍小，适应 7×7 */
+.camp-cg {
+  --cell-size: 36px;
+}
+.camp-warehouse-drag-hint {
+  text-align:  center;
+  font-size:   0.72rem;
+  color:       var(--text-dim);
+  padding:     4px;
+  flex-shrink: 0;
+}
+
+/* 数量徽章（图块右下角） */
+.cg-tile-qty {
+  position:    absolute;
+  bottom:      1px;
+  right:       2px;
+  font-size:   0.65rem;
+  color:       var(--gold-active);
+  line-height: 1;
+  pointer-events: none;
+}
+
+.camp-warehouse-remove:hover {
+  color:      #E84444;
+  background: rgba(232, 68, 68, 0.1);
+}
+
+/* ── 配方列表 ─────────────────────────────────────────────────── */
+.camp-recipe-list {
+  flex:       1;
+  overflow-y: auto;
+  padding:    6px;
+}
+.camp-recipe-row {
+  border:        1px solid var(--border-gold);
+  border-radius: 4px;
+  margin-bottom: 6px;
+  background:    var(--bg-card);
+  overflow:      hidden;
+}
+.camp-recipe-row.recipe-hidden {
+  opacity: 0.55;
+}
+.camp-recipe-header-row {
+  display:     flex;
+  align-items: center;
+  gap:         6px;
+  padding:     5px 8px;
+  background:  var(--bg-mid);
+}
+.camp-recipe-output-icon {
+  width:         24px;
+  height:        24px;
+  object-fit:    cover;
+  border-radius: 3px;
+  flex-shrink:   0;
+}
+.camp-recipe-name {
+  flex:         1;
+  font-size:    0.83rem;
+  font-weight:  600;
+  white-space:  nowrap;
+  overflow:     hidden;
+  text-overflow:ellipsis;
+}
+.camp-recipe-hidden-badge {
+  font-size:    0.68rem;
+  padding:      1px 4px;
+  background:   rgba(255,200,0,0.15);
+  border:       1px solid rgba(255,200,0,0.3);
+  border-radius:3px;
+  color:        #FFD700;
+  flex-shrink:  0;
+}
+.camp-recipe-btns {
+  display:     flex;
+  align-items: center;
+  gap:         4px;
+  flex-shrink: 0;
+}
+.camp-craft-btn {
+  font-size:     0.75rem;
+  padding:       3px 10px;
+}
+.camp-craft-disabled {
+  opacity: 0.4;
+  cursor:  not-allowed;
+}
+.camp-recipe-detail-row {
+  display:     flex;
+  flex-wrap:   wrap;
+  align-items: center;
+  gap:         4px;
+  padding:     4px 8px 6px;
+}
+.camp-ing-chip {
+  display:      inline-flex;
+  align-items:  center;
+  gap:          3px;
+  font-size:    0.73rem;
+  padding:      2px 5px;
+  background:   rgba(255,255,255,0.06);
+  border:       1px solid rgba(255,255,255,0.1);
+  border-radius:3px;
+}
+.camp-ing-chip.ing-insufficient {
+  background: rgba(232, 68, 68, 0.1);
+  border-color:rgba(232, 68, 68, 0.35);
+  color:      #E84444;
+}
+.ing-lack {
+  font-size: 0.68rem;
+  color:     #E84444;
+}
+.camp-recipe-arrow {
+  font-size: 0.85rem;
+  color:     var(--text-sub);
+}
+.camp-output-chip {
+  display:      inline-flex;
+  align-items:  center;
+  gap:          3px;
+  font-size:    0.73rem;
+  padding:      2px 5px;
+  background:   rgba(100, 220, 100, 0.08);
+  border:       1px solid rgba(100, 220, 100, 0.2);
+  border-radius:3px;
+  color:        #90EE90;
+}
+
+/* ── 空状态提示 ───────────────────────────────────────────────── */
+.camp-empty-hint {
+  text-align: center;
+  color:      var(--text-dim);
+  font-size:  0.78rem;
+  padding:    20px 10px;
+}
+
+/* ── 配方编辑器 Dialog ─────────────────────────────────────────── */
+.camp-recipe-editor {
+  padding:    8px 4px;
+  font-size:  0.85rem;
+}
+.camp-editor-row {
+  display:     flex;
+  align-items: center;
+  gap:         8px;
+  margin-bottom: 8px;
+}
+.camp-editor-section-title {
+  font-weight:   700;
+  color:         var(--text-sub);
+  font-size:     0.78rem;
+  margin:        8px 0 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.camp-editor-ing-list {
+  display:        flex;
+  flex-direction: column;
+  gap:            4px;
+  margin-bottom:  4px;
+}
+.camp-recipe-ing-row {
+  display:     flex;
+  align-items: center;
+  gap:         6px;
+  padding:     3px 4px;
+  background:  rgba(255,255,255,0.04);
+  border-radius:3px;
+}
+.camp-ing-drag-target,
+.camp-output-drag-target {
+  cursor:        copy;
+  border-radius: 3px;
+  border:        1px dashed var(--text-dim);
+  padding:       1px;
+  flex-shrink:   0;
+}
+.camp-ing-drag-target:hover,
+.camp-output-drag-target:hover {
+  border-color: var(--gold-active);
+}
+.camp-ing-remove {
+  padding:    1px 5px;
+  background: transparent;
+  border:     1px solid var(--text-dim);
+  border-radius: 2px;
+  cursor:     pointer;
+  color:      var(--text-dim);
+  font-size:  0.75rem;
+}
+.camp-ing-remove:hover {
+  color:        #E84444;
+  border-color: #E84444;
+}
+.camp-editor-add-btn {
+  font-size:     0.78rem;
+  padding:       3px 10px;
+  margin:        2px 0;
+  background:    rgba(255,255,255,0.05);
+  border:        1px solid #3B2412;
+  border-radius: 3px;
+  cursor:        pointer;
+  color:         var(--text-sub);
+}
+.camp-editor-add-btn:hover { color: var(--gold-active); border-color: var(--gold-active); }
+.camp-editor-output-row {
+  display:     flex;
+  align-items: center;
+  gap:         8px;
+  padding:     4px;
+  background:  rgba(100,220,100,0.05);
+  border-radius:3px;
+  border:      1px solid rgba(100,220,100,0.15);
+}
+.camp-editor-hint {
+  font-size: 0.73rem;
+  color:     var(--text-dim);
+  margin:    3px 0;
+}
+
+/* ── 聊天消息 ─────────────────────────────────────────────────── */
+.chat-camp {
+  padding:    6px 10px;
+  font-size:  0.85rem;
+  line-height:1.5;
+}

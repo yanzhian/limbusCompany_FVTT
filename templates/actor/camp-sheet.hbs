@@ -1,0 +1,163 @@
+{{!-- camp-sheet.hbs — 营地角色卡 --}}
+<form class="limbuscompany actor-sheet camp-sheet" autocomplete="off">
+
+  {{!-- ── 标题栏 ────────────────────────────────────────────────────────── --}}
+  <div class="camp-titlebar">
+    {{#if isGM}}
+      <span class="camp-lock-toggle {{#if editUnlocked}}unlocked{{else}}locked{{/if}}"
+            title="{{#if editUnlocked}}点击锁定编辑{{else}}点击解锁编辑{{/if}}">
+        <i class="fas fa-{{#if editUnlocked}}lock-open{{else}}lock{{/if}}"></i>
+      </span>
+    {{/if}}
+    <img src="{{actor.img}}" class="camp-title-icon" alt="camp">
+    <span class="camp-title-name">{{actor.name}}</span>
+    <span class="camp-title-label">营地</span>
+  </div>
+
+  {{!-- ── 主体：仓库（左） + 配方（右） ──────────────────────────────────── --}}
+  <div class="camp-body">
+
+    {{!-- ══ 左栏：仓库 ═══════════════════════════════════════════════════════ --}}
+    <div class="camp-warehouse-panel">
+
+      {{!-- 仓库顶部工具栏 --}}
+      <div class="camp-panel-header">
+        <i class="fas fa-boxes"></i> 仓库
+        <span class="camp-warehouse-stats">{{warehouseUsed}} 件 / 剩余 {{warehouseAvail}} 格</span>
+        {{#if (and isGM editUnlocked)}}
+          <span class="camp-grid-size-edit">
+            <input type="number" class="camp-grid-dim" data-axis="width"
+                   value="{{gridCols}}" min="1" max="20" title="列数">
+            <span>×</span>
+            <input type="number" class="camp-grid-dim" data-axis="height"
+                   value="{{gridRows}}" min="1" max="20" title="行数">
+          </span>
+        {{else}}
+          <span class="camp-grid-size-label">{{gridSizeLabel}}</span>
+        {{/if}}
+      </div>
+
+      {{!-- 仓库搜索 --}}
+      <div class="camp-warehouse-toolbar">
+        <input type="text" class="camp-warehouse-search" placeholder="搜索仓库物品…" value="{{warehouseSearch}}"/>
+      </div>
+
+      {{!-- 仓库网格（与容器完全相同的 cg-wrap 结构） --}}
+      <div class="camp-warehouse-grid-wrap">
+        <div class="cg-wrap camp-cg" style="--grid-cols:{{gridCols}}; --grid-rows:{{gridRows}}">
+
+          {{!-- 背景格（拖放目标） --}}
+          {{#each allCells}}
+            <div class="cg-cell {{#if occupied}}cg-occupied{{/if}}"
+                 style="grid-column:{{col}}; grid-row:{{row}}"
+                 data-x="{{x}}" data-y="{{y}}">
+            </div>
+          {{/each}}
+
+          {{!-- 物品图块 --}}
+          {{#each placedItems}}
+            <div class="cg-item-tile {{#unless show}}cg-hidden{{/unless}}"
+                 style="grid-column:{{col}} / span {{w}}; grid-row:{{row}} / span {{h}}"
+                 data-placement-idx="{{idx}}"
+                 data-item-uuid="{{uuid}}"
+                 data-item-name="{{item.name}}"
+                 draggable="true"
+                 title="{{item.name}}（右键取出）">
+              <img src="{{item.img}}" class="cg-tile-icon" alt="{{item.name}}">
+              <span class="cg-tile-name">{{item.name}}</span>
+              {{#if item.quantity}}<span class="cg-tile-qty">×{{item.quantity}}</span>{{/if}}
+              {{#if (and ../isGM ../editUnlocked)}}
+                <button type="button" class="cg-rotate-btn" data-placement-idx="{{idx}}" title="旋转">↻</button>
+              {{/if}}
+            </div>
+          {{/each}}
+
+        </div>{{!-- /cg-wrap --}}
+      </div>
+
+      {{#if (and isGM editUnlocked)}}
+        <div class="camp-warehouse-drag-hint">
+          <i class="fas fa-arrow-down"></i> 将物品拖入网格以存入仓库
+        </div>
+      {{/if}}
+
+    </div>{{!-- /camp-warehouse-panel --}}
+
+    {{!-- ══ 右栏：配方 ════════════════════════════════════════════════════════ --}}
+    <div class="camp-recipe-panel">
+      <div class="camp-panel-header">
+        <i class="fas fa-flask"></i> 配方
+        {{#if (and isGM editUnlocked)}}
+          <button type="button" class="camp-add-recipe icon-btn" title="添加配方">
+            <i class="fas fa-plus"></i>
+          </button>
+        {{/if}}
+      </div>
+
+      <div class="camp-recipe-list">
+        {{#each recipes}}
+          <div class="camp-recipe-row {{#if hidden}}recipe-hidden{{/if}}" data-recipe-id="{{id}}">
+
+            {{!-- 配方头部行 --}}
+            <div class="camp-recipe-header-row">
+              <img src="{{outputImg}}" alt="{{outputName}}" class="camp-recipe-output-icon" title="{{outputName}}">
+              <span class="camp-recipe-name">{{name}}</span>
+              {{#if hidden}}<span class="camp-recipe-hidden-badge">已隐藏</span>{{/if}}
+
+              <div class="camp-recipe-btns">
+                {{#if (and ../isGM ../editUnlocked)}}
+                  <button type="button" class="camp-recipe-hide icon-btn" data-recipe-id="{{id}}"
+                          title="{{#if hidden}}取消隐藏{{else}}对玩家隐藏{{/if}}">
+                    <i class="fas fa-{{#if hidden}}eye{{else}}eye-slash{{/if}}"></i>
+                  </button>
+                  <button type="button" class="camp-recipe-edit icon-btn" data-recipe-id="{{id}}" title="编辑配方">
+                    <i class="fas fa-edit"></i>
+                  </button>
+                  <button type="button" class="camp-recipe-delete icon-btn" data-recipe-id="{{id}}" title="删除配方">
+                    <i class="fas fa-trash"></i>
+                  </button>
+                {{/if}}
+                <button type="button"
+                        class="camp-craft-btn sheet-btn {{#unless canCraft}}camp-craft-disabled{{/unless}}"
+                        data-recipe-id="{{id}}"
+                        {{#unless canCraft}}disabled{{/unless}}
+                        title="{{#if canCraft}}点击制作{{else}}原料不足或未绑定产出物品{{/if}}">
+                  制作
+                </button>
+              </div>
+            </div>
+
+            {{!-- 原料 + 产出行 --}}
+            <div class="camp-recipe-detail-row">
+              {{#each ingDetails}}
+                <span class="camp-ing-chip {{#unless sufficient}}ing-insufficient{{/unless}}"
+                      title="需要 {{quantity}}，仓库有 {{available}}">
+                  <img src="{{img}}" width="14" height="14">
+                  {{name}}×{{quantity}}
+                </span>
+              {{/each}}
+              {{#if ingDetails.length}}
+                <span class="camp-recipe-arrow">→</span>
+              {{/if}}
+              <span class="camp-output-chip">
+                <img src="{{outputImg}}" width="14" height="14">
+                {{outputName}}×{{outputQuantity}}
+              </span>
+            </div>
+
+          </div>
+        {{else}}
+          <div class="camp-empty-hint">
+            {{#if (and isGM editUnlocked)}}
+              暂无配方，点击右上角 + 添加
+            {{else}}
+              暂无可用配方
+            {{/if}}
+          </div>
+        {{/each}}
+      </div>
+    </div>{{!-- /camp-recipe-panel --}}
+
+  </div>{{!-- /camp-body --}}
+
+</form>

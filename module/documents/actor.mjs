@@ -299,6 +299,60 @@ export class MerchantData extends foundry.abstract.TypeDataModel {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+//  CampData — TypeDataModel（营地数据模型）
+// ═══════════════════════════════════════════════════════════════════════════
+
+export class CampData extends foundry.abstract.TypeDataModel {
+
+  static defineSchema() {
+    const fields = foundry.data.fields;
+
+    // 配方原料条目
+    const ingredientSchema = new fields.SchemaField({
+      name:     new fields.StringField({ required: true, initial: "" }),
+      img:      new fields.StringField({ required: false, initial: "icons/svg/item-bag.svg" }),
+      quantity: new fields.NumberField({ required: true, integer: true, min: 1, initial: 1 }),
+    });
+
+    // 配方条目
+    const recipeSchema = new fields.SchemaField({
+      id:             new fields.StringField({ required: true, initial: () => foundry.utils.randomID() }),
+      name:           new fields.StringField({ required: true, initial: "新配方" }),
+      hidden:         new fields.BooleanField({ required: true, initial: false }),
+      ingredients:    new fields.ArrayField(ingredientSchema, { required: true, initial: [] }),
+      outputName:     new fields.StringField({ required: true, initial: "" }),
+      outputImg:      new fields.StringField({ required: false, initial: "icons/svg/item-bag.svg" }),
+      outputQuantity: new fields.NumberField({ required: true, integer: true, min: 1, initial: 1 }),
+      // 产出物品完整数据快照（GM 拖拽物品时自动填入）
+      outputItemData: new fields.ObjectField({ required: false, nullable: true, initial: null }),
+    });
+
+    return {
+      // 仓库网格尺寸（默认 7×7）
+      warehouseSize: new fields.SchemaField({
+        width:  new fields.NumberField({ required: true, integer: true, min: 1, max: 20, initial: 7 }),
+        height: new fields.NumberField({ required: true, integer: true, min: 1, max: 20, initial: 7 }),
+      }),
+      // 仓库内容物（放置记录，与容器 contents 格式相同）
+      // { uuid, x, y, w, h, rotated }  uuid 指向该 camp actor 的嵌入物品
+      warehouseContents: new fields.ArrayField(
+        new fields.SchemaField({
+          uuid:    new fields.StringField({ required: true, initial: "" }),
+          x:       new fields.NumberField({ required: true, integer: true, min: 0, initial: 0 }),
+          y:       new fields.NumberField({ required: true, integer: true, min: 0, initial: 0 }),
+          w:       new fields.NumberField({ required: true, integer: true, min: 1, initial: 1 }),
+          h:       new fields.NumberField({ required: true, integer: true, min: 1, initial: 1 }),
+          rotated: new fields.BooleanField({ initial: false }),
+        }),
+        { required: true, initial: [] }
+      ),
+      description: new fields.HTMLField({ required: false, initial: "" }),
+      recipes:     new fields.ArrayField(recipeSchema, { required: true, initial: [] }),
+    };
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 //  LimbusActor — Actor 文档类
 // ═══════════════════════════════════════════════════════════════════════════
 

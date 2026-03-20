@@ -9,7 +9,7 @@
  */
 
 import { LIMBUSCOMPANY }   from "./config.mjs";
-import { LimbusActor, CharacterData, MerchantData }  from "./documents/actor.mjs";
+import { LimbusActor, CharacterData, MerchantData, CampData }  from "./documents/actor.mjs";
 import {
   LimbusItem,
   EquipmentData,
@@ -21,6 +21,7 @@ import {
 import { LimbusActorSheet }   from "./sheets/actor-sheet.mjs";
 import { LimbusItemSheet }    from "./sheets/item-sheet.mjs";
 import { LimbusMerchantSheet } from "./sheets/merchant-sheet.mjs";
+import { LimbusCampSheet }    from "./sheets/camp-sheet.mjs";
 import { ClashManager }     from "./helpers/clash.mjs";
 import { SinResourceHUD }   from "./helpers/sin-resource-hud.mjs";
 import { QuickActionHUD }   from "./sheets/quick-action-hud.mjs";
@@ -89,6 +90,7 @@ Hooks.once("init", () => {
     await SinResourceHUD.handleSocketMsg(msg);
     await ClashManager.handleSocketMsg(msg);
     await _handleMerchantSocketMsg(msg);
+    await LimbusCampSheet.handleSocketMsg(msg);
   });
 
   // 先攻公式：1D6 + 敏捷（战斗跟踪器默认骰掷使用）
@@ -103,6 +105,7 @@ Hooks.once("init", () => {
   CONFIG.Actor.dataModels = {
     character: CharacterData,
     merchant:  MerchantData,
+    camp:      CampData,
   };
 
   CONFIG.Item.dataModels = {
@@ -124,6 +127,12 @@ Hooks.once("init", () => {
     types:       ["merchant"],
     makeDefault: true,
     label:       "LIMBUSCOMPANY.Sheet.Merchant",
+  });
+
+  Actors.registerSheet("limbusCompany_FVTT", LimbusCampSheet, {
+    types:       ["camp"],
+    makeDefault: true,
+    label:       "LIMBUSCOMPANY.Sheet.Camp",
   });
 
   // ── 注册 Item Sheet ────────────────────────────────────────────────────
@@ -601,6 +610,7 @@ async function _preloadTemplates() {
     // Actor sheets
     "systems/limbusCompany_FVTT/templates/actor/merchant-sheet.hbs",
     "systems/limbusCompany_FVTT/templates/actor/character-sheet.hbs",
+    "systems/limbusCompany_FVTT/templates/actor/camp-sheet.hbs",
     "systems/limbusCompany_FVTT/templates/actor/parts/header.hbs",
     "systems/limbusCompany_FVTT/templates/actor/parts/tab-items.hbs",
     "systems/limbusCompany_FVTT/templates/actor/parts/tab-skills.hbs",
