@@ -96,19 +96,33 @@ export class LimbusCampSheet extends ActorSheet {
   /* ─── 仓库网格构建（与容器 _buildContainerGrid 同逻辑） ─────────────── */
 
   async _buildWarehouseGrid(placements, cols, rows) {
-    const placedItems = [];
-    const occupied    = new Set(); // "x,y"
-    const q           = (this._warehouseSearch ?? "").toLowerCase();
+    const placedItems     = [];
+    const occupied        = new Set(); // "x,y"
+    const q               = (this._warehouseSearch ?? "").toLowerCase();
+    const orphanedIndices = [];
 
     for (let idx = 0; idx < placements.length; idx++) {
       const p    = placements[idx];
       let   item = null;
       if (p?.uuid) item = await fromUuid(p.uuid).catch(() => null);
-      if (!item) continue;
 
       const w = Math.max(1, p.w ?? 1);
       const h = Math.max(1, p.h ?? 1);
-      if (p.x + w > cols || p.y + h > rows || p.x < 0 || p.y < 0) continue;
+      const inBounds = p.x >= 0 && p.y >= 0 && p.x + w <= cols && p.y + h <= rows;
+
+      if (!item) {
+        // 孤儿条目（物品已被删除但放置记录残留）：
+        // 仍然标记格子为占用，保持视觉与碰撞一致；同时收集待清理索引。
+        if (inBounds) {
+          for (let dy = 0; dy < h; dy++)
+            for (let dx = 0; dx < w; dx++)
+              occupied.add(`${p.x + dx},${p.y + dy}`);
+        }
+        orphanedIndices.push(idx);
+        continue;
+      }
+
+      if (!inBounds) continue;
 
       for (let dy = 0; dy < h; dy++)
         for (let dx = 0; dx < w; dx++)
@@ -126,6 +140,15 @@ export class LimbusCampSheet extends ActorSheet {
         item: { _id: item.id, name: item.name, img: item.img,
                 quantity: item.system?.quantity ?? 1 },
       });
+    }
+
+    // GM 端：延迟自动清理孤儿条目（defer 出当前 getData 调用栈，避免重入渲染循环）
+    if (orphanedIndices.length > 0 && game.user.isGM) {
+      setTimeout(async () => {
+        const cur     = this.actor.system.warehouseContents ?? [];
+        const cleaned = cur.filter((_, i) => !orphanedIndices.includes(i));
+        await this.actor.update({ "system.warehouseContents": cleaned });
+      }, 0);
     }
 
     const allCells = [];
