@@ -68,13 +68,11 @@ export class LimbusCampSheet extends ActorSheet {
     ctx.recipes = (sys.recipes ?? [])
       .filter(r => isGM || !r.hidden)
       .map(recipe => {
-        const ingDetails  = this._getIngredientDetails(recipe, actor.items.contents);
-        const realCanCraft = ingDetails.every(d => d.sufficient) &&
-                             ingDetails.length > 0 &&
-                             !!recipe.outputItemData;
-        // 若服务端数据已更新导致 canCraft=false，清除乐观锁
-        if (!realCanCraft) this._pendingCraftIds.delete(recipe.id);
-        const canCraft = realCanCraft && !this._pendingCraftIds.has(recipe.id);
+        const ingDetails = this._getIngredientDetails(recipe, actor.items.contents);
+        const canCraft   = ingDetails.every(d => d.sufficient) &&
+                           ingDetails.length > 0 &&
+                           !!recipe.outputItemData &&
+                           !this._pendingCraftIds.has(recipe.id);
         return { ...recipe, canCraft, ingDetails };
       });
 
@@ -345,11 +343,10 @@ export class LimbusCampSheet extends ActorSheet {
     const idx  = parseInt(tile.dataset.placementIdx ?? "-1");
     if (idx < 0) return;
 
-    // 计算鼠标在图块内的偏移（格子单位）
-    const cellSize = 36; // 像素（与 CSS 一致）
-    const rect     = tile.getBoundingClientRect();
-    const offX     = Math.floor((event.originalEvent.clientX - rect.left)  / cellSize);
-    const offY     = Math.floor((event.originalEvent.clientY - rect.top)   / cellSize);
+    const step = 46;   // --cg-cell(44px) + --cg-gap(2px)，与容器保持一致
+    const rect = tile.getBoundingClientRect();
+    const offX = Math.floor((event.clientX - rect.left)  / step);
+    const offY = Math.floor((event.clientY - rect.top)   / step);
 
     const dragData = {
       type:             "Item",
@@ -662,18 +659,28 @@ export class LimbusCampSheet extends ActorSheet {
     const recipeId = event.currentTarget.dataset.recipeId;
     if (this._pendingCraftIds.has(recipeId)) return;
 
-    // 乐观锁：立即禁用按钮，等待服务端确认
+    // 乐观锁：立即禁用按钮，防止重复点击
     this._pendingCraftIds.add(recipeId);
     this.render(false);
 
     if (game.user.isGM) {
-      await LimbusCampSheet._gmExecuteCraft({
-        campActorId: this.actor.id, recipeId, userId: game.user.id,
-      });
+      try {
+        await LimbusCampSheet._gmExecuteCraft({
+          campActorId: this.actor.id, recipeId, userId: game.user.id,
+        });
+      } finally {
+        // GM 侧：制作完成（成功或失败）后立即解锁
+        this._pendingCraftIds.delete(recipeId);
+        this.render(false);
+      }
     } else {
       game.socket.emit("system.limbusCompany_FVTT", {
         type: "campCraft", campActorId: this.actor.id, recipeId, userId: game.user.id,
       });
+      // 玩家侧：5 秒超时保底解锁（正常情况下服务端同步会使 canCraft 变 false，按钮自然灰掉）
+      setTimeout(() => {
+        if (this._pendingCraftIds.delete(recipeId)) this.render(false);
+      }, 5000);
     }
   }
 
