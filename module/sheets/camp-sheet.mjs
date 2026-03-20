@@ -179,7 +179,11 @@ export class LimbusCampSheet extends ActorSheet {
       const hasInfinite = matches.some(i => i.system?.infinite);
       const available = hasInfinite
         ? ing.quantity
-        : matches.reduce((s, i) => s + (i.system?.quantity ?? 1), 0);
+        : matches.reduce((s, i) => {
+            // 可复用物品数量归零时仍视为"在场"（贡献 1），不拦截制作
+            const qty = i.system?.quantity ?? 1;
+            return s + (i.system?.reusable ? Math.max(qty, 1) : qty);
+          }, 0);
       return { ...ing, available, sufficient: available >= ing.quantity };
     });
   }
@@ -729,7 +733,10 @@ export class LimbusCampSheet extends ActorSheet {
       const hasInfinite = matches.some(i => i.system?.infinite);
       const available = hasInfinite
         ? ing.quantity
-        : matches.reduce((s, i) => s + (i.system?.quantity ?? 1), 0);
+        : matches.reduce((s, i) => {
+            const qty = i.system?.quantity ?? 1;
+            return s + (i.system?.reusable ? Math.max(qty, 1) : qty);
+          }, 0);
       return { ...ing, available, sufficient: available >= ing.quantity };
     });
 
