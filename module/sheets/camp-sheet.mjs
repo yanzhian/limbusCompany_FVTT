@@ -246,9 +246,6 @@ export class LimbusCampSheet extends ActorSheet {
     event.preventDefault();
     $(event.currentTarget).removeClass("cg-drag-over");
 
-    // 玩家不能拖放到仓库
-    if (!game.user.isGM) return;
-
     const cell    = event.currentTarget;
     const targetX = parseInt(cell.dataset.x ?? 0);
     const targetY = parseInt(cell.dataset.y ?? 0);
@@ -263,14 +260,25 @@ export class LimbusCampSheet extends ActorSheet {
     // ── 仓库内图块移动 ────────────────────────────────────────────────
     if (raw.type === "Item" && raw.fromCampWarehouse?.campActorId === this.actor.id) {
       const { placementIdx: idx, offX = 0, offY = 0 } = raw.fromCampWarehouse;
-      const contents = foundry.utils.deepClone(sys.warehouseContents ?? []);
-      const p = contents[idx];
-      if (!p) return;
       const nx = targetX - offX, ny = targetY - offY;
-      if (!this._whCanPlace(nx, ny, p.w ?? 1, p.h ?? 1, cols, rows, idx))
-        return void ui.notifications.warn("此位置无法放置（超出边界或与其他物品重叠）");
-      p.x = nx; p.y = ny;
-      return void await this.actor.update({ "system.warehouseContents": contents });
+
+      if (game.user.isGM) {
+        const contents = foundry.utils.deepClone(sys.warehouseContents ?? []);
+        const p = contents[idx];
+        if (!p) return;
+        if (!this._whCanPlace(nx, ny, p.w ?? 1, p.h ?? 1, cols, rows, idx))
+          return void ui.notifications.warn("此位置无法放置（超出边界或与其他物品重叠）");
+        p.x = nx; p.y = ny;
+        return void await this.actor.update({ "system.warehouseContents": contents });
+      } else {
+        // 玩家通过 socket 委托 GM 执行移动
+        game.socket.emit("system.limbusCompany_FVTT", {
+          type: "campMoveItem",
+          campActorId: this.actor.id, placementIdx: idx, nx, ny,
+          userId: game.user.id,
+        });
+        return;
+      }
     }
 
     // ── 外部物品拖入 ──────────────────────────────────────────────────
@@ -278,6 +286,28 @@ export class LimbusCampSheet extends ActorSheet {
     if (!dropped) return;
     if (dropped.type === "container" || dropped.type === "camp") return;
 
+    const sourceActor = dropped.parent;
+
+    if (!game.user.isGM) {
+      // 玩家只能拖入自己背包中的物品，通过 socket 委托 GM 执行
+      const myChar = game.user.character;
+      if (!myChar || !sourceActor || sourceActor.id !== myChar.id) {
+        ui.notifications.warn("只能将自己背包中的物品存入仓库。");
+        return;
+      }
+      game.socket.emit("system.limbusCompany_FVTT", {
+        type:          "campDropItem",
+        campActorId:   this.actor.id,
+        itemUuid:      dropped.uuid,
+        sourceActorId: sourceActor.id,
+        itemData:      dropped.toObject(),
+        targetX, targetY,
+        userId: game.user.id,
+      });
+      return;
+    }
+
+    // GM 直接执行
     const cap = dropped.system?.capacity ?? { w: 1, h: 1 };
     const w = Math.max(1, cap.w ?? 1), h = Math.max(1, cap.h ?? 1);
 
@@ -286,14 +316,14 @@ export class LimbusCampSheet extends ActorSheet {
       : this._whAutoPlace(w, h);
     if (!place) return void ui.notifications.warn("仓库空间不足，无法放置该物品。");
 
-    const sourceActor = dropped.parent;
-    let   storedUuid  = dropped.uuid;
+    let storedUuid = dropped.uuid;
 
-    // 跨 Actor 拖入：复制物品到 camp actor（不删除源物品，仓库是"存入"）
     if (sourceActor && sourceActor.id !== this.actor.id) {
+      // 跨 Actor 拖入：复制到仓库并从源角色删除
       const itemData = dropped.toObject();
       const [newItem] = await this.actor.createEmbeddedDocuments("Item", [itemData]);
       storedUuid = newItem.uuid;
+      await dropped.delete();
     } else if (!sourceActor) {
       // 世界物品（无 actor）：复制数据
       const itemData = dropped.toObject();
@@ -636,6 +666,15 @@ export class LimbusCampSheet extends ActorSheet {
       }
     }
 
+    // 清理已删除物品的仓库放置记录（消耗后同步 warehouseContents）
+    const remainingIds = new Set(campActor.items.contents.map(i => i.id));
+    const cleanedContents = (campActor.system.warehouseContents ?? []).filter(p => {
+      const parts  = p.uuid.split(".");
+      const itemId = parts[parts.length - 1];
+      return remainingIds.has(itemId);
+    });
+    await campActor.update({ "system.warehouseContents": cleanedContents });
+
     // 创建产出
     const outData = foundry.utils.deepClone(recipe.outputItemData);
     if (outData.system?.quantity !== undefined) outData.system.quantity = recipe.outputQuantity;
@@ -685,12 +724,98 @@ export class LimbusCampSheet extends ActorSheet {
     ui.notifications.info(`${item.name} ×${qty} 已移至 ${playerChar.name} 的背包。`);
   }
 
+  /* ─── 静态：GM 端执行玩家拖入物品 ─────────────────────────────────── */
+
+  static async _gmExecuteDropItem({ campActorId, itemUuid, sourceActorId, itemData, targetX, targetY }) {
+    const campActor = game.actors.get(campActorId);
+    if (!campActor) return;
+
+    const sys  = campActor.system;
+    const cols = sys.warehouseSize?.width  ?? 7;
+    const rows = sys.warehouseSize?.height ?? 7;
+    const cur  = foundry.utils.deepClone(sys.warehouseContents ?? []);
+
+    // 碰撞检测（内联静态版）
+    const canPlace = (x, y, w, h) => {
+      if (x < 0 || y < 0 || x + w > cols || y + h > rows) return false;
+      for (const p of cur) {
+        const pw = p.w ?? 1, ph = p.h ?? 1;
+        for (let dy = 0; dy < h; dy++)
+          for (let dx = 0; dx < w; dx++)
+            if (p.x <= x + dx && x + dx < p.x + pw &&
+                p.y <= y + dy && y + dy < p.y + ph) return false;
+      }
+      return true;
+    };
+
+    const data = foundry.utils.deepClone(itemData);
+    delete data._id;
+    const cap = data.system?.capacity ?? { w: 1, h: 1 };
+    const w = Math.max(1, cap.w ?? 1), h = Math.max(1, cap.h ?? 1);
+
+    // 优先放目标格，否则自动寻位
+    let place = canPlace(targetX, targetY, w, h)
+      ? { x: targetX, y: targetY, w, h, rotated: false }
+      : null;
+    if (!place) {
+      outer: for (let y = 0; y < rows; y++) {
+        for (let x = 0; x < cols; x++) {
+          if (canPlace(x, y, w, h)) { place = { x, y, w, h, rotated: false }; break outer; }
+          if (w !== h && canPlace(x, y, h, w)) { place = { x, y, w: h, h: w, rotated: true }; break outer; }
+        }
+      }
+    }
+    if (!place) { ui.notifications.warn("仓库空间不足，无法存入。"); return; }
+
+    // 在仓库创建物品
+    const [newItem] = await campActor.createEmbeddedDocuments("Item", [data]);
+    cur.push({ uuid: newItem.uuid, x: place.x, y: place.y, w: place.w, h: place.h, rotated: place.rotated });
+    await campActor.update({ "system.warehouseContents": cur });
+
+    // 从源角色删除原物品
+    const srcItem = await fromUuid(itemUuid).catch(() => null);
+    if (srcItem && srcItem.parent?.id === sourceActorId) await srcItem.delete();
+  }
+
+  /* ─── 静态：GM 端执行玩家移动仓库物品 ──────────────────────────────── */
+
+  static async _gmExecuteMoveItem({ campActorId, placementIdx, nx, ny }) {
+    const campActor = game.actors.get(campActorId);
+    if (!campActor) return;
+
+    const sys      = campActor.system;
+    const cols     = sys.warehouseSize?.width  ?? 7;
+    const rows     = sys.warehouseSize?.height ?? 7;
+    const contents = foundry.utils.deepClone(sys.warehouseContents ?? []);
+    const p        = contents[placementIdx];
+    if (!p) return;
+
+    const pw = p.w ?? 1, ph = p.h ?? 1;
+    if (nx < 0 || ny < 0 || nx + pw > cols || ny + ph > rows) {
+      ui.notifications.warn("此位置超出仓库边界。"); return;
+    }
+    for (let i = 0; i < contents.length; i++) {
+      if (i === placementIdx) continue;
+      const q = contents[i], qw = q.w ?? 1, qh = q.h ?? 1;
+      for (let dy = 0; dy < ph; dy++)
+        for (let dx = 0; dx < pw; dx++)
+          if (q.x <= nx + dx && nx + dx < q.x + qw &&
+              q.y <= ny + dy && ny + dy < q.y + qh) {
+            ui.notifications.warn("此位置与其他物品重叠。"); return;
+          }
+    }
+    p.x = nx; p.y = ny;
+    await campActor.update({ "system.warehouseContents": contents });
+  }
+
   /* ─── Socket 消息处理 ─────────────────────────────────────────────── */
 
   static async handleSocketMsg(msg) {
     if (!game.user.isGM) return;
     if      (msg.type === "campCraft")    await LimbusCampSheet._gmExecuteCraft(msg);
     else if (msg.type === "campTakeItem") await LimbusCampSheet._gmExecuteTakeItem(msg);
+    else if (msg.type === "campDropItem") await LimbusCampSheet._gmExecuteDropItem(msg);
+    else if (msg.type === "campMoveItem") await LimbusCampSheet._gmExecuteMoveItem(msg);
   }
 
   /* ─── 工具 ─────────────────────────────────────────────────────────── */
