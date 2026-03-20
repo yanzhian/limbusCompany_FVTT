@@ -740,10 +740,16 @@ export class LimbusCampSheet extends ActorSheet {
       let remaining = ing.quantity;
       for (const item of currentItems.filter(i => i.name === ing.name)) {
         if (remaining <= 0) break;
-        const qty = item.system?.quantity ?? 1;
+        const qty      = item.system?.quantity ?? 1;
+        const reusable = item.system?.reusable  ?? false;
         if (qty <= remaining) {
           remaining -= qty;
-          idsToDelete.push(item.id);
+          if (reusable) {
+            // 可复用物品：数量归零保留，与正常使用语义一致
+            bulkUpdates.push({ _id: item.id, "system.quantity": 0 });
+          } else {
+            idsToDelete.push(item.id);
+          }
         } else {
           bulkUpdates.push({ _id: item.id, "system.quantity": qty - remaining });
           remaining = 0;
