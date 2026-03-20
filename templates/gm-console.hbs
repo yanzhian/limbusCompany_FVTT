@@ -1,0 +1,82 @@
+{{!-- gm-console.hbs — GM 控制台 --}}
+<div class="gmc-body">
+
+  {{!-- ── 角色选择区 ─────────────────────────────────────────────── --}}
+  <section class="gmc-section">
+    <div class="gmc-section-header">
+      <span class="gmc-section-title">角色选择</span>
+      <span class="gmc-selected-count">已选 {{selectedCount}} 名</span>
+      <button type="button" class="gmc-select-all  gmc-text-btn">全选</button>
+      <button type="button" class="gmc-deselect-all gmc-text-btn">清空</button>
+    </div>
+
+    {{!-- 拖放区域：从侧边栏拖入角色 --}}
+    <div class="gmc-drop-zone" title="可从侧边栏角色列表拖入角色">
+      {{#each actors}}
+        <div class="gmc-actor-tile {{#if selected}}gmc-actor-selected{{/if}}"
+             data-actor-id="{{id}}"
+             title="{{name}}（点击切换选中）">
+          <img src="{{img}}" alt="{{name}}" class="gmc-actor-img">
+          {{#if selected}}<div class="gmc-actor-check">✓</div>{{/if}}
+          <span class="gmc-actor-name">{{name}}</span>
+        </div>
+      {{/each}}
+      {{#unless actors.length}}
+        <span class="gmc-empty-hint">拖入角色卡，或先创建 character 类型角色</span>
+      {{/unless}}
+    </div>
+  </section>
+
+  {{!-- ── 集体长休 ──────────────────────────────────────────────── --}}
+  <section class="gmc-section">
+    <div class="gmc-section-header">
+      <span class="gmc-section-title">⛺ 集体长休</span>
+    </div>
+
+    <div class="gmc-lr-options">
+      <label class="gmc-cb-label">
+        <input type="checkbox" class="gmc-lr-cb" data-key="hp"
+               {{#if lrOpts.hp}}checked{{/if}}>
+        生命值重置为上限
+      </label>
+      <label class="gmc-cb-label">
+        <input type="checkbox" class="gmc-lr-cb" data-key="sanity"
+               {{#if lrOpts.sanity}}checked{{/if}}>
+        理智值归 50
+      </label>
+      <label class="gmc-cb-label">
+        <input type="checkbox" class="gmc-lr-cb" data-key="ap"
+               {{#if lrOpts.ap}}checked{{/if}}>
+        行动点重置为 3
+      </label>
+      <label class="gmc-cb-label">
+        <input type="checkbox" class="gmc-lr-cb" data-key="chaos"
+               {{#if lrOpts.chaos}}checked{{/if}}>
+        混乱阈值重置
+      </label>
+      <label class="gmc-cb-label">
+        <input type="checkbox" class="gmc-lr-cb" data-key="buffs"
+               {{#if lrOpts.buffs}}checked{{/if}}>
+        清除所有 BUFF / 状态
+      </label>
+    </div>
+
+    <button type="button" class="gmc-btn gmc-btn-long-rest">执行长休</button>
+  </section>
+
+  {{!-- ── 经验分配 ──────────────────────────────────────────────── --}}
+  <section class="gmc-section">
+    <div class="gmc-section-header">
+      <span class="gmc-section-title">✦ 经验分配</span>
+    </div>
+
+    <div class="gmc-xp-row">
+      <label class="gmc-xp-label">为已选角色各增加经验</label>
+      <div class="gmc-xp-controls">
+        <input type="number" class="gmc-xp-input" min="0" value="100" placeholder="经验值">
+        <button type="button" class="gmc-btn gmc-btn-xp">分配经验</button>
+      </div>
+    </div>
+  </section>
+
+</div>

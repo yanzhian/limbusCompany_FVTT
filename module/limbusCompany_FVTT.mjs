@@ -22,6 +22,7 @@ import { LimbusActorSheet }   from "./sheets/actor-sheet.mjs";
 import { LimbusItemSheet }    from "./sheets/item-sheet.mjs";
 import { LimbusMerchantSheet } from "./sheets/merchant-sheet.mjs";
 import { LimbusCampSheet }    from "./sheets/camp-sheet.mjs";
+import { GMConsole }          from "./sheets/gm-console.mjs";
 import { ClashManager }     from "./helpers/clash.mjs";
 import { SinResourceHUD }   from "./helpers/sin-resource-hud.mjs";
 import { QuickActionHUD }   from "./sheets/quick-action-hud.mjs";
@@ -143,6 +144,14 @@ Hooks.once("init", () => {
 
   // ── 注册游戏系统设置 ───────────────────────────────────────────────────
   _registerSettings();
+
+  // ── 注册快捷键 ────────────────────────────────────────────────────────
+  game.keybindings.register("limbusCompany_FVTT", "openGMConsole", {
+    name: "GM 控制台",
+    editable: [{ key: "KeyM" }],
+    onDown: () => { GMConsole.toggle(); return true; },
+    restricted: true,
+  });
 
   // ── 预加载 HBS 模板 ───────────────────────────────────────────────────
   _preloadTemplates();
@@ -628,6 +637,8 @@ async function _preloadTemplates() {
     // HUD
     "systems/limbusCompany_FVTT/templates/sin-resource-hud.hbs",
     "systems/limbusCompany_FVTT/templates/quick-action-hud.hbs",
+    // GM Console
+    "systems/limbusCompany_FVTT/templates/gm-console.hbs",
   ];
   return loadTemplates(templatePaths);
 }
