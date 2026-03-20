@@ -298,7 +298,7 @@ export class LimbusCampSheet extends ActorSheet {
     // ── 外部物品拖入 ──────────────────────────────────────────────────
     const dropped = await Item.fromDropData(raw).catch(() => null);
     if (!dropped) return;
-    if (dropped.type === "container" || dropped.type === "camp") return;
+    if (dropped.type === "camp") return;
 
     const sourceActor = dropped.parent;
 
