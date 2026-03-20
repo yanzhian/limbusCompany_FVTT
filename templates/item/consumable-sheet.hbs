@@ -50,10 +50,15 @@
               <input type="checkbox" name="system.reusable" {{#if system.reusable}}checked{{/if}}/>
               可复用
             </label>
+            <label class="reusable-label" title="无限耐久：作为制作原料时不消耗数量（始终保留）">
+              <input type="checkbox" name="system.infinite" {{#if system.infinite}}checked{{/if}}/>
+              无限耐久
+            </label>
             <input type="text" name="system.category" value="{{system.category}}" class="equip-category-input" placeholder="分类"/>
           {{else}}
             <span class="equip-subtype-label">{{typeLabel}}</span>
             {{#if system.reusable}}<span class="reusable-badge">♻ 可复用</span>{{/if}}
+            {{#if system.infinite}}<span class="reusable-badge">∞ 无限耐久</span>{{/if}}
             <span class="equip-sep">　</span>
             <span class="equip-category">{{system.category}}</span>
           {{/if}}

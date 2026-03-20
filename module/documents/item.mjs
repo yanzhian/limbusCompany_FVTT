@@ -253,6 +253,7 @@ export class ConsumableData extends foundry.abstract.TypeDataModel {
       typeName: new fields.StringField({ required: false, initial: "" }),
       quantity: new fields.NumberField({ required: true, integer: true, min: 0, initial: 1 }),
       reusable: new fields.BooleanField({ required: true, initial: false }),
+      infinite: new fields.BooleanField({ required: true, initial: false }),
       tags:     new fields.StringField({ required: false, initial: "" }),
       effect:   new fields.HTMLField({ required: false, initial: "" }),
       // 激活效果触发列表
@@ -288,6 +289,7 @@ export class MaterialData extends foundry.abstract.TypeDataModel {
       effect:      new fields.HTMLField({ required: false, initial: "" }),
       tags:        new fields.StringField({ required: false, initial: "" }),
       reusable:    new fields.BooleanField({ required: true, initial: false }),
+      infinite:    new fields.BooleanField({ required: true, initial: false }),
       quantity:    new fields.NumberField({ required: true, integer: true, min: 0, initial: 1 }),
       favorited:   new fields.BooleanField({ required: true, initial: false }),
       // 物品容量

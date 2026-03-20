@@ -174,9 +174,12 @@ export class LimbusCampSheet extends ActorSheet {
 
   _getIngredientDetails(recipe, warehouseItems) {
     return (recipe.ingredients ?? []).map(ing => {
-      const available = warehouseItems
-        .filter(i => i.name === ing.name)
-        .reduce((s, i) => s + (i.system?.quantity ?? 1), 0);
+      const matches = warehouseItems.filter(i => i.name === ing.name);
+      // 无限耐久物品：只要仓库中存在即视为数量充足
+      const hasInfinite = matches.some(i => i.system?.infinite);
+      const available = hasInfinite
+        ? ing.quantity
+        : matches.reduce((s, i) => s + (i.system?.quantity ?? 1), 0);
       return { ...ing, available, sufficient: available >= ing.quantity };
     });
   }
@@ -722,8 +725,11 @@ export class LimbusCampSheet extends ActorSheet {
     );
     const currentItems = campActor.items.contents.filter(i => placedIds.has(i.id));
     const ingDetails   = (recipe.ingredients ?? []).map(ing => {
-      const available = currentItems.filter(i => i.name === ing.name)
-        .reduce((s, i) => s + (i.system?.quantity ?? 1), 0);
+      const matches = currentItems.filter(i => i.name === ing.name);
+      const hasInfinite = matches.some(i => i.system?.infinite);
+      const available = hasInfinite
+        ? ing.quantity
+        : matches.reduce((s, i) => s + (i.system?.quantity ?? 1), 0);
       return { ...ing, available, sufficient: available >= ing.quantity };
     });
 
@@ -737,8 +743,12 @@ export class LimbusCampSheet extends ActorSheet {
     const bulkUpdates = [];
 
     for (const ing of (recipe.ingredients ?? [])) {
+      const ingItems = currentItems.filter(i => i.name === ing.name);
+      // 无限耐久：仓库中存在即满足，完全不消耗数量
+      if (ingItems.some(i => i.system?.infinite)) continue;
+
       let remaining = ing.quantity;
-      for (const item of currentItems.filter(i => i.name === ing.name)) {
+      for (const item of ingItems) {
         if (remaining <= 0) break;
         const qty      = item.system?.quantity ?? 1;
         const reusable = item.system?.reusable  ?? false;
