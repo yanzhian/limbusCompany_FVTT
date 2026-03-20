@@ -31,6 +31,9 @@ export class LimbusCampSheet extends ActorSheet {
   /** 仓库搜索关键词 */
   _warehouseSearch = "";
 
+  /** 正在等待服务端确认的制作配方 ID（防止重复点击） */
+  _pendingCraftIds = new Set();
+
   /* ─── getData ────────────────────────────────────────────────────────── */
 
   /** @override */
@@ -65,10 +68,13 @@ export class LimbusCampSheet extends ActorSheet {
     ctx.recipes = (sys.recipes ?? [])
       .filter(r => isGM || !r.hidden)
       .map(recipe => {
-        const ingDetails = this._getIngredientDetails(recipe, actor.items.contents);
-        const canCraft   = ingDetails.every(d => d.sufficient) &&
-                           ingDetails.length > 0 &&
-                           !!recipe.outputItemData;
+        const ingDetails  = this._getIngredientDetails(recipe, actor.items.contents);
+        const realCanCraft = ingDetails.every(d => d.sufficient) &&
+                             ingDetails.length > 0 &&
+                             !!recipe.outputItemData;
+        // 若服务端数据已更新导致 canCraft=false，清除乐观锁
+        if (!realCanCraft) this._pendingCraftIds.delete(recipe.id);
+        const canCraft = realCanCraft && !this._pendingCraftIds.has(recipe.id);
         return { ...recipe, canCraft, ingDetails };
       });
 
@@ -371,25 +377,29 @@ export class LimbusCampSheet extends ActorSheet {
   /* ─── 仓库图块旋转（GM） ─────────────────────────────────────────────── */
 
   async _onCgTileRotate(event) {
+    event.preventDefault();
     event.stopPropagation();
-    if (!game.user.isGM || !this._editUnlocked) return;
     const idx = parseInt(event.currentTarget.dataset.placementIdx ?? "-1");
     if (idx < 0) return;
 
-    const contents = foundry.utils.deepClone(this.actor.system.warehouseContents ?? []);
-    const p = contents[idx];
-    if (!p) return;
-
-    const sys  = this.actor.system;
-    const cols = sys.warehouseSize?.width  ?? 7;
-    const rows = sys.warehouseSize?.height ?? 7;
-    const newW = p.h ?? 1, newH = p.w ?? 1;
-
-    if (!this._whCanPlace(p.x, p.y, newW, newH, cols, rows, idx))
-      return void ui.notifications.warn("无法旋转：此位置放不下旋转后的物品。");
-
-    p.w = newW; p.h = newH; p.rotated = !(p.rotated ?? false);
-    await this.actor.update({ "system.warehouseContents": contents });
+    if (game.user.isGM) {
+      const contents = foundry.utils.deepClone(this.actor.system.warehouseContents ?? []);
+      const p = contents[idx];
+      if (!p) return;
+      const sys  = this.actor.system;
+      const cols = sys.warehouseSize?.width  ?? 7;
+      const rows = sys.warehouseSize?.height ?? 7;
+      const newW = p.h ?? 1, newH = p.w ?? 1;
+      if (!this._whCanPlace(p.x, p.y, newW, newH, cols, rows, idx))
+        return void ui.notifications.warn("无法旋转：此位置放不下旋转后的物品。");
+      p.w = newW; p.h = newH; p.rotated = !(p.rotated ?? false);
+      await this.actor.update({ "system.warehouseContents": contents });
+    } else {
+      game.socket.emit("system.limbusCompany_FVTT", {
+        type: "campRotateItem", campActorId: this.actor.id,
+        placementIdx: idx, userId: game.user.id,
+      });
+    }
   }
 
   /* ─── 图块右键菜单（与容器保持一致） ────────────────────────────────── */
@@ -404,13 +414,12 @@ export class LimbusCampSheet extends ActorSheet {
 
     $(".cg-ctx-menu").remove();
 
-    const isGM = game.user.isGM;
     const menu = $(`<ul class="cg-ctx-menu">
       <li data-action="takeout"><i class="fas fa-box-open"></i> 取出到我的角色</li>
       <li data-action="edit"><i class="fas fa-edit"></i> 编辑 / 查看</li>
       <li data-action="chat"><i class="fas fa-comment"></i> 发送聊天框</li>
-      ${isGM ? `<li class="cg-ctx-sep"></li>
-      <li data-action="delete" class="cg-ctx-danger"><i class="fas fa-trash"></i> 删除</li>` : ""}
+      <li class="cg-ctx-sep"></li>
+      <li data-action="delete" class="cg-ctx-danger"><i class="fas fa-trash"></i> 删除</li>
     </ul>`).css({ top: event.clientY, left: event.clientX });
     $("body").append(menu);
 
@@ -459,7 +468,7 @@ export class LimbusCampSheet extends ActorSheet {
         if (itm?.sendToChat) await itm.sendToChat();
         else ChatMessage.create({ content: `<b>${iname}</b>`, speaker: ChatMessage.getSpeaker() });
 
-      } else if (action === "delete" && isGM) {
+      } else if (action === "delete") {
         const confirmed = await Dialog.confirm({
           title: "删除物品",
           content: `<p>确定从仓库删除 <strong>${iname}</strong>？</p>`,
@@ -651,6 +660,11 @@ export class LimbusCampSheet extends ActorSheet {
 
   async _onCraft(event) {
     const recipeId = event.currentTarget.dataset.recipeId;
+    if (this._pendingCraftIds.has(recipeId)) return;
+
+    // 乐观锁：立即禁用按钮，等待服务端确认
+    this._pendingCraftIds.add(recipeId);
+    this.render(false);
 
     if (game.user.isGM) {
       await LimbusCampSheet._gmExecuteCraft({
@@ -868,14 +882,43 @@ export class LimbusCampSheet extends ActorSheet {
     await campActor.update({ "system.warehouseContents": contents });
   }
 
+  /* ─── 静态：GM 端执行玩家旋转仓库物品 ──────────────────────────────── */
+
+  static async _gmExecuteRotateItem({ campActorId, placementIdx }) {
+    const campActor = game.actors.get(campActorId);
+    if (!campActor) return;
+    const sys      = campActor.system;
+    const cols     = sys.warehouseSize?.width  ?? 7;
+    const rows     = sys.warehouseSize?.height ?? 7;
+    const contents = foundry.utils.deepClone(sys.warehouseContents ?? []);
+    const p        = contents[placementIdx];
+    if (!p) return;
+    const newW = p.h ?? 1, newH = p.w ?? 1;
+    // 碰撞检测
+    if (newW < 0 || newH < 0 || p.x + newW > cols || p.y + newH > rows) {
+      return; // 超出边界，忽略
+    }
+    for (let i = 0; i < contents.length; i++) {
+      if (i === placementIdx) continue;
+      const q = contents[i], qw = q.w ?? 1, qh = q.h ?? 1;
+      for (let dy = 0; dy < newH; dy++)
+        for (let dx = 0; dx < newW; dx++)
+          if (q.x <= p.x + dx && p.x + dx < q.x + qw &&
+              q.y <= p.y + dy && p.y + dy < q.y + qh) return; // 重叠，忽略
+    }
+    p.w = newW; p.h = newH; p.rotated = !(p.rotated ?? false);
+    await campActor.update({ "system.warehouseContents": contents });
+  }
+
   /* ─── Socket 消息处理 ─────────────────────────────────────────────── */
 
   static async handleSocketMsg(msg) {
     if (!game.user.isGM) return;
-    if      (msg.type === "campCraft")    await LimbusCampSheet._gmExecuteCraft(msg);
-    else if (msg.type === "campTakeItem") await LimbusCampSheet._gmExecuteTakeItem(msg);
-    else if (msg.type === "campDropItem") await LimbusCampSheet._gmExecuteDropItem(msg);
-    else if (msg.type === "campMoveItem") await LimbusCampSheet._gmExecuteMoveItem(msg);
+    if      (msg.type === "campCraft")      await LimbusCampSheet._gmExecuteCraft(msg);
+    else if (msg.type === "campTakeItem")   await LimbusCampSheet._gmExecuteTakeItem(msg);
+    else if (msg.type === "campDropItem")   await LimbusCampSheet._gmExecuteDropItem(msg);
+    else if (msg.type === "campMoveItem")   await LimbusCampSheet._gmExecuteMoveItem(msg);
+    else if (msg.type === "campRotateItem") await LimbusCampSheet._gmExecuteRotateItem(msg);
   }
 
   /* ─── 工具 ─────────────────────────────────────────────────────────── */
