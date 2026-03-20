@@ -34,6 +34,13 @@ export class LimbusCampSheet extends ActorSheet {
   /** 正在等待服务端确认的制作配方 ID（防止重复点击） */
   _pendingCraftIds = new Set();
 
+  /**
+   * 每个营地 Actor 的 GM 端操作序列化队列。
+   * 防止"快速取出后立刻制作"导致两条 socket 消息并发执行产生竞态条件。
+   * @type {Map<string, Promise<void>>}
+   */
+  static _opQueues = new Map();
+
   /* ─── getData ────────────────────────────────────────────────────────── */
 
   /** @override */
@@ -788,18 +795,26 @@ export class LimbusCampSheet extends ActorSheet {
     const qty    = Math.min(maxQty, Math.max(1, quantity));
     const newQty = maxQty - qty;
 
-    // 更新仓库 contents：若数量归零则同时移除放置记录
+    // 取出前快照物品数据（delete 后 toObject 仍可用，但提前保存更安全）
+    const itemData = item.toObject();
+
+    // 更新仓库 contents：若数量归零则同时移除放置记录并删除物品
     const contents = foundry.utils.deepClone(campActor.system.warehouseContents ?? []);
     if (newQty <= 0) {
       contents.splice(placementIdx, 1);
       await campActor.update({ "system.warehouseContents": contents });
+      // 再次确认物品仍属于仓库（防竞态：可能已被并发制作消耗）
+      const stillExists = campActor.items.get(item.id);
+      if (!stillExists) {
+        ui.notifications.warn(`[营地] ${item.name} 已被制作消耗，无法取回。`);
+        return;
+      }
       await item.delete();
     } else {
       await item.update({ "system.quantity": newQty });
     }
 
     // 创建物品到玩家角色
-    const itemData = item.toObject();
     if (itemData.system?.quantity !== undefined) itemData.system.quantity = qty;
     await playerChar.createEmbeddedDocuments("Item", [itemData]);
     ui.notifications.info(`${item.name} ×${qty} 已移至 ${playerChar.name} 的背包。`);
@@ -917,15 +932,26 @@ export class LimbusCampSheet extends ActorSheet {
     await campActor.update({ "system.warehouseContents": contents });
   }
 
-  /* ─── Socket 消息处理 ─────────────────────────────────────────────── */
+  /* ─── Socket 消息处理（操作序列化，防竞态） ──────────────────────── */
 
   static async handleSocketMsg(msg) {
     if (!game.user.isGM) return;
-    if      (msg.type === "campCraft")      await LimbusCampSheet._gmExecuteCraft(msg);
-    else if (msg.type === "campTakeItem")   await LimbusCampSheet._gmExecuteTakeItem(msg);
-    else if (msg.type === "campDropItem")   await LimbusCampSheet._gmExecuteDropItem(msg);
-    else if (msg.type === "campMoveItem")   await LimbusCampSheet._gmExecuteMoveItem(msg);
-    else if (msg.type === "campRotateItem") await LimbusCampSheet._gmExecuteRotateItem(msg);
+    const campActorId = msg.campActorId;
+    if (!campActorId) return;
+
+    // 将操作排入该营地 Actor 的串行队列，避免并发导致竞态
+    const prev = LimbusCampSheet._opQueues.get(campActorId) ?? Promise.resolve();
+    const next = prev.catch(() => {}).then(async () => {
+      if      (msg.type === "campCraft")      await LimbusCampSheet._gmExecuteCraft(msg);
+      else if (msg.type === "campTakeItem")   await LimbusCampSheet._gmExecuteTakeItem(msg);
+      else if (msg.type === "campDropItem")   await LimbusCampSheet._gmExecuteDropItem(msg);
+      else if (msg.type === "campMoveItem")   await LimbusCampSheet._gmExecuteMoveItem(msg);
+      else if (msg.type === "campRotateItem") await LimbusCampSheet._gmExecuteRotateItem(msg);
+    }).finally(() => {
+      if (LimbusCampSheet._opQueues.get(campActorId) === next)
+        LimbusCampSheet._opQueues.delete(campActorId);
+    });
+    LimbusCampSheet._opQueues.set(campActorId, next);
   }
 
   /* ─── 工具 ─────────────────────────────────────────────────────────── */
