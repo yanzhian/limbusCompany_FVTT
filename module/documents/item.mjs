@@ -250,8 +250,10 @@ export class ConsumableData extends foundry.abstract.TypeDataModel {
     const fields = foundry.data.fields;
     return {
       category: new fields.StringField({ required: false, initial: "" }),
+      typeName: new fields.StringField({ required: false, initial: "" }),
       quantity: new fields.NumberField({ required: true, integer: true, min: 0, initial: 1 }),
       reusable: new fields.BooleanField({ required: true, initial: false }),
+      tags:     new fields.StringField({ required: false, initial: "" }),
       effect:   new fields.HTMLField({ required: false, initial: "" }),
       // 激活效果触发列表
       activities: new fields.ArrayField(makeActivitySchema(), { required: true, initial: [] }),
@@ -282,7 +284,10 @@ export class MaterialData extends foundry.abstract.TypeDataModel {
     const fields = foundry.data.fields;
     return {
       category:    new fields.StringField({ required: false, initial: "" }),
-      description: new fields.HTMLField({ required: false, initial: "" }),
+      typeName:    new fields.StringField({ required: false, initial: "" }),
+      effect:      new fields.HTMLField({ required: false, initial: "" }),
+      tags:        new fields.StringField({ required: false, initial: "" }),
+      reusable:    new fields.BooleanField({ required: true, initial: false }),
       quantity:    new fields.NumberField({ required: true, integer: true, min: 0, initial: 1 }),
       favorited:   new fields.BooleanField({ required: true, initial: false }),
       // 物品容量
@@ -554,8 +559,8 @@ export class LimbusItem extends Item {
       const raw =
         (this.type === "skill"      ? sys.effectDesc : null) ??
         (this.type === "equipment"  ? sys.effect     : null) ??
-        (this.type === "consumable" ? sys.effect      : null) ??
-        (this.type === "material"   ? sys.description : null) ??
+        (this.type === "consumable" ? sys.effect : null) ??
+        (this.type === "material"   ? sys.effect : null) ??
         "";
       if (!raw) return "";
       return `<div class="ic-desc">${raw}</div>`;

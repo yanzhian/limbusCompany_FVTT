@@ -970,6 +970,16 @@ export class LimbusItemSheet extends ItemSheet {
         await srcContainer.update({ "system.contents": srcContents });
       }
     }
+    // 来自仓库网格：移除仓库占位记录，物品本身留在 campActor 中不删除
+    else if (raw.fromCampWarehouse) {
+      const { campActorId, placementIdx: srcIdx } = raw.fromCampWarehouse;
+      const campActor = game.actors?.get(campActorId);
+      if (campActor) {
+        const wc = foundry.utils.deepClone(campActor.system.warehouseContents ?? []);
+        wc.splice(srcIdx, 1);
+        await campActor.update({ "system.warehouseContents": wc });
+      }
+    }
 
     const contents = foundry.utils.deepClone(sys.contents ?? []);
     const entry = { uuid: storedUuid, x: place.x, y: place.y, w: place.w, h: place.h, rotated: place.rotated };
