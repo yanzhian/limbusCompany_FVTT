@@ -684,10 +684,10 @@ export class LimbusCampSheet extends ActorSheet {
       game.socket.emit("system.limbusCompany_FVTT", {
         type: "campCraft", campActorId: this.actor.id, recipeId, userId: game.user.id,
       });
-      // 玩家侧：5 秒超时保底解锁（正常情况下服务端同步会使 canCraft 变 false，按钮自然灰掉）
+      // 玩家侧：1 秒超时保底解锁（正常情况下服务端同步会更新按钮状态）
       setTimeout(() => {
         if (this._pendingCraftIds.delete(recipeId)) this.render(false);
-      }, 5000);
+      }, 1000);
     }
   }
 
@@ -698,9 +698,10 @@ export class LimbusCampSheet extends ActorSheet {
     const recipe    = (campActor?.system?.recipes ?? []).find(r => r.id === recipeId);
     if (!campActor || !recipe) return;
 
-    const allItems   = campActor.items.contents;
-    const ingDetails = (recipe.ingredients ?? []).map(ing => {
-      const available = allItems.filter(i => i.name === ing.name)
+    // ── 1. 检查原料（使用最新快照） ──────────────────────────────────
+    const currentItems = campActor.items.contents;
+    const ingDetails   = (recipe.ingredients ?? []).map(ing => {
+      const available = currentItems.filter(i => i.name === ing.name)
         .reduce((s, i) => s + (i.system?.quantity ?? 1), 0);
       return { ...ing, available, sufficient: available >= ing.quantity };
     });
@@ -710,25 +711,40 @@ export class LimbusCampSheet extends ActorSheet {
       return;
     }
 
-    // 消耗原料
+    // ── 2. 提前计算要删除/更新的物品（不做任何服务端操作） ──────────
+    const idsToDelete   = [];
+    const idsDeletedSet = new Set();
+    const bulkUpdates   = [];
+
     for (const ing of (recipe.ingredients ?? [])) {
       let remaining = ing.quantity;
-      for (const item of [...allItems].filter(i => i.name === ing.name)) {
+      for (const item of currentItems.filter(i => i.name === ing.name)) {
         if (remaining <= 0) break;
         const qty = item.system?.quantity ?? 1;
-        if (qty <= remaining) { remaining -= qty; await item.delete(); }
-        else { await item.update({ "system.quantity": qty - remaining }); remaining = 0; }
+        if (qty <= remaining) {
+          remaining -= qty;
+          idsToDelete.push(item.id);
+          idsDeletedSet.add(item.id);
+        } else {
+          bulkUpdates.push({ _id: item.id, "system.quantity": qty - remaining });
+          remaining = 0;
+        }
       }
     }
 
-    // 清理已删除物品的仓库放置记录
-    const remainingIds    = new Set(campActor.items.contents.map(i => i.id));
-    let   warehouseAfter  = (campActor.system.warehouseContents ?? []).filter(p => {
+    // ── 3. 提前计算清理后的 warehouseContents（不受后续服务端刷新影响） ──
+    const newContents = (campActor.system.warehouseContents ?? []).filter(p => {
       const parts = p.uuid.split(".");
-      return remainingIds.has(parts[parts.length - 1]);
+      return !idsDeletedSet.has(parts[parts.length - 1]);
     });
 
-    // 将产出存入仓库
+    // ── 4. 批量执行原料消耗（单次服务端请求，更可靠） ───────────────
+    if (idsToDelete.length)
+      await campActor.deleteEmbeddedDocuments("Item", idsToDelete);
+    if (bulkUpdates.length)
+      await campActor.updateEmbeddedDocuments("Item", bulkUpdates);
+
+    // ── 5. 创建产出物品并放入仓库 ───────────────────────────────────
     const outData = foundry.utils.deepClone(recipe.outputItemData);
     delete outData._id;
     if (outData.system?.quantity !== undefined) outData.system.quantity = recipe.outputQuantity;
@@ -755,17 +771,17 @@ export class LimbusCampSheet extends ActorSheet {
     let place = null;
     outer: for (let y = 0; y < rows; y++) {
       for (let x = 0; x < cols; x++) {
-        if (canPlaceStatic(x, y, ow, oh, warehouseAfter)) { place = { x, y, w: ow, h: oh, rotated: false }; break outer; }
-        if (ow !== oh && canPlaceStatic(x, y, oh, ow, warehouseAfter)) { place = { x, y, w: oh, h: ow, rotated: true }; break outer; }
+        if (canPlaceStatic(x, y, ow, oh, newContents)) { place = { x, y, w: ow, h: oh, rotated: false }; break outer; }
+        if (ow !== oh && canPlaceStatic(x, y, oh, ow, newContents)) { place = { x, y, w: oh, h: ow, rotated: true }; break outer; }
       }
     }
 
     if (place) {
-      warehouseAfter.push({ uuid: outItem.uuid, ...place });
+      newContents.push({ uuid: outItem.uuid, ...place });
     } else {
       ui.notifications.warn(`[营地] 产出 ${recipe.outputName} 无法放入仓库（空间不足），已创建为悬空物品。`);
     }
-    await campActor.update({ "system.warehouseContents": warehouseAfter });
+    await campActor.update({ "system.warehouseContents": newContents });
 
     const triggerUser = game.users.get(userId);
     await ChatMessage.create({
