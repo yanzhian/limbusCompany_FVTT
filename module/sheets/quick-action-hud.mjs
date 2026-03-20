@@ -525,13 +525,20 @@ export class QuickActionHUD extends Application {
 
   /** 激活物品（触发 [使用时]；消耗品数量 -1 / 归零删除） */
   async _activateItem(item) {
+    if (item.type === "consumable" && (item.system.quantity ?? 0) <= 0) {
+      ui.notifications.warn("数量不足。"); return;
+    }
     await ClashManager._applyActivities(item, "使用时", {
       owner: this._actor, atkActor: this._actor, defActor: null, _fireCounts: {},
     });
     if (item.type === "consumable") {
-      const qty = (item.system.quantity ?? 1) - 1;
-      if (qty <= 0) await item.delete();
-      else          await item.update({ "system.quantity": qty });
+      const qty      = (item.system.quantity ?? 1) - 1;
+      const reusable = item.system.reusable ?? false;
+      if (qty <= 0 && !reusable) {
+        await item.delete();
+      } else {
+        await item.update({ "system.quantity": Math.max(0, qty) });
+      }
     }
   }
 
