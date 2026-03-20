@@ -198,12 +198,8 @@ export class LimbusCampSheet extends ActorSheet {
     html.find(".cg-item-tile").on("mouseenter",  this._onCgTileHoverStart.bind(this));
     html.find(".cg-item-tile").on("mouseleave",  this._onCgTileHoverEnd.bind(this));
 
-    // 仓库图块：右键取出
-    html.find(".cg-item-tile").on("contextmenu", e => {
-      e.preventDefault();
-      const idx  = parseInt(e.currentTarget.dataset.placementIdx ?? "-1");
-      this._showTileContextMenu(idx);
-    });
+    // 仓库图块：右键菜单
+    html.find(".cg-item-tile").on("contextmenu", this._onCgTileMenu.bind(this));
 
     // 仓库图块：旋转（GM 解锁时显示）
     html.find(".cg-rotate-btn").on("click", this._onCgTileRotate.bind(this));
@@ -396,42 +392,85 @@ export class LimbusCampSheet extends ActorSheet {
     await this.actor.update({ "system.warehouseContents": contents });
   }
 
-  /* ─── 图块右键：取出物品 ────────────────────────────────────────────── */
+  /* ─── 图块右键菜单（与容器保持一致） ────────────────────────────────── */
 
-  _showTileContextMenu(placementIdx) {
-    const contents = this.actor.system.warehouseContents ?? [];
-    const p        = contents[placementIdx];
-    if (!p) return;
+  async _onCgTileMenu(event) {
+    event.preventDefault();
+    const tile  = $(event.currentTarget);
+    const idx   = parseInt(tile.data("placementIdx") ?? tile.data("placement-idx") ?? -1);
+    const uuid  = tile.data("itemUuid") ?? tile.data("item-uuid") ?? "";
+    const iname = tile.data("itemName") ?? tile.data("item-name") ?? "";
+    if (idx < 0) return;
 
-    // 通过 UUID 获取物品名（async → 使用 Promise）
-    fromUuid(p.uuid).then(item => {
-      if (!item) return;
-      const maxQty = item.system?.quantity ?? 1;
-      const sheet  = this;
+    $(".cg-ctx-menu").remove();
 
-      new Dialog({
-        title: `取出 — ${item.name}`,
-        content: `
-          <div class="limbuscompany" style="padding:6px 0">
+    const isGM = game.user.isGM;
+    const menu = $(`<ul class="cg-ctx-menu">
+      <li data-action="takeout"><i class="fas fa-box-open"></i> 取出到我的角色</li>
+      <li data-action="edit"><i class="fas fa-edit"></i> 编辑 / 查看</li>
+      <li data-action="chat"><i class="fas fa-comment"></i> 发送聊天框</li>
+      ${isGM ? `<li class="cg-ctx-sep"></li>
+      <li data-action="delete" class="cg-ctx-danger"><i class="fas fa-trash"></i> 删除</li>` : ""}
+    </ul>`).css({ top: event.clientY, left: event.clientX });
+    $("body").append(menu);
+
+    const close = () => { menu.remove(); $(document).off("click.cgctx"); };
+    setTimeout(() => $(document).on("click.cgctx", close), 10);
+
+    const sheet = this;
+    menu.on("click", "li[data-action]", async e => {
+      e.stopPropagation();
+      const action = $(e.currentTarget).data("action");
+      close();
+
+      if (action === "takeout") {
+        const item = await fromUuid(uuid).catch(() => null);
+        if (!item) { ui.notifications.warn(`找不到物品「${iname}」，可能已被删除。`); return; }
+        const maxQty = item.system?.quantity ?? 1;
+        new Dialog({
+          title: `取出 — ${item.name}`,
+          content: `<div class="limbuscompany" style="padding:6px 0">
             <p>将物品移至你的角色背包。</p>
             <label style="display:flex;align-items:center;gap:8px">
               取出数量：
-              <input type="number" id="take-qty" value="${Math.min(1, maxQty)}" min="1" max="${maxQty}" style="width:60px"/>
+              <input type="number" id="take-qty" value="1" min="1" max="${maxQty}" style="width:60px"/>
               <span>（仓库剩余：${maxQty}）</span>
             </label>
           </div>`,
-        buttons: {
-          take: {
-            label: "取出",
-            callback: async (html) => {
-              const qty = Math.min(maxQty, Math.max(1, parseInt(html.find("#take-qty").val()) || 1));
-              await sheet._executeItemTake(sheet.actor.id, p.uuid, placementIdx, qty);
+          buttons: {
+            take: {
+              label: "取出",
+              callback: async (html) => {
+                const qty = Math.min(maxQty, Math.max(1, parseInt(html.find("#take-qty").val()) || 1));
+                await sheet._executeItemTake(sheet.actor.id, uuid, idx, qty);
+              },
             },
+            cancel: { label: "取消" },
           },
-          cancel: { label: "取消" },
-        },
-        default: "take",
-      }).render(true);
+          default: "take",
+        }).render(true);
+
+      } else if (action === "edit") {
+        const itm = await fromUuid(uuid).catch(() => null);
+        itm?.sheet?.render(true);
+
+      } else if (action === "chat") {
+        const itm = await fromUuid(uuid).catch(() => null);
+        if (itm?.sendToChat) await itm.sendToChat();
+        else ChatMessage.create({ content: `<b>${iname}</b>`, speaker: ChatMessage.getSpeaker() });
+
+      } else if (action === "delete" && isGM) {
+        const confirmed = await Dialog.confirm({
+          title: "删除物品",
+          content: `<p>确定从仓库删除 <strong>${iname}</strong>？</p>`,
+        });
+        if (!confirmed) return;
+        const contents = foundry.utils.deepClone(sheet.actor.system.warehouseContents ?? []);
+        contents.splice(idx, 1);
+        await sheet.actor.update({ "system.warehouseContents": contents });
+        const itm = await fromUuid(uuid).catch(() => null);
+        if (itm?.parent?.id === sheet.actor.id) await itm.delete();
+      }
     });
   }
 
@@ -615,33 +654,21 @@ export class LimbusCampSheet extends ActorSheet {
 
     if (game.user.isGM) {
       await LimbusCampSheet._gmExecuteCraft({
-        campActorId: this.actor.id, recipeId,
-        charId: game.user.character?.id ?? null, userId: game.user.id,
+        campActorId: this.actor.id, recipeId, userId: game.user.id,
       });
     } else {
-      const myChar = game.user.character;
-      if (!myChar) { ui.notifications.warn("找不到你的角色，无法领取制作产物。"); return; }
       game.socket.emit("system.limbusCompany_FVTT", {
-        type: "campCraft", campActorId: this.actor.id, recipeId,
-        charId: myChar.id, userId: game.user.id,
+        type: "campCraft", campActorId: this.actor.id, recipeId, userId: game.user.id,
       });
     }
   }
 
   /* ─── 静态：GM 端执行制作 ────────────────────────────────────────────── */
 
-  static async _gmExecuteCraft({ campActorId, recipeId, charId, userId }) {
+  static async _gmExecuteCraft({ campActorId, recipeId, userId }) {
     const campActor = game.actors.get(campActorId);
     const recipe    = (campActor?.system?.recipes ?? []).find(r => r.id === recipeId);
     if (!campActor || !recipe) return;
-
-    const playerChar = game.actors.get(charId) ??
-      game.actors.find(a => a.type === "character" &&
-        a.ownership?.[userId] >= CONST.DOCUMENT_OWNERSHIP_LEVELS.OWNER);
-    if (!playerChar) {
-      ui.notifications.warn(`[营地] 找不到玩家角色，制作失败。`);
-      return;
-    }
 
     const allItems   = campActor.items.contents;
     const ingDetails = (recipe.ingredients ?? []).map(ing => {
@@ -666,25 +693,58 @@ export class LimbusCampSheet extends ActorSheet {
       }
     }
 
-    // 清理已删除物品的仓库放置记录（消耗后同步 warehouseContents）
-    const remainingIds = new Set(campActor.items.contents.map(i => i.id));
-    const cleanedContents = (campActor.system.warehouseContents ?? []).filter(p => {
-      const parts  = p.uuid.split(".");
-      const itemId = parts[parts.length - 1];
-      return remainingIds.has(itemId);
+    // 清理已删除物品的仓库放置记录
+    const remainingIds    = new Set(campActor.items.contents.map(i => i.id));
+    let   warehouseAfter  = (campActor.system.warehouseContents ?? []).filter(p => {
+      const parts = p.uuid.split(".");
+      return remainingIds.has(parts[parts.length - 1]);
     });
-    await campActor.update({ "system.warehouseContents": cleanedContents });
 
-    // 创建产出
+    // 将产出存入仓库
     const outData = foundry.utils.deepClone(recipe.outputItemData);
+    delete outData._id;
     if (outData.system?.quantity !== undefined) outData.system.quantity = recipe.outputQuantity;
-    await playerChar.createEmbeddedDocuments("Item", [outData]);
+    const [outItem] = await campActor.createEmbeddedDocuments("Item", [outData]);
 
+    const sys  = campActor.system;
+    const cols = sys.warehouseSize?.width  ?? 7;
+    const rows = sys.warehouseSize?.height ?? 7;
+    const cap  = outData.system?.capacity ?? { w: 1, h: 1 };
+    const ow   = Math.max(1, cap.w ?? 1), oh = Math.max(1, cap.h ?? 1);
+
+    const canPlaceStatic = (x, y, w, h, cur) => {
+      if (x < 0 || y < 0 || x + w > cols || y + h > rows) return false;
+      for (const p of cur) {
+        const pw = p.w ?? 1, ph = p.h ?? 1;
+        for (let dy = 0; dy < h; dy++)
+          for (let dx = 0; dx < w; dx++)
+            if (p.x <= x + dx && x + dx < p.x + pw &&
+                p.y <= y + dy && y + dy < p.y + ph) return false;
+      }
+      return true;
+    };
+
+    let place = null;
+    outer: for (let y = 0; y < rows; y++) {
+      for (let x = 0; x < cols; x++) {
+        if (canPlaceStatic(x, y, ow, oh, warehouseAfter)) { place = { x, y, w: ow, h: oh, rotated: false }; break outer; }
+        if (ow !== oh && canPlaceStatic(x, y, oh, ow, warehouseAfter)) { place = { x, y, w: oh, h: ow, rotated: true }; break outer; }
+      }
+    }
+
+    if (place) {
+      warehouseAfter.push({ uuid: outItem.uuid, ...place });
+    } else {
+      ui.notifications.warn(`[营地] 产出 ${recipe.outputName} 无法放入仓库（空间不足），已创建为悬空物品。`);
+    }
+    await campActor.update({ "system.warehouseContents": warehouseAfter });
+
+    const triggerUser = game.users.get(userId);
     await ChatMessage.create({
       content: `<div class="limbuscompany chat-camp">
-        <strong>${playerChar.name}</strong> 在营地【${campActor.name}】制作了
+        ${triggerUser ? `<strong>${triggerUser.name}</strong> 在` : ""}营地【${campActor.name}】制作了
         <img src="${recipe.outputImg}" width="16" height="16" style="vertical-align:middle">
-        <strong>${recipe.outputName} ×${recipe.outputQuantity}</strong>！
+        <strong>${recipe.outputName} ×${recipe.outputQuantity}</strong>，已存入仓库！
       </div>`,
     });
   }
