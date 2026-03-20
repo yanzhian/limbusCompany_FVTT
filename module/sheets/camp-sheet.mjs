@@ -345,6 +345,17 @@ export class LimbusCampSheet extends ActorSheet {
       storedUuid = newItem.uuid;
     }
 
+    // ── 若来自本营地的容器，移除容器内的占位记录 ──────────────────────
+    if (raw.fromContainer && raw.fromContainer.actorId === this.actor.id) {
+      const { containerId, placementIdx: srcIdx } = raw.fromContainer;
+      const containerItem = this.actor.items.get(containerId);
+      if (containerItem) {
+        const sc = foundry.utils.deepClone(containerItem.system.contents ?? []);
+        sc.splice(srcIdx, 1);
+        await containerItem.update({ "system.contents": sc });
+      }
+    }
+
     const contents = foundry.utils.deepClone(sys.warehouseContents ?? []);
     contents.push({ uuid: storedUuid, x: place.x, y: place.y, w: place.w, h: place.h, rotated: place.rotated });
     await this.actor.update({ "system.warehouseContents": contents });
