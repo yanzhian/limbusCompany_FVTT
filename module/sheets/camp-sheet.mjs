@@ -72,10 +72,17 @@ export class LimbusCampSheet extends ActorSheet {
     ctx.warehouseAvail = allCells.filter(c => !c.occupied).length;
 
     // ── 配方列表 ──────────────────────────────────────────────────────────
+    // 只统计实际放置在仓库格中的物品（warehouseContents 有记录的），
+    // 避免已删除但缓存未刷新的孤立物品，或同名产出物品被错误计入原料。
+    const _placedIds = new Set(
+      (sys.warehouseContents ?? []).map(p => p.uuid.split(".").pop())
+    );
+    const _warehouseItems = actor.items.contents.filter(i => _placedIds.has(i.id));
+
     ctx.recipes = (sys.recipes ?? [])
       .filter(r => isGM || !r.hidden)
       .map(recipe => {
-        const ingDetails = this._getIngredientDetails(recipe, actor.items.contents);
+        const ingDetails = this._getIngredientDetails(recipe, _warehouseItems);
         const canCraft   = ingDetails.every(d => d.sufficient) &&
                            ingDetails.length > 0 &&
                            !!recipe.outputItemData &&
@@ -698,8 +705,11 @@ export class LimbusCampSheet extends ActorSheet {
     const recipe    = (campActor?.system?.recipes ?? []).find(r => r.id === recipeId);
     if (!campActor || !recipe) return;
 
-    // ── 1. 检查原料（使用最新快照） ──────────────────────────────────
-    const currentItems = campActor.items.contents;
+    // ── 1. 检查原料（只计算实际放置在仓库格中的物品，与 getData 逻辑一致） ──
+    const placedIds    = new Set(
+      (campActor.system.warehouseContents ?? []).map(p => p.uuid.split(".").pop())
+    );
+    const currentItems = campActor.items.contents.filter(i => placedIds.has(i.id));
     const ingDetails   = (recipe.ingredients ?? []).map(ing => {
       const available = currentItems.filter(i => i.name === ing.name)
         .reduce((s, i) => s + (i.system?.quantity ?? 1), 0);
@@ -742,11 +752,13 @@ export class LimbusCampSheet extends ActorSheet {
     if (outData.system?.quantity !== undefined) outData.system.quantity = recipe.outputQuantity;
     const [outItem] = await campActor.createEmbeddedDocuments("Item", [outData]);
 
-    // ── 5. 在所有服务端操作完成后，用实际存活物品 ID 重新计算 contents ──
-    // 此时 campActor.items.contents 已反映删除和创建的最终结果
-    const survivingIds = new Set(campActor.items.contents.map(i => i.id));
-    const newContents  = (campActor.system.warehouseContents ?? []).filter(p =>
-      survivingIds.has(p.uuid.split(".").pop())
+    // ── 5. 用预先计算的 idsToDelete 集合过滤 warehouseContents ──────
+    // 不依赖 campActor.items.contents 的即时刷新状态（EmbeddedCollection
+    // 在 deleteEmbeddedDocuments resolve 时可能仍有短暂缓存延迟），
+    // 而是明确排除本次制作中已标记删除的物品 ID。
+    const deletedIds  = new Set(idsToDelete);
+    const newContents = (campActor.system.warehouseContents ?? []).filter(p =>
+      !deletedIds.has(p.uuid.split(".").pop())
     );
 
     const sys  = campActor.system;
