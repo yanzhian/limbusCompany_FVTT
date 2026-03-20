@@ -711,10 +711,9 @@ export class LimbusCampSheet extends ActorSheet {
       return;
     }
 
-    // ── 2. 提前计算要删除/更新的物品（不做任何服务端操作） ──────────
-    const idsToDelete   = [];
-    const idsDeletedSet = new Set();
-    const bulkUpdates   = [];
+    // ── 2. 计算要删除/更新的物品 ────────────────────────────────────
+    const idsToDelete = [];
+    const bulkUpdates = [];
 
     for (const ing of (recipe.ingredients ?? [])) {
       let remaining = ing.quantity;
@@ -724,7 +723,6 @@ export class LimbusCampSheet extends ActorSheet {
         if (qty <= remaining) {
           remaining -= qty;
           idsToDelete.push(item.id);
-          idsDeletedSet.add(item.id);
         } else {
           bulkUpdates.push({ _id: item.id, "system.quantity": qty - remaining });
           remaining = 0;
@@ -732,23 +730,24 @@ export class LimbusCampSheet extends ActorSheet {
       }
     }
 
-    // ── 3. 提前计算清理后的 warehouseContents（不受后续服务端刷新影响） ──
-    const newContents = (campActor.system.warehouseContents ?? []).filter(p => {
-      const parts = p.uuid.split(".");
-      return !idsDeletedSet.has(parts[parts.length - 1]);
-    });
-
-    // ── 4. 批量执行原料消耗（单次服务端请求，更可靠） ───────────────
+    // ── 3. 执行原料消耗 ──────────────────────────────────────────────
     if (idsToDelete.length)
       await campActor.deleteEmbeddedDocuments("Item", idsToDelete);
     if (bulkUpdates.length)
       await campActor.updateEmbeddedDocuments("Item", bulkUpdates);
 
-    // ── 5. 创建产出物品并放入仓库 ───────────────────────────────────
+    // ── 4. 创建产出物品 ──────────────────────────────────────────────
     const outData = foundry.utils.deepClone(recipe.outputItemData);
     delete outData._id;
     if (outData.system?.quantity !== undefined) outData.system.quantity = recipe.outputQuantity;
     const [outItem] = await campActor.createEmbeddedDocuments("Item", [outData]);
+
+    // ── 5. 在所有服务端操作完成后，用实际存活物品 ID 重新计算 contents ──
+    // 此时 campActor.items.contents 已反映删除和创建的最终结果
+    const survivingIds = new Set(campActor.items.contents.map(i => i.id));
+    const newContents  = (campActor.system.warehouseContents ?? []).filter(p =>
+      survivingIds.has(p.uuid.split(".").pop())
+    );
 
     const sys  = campActor.system;
     const cols = sys.warehouseSize?.width  ?? 7;
