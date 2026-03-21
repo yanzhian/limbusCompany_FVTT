@@ -527,11 +527,17 @@ Hooks.on("updateCombat", async (combat, changed) => {
 
   // ── 一轮结束进入下一轮：重掷所有角色先攻 ──────────────────────────────
   // 第 0 → 1 轮跳过（战斗开始时已由 combatStart 钩子处理），之后每轮重掷
+  // 先全部骰好并发聊天，最后一次性批量写入先攻值，只触发一次排序
   if ((changed.round ?? 0) > 1) {
+    const initiativeUpdates = [];
     for (const combatant of combat.combatants) {
       const actor = combatant.actor;
       if (!actor || actor.type !== "character") continue;
-      await actor.rollSpeedInitiative();
+      const roll = await actor.rollSpeedInitiative({ updateCombatant: false });
+      initiativeUpdates.push({ _id: combatant.id, initiative: roll.total });
+    }
+    if (initiativeUpdates.length > 0) {
+      await combat.updateEmbeddedDocuments("Combatant", initiativeUpdates);
     }
   }
 });
