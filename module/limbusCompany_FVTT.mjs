@@ -455,6 +455,11 @@ Hooks.on("updateCombat", async (combat, changed) => {
         content: `<div class="limbuscompany chat-clash"><strong>${actor.name}</strong>【陷入恐慌】！无法使用基础及守备技能，E.G.O 不消耗理智但罪孽资源 ×1.5。</div>`,
       });
     }
+    // 一轮结束进入下一轮：非恐慌角色补满行动点
+    // （第 0→1 轮由 combatStart 钩子已处理，跳过）
+    else if ((changed.round ?? 0) > 1) {
+      await actor.update({ "system.ap.value": actor.system.ap.max ?? 3 });
+    }
 
     // 更新后重新读取 buffs（上面 update 已改变数据）
     const freshBuffs = actor.system.buffs ?? [];
@@ -520,7 +525,7 @@ Hooks.on("updateCombat", async (combat, changed) => {
     }
   }
 
-  // ── 每轮开始时重新骰掷所有角色先攻 ─────────────────────────────────────
+  // ── 一轮结束进入下一轮：重掷所有角色先攻 ──────────────────────────────
   // 第 0 → 1 轮跳过（战斗开始时已由 combatStart 钩子处理），之后每轮重掷
   if ((changed.round ?? 0) > 1) {
     for (const combatant of combat.combatants) {
