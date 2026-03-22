@@ -7034,3 +7034,254 @@ input.item-piles-quantity {
   outline:      none;
   border-color: var(--gold-active);
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   小队 HUD  (.limbus-squad-hud)
+   两支队伍各一个固定悬浮面板，显示成员 HP / 理智 / AP / BUFF
+═══════════════════════════════════════════════════════════════════════════ */
+
+.limbus-squad-hud {
+  position:       fixed;
+  z-index:        95;
+  min-width:      210px;
+  max-width:      240px;
+  background:     rgba(10, 7, 3, 0.88);
+  border:         1px solid rgba(90, 58, 26, 0.55);
+  border-radius:  5px;
+  box-shadow:     0 4px 18px rgba(0,0,0,0.7);
+  user-select:    none;
+  pointer-events: auto;
+  font-family:    var(--font-primary, sans-serif);
+}
+
+/* ── 标题栏 ─────────────────────────────────────────────────────────────── */
+
+.squad-header {
+  display:        flex;
+  align-items:    center;
+  padding:        5px 8px;
+  background:     rgba(30, 18, 8, 0.9);
+  border-bottom:  1px solid rgba(90, 58, 26, 0.45);
+  border-radius:  5px 5px 0 0;
+  cursor:         grab;
+}
+.squad-header:active { cursor: grabbing; }
+
+.squad-title {
+  font-size:      12px;
+  font-weight:    bold;
+  color:          var(--gold-active, #E5BA25);
+  letter-spacing: 1px;
+}
+
+/* ── 成员列表容器 ──────────────────────────────────────────────────────── */
+
+.squad-members {
+  display:        flex;
+  flex-direction: column;
+  gap:            1px;
+  padding:        4px;
+}
+
+/* ── 单个成员卡片 ──────────────────────────────────────────────────────── */
+
+.squad-member {
+  display:        flex;
+  flex-direction: column;
+  gap:            3px;
+  padding:        4px;
+  border-radius:  3px;
+  background:     rgba(20, 14, 8, 0.6);
+  border:         1px solid rgba(60, 40, 18, 0.4);
+}
+.squad-member:hover {
+  border-color: rgba(200, 158, 112, 0.3);
+}
+
+/* ── 主行（头像 + 状态） ───────────────────────────────────────────────── */
+
+.squad-main-row {
+  display:     flex;
+  align-items: stretch;
+  gap:         7px;
+}
+
+/* 头像 60×60 */
+.squad-avatar {
+  width:         60px;
+  height:        60px;
+  object-fit:    cover;
+  border-radius: 3px;
+  border:        1px solid rgba(90, 58, 26, 0.5);
+  flex-shrink:   0;
+}
+
+/* ── 右侧状态区 ────────────────────────────────────────────────────────── */
+
+.squad-stats {
+  display:        flex;
+  flex-direction: column;
+  justify-content: center;
+  gap:            5px;
+  flex:           1;
+  min-width:      0;
+}
+
+/* 单行状态（HP行 / 理智行） */
+.squad-stat-row {
+  display:     flex;
+  align-items: center;
+  gap:         4px;
+}
+
+.squad-stat-label {
+  font-size:   9px;
+  color:       var(--text-dim, #786455);
+  flex-shrink: 0;
+  width:       22px;
+  text-align:  right;
+}
+
+/* 进度条轨道 */
+.squad-bar-track {
+  flex:          1;
+  height:        8px;
+  background:    rgba(255,255,255,0.07);
+  border-radius: 2px;
+  overflow:      hidden;
+  min-width:     0;
+}
+
+/* 进度条填充 */
+.squad-bar {
+  height:        100%;
+  border-radius: 2px;
+  transition:    width 0.25s ease;
+}
+
+/* HP 颜色阶段 */
+.squad-bar--hp-high  { background: #4CAF50; }
+.squad-bar--hp-mid   { background: #E5BA25; }
+.squad-bar--hp-low   { background: #E84444; }
+
+/* 理智颜色 */
+.squad-bar--san-normal { background: #4A9FCC; }
+.squad-bar--san-low    { background: #CC7A4A; }
+.squad-bar--san-panic  { background: #8B2BE2; }
+
+.squad-stat-val {
+  font-size:   10px;
+  font-weight: bold;
+  color:       var(--text-main, #ECE4D6);
+  flex-shrink: 0;
+  min-width:   26px;
+  text-align:  right;
+}
+.squad-stat-max {
+  font-size:  9px;
+  color:      var(--text-dim, #786455);
+  font-weight: normal;
+}
+.squad-san-val {
+  min-width: 20px;
+}
+
+/* 移除按钮 */
+.squad-remove-btn {
+  background:    transparent;
+  border:        none;
+  color:         #786455;
+  font-size:     9px;
+  line-height:   1;
+  padding:       1px 3px;
+  cursor:        pointer;
+  border-radius: 2px;
+  flex-shrink:   0;
+  transition:    color 0.15s, background 0.15s;
+}
+.squad-remove-btn:hover {
+  color:      #E84444;
+  background: rgba(232, 68, 68, 0.15);
+}
+
+/* AP 硬币（小号，紧凑） */
+.squad-ap-coins {
+  display:     flex;
+  gap:         2px;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.squad-ap-coin {
+  width:         8px;
+  height:        8px;
+  border-radius: 50%;
+  background:    rgba(255,255,255,0.12);
+  border:        1px solid rgba(200, 158, 112, 0.3);
+  flex-shrink:   0;
+  transition:    background 0.15s, border-color 0.15s;
+}
+.squad-ap-coin--on {
+  background:   var(--gold-active, #E5BA25);
+  border-color: var(--gold-active, #E5BA25);
+  box-shadow:   0 0 4px rgba(229, 186, 37, 0.6);
+}
+
+/* ── BUFF 状态栏 ────────────────────────────────────────────────────────── */
+
+.squad-buff-bar {
+  display:   flex;
+  flex-wrap: wrap;
+  gap:       2px;
+  padding:   0 2px 2px;
+}
+
+/* 单个 BUFF 格 32×32，复用 qa-buff-slot 样式 */
+.squad-buff-slot {
+  width:         32px;
+  height:        32px;
+  background:    #201E1B;
+  border:        1px solid #2A2520;
+  border-radius: 2px;
+  position:      relative;
+  overflow:      visible;
+  cursor:        default;
+  flex-shrink:   0;
+  transition:    border-color 0.15s;
+}
+.squad-buff-slot:hover { border-color: #E5BA25; }
+
+.squad-buff-icon {
+  width:         24px;
+  height:        24px;
+  position:      absolute;
+  top:           50%;
+  left:          50%;
+  transform:     translate(-50%, -50%);
+  object-fit:    cover;
+  pointer-events: none;
+}
+
+.squad-buff-intensity,
+.squad-buff-stacks {
+  position:    absolute;
+  bottom:      0;
+  font-size:   9px;
+  color:       #ECE4D6;
+  line-height: 1;
+  background:  rgba(0,0,0,0.6);
+  padding:     0 1px;
+  pointer-events: none;
+}
+.squad-buff-intensity { left:  0; border-radius: 0 2px 0 2px; }
+.squad-buff-stacks    { right: 0; border-radius: 2px 0 2px 0; }
+
+/* ── 空队伍提示 ────────────────────────────────────────────────────────── */
+
+.squad-empty {
+  padding:    12px 8px;
+  font-size:  11px;
+  color:      var(--text-dim, #786455);
+  text-align: center;
+  font-style: italic;
+}
