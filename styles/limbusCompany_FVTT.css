@@ -6832,3 +6832,205 @@ input.item-piles-quantity {
   font-size:  0.85rem;
   line-height:1.5;
 }
+
+/* ═══════════════════════════════════════════════════════════════
+   GM 控制台（#gm-console）
+   ═══════════════════════════════════════════════════════════════ */
+
+#gm-console .window-content {
+  padding:    0;
+  overflow-y: auto;
+  background: var(--bg-darkest);
+}
+
+.gmc-body {
+  display:        flex;
+  flex-direction: column;
+  gap:            0;
+}
+
+/* ── 通用 section ───────────────────────────────────────────── */
+.gmc-section {
+  padding:       10px 14px 12px;
+  border-bottom: 1px solid #2A1E12;
+}
+.gmc-section:last-child { border-bottom: none; }
+
+.gmc-section-header {
+  display:     flex;
+  align-items: center;
+  gap:         8px;
+  margin-bottom: 8px;
+}
+
+.gmc-section-title {
+  font-size:   0.92rem;
+  font-weight: bold;
+  color:       var(--gold-active);
+  flex:        1;
+}
+
+.gmc-selected-count {
+  font-size: 0.75rem;
+  color:     var(--text-sub);
+}
+
+.gmc-text-btn {
+  padding:      1px 7px;
+  font-size:    0.75rem;
+  background:   transparent;
+  border:       1px solid #3B2412;
+  border-radius:2px;
+  color:        var(--text-sub);
+  cursor:       pointer;
+  transition:   color 0.15s, border-color 0.15s;
+}
+.gmc-text-btn:hover {
+  color:        var(--gold-active);
+  border-color: var(--gold-active);
+}
+
+/* ── 角色拖放区 ─────────────────────────────────────────────── */
+.gmc-drop-zone {
+  display:       flex;
+  flex-wrap:     wrap;
+  gap:           6px;
+  min-height:    58px;
+  padding:       6px;
+  background:    rgba(255,255,255,0.02);
+  border:        1px dashed #3B2412;
+  border-radius: 3px;
+}
+
+.gmc-empty-hint {
+  font-size: 0.75rem;
+  color:     var(--text-dim);
+  align-self:center;
+  padding:   4px;
+}
+
+.gmc-actor-tile {
+  position:      relative;
+  display:       flex;
+  flex-direction:column;
+  align-items:   center;
+  width:         52px;
+  cursor:        pointer;
+  opacity:       0.4;
+  transition:    opacity 0.15s, outline 0.15s;
+  border-radius: 3px;
+  padding:       2px;
+}
+.gmc-actor-tile:hover          { opacity: 0.75; }
+.gmc-actor-tile.gmc-actor-selected {
+  opacity: 1;
+  outline: 2px solid var(--gold-active);
+}
+
+.gmc-actor-img {
+  width:         44px;
+  height:        44px;
+  object-fit:    cover;
+  border-radius: 2px;
+  border:        1px solid #3B2412;
+}
+
+.gmc-actor-check {
+  position:    absolute;
+  top:         1px;
+  right:       1px;
+  font-size:   0.65rem;
+  background:  var(--gold-active);
+  color:       var(--bg-darkest);
+  width:       14px;
+  height:      14px;
+  border-radius:50%;
+  display:     flex;
+  align-items: center;
+  justify-content:center;
+  font-weight: bold;
+}
+
+.gmc-actor-name {
+  font-size:     0.63rem;
+  color:         var(--text-sub);
+  text-align:    center;
+  white-space:   nowrap;
+  overflow:      hidden;
+  text-overflow: ellipsis;
+  max-width:     50px;
+  margin-top:    2px;
+}
+
+/* ── 长休勾选项 ─────────────────────────────────────────────── */
+.gmc-lr-options {
+  display:        flex;
+  flex-wrap:      wrap;
+  gap:            4px 16px;
+  margin-bottom:  10px;
+}
+
+.gmc-cb-label {
+  display:     flex;
+  align-items: center;
+  gap:         5px;
+  font-size:   0.82rem;
+  color:       var(--text-main);
+  cursor:      pointer;
+  user-select: none;
+}
+.gmc-cb-label input[type="checkbox"] {
+  accent-color: var(--gold-active);
+  width:  13px;
+  height: 13px;
+}
+
+/* ── 主操作按钮 ─────────────────────────────────────────────── */
+.gmc-btn {
+  padding:      4px 18px;
+  font-size:    0.85rem;
+  background:   var(--bg-title-bar);
+  border:       1px solid #5A3A18;
+  border-radius:2px;
+  color:        var(--text-main);
+  cursor:       pointer;
+  transition:   background 0.15s, border-color 0.15s;
+}
+.gmc-btn:hover {
+  background:   var(--gold-mid);
+  border-color: var(--gold-active);
+  color:        var(--bg-darkest);
+}
+
+/* ── 经验分配行 ─────────────────────────────────────────────── */
+.gmc-xp-row {
+  display:        flex;
+  flex-direction: column;
+  gap:            6px;
+}
+
+.gmc-xp-label {
+  font-size: 0.82rem;
+  color:     var(--text-sub);
+}
+
+.gmc-xp-controls {
+  display:     flex;
+  align-items: center;
+  gap:         8px;
+}
+
+.gmc-xp-input {
+  width:        90px;
+  padding:      3px 6px;
+  font-size:    0.9rem;
+  background:   transparent;
+  border:       1px solid #3B2412;
+  border-radius:2px;
+  color:        var(--text-main);
+  text-align:   center;
+}
+.gmc-xp-input:focus {
+  outline:      none;
+  border-color: var(--gold-active);
+}

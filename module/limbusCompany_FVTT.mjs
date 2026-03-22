@@ -22,6 +22,7 @@ import { LimbusActorSheet }   from "./sheets/actor-sheet.mjs";
 import { LimbusItemSheet }    from "./sheets/item-sheet.mjs";
 import { LimbusMerchantSheet } from "./sheets/merchant-sheet.mjs";
 import { LimbusCampSheet }    from "./sheets/camp-sheet.mjs";
+import { GMConsole }          from "./sheets/gm-console.mjs";
 import { ClashManager }     from "./helpers/clash.mjs";
 import { SinResourceHUD }   from "./helpers/sin-resource-hud.mjs";
 import { QuickActionHUD }   from "./sheets/quick-action-hud.mjs";
@@ -143,6 +144,14 @@ Hooks.once("init", () => {
 
   // ── 注册游戏系统设置 ───────────────────────────────────────────────────
   _registerSettings();
+
+  // ── 注册快捷键 ────────────────────────────────────────────────────────
+  game.keybindings.register("limbusCompany_FVTT", "openGMConsole", {
+    name: "GM 控制台",
+    editable: [{ key: "KeyM" }],
+    onDown: () => { GMConsole.toggle(); return true; },
+    restricted: true,
+  });
 
   // ── 预加载 HBS 模板 ───────────────────────────────────────────────────
   _preloadTemplates();
@@ -446,6 +455,11 @@ Hooks.on("updateCombat", async (combat, changed) => {
         content: `<div class="limbuscompany chat-clash"><strong>${actor.name}</strong>【陷入恐慌】！无法使用基础及守备技能，E.G.O 不消耗理智但罪孽资源 ×1.5。</div>`,
       });
     }
+    // 一轮结束进入下一轮：非恐慌角色补满行动点
+    // （第 0→1 轮由 combatStart 钩子已处理，跳过）
+    else if ((changed.round ?? 0) > 1) {
+      await actor.update({ "system.ap.value": actor.system.ap.max ?? 3 });
+    }
 
     // 更新后重新读取 buffs（上面 update 已改变数据）
     const freshBuffs = actor.system.buffs ?? [];
@@ -511,13 +525,19 @@ Hooks.on("updateCombat", async (combat, changed) => {
     }
   }
 
-  // ── 每轮开始时重新骰掷所有角色先攻 ─────────────────────────────────────
+  // ── 一轮结束进入下一轮：重掷所有角色先攻 ──────────────────────────────
   // 第 0 → 1 轮跳过（战斗开始时已由 combatStart 钩子处理），之后每轮重掷
+  // 先全部骰好并发聊天，最后一次性批量写入先攻值，只触发一次排序
   if ((changed.round ?? 0) > 1) {
+    const initiativeUpdates = [];
     for (const combatant of combat.combatants) {
       const actor = combatant.actor;
       if (!actor || actor.type !== "character") continue;
-      await actor.rollSpeedInitiative();
+      const roll = await actor.rollSpeedInitiative({ updateCombatant: false });
+      initiativeUpdates.push({ _id: combatant.id, initiative: roll.total });
+    }
+    if (initiativeUpdates.length > 0) {
+      await combat.updateEmbeddedDocuments("Combatant", initiativeUpdates);
     }
   }
 });
@@ -628,6 +648,8 @@ async function _preloadTemplates() {
     // HUD
     "systems/limbusCompany_FVTT/templates/sin-resource-hud.hbs",
     "systems/limbusCompany_FVTT/templates/quick-action-hud.hbs",
+    // GM Console
+    "systems/limbusCompany_FVTT/templates/gm-console.hbs",
   ];
   return loadTemplates(templatePaths);
 }

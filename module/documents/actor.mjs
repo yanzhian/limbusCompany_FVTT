@@ -936,7 +936,7 @@ export class LimbusActor extends Actor {
    * 播放 DiceSoNice 动画，发送聊天消息，更新战斗跟踪器先攻值。
    * @returns {Promise<Roll>}
    */
-  async rollSpeedInitiative() {
+  async rollSpeedInitiative({ updateCombatant = true } = {}) {
     const sys = this.system;
     const agi = sys.attributes?.agi ?? 0;
 
@@ -957,11 +957,13 @@ export class LimbusActor extends Actor {
     const roll     = new Roll("1d6 + @mod", { mod: modifier });
     await roll.evaluate();
 
-    // 更新战斗跟踪器先攻值
-    const combat = game.combat;
-    if (combat) {
-      const combatant = combat.combatants.find(c => c.actorId === this.id);
-      if (combatant) await combatant.update({ initiative: roll.total });
+    // 更新战斗跟踪器先攻值（可选：批量更新时由调用方统一写入）
+    if (updateCombatant) {
+      const combat = game.combat;
+      if (combat) {
+        const combatant = combat.combatants.find(c => c.actorId === this.id);
+        if (combatant) await combatant.update({ initiative: roll.total });
+      }
     }
 
     // 发送聊天消息

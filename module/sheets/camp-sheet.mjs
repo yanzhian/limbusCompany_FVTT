@@ -96,19 +96,33 @@ export class LimbusCampSheet extends ActorSheet {
   /* ─── 仓库网格构建（与容器 _buildContainerGrid 同逻辑） ─────────────── */
 
   async _buildWarehouseGrid(placements, cols, rows) {
-    const placedItems = [];
-    const occupied    = new Set(); // "x,y"
-    const q           = (this._warehouseSearch ?? "").toLowerCase();
+    const placedItems     = [];
+    const occupied        = new Set(); // "x,y"
+    const q               = (this._warehouseSearch ?? "").toLowerCase();
+    const orphanedIndices = [];
 
     for (let idx = 0; idx < placements.length; idx++) {
       const p    = placements[idx];
       let   item = null;
       if (p?.uuid) item = await fromUuid(p.uuid).catch(() => null);
-      if (!item) continue;
 
       const w = Math.max(1, p.w ?? 1);
       const h = Math.max(1, p.h ?? 1);
-      if (p.x + w > cols || p.y + h > rows || p.x < 0 || p.y < 0) continue;
+      const inBounds = p.x >= 0 && p.y >= 0 && p.x + w <= cols && p.y + h <= rows;
+
+      if (!item) {
+        // 孤儿条目（物品已被删除但放置记录残留）：
+        // 仍然标记格子为占用，保持视觉与碰撞一致；同时收集待清理索引。
+        if (inBounds) {
+          for (let dy = 0; dy < h; dy++)
+            for (let dx = 0; dx < w; dx++)
+              occupied.add(`${p.x + dx},${p.y + dy}`);
+        }
+        orphanedIndices.push(idx);
+        continue;
+      }
+
+      if (!inBounds) continue;
 
       for (let dy = 0; dy < h; dy++)
         for (let dx = 0; dx < w; dx++)
@@ -126,6 +140,15 @@ export class LimbusCampSheet extends ActorSheet {
         item: { _id: item.id, name: item.name, img: item.img,
                 quantity: item.system?.quantity ?? 1 },
       });
+    }
+
+    // GM 端：延迟自动清理孤儿条目（defer 出当前 getData 调用栈，避免重入渲染循环）
+    if (orphanedIndices.length > 0 && game.user.isGM) {
+      setTimeout(async () => {
+        const cur     = this.actor.system.warehouseContents ?? [];
+        const cleaned = cur.filter((_, i) => !orphanedIndices.includes(i));
+        await this.actor.update({ "system.warehouseContents": cleaned });
+      }, 0);
     }
 
     const allCells = [];
@@ -174,9 +197,16 @@ export class LimbusCampSheet extends ActorSheet {
 
   _getIngredientDetails(recipe, warehouseItems) {
     return (recipe.ingredients ?? []).map(ing => {
-      const available = warehouseItems
-        .filter(i => i.name === ing.name)
-        .reduce((s, i) => s + (i.system?.quantity ?? 1), 0);
+      const matches = warehouseItems.filter(i => i.name === ing.name);
+      // 无限耐久物品：只要仓库中存在即视为数量充足
+      const hasInfinite = matches.some(i => i.system?.infinite);
+      const available = hasInfinite
+        ? ing.quantity
+        : matches.reduce((s, i) => {
+            // 可复用物品数量归零时仍视为"在场"（贡献 1），不拦截制作
+            const qty = i.system?.quantity ?? 1;
+            return s + (i.system?.reusable ? Math.max(qty, 1) : qty);
+          }, 0);
       return { ...ing, available, sufficient: available >= ing.quantity };
     });
   }
@@ -722,8 +752,14 @@ export class LimbusCampSheet extends ActorSheet {
     );
     const currentItems = campActor.items.contents.filter(i => placedIds.has(i.id));
     const ingDetails   = (recipe.ingredients ?? []).map(ing => {
-      const available = currentItems.filter(i => i.name === ing.name)
-        .reduce((s, i) => s + (i.system?.quantity ?? 1), 0);
+      const matches = currentItems.filter(i => i.name === ing.name);
+      const hasInfinite = matches.some(i => i.system?.infinite);
+      const available = hasInfinite
+        ? ing.quantity
+        : matches.reduce((s, i) => {
+            const qty = i.system?.quantity ?? 1;
+            return s + (i.system?.reusable ? Math.max(qty, 1) : qty);
+          }, 0);
       return { ...ing, available, sufficient: available >= ing.quantity };
     });
 
@@ -737,13 +773,23 @@ export class LimbusCampSheet extends ActorSheet {
     const bulkUpdates = [];
 
     for (const ing of (recipe.ingredients ?? [])) {
+      const ingItems = currentItems.filter(i => i.name === ing.name);
+      // 无限耐久：仓库中存在即满足，完全不消耗数量
+      if (ingItems.some(i => i.system?.infinite)) continue;
+
       let remaining = ing.quantity;
-      for (const item of currentItems.filter(i => i.name === ing.name)) {
+      for (const item of ingItems) {
         if (remaining <= 0) break;
-        const qty = item.system?.quantity ?? 1;
+        const qty      = item.system?.quantity ?? 1;
+        const reusable = item.system?.reusable  ?? false;
         if (qty <= remaining) {
           remaining -= qty;
-          idsToDelete.push(item.id);
+          if (reusable) {
+            // 可复用物品：数量归零保留，与正常使用语义一致
+            bulkUpdates.push({ _id: item.id, "system.quantity": 0 });
+          } else {
+            idsToDelete.push(item.id);
+          }
         } else {
           bulkUpdates.push({ _id: item.id, "system.quantity": qty - remaining });
           remaining = 0;
