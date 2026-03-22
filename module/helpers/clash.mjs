@@ -1436,10 +1436,10 @@ export class ClashManager {
         // 防守方拼点胜（攻击方落败）
         await ClashManager._applyActivities(atkItem, "拼点失败", atkCtx);
         await ClashManager._applyActivities(defItem,  "拼点成功", defCtx);
-        // clashCounter：防守方反击命中攻击方
-        if (defCategory === "clashCounter") {
+        // 防守方命中攻击方（闪避胜利不造成伤害，其余胜利均命中）
+        if (!dodgeWin) {
           await ClashManager._applyActivities(defItem, "命中时", defCtx);
-          // 攻击方受到反击伤害（技能 + 装备格物品）
+          // 攻击方受到伤害（技能 + 装备格物品）
           await ClashManager._applyActivities(atkItem, "受到伤害时", atkCtx);
           for (const eq of ClashManager._getEquippedItems(atkActor)) {
             await ClashManager._applyActivities(eq, "受到伤害时", atkCtx);
