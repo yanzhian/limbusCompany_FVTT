@@ -1,10 +1,12 @@
 {
   "_comment": "此文件为类型声明兼容占位。正式数据模型通过 TypeDataModel 类定义，见 module/documents/actor.mjs 和 module/documents/item.mjs。",
   "Actor": {
-    "types": ["character", "merchant"],
+    "types": ["character", "merchant", "camp", "loot"],
     "templates": {},
     "character": {},
-    "merchant": {}
+    "merchant": {},
+    "camp": {},
+    "loot": {}
   },
   "Item": {
     "types": ["equipment", "skill", "consumable", "material", "container"],

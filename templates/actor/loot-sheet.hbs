@@ -1,0 +1,89 @@
+{{!-- loot-sheet.hbs — 战利品角色卡 --}}
+<form class="limbuscompany actor-sheet loot-sheet" autocomplete="off">
+
+  {{!-- ── 标题栏 ──────────────────────────────────────────────────────────── --}}
+  <div class="loot-titlebar">
+    {{#if isGM}}
+      <span class="loot-lock-toggle {{#if editUnlocked}}unlocked{{else}}locked{{/if}}"
+            title="{{#if editUnlocked}}点击锁定编辑{{else}}点击解锁编辑{{/if}}">
+        <i class="fas fa-{{#if editUnlocked}}lock-open{{else}}lock{{/if}}"></i>
+      </span>
+    {{/if}}
+    <img src="{{actor.img}}" class="loot-title-icon" alt="loot">
+    <span class="loot-title-name">{{actor.name}}</span>
+    <span class="loot-title-label">战利品</span>
+  </div>
+
+  {{!-- ── 货币栏 ──────────────────────────────────────────────────────────── --}}
+  <div class="loot-currency-bar">
+    <span class="loot-currency-icon" title="眼（货币）">👁</span>
+    <span class="loot-currency-value">{{currency}}</span>
+    <span class="loot-currency-unit">眼</span>
+
+    {{#if isGM}}
+      <button type="button" class="loot-fill-btn sheet-btn" title="填充眼">填充</button>
+    {{else}}
+      <button type="button" class="loot-take-currency-btn sheet-btn" title="拿走眼">拿走</button>
+      <button type="button" class="loot-split-currency-btn sheet-btn" title="将眼平分给队伍1成员">一键平分</button>
+    {{/if}}
+  </div>
+
+  {{!-- ── 网格工具栏（GM） ──────────────────────────────────────────────── --}}
+  {{#if isGM}}
+  <div class="loot-grid-toolbar">
+    <span class="loot-grid-label"><i class="fas fa-th"></i> 网格</span>
+    {{#if editUnlocked}}
+      <span class="loot-grid-size-edit">
+        <input type="number" class="loot-grid-dim" data-axis="width"
+               value="{{gridCols}}" min="1" max="20" title="列数">
+        <span>×</span>
+        <input type="number" class="loot-grid-dim" data-axis="height"
+               value="{{gridRows}}" min="1" max="20" title="行数">
+      </span>
+    {{else}}
+      <span class="loot-grid-size-label">{{gridSizeLabel}}</span>
+    {{/if}}
+  </div>
+  {{/if}}
+
+  {{!-- ── 网格 ────────────────────────────────────────────────────────────── --}}
+  <div class="loot-grid-wrap">
+    <div class="cg-wrap loot-cg" style="--grid-cols:{{gridCols}}; --grid-rows:{{gridRows}}">
+
+      {{!-- 背景格（拖放目标） --}}
+      {{#each allCells}}
+        <div class="cg-cell {{#if occupied}}cg-occupied{{/if}}"
+             style="grid-column:{{col}}; grid-row:{{row}}"
+             data-x="{{x}}" data-y="{{y}}">
+        </div>
+      {{/each}}
+
+      {{!-- 物品图块 --}}
+      {{#each placedItems}}
+        <div class="cg-item-tile {{#unless show}}cg-hidden{{/unless}}"
+             style="grid-column:{{col}} / span {{w}}; grid-row:{{row}} / span {{h}}"
+             data-placement-idx="{{idx}}"
+             data-item-uuid="{{uuid}}"
+             data-item-name="{{item.name}}"
+             draggable="true"
+             title="{{item.name}}（右键菜单）">
+          <img src="{{item.img}}" class="cg-tile-icon" alt="{{item.name}}">
+          <span class="cg-tile-name">{{item.name}}</span>
+          {{#if item.quantity}}<span class="cg-tile-qty">×{{item.quantity}}</span>{{/if}}
+          {{#if (and ../isGM ../editUnlocked)}}
+            <button type="button" class="cg-rotate-btn" data-placement-idx="{{idx}}" title="旋转">↻</button>
+          {{/if}}
+        </div>
+      {{/each}}
+
+    </div>{{!-- /cg-wrap --}}
+  </div>{{!-- /loot-grid-wrap --}}
+
+  {{!-- ── 提示 ────────────────────────────────────────────────────────────── --}}
+  {{#if (and isGM editUnlocked)}}
+    <div class="loot-drag-hint">
+      <i class="fas fa-arrow-down"></i> 将物品拖入网格以存入战利品
+    </div>
+  {{/if}}
+
+</form>

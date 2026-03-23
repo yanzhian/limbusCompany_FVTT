@@ -353,6 +353,39 @@ export class CampData extends foundry.abstract.TypeDataModel {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+//  LootData — 战利品 Actor 数据模型
+// ═══════════════════════════════════════════════════════════════════════════
+
+export class LootData extends foundry.abstract.TypeDataModel {
+
+  static defineSchema() {
+    const fields = foundry.data.fields;
+
+    // 放置记录（与营地仓库格式相同）
+    const placementSchema = new fields.SchemaField({
+      uuid:    new fields.StringField({ required: true, initial: "" }),
+      x:       new fields.NumberField({ required: true, integer: true, min: 0, initial: 0 }),
+      y:       new fields.NumberField({ required: true, integer: true, min: 0, initial: 0 }),
+      w:       new fields.NumberField({ required: true, integer: true, min: 1, initial: 1 }),
+      h:       new fields.NumberField({ required: true, integer: true, min: 1, initial: 1 }),
+      rotated: new fields.BooleanField({ initial: false }),
+    });
+
+    return {
+      // 网格尺寸（GM 可改，默认 5×5）
+      gridSize: new fields.SchemaField({
+        width:  new fields.NumberField({ required: true, integer: true, min: 1, max: 20, initial: 5 }),
+        height: new fields.NumberField({ required: true, integer: true, min: 1, max: 20, initial: 5 }),
+      }),
+      // 物品放置记录
+      lootContents: new fields.ArrayField(placementSchema, { required: true, initial: [] }),
+      // 眼（货币）
+      currency: new fields.NumberField({ required: true, integer: true, min: 0, initial: 0 }),
+    };
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 //  LimbusActor — Actor 文档类
 // ═══════════════════════════════════════════════════════════════════════════
 

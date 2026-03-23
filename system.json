@@ -29,7 +29,8 @@
     "Actor": {
       "character": {},
       "merchant": {},
-      "camp": {}
+      "camp": {},
+      "loot": {}
     },
     "Item": {
       "equipment": {},
