@@ -7285,3 +7285,262 @@ input.item-piles-quantity {
   text-align: center;
   font-style: italic;
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   战利品 Actor Sheet (loot-sheet)
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── 整体布局 ────────────────────────────────────────────────────────────── */
+
+.loot-sheet {
+  display:        flex;
+  flex-direction: column;
+  gap:            0;
+  height:         100%;
+  overflow:       hidden;
+  background:     var(--bg-deep, #151210);
+  color:          var(--text-main, #ECE4D6);
+  font-family:    var(--font-primary, "Noto Serif SC", serif);
+}
+
+/* ── 标题栏 ──────────────────────────────────────────────────────────────── */
+
+.loot-titlebar {
+  display:         flex;
+  align-items:     center;
+  gap:             6px;
+  padding:         6px 8px;
+  background:      rgba(0,0,0,0.35);
+  border-bottom:   1px solid rgba(200,158,112,0.25);
+  flex-shrink:     0;
+}
+
+.loot-lock-toggle {
+  cursor:        pointer;
+  font-size:     13px;
+  padding:       2px 4px;
+  border-radius: 3px;
+  transition:    color 0.15s, background 0.15s;
+  flex-shrink:   0;
+}
+.loot-lock-toggle.locked  { color: #E84444; }
+.loot-lock-toggle.unlocked { color: #E5BA25; }
+.loot-lock-toggle:hover { background: rgba(255,255,255,0.08); }
+
+.loot-title-icon {
+  width:         28px;
+  height:        28px;
+  border-radius: 3px;
+  object-fit:    cover;
+  flex-shrink:   0;
+}
+
+.loot-title-name {
+  flex:        1;
+  font-size:   14px;
+  font-weight: 600;
+  color:       var(--text-main, #ECE4D6);
+  overflow:    hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.loot-title-label {
+  font-size:  11px;
+  color:      var(--text-dim, #786455);
+  flex-shrink: 0;
+  letter-spacing: 0.05em;
+}
+
+/* ── 货币栏 ──────────────────────────────────────────────────────────────── */
+
+.loot-currency-bar {
+  display:       flex;
+  align-items:   center;
+  gap:           6px;
+  padding:       6px 10px;
+  background:    rgba(229, 186, 37, 0.06);
+  border-bottom: 1px solid rgba(200,158,112,0.18);
+  flex-shrink:   0;
+}
+
+.loot-currency-icon {
+  font-size:   16px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.loot-currency-value {
+  font-size:   18px;
+  font-weight: 700;
+  color:       var(--gold-active, #E5BA25);
+  min-width:   40px;
+}
+
+.loot-currency-unit {
+  font-size:  12px;
+  color:      var(--text-dim, #786455);
+  flex:       1;
+}
+
+.loot-currency-bar .sheet-btn {
+  padding:       3px 10px;
+  font-size:     12px;
+  background:    rgba(229,186,37,0.15);
+  border:        1px solid rgba(229,186,37,0.35);
+  color:         var(--gold-active, #E5BA25);
+  border-radius: 3px;
+  cursor:        pointer;
+  transition:    background 0.15s, border-color 0.15s;
+  flex-shrink:   0;
+  max-width: 20px;
+}
+.loot-currency-bar .sheet-btn:hover {
+  background:  rgba(229,186,37,0.28);
+  border-color: rgba(229,186,37,0.6);
+}
+.loot-currency-bar .loot-fill-btn {
+  background:  rgba(99,180,99,0.15);
+  border-color: rgba(99,180,99,0.35);
+  color:       #63B463;
+}
+.loot-currency-bar .loot-fill-btn:hover {
+  background:  rgba(99,180,99,0.28);
+  border-color: rgba(99,180,99,0.6);
+}
+
+/* ── 网格工具栏 ──────────────────────────────────────────────────────────── */
+
+.loot-grid-toolbar {
+  display:       flex;
+  align-items:   center;
+  gap:           6px;
+  padding:       4px 10px;
+  background:    rgba(0,0,0,0.2);
+  border-bottom: 1px solid rgba(200,158,112,0.12);
+  flex-shrink:   0;
+  font-size:     12px;
+  color:         var(--text-dim, #786455);
+}
+
+.loot-grid-label {
+  flex: 1;
+}
+
+.loot-grid-size-edit {
+  display:     flex;
+  align-items: center;
+  gap:         4px;
+}
+
+.loot-grid-dim {
+  width:         38px;
+  padding:       1px 4px;
+  background:    rgba(255,255,255,0.06);
+  border:        1px solid rgba(200,158,112,0.25);
+  border-radius: 3px;
+  color:         var(--text-main, #ECE4D6);
+  font-size:     12px;
+  text-align:    center;
+}
+
+.loot-grid-size-label {
+  font-size: 12px;
+  color:     var(--text-dim, #786455);
+}
+
+/* ── 网格容器 ────────────────────────────────────────────────────────────── */
+
+.loot-grid-wrap {
+  flex:       1;
+  overflow:   auto;
+  padding:    8px;
+}
+
+/* 复用 .cg-wrap 相同布局，仅调整尺寸变量引用 */
+.loot-cg {
+  grid-template-columns: repeat(var(--grid-cols, 5), 50px);
+  grid-template-rows:    repeat(var(--grid-rows, 5), 50px);
+}
+
+/* ── 拖入提示 ────────────────────────────────────────────────────────────── */
+
+.loot-drag-hint {
+  flex-shrink: 0;
+  text-align:  center;
+  font-size:   11px;
+  color:       var(--text-dim, #786455);
+  padding:     4px 8px 6px;
+  font-style:  italic;
+}
+
+/* ─── 战利品揭示动画 ─────────────────────────────────────────────────────── */
+
+/* ♻ 旋转动画 */
+@keyframes loot-spin {
+  from { transform: translate(-50%, -50%) rotate(0deg); }
+  to   { transform: translate(-50%, -50%) rotate(360deg); }
+}
+
+/* 物品揭示时的缩放淡入 */
+@keyframes loot-reveal {
+  from { opacity: 0.15; transform: scale(0.82); filter: brightness(0); }
+  to   { opacity: 1;    transform: scale(1);    filter: brightness(1); }
+}
+
+/* ── 剪影状态 ────────────────────────────────────────────────────────────── */
+
+.loot-tile--silhouette {
+  cursor: default;
+  pointer-events: none; /* 搜索中禁止交互 */
+}
+
+/* 图片变为纯黑轮廓 */
+.loot-tile--silhouette .cg-tile-icon {
+  filter: brightness(0) saturate(0);
+}
+
+/* 隐藏名称、数量、旋转按钮 */
+.loot-tile--silhouette .cg-tile-name,
+.loot-tile--silhouette .cg-tile-qty,
+.loot-tile--silhouette .cg-rotate-btn {
+  opacity: 0;
+}
+
+/* ♻ 旋转搜索符号（居中悬浮在图块上） */
+.loot-tile--silhouette::before {
+  content:         "♻";
+  position:        absolute;
+  top:             50%;
+  left:            50%;
+  transform:       translate(-50%, -50%);
+  font-size:       20px;
+  color:           rgba(200, 158, 112, 0.75);
+  animation:       loot-spin 1.1s linear infinite;
+  z-index:         5;
+  pointer-events:  none;
+  text-shadow:     0 0 8px rgba(200, 158, 112, 0.4);
+}
+
+/* ── 揭示瞬间动画 ────────────────────────────────────────────────────────── */
+
+.loot-tile--revealing {
+  animation: loot-reveal 0.42s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+/* ─── 战利品聊天消息 ─────────────────────────────────────────────────────── */
+
+.loot-chat-msg {
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.loot-chat-header {
+  margin-bottom: 4px;
+  color: var(--text-main, #ECE4D6);
+}
+
+.loot-chat-item {
+  padding-left: 8px;
+  color: var(--text-dim, #b0a090);
+}

@@ -1458,11 +1458,36 @@ function _buildCondRow(cond, idx, cfg) {
     </div>`;
 }
 
+/** 目标下拉选项 HTML（含队伍群体目标） */
+function _buildTargetOptions(selected) {
+  return [
+    ["self",          "自己"],
+    ["target",        "目标"],
+    ["allTeam",       "本队全部"],
+    ["allTeamOther",  "本队其他全部"],
+    ["allEnemy",      "敌对全部"],
+    ["allEnemyOther", "敌对其他全部"],
+  ].map(([v, l]) => `<option value="${v}" ${selected === v ? "selected" : ""}>${l}</option>`).join("");
+}
+
 /** 消耗行 HTML */
 function _buildCostRow(cost, idx, cfg) {
-  const buffOpts  = _buildBuffGroupOptions(cfg, cost?.buff);
-  const typeOpts  = [["perStack","【每】"],["forced","强制消耗"],["optional","可选消耗"]]
-    .map(([v,l]) => `<option value="${v}" ${(cost?.type ?? "forced") === v ? "selected" : ""}>${l}</option>`).join("");
+  const buffOpts = _buildBuffGroupOptions(cfg, cost?.buff);
+  const selType  = cost?.type ?? "forced";
+  const isAttr   = selType === "attribute";
+  const typeOpts = [
+    ["perStack",  "【每】"],
+    ["forced",    "强制消耗"],
+    ["optional",  "可选消耗"],
+    ["attribute", "基础属性"],
+  ].map(([v, l]) => `<option value="${v}" ${selType === v ? "selected" : ""}>${l}</option>`).join("");
+
+  const attrTypeOpts = [
+    ["hp",     "生命值"],
+    ["sanity", "理智值"],
+    ["ap",     "行动值"],
+  ].map(([v, l]) => `<option value="${v}" ${(cost?.attrType ?? "hp") === v ? "selected" : ""}>${l}</option>`).join("");
+
   return `
     <div class="ae-row ae-cost-row">
       <div class="ae-row-hd">
@@ -1473,20 +1498,25 @@ function _buildCostRow(cost, idx, cfg) {
         <label>类型</label>
         <select class="ae-sel cost-type">${typeOpts}</select>
         <label>目标</label>
-        <select class="ae-sel cost-target">
-          <option value="self"   ${(cost?.target ?? "self") === "self"   ? "selected" : ""}>自己</option>
-          <option value="target" ${cost?.target === "target" ? "selected" : ""}>目标</option>
-        </select>
-        <label>BUFF</label>
-        <select class="ae-sel cost-buff">${buffOpts}</select>
-        <input class="ae-input cost-buff-custom" type="text"
-               placeholder="自定BUFF名称"
-               value="${_esc(cost?.buffCustom ?? "")}"
-               style="display:${(cost?.buff ?? "") === "custom" ? "inline-block" : "none"};width:90px;">
-        <label>强度</label>
-        <input class="ae-input-sm cost-intensity" type="number" value="${cost?.intensity ?? 1}" min="0">
-        <label>层数</label>
-        <input class="ae-input-sm cost-stacks"    type="number" value="${cost?.stacks ?? 1}"    min="0">
+        <select class="ae-sel cost-target">${_buildTargetOptions(cost?.target ?? "self")}</select>
+        <span class="ae-cost-buff-sec" ${isAttr ? 'style="display:none"' : ""}>
+          <label>BUFF</label>
+          <select class="ae-sel cost-buff">${buffOpts}</select>
+          <input class="ae-input cost-buff-custom" type="text"
+                 placeholder="自定BUFF名称"
+                 value="${_esc(cost?.buffCustom ?? "")}"
+                 style="display:${(cost?.buff ?? "") === "custom" ? "inline-block" : "none"};width:90px;">
+          <label>强度</label>
+          <input class="ae-input-sm cost-intensity" type="number" value="${cost?.intensity ?? 1}" min="0">
+          <label>层数</label>
+          <input class="ae-input-sm cost-stacks"    type="number" value="${cost?.stacks ?? 1}"    min="0">
+        </span>
+        <span class="ae-cost-attr-sec" ${isAttr ? "" : 'style="display:none"'}>
+          <label>属性</label>
+          <select class="ae-sel cost-attr-type">${attrTypeOpts}</select>
+          <label>数值</label>
+          <input class="ae-input-sm cost-attr-value" type="number" value="${cost?.value ?? 1}" min="1">
+        </span>
       </div>
     </div>`;
 }
@@ -1519,10 +1549,7 @@ function _buildEffectRow(eff, idx, cfg) {
         <label>类型</label>
         <select class="ae-sel ae-eff-type eff-type">${effOpts}</select>
         <label>目标</label>
-        <select class="ae-sel eff-target">
-          <option value="self"   ${(eff?.target ?? "self") === "self"   ? "selected" : ""}>自己</option>
-          <option value="target" ${eff?.target === "target" ? "selected" : ""}>目标</option>
-        </select>
+        <select class="ae-sel eff-target">${_buildTargetOptions(eff?.target ?? "self")}</select>
         <span class="ae-eff-round-sec" ${isAddBuff ? "" : 'style="display:none"'}>
           <label>回合</label>
           <select class="ae-sel eff-round">${roundOpts}</select>
@@ -1574,6 +1601,7 @@ function _setupAeDialog(html, cfg) {
     list.append(_buildCostRow({}, idx, cfg));
     _bindDel(html);
     _bindCondCostBuff(html);
+    _bindCostType(html);
   });
   html.find(".ae-add-effect").on("click", () => {
     const list = html.find(".ae-effect-list");
@@ -1589,6 +1617,7 @@ function _setupAeDialog(html, cfg) {
   _bindDel(html);
   _bindEffType(html);
   _bindCondCostBuff(html);
+  _bindCostType(html);
 }
 
 function _bindCondCostBuff(html) {
@@ -1597,6 +1626,15 @@ function _bindCondCostBuff(html) {
   });
   html.find(".cost-buff").off("change").on("change", function () {
     $(this).closest(".ae-cost-row").find(".cost-buff-custom").toggle($(this).val() === "custom");
+  });
+}
+
+function _bindCostType(html) {
+  html.find(".cost-type").off("change").on("change", function () {
+    const row    = $(this).closest(".ae-cost-row");
+    const isAttr = $(this).val() === "attribute";
+    row.find(".ae-cost-buff-sec").toggle(!isAttr);
+    row.find(".ae-cost-attr-sec").toggle(isAttr);
   });
 }
 
@@ -1660,16 +1698,27 @@ function _readActivityForm(html, original) {
 
   const costs = [];
   html.find(".ae-cost-row").each((_, el) => {
-    const $r      = $(el);
-    const buffVal = $r.find(".cost-buff").val() || "";
-    costs.push({
-      type:       $r.find(".cost-type").val()    || "forced",
-      target:     $r.find(".cost-target").val()  || "self",
-      buff:       buffVal,
-      buffCustom: buffVal === "custom" ? ($r.find(".cost-buff-custom").val()?.trim() || "") : "",
-      intensity:  parseInt($r.find(".cost-intensity").val()) || 1,
-      stacks:     parseInt($r.find(".cost-stacks").val())    || 1,
-    });
+    const $r    = $(el);
+    const type  = $r.find(".cost-type").val()   || "forced";
+    const target = $r.find(".cost-target").val() || "self";
+    if (type === "attribute") {
+      costs.push({
+        type,
+        target,
+        attrType: $r.find(".cost-attr-type").val()             || "hp",
+        value:    parseInt($r.find(".cost-attr-value").val())  || 1,
+      });
+    } else {
+      const buffVal = $r.find(".cost-buff").val() || "";
+      costs.push({
+        type,
+        target,
+        buff:       buffVal,
+        buffCustom: buffVal === "custom" ? ($r.find(".cost-buff-custom").val()?.trim() || "") : "",
+        intensity:  parseInt($r.find(".cost-intensity").val()) || 1,
+        stacks:     parseInt($r.find(".cost-stacks").val())    || 1,
+      });
+    }
   });
 
   const effects = [];

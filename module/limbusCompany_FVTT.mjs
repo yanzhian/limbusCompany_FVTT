@@ -9,7 +9,7 @@
  */
 
 import { LIMBUSCOMPANY }   from "./config.mjs";
-import { LimbusActor, CharacterData, MerchantData, CampData }  from "./documents/actor.mjs";
+import { LimbusActor, CharacterData, MerchantData, CampData, LootData }  from "./documents/actor.mjs";
 import {
   LimbusItem,
   EquipmentData,
@@ -22,6 +22,7 @@ import { LimbusActorSheet }   from "./sheets/actor-sheet.mjs";
 import { LimbusItemSheet }    from "./sheets/item-sheet.mjs";
 import { LimbusMerchantSheet } from "./sheets/merchant-sheet.mjs";
 import { LimbusCampSheet }    from "./sheets/camp-sheet.mjs";
+import { LimbusLootSheet }    from "./sheets/loot-sheet.mjs";
 import { GMConsole }          from "./sheets/gm-console.mjs";
 import { SquadHUD }           from "./sheets/squad-hud.mjs";
 import { ClashManager }     from "./helpers/clash.mjs";
@@ -93,6 +94,7 @@ Hooks.once("init", () => {
     await ClashManager.handleSocketMsg(msg);
     await _handleMerchantSocketMsg(msg);
     await LimbusCampSheet.handleSocketMsg(msg);
+    await LimbusLootSheet.handleSocketMsg(msg);
   });
 
   // 先攻公式：1D6 + 敏捷（战斗跟踪器默认骰掷使用）
@@ -108,6 +110,7 @@ Hooks.once("init", () => {
     character: CharacterData,
     merchant:  MerchantData,
     camp:      CampData,
+    loot:      LootData,
   };
 
   CONFIG.Item.dataModels = {
@@ -135,6 +138,12 @@ Hooks.once("init", () => {
     types:       ["camp"],
     makeDefault: true,
     label:       "LIMBUSCOMPANY.Sheet.Camp",
+  });
+
+  Actors.registerSheet("limbusCompany_FVTT", LimbusLootSheet, {
+    types:       ["loot"],
+    makeDefault: true,
+    label:       "LIMBUSCOMPANY.Sheet.Loot",
   });
 
   // ── 注册 Item Sheet ────────────────────────────────────────────────────
@@ -674,6 +683,8 @@ async function _preloadTemplates() {
     "systems/limbusCompany_FVTT/templates/gm-console.hbs",
     // Squad HUD
     "systems/limbusCompany_FVTT/templates/squad-hud.hbs",
+    // Loot sheet
+    "systems/limbusCompany_FVTT/templates/actor/loot-sheet.hbs",
   ];
   return loadTemplates(templatePaths);
 }
