@@ -33,48 +33,64 @@ export class LimbusLootSheet extends ActorSheet {
   static _opQueues = new Map();
 
   /**
-   * 聊天消息防抖聚合器
+   * 聊天消息实时聚合器
    * key: `${charId}_${lootActorId}`
-   * value: { playerChar, lootActor, items: [{name, img, qty}] }
+   * value: { playerChar, lootActor, items, msg, chain }
+   *
+   * 策略：第一件物品立即创建聊天消息；后续物品通过 update() 追加到同一条消息。
+   * 30 秒无新取出操作后清理会话，下次取出重新开始新消息。
    */
-  static _chatPending = new Map();
-  static _chatTimers  = new Map();
+  static _chatSessions = new Map();
+  static _chatTimers   = new Map();
+
+  /** 构建聊天消息 HTML 内容 */
+  static _buildLootChatContent({ playerChar, lootActor, items }) {
+    const rows = items.map(i =>
+      `<div class="loot-chat-item">` +
+      `<img src="${i.img}" width="16" height="16" style="vertical-align:middle;margin-right:4px">` +
+      `<strong>${i.name}</strong> ×${i.qty}</div>`
+    ).join("");
+    return `<div class="limbuscompany loot-chat-msg">
+      <div class="loot-chat-header">
+        <strong>${playerChar.name}</strong>
+        &nbsp;从战利品【${lootActor.name}】中取出了
+      </div>
+      ${rows}
+    </div>`;
+  }
 
   /**
-   * 将一条取出记录加入聚合缓冲区，800ms 内无新记录则统一发送一条聊天消息。
-   * 同一玩家角色 + 同一战利品箱 的取出操作合并到同一条消息中。
+   * 记录一次取出操作：首次取出立即创建聊天消息，
+   * 后续操作 update 同一条消息追加物品行。
+   * 所有异步操作通过 entry.chain 串行化，避免竞态。
    */
   static _scheduleChatMsg(lootActor, playerChar, itemName, itemImg, qty) {
-    const key   = `${playerChar.id}_${lootActor.id}`;
-    const entry = LimbusLootSheet._chatPending.get(key)
-      ?? { playerChar, lootActor, items: [] };
+    const key = `${playerChar.id}_${lootActor.id}`;
+
+    let entry = LimbusLootSheet._chatSessions.get(key);
+    if (!entry) {
+      entry = { playerChar, lootActor, items: [], msg: null, chain: Promise.resolve() };
+      LimbusLootSheet._chatSessions.set(key, entry);
+    }
+
     entry.items.push({ name: itemName, img: itemImg, qty });
-    LimbusLootSheet._chatPending.set(key, entry);
 
-    // 重置防抖计时器
+    // 串行执行：创建或更新消息
+    entry.chain = entry.chain.then(async () => {
+      const content = LimbusLootSheet._buildLootChatContent(entry);
+      if (!entry.msg) {
+        entry.msg = await ChatMessage.create({ content });
+      } else {
+        await entry.msg.update({ content });
+      }
+    });
+
+    // 重置 30s 清理计时器（30s 内无新操作则结束本次会话）
     clearTimeout(LimbusLootSheet._chatTimers.get(key));
-    LimbusLootSheet._chatTimers.set(key, setTimeout(async () => {
-      const pending = LimbusLootSheet._chatPending.get(key);
-      if (!pending) return;
-      LimbusLootSheet._chatPending.delete(key);
+    LimbusLootSheet._chatTimers.set(key, setTimeout(() => {
+      LimbusLootSheet._chatSessions.delete(key);
       LimbusLootSheet._chatTimers.delete(key);
-
-      const rows = pending.items.map(i =>
-        `<div class="loot-chat-item">` +
-        `<img src="${i.img}" width="16" height="16" style="vertical-align:middle;margin-right:4px">` +
-        `<strong>${i.name}</strong> ×${i.qty}</div>`
-      ).join("");
-
-      await ChatMessage.create({
-        content: `<div class="limbuscompany loot-chat-msg">
-          <div class="loot-chat-header">
-            <strong>${pending.playerChar.name}</strong>
-            &nbsp;从战利品【${pending.lootActor.name}】中取出了
-          </div>
-          ${rows}
-        </div>`,
-      });
-    }, 800));
+    }, 30_000));
   }
 
   /* ─── getData ──────────────────────────────────────────────────────────── */
