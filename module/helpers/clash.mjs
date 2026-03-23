@@ -240,6 +240,34 @@ export class ClashManager {
   }
 
   /**
+   * 根据目标类型解析实际 Actor 列表。
+   * "self"/"target" 返回单体数组；群体目标从队伍设置读取。
+   */
+  static _resolveTargets(targetType, owner, other) {
+    if (targetType === "self")   return owner ? [owner] : [];
+    if (targetType === "target") return other ? [other] : [];
+
+    const ownerId = owner?.id;
+    let team1Ids = [], team2Ids = [];
+    try { team1Ids = game.settings.get("limbusCompany_FVTT", "squadTeam1") ?? []; } catch { /* 未注册时忽略 */ }
+    try { team2Ids = game.settings.get("limbusCompany_FVTT", "squadTeam2") ?? []; } catch { /* 未注册时忽略 */ }
+
+    const inTeam1  = team1Ids.includes(ownerId);
+    const inTeam2  = !inTeam1 && team2Ids.includes(ownerId);
+    const myIds    = inTeam1 ? team1Ids : inTeam2 ? team2Ids : [];
+    const foeIds   = inTeam1 ? team2Ids : inTeam2 ? team1Ids : [];
+    const toActors = ids => ids.map(id => game.actors.get(id)).filter(Boolean);
+
+    switch (targetType) {
+      case "allTeam":       return toActors(myIds);
+      case "allTeamOther":  return toActors(myIds.filter(id => id !== ownerId));
+      case "allEnemy":      return toActors(foeIds);
+      case "allEnemyOther": return toActors(foeIds.filter(id => id !== ownerId));
+      default:              return other ? [other] : [];
+    }
+  }
+
+  /**
    * 执行 item.system.activities 中与 trigger 匹配的效果。
    * @param {Item}   item     携带活动效果的技能物品（攻击方或防守方的技能）
    * @param {string} trigger  触发时机（如 "使用时"、"命中时"）
@@ -291,32 +319,70 @@ export class ClashManager {
       const costs = Array.isArray(act.costs) ? act.costs
         : (act.cost ? [act.cost] : []);
 
-      // 强制消耗：先校验层数是否充足，不足则跳过整条 Activity
+      // 强制消耗：先校验资源是否充足，不足则跳过整条 Activity
       let forcedFail = false;
       for (const cost of costs) {
-        if (!cost?.buff || cost.type !== "forced") continue;
-        const costBuffType = cost.buff === "custom" ? (cost.buffCustom || "custom") : cost.buff;
-        const costTgt = cost.target === "self" ? owner : other;
-        if (!costTgt) { forcedFail = true; break; }
-        const existing = ClashManager._getBuff(costTgt, costBuffType);
-        if ((existing?.stacks ?? 0) < (cost.stacks ?? 1)) { forcedFail = true; break; }
+        if (!cost) continue;
+        if (cost.type === "attribute") {
+          // 基础属性消耗：始终视为强制
+          const costTgts = ClashManager._resolveTargets(cost.target ?? "self", owner, other);
+          if (costTgts.length === 0) { forcedFail = true; break; }
+          const need = cost.value ?? 1;
+          for (const tgt of costTgts) {
+            const sys = tgt.system;
+            let have = 0;
+            if      (cost.attrType === "hp")     have = sys.hp?.value     ?? 0;
+            else if (cost.attrType === "sanity")  have = sys.sanity?.value ?? 0;
+            else if (cost.attrType === "ap")      have = sys.ap?.value     ?? 0;
+            if (have < need) { forcedFail = true; break; }
+          }
+        } else if (cost.buff && cost.type === "forced") {
+          const costBuffType = cost.buff === "custom" ? (cost.buffCustom || "custom") : cost.buff;
+          const costTgts = ClashManager._resolveTargets(cost.target ?? "self", owner, other);
+          if (costTgts.length === 0) { forcedFail = true; break; }
+          for (const tgt of costTgts) {
+            const existing = ClashManager._getBuff(tgt, costBuffType);
+            if ((existing?.stacks ?? 0) < (cost.stacks ?? 1)) { forcedFail = true; break; }
+          }
+        }
+        if (forcedFail) break;
       }
       if (forcedFail) continue;
 
       let perStackMultiplier = 1;
       for (const cost of costs) {
-        if (!cost?.buff) continue;
-        const costBuffType = cost.buff === "custom" ? (cost.buffCustom || "custom") : cost.buff;
-        const costTgt = cost.target === "self" ? owner : other;
-        if (!costTgt) continue;
-        if (cost.type === "perStack") {
-          // 消耗全部层数，将消耗量作为效果倍数
-          const existing = ClashManager._getBuff(costTgt, costBuffType);
-          const consumed = existing?.stacks ?? 0;
-          await ClashManager._removeBuff(costTgt, costBuffType);
-          perStackMultiplier = consumed;
-        } else if (cost.type !== "none") {
-          await ClashManager._reduceBuffStacks(costTgt, costBuffType, cost.stacks ?? 1);
+        if (!cost) continue;
+        if (cost.type === "attribute") {
+          // 消耗基础属性
+          const costTgts = ClashManager._resolveTargets(cost.target ?? "self", owner, other);
+          const need = cost.value ?? 1;
+          for (const tgt of costTgts) {
+            const sys = tgt.system;
+            if (cost.attrType === "hp") {
+              await tgt.update({ "system.hp.value": Math.max(0, (sys.hp?.value ?? 0) - need) });
+            } else if (cost.attrType === "sanity") {
+              await tgt.update({ "system.sanity.value": Math.max(5, Math.min(95, (sys.sanity?.value ?? 50) - need)) });
+            } else if (cost.attrType === "ap") {
+              await tgt.update({ "system.ap.value": Math.max(0, (sys.ap?.value ?? 0) - need) });
+            }
+          }
+        } else if (cost.buff) {
+          const costBuffType = cost.buff === "custom" ? (cost.buffCustom || "custom") : cost.buff;
+          const costTgts = ClashManager._resolveTargets(cost.target ?? "self", owner, other);
+          if (cost.type === "perStack") {
+            // 消耗第一个目标的全部层数，作为效果倍数
+            const tgt = costTgts[0];
+            if (tgt) {
+              const existing = ClashManager._getBuff(tgt, costBuffType);
+              const consumed = existing?.stacks ?? 0;
+              await ClashManager._removeBuff(tgt, costBuffType);
+              perStackMultiplier = consumed;
+            }
+          } else if (cost.type !== "none") {
+            for (const tgt of costTgts) {
+              await ClashManager._reduceBuffStacks(tgt, costBuffType, cost.stacks ?? 1);
+            }
+          }
         }
       }
 
@@ -327,8 +393,10 @@ export class ClashManager {
 
       for (const eff of effects) {
         if (!eff?.type) continue;
-        const effTgt = eff.target === "self" ? owner : other;
-        if (!effTgt) continue;
+        const effTgts = ClashManager._resolveTargets(eff.target ?? "self", owner, other);
+        if (effTgts.length === 0) continue;
+
+        for (const effTgt of effTgts) {
 
         // BUFF 型效果用 intensity/stacks；数值型效果用 value
         // 若存在【每】消耗，stacks 按消耗层数等比放大
@@ -516,6 +584,7 @@ export class ClashManager {
 
         const actName = act.name ? `${act.name}：` : "";
         if (descStr) msgs.push(`${actName}${descStr}`);
+        } // end for effTgt
       }
 
       // 记录触发次数
