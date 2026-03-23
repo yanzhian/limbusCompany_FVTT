@@ -333,7 +333,7 @@ export class LimbusLootSheet extends ActorSheet {
     $(".cg-ctx-menu").remove();
 
     const isGM = game.user.isGM;
-    let menuHtml = `<li data-action="takeout"><i class="fas fa-hand-paper"></i> 拿走</li>
+    let menuHtml = `<li data-action="takeout"><i class="fas fa-box-open"></i> 取出到我的角色</li>
                     <li data-action="chat"><i class="fas fa-comment"></i> 发送聊天框</li>`;
     if (isGM) {
       menuHtml += `<li class="cg-ctx-sep"></li>
@@ -359,17 +359,18 @@ export class LimbusLootSheet extends ActorSheet {
         if (!item) { ui.notifications.warn(`找不到物品「${iname}」，可能已被取走。`); return; }
         const maxQty = item.system?.quantity ?? 1;
         new Dialog({
-          title: `拿走 — ${item.name}`,
+          title: `取出 — ${item.name}`,
           content: `<div class="limbuscompany" style="padding:6px 0">
+            <p>将物品移至你的角色背包。</p>
             <label style="display:flex;align-items:center;gap:8px">
-              拿走数量：
-              <input type="number" id="loot-take-qty" value="${maxQty}" min="1" max="${maxQty}" style="width:60px">
-              <span>（剩余：${maxQty}）</span>
+              取出数量：
+              <input type="number" id="loot-take-qty" value="1" min="1" max="${maxQty}" style="width:60px">
+              <span>（战利品剩余：${maxQty}）</span>
             </label>
           </div>`,
           buttons: {
             take: {
-              label: "拿走",
+              label: "取出",
               callback: async (dlg) => {
                 const qty = Math.min(maxQty, Math.max(1, parseInt(dlg.find("#loot-take-qty").val()) || 1));
                 await sheet._executeItemTake(sheet.actor.id, uuid, idx, qty);
@@ -570,7 +571,13 @@ export class LimbusLootSheet extends ActorSheet {
 
     if (itemData.system?.quantity !== undefined) itemData.system.quantity = qty;
     await playerChar.createEmbeddedDocuments("Item", [itemData]);
-    ui.notifications.info(`${item.name} ×${qty} 已移至 ${playerChar.name} 的背包。`);
+    await ChatMessage.create({
+      content: `<div class="limbuscompany">
+        <strong>${playerChar.name}</strong> 从战利品【${lootActor.name}】中取出了
+        <img src="${itemData.img}" width="16" height="16" style="vertical-align:middle">
+        <strong>${itemData.name} ×${qty}</strong>。
+      </div>`,
+    });
   }
 
   static async _gmExecuteTakeCurrency({ lootActorId, amount, userId, charId }) {
