@@ -274,16 +274,20 @@ export class LimbusLootSheet extends ActorSheet {
    */
   async _maybePlayReveal(html) {
     const flagKey = `lootRevealed_${this.actor.id}`;
-    if (game.user.getFlag("limbusCompany_FVTT", flagKey)) return;
-
-    const tiles = html.find(".cg-item-tile").toArray();
-    if (tiles.length === 0) {
-      // 空战利品：直接标记已见过
-      await game.user.setFlag("limbusCompany_FVTT", flagKey, true);
+    if (game.user.getFlag("limbusCompany_FVTT", flagKey)) {
+      // 动画已完成或已在进行中，取消可能仍在运行的旧循环
+      this._revealId++;
       return;
     }
 
-    // 用版本号标记本次动画，关闭或重新渲染时自增以终止旧循环
+    const tiles = html.find(".cg-item-tile").toArray();
+
+    // 立即持久化"已见过"标记，防止取出物品触发重渲染时重播动画
+    await game.user.setFlag("limbusCompany_FVTT", flagKey, true);
+
+    if (tiles.length === 0) return;
+
+    // 用版本号标记本次动画，关闭时自增以终止旧循环
     const myId = ++this._revealId;
 
     // 初始：全部变为剪影
@@ -292,17 +296,12 @@ export class LimbusLootSheet extends ActorSheet {
     for (const tile of tiles) {
       // 等待 1s（搜索中…）
       await new Promise(r => setTimeout(r, 1000));
-      if (this._revealId !== myId) return; // 动画已被取消
+      if (this._revealId !== myId) return; // 动画已被取消（窗口关闭）
 
       // 揭示该物品
       const $t = $(tile);
       $t.removeClass("loot-tile--silhouette").addClass("loot-tile--revealing");
       setTimeout(() => $t.removeClass("loot-tile--revealing"), 450);
-    }
-
-    // 全部揭示完成，持久化标记
-    if (this._revealId === myId) {
-      await game.user.setFlag("limbusCompany_FVTT", flagKey, true);
     }
   }
 
