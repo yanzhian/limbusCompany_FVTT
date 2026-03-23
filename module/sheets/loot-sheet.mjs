@@ -43,9 +43,20 @@ export class LimbusLootSheet extends ActorSheet {
   static _chatSessions = new Map();
   static _chatTimers   = new Map();
 
-  /** 构建聊天消息 HTML 内容 */
+  /** 构建聊天消息 HTML 内容（相同物品合并计数） */
   static _buildLootChatContent({ playerChar, lootActor, items }) {
-    const rows = items.map(i =>
+    // 按物品名称合并数量
+    const merged = [];
+    const seen   = new Map(); // name -> index in merged
+    for (const i of items) {
+      if (seen.has(i.name)) {
+        merged[seen.get(i.name)].qty += i.qty;
+      } else {
+        seen.set(i.name, merged.length);
+        merged.push({ ...i });
+      }
+    }
+    const rows = merged.map(i =>
       `<div class="loot-chat-item">` +
       `<img src="${i.img}" width="16" height="16" style="vertical-align:middle;margin-right:4px">` +
       `<strong>${i.name}</strong> ×${i.qty}</div>`
@@ -476,28 +487,33 @@ export class LimbusLootSheet extends ActorSheet {
         const item = await fromUuid(uuid).catch(() => null);
         if (!item) { ui.notifications.warn(`找不到物品「${iname}」，可能已被取走。`); return; }
         const maxQty = item.system?.quantity ?? 1;
-        new Dialog({
-          title: `取出 — ${item.name}`,
-          content: `<div class="limbuscompany" style="padding:6px 0">
-            <p>将物品移至你的角色背包。</p>
-            <label style="display:flex;align-items:center;gap:8px">
-              取出数量：
-              <input type="number" id="loot-take-qty" value="1" min="1" max="${maxQty}" style="width:60px">
-              <span>（战利品剩余：${maxQty}）</span>
-            </label>
-          </div>`,
-          buttons: {
-            take: {
-              label: "取出",
-              callback: async (dlg) => {
-                const qty = Math.min(maxQty, Math.max(1, parseInt(dlg.find("#loot-take-qty").val()) || 1));
-                await sheet._executeItemTake(sheet.actor.id, uuid, idx, qty);
+        // 数量为 1 时直接取出，无需弹窗确认
+        if (maxQty === 1) {
+          await sheet._executeItemTake(sheet.actor.id, uuid, idx, 1);
+        } else {
+          new Dialog({
+            title: `取出 — ${item.name}`,
+            content: `<div class="limbuscompany" style="padding:6px 0">
+              <p>将物品移至你的角色背包。</p>
+              <label style="display:flex;align-items:center;gap:8px">
+                取出数量：
+                <input type="number" id="loot-take-qty" value="1" min="1" max="${maxQty}" style="width:60px">
+                <span>（战利品剩余：${maxQty}）</span>
+              </label>
+            </div>`,
+            buttons: {
+              take: {
+                label: "取出",
+                callback: async (dlg) => {
+                  const qty = Math.min(maxQty, Math.max(1, parseInt(dlg.find("#loot-take-qty").val()) || 1));
+                  await sheet._executeItemTake(sheet.actor.id, uuid, idx, qty);
+                },
               },
+              cancel: { label: "取消" },
             },
-            cancel: { label: "取消" },
-          },
-          default: "take",
-        }).render(true);
+            default: "take",
+          }).render(true);
+        }
 
       } else if (action === "edit") {
         const itm = await fromUuid(uuid).catch(() => null);
