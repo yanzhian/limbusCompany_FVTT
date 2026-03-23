@@ -7393,6 +7393,7 @@ input.item-piles-quantity {
   cursor:        pointer;
   transition:    background 0.15s, border-color 0.15s;
   flex-shrink:   0;
+  max-width: 20px;
 }
 .loot-currency-bar .sheet-btn:hover {
   background:  rgba(229,186,37,0.28);
