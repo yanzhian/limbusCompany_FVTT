@@ -330,7 +330,10 @@ export class LimbusLootSheet extends ActorSheet {
     const cellSize = 50;
     const offX     = Math.max(0, Math.floor((event.clientX - rect.left) / cellSize));
     const offY     = Math.max(0, Math.floor((event.clientY - rect.top)  / cellSize));
-    event.dataTransfer.setData("text/plain", JSON.stringify({
+    // jQuery 包装的事件不代理 dataTransfer，需取 originalEvent
+    const dt = (event.originalEvent ?? event).dataTransfer;
+    if (!dt) return;
+    dt.setData("text/plain", JSON.stringify({
       type: "Item",
       uuid: tile.dataset.itemUuid ?? "",
       fromLootGrid: { lootActorId: this.actor.id, placementIdx: idx, offX, offY },
