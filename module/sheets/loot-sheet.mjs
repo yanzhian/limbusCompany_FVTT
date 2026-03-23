@@ -32,6 +32,51 @@ export class LimbusLootSheet extends ActorSheet {
   /** 每个战利品 Actor 的操作串行队列（防竞态） */
   static _opQueues = new Map();
 
+  /**
+   * 聊天消息防抖聚合器
+   * key: `${charId}_${lootActorId}`
+   * value: { playerChar, lootActor, items: [{name, img, qty}] }
+   */
+  static _chatPending = new Map();
+  static _chatTimers  = new Map();
+
+  /**
+   * 将一条取出记录加入聚合缓冲区，800ms 内无新记录则统一发送一条聊天消息。
+   * 同一玩家角色 + 同一战利品箱 的取出操作合并到同一条消息中。
+   */
+  static _scheduleChatMsg(lootActor, playerChar, itemName, itemImg, qty) {
+    const key   = `${playerChar.id}_${lootActor.id}`;
+    const entry = LimbusLootSheet._chatPending.get(key)
+      ?? { playerChar, lootActor, items: [] };
+    entry.items.push({ name: itemName, img: itemImg, qty });
+    LimbusLootSheet._chatPending.set(key, entry);
+
+    // 重置防抖计时器
+    clearTimeout(LimbusLootSheet._chatTimers.get(key));
+    LimbusLootSheet._chatTimers.set(key, setTimeout(async () => {
+      const pending = LimbusLootSheet._chatPending.get(key);
+      if (!pending) return;
+      LimbusLootSheet._chatPending.delete(key);
+      LimbusLootSheet._chatTimers.delete(key);
+
+      const rows = pending.items.map(i =>
+        `<div class="loot-chat-item">` +
+        `<img src="${i.img}" width="16" height="16" style="vertical-align:middle;margin-right:4px">` +
+        `<strong>${i.name}</strong> ×${i.qty}</div>`
+      ).join("");
+
+      await ChatMessage.create({
+        content: `<div class="limbuscompany loot-chat-msg">
+          <div class="loot-chat-header">
+            <strong>${pending.playerChar.name}</strong>
+            &nbsp;从战利品【${pending.lootActor.name}】中取出了
+          </div>
+          ${rows}
+        </div>`,
+      });
+    }, 800));
+  }
+
   /* ─── getData ──────────────────────────────────────────────────────────── */
 
   /** @override */
@@ -625,13 +670,7 @@ export class LimbusLootSheet extends ActorSheet {
 
     if (itemData.system?.quantity !== undefined) itemData.system.quantity = qty;
     await playerChar.createEmbeddedDocuments("Item", [itemData]);
-    await ChatMessage.create({
-      content: `<div class="limbuscompany">
-        <strong>${playerChar.name}</strong> 从战利品【${lootActor.name}】中取出了
-        <img src="${itemData.img}" width="16" height="16" style="vertical-align:middle">
-        <strong>${itemData.name} ×${qty}</strong>。
-      </div>`,
-    });
+    LimbusLootSheet._scheduleChatMsg(lootActor, playerChar, itemData.name, itemData.img, qty);
   }
 
   static async _gmExecuteTakeCurrency({ lootActorId, amount, userId, charId }) {

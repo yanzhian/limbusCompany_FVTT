@@ -7527,3 +7527,20 @@ input.item-piles-quantity {
 .loot-tile--revealing {
   animation: loot-reveal 0.42s cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
+
+/* ─── 战利品聊天消息 ─────────────────────────────────────────────────────── */
+
+.loot-chat-msg {
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.loot-chat-header {
+  margin-bottom: 4px;
+  color: var(--text-main, #ECE4D6);
+}
+
+.loot-chat-item {
+  padding-left: 8px;
+  color: var(--text-dim, #b0a090);
+}
