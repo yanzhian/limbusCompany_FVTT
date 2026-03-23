@@ -1,0 +1,79 @@
+<div id="limbus-squad-hud-{{teamId}}" class="limbus-squad-hud" data-team="{{teamId}}">
+
+  {{!-- 标题栏（可拖动） --}}
+  <div class="squad-header">
+    <span class="squad-title">{{teamLabel}}</span>
+  </div>
+
+  {{!-- 成员列表 --}}
+  <div class="squad-members">
+    {{#each members}}
+    <div class="squad-member" data-actor-id="{{id}}">
+
+      {{!-- 主行：头像 + 状态 --}}
+      <div class="squad-main-row">
+
+        {{!-- 60×60 头像 --}}
+        <img class="squad-avatar" src="{{img}}" alt="{{name}}" title="{{name}}">
+
+        {{!-- 右侧状态区 --}}
+        <div class="squad-stats">
+
+          {{!-- 第一行：HP 条 + 数值 + 移除按钮 --}}
+          <div class="squad-stat-row">
+            <span class="squad-stat-label">HP</span>
+            <div class="squad-bar-track">
+              <div class="squad-bar squad-hp-bar squad-bar--{{hp.cls}}"
+                   style="width:{{hp.pct}}%"></div>
+            </div>
+            <span class="squad-stat-val">{{hp.value}}<span class="squad-stat-max">/{{hp.max}}</span></span>
+            {{#if ../isGM}}
+            <button class="squad-remove-btn" data-actor-id="{{id}}" title="移除出小队">✕</button>
+            {{/if}}
+          </div>
+
+          {{!-- 第二行：理智条 + 数值 + AP 硬币 --}}
+          <div class="squad-stat-row">
+            <span class="squad-stat-label">理智</span>
+            <div class="squad-bar-track">
+              <div class="squad-bar squad-san-bar squad-bar--{{san.cls}}"
+                   style="width:{{san.pct}}%"></div>
+            </div>
+            <span class="squad-stat-val squad-san-val">{{san.value}}</span>
+            <div class="squad-ap-coins">
+              {{#each apCoins}}
+              <div class="squad-ap-coin {{#if active}}squad-ap-coin--on{{/if}}"></div>
+              {{/each}}
+            </div>
+          </div>
+
+        </div>{{!-- .squad-stats --}}
+      </div>{{!-- .squad-main-row --}}
+
+      {{!-- BUFF 状态栏（仅在有 BUFF 时显示） --}}
+      {{#if buffs.length}}
+      <div class="squad-buff-bar">
+        {{#each buffs}}
+        <div class="squad-buff-slot" title="{{label}}">
+          {{#if iconPath}}
+          <img class="squad-buff-icon" src="{{iconPath}}" alt="{{name}}">
+          {{/if}}
+          {{#if intensity}}<span class="squad-buff-intensity">{{intensity}}</span>{{/if}}
+          {{#if stacks}}<span class="squad-buff-stacks">{{stacks}}</span>{{/if}}
+        </div>
+        {{/each}}
+      </div>
+      {{/if}}
+
+    </div>{{!-- .squad-member --}}
+    {{/each}}
+
+    {{!-- 空队伍提示 --}}
+    {{#unless members.length}}
+    <div class="squad-empty">
+      {{#if isGM}}将 Token 拖入此处加入小队{{else}}（空队伍）{{/if}}
+    </div>
+    {{/unless}}
+  </div>{{!-- .squad-members --}}
+
+</div>

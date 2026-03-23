@@ -1436,10 +1436,10 @@ export class ClashManager {
         // 防守方拼点胜（攻击方落败）
         await ClashManager._applyActivities(atkItem, "拼点失败", atkCtx);
         await ClashManager._applyActivities(defItem,  "拼点成功", defCtx);
-        // clashCounter：防守方反击命中攻击方
-        if (defCategory === "clashCounter") {
+        // 防守方命中攻击方（闪避胜利不造成伤害，其余胜利均命中）
+        if (!dodgeWin) {
           await ClashManager._applyActivities(defItem, "命中时", defCtx);
-          // 攻击方受到反击伤害（技能 + 装备格物品）
+          // 攻击方受到伤害（技能 + 装备格物品）
           await ClashManager._applyActivities(atkItem, "受到伤害时", atkCtx);
           for (const eq of ClashManager._getEquippedItems(atkActor)) {
             await ClashManager._applyActivities(eq, "受到伤害时", atkCtx);
@@ -1692,6 +1692,7 @@ export class ClashManager {
       defItemName, defItemImg,
       defCategory: defCat,
       defSinType:  defItem?.system?.sinType ?? "",
+      defItemId:   defItem?.id ?? "",
     } : null;
 
     // 加重扩散信息：仅攻击方胜且非平局才携带
@@ -1857,6 +1858,47 @@ export class ClashManager {
       { img: defItemImg, name: defItemName, system: { category: defCategory, sinType: defSinType } },
       defFormula,
     );
+
+    // ── 平局重投后触发 Activity（仅 GM 执行，拥有全部 Actor 写权限） ──
+    if (!game.user.isGM) return;
+
+    const { atkWins, isTie: newIsTie, dodgeWin, breatheCrit } = resolution;
+    if (newIsTie) return; // 再次平局，等待下一次重投
+
+    const atkItemDoc = atkActor?.items?.get(rerollData.atkItemId) ?? null;
+    const defItemDoc = defActor?.items?.get(rerollData.defItemId) ?? null;
+
+    const _fc2      = {};
+    const _actMsgs2 = [];
+    const atkCtx2 = { atkActor, defActor, owner: atkActor, other: defActor, _fireCounts: _fc2, _actMsgs: _actMsgs2 };
+    const defCtx2 = { atkActor, defActor, owner: defActor, other: atkActor, _fireCounts: _fc2, _actMsgs: _actMsgs2 };
+
+    if (atkWins) {
+      await ClashManager._applyActivities(atkItemDoc, "拼点成功", atkCtx2);
+      await ClashManager._applyActivities(defItemDoc,  "拼点失败", defCtx2);
+      if (!dodgeWin) {
+        await ClashManager._applyActivities(atkItemDoc, "命中时", atkCtx2);
+        if (breatheCrit) {
+          await ClashManager._applyActivities(atkItemDoc, "暴击命中时", atkCtx2);
+        }
+        await ClashManager._applyActivities(defItemDoc, "受到伤害时", defCtx2);
+        for (const eq of ClashManager._getEquippedItems(defActor)) {
+          await ClashManager._applyActivities(eq, "受到伤害时", defCtx2);
+        }
+      }
+    } else {
+      await ClashManager._applyActivities(atkItemDoc, "拼点失败", atkCtx2);
+      await ClashManager._applyActivities(defItemDoc,  "拼点成功", defCtx2);
+      if (!dodgeWin) {
+        await ClashManager._applyActivities(defItemDoc, "命中时", defCtx2);
+        await ClashManager._applyActivities(atkItemDoc, "受到伤害时", atkCtx2);
+        for (const eq of ClashManager._getEquippedItems(atkActor)) {
+          await ClashManager._applyActivities(eq, "受到伤害时", atkCtx2);
+        }
+      }
+    }
+
+    await ClashManager._flushActMsgs(_actMsgs2, atkActor);
   }
 
   /* ─── 阶段六：直接承受（跳过对抗，玩家B点聊天框承受） ────────────────── */

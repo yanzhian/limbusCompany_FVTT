@@ -121,6 +121,14 @@ export class LimbusMerchantSheet extends ActorSheet {
 
     const isGM = game.user.isGM;
 
+    // Foundry v13 base class 在 !isEditable（Limited 权限）时会将所有 button/input
+    // 设为 disabled。对玩家而言，购买/卖出/角色选择框不依赖 merchant 的编辑权限
+    // （修改的是玩家自己的角色，库存扣减通过 socket 委托 GM），需手动恢复。
+    if (!isGM && !this.isEditable) {
+      html.find(".merchant-item-buy, .merchant-item-sell, .merchant-char-select")
+          .prop("disabled", false);
+    }
+
     // ── 搜索框 ────────────────────────────────────────────────────────────
     html.find(".merchant-search").on("input", (e) => {
       this._searchQuery = e.target.value ?? "";

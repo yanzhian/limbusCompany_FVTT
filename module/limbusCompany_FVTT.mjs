@@ -23,6 +23,7 @@ import { LimbusItemSheet }    from "./sheets/item-sheet.mjs";
 import { LimbusMerchantSheet } from "./sheets/merchant-sheet.mjs";
 import { LimbusCampSheet }    from "./sheets/camp-sheet.mjs";
 import { GMConsole }          from "./sheets/gm-console.mjs";
+import { SquadHUD }           from "./sheets/squad-hud.mjs";
 import { ClashManager }     from "./helpers/clash.mjs";
 import { SinResourceHUD }   from "./helpers/sin-resource-hud.mjs";
 import { QuickActionHUD }   from "./sheets/quick-action-hud.mjs";
@@ -152,6 +153,23 @@ Hooks.once("init", () => {
     onDown: () => { GMConsole.toggle(); return true; },
     restricted: true,
   });
+
+  game.keybindings.register("limbusCompany_FVTT", "toggleSquadTeam1", {
+    name: "小队 HUD — 队伍1",
+    editable: [{ key: "KeyZ" }],
+    onDown: () => { SquadHUD.toggle(1); return true; },
+    restricted: true,
+  });
+
+  game.keybindings.register("limbusCompany_FVTT", "toggleSquadTeam2", {
+    name: "小队 HUD — 队伍2",
+    editable: [{ key: "KeyX" }],
+    onDown: () => { SquadHUD.toggle(2); return true; },
+    restricted: true,
+  });
+
+  // 注册小队 HUD 世界设置
+  SquadHUD.init();
 
   // ── 预加载 HBS 模板 ───────────────────────────────────────────────────
   _preloadTemplates();
@@ -362,12 +380,16 @@ Hooks.on("controlToken", () => {
 /** Actor 数据变化 → 刷新 HUD（若追踪的就是该 actor） */
 Hooks.on("updateActor", (actor) => {
   QuickActionHUD.onActorUpdate(actor);
+  SquadHUD.onActorUpdate(actor);
 });
 
 /** Token 数据变化（非链接 Token）→ 也刷新 HUD */
 Hooks.on("updateToken", (token) => {
   const actor = token.actor;
-  if (actor) QuickActionHUD.onActorUpdate(actor);
+  if (actor) {
+    QuickActionHUD.onActorUpdate(actor);
+    SquadHUD.onActorUpdate(actor);
+  }
 });
 
 /* ─── 战斗钩子 ───────────────────────────────────────────────────────────── */
@@ -650,6 +672,8 @@ async function _preloadTemplates() {
     "systems/limbusCompany_FVTT/templates/quick-action-hud.hbs",
     // GM Console
     "systems/limbusCompany_FVTT/templates/gm-console.hbs",
+    // Squad HUD
+    "systems/limbusCompany_FVTT/templates/squad-hud.hbs",
   ];
   return loadTemplates(templatePaths);
 }
