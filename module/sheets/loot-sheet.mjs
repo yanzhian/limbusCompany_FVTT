@@ -26,6 +26,9 @@ export class LimbusLootSheet extends ActorSheet {
   /** GM 编辑锁 */
   _editUnlocked = false;
 
+  /** 揭示动画版本号（每次调用 _maybePlayReveal 自增，用于取消旧动画） */
+  _revealId = 0;
+
   /** 每个战利品 Actor 的操作串行队列（防竞态） */
   static _opQueues = new Map();
 
@@ -177,6 +180,57 @@ export class LimbusLootSheet extends ActorSheet {
       this._activateGMListeners(html);
     } else {
       this._activatePlayerListeners(html);
+      // 玩家首次打开时播放揭示动画（GM 跳过）
+      this._maybePlayReveal(html);
+    }
+  }
+
+  /* ─── 关闭时取消揭示动画 ───────────────────────────────────────────────── */
+
+  /** @override */
+  async close(options) {
+    this._revealId++; // 令进行中的揭示循环提前退出
+    return super.close(options);
+  }
+
+  /* ─── 战利品揭示动画 ────────────────────────────────────────────────────── */
+
+  /**
+   * 玩家首次打开战利品时：全部物品呈现黑色剪影 + ♻ 旋转，
+   * 每隔 1 秒依次揭示一件，完成后将"已揭示"状态写入用户 Flag。
+   * 再次打开时直接跳过动画。
+   */
+  async _maybePlayReveal(html) {
+    const flagKey = `lootRevealed_${this.actor.id}`;
+    if (game.user.getFlag("limbusCompany_FVTT", flagKey)) return;
+
+    const tiles = html.find(".cg-item-tile").toArray();
+    if (tiles.length === 0) {
+      // 空战利品：直接标记已见过
+      await game.user.setFlag("limbusCompany_FVTT", flagKey, true);
+      return;
+    }
+
+    // 用版本号标记本次动画，关闭或重新渲染时自增以终止旧循环
+    const myId = ++this._revealId;
+
+    // 初始：全部变为剪影
+    $(tiles).addClass("loot-tile--silhouette");
+
+    for (const tile of tiles) {
+      // 等待 1s（搜索中…）
+      await new Promise(r => setTimeout(r, 1000));
+      if (this._revealId !== myId) return; // 动画已被取消
+
+      // 揭示该物品
+      const $t = $(tile);
+      $t.removeClass("loot-tile--silhouette").addClass("loot-tile--revealing");
+      setTimeout(() => $t.removeClass("loot-tile--revealing"), 450);
+    }
+
+    // 全部揭示完成，持久化标记
+    if (this._revealId === myId) {
+      await game.user.setFlag("limbusCompany_FVTT", flagKey, true);
     }
   }
 

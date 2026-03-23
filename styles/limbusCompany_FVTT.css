@@ -7472,3 +7472,57 @@ input.item-piles-quantity {
   padding:     4px 8px 6px;
   font-style:  italic;
 }
+
+/* ─── 战利品揭示动画 ─────────────────────────────────────────────────────── */
+
+/* ♻ 旋转动画 */
+@keyframes loot-spin {
+  from { transform: translate(-50%, -50%) rotate(0deg); }
+  to   { transform: translate(-50%, -50%) rotate(360deg); }
+}
+
+/* 物品揭示时的缩放淡入 */
+@keyframes loot-reveal {
+  from { opacity: 0.15; transform: scale(0.82); filter: brightness(0); }
+  to   { opacity: 1;    transform: scale(1);    filter: brightness(1); }
+}
+
+/* ── 剪影状态 ────────────────────────────────────────────────────────────── */
+
+.loot-tile--silhouette {
+  cursor: default;
+  pointer-events: none; /* 搜索中禁止交互 */
+}
+
+/* 图片变为纯黑轮廓 */
+.loot-tile--silhouette .cg-tile-icon {
+  filter: brightness(0) saturate(0);
+}
+
+/* 隐藏名称、数量、旋转按钮 */
+.loot-tile--silhouette .cg-tile-name,
+.loot-tile--silhouette .cg-tile-qty,
+.loot-tile--silhouette .cg-rotate-btn {
+  opacity: 0;
+}
+
+/* ♻ 旋转搜索符号（居中悬浮在图块上） */
+.loot-tile--silhouette::before {
+  content:         "♻";
+  position:        absolute;
+  top:             50%;
+  left:            50%;
+  transform:       translate(-50%, -50%);
+  font-size:       20px;
+  color:           rgba(200, 158, 112, 0.75);
+  animation:       loot-spin 1.1s linear infinite;
+  z-index:         5;
+  pointer-events:  none;
+  text-shadow:     0 0 8px rgba(200, 158, 112, 0.4);
+}
+
+/* ── 揭示瞬间动画 ────────────────────────────────────────────────────────── */
+
+.loot-tile--revealing {
+  animation: loot-reveal 0.42s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
