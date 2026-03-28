@@ -2731,8 +2731,20 @@ export class ClashManager {
 
   /* ─── Socket 消息处理：由主入口统一注册单一监听器后调用 ─────────────── */
 
-  /** GM 端处理 clashResolve socket 消息 */
+  /** GM 端处理 socket 消息（clashResolve / activityActivate） */
   static async handleSocketMsg(msg) {
+    // 玩家委托GM执行物品 [使用时] Activity（群体目标需GM权限更新其他Actor）
+    if (msg.type === "activityActivate") {
+      if (!game.user.isGM) return;
+      const actor = game.actors.get(msg.actorId);
+      const item  = actor?.items.get(msg.itemId);
+      if (!actor || !item) return;
+      await ClashManager._applyActivities(item, msg.trigger ?? "使用时", {
+        owner: actor, atkActor: actor, defActor: null, _fireCounts: {},
+      });
+      return;
+    }
+
     if (msg.type !== "clashResolve") return;
     console.log("[ClashManager] 收到 clashResolve socket 消息 | isGM:", game.user.isGM, "| data:", msg.data);
     if (!game.user.isGM) return;
