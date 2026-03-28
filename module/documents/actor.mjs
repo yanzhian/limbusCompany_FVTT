@@ -442,16 +442,42 @@ export class LimbusActor extends Actor {
 
   // ─── 星芒检查 ──────────────────────────────────────────────────────────
 
+  /** 计算当前所有已装备物品（装备格 + 技能槽）的星芒总消耗 */
+  _calcEquippedStellarCost() {
+    const sys = this.system;
+    let total = 0;
+    for (const itemId of Object.values(sys.equipment ?? {})) {
+      const item = itemId ? this.items.get(itemId) : null;
+      total += item?.getStellarCost?.() ?? 0;
+    }
+    for (const itemId of (sys.skills?.basic ?? [])) {
+      const item = itemId ? this.items.get(itemId) : null;
+      total += item?.getStellarCost?.() ?? 0;
+    }
+    const defenseId = sys.skills?.defense ?? null;
+    const defense   = defenseId ? this.items.get(defenseId) : null;
+    total += defense?.getStellarCost?.() ?? 0;
+    for (const itemId of Object.values(sys.skills?.ego ?? {})) {
+      const item = itemId ? this.items.get(itemId) : null;
+      total += item?.getStellarCost?.() ?? 0;
+    }
+    return total;
+  }
+
   /**
-   * 检查是否有足够星芒装备某个物品
+   * 检查是否有足够星芒装备某个物品。
+   * 以【上限 - 当前已装备总费用】动态计算剩余星芒，与 UI 显示保持一致，
+   * 避免 stellarMotes.value 因数据迁移/直接编辑而与实际状态脱节。
    * @param {LimbusItem} item
+   * @param {number}     [refund=0]  替换旧物品时可退还的星芒（旧物品仍在 equipped 列表中，需补偿）
    * @returns {{ canEquip: boolean, cost: number, current: number, max: number }}
    */
-  checkStellarCost(item) {
+  checkStellarCost(item, refund = 0) {
     const cost    = item.getStellarCost?.() ?? 0;
-    const current = this.system.stellarMotes.value;
-    const max     = this.system.stellarMotes.max;
-    return { canEquip: current >= cost, cost, current, max };
+    const max     = 30 + (this.system.level ?? 1);
+    const spent   = this._calcEquippedStellarCost();
+    const current = Math.max(0, max - spent);
+    return { canEquip: (current + refund) >= cost, cost, current, max };
   }
 
   /**
@@ -485,10 +511,12 @@ export class LimbusActor extends Actor {
     const item = this.items.get(itemId);
     if (!item || item.type !== "equipment") return;
 
-    const prevId = this.system.equipment[`slot${slotIndex}`];
+    const prevId   = this.system.equipment[`slot${slotIndex}`];
     if (!this._canEquipSubtype(item, { currentSlot: slotIndex, replacingItemId: prevId })) return;
 
-    const { canEquip, cost, current, max } = this.checkStellarCost(item);
+    const prevItem = prevId ? this.items.get(prevId) : null;
+    const refund   = prevItem?.getStellarCost?.() ?? 0;
+    const { canEquip, cost, current, max } = this.checkStellarCost(item, refund);
     if (!canEquip) {
       const msg = game.i18n.format("LIMBUSCOMPANY.Warning.NotEnoughStellar", { cost, current, max });
       ui.notifications.warn(msg);
@@ -542,17 +570,27 @@ export class LimbusActor extends Actor {
     const item = this.items.get(itemId);
     if (!item || item.type !== "skill") return;
 
-    const { canEquip, cost, current, max } = this.checkStellarCost(item);
+    const skillType = item.system.type;
+
+    // 提前计算旧技能退款（用于星芒校验）
+    let prevId = null;
+    if (skillType === "defense") {
+      prevId = this.system.skills.defense;
+    } else if (skillType === "ego") {
+      const grade = item.system.egoDiceRating;
+      if (!grade) return;
+      prevId = this.system.skills.ego[grade];
+    }
+    const refund = prevId ? (this.items.get(prevId)?.getStellarCost?.() ?? 0) : 0;
+
+    const { canEquip, cost, current, max } = this.checkStellarCost(item, refund);
     if (!canEquip) {
       const msg = game.i18n.format("LIMBUSCOMPANY.Warning.NotEnoughStellar", { cost, current, max });
       ui.notifications.warn(msg);
       return;
     }
 
-    const skillType = item.system.type;
-
     if (skillType === "defense") {
-      const prevId = this.system.skills.defense;
       if (prevId) await this.unequipSkill(prevId);
       await this.spendStellarMotes(cost);
       return this.update({ "system.skills.defense": itemId });
@@ -560,14 +598,12 @@ export class LimbusActor extends Actor {
 
     if (skillType === "ego") {
       const grade = item.system.egoDiceRating;
-      if (!grade) return;
-      const prevId = this.system.skills.ego[grade];
       if (prevId) await this.unequipSkill(prevId);
       await this.spendStellarMotes(cost);
       return this.update({ [`system.skills.ego.${grade}`]: itemId });
     }
 
-    // 基础技能：找第一个空槽
+    // 基础技能：找第一个空槽（无替换，无退款）
     if (skillType === "basic") {
       const slots = [...(this.system.skills.basic ?? [null, null, null, null, null, null])];
       const emptyIdx = slots.findIndex(s => !s);
@@ -609,15 +645,16 @@ export class LimbusActor extends Actor {
       return;
     }
 
-    // 星芒检查
-    const { canEquip, cost, current, max } = this.checkStellarCost(item);
+    // 星芒检查（含目标槽旧技能的退款）
+    const prevId   = slots[targetSlot];
+    const refund   = prevId ? (this.items.get(prevId)?.getStellarCost?.() ?? 0) : 0;
+    const { canEquip, cost, current, max } = this.checkStellarCost(item, refund);
     if (!canEquip) {
       ui.notifications.warn(game.i18n.format("LIMBUSCOMPANY.Warning.NotEnoughStellar", { cost, current, max }));
       return;
     }
 
     // 目标槽已有技能则先卸下（退还星芒）
-    const prevId = slots[targetSlot];
     if (prevId) await this.unequipSkill(prevId);
 
     // 重新读取（unequipSkill 会触发 update）

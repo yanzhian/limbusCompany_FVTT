@@ -1035,15 +1035,37 @@ export class LimbusActorSheet extends ActorSheet {
     await this._activateItem(item);
   }
 
-  /** 激活物品：触发 [使用时] Activity 效果；消耗品数量 -1，归零时自动删除。 */
+  /** 激活物品：触发 [使用时] Activity 效果；消耗品数量 -1，归零时自动删除。*/
   async _activateItem(item) {
     if (!item) return;
     if (item.type === "consumable" && (item.system.quantity ?? 0) <= 0) {
       ui.notifications.warn("数量不足。"); return;
     }
-    await ClashManager._applyActivities(item, "使用时", {
-      owner: this.actor, atkActor: this.actor, defActor: null, _fireCounts: {},
-    });
+
+    // 装备激活消耗 1 行动值
+    if (item.type === "equipment") {
+      const curAp = this.actor.system?.ap?.value ?? 0;
+      if (curAp < 1) {
+        ui.notifications.warn("行动值不足，无法激活装备。"); return;
+      }
+      await this.actor.update({ "system.ap.value": curAp - 1 });
+    }
+
+    // Activity 效果可能涉及群体目标（其他玩家角色），非GM无权直接 update
+    // → 委托GM通过 socket 代为执行
+    if (game.user.isGM) {
+      await ClashManager._applyActivities(item, "使用时", {
+        owner: this.actor, atkActor: this.actor, defActor: null, _fireCounts: {},
+      });
+    } else {
+      game.socket.emit("system.limbusCompany_FVTT", {
+        type:    "activityActivate",
+        actorId: this.actor.id,
+        itemId:  item.id,
+        trigger: "使用时",
+      });
+    }
+
     if (item.type === "consumable") {
       const qty      = (item.system.quantity ?? 1) - 1;
       const reusable = item.system.reusable ?? false;

@@ -165,7 +165,7 @@ export class ClashManager {
     return labels[type] ?? type;
   }
 
-  /** 给角色添加或叠加 BUFF。已有同类型则叠加层数、取最大强度；无则新增。 */
+  /** 给角色添加或叠加 BUFF。已有同类型则层数和强度均累加；无则新增。 */
   static async _addBuff(actor, type, intensity = 1, stacks = 1, whenAdded = "本回合") {
     if (!actor || !type) return;
     const buffs = foundry.utils.deepClone(actor.system?.buffs ?? []);
@@ -173,7 +173,7 @@ export class ClashManager {
     const idx   = buffs.findIndex(b => b.type === type && (b.whenAdded ?? "本回合") === whenAdded);
     if (idx >= 0) {
       buffs[idx].stacks    = (buffs[idx].stacks    ?? 0) + stacks;
-      buffs[idx].intensity = Math.max(buffs[idx].intensity ?? 0, intensity);
+      buffs[idx].intensity = (buffs[idx].intensity ?? 0) + intensity;
       if (!buffs[idx].name) buffs[idx].name = ClashManager._buffLabel(type);
     } else {
       // 与 actor.addBuff 字段结构保持一致，确保状态栏正常显示
@@ -2731,8 +2731,20 @@ export class ClashManager {
 
   /* ─── Socket 消息处理：由主入口统一注册单一监听器后调用 ─────────────── */
 
-  /** GM 端处理 clashResolve socket 消息 */
+  /** GM 端处理 socket 消息（clashResolve / activityActivate） */
   static async handleSocketMsg(msg) {
+    // 玩家委托GM执行物品 [使用时] Activity（群体目标需GM权限更新其他Actor）
+    if (msg.type === "activityActivate") {
+      if (!game.user.isGM) return;
+      const actor = game.actors.get(msg.actorId);
+      const item  = actor?.items.get(msg.itemId);
+      if (!actor || !item) return;
+      await ClashManager._applyActivities(item, msg.trigger ?? "使用时", {
+        owner: actor, atkActor: actor, defActor: null, _fireCounts: {},
+      });
+      return;
+    }
+
     if (msg.type !== "clashResolve") return;
     console.log("[ClashManager] 收到 clashResolve socket 消息 | isGM:", game.user.isGM, "| data:", msg.data);
     if (!game.user.isGM) return;

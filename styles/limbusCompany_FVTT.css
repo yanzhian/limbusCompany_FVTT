@@ -3673,6 +3673,7 @@ body.game .limbuscompany.app img {
   background: var(--bg-panel); border: 1px solid var(--border-gold);
   color: var(--text-sub); font-size: .65rem; padding: 1px 6px;
   cursor: pointer; border-radius: 2px; transition: all .15s;
+  max-width: 60px;
 }
 .limbuscompany .related-skill-toggle:hover { color: var(--gold-active); border-color: var(--gold-active); }
 
