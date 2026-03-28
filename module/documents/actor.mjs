@@ -6,7 +6,7 @@
  *   - LimbusActor    : Actor 文档类（封装游戏逻辑方法）
  */
 
-import { CustomBuffRegistry } from "../helpers/custom-buffs.mjs";
+import { CustomBuffRegistry, resolveBuffHandler } from "../helpers/custom-buffs.mjs";
 
 // ═══════════════════════════════════════════════════════════════════════════
 //  CharacterData — TypeDataModel（角色数据模型）
@@ -827,7 +827,7 @@ export class LimbusActor extends Actor {
 
     // 检查自定义 BUFF beforeChaos 免疫（如【防御姿态】）
     for (const buff of (this.system?.buffs ?? [])) {
-      const handler = CustomBuffRegistry.get(buff.type);
+      const handler = resolveBuffHandler(buff);
       if (typeof handler?.beforeChaos === "function") {
         const result = handler.beforeChaos(this, buff);
         if (result?.immune) return; // 免疫混乱触发
@@ -1041,7 +1041,7 @@ export class LimbusActor extends Actor {
     // 自定义 BUFF modifySpeedRoll 钩子（如【防御姿态】固定为最小速度）
     let finalTotal = roll.total;
     for (const buff of (sys.buffs ?? [])) {
-      const handler = CustomBuffRegistry.get(buff.type);
+      const handler = resolveBuffHandler(buff);
       if (typeof handler?.modifySpeedRoll === "function") {
         finalTotal = handler.modifySpeedRoll(this, { modifier, roll });
         break; // 只取第一个生效的修正器

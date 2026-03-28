@@ -29,6 +29,43 @@ export function registerCustomBuff(type, handler) {
   CustomBuffRegistry.set(type, { type, ...handler });
 }
 
+/**
+ * 根据 buff 对象查找自定义处理器。
+ * 优先按 buff.type 精确匹配；若未找到，则按 buff.name 与注册 label 模糊匹配。
+ * 这样 type="custom" name="防御姿态" 与 type="defensiveStance" 都能找到处理器。
+ * @param {{ type: string, name?: string }} buff
+ * @returns {object|null}
+ */
+export function resolveBuffHandler(buff) {
+  if (!buff) return null;
+  // 1. 精确类型匹配
+  const direct = CustomBuffRegistry.get(buff.type);
+  if (direct) return direct;
+  // 2. 按显示名称（label / name）回退匹配
+  if (buff.name) {
+    for (const handler of CustomBuffRegistry.values()) {
+      if (handler.label === buff.name) return handler;
+    }
+  }
+  return null;
+}
+
+/**
+ * 将 buff 的 type 规范化为注册表 key。
+ * 当用户以自定义方式输入中文标签时（如 "防御姿态"），自动解析为注册 type。
+ * @param {string} type   当前 type 值
+ * @param {string} [name] 显示名称（用于回退匹配）
+ * @returns {string} 规范化后的 type
+ */
+export function normalizeBuffType(type, name = "") {
+  if (CustomBuffRegistry.has(type)) return type;
+  const target = name || type;
+  for (const [regType, handler] of CustomBuffRegistry.entries()) {
+    if (handler.label === target) return regType;
+  }
+  return type;
+}
+
 /* ─── 内置自定义 BUFF ───────────────────────────────────────────────────── */
 
 /**

@@ -4,7 +4,7 @@
  */
 
 import { SinResourceHUD } from "./sin-resource-hud.mjs";
-import { CustomBuffRegistry } from "./custom-buffs.mjs";
+import { CustomBuffRegistry, resolveBuffHandler } from "./custom-buffs.mjs";
 
 export class ClashManager {
 
@@ -196,9 +196,11 @@ export class ClashManager {
       // 与 actor.addBuff 字段结构保持一致，确保状态栏正常显示
       const iconBase = "systems/limbusCompany_FVTT/assets/icons/Buff_icon/";
       const iconName = ClashManager._buffLabel(type);
-      const icon     = iconName !== type
-        ? `${iconBase}${iconName}.webp`
-        : `${iconBase}Custom_buffs/${type}.webp`;
+      // 注册表自定义 BUFF 图标放在 Custom_buffs/ 子目录下
+      const isCustomRegistered = CustomBuffRegistry.has(type);
+      const icon = isCustomRegistered
+        ? `${iconBase}Custom_buffs/${iconName}.webp`
+        : (iconName !== type ? `${iconBase}${iconName}.webp` : `${iconBase}Custom_buffs/${type}.webp`);
       buffs.push({
         id:        foundry.utils.randomID(),
         type,
@@ -1539,7 +1541,7 @@ export class ClashManager {
       const loser  = atkWins ? defActor : atkActor;
       if (winner && loser) {
         for (const buff of (winner.system?.buffs ?? [])) {
-          const handler = CustomBuffRegistry.get(buff.type);
+          const handler = resolveBuffHandler(buff);
           if (typeof handler?.onClashWin === "function") {
             await handler.onClashWin(winner, loser);
           }
