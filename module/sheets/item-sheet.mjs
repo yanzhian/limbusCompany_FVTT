@@ -1378,10 +1378,11 @@ function _buildBuffGroupOptions(cfg, selected) {
   const groups   = cfg.BUFF_GROUPS ?? {};
   const labels   = _buffLabelMap();
   const sections = [
-    { label: "增益", keys: groups.positive ?? [] },
-    { label: "减益", keys: groups.negative ?? [] },
-    { label: "特殊", keys: groups.special ?? [] },
-    { label: "其他", keys: groups.other   ?? [] },
+    { label: "增益",      keys: groups.positive ?? [] },
+    { label: "减益",      keys: groups.negative ?? [] },
+    { label: "特殊",      keys: groups.special  ?? [] },
+    { label: "其他",      keys: groups.other    ?? [] },
+    { label: "自定义BUFF", keys: groups.custom   ?? [] },
   ];
   return sections.map(sec =>
     `<optgroup label="${sec.label}">${sec.keys.map(k =>
@@ -1410,6 +1411,7 @@ function _buffLabelMap() {
     burn:"烧伤", bleed:"流血", tremor:"震颤", rupture:"破裂",
     sinking:"沉沦", breathing:"呼吸法", charge:"充能",
     chaos:"陷入混乱", panic:"陷入恐慌", custom:"自定义",
+    defensiveStance:"防御姿态",
   };
 }
 

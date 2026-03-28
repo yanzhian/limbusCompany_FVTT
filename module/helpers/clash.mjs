@@ -4,6 +4,7 @@
  */
 
 import { SinResourceHUD } from "./sin-resource-hud.mjs";
+import { CustomBuffRegistry } from "./custom-buffs.mjs";
 
 export class ClashManager {
 
@@ -162,6 +163,10 @@ export class ClashManager {
       sinking:"沉沦", breathing:"呼吸法", charge:"充能",
       chaos:"陷入混乱", panic:"陷入恐慌",
     };
+    // 检查自定义 BUFF 注册表
+    if (CustomBuffRegistry.has(type)) {
+      return CustomBuffRegistry.get(type).label ?? type;
+    }
     return labels[type] ?? type;
   }
 
@@ -169,11 +174,23 @@ export class ClashManager {
   static async _addBuff(actor, type, intensity = 1, stacks = 1, whenAdded = "本回合") {
     if (!actor || !type) return;
     const buffs = foundry.utils.deepClone(actor.system?.buffs ?? []);
+
+    // 查询自定义 BUFF 处理器（maxStacks / refreshOnGain）
+    const customHandler = CustomBuffRegistry.get(type);
+    const maxStacks     = customHandler?.maxStacks ?? Infinity;
+    const refreshOnGain = customHandler?.refreshOnGain ?? false;
+
     // 按 type + whenAdded 精确匹配，防止本/下回合同类 BUFF 错误合并
     const idx   = buffs.findIndex(b => b.type === type && (b.whenAdded ?? "本回合") === whenAdded);
     if (idx >= 0) {
-      buffs[idx].stacks    = (buffs[idx].stacks    ?? 0) + stacks;
-      buffs[idx].intensity = (buffs[idx].intensity ?? 0) + intensity;
+      if (refreshOnGain) {
+        // 刷新：层数替换（不叠加），强度也替换
+        buffs[idx].stacks    = Math.min(stacks, maxStacks);
+        buffs[idx].intensity = intensity;
+      } else {
+        buffs[idx].stacks    = Math.min((buffs[idx].stacks ?? 0) + stacks, maxStacks);
+        buffs[idx].intensity = (buffs[idx].intensity ?? 0) + intensity;
+      }
       if (!buffs[idx].name) buffs[idx].name = ClashManager._buffLabel(type);
     } else {
       // 与 actor.addBuff 字段结构保持一致，确保状态栏正常显示
@@ -188,7 +205,7 @@ export class ClashManager {
         name:      iconName,
         icon,
         intensity,
-        stacks,
+        stacks:    Math.min(stacks, maxStacks),
         whenAdded,
       });
     }
@@ -1512,6 +1529,19 @@ export class ClashManager {
           await ClashManager._applyActivities(atkItem, "受到伤害时", atkCtx);
           for (const eq of ClashManager._getEquippedItems(atkActor)) {
             await ClashManager._applyActivities(eq, "受到伤害时", atkCtx);
+          }
+        }
+      }
+
+      // ── 自定义 BUFF onClashWin 钩子 ────────────────────────────────────
+      // 胜者的所有 BUFF 中，若有注册 onClashWin 的自定义 BUFF，则对败者触发
+      const winner = atkWins ? atkActor : defActor;
+      const loser  = atkWins ? defActor : atkActor;
+      if (winner && loser) {
+        for (const buff of (winner.system?.buffs ?? [])) {
+          const handler = CustomBuffRegistry.get(buff.type);
+          if (typeof handler?.onClashWin === "function") {
+            await handler.onClashWin(winner, loser);
           }
         }
       }

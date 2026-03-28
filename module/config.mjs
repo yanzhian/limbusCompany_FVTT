@@ -177,6 +177,7 @@ LIMBUSCOMPANY.BUFF_GROUPS = {
   negative: ["weak", "breach", "bind", "fragile", "clashPowerDown", "atkLevelDown", "defLevelDown"],
   special:  ["burn", "bleed", "tremor", "rupture", "sinking", "breathing", "charge", "chaos", "panic"],
   other:    ["custom"],
+  custom:   ["defensiveStance"],
 };
 
 /**

@@ -6,6 +6,8 @@
  *   - LimbusActor    : Actor 文档类（封装游戏逻辑方法）
  */
 
+import { CustomBuffRegistry } from "../helpers/custom-buffs.mjs";
+
 // ═══════════════════════════════════════════════════════════════════════════
 //  CharacterData — TypeDataModel（角色数据模型）
 // ═══════════════════════════════════════════════════════════════════════════
@@ -823,6 +825,15 @@ export class LimbusActor extends Actor {
   async checkAndTriggerChaos(newHP, oldHP, { silent = false } = {}) {
     if (newHP >= oldHP) return; // HP 没有减少则不检查
 
+    // 检查自定义 BUFF beforeChaos 免疫（如【防御姿态】）
+    for (const buff of (this.system?.buffs ?? [])) {
+      const handler = CustomBuffRegistry.get(buff.type);
+      if (typeof handler?.beforeChaos === "function") {
+        const result = handler.beforeChaos(this, buff);
+        if (result?.immune) return; // 免疫混乱触发
+      }
+    }
+
     const sys        = this.system;
     const maxHP      = sys.hp.max;
     const thresholds = [...sys.chaosThresholds];
@@ -1027,12 +1038,22 @@ export class LimbusActor extends Actor {
     const roll     = new Roll("1d6 + @mod", { mod: modifier });
     await roll.evaluate();
 
+    // 自定义 BUFF modifySpeedRoll 钩子（如【防御姿态】固定为最小速度）
+    let finalTotal = roll.total;
+    for (const buff of (sys.buffs ?? [])) {
+      const handler = CustomBuffRegistry.get(buff.type);
+      if (typeof handler?.modifySpeedRoll === "function") {
+        finalTotal = handler.modifySpeedRoll(this, { modifier, roll });
+        break; // 只取第一个生效的修正器
+      }
+    }
+
     // 更新战斗跟踪器先攻值（可选：批量更新时由调用方统一写入）
     if (updateCombatant) {
       const combat = game.combat;
       if (combat) {
         const combatant = combat.combatants.find(c => c.actorId === this.id);
-        if (combatant) await combatant.update({ initiative: roll.total });
+        if (combatant) await combatant.update({ initiative: finalTotal });
       }
     }
 
@@ -1059,12 +1080,14 @@ export class LimbusActor extends Actor {
                  class="initiative-speed-icon" alt="速度" width="20" height="20">
             <span class="initiative-speed-range">${speedMin}–${speedMax}</span>
             <span class="initiative-arrow">→</span>
-            <span class="initiative-total">${roll.total}</span>
+            <span class="initiative-total">${finalTotal}</span>
           </div>
           <div class="ic-gold-divider"></div>
         </div>`,
     });
 
+    // 将最终先攻值附加到 roll 对象，供调用方使用
+    roll.finalTotal = finalTotal;
     return roll;
   }
 }
