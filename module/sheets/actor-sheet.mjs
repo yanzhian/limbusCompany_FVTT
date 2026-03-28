@@ -1051,9 +1051,21 @@ export class LimbusActorSheet extends ActorSheet {
       await this.actor.update({ "system.ap.value": curAp - 1 });
     }
 
-    await ClashManager._applyActivities(item, "使用时", {
-      owner: this.actor, atkActor: this.actor, defActor: null, _fireCounts: {},
-    });
+    // Activity 效果可能涉及群体目标（其他玩家角色），非GM无权直接 update
+    // → 委托GM通过 socket 代为执行
+    if (game.user.isGM) {
+      await ClashManager._applyActivities(item, "使用时", {
+        owner: this.actor, atkActor: this.actor, defActor: null, _fireCounts: {},
+      });
+    } else {
+      game.socket.emit("system.limbusCompany_FVTT", {
+        type:    "activityActivate",
+        actorId: this.actor.id,
+        itemId:  item.id,
+        trigger: "使用时",
+      });
+    }
+
     if (item.type === "consumable") {
       const qty      = (item.system.quantity ?? 1) - 1;
       const reusable = item.system.reusable ?? false;
