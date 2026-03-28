@@ -165,7 +165,7 @@ export class ClashManager {
     return labels[type] ?? type;
   }
 
-  /** 给角色添加或叠加 BUFF。已有同类型则叠加层数、取最大强度；无则新增。 */
+  /** 给角色添加或叠加 BUFF。已有同类型则层数和强度均累加；无则新增。 */
   static async _addBuff(actor, type, intensity = 1, stacks = 1, whenAdded = "本回合") {
     if (!actor || !type) return;
     const buffs = foundry.utils.deepClone(actor.system?.buffs ?? []);
@@ -173,7 +173,7 @@ export class ClashManager {
     const idx   = buffs.findIndex(b => b.type === type && (b.whenAdded ?? "本回合") === whenAdded);
     if (idx >= 0) {
       buffs[idx].stacks    = (buffs[idx].stacks    ?? 0) + stacks;
-      buffs[idx].intensity = Math.max(buffs[idx].intensity ?? 0, intensity);
+      buffs[idx].intensity = (buffs[idx].intensity ?? 0) + intensity;
       if (!buffs[idx].name) buffs[idx].name = ClashManager._buffLabel(type);
     } else {
       // 与 actor.addBuff 字段结构保持一致，确保状态栏正常显示
