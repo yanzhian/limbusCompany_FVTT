@@ -442,16 +442,41 @@ export class LimbusActor extends Actor {
 
   // ─── 星芒检查 ──────────────────────────────────────────────────────────
 
+  /** 计算当前所有已装备物品（装备格 + 技能槽）的星芒总消耗 */
+  _calcEquippedStellarCost() {
+    const sys = this.system;
+    let total = 0;
+    for (const itemId of Object.values(sys.equipment ?? {})) {
+      const item = itemId ? this.items.get(itemId) : null;
+      total += item?.getStellarCost?.() ?? 0;
+    }
+    for (const itemId of (sys.skills?.basic ?? [])) {
+      const item = itemId ? this.items.get(itemId) : null;
+      total += item?.getStellarCost?.() ?? 0;
+    }
+    const defenseId = sys.skills?.defense ?? null;
+    const defense   = defenseId ? this.items.get(defenseId) : null;
+    total += defense?.getStellarCost?.() ?? 0;
+    for (const itemId of Object.values(sys.skills?.ego ?? {})) {
+      const item = itemId ? this.items.get(itemId) : null;
+      total += item?.getStellarCost?.() ?? 0;
+    }
+    return total;
+  }
+
   /**
-   * 检查是否有足够星芒装备某个物品
+   * 检查是否有足够星芒装备某个物品。
+   * 以【上限 - 当前已装备总费用】动态计算剩余星芒，与 UI 显示保持一致，
+   * 避免 stellarMotes.value 因数据迁移/直接编辑而与实际状态脱节。
    * @param {LimbusItem} item
-   * @param {number}     [refund=0]  替换旧物品时可退还的星芒数（卸下旧物品前预计算）
+   * @param {number}     [refund=0]  替换旧物品时可退还的星芒（旧物品仍在 equipped 列表中，需补偿）
    * @returns {{ canEquip: boolean, cost: number, current: number, max: number }}
    */
   checkStellarCost(item, refund = 0) {
     const cost    = item.getStellarCost?.() ?? 0;
-    const current = this.system.stellarMotes.value;
-    const max     = this.system.stellarMotes.max;
+    const max     = 30 + (this.system.level ?? 1);
+    const spent   = this._calcEquippedStellarCost();
+    const current = Math.max(0, max - spent);
     return { canEquip: (current + refund) >= cost, cost, current, max };
   }
 
