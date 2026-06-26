@@ -1460,7 +1460,7 @@ function _buildCondRow(cond, idx, cfg) {
                value="${_esc(cond?.buffCustom ?? "")}"
                style="display:${(cond?.buff ?? "") === "custom" ? "inline-block" : "none"};width:90px;">
         <label>强度≥</label>
-        <input class="ae-input-sm cond-intensity" type="number" value="${cond?.intensity ?? 1}" min="0">
+        <input class="ae-input-sm cond-intensity" type="number" value="${cond?.intensity ?? 0}" min="0">
         <label class="cond-stacks-label">${stacksLbl}</label>
         <input class="ae-input-sm cond-stacks"    type="number" value="${cond?.stacks ?? 1}"    min="0">
       </div>
@@ -1516,7 +1516,7 @@ function _buildCostRow(cost, idx, cfg) {
                  value="${_esc(cost?.buffCustom ?? "")}"
                  style="display:${(cost?.buff ?? "") === "custom" ? "inline-block" : "none"};width:90px;">
           <label>强度</label>
-          <input class="ae-input-sm cost-intensity" type="number" value="${cost?.intensity ?? 1}" min="0">
+          <input class="ae-input-sm cost-intensity" type="number" value="${cost?.intensity ?? 0}" min="0">
           <label>层数</label>
           <input class="ae-input-sm cost-stacks"    type="number" value="${cost?.stacks ?? 1}"    min="0">
         </span>
@@ -1723,7 +1723,7 @@ function _readActivityForm(html, original) {
       target:     $r.find(".cond-target").val()  || "self",
       buff:       buffVal,
       buffCustom: buffVal === "custom" ? ($r.find(".cond-buff-custom").val()?.trim() || "") : "",
-      intensity:  parseInt($r.find(".cond-intensity").val()) || 1,
+      intensity:  parseInt($r.find(".cond-intensity").val()) || 0,
       stacks:     parseInt($r.find(".cond-stacks").val())    || 1,
     });
   });
@@ -1747,7 +1747,7 @@ function _readActivityForm(html, original) {
         target,
         buff:       buffVal,
         buffCustom: buffVal === "custom" ? ($r.find(".cost-buff-custom").val()?.trim() || "") : "",
-        intensity:  parseInt($r.find(".cost-intensity").val()) || 1,
+        intensity:  parseInt($r.find(".cost-intensity").val()) || 0,
         stacks:     parseInt($r.find(".cost-stacks").val())    || 1,
       });
     }
