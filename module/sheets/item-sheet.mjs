@@ -1532,6 +1532,17 @@ function _buildCostRow(cost, idx, cfg) {
 
 const _BUFF_EFFECTS   = new Set(["addBuff", "removeBuff"]);
 
+// 支持"无符号=绝对赋值，+/-=相对增减"语义的效果类型
+const _SIGNED_VALUE_EFFECTS = new Set([
+  "hpAdj", "sanityAdj", "apAdj", "weightAdj", "diceAdj", "diceFacesAdj", "baseValue",
+]);
+
+function _effValuePlaceholder(type) {
+  return _SIGNED_VALUE_EFFECTS.has(type)
+    ? "3=调整为3，+3/-3=相对增减，或公式1D4+2"
+    : "数值或公式，如 1D4+2";
+}
+
 const _ROUND_OPTIONS = ["本回合", "下回合", "本回合和下回合"];
 
 /** 效果行 HTML */
@@ -1577,7 +1588,7 @@ function _buildEffectRow(eff, idx, cfg) {
         </span>
         <span class="ae-eff-val-sec" ${(!isBuff && !isTriggerBuff) ? "" : 'style="display:none"'}>
           <label>相关数值</label>
-          <input class="ae-input eff-value" type="text" placeholder="数值或公式，如 1D4+2"
+          <input class="ae-input eff-value" type="text" placeholder="${_effValuePlaceholder(type)}"
                  value="${formulaVal}" style="width:110px;">
         </span>
         <span class="ae-eff-trig-sec" ${isTriggerBuff ? "" : 'style="display:none"'}>
@@ -1683,6 +1694,7 @@ function _bindEffType(html) {
     row.find(".ae-eff-round-sec").toggle(isAddBuff);
     row.find(".ae-eff-buff-sec").toggle(isBuff);
     row.find(".ae-eff-val-sec").toggle(!isBuff && !isTriggerBuff);
+    row.find(".eff-value").attr("placeholder", _effValuePlaceholder(type));
     row.find(".ae-eff-trig-sec").toggle(isTriggerBuff);
     // 切换效果类型时也检查自定义 BUFF 输入框
     const buffVal = row.find(".ae-eff-buff-sel").val();

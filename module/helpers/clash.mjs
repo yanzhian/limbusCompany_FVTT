@@ -31,6 +31,33 @@ export class ClashManager {
     }
   }
 
+  /**
+   * 解析"相关数值"字段的符号语义：
+   * - 无符号纯数字（如 "3"）→ 绝对赋值（mode:"absolute"）
+   * - 带显式符号（如 "+3" / "-3"）→ 相对调整（mode:"relative"）
+   * - 骰子公式（如 "1D4+2"）或其他表达式 → 始终视为相对调整
+   * - 旧数据缺少 value 字段时，回退使用 intensity（数字），保持相对调整语义
+   * @param {string|number} value
+   * @param {number} [intensity]
+   * @returns {Promise<{mode: "absolute"|"relative", value: number}>}
+   */
+  static async _evalSignedValue(value, intensity) {
+    if (value === undefined || value === null) {
+      return { mode: "relative", value: Math.round(Number(intensity ?? 0)) || 0 };
+    }
+    const str = String(value).trim();
+    if (str === "") return { mode: "relative", value: 0 };
+    const m = /^([+-]?)(\d+(?:\.\d+)?)$/.exec(str);
+    if (m) {
+      const [, sign, num] = m;
+      const n = Number(num);
+      if (sign === "") return { mode: "absolute", value: Math.round(n) };
+      return { mode: "relative", value: Math.round(sign === "-" ? -n : n) };
+    }
+    const evaluated = Math.round(await ClashManager._evalValue(str));
+    return { mode: "relative", value: evaluated };
+  }
+
   static _catIcon(cat) {
     return CONFIG.LIMBUSCOMPANY?.CATEGORY_ICON_PATHS?.[cat] ?? "";
   }
@@ -456,24 +483,30 @@ export class ClashManager {
             descStr = `移除【${effTgt.name}】的 ${buffType}`;
             break;
           case "hpAdj": {
-            const val = Math.round(await ClashManager._evalValue(eff.value ?? eff.intensity ?? 0));
+            const { mode, value: val } = await ClashManager._evalSignedValue(eff.value, eff.intensity);
             const cur = effTgt.system?.hp?.value ?? 0;
             const max = effTgt.system?.hp?.max   ?? 1;
-            const nv  = Math.max(0, Math.min(max, cur + val));
+            const nv  = mode === "absolute"
+              ? Math.max(0, Math.min(max, val))
+              : Math.max(0, Math.min(max, cur + val));
             await effTgt.update({ "system.hp.value": nv });
-            descStr = `【${effTgt.name}】HP ${val >= 0 ? "+" : ""}${val}（${cur} → ${nv}）`;
+            descStr = mode === "absolute"
+              ? `【${effTgt.name}】HP 调整为 ${nv}`
+              : `【${effTgt.name}】HP ${val >= 0 ? "+" : ""}${val}（${cur} → ${nv}）`;
             break;
           }
           case "sanityAdj": {
-            const val = Math.round(await ClashManager._evalValue(eff.value ?? eff.intensity ?? 0));
+            const { mode, value: val } = await ClashManager._evalSignedValue(eff.value, eff.intensity);
+            const cur    = effTgt.system?.sanity?.value ?? 50;
+            const target = mode === "absolute" ? val : cur + val;
             if (typeof effTgt.setSanity === "function") {
-              const cur = effTgt.system?.sanity?.value ?? 50;
-              await effTgt.setSanity(cur + val);
+              await effTgt.setSanity(target);
             } else {
-              const cur = effTgt.system?.sanity?.value ?? 50;
-              await effTgt.update({ "system.sanity.value": Math.max(5, Math.min(95, cur + val)) });
+              await effTgt.update({ "system.sanity.value": Math.max(5, Math.min(95, target)) });
             }
-            descStr = `【${effTgt.name}】理智 ${val >= 0 ? "+" : ""}${val}`;
+            descStr = mode === "absolute"
+              ? `【${effTgt.name}】理智 调整为 ${Math.max(5, Math.min(95, target))}`
+              : `【${effTgt.name}】理智 ${val >= 0 ? "+" : ""}${val}`;
             break;
           }
           case "atkAdj": {
@@ -491,47 +524,59 @@ export class ClashManager {
             break;
           }
           case "apAdj": {
-            const val = Math.round(await ClashManager._evalValue(eff.value ?? eff.intensity ?? 0));
+            const { mode, value: val } = await ClashManager._evalSignedValue(eff.value, eff.intensity);
             const cur = effTgt.system?.ap?.value ?? 0;
             const max = effTgt.system?.ap?.max   ?? 3;
-            const nv  = Math.max(0, Math.min(max, cur + val));
+            const nv  = mode === "absolute"
+              ? Math.max(0, Math.min(max, val))
+              : Math.max(0, Math.min(max, cur + val));
             await effTgt.update({ "system.ap.value": nv });
-            descStr = `【${effTgt.name}】行动值 ${val >= 0 ? "+" : ""}${val}（${cur} → ${nv}）`;
+            descStr = mode === "absolute"
+              ? `【${effTgt.name}】行动值 调整为 ${nv}`
+              : `【${effTgt.name}】行动值 ${val >= 0 ? "+" : ""}${val}（${cur} → ${nv}）`;
             break;
           }
           case "weightAdj": {
-            const val = Math.round(await ClashManager._evalValue(eff.value ?? eff.intensity ?? 0));
+            const { mode, value: val } = await ClashManager._evalSignedValue(eff.value, eff.intensity);
             const cur = item.system?.weight ?? 0;
-            const nv  = Math.max(0, cur + val);
+            const nv  = mode === "absolute" ? Math.max(0, val) : Math.max(0, cur + val);
             await item.update({ "system.weight": nv });
-            descStr = `【${item.name}】加重值 ${val >= 0 ? "+" : ""}${val}（${cur} → ${nv}）`;
+            descStr = mode === "absolute"
+              ? `【${item.name}】加重值 调整为 ${nv}`
+              : `【${item.name}】加重值 ${val >= 0 ? "+" : ""}${val}（${cur} → ${nv}）`;
             break;
           }
           case "diceAdj": {
-            // 骰数：累加骰子数量，下限 1
-            const val = Math.round(await ClashManager._evalValue(eff.value ?? eff.intensity ?? 0));
+            // 骰数：累加或赋值骰子数量，下限 1
+            const { mode, value: val } = await ClashManager._evalSignedValue(eff.value, eff.intensity);
             const cur = item.system?.diceCount ?? 1;
-            const nv  = Math.max(1, cur + val);
+            const nv  = mode === "absolute" ? Math.max(1, val) : Math.max(1, cur + val);
             await item.update({ "system.diceCount": nv });
-            descStr = `【${item.name}】骰数 ${val >= 0 ? "+" : ""}${val}（${cur}d → ${nv}d）`;
+            descStr = mode === "absolute"
+              ? `【${item.name}】骰数 调整为 ${nv}d`
+              : `【${item.name}】骰数 ${val >= 0 ? "+" : ""}${val}（${cur}d → ${nv}d）`;
             break;
           }
           case "diceFacesAdj": {
-            // 面数：覆盖骰子面数（设定为指定值），下限 2
-            const val = Math.round(await ClashManager._evalValue(eff.value ?? eff.intensity ?? 0));
+            // 面数：累加或赋值骰子面数，下限 2
+            const { mode, value: val } = await ClashManager._evalSignedValue(eff.value, eff.intensity);
             const cur = item.system?.diceFaces ?? 4;
-            const nv  = Math.max(2, val);
+            const nv  = mode === "absolute" ? Math.max(2, val) : Math.max(2, cur + val);
             await item.update({ "system.diceFaces": nv });
-            descStr = `【${item.name}】面数 d${cur} → d${nv}`;
+            descStr = mode === "absolute"
+              ? `【${item.name}】面数 d${cur} → d${nv}`
+              : `【${item.name}】面数 ${val >= 0 ? "+" : ""}${val}（d${cur} → d${nv}）`;
             break;
           }
           case "baseValue": {
-            // 基础值：累加骰子公式固定加值，允许负数
-            const val = Math.round(await ClashManager._evalValue(eff.value ?? eff.intensity ?? 0));
+            // 基础值：累加或赋值固定加值，允许负数
+            const { mode, value: val } = await ClashManager._evalSignedValue(eff.value, eff.intensity);
             const cur = item.system?.baseValue ?? 0;
-            const nv  = cur + val;
+            const nv  = mode === "absolute" ? val : cur + val;
             await item.update({ "system.baseValue": nv });
-            descStr = `【${item.name}】基础值 ${val >= 0 ? "+" : ""}${val}（${cur} → ${nv}）`;
+            descStr = mode === "absolute"
+              ? `【${item.name}】基础值 调整为 ${nv}`
+              : `【${item.name}】基础值 ${val >= 0 ? "+" : ""}${val}（${cur} → ${nv}）`;
             break;
           }
           case "seismicBlast": {
