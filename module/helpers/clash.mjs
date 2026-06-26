@@ -1447,6 +1447,15 @@ export class ClashManager {
     // 流血：防守方进行对抗也是攻击动作，同样触发
     await ClashManager._processBleed(defActor);
 
+    // 拼点结算所需的攻击方角色（提前获取，供 [使用时] 触发使用）
+    const atkActor = game.actors.get(initFlags.attackerId);
+
+    // ── [使用时] Activity 触发（防守方使用技能进行对抗，与发起方对称）───
+    await ClashManager._applyActivities(defItem, "使用时", {
+      owner: defActor, atkActor, defActor, _fireCounts: {},
+      // 无 _actMsgs：使用时独立场景，立即发出
+    });
+
     // 扣防守方 AP（恐慌时使用 EGO 免 AP 消耗）
     const defIsEgo     = (defItem.system?.type === "ego");
     const defIsInPanic = defIsEgo && !!ClashManager._getBuff(defActor, "panic");
@@ -1462,7 +1471,6 @@ export class ClashManager {
     }
 
     // 拼点结算
-    const atkActor    = game.actors.get(initFlags.attackerId);
     const defCategory = sys.category ?? "";
 
     // 攻击方技能物品（用于 activity 触发）
