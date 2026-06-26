@@ -1770,7 +1770,7 @@ function _readActivityForm(html, original) {
       round:          isAddBuff     ? ($r.find(".eff-round").val() || "本回合") : undefined,
       buff:           buffVal,
       buffCustom,
-      intensity:      isBuff        ? (parseInt($r.find(".eff-intensity").val()) || 1) : 0,
+      intensity:      isBuff        ? (parseInt($r.find(".eff-intensity").val()) || 0) : 0,
       stacks:         isBuff        ? (parseInt($r.find(".eff-stacks").val())    || 1) : 0,
       value:          (!isBuff && !isTriggerBuff) ? ($r.find(".eff-value").val()?.trim() || "") : "",
       trigBuff:       trigBuffVal,
