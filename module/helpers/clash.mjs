@@ -4,6 +4,7 @@
  */
 
 import { SinResourceHUD } from "./sin-resource-hud.mjs";
+import { CustomBuffRegistry, resolveBuffHandler } from "./custom-buffs.mjs";
 
 export class ClashManager {
 
@@ -28,6 +29,33 @@ export class ClashManager {
       console.warn("ClashManager._evalValue: 无法解析值", val, e);
       return 0;
     }
+  }
+
+  /**
+   * 解析"相关数值"字段的符号语义：
+   * - 无符号纯数字（如 "3"）→ 绝对赋值（mode:"absolute"）
+   * - 带显式符号（如 "+3" / "-3"）→ 相对调整（mode:"relative"）
+   * - 骰子公式（如 "1D4+2"）或其他表达式 → 始终视为相对调整
+   * - 旧数据缺少 value 字段时，回退使用 intensity（数字），保持相对调整语义
+   * @param {string|number} value
+   * @param {number} [intensity]
+   * @returns {Promise<{mode: "absolute"|"relative", value: number}>}
+   */
+  static async _evalSignedValue(value, intensity) {
+    if (value === undefined || value === null) {
+      return { mode: "relative", value: Math.round(Number(intensity ?? 0)) || 0 };
+    }
+    const str = String(value).trim();
+    if (str === "") return { mode: "relative", value: 0 };
+    const m = /^([+-]?)(\d+(?:\.\d+)?)$/.exec(str);
+    if (m) {
+      const [, sign, num] = m;
+      const n = Number(num);
+      if (sign === "") return { mode: "absolute", value: Math.round(n) };
+      return { mode: "relative", value: Math.round(sign === "-" ? -n : n) };
+    }
+    const evaluated = Math.round(await ClashManager._evalValue(str));
+    return { mode: "relative", value: evaluated };
   }
 
   static _catIcon(cat) {
@@ -162,6 +190,10 @@ export class ClashManager {
       sinking:"沉沦", breathing:"呼吸法", charge:"充能",
       chaos:"陷入混乱", panic:"陷入恐慌",
     };
+    // 检查自定义 BUFF 注册表
+    if (CustomBuffRegistry.has(type)) {
+      return CustomBuffRegistry.get(type).label ?? type;
+    }
     return labels[type] ?? type;
   }
 
@@ -169,26 +201,40 @@ export class ClashManager {
   static async _addBuff(actor, type, intensity = 1, stacks = 1, whenAdded = "本回合") {
     if (!actor || !type) return;
     const buffs = foundry.utils.deepClone(actor.system?.buffs ?? []);
+
+    // 查询自定义 BUFF 处理器（maxStacks / refreshOnGain）
+    const customHandler = CustomBuffRegistry.get(type);
+    const maxStacks     = customHandler?.maxStacks ?? Infinity;
+    const refreshOnGain = customHandler?.refreshOnGain ?? false;
+
     // 按 type + whenAdded 精确匹配，防止本/下回合同类 BUFF 错误合并
     const idx   = buffs.findIndex(b => b.type === type && (b.whenAdded ?? "本回合") === whenAdded);
     if (idx >= 0) {
-      buffs[idx].stacks    = (buffs[idx].stacks    ?? 0) + stacks;
-      buffs[idx].intensity = (buffs[idx].intensity ?? 0) + intensity;
+      if (refreshOnGain) {
+        // 刷新：层数替换（不叠加），强度也替换
+        buffs[idx].stacks    = Math.min(stacks, maxStacks);
+        buffs[idx].intensity = intensity;
+      } else {
+        buffs[idx].stacks    = Math.min((buffs[idx].stacks ?? 0) + stacks, maxStacks);
+        buffs[idx].intensity = (buffs[idx].intensity ?? 0) + intensity;
+      }
       if (!buffs[idx].name) buffs[idx].name = ClashManager._buffLabel(type);
     } else {
       // 与 actor.addBuff 字段结构保持一致，确保状态栏正常显示
       const iconBase = "systems/limbusCompany_FVTT/assets/icons/Buff_icon/";
       const iconName = ClashManager._buffLabel(type);
-      const icon     = iconName !== type
-        ? `${iconBase}${iconName}.webp`
-        : `${iconBase}Custom_buffs/${type}.webp`;
+      // 注册表自定义 BUFF 图标放在 Custom_buffs/ 子目录下
+      const isCustomRegistered = CustomBuffRegistry.has(type);
+      const icon = isCustomRegistered
+        ? `${iconBase}Custom_buffs/${iconName}.webp`
+        : (iconName !== type ? `${iconBase}${iconName}.webp` : `${iconBase}Custom_buffs/${type}.webp`);
       buffs.push({
         id:        foundry.utils.randomID(),
         type,
         name:      iconName,
         icon,
         intensity,
-        stacks,
+        stacks:    Math.min(stacks, maxStacks),
         whenAdded,
       });
     }
@@ -303,14 +349,26 @@ export class ClashManager {
       const preconditions = Array.isArray(act.preconditions) ? act.preconditions
         : (act.precondition ? [act.precondition] : []);
       let precondFail = false;
+      // 【每】类前置条件按 floor(层数/N) 计算倍数，传递给后续效果（与 cost.type==="perStack" 共用倍数变量）
+      let precondMultiplier = 1;
       for (const pre of preconditions) {
         if (!pre?.buff) continue;
         const preBuffType = pre.buff === "custom" ? (pre.buffCustom || "custom") : pre.buff;
         const precTgt = pre.target === "self" ? owner : other;
         const buff    = precTgt ? ClashManager._getBuff(precTgt, preBuffType) : null;
-        if (!buff) { precondFail = true; break; }
-        if ((pre.intensity ?? 0) > 0 && (buff.intensity ?? 0) < pre.intensity) { precondFail = true; break; }
-        if ((pre.stacks    ?? 0) > 0 && (buff.stacks    ?? 0) < pre.stacks)    { precondFail = true; break; }
+
+        if (pre.type === "perN") {
+          // 【每】：层数 ≥ N（N = pre.stacks）才满足，倍数 = floor(当前层数 / N)
+          const n = Math.max(1, pre.stacks ?? 1);
+          if (!buff || (buff.stacks ?? 0) < n) { precondFail = true; break; }
+          if ((pre.intensity ?? 0) > 0 && (buff.intensity ?? 0) < pre.intensity) { precondFail = true; break; }
+          precondMultiplier *= Math.floor((buff.stacks ?? 0) / n);
+        } else {
+          // 【拥有】（默认）：达到指定强度/层数阈值即满足
+          if (!buff) { precondFail = true; break; }
+          if ((pre.intensity ?? 0) > 0 && (buff.intensity ?? 0) < pre.intensity) { precondFail = true; break; }
+          if ((pre.stacks    ?? 0) > 0 && (buff.stacks    ?? 0) < pre.stacks)    { precondFail = true; break; }
+        }
       }
       if (precondFail) continue;
 
@@ -349,7 +407,8 @@ export class ClashManager {
       }
       if (forcedFail) continue;
 
-      let perStackMultiplier = 1;
+      // 倍数默认取自【每】前置条件计算结果；若另有 perStack 消耗，会在下方覆盖为实际消耗层数
+      let perStackMultiplier = precondMultiplier;
       for (const cost of costs) {
         if (!cost) continue;
         if (cost.type === "attribute") {
@@ -424,24 +483,30 @@ export class ClashManager {
             descStr = `移除【${effTgt.name}】的 ${buffType}`;
             break;
           case "hpAdj": {
-            const val = Math.round(await ClashManager._evalValue(eff.value ?? eff.intensity ?? 0));
+            const { mode, value: val } = await ClashManager._evalSignedValue(eff.value, eff.intensity);
             const cur = effTgt.system?.hp?.value ?? 0;
             const max = effTgt.system?.hp?.max   ?? 1;
-            const nv  = Math.max(0, Math.min(max, cur + val));
+            const nv  = mode === "absolute"
+              ? Math.max(0, Math.min(max, val))
+              : Math.max(0, Math.min(max, cur + val));
             await effTgt.update({ "system.hp.value": nv });
-            descStr = `【${effTgt.name}】HP ${val >= 0 ? "+" : ""}${val}（${cur} → ${nv}）`;
+            descStr = mode === "absolute"
+              ? `【${effTgt.name}】HP 调整为 ${nv}`
+              : `【${effTgt.name}】HP ${val >= 0 ? "+" : ""}${val}（${cur} → ${nv}）`;
             break;
           }
           case "sanityAdj": {
-            const val = Math.round(await ClashManager._evalValue(eff.value ?? eff.intensity ?? 0));
+            const { mode, value: val } = await ClashManager._evalSignedValue(eff.value, eff.intensity);
+            const cur    = effTgt.system?.sanity?.value ?? 50;
+            const target = mode === "absolute" ? val : cur + val;
             if (typeof effTgt.setSanity === "function") {
-              const cur = effTgt.system?.sanity?.value ?? 50;
-              await effTgt.setSanity(cur + val);
+              await effTgt.setSanity(target);
             } else {
-              const cur = effTgt.system?.sanity?.value ?? 50;
-              await effTgt.update({ "system.sanity.value": Math.max(5, Math.min(95, cur + val)) });
+              await effTgt.update({ "system.sanity.value": Math.max(5, Math.min(95, target)) });
             }
-            descStr = `【${effTgt.name}】理智 ${val >= 0 ? "+" : ""}${val}`;
+            descStr = mode === "absolute"
+              ? `【${effTgt.name}】理智 调整为 ${Math.max(5, Math.min(95, target))}`
+              : `【${effTgt.name}】理智 ${val >= 0 ? "+" : ""}${val}`;
             break;
           }
           case "atkAdj": {
@@ -459,47 +524,59 @@ export class ClashManager {
             break;
           }
           case "apAdj": {
-            const val = Math.round(await ClashManager._evalValue(eff.value ?? eff.intensity ?? 0));
+            const { mode, value: val } = await ClashManager._evalSignedValue(eff.value, eff.intensity);
             const cur = effTgt.system?.ap?.value ?? 0;
             const max = effTgt.system?.ap?.max   ?? 3;
-            const nv  = Math.max(0, Math.min(max, cur + val));
+            const nv  = mode === "absolute"
+              ? Math.max(0, Math.min(max, val))
+              : Math.max(0, Math.min(max, cur + val));
             await effTgt.update({ "system.ap.value": nv });
-            descStr = `【${effTgt.name}】行动值 ${val >= 0 ? "+" : ""}${val}（${cur} → ${nv}）`;
+            descStr = mode === "absolute"
+              ? `【${effTgt.name}】行动值 调整为 ${nv}`
+              : `【${effTgt.name}】行动值 ${val >= 0 ? "+" : ""}${val}（${cur} → ${nv}）`;
             break;
           }
           case "weightAdj": {
-            const val = Math.round(await ClashManager._evalValue(eff.value ?? eff.intensity ?? 0));
+            const { mode, value: val } = await ClashManager._evalSignedValue(eff.value, eff.intensity);
             const cur = item.system?.weight ?? 0;
-            const nv  = Math.max(0, cur + val);
+            const nv  = mode === "absolute" ? Math.max(0, val) : Math.max(0, cur + val);
             await item.update({ "system.weight": nv });
-            descStr = `【${item.name}】加重值 ${val >= 0 ? "+" : ""}${val}（${cur} → ${nv}）`;
+            descStr = mode === "absolute"
+              ? `【${item.name}】加重值 调整为 ${nv}`
+              : `【${item.name}】加重值 ${val >= 0 ? "+" : ""}${val}（${cur} → ${nv}）`;
             break;
           }
           case "diceAdj": {
-            // 骰数：累加骰子数量，下限 1
-            const val = Math.round(await ClashManager._evalValue(eff.value ?? eff.intensity ?? 0));
+            // 骰数：累加或赋值骰子数量，下限 1
+            const { mode, value: val } = await ClashManager._evalSignedValue(eff.value, eff.intensity);
             const cur = item.system?.diceCount ?? 1;
-            const nv  = Math.max(1, cur + val);
+            const nv  = mode === "absolute" ? Math.max(1, val) : Math.max(1, cur + val);
             await item.update({ "system.diceCount": nv });
-            descStr = `【${item.name}】骰数 ${val >= 0 ? "+" : ""}${val}（${cur}d → ${nv}d）`;
+            descStr = mode === "absolute"
+              ? `【${item.name}】骰数 调整为 ${nv}d`
+              : `【${item.name}】骰数 ${val >= 0 ? "+" : ""}${val}（${cur}d → ${nv}d）`;
             break;
           }
           case "diceFacesAdj": {
-            // 面数：覆盖骰子面数（设定为指定值），下限 2
-            const val = Math.round(await ClashManager._evalValue(eff.value ?? eff.intensity ?? 0));
+            // 面数：累加或赋值骰子面数，下限 2
+            const { mode, value: val } = await ClashManager._evalSignedValue(eff.value, eff.intensity);
             const cur = item.system?.diceFaces ?? 4;
-            const nv  = Math.max(2, val);
+            const nv  = mode === "absolute" ? Math.max(2, val) : Math.max(2, cur + val);
             await item.update({ "system.diceFaces": nv });
-            descStr = `【${item.name}】面数 d${cur} → d${nv}`;
+            descStr = mode === "absolute"
+              ? `【${item.name}】面数 d${cur} → d${nv}`
+              : `【${item.name}】面数 ${val >= 0 ? "+" : ""}${val}（d${cur} → d${nv}）`;
             break;
           }
           case "baseValue": {
-            // 基础值：累加骰子公式固定加值，允许负数
-            const val = Math.round(await ClashManager._evalValue(eff.value ?? eff.intensity ?? 0));
+            // 基础值：累加或赋值固定加值，允许负数
+            const { mode, value: val } = await ClashManager._evalSignedValue(eff.value, eff.intensity);
             const cur = item.system?.baseValue ?? 0;
-            const nv  = cur + val;
+            const nv  = mode === "absolute" ? val : cur + val;
             await item.update({ "system.baseValue": nv });
-            descStr = `【${item.name}】基础值 ${val >= 0 ? "+" : ""}${val}（${cur} → ${nv}）`;
+            descStr = mode === "absolute"
+              ? `【${item.name}】基础值 调整为 ${nv}`
+              : `【${item.name}】基础值 ${val >= 0 ? "+" : ""}${val}（${cur} → ${nv}）`;
             break;
           }
           case "seismicBlast": {
@@ -1370,6 +1447,15 @@ export class ClashManager {
     // 流血：防守方进行对抗也是攻击动作，同样触发
     await ClashManager._processBleed(defActor);
 
+    // 拼点结算所需的攻击方角色（提前获取，供 [使用时] 触发使用）
+    const atkActor = game.actors.get(initFlags.attackerId);
+
+    // ── [使用时] Activity 触发（防守方使用技能进行对抗，与发起方对称）───
+    await ClashManager._applyActivities(defItem, "使用时", {
+      owner: defActor, atkActor, defActor, _fireCounts: {},
+      // 无 _actMsgs：使用时独立场景，立即发出
+    });
+
     // 扣防守方 AP（恐慌时使用 EGO 免 AP 消耗）
     const defIsEgo     = (defItem.system?.type === "ego");
     const defIsInPanic = defIsEgo && !!ClashManager._getBuff(defActor, "panic");
@@ -1385,7 +1471,6 @@ export class ClashManager {
     }
 
     // 拼点结算
-    const atkActor    = game.actors.get(initFlags.attackerId);
     const defCategory = sys.category ?? "";
 
     // 攻击方技能物品（用于 activity 触发）
@@ -1512,6 +1597,19 @@ export class ClashManager {
           await ClashManager._applyActivities(atkItem, "受到伤害时", atkCtx);
           for (const eq of ClashManager._getEquippedItems(atkActor)) {
             await ClashManager._applyActivities(eq, "受到伤害时", atkCtx);
+          }
+        }
+      }
+
+      // ── 自定义 BUFF onClashWin 钩子 ────────────────────────────────────
+      // 胜者的所有 BUFF 中，若有注册 onClashWin 的自定义 BUFF，则对败者触发
+      const winner = atkWins ? atkActor : defActor;
+      const loser  = atkWins ? defActor : atkActor;
+      if (winner && loser) {
+        for (const buff of (winner.system?.buffs ?? [])) {
+          const handler = resolveBuffHandler(buff);
+          if (typeof handler?.onClashWin === "function") {
+            await handler.onClashWin(winner, loser);
           }
         }
       }

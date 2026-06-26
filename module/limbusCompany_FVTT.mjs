@@ -26,6 +26,7 @@ import { LimbusLootSheet }    from "./sheets/loot-sheet.mjs";
 import { GMConsole }          from "./sheets/gm-console.mjs";
 import { SquadHUD }           from "./sheets/squad-hud.mjs";
 import { ClashManager }     from "./helpers/clash.mjs";
+import { CustomBuffRegistry, resolveBuffHandler } from "./helpers/custom-buffs.mjs";
 import { SinResourceHUD }   from "./helpers/sin-resource-hud.mjs";
 import { QuickActionHUD }   from "./sheets/quick-action-hud.mjs";
 import { registerItemPiles } from "./helpers/item-piles.mjs";
@@ -529,6 +530,16 @@ Hooks.on("updateCombat", async (combat, changed) => {
       await actor.reduceBuffStacks?.("breathing");
     }
 
+    // ── 自定义 BUFF onRoundEnd 钩子 ──────────────────────────────────────
+    // 重新读取 freshBuffs（上面的 reduceBuffStacks 可能已修改数据）
+    const customBuffsSnapshot = [...(actor.system?.buffs ?? [])];
+    for (const buff of customBuffsSnapshot) {
+      const handler = resolveBuffHandler(buff);
+      if (typeof handler?.onRoundEnd === "function") {
+        await handler.onRoundEnd(actor, buff);
+      }
+    }
+
     // ── Activity 触发：[回合结束时] 与 [回合开始时] ─────────────────────
     const sys      = actor.system ?? {};
     const roundCtx = { owner: actor, atkActor: actor, defActor: null };
@@ -565,7 +576,7 @@ Hooks.on("updateCombat", async (combat, changed) => {
       const actor = combatant.actor;
       if (!actor || actor.type !== "character") continue;
       const roll = await actor.rollSpeedInitiative({ updateCombatant: false });
-      initiativeUpdates.push({ _id: combatant.id, initiative: roll.total });
+      initiativeUpdates.push({ _id: combatant.id, initiative: roll.finalTotal ?? roll.total });
     }
     if (initiativeUpdates.length > 0) {
       await combat.updateEmbeddedDocuments("Combatant", initiativeUpdates);

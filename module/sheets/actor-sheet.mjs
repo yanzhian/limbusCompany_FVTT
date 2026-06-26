@@ -11,6 +11,7 @@
  */
 
 import { ClashManager } from "../helpers/clash.mjs";
+import { CustomBuffRegistry, resolveBuffHandler, normalizeBuffType } from "../helpers/custom-buffs.mjs";
 
 /**
  * 以 actorId 为 key 的模块级战斗袋状态 Map。
@@ -1643,10 +1644,11 @@ export class LimbusActorSheet extends ActorSheet {
     // 构建选项 HTML（分组）
     const buildGroupOptions = () => {
       const sections = [
-        { label: "增益",   keys: groups.positive },
-        { label: "减益",   keys: groups.negative },
-        { label: "特殊",   keys: groups.special },
-        { label: "其他",   keys: groups.other },
+        { label: "增益",      keys: groups.positive ?? [] },
+        { label: "减益",      keys: groups.negative ?? [] },
+        { label: "特殊",      keys: groups.special  ?? [] },
+        { label: "其他",      keys: groups.other    ?? [] },
+        { label: "自定义BUFF", keys: groups.custom   ?? [] },
       ];
       return sections.map(sec =>
         `<optgroup label="${sec.label}">${sec.keys.map(k => `<option value="${k}">${_buffLabel(k)}</option>`).join("")}</optgroup>`
@@ -1683,12 +1685,17 @@ export class LimbusActorSheet extends ActorSheet {
         add: {
           label: "添加",
           callback: async (html) => {
-            const type      = html.find("[name='buffType']").val();
-            const custom    = html.find("[name='customName']").val();
+            let type        = html.find("[name='buffType']").val();
+            const custom    = html.find("[name='customName']").val().trim();
             const whenAdded = html.find("[name='whenAdded']").val();
             const intensity = parseInt(html.find("[name='intensity']").val()) || 1;
             const stacks    = parseInt(html.find("[name='stacks']").val())    || 1;
-            const name      = type === "custom" ? (custom || "自定义") : _buffLabel(type);
+
+            // 若用户选择"自定义"并输入了文字，尝试解析为注册的自定义 BUFF 类型
+            if (type === "custom" && custom) {
+              type = normalizeBuffType("custom", custom);
+            }
+            const name = type === "custom" ? (custom || "自定义") : _buffLabel(type);
 
             await this.actor.addBuff({ type, name, intensity, stacks, whenAdded,
               icon: _buffIconPath(type, name) });
@@ -2058,7 +2065,11 @@ function _buffLabel(type) {
     sinking:"沉沦", breathing:"呼吸法", charge:"充能",
     chaos:"陷入混乱", panic:"陷入恐慌", custom:"自定义",
   };
-  return labels[type] ?? type;
+  if (labels[type]) return labels[type];
+  // 查询自定义 BUFF 注册表
+  const handler = CustomBuffRegistry.get(type);
+  if (handler?.label) return handler.label;
+  return type;
 }
 
 function _buffIconPath(type, name = "") {
@@ -2072,6 +2083,10 @@ function _buffIconPath(type, name = "") {
     sinking:"沉沦", breathing:"呼吸法", charge:"充能",
     chaos:"陷入混乱", panic:"陷入恐慌" };
   if (map[type]) return `${base}${map[type]}.webp`;
+  // 注册表自定义 BUFF：图标在 Custom_buffs/ 子目录，使用中文标签作为文件名
+  const regHandler = CustomBuffRegistry.get(type);
+  if (regHandler?.label) return `${base}Custom_buffs/${regHandler.label}.webp`;
+  // 其他自定义（type="custom" 或未知类型）：尝试用 name 在 Custom_buffs/ 中查找
   const customName = name || type;
   return customName ? `${base}Custom_buffs/${customName}.webp` : "";
 }

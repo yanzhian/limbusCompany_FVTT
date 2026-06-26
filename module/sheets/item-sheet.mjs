@@ -1378,10 +1378,11 @@ function _buildBuffGroupOptions(cfg, selected) {
   const groups   = cfg.BUFF_GROUPS ?? {};
   const labels   = _buffLabelMap();
   const sections = [
-    { label: "增益", keys: groups.positive ?? [] },
-    { label: "减益", keys: groups.negative ?? [] },
-    { label: "特殊", keys: groups.special ?? [] },
-    { label: "其他", keys: groups.other   ?? [] },
+    { label: "增益",      keys: groups.positive ?? [] },
+    { label: "减益",      keys: groups.negative ?? [] },
+    { label: "特殊",      keys: groups.special  ?? [] },
+    { label: "其他",      keys: groups.other    ?? [] },
+    { label: "自定义BUFF", keys: groups.custom   ?? [] },
   ];
   return sections.map(sec =>
     `<optgroup label="${sec.label}">${sec.keys.map(k =>
@@ -1410,6 +1411,7 @@ function _buffLabelMap() {
     burn:"烧伤", bleed:"流血", tremor:"震颤", rupture:"破裂",
     sinking:"沉沦", breathing:"呼吸法", charge:"充能",
     chaos:"陷入混乱", panic:"陷入恐慌", custom:"自定义",
+    defensiveStance:"防御姿态",
   };
 }
 
@@ -1431,7 +1433,9 @@ function _buildTriggerOpts(selected) {
 
 /** 前置条件行 HTML */
 function _buildCondRow(cond, idx, cfg) {
-  const buffOpts = _buildBuffGroupOptions(cfg, cond?.buff);
+  const buffOpts  = _buildBuffGroupOptions(cfg, cond?.buff);
+  const condType  = cond?.type === "perN" ? "perN" : "hasBuff";
+  const stacksLbl = condType === "perN" ? "每N层" : "层数≥";
   return `
     <div class="ae-row ae-cond-row">
       <div class="ae-row-hd">
@@ -1439,6 +1443,11 @@ function _buildCondRow(cond, idx, cfg) {
         <button type="button" class="ae-del-btn ae-del-precond">×</button>
       </div>
       <div class="ae-row-fields">
+        <label>类型</label>
+        <select class="ae-sel cond-type">
+          <option value="hasBuff" ${condType === "hasBuff" ? "selected" : ""}>拥有</option>
+          <option value="perN"    ${condType === "perN"    ? "selected" : ""}>每</option>
+        </select>
         <label>目标</label>
         <select class="ae-sel cond-target">
           <option value="self"   ${(cond?.target ?? "self") === "self"   ? "selected" : ""}>自己</option>
@@ -1451,8 +1460,8 @@ function _buildCondRow(cond, idx, cfg) {
                value="${_esc(cond?.buffCustom ?? "")}"
                style="display:${(cond?.buff ?? "") === "custom" ? "inline-block" : "none"};width:90px;">
         <label>强度≥</label>
-        <input class="ae-input-sm cond-intensity" type="number" value="${cond?.intensity ?? 1}" min="0">
-        <label>层数≥</label>
+        <input class="ae-input-sm cond-intensity" type="number" value="${cond?.intensity ?? 0}" min="0">
+        <label class="cond-stacks-label">${stacksLbl}</label>
         <input class="ae-input-sm cond-stacks"    type="number" value="${cond?.stacks ?? 1}"    min="0">
       </div>
     </div>`;
@@ -1507,7 +1516,7 @@ function _buildCostRow(cost, idx, cfg) {
                  value="${_esc(cost?.buffCustom ?? "")}"
                  style="display:${(cost?.buff ?? "") === "custom" ? "inline-block" : "none"};width:90px;">
           <label>强度</label>
-          <input class="ae-input-sm cost-intensity" type="number" value="${cost?.intensity ?? 1}" min="0">
+          <input class="ae-input-sm cost-intensity" type="number" value="${cost?.intensity ?? 0}" min="0">
           <label>层数</label>
           <input class="ae-input-sm cost-stacks"    type="number" value="${cost?.stacks ?? 1}"    min="0">
         </span>
@@ -1522,6 +1531,17 @@ function _buildCostRow(cost, idx, cfg) {
 }
 
 const _BUFF_EFFECTS   = new Set(["addBuff", "removeBuff"]);
+
+// 支持"无符号=绝对赋值，+/-=相对增减"语义的效果类型
+const _SIGNED_VALUE_EFFECTS = new Set([
+  "hpAdj", "sanityAdj", "apAdj", "weightAdj", "diceAdj", "diceFacesAdj", "baseValue",
+]);
+
+function _effValuePlaceholder(type) {
+  return _SIGNED_VALUE_EFFECTS.has(type)
+    ? "3=调整为3，+3/-3=相对增减，或公式1D4+2"
+    : "数值或公式，如 1D4+2";
+}
 
 const _ROUND_OPTIONS = ["本回合", "下回合", "本回合和下回合"];
 
@@ -1568,7 +1588,7 @@ function _buildEffectRow(eff, idx, cfg) {
         </span>
         <span class="ae-eff-val-sec" ${(!isBuff && !isTriggerBuff) ? "" : 'style="display:none"'}>
           <label>相关数值</label>
-          <input class="ae-input eff-value" type="text" placeholder="数值或公式，如 1D4+2"
+          <input class="ae-input eff-value" type="text" placeholder="${_effValuePlaceholder(type)}"
                  value="${formulaVal}" style="width:110px;">
         </span>
         <span class="ae-eff-trig-sec" ${isTriggerBuff ? "" : 'style="display:none"'}>
@@ -1594,6 +1614,7 @@ function _setupAeDialog(html, cfg) {
     list.append(_buildCondRow({}, idx, cfg));
     _bindDel(html);
     _bindCondCostBuff(html);
+    _bindCondType(html);
   });
   html.find(".ae-add-cost").on("click", () => {
     const list = html.find(".ae-cost-list");
@@ -1618,6 +1639,7 @@ function _setupAeDialog(html, cfg) {
   _bindEffType(html);
   _bindCondCostBuff(html);
   _bindCostType(html);
+  _bindCondType(html);
 }
 
 function _bindCondCostBuff(html) {
@@ -1626,6 +1648,15 @@ function _bindCondCostBuff(html) {
   });
   html.find(".cost-buff").off("change").on("change", function () {
     $(this).closest(".ae-cost-row").find(".cost-buff-custom").toggle($(this).val() === "custom");
+  });
+}
+
+/** 切换"拥有/每"时更新层数字段的标签提示 */
+function _bindCondType(html) {
+  html.find(".cond-type").off("change").on("change", function () {
+    const row    = $(this).closest(".ae-cond-row");
+    const isPerN = $(this).val() === "perN";
+    row.find(".cond-stacks-label").text(isPerN ? "每N层" : "层数≥");
   });
 }
 
@@ -1663,6 +1694,7 @@ function _bindEffType(html) {
     row.find(".ae-eff-round-sec").toggle(isAddBuff);
     row.find(".ae-eff-buff-sec").toggle(isBuff);
     row.find(".ae-eff-val-sec").toggle(!isBuff && !isTriggerBuff);
+    row.find(".eff-value").attr("placeholder", _effValuePlaceholder(type));
     row.find(".ae-eff-trig-sec").toggle(isTriggerBuff);
     // 切换效果类型时也检查自定义 BUFF 输入框
     const buffVal = row.find(".ae-eff-buff-sel").val();
@@ -1687,11 +1719,11 @@ function _readActivityForm(html, original) {
     const $r      = $(el);
     const buffVal = $r.find(".cond-buff").val() || "";
     preconditions.push({
-      type:       "hasBuff",
+      type:       $r.find(".cond-type").val() === "perN" ? "perN" : "hasBuff",
       target:     $r.find(".cond-target").val()  || "self",
       buff:       buffVal,
       buffCustom: buffVal === "custom" ? ($r.find(".cond-buff-custom").val()?.trim() || "") : "",
-      intensity:  parseInt($r.find(".cond-intensity").val()) || 1,
+      intensity:  parseInt($r.find(".cond-intensity").val()) || 0,
       stacks:     parseInt($r.find(".cond-stacks").val())    || 1,
     });
   });
@@ -1715,7 +1747,7 @@ function _readActivityForm(html, original) {
         target,
         buff:       buffVal,
         buffCustom: buffVal === "custom" ? ($r.find(".cost-buff-custom").val()?.trim() || "") : "",
-        intensity:  parseInt($r.find(".cost-intensity").val()) || 1,
+        intensity:  parseInt($r.find(".cost-intensity").val()) || 0,
         stacks:     parseInt($r.find(".cost-stacks").val())    || 1,
       });
     }
@@ -1738,7 +1770,7 @@ function _readActivityForm(html, original) {
       round:          isAddBuff     ? ($r.find(".eff-round").val() || "本回合") : undefined,
       buff:           buffVal,
       buffCustom,
-      intensity:      isBuff        ? (parseInt($r.find(".eff-intensity").val()) || 1) : 0,
+      intensity:      isBuff        ? (parseInt($r.find(".eff-intensity").val()) || 0) : 0,
       stacks:         isBuff        ? (parseInt($r.find(".eff-stacks").val())    || 1) : 0,
       value:          (!isBuff && !isTriggerBuff) ? ($r.find(".eff-value").val()?.trim() || "") : "",
       trigBuff:       trigBuffVal,
