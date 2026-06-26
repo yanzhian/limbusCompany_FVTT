@@ -1433,7 +1433,9 @@ function _buildTriggerOpts(selected) {
 
 /** 前置条件行 HTML */
 function _buildCondRow(cond, idx, cfg) {
-  const buffOpts = _buildBuffGroupOptions(cfg, cond?.buff);
+  const buffOpts  = _buildBuffGroupOptions(cfg, cond?.buff);
+  const condType  = cond?.type === "perN" ? "perN" : "hasBuff";
+  const stacksLbl = condType === "perN" ? "每N层" : "层数≥";
   return `
     <div class="ae-row ae-cond-row">
       <div class="ae-row-hd">
@@ -1441,6 +1443,11 @@ function _buildCondRow(cond, idx, cfg) {
         <button type="button" class="ae-del-btn ae-del-precond">×</button>
       </div>
       <div class="ae-row-fields">
+        <label>类型</label>
+        <select class="ae-sel cond-type">
+          <option value="hasBuff" ${condType === "hasBuff" ? "selected" : ""}>拥有</option>
+          <option value="perN"    ${condType === "perN"    ? "selected" : ""}>每</option>
+        </select>
         <label>目标</label>
         <select class="ae-sel cond-target">
           <option value="self"   ${(cond?.target ?? "self") === "self"   ? "selected" : ""}>自己</option>
@@ -1454,7 +1461,7 @@ function _buildCondRow(cond, idx, cfg) {
                style="display:${(cond?.buff ?? "") === "custom" ? "inline-block" : "none"};width:90px;">
         <label>强度≥</label>
         <input class="ae-input-sm cond-intensity" type="number" value="${cond?.intensity ?? 1}" min="0">
-        <label>层数≥</label>
+        <label class="cond-stacks-label">${stacksLbl}</label>
         <input class="ae-input-sm cond-stacks"    type="number" value="${cond?.stacks ?? 1}"    min="0">
       </div>
     </div>`;
@@ -1596,6 +1603,7 @@ function _setupAeDialog(html, cfg) {
     list.append(_buildCondRow({}, idx, cfg));
     _bindDel(html);
     _bindCondCostBuff(html);
+    _bindCondType(html);
   });
   html.find(".ae-add-cost").on("click", () => {
     const list = html.find(".ae-cost-list");
@@ -1620,6 +1628,7 @@ function _setupAeDialog(html, cfg) {
   _bindEffType(html);
   _bindCondCostBuff(html);
   _bindCostType(html);
+  _bindCondType(html);
 }
 
 function _bindCondCostBuff(html) {
@@ -1628,6 +1637,15 @@ function _bindCondCostBuff(html) {
   });
   html.find(".cost-buff").off("change").on("change", function () {
     $(this).closest(".ae-cost-row").find(".cost-buff-custom").toggle($(this).val() === "custom");
+  });
+}
+
+/** 切换"拥有/每"时更新层数字段的标签提示 */
+function _bindCondType(html) {
+  html.find(".cond-type").off("change").on("change", function () {
+    const row    = $(this).closest(".ae-cond-row");
+    const isPerN = $(this).val() === "perN";
+    row.find(".cond-stacks-label").text(isPerN ? "每N层" : "层数≥");
   });
 }
 
@@ -1689,7 +1707,7 @@ function _readActivityForm(html, original) {
     const $r      = $(el);
     const buffVal = $r.find(".cond-buff").val() || "";
     preconditions.push({
-      type:       "hasBuff",
+      type:       $r.find(".cond-type").val() === "perN" ? "perN" : "hasBuff",
       target:     $r.find(".cond-target").val()  || "self",
       buff:       buffVal,
       buffCustom: buffVal === "custom" ? ($r.find(".cond-buff-custom").val()?.trim() || "") : "",

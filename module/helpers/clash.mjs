@@ -322,14 +322,26 @@ export class ClashManager {
       const preconditions = Array.isArray(act.preconditions) ? act.preconditions
         : (act.precondition ? [act.precondition] : []);
       let precondFail = false;
+      // 【每】类前置条件按 floor(层数/N) 计算倍数，传递给后续效果（与 cost.type==="perStack" 共用倍数变量）
+      let precondMultiplier = 1;
       for (const pre of preconditions) {
         if (!pre?.buff) continue;
         const preBuffType = pre.buff === "custom" ? (pre.buffCustom || "custom") : pre.buff;
         const precTgt = pre.target === "self" ? owner : other;
         const buff    = precTgt ? ClashManager._getBuff(precTgt, preBuffType) : null;
-        if (!buff) { precondFail = true; break; }
-        if ((pre.intensity ?? 0) > 0 && (buff.intensity ?? 0) < pre.intensity) { precondFail = true; break; }
-        if ((pre.stacks    ?? 0) > 0 && (buff.stacks    ?? 0) < pre.stacks)    { precondFail = true; break; }
+
+        if (pre.type === "perN") {
+          // 【每】：层数 ≥ N（N = pre.stacks）才满足，倍数 = floor(当前层数 / N)
+          const n = Math.max(1, pre.stacks ?? 1);
+          if (!buff || (buff.stacks ?? 0) < n) { precondFail = true; break; }
+          if ((pre.intensity ?? 0) > 0 && (buff.intensity ?? 0) < pre.intensity) { precondFail = true; break; }
+          precondMultiplier *= Math.floor((buff.stacks ?? 0) / n);
+        } else {
+          // 【拥有】（默认）：达到指定强度/层数阈值即满足
+          if (!buff) { precondFail = true; break; }
+          if ((pre.intensity ?? 0) > 0 && (buff.intensity ?? 0) < pre.intensity) { precondFail = true; break; }
+          if ((pre.stacks    ?? 0) > 0 && (buff.stacks    ?? 0) < pre.stacks)    { precondFail = true; break; }
+        }
       }
       if (precondFail) continue;
 
@@ -368,7 +380,8 @@ export class ClashManager {
       }
       if (forcedFail) continue;
 
-      let perStackMultiplier = 1;
+      // 倍数默认取自【每】前置条件计算结果；若另有 perStack 消耗，会在下方覆盖为实际消耗层数
+      let perStackMultiplier = precondMultiplier;
       for (const cost of costs) {
         if (!cost) continue;
         if (cost.type === "attribute") {
