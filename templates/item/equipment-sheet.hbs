@@ -89,18 +89,6 @@
               </div>
             {{/unless}}
           </div>
-
-          {{!-- 链接方向（右侧对齐） --}}
-          <div class="link-dir-group" role="group" aria-label="链接方向">
-            {{#each linkDirs}}
-              <button type="button" class="link-dir-btn link-dir-{{this}} {{#if (lookup ../linksActive this)}}link-active{{/if}}"
-                      data-dir="{{this}}"
-                      {{#if (or ../isLocked (not ../isEditable))}}disabled{{/if}}
-                      title="链接 {{this}}">
-                <img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/Link.svg" class="link-dir-icon" alt="链接 {{this}}">
-              </button>
-            {{/each}}
-          </div>
         </div>
 
         {{!-- 物理抗性（仅上装） --}}

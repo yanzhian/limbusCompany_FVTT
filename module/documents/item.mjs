@@ -62,14 +62,6 @@ export class EquipmentData extends foundry.abstract.TypeDataModel {
       defAdj:   new fields.NumberField({ required: true, integer: true, initial: 0 }),
       speedAdj: new fields.NumberField({ required: true, integer: true, initial: 0 }),
 
-      // 链接方向（四方向箭头）
-      links: new fields.SchemaField({
-        up:    new fields.BooleanField({ required: true, initial: false }),
-        down:  new fields.BooleanField({ required: true, initial: false }),
-        left:  new fields.BooleanField({ required: true, initial: false }),
-        right: new fields.BooleanField({ required: true, initial: false }),
-      }),
-
       // 星芒费用
       stellarCost: new fields.NumberField({ required: true, integer: true, min: 0, initial: 1 }),
 
@@ -84,9 +76,6 @@ export class EquipmentData extends foundry.abstract.TypeDataModel {
 
       // 效果触发列表（Activity）
       activities: new fields.ArrayField(makeActivitySchema(), { required: true, initial: [] }),
-
-      // 是否需要相互链接才激活效果
-      requiresLink: new fields.BooleanField({ required: true, initial: false }),
 
       // 是否已激活（武器/饰品有多件时的激活状态）
       isActive: new fields.BooleanField({ required: true, initial: false }),
@@ -603,19 +592,4 @@ export class LimbusItem extends Item {
     return this.name?.includes("侵蚀") ?? false;
   }
 
-  // ─── 装备链接检测辅助 ─────────────────────────────────────────────────
-
-  /**
-   * 检查此装备是否与另一件装备在指定方向上相互链接
-   * @param {LimbusItem} other  相邻装备
-   * @param {"up"|"down"|"left"|"right"} directionFromThis  从本装备到另一装备的方向
-   * @returns {boolean}
-   */
-  isLinkedWith(other, directionFromThis) {
-    if (this.type !== "equipment" || other.type !== "equipment") return false;
-    const opposites = { up: "down", down: "up", left: "right", right: "left" };
-    const myLink    = this.system.links?.[directionFromThis]        ?? false;
-    const theirLink = other.system.links?.[opposites[directionFromThis]] ?? false;
-    return myLink && theirLink;
-  }
 }
