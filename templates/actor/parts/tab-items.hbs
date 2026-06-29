@@ -16,11 +16,6 @@
              draggable="{{#if item}}true{{else}}false{{/if}}">
           {{#if item}}
             <img src="{{item.img}}" alt="{{item.name}}" class="equip-slot-icon">
-            {{!-- 链接方向箭头 --}}
-            {{#if item.system.links.up}}    <div class="link-arrow up"></div>{{/if}}
-            {{#if item.system.links.down}}  <div class="link-arrow down"></div>{{/if}}
-            {{#if item.system.links.left}}  <div class="link-arrow left"></div>{{/if}}
-            {{#if item.system.links.right}} <div class="link-arrow right"></div>{{/if}}
           {{else}}
             <div class="equip-slot-placeholder"></div>
           {{/if}}
@@ -62,23 +57,6 @@
             <button class="filter-category-btn" data-category="container">容器</button>
           </div>
         </div>
-        <div class="filter-section">
-          <div class="filter-section-label">链接方向</div>
-          {{!-- 十字形布局：↑ / ← · → / ↓ --}}
-          <div class="filter-link-cross">
-            <div class="filter-link-row">
-              <button class="filter-link-btn" data-dir="up">↑</button>
-            </div>
-            <div class="filter-link-row">
-              <button class="filter-link-btn" data-dir="left">←</button>
-              <div class="filter-link-center"></div>
-              <button class="filter-link-btn" data-dir="right">→</button>
-            </div>
-            <div class="filter-link-row">
-              <button class="filter-link-btn" data-dir="down">↓</button>
-            </div>
-          </div>
-        </div>
         <button class="filter-apply-btn">过滤</button>
       </div>
     </div>
@@ -88,7 +66,6 @@
       <span class="col-icon"></span>
       <span class="col-name">名称</span>
       <span class="col-cat">分类</span>
-      <span class="col-link">链接</span>
       <span class="col-qty">数量</span>
       <span class="col-cap">容量</span>
       <span class="col-stellar">星芒</span>
@@ -110,8 +87,7 @@
                 data-item-name="{{name}}"
                 data-type="{{type}}"
                 data-subtype="{{system.subtype}}"
-                data-tags="{{system.tags}}"
-                data-links="{{#if system.links}}{{#if system.links.up}}up,{{/if}}{{#if system.links.down}}down,{{/if}}{{#if system.links.left}}left,{{/if}}{{#if system.links.right}}right{{/if}}{{/if}}">
+                data-tags="{{system.tags}}">
               {{!-- 图标 --}}
               <span class="col-icon">
                 <img src="{{img}}" class="item-icon" data-item-id="{{_id}}" alt="{{name}}">
@@ -120,10 +96,6 @@
               <span class="col-name item-name">{{name}}</span>
               {{!-- 分类 --}}
               <span class="col-cat item-cat">{{system.category}}</span>
-              {{!-- 链接方向 --}}
-              <span class="col-link item-links">
-                {{#if system.links.up}}↑{{/if}}{{#if system.links.down}}↓{{/if}}{{#if system.links.left}}←{{/if}}{{#if system.links.right}}→{{/if}}
-              </span>
               {{!-- 数量 --}}
               <span class="col-qty item-qty">{{system.quantity}}</span>
               {{!-- 容量 --}}

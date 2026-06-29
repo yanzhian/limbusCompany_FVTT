@@ -143,10 +143,6 @@ export class LimbusItemSheet extends ItemSheet {
 
       // 汇总修正行（用于解锁编辑）
       context.modifiers = _parseModifiers(sys);
-
-      // 链接方向
-      context.linkDirs = ["up", "down", "left", "right"];
-      context.linksActive = sys.links ?? { up: false, down: false, left: false, right: false };
     }
 
     // ── 消耗品/材料专用数据 ───────────────────────────────────────────────
@@ -339,7 +335,6 @@ export class LimbusItemSheet extends ItemSheet {
     }
 
     // ── 链接方向箭头 ──────────────────────────────────────────────────────
-    html.find(".link-dir-btn").on("click", this._onLinkDirToggle.bind(this));
 
     // ── 修正行 [+] ────────────────────────────────────────────────────────
     html.find(".modifier-add-btn").on("click", this._onModifierAdd.bind(this));
@@ -742,16 +737,6 @@ export class LimbusItemSheet extends ItemSheet {
   _onRelatedToggle(event) {
     this._relatedExpanded = !this.relatedExpanded;
     this.render(false);
-  }
-
-  /* ─── 链接方向 ──────────────────────────────────────────────────────────── */
-
-  async _onLinkDirToggle(event) {
-    event.preventDefault();
-    if (this.isLocked) return;
-    const dir     = event.currentTarget.dataset.dir;
-    const current = this.item.system.links?.[dir] ?? false;
-    await this.item.update({ [`system.links.${dir}`]: !current });
   }
 
   /* ─── 修正行 ────────────────────────────────────────────────────────────── */
@@ -1257,12 +1242,6 @@ function _buildItemTitleCard(item) {
   const descText     = sys.effect ?? sys.description ?? sys.effectDesc ?? "";
 
   if (item.type === "equipment") {
-    const linkDirs   = ["up", "left", "right", "down"];
-    const linkArrows = { up:"↑", down:"↓", left:"←", right:"→" };
-    const linkBtnsHtml = linkDirs.map(dir => {
-      const active = sys.links?.[dir] ? "link-active" : "";
-      return `<span class="link-dir-btn link-dir-${dir} ${active}"><span class="tc-link-arrow-text">${linkArrows[dir]}</span></span>`;
-    }).join("");
     const fmt = v => { const n = Number(v) || 0; return `${n > 0 ? "+" : ""}${n}`; };
     const modRows = [];
     if (sys.subtype === "upper") {
@@ -1289,7 +1268,6 @@ function _buildItemTitleCard(item) {
           ${modRows.length ? `<div class="tce-modifiers">${modRows.join("")}</div>` : ""}
           ${tagsHtml ? `<div class="tce-tags">${tagsHtml}</div>` : ""}
         </div>
-        <div class="tc-link-dir-group">${linkBtnsHtml}</div>
       </div>
       <div class="tc-gold-divider-skill"></div>
       <div class="tc-desc tce-desc">${descText}</div>

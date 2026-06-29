@@ -216,7 +216,7 @@ export class LimbusActorSheet extends ActorSheet {
     context.resistanceValues = cfg.RESISTANCE_VALUES ?? ["x0.5","x1.0","x2.0","x2.5","x3.0"];
 
     // ── 本地过滤状态（不持久化） ──────────────────────────────────────────
-    context.filterState = this._filterState ?? { categories: [], links: [] };
+    context.filterState = this._filterState ?? { categories: [] };
 
     return context;
   }
@@ -550,7 +550,6 @@ export class LimbusActorSheet extends ActorSheet {
     // ── 过滤面板 ──────────────────────────────────────────────────────────
     html.find(".filter-toggle-btn").on("click", this._onFilterToggle.bind(this));
     html.find(".filter-category-btn").on("click", this._onFilterCategory.bind(this));
-    html.find(".filter-link-btn").on("click", this._onFilterLink.bind(this));
     html.find(".filter-apply-btn").on("click", this._onFilterApply.bind(this));
     html.find(".filter-expand-all").on("click", this._onExpandAll.bind(this));
     html.find(".filter-collapse-all").on("click", this._onCollapseAll.bind(this));
@@ -1190,26 +1189,18 @@ export class LimbusActorSheet extends ActorSheet {
     btn.toggleClass("active");
   }
 
-  _onFilterLink(event) {
-    const btn = $(event.currentTarget);
-    btn.toggleClass("active");
-  }
-
   _onFilterApply(event) {
     const panel    = $(event.currentTarget).closest(".filter-panel");
     const cats     = panel.find(".filter-category-btn.active").map((_, b) => $(b).data("category")).get();
-    const links    = panel.find(".filter-link-btn.active").map((_, b)    => $(b).data("dir")).get();
-    this._filterState = { categories: cats, links };
+    this._filterState = { categories: cats };
 
     const listPanel = $(event.currentTarget).closest(".tab").find(".item-list-panel, .skill-list-panel");
     listPanel.find(".item-row, .skill-row").each((_, row) => {
-      const $row    = $(row);
-      const cat     = $row.data("subtype") ?? $row.data("type") ?? "";
-      const rowLinks = ($row.data("links") ?? "").split(",").filter(Boolean);
+      const $row = $(row);
+      const cat  = $row.data("subtype") ?? $row.data("type") ?? "";
 
-      const catOk  = !cats.length  || cats.includes(cat);
-      const linkOk = !links.length || links.some(l => rowLinks.includes(l));
-      $row.toggle(catOk && linkOk);
+      const catOk = !cats.length || cats.includes(cat);
+      $row.toggle(catOk);
     });
 
     panel.hide();
@@ -1961,13 +1952,6 @@ export class LimbusActorSheet extends ActorSheet {
     }
 
     // Equipment / other
-    const linkDirs = ["up", "left", "right", "down"];
-    const linkArrows = { up: "↑", down: "↓", left: "←", right: "→" };
-    const linkButtonsHtml = linkDirs.map((dir) => {
-      const active = sys.links?.[dir] ? "link-active" : "";
-      return `<span class="link-dir-btn link-dir-${dir} ${active}"><span class="tc-link-arrow-text" aria-label="链接 ${dir}">${linkArrows[dir]}</span></span>`;
-    }).join("");
-
     const formatSigned = (value = 0) => {
       const num = Number(value) || 0;
       return `${num > 0 ? "+" : ""}${num}`;
@@ -2017,7 +2001,6 @@ export class LimbusActorSheet extends ActorSheet {
           ${modifierRows.length ? `<div class="tce-modifiers">${modifierRows.join("")}</div>` : ""}
           ${tagsHtml ? `<div class="tce-tags">${tagsHtml}</div>` : ""}
         </div>
-        <div class="tc-link-dir-group">${linkButtonsHtml}</div>
       </div>
 
       <div class="tc-gold-divider-skill"></div>

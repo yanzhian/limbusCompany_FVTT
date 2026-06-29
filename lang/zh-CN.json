@@ -155,11 +155,9 @@
       "Equipment": {
         "Subtype":      "子类型",
         "Category":     "分类",
-        "Links":        "链接方向",
         "StellarCost":  "星芒费用",
         "Tags":         "标签",
         "Effect":       "效果描述",
-        "RequiresLink": "需要相互链接",
         "AtkAdj":       "攻击等级修正",
         "DefAdj":       "防御等级修正",
         "SpeedAdj":     "速度修正",
