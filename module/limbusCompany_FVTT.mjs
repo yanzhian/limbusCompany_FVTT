@@ -17,6 +17,7 @@ import {
   ConsumableData,
   MaterialData,
   ContainerData,
+  SkillBookData,
 } from "./documents/item.mjs";
 import { LimbusActorSheet }   from "./sheets/actor-sheet.mjs";
 import { LimbusItemSheet }    from "./sheets/item-sheet.mjs";
@@ -120,6 +121,7 @@ Hooks.once("init", () => {
     consumable: ConsumableData,
     material:   MaterialData,
     container:  ContainerData,
+    skillbook:  SkillBookData,
   };
 
   // ── 注册 Actor Sheet ───────────────────────────────────────────────────
@@ -682,6 +684,7 @@ async function _preloadTemplates() {
     "systems/limbusCompany_FVTT/templates/item/skill-sheet.hbs",
     "systems/limbusCompany_FVTT/templates/item/consumable-sheet.hbs",
     "systems/limbusCompany_FVTT/templates/item/container-sheet.hbs",
+    "systems/limbusCompany_FVTT/templates/item/skillbook-sheet.hbs",
     // Combat
     "systems/limbusCompany_FVTT/templates/combat/combat-hud.hbs",
     // Partials

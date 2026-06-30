@@ -12,7 +12,8 @@
       "skill":     "技能",
       "consumable":"消耗品",
       "material":  "材料",
-      "container": "容器"
+      "container": "容器",
+      "skillbook": "技能书"
     },
 
     "Sin": {
@@ -245,7 +246,8 @@
       "skill":     { "label": "技能",  "plural": "技能" },
       "consumable":{ "label": "消耗品","plural": "消耗品" },
       "material":  { "label": "材料",  "plural": "材料" },
-      "container": { "label": "容器",  "plural": "容器" }
+      "container": { "label": "容器",  "plural": "容器" },
+      "skillbook": { "label": "技能书","plural": "技能书" }
     }
   }
 }

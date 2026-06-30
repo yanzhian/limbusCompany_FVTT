@@ -12,6 +12,7 @@
  */
 
 import { ClashManager } from "../helpers/clash.mjs";
+import { SKILLBOOK_MAX_SLOTS } from "../documents/item.mjs";
 
 export class LimbusItemSheet extends ItemSheet {
 
@@ -34,6 +35,7 @@ export class LimbusItemSheet extends ItemSheet {
       consumable: "consumable-sheet",
       material:   "consumable-sheet",   // 共用一套模板
       container:  "container-sheet",
+      skillbook:  "skillbook-sheet",
     };
     const name = typeMap[this.item.type] ?? "equipment-sheet";
     return `systems/limbusCompany_FVTT/templates/item/${name}.hbs`;
@@ -168,6 +170,13 @@ export class LimbusItemSheet extends ItemSheet {
       context.containerAvail = allCells.filter(c => !c.occupied && !c.locked).length;
     }
 
+    // ── 技能书专用数据 ──────────────────────────────────────────────────────
+    if (item.type === "skillbook") {
+      context.skillSlots = await this._buildSkillBookSlots(sys.skills ?? []);
+      context.skillBookMax  = SKILLBOOK_MAX_SLOTS;
+      context.skillBookUsed = (sys.skills ?? []).length;
+    }
+
     // ── Activity 触发时机 & 效果类型选项 ─────────────────────────────────
     context.activityTriggers = cfg.ACTIVITY_TRIGGERS ?? [];
     context.activityEffects  = _activityEffectLabels();
@@ -228,6 +237,33 @@ export class LimbusItemSheet extends ItemSheet {
       }
     }
     return { placedItems, allCells };
+  }
+
+  /* ─── 技能书：解析存放的技能 ─────────────────────────────────────────────── */
+
+  /**
+   * 将 skillbook.system.skills 引用列表解析为模板所需数据。
+   * @returns {Promise<Array>}
+   */
+  async _buildSkillBookSlots(entries) {
+    const slots = [];
+    for (let idx = 0; idx < entries.length; idx++) {
+      const entry = entries[idx];
+      let item = null;
+      if (entry?.uuid) {
+        item = await fromUuid(entry.uuid).catch(() => null);
+      } else if (entry?.itemData) {
+        item = { id: null, name: entry.itemData.name ?? "未知技能", img: entry.itemData.img ?? "icons/svg/book.svg", system: entry.itemData.system ?? {} };
+      }
+      if (!item) continue;
+      const cfg = CONFIG.LIMBUSCOMPANY;
+      slots.push({
+        idx, uuid: entry.uuid ?? "",
+        item: { _id: item.id, name: item.name, img: item.img },
+        sinColor: cfg?.SIN_COLORS?.[item.system?.sinType] ?? "#5F3E21",
+      });
+    }
+    return slots;
   }
 
   /**
@@ -366,6 +402,15 @@ export class LimbusItemSheet extends ItemSheet {
     if (!this.isLocked && this.item.type === "container") {
       html.find(".cg-wrap").addClass("cg-edit-unlocked");
     }
+
+    // ── 技能书 ───────────────────────────────────────────────────────────
+    html.find(".skillbook-dropzone").on("dragover",  this._onSkillBookDragOver.bind(this));
+    html.find(".skillbook-dropzone").on("dragleave", this._onSkillBookDragLeave.bind(this));
+    html.find(".skillbook-dropzone").on("drop",      this._onSkillBookDrop.bind(this));
+    html.find(".skillbook-slot").on("contextmenu",   this._onSkillBookSlotMenu.bind(this));
+    html.find(".skillbook-slot").on("mouseenter",    this._onCgTileHover.bind(this));
+    html.find(".skillbook-slot").on("mouseleave",    this._onCgTileHoverEnd.bind(this));
+    html.find(".skillbook-learn-btn").on("click",    this._onSkillBookLearn.bind(this));
   }
 
 
@@ -971,6 +1016,136 @@ export class LimbusItemSheet extends ItemSheet {
     if (storedItemData) entry.itemData = storedItemData;
     contents.push(entry);
     await this.item.update({ "system.contents": contents });
+  }
+
+  /* ─── 技能书：拖入高亮 ──────────────────────────────────────────────────── */
+
+  _onSkillBookDragOver(event) {
+    event.preventDefault();
+    event.originalEvent.dataTransfer.dropEffect = "move";
+    $(event.currentTarget).addClass("cg-drag-over");
+  }
+
+  _onSkillBookDragLeave(event) {
+    $(event.currentTarget).removeClass("cg-drag-over");
+  }
+
+  /* ─── 技能书：放置（仅接受 skill 类型物品，上限 16） ────────────────────── */
+
+  async _onSkillBookDrop(event) {
+    event.preventDefault();
+    $(event.currentTarget).removeClass("cg-drag-over");
+
+    const sys     = this.item.system;
+    const skills  = foundry.utils.deepClone(sys.skills ?? []);
+    if (skills.length >= SKILLBOOK_MAX_SLOTS) {
+      return void ui.notifications.warn(`技能书已满（最多 ${SKILLBOOK_MAX_SLOTS} 个技能）`);
+    }
+
+    let raw;
+    try { raw = JSON.parse(event.originalEvent.dataTransfer.getData("text/plain")); }
+    catch { return; }
+    if (raw.type !== "Item") return;
+
+    const dropped = await Item.fromDropData(raw).catch(() => null);
+    const droppedType = dropped?.type ?? raw.itemData?.type;
+    if (droppedType !== "skill") {
+      return void ui.notifications.warn("技能书只能存放技能类型的物品。");
+    }
+
+    const bookActor   = this.item.parent;
+    const sourceActor = dropped?.parent ?? null;
+
+    // 同一角色背包内的技能：仅存引用，不复制不删除
+    if (dropped && bookActor && sourceActor && sourceActor.id === bookActor.id) {
+      if (skills.some(s => s.uuid === dropped.uuid)) return void ui.notifications.warn("该技能已在技能书中。");
+      skills.push({ uuid: dropped.uuid, itemData: null });
+      return void await this.item.update({ "system.skills": skills });
+    }
+
+    // 跨角色拖入：在技能书所属角色处创建嵌入副本，并删除源技能
+    if (dropped && bookActor && sourceActor && sourceActor.id !== bookActor.id) {
+      const itemData = dropped.toObject();
+      const [newItem] = await bookActor.createEmbeddedDocuments("Item", [itemData]);
+      skills.push({ uuid: newItem.uuid, itemData: null });
+      await dropped.delete();
+      return void await this.item.update({ "system.skills": skills });
+    }
+
+    // 技能书为世界金库物品（无所属角色）：保留完整数据快照
+    if (dropped && !bookActor) {
+      const itemData = dropped.toObject();
+      skills.push({ uuid: "", itemData });
+      if (sourceActor) await dropped.delete();
+      return void await this.item.update({ "system.skills": skills });
+    }
+
+    // 直接来自世界金库的拖放数据（无法解析为 Document，仅有 itemData）
+    if (!dropped && raw.itemData) {
+      skills.push({ uuid: "", itemData: raw.itemData });
+      return void await this.item.update({ "system.skills": skills });
+    }
+  }
+
+  /* ─── 技能书：右键菜单（移除引用，不删除原技能） ─────────────────────────── */
+
+  async _onSkillBookSlotMenu(event) {
+    event.preventDefault();
+    const slot  = $(event.currentTarget);
+    const idx   = parseInt(slot.data("idx") ?? -1);
+    const iname = slot.data("item-name") ?? "";
+    if (idx < 0) return;
+
+    $(".cg-ctx-menu").remove();
+    const menu = $(`<ul class="cg-ctx-menu">
+      <li data-action="edit"><i class="fas fa-edit"></i> 编辑 / 查看</li>
+      <li class="cg-ctx-sep"></li>
+      <li data-action="remove" class="cg-ctx-danger"><i class="fas fa-times"></i> 从技能书移除</li>
+    </ul>`).css({ top: event.clientY, left: event.clientX });
+    $("body").append(menu);
+
+    const close = () => { menu.remove(); $(document).off("click.skbctx"); };
+    setTimeout(() => $(document).on("click.skbctx", close), 10);
+
+    menu.on("click", "li[data-action]", async e => {
+      e.stopPropagation();
+      const action = $(e.currentTarget).data("action");
+      close();
+
+      const skills = foundry.utils.deepClone(this.item.system.skills ?? []);
+      const entry  = skills[idx];
+      if (!entry) return;
+
+      if (action === "edit") {
+        if (entry.uuid) {
+          const itm = await fromUuid(entry.uuid).catch(() => null);
+          itm?.sheet?.render(true);
+        } else if (entry.itemData) {
+          const tempData = foundry.utils.deepClone(entry.itemData);
+          delete tempData._id;
+          const tempItem = await Item.create(tempData, { temporary: true });
+          tempItem?.sheet?.render(true);
+        }
+      } else if (action === "remove") {
+        skills.splice(idx, 1);
+        await this.item.update({ "system.skills": skills });
+        ui.notifications.info(`已从技能书移除「${iname}」（技能本身未删除）`);
+      }
+    });
+  }
+
+  /* ─── 技能书：学习全部技能 ──────────────────────────────────────────────── */
+
+  async _onSkillBookLearn(event) {
+    if (!this.item.actor) {
+      return void ui.notifications.warn("请将技能书放入角色背包后再学习。");
+    }
+    const confirmed = await Dialog.confirm({
+      title: "学习技能",
+      content: `<p>确定学习技能书「${this.item.name}」中的全部技能？技能书将被消耗。</p>`,
+    });
+    if (!confirmed) return;
+    await this.item.learnAllSkills();
   }
 
   /* ─── 物品格：开始拖拽（内部重定位）────────────────────────────────────── */

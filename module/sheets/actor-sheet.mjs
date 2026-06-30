@@ -294,7 +294,7 @@ export class LimbusActorSheet extends ActorSheet {
   _calcInventoryCapacity() {
     const inContainer  = this._getItemsInContainers();
     let total = 0;
-    const nonSkillTypes = ["equipment", "consumable", "material", "container"];
+    const nonSkillTypes = ["equipment", "consumable", "material", "container", "skillbook"];
     for (const item of this.actor.items) {
       if (!nonSkillTypes.includes(item.type)) continue;
       if (inContainer.has(item.uuid)) continue; // 容器内物品不占背包容量
@@ -314,10 +314,11 @@ export class LimbusActorSheet extends ActorSheet {
       consumable:"消耗品",
       material:  "材料",
       container: "容器",
+      skillbook: "技能书",
     };
 
     const groups = {};
-    const nonSkillTypes  = ["equipment", "consumable", "material", "container"];
+    const nonSkillTypes  = ["equipment", "consumable", "material", "container", "skillbook"];
     const inContainer    = this._getItemsInContainers();
 
     for (const item of this.actor.items) {
@@ -333,7 +334,7 @@ export class LimbusActorSheet extends ActorSheet {
     }
 
     // Sort by predefined order
-    const order = [...subtypeOrder, "consumable", "material", "container"];
+    const order = [...subtypeOrder, "consumable", "material", "container", "skillbook"];
     return order
       .filter(k => groups[k])
       .map(k => groups[k]);
