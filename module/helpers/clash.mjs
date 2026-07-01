@@ -458,10 +458,13 @@ export class ClashManager {
         for (const effTgt of effTgts) {
 
         // BUFF 型效果用 intensity/stacks；数值型效果用 value
-        // 若存在【每】消耗，stacks 按消耗层数等比放大
+        // 若存在【每】前置条件/消耗，stacks 和 数值型 val 均乘以倍数
         const intensity = Number(eff.intensity ?? eff.value ?? 1);
         const stacks    = Number(eff.stacks    ?? 1) * perStackMultiplier;
         const buffType  = eff.buff === "custom" ? (eff.buffCustom || "custom") : (eff.buff || "");
+        // 数值型效果（非BUFF）的 perN 倍数：绝对值模式不放大，相对值模式放大
+        const _scaleVal = (rawVal, mode) =>
+          (mode === "absolute" || perStackMultiplier === 1) ? rawVal : rawVal * perStackMultiplier;
 
         let descStr = "";
         switch (eff.type) {
@@ -483,7 +486,8 @@ export class ClashManager {
             descStr = `移除【${effTgt.name}】的 ${buffType}`;
             break;
           case "hpAdj": {
-            const { mode, value: val } = await ClashManager._evalSignedValue(eff.value, eff.intensity);
+            const { mode, value: rawVal } = await ClashManager._evalSignedValue(eff.value, eff.intensity);
+            const val = _scaleVal(rawVal, mode);
             const cur = effTgt.system?.hp?.value ?? 0;
             const max = effTgt.system?.hp?.max   ?? 1;
             const nv  = mode === "absolute"
@@ -496,7 +500,8 @@ export class ClashManager {
             break;
           }
           case "sanityAdj": {
-            const { mode, value: val } = await ClashManager._evalSignedValue(eff.value, eff.intensity);
+            const { mode, value: rawVal } = await ClashManager._evalSignedValue(eff.value, eff.intensity);
+            const val    = _scaleVal(rawVal, mode);
             const cur    = effTgt.system?.sanity?.value ?? 50;
             const target = mode === "absolute" ? val : cur + val;
             if (typeof effTgt.setSanity === "function") {
@@ -510,21 +515,22 @@ export class ClashManager {
             break;
           }
           case "atkAdj": {
-            const val = Number(eff.value ?? eff.intensity ?? 0);
+            const val = Number(eff.value ?? eff.intensity ?? 0) * perStackMultiplier;
             const cur = effTgt.system?.atk?.extra ?? 0;
             await effTgt.update({ "system.atk.extra": cur + val });
             descStr = `【${effTgt.name}】攻击等级 ${val >= 0 ? "+" : ""}${val}`;
             break;
           }
           case "defAdj": {
-            const val = Number(eff.value ?? eff.intensity ?? 0);
+            const val = Number(eff.value ?? eff.intensity ?? 0) * perStackMultiplier;
             const cur = effTgt.system?.def?.extra ?? 0;
             await effTgt.update({ "system.def.extra": cur + val });
             descStr = `【${effTgt.name}】防御等级 ${val >= 0 ? "+" : ""}${val}`;
             break;
           }
           case "apAdj": {
-            const { mode, value: val } = await ClashManager._evalSignedValue(eff.value, eff.intensity);
+            const { mode, value: rawVal } = await ClashManager._evalSignedValue(eff.value, eff.intensity);
+            const val = _scaleVal(rawVal, mode);
             const cur = effTgt.system?.ap?.value ?? 0;
             const max = effTgt.system?.ap?.max   ?? 3;
             const nv  = mode === "absolute"
@@ -537,7 +543,8 @@ export class ClashManager {
             break;
           }
           case "weightAdj": {
-            const { mode, value: val } = await ClashManager._evalSignedValue(eff.value, eff.intensity);
+            const { mode, value: rawVal } = await ClashManager._evalSignedValue(eff.value, eff.intensity);
+            const val = _scaleVal(rawVal, mode);
             const cur = item.system?.weight ?? 0;
             const nv  = mode === "absolute" ? Math.max(0, val) : Math.max(0, cur + val);
             await item.update({ "system.weight": nv });
@@ -548,7 +555,8 @@ export class ClashManager {
           }
           case "diceAdj": {
             // 骰数：累加或赋值骰子数量，下限 1
-            const { mode, value: val } = await ClashManager._evalSignedValue(eff.value, eff.intensity);
+            const { mode, value: rawVal } = await ClashManager._evalSignedValue(eff.value, eff.intensity);
+            const val = _scaleVal(rawVal, mode);
             const cur = item.system?.diceCount ?? 1;
             const nv  = mode === "absolute" ? Math.max(1, val) : Math.max(1, cur + val);
             await item.update({ "system.diceCount": nv });
@@ -559,7 +567,8 @@ export class ClashManager {
           }
           case "diceFacesAdj": {
             // 面数：累加或赋值骰子面数，下限 2
-            const { mode, value: val } = await ClashManager._evalSignedValue(eff.value, eff.intensity);
+            const { mode, value: rawVal } = await ClashManager._evalSignedValue(eff.value, eff.intensity);
+            const val = _scaleVal(rawVal, mode);
             const cur = item.system?.diceFaces ?? 4;
             const nv  = mode === "absolute" ? Math.max(2, val) : Math.max(2, cur + val);
             await item.update({ "system.diceFaces": nv });
@@ -570,7 +579,8 @@ export class ClashManager {
           }
           case "baseValue": {
             // 基础值：累加或赋值固定加值，允许负数
-            const { mode, value: val } = await ClashManager._evalSignedValue(eff.value, eff.intensity);
+            const { mode, value: rawVal } = await ClashManager._evalSignedValue(eff.value, eff.intensity);
+            const val = _scaleVal(rawVal, mode);
             const cur = item.system?.baseValue ?? 0;
             const nv  = mode === "absolute" ? val : cur + val;
             await item.update({ "system.baseValue": nv });
