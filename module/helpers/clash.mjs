@@ -614,20 +614,23 @@ export class ClashManager {
             break;
           }
           case "randomBuff": {
-            // 从 buffPool 中随机选取 1 个 BUFF 添加
+            // 从 buffPool 中随机选取 1 个 BUFF 添加（每项有独立 intensity/stacks）
             const pool = eff.buffPool ?? [];
             if (!pool.length) { descStr = "随机BUFF：未配置BUFF池"; break; }
             const chosen = pool[Math.floor(Math.random() * pool.length)];
-            const round  = eff.round ?? "本回合";
+            const chosenBuff = chosen.buff ?? "";
+            const chosenInt  = chosen.intensity ?? 1;
+            const chosenStk  = chosen.stacks ?? 1;
+            const round = eff.round ?? "本回合";
             if (round === "本回合和下回合") {
-              await ClashManager._addBuff(effTgt, chosen, intensity, stacks, "本回合");
-              await ClashManager._addBuff(effTgt, chosen, intensity, stacks, "下回合");
+              await ClashManager._addBuff(effTgt, chosenBuff, chosenInt, chosenStk, "本回合");
+              await ClashManager._addBuff(effTgt, chosenBuff, chosenInt, chosenStk, "下回合");
             } else {
-              await ClashManager._addBuff(effTgt, chosen, intensity, stacks, round);
+              await ClashManager._addBuff(effTgt, chosenBuff, chosenInt, chosenStk, round);
             }
-            const poolLabels = pool.map(k => ClashManager._buffLabel(k)).join("、");
+            const poolLabels = pool.map(e => ClashManager._buffLabel(e.buff ?? "")).join("、");
             const roundLabel = round === "本回合" ? "" : `（${round}）`;
-            descStr = `为【${effTgt.name}】随机添加 ${stacks} 层【${ClashManager._buffLabel(chosen)}】${roundLabel}（随机池：${poolLabels}）`;
+            descStr = `为【${effTgt.name}】随机添加 ${chosenStk} 层【${ClashManager._buffLabel(chosenBuff)}】${roundLabel}（随机池：${poolLabels}）`;
             break;
           }
           case "triggerBuff": {
@@ -831,8 +834,8 @@ export class ClashManager {
       return `触发${tgt} ${eff.trigStacks ?? 1} 层 ${bn}`;
     }
     if (t === "randomBuff") {
-      const pool = (eff.buffPool ?? []).map(k => ClashManager._buffLabel(k)).join("、");
-      return `为${tgt}随机添加 ${eff.stacks ?? 1} 层BUFF（${pool || "未配置"}）`;
+      const pool = (eff.buffPool ?? []).map(e => ClashManager._buffLabel(e.buff ?? "")).join("、");
+      return `为${tgt}随机添加BUFF（${pool || "未配置"}）`;
     }
     return "";
   }

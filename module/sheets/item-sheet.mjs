@@ -1714,7 +1714,6 @@ function _buildEffectRow(eff, idx, cfg) {
   const roundOpts  = _ROUND_OPTIONS
     .map(v => `<option value="${v}" ${roundVal === v ? "selected" : ""}>${v}</option>`).join("");
   const formulaVal = _esc(eff?.value ?? "");
-  const poolChecks = isRandomBuff ? _buildBuffPoolCheckboxes(eff?.buffPool ?? [], cfg) : "";
   const isValSec   = !isBuff && !isTriggerBuff && !isRandomBuff;
   return `
     <div class="ae-row ae-eff-row">
@@ -1761,40 +1760,28 @@ function _buildEffectRow(eff, idx, cfg) {
         <span class="ae-eff-random-sec" ${isRandomBuff ? "" : 'style="display:none"'}>
           <label>回合</label>
           <select class="ae-sel eff-random-round">${roundOpts}</select>
-          <label>强度</label>
-          <input class="ae-input-sm eff-random-intensity" type="number" value="${eff?.intensity ?? 1}" min="0">
-          <label>层数</label>
-          <input class="ae-input-sm eff-random-stacks" type="number" value="${eff?.stacks ?? 1}" min="1">
-          <div class="ae-pool-header">随机池（三选一）：</div>
-          <div class="ae-pool-container">${poolChecks}</div>
+          <div class="ae-pool-list">
+            ${(eff?.buffPool ?? [{ buff: "", intensity: 1, stacks: 1 }])
+              .map(entry => _buildBuffPoolRow(entry, cfg)).join("")}
+          </div>
+          <button type="button" class="ae-add-pool-buff ae-add-btn">＋ 添加BUFF</button>
         </span>
       </div>
     </div>`;
 }
 
-/** 随机BUFF池复选框 */
-function _buildBuffPoolCheckboxes(pool, cfg) {
-  const labels = _buffLabelMap();
-  const groups = cfg.BUFF_GROUPS ?? {};
-  const sections = [
-    { label: "增益", keys: groups.positive ?? [] },
-    { label: "减益", keys: groups.negative ?? [] },
-    { label: "特殊", keys: groups.special  ?? [] },
-    { label: "其他", keys: groups.other    ?? [] },
-  ];
-  return sections.map(sec => sec.keys.length === 0 ? "" : `
-    <div class="ae-pool-group">
-      <span class="ae-pool-group-label">${sec.label}</span>
-      <div class="ae-pool-checks">
-        ${sec.keys.map(k => `
-          <label class="ae-pool-check-label">
-            <input type="checkbox" class="ae-pool-check" value="${k}" ${pool.includes(k) ? "checked" : ""}>
-            ${labels[k] ?? k}
-          </label>
-        `).join("")}
-      </div>
-    </div>`
-  ).join("");
+/** 随机BUFF池单行：下拉 + 强度 + 层数 + 删除 */
+function _buildBuffPoolRow(entry, cfg) {
+  const buffOpts = _buildBuffGroupOptions(cfg, entry?.buff);
+  return `
+    <div class="ae-pool-row">
+      <select class="ae-sel ae-pool-buff-sel">${buffOpts}</select>
+      <label>强度</label>
+      <input class="ae-input-sm ae-pool-intensity" type="number" value="${entry?.intensity ?? 1}" min="0">
+      <label>层数</label>
+      <input class="ae-input-sm ae-pool-stacks" type="number" value="${entry?.stacks ?? 1}" min="1">
+      <button type="button" class="ae-del-btn ae-del-pool-buff">×</button>
+    </div>`;
 }
 
 /** 设置 Dialog 动态交互事件 */
@@ -1822,6 +1809,11 @@ function _setupAeDialog(html, cfg) {
     list.append(_buildEffectRow({}, idx, cfg));
     _bindDel(html);
     _bindEffType(html);
+  });
+  html.on("click", ".ae-add-pool-buff", function () {
+    const sec = $(this).closest(".ae-eff-random-sec");
+    sec.find(".ae-pool-list").append(_buildBuffPoolRow({}, cfg));
+    _bindDel(html);
   });
   html.find(".ae-toggle-limit").on("click", () => {
     html.find(".ae-limit-body").toggle();
@@ -1873,6 +1865,9 @@ function _bindDel(html) {
   html.find(".ae-del-effect").off("click").on("click", function () {
     $(this).closest(".ae-eff-row").remove();
     html.find(".ae-eff-row .ae-row-num").each((i, el) => $(el).text(`效果 ${i + 1}`));
+  });
+  html.find(".ae-del-pool-buff").off("click").on("click", function () {
+    $(this).closest(".ae-pool-row").remove();
   });
 }
 
@@ -1955,17 +1950,24 @@ function _readActivityForm(html, original) {
     const isRandomBuff  = type === "randomBuff";
     const isTriggerBuff = type === "triggerBuff";
     if (isRandomBuff) {
-      const buffPool = $r.find(".ae-pool-check:checked").map((_, cb) => $(cb).val()).get();
+      const buffPool = [];
+      $r.find(".ae-pool-row").each((_, pr) => {
+        const $pr = $(pr);
+        buffPool.push({
+          buff:      $pr.find(".ae-pool-buff-sel").val() || "",
+          intensity: parseInt($pr.find(".ae-pool-intensity").val()) || 1,
+          stacks:    parseInt($pr.find(".ae-pool-stacks").val())    || 1,
+        });
+      });
       effects.push({
         type,
-        target:    $r.find(".eff-target").val() || "self",
-        round:     $r.find(".eff-random-round").val() || "本回合",
+        target: $r.find(".eff-target").val() || "self",
+        round:  $r.find(".eff-random-round").val() || "本回合",
         buffPool,
-        intensity: parseInt($r.find(".eff-random-intensity").val()) || 1,
-        stacks:    parseInt($r.find(".eff-random-stacks").val())    || 1,
-        buff: "", buffCustom: "", value: "", trigBuff: "", trigBuffCustom: "", trigStacks: 0,
+        buff: "", buffCustom: "", intensity: 0, stacks: 0,
+        value: "", trigBuff: "", trigBuffCustom: "", trigStacks: 0,
       });
-      return; // continue each()
+      return;
     }
     const buffVal       = isBuff ? ($r.find(".eff-buff").val() || "") : "";
     const buffCustom    = (buffVal === "custom") ? ($r.find(".eff-buff-custom").val()?.trim() || "") : "";
