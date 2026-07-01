@@ -613,6 +613,23 @@ export class ClashManager {
               : `【${effTgt.name}】震颤引爆未触发（震颤层数不足）`;
             break;
           }
+          case "randomBuff": {
+            // 从 buffPool 中随机选取 1 个 BUFF 添加
+            const pool = eff.buffPool ?? [];
+            if (!pool.length) { descStr = "随机BUFF：未配置BUFF池"; break; }
+            const chosen = pool[Math.floor(Math.random() * pool.length)];
+            const round  = eff.round ?? "本回合";
+            if (round === "本回合和下回合") {
+              await ClashManager._addBuff(effTgt, chosen, intensity, stacks, "本回合");
+              await ClashManager._addBuff(effTgt, chosen, intensity, stacks, "下回合");
+            } else {
+              await ClashManager._addBuff(effTgt, chosen, intensity, stacks, round);
+            }
+            const poolLabels = pool.map(k => ClashManager._buffLabel(k)).join("、");
+            const roundLabel = round === "本回合" ? "" : `（${round}）`;
+            descStr = `为【${effTgt.name}】随机添加 ${stacks} 层【${ClashManager._buffLabel(chosen)}】${roundLabel}（随机池：${poolLabels}）`;
+            break;
+          }
           case "triggerBuff": {
             // 触发目标/自身身上 N 层指定BUFF：消耗层数，并立即造成对应伤害
             // 震颤不参与此效果（使用 seismicBlast）
@@ -812,6 +829,10 @@ export class ClashManager {
     if (t === "triggerBuff") {
       const bn = eff.trigBuff === "custom" ? (eff.trigBuffCustom || "自定义") : ClashManager._buffLabel(eff.trigBuff ?? "");
       return `触发${tgt} ${eff.trigStacks ?? 1} 层 ${bn}`;
+    }
+    if (t === "randomBuff") {
+      const pool = (eff.buffPool ?? []).map(k => ClashManager._buffLabel(k)).join("、");
+      return `为${tgt}随机添加 ${eff.stacks ?? 1} 层BUFF（${pool || "未配置"}）`;
     }
     return "";
   }
