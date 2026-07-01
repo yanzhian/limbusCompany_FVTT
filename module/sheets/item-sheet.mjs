@@ -1783,7 +1783,7 @@ function _buildBuffPoolRow(entry, cfg) {
       <input class="ae-input ae-pool-buff-custom" type="text" placeholder="自定BUFF名称"
              value="${customVal}" style="display:${isCustom ? "inline-block" : "none"};width:80px;">
       <label>强度</label>
-      <input class="ae-input-sm ae-pool-intensity" type="number" value="${entry?.intensity ?? 1}" min="0">
+      <input class="ae-input-sm ae-pool-intensity" type="number" value="${entry?.intensity ?? 0}" min="0">
       <label>层数</label>
       <input class="ae-input-sm ae-pool-stacks" type="number" value="${entry?.stacks ?? 1}" min="1">
       <button type="button" class="ae-del-btn ae-del-pool-buff">×</button>
