@@ -1582,11 +1582,15 @@ export class ClashManager {
     // 反击/防御：不走拼点流程，直接结算
     if (defCategory === "counter") {
       await ClashManager._resolveDirectCounter(atkActor, defActor, effectiveInitFlags, defItem, defRoll, defFormula);
+      await ClashManager._applyActivities(atkItem, "攻击后", atkCtx);
+      await ClashManager._applyActivities(defItem,  "攻击后", defCtx);
       await ClashManager._flushActMsgs(_actMsgs, atkActor);
       return;
     }
     if (defCategory === "block") {
       await ClashManager._resolveDirectBlock(atkActor, defActor, effectiveInitFlags, defItem, defRoll, defFormula);
+      await ClashManager._applyActivities(atkItem, "攻击后", atkCtx);
+      await ClashManager._applyActivities(defItem,  "攻击后", defCtx);
       await ClashManager._flushActMsgs(_actMsgs, atkActor);
       return;
     }
