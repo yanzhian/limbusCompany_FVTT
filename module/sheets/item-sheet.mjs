@@ -1774,10 +1774,14 @@ function _buildEffectRow(eff, idx, cfg) {
 
 /** 随机BUFF池单行：下拉 + 强度 + 层数 + 删除 */
 function _buildBuffPoolRow(entry, cfg) {
-  const buffOpts = _buildBuffGroupOptions(cfg, entry?.buff);
+  const buffOpts   = _buildBuffGroupOptions(cfg, entry?.buff);
+  const isCustom   = (entry?.buff ?? "") === "custom";
+  const customVal  = _esc(entry?.buffCustom ?? "");
   return `
     <div class="ae-pool-row">
       <select class="ae-sel ae-pool-buff-sel">${buffOpts}</select>
+      <input class="ae-input ae-pool-buff-custom" type="text" placeholder="自定BUFF名称"
+             value="${customVal}" style="display:${isCustom ? "inline-block" : "none"};width:80px;">
       <label>强度</label>
       <input class="ae-input-sm ae-pool-intensity" type="number" value="${entry?.intensity ?? 1}" min="0">
       <label>层数</label>
@@ -1816,6 +1820,10 @@ function _setupAeDialog(html, cfg) {
     const sec = $(this).closest(".ae-eff-random-sec");
     sec.find(".ae-pool-list").append(_buildBuffPoolRow({}, cfg));
     _bindDel(html);
+  });
+  html.on("change", ".ae-pool-buff-sel", function () {
+    $(this).closest(".ae-pool-row").find(".ae-pool-buff-custom")
+      .toggle($(this).val() === "custom");
   });
   html.find(".ae-toggle-limit").on("click", () => {
     html.find(".ae-limit-body").toggle();
@@ -1954,11 +1962,15 @@ function _readActivityForm(html, original) {
     if (isRandomBuff) {
       const buffPool = [];
       $r.find(".ae-pool-row").each((_, pr) => {
-        const $pr = $(pr);
+        const $pr      = $(pr);
+        const buffVal  = $pr.find(".ae-pool-buff-sel").val() || "";
+        const buffCustom = buffVal === "custom"
+          ? ($pr.find(".ae-pool-buff-custom").val()?.trim() || "") : "";
         buffPool.push({
-          buff:      $pr.find(".ae-pool-buff-sel").val() || "",
-          intensity: parseInt($pr.find(".ae-pool-intensity").val()) || 1,
-          stacks:    parseInt($pr.find(".ae-pool-stacks").val())    || 1,
+          buff:       buffVal,
+          buffCustom,
+          intensity:  parseInt($pr.find(".ae-pool-intensity").val()) || 1,
+          stacks:     parseInt($pr.find(".ae-pool-stacks").val())    || 1,
         });
       });
       effects.push({

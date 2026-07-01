@@ -638,7 +638,7 @@ export class ClashManager {
             const round  = eff.round ?? "本回合";
             const appliedLabels = [];
             for (const entry of chosen) {
-              const b = entry.buff ?? "";
+              const b = entry.buff === "custom" ? (entry.buffCustom?.trim() || "custom") : (entry.buff ?? "");
               const n = entry.intensity ?? 1;
               const s = entry.stacks ?? 1;
               if (round === "本回合和下回合") {
