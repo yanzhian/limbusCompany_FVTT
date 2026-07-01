@@ -1760,6 +1760,8 @@ function _buildEffectRow(eff, idx, cfg) {
         <span class="ae-eff-random-sec" ${isRandomBuff ? "" : 'style="display:none"'}>
           <label>回合</label>
           <select class="ae-sel eff-random-round">${roundOpts}</select>
+          <label>随机抽取</label>
+          <input class="ae-input-sm eff-random-count" type="number" value="${eff?.count ?? 1}" min="1" title="从随机池中抽取几个BUFF">
           <div class="ae-pool-list">
             ${(eff?.buffPool ?? [{ buff: "", intensity: 1, stacks: 1 }])
               .map(entry => _buildBuffPoolRow(entry, cfg)).join("")}
@@ -1963,6 +1965,7 @@ function _readActivityForm(html, original) {
         type,
         target: $r.find(".eff-target").val() || "self",
         round:  $r.find(".eff-random-round").val() || "本回合",
+        count:  Math.max(1, parseInt($r.find(".eff-random-count").val()) || 1),
         buffPool,
         buff: "", buffCustom: "", intensity: 0, stacks: 0,
         value: "", trigBuff: "", trigBuffCustom: "", trigStacks: 0,

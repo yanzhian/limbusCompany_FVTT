@@ -614,23 +614,33 @@ export class ClashManager {
             break;
           }
           case "randomBuff": {
-            // 从 buffPool 中随机选取 1 个 BUFF 添加（每项有独立 intensity/stacks）
-            const pool = eff.buffPool ?? [];
+            // 从 buffPool 中随机不重复抽取 count 个 BUFF 添加（每项有独立 intensity/stacks）
+            const pool  = eff.buffPool ?? [];
             if (!pool.length) { descStr = "随机BUFF：未配置BUFF池"; break; }
-            const chosen = pool[Math.floor(Math.random() * pool.length)];
-            const chosenBuff = chosen.buff ?? "";
-            const chosenInt  = chosen.intensity ?? 1;
-            const chosenStk  = chosen.stacks ?? 1;
-            const round = eff.round ?? "本回合";
-            if (round === "本回合和下回合") {
-              await ClashManager._addBuff(effTgt, chosenBuff, chosenInt, chosenStk, "本回合");
-              await ClashManager._addBuff(effTgt, chosenBuff, chosenInt, chosenStk, "下回合");
-            } else {
-              await ClashManager._addBuff(effTgt, chosenBuff, chosenInt, chosenStk, round);
+            const count = Math.min(Math.max(1, Math.round(Number(eff.count ?? 1))), pool.length);
+            // Fisher-Yates 部分洗牌取前 count 项
+            const shuffled = pool.slice();
+            for (let i = 0; i < count; i++) {
+              const j = i + Math.floor(Math.random() * (shuffled.length - i));
+              [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
             }
-            const poolLabels = pool.map(e => ClashManager._buffLabel(e.buff ?? "")).join("、");
+            const chosen = shuffled.slice(0, count);
+            const round  = eff.round ?? "本回合";
+            const appliedLabels = [];
+            for (const entry of chosen) {
+              const b = entry.buff ?? "";
+              const n = entry.intensity ?? 1;
+              const s = entry.stacks ?? 1;
+              if (round === "本回合和下回合") {
+                await ClashManager._addBuff(effTgt, b, n, s, "本回合");
+                await ClashManager._addBuff(effTgt, b, n, s, "下回合");
+              } else {
+                await ClashManager._addBuff(effTgt, b, n, s, round);
+              }
+              appliedLabels.push(`【${ClashManager._buffLabel(b)}】×${s}`);
+            }
             const roundLabel = round === "本回合" ? "" : `（${round}）`;
-            descStr = `为【${effTgt.name}】随机添加 ${chosenStk} 层【${ClashManager._buffLabel(chosenBuff)}】${roundLabel}（随机池：${poolLabels}）`;
+            descStr = `为【${effTgt.name}】随机添加 ${appliedLabels.join("、")}${roundLabel}`;
             break;
           }
           case "triggerBuff": {
@@ -834,8 +844,9 @@ export class ClashManager {
       return `触发${tgt} ${eff.trigStacks ?? 1} 层 ${bn}`;
     }
     if (t === "randomBuff") {
-      const pool = (eff.buffPool ?? []).map(e => ClashManager._buffLabel(e.buff ?? "")).join("、");
-      return `为${tgt}随机添加BUFF（${pool || "未配置"}）`;
+      const pool  = (eff.buffPool ?? []).map(e => ClashManager._buffLabel(e.buff ?? "")).join("、");
+      const count = eff.count ?? 1;
+      return `为${tgt}随机抽取 ${count} 个BUFF（${pool || "未配置"}）`;
     }
     return "";
   }
