@@ -1969,7 +1969,7 @@ function _readActivityForm(html, original) {
         buffPool.push({
           buff:       buffVal,
           buffCustom,
-          intensity:  parseInt($pr.find(".ae-pool-intensity").val()) || 1,
+          intensity:  parseInt($pr.find(".ae-pool-intensity").val()) || 0,
           stacks:     parseInt($pr.find(".ae-pool-stacks").val())    || 1,
         });
       });
