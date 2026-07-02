@@ -190,7 +190,11 @@ export class LimbusActorSheet extends ActorSheet {
     context.skillGroups = this._groupSkillItems();
 
     // ── BUFF 列表（战斗 Tab） ─────────────────────────────────────────────
-    context.buffs = system.buffs ?? [];
+    context.buffs = (system.buffs ?? []).map(b => ({
+      ...b,
+      icon:        _buffIconPath(b.type, b.name),
+      description: CustomBuffRegistry.get(b.type)?.description ?? "",
+    }));
     context.buffIcons = _buildBuffIconMap();
 
     // ── 基础技能战斗槽（6格占位，避免 {{#times}} 未注册问题） ─────────────

@@ -12,6 +12,7 @@
  */
 
 import { ClashManager } from "../helpers/clash.mjs";
+import { CustomBuffRegistry } from "../helpers/custom-buffs.mjs";
 
 /* ─── 常量 ────────────────────────────────────────────────────────────────── */
 
@@ -241,7 +242,12 @@ export class QuickActionHUD extends Application {
     const slotCount = Math.max(8, Math.ceil(activeBuffs.length / 8) * 8);
     const buffSlots = Array.from({ length: slotCount }, (_, i) => {
       const buff = activeBuffs[i] ?? null;
-      return { index: i, buff, icon: buff ? _buffIcon(buff.type, buff.icon) : "" };
+      const handler = buff ? CustomBuffRegistry.get(buff.type) : null;
+      return {
+        index: i, buff,
+        icon:        buff ? _buffIcon(buff.type, buff.icon) : "",
+        description: handler?.description ?? "",
+      };
     });
 
     // 装备格物品（排除空格）

@@ -159,3 +159,69 @@ registerCustomBuff("defensiveStance", {
     return { immune: true };
   },
 });
+
+/**
+ * 【蝶】
+ * - 最大值：10 层
+ * - 受到伤害时，消耗 1 层，为目标恢复 1D6 理智值，为自己添加 1 层【沉沦2】
+ */
+registerCustomBuff("butterfly", {
+  label:       "蝶",
+  maxStacks:   10,
+  description: "- 最大值：10 层\n- 受到伤害时，消耗 1 层，为目标恢复 1D6 的理智值，为自己添加 1 层【沉沦2】",
+
+  async onTakeDamage(actor, buff, ctx) {
+    if ((buff.stacks ?? 0) <= 0) return;
+
+    // 消耗 1 层蝶
+    const buffs = foundry.utils.deepClone(actor.system?.buffs ?? []);
+    const idx   = buffs.findIndex(b => b.id === buff.id);
+    if (idx < 0) return;
+    const newStacks = (buffs[idx].stacks ?? 1) - 1;
+    if (newStacks <= 0) {
+      buffs.splice(idx, 1);
+    } else {
+      buffs[idx].stacks = newStacks;
+    }
+    await actor.update({ "system.buffs": buffs });
+
+    // 为目标（伤害来源）恢复 1D6 理智
+    const target = ctx?.attacker ?? null;
+    let sanHeal = 0;
+    if (target) {
+      const healRoll = new Roll("1d6");
+      await healRoll.evaluate();
+      sanHeal = healRoll.total;
+      const curSan = target.system?.sanity?.value ?? 50;
+      const newSan = Math.min(95, curSan + sanHeal);
+      await target.update({ "system.sanity.value": newSan });
+    }
+
+    // 为自己添加 1 层沉沦（强度 2）
+    const sinkingBuff = (actor.system?.buffs ?? []).find(b => b.type === "sinking");
+    const updatedBuffs = foundry.utils.deepClone(actor.system?.buffs ?? []);
+    if (sinkingBuff) {
+      const si = updatedBuffs.findIndex(b => b.type === "sinking");
+      updatedBuffs[si].stacks = (updatedBuffs[si].stacks ?? 0) + 1;
+    } else {
+      updatedBuffs.push({
+        id:        foundry.utils.randomID(),
+        type:      "sinking",
+        name:      "沉沦",
+        intensity: 2,
+        stacks:    1,
+        whenAdded: "本回合",
+      });
+    }
+    await actor.update({ "system.buffs": updatedBuffs });
+
+    await ChatMessage.create({
+      speaker: ChatMessage.getSpeaker({ actor }),
+      content: `<div class="limbuscompany chat-clash">
+        <strong>${actor.name}</strong>【蝶】触发（剩余 ${newStacks} 层）：
+        ${target ? `为 <strong>${target.name}</strong> 恢复 <strong>${sanHeal}</strong> 点理智。` : ""}
+        自身获得 1 层【沉沦】（强度 2）。
+      </div>`,
+    });
+  },
+});
