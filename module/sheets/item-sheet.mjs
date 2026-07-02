@@ -13,6 +13,7 @@
 
 import { ClashManager } from "../helpers/clash.mjs";
 import { SKILLBOOK_MAX_SLOTS } from "../documents/item.mjs";
+import { CustomBuffRegistry, normalizeBuffType } from "../helpers/custom-buffs.mjs";
 
 export class LimbusItemSheet extends ItemSheet {
 
@@ -687,6 +688,8 @@ export class LimbusItemSheet extends ItemSheet {
     const hasLimit = act.limit?.type === "perTurn";
 
     const content = `
+      ${_buildBuffDatalistHtml("ae-buff-dl", cfg)}
+      ${_buildTriggerBuffDatalistHtml("ae-trig-buff-dl", cfg)}
       <div class="ae-v2 limbuscompany">
         <div class="ae-title-bar">效果触发编辑器</div>
         <div class="ae-gold-line"></div>
@@ -1528,35 +1531,59 @@ function _activityEffectLabels() {
   ];
 }
 
-function _buildBuffGroupOptions(cfg, selected) {
-  const groups   = cfg.BUFF_GROUPS ?? {};
-  const labels   = _buffLabelMap();
-  const sections = [
-    { label: "增益",      keys: groups.positive ?? [] },
-    { label: "减益",      keys: groups.negative ?? [] },
-    { label: "特殊",      keys: groups.special  ?? [] },
-    { label: "其他",      keys: groups.other    ?? [] },
-    { label: "自定义BUFF", keys: groups.custom   ?? [] },
+/** 从 cfg 构建 label→typeKey 反向映射（含 CustomBuffRegistry） */
+function _buffLabelToKey(cfg) {
+  const map = {};
+  const allGroups = [
+    ...(cfg.BUFF_GROUPS?.positive ?? []),
+    ...(cfg.BUFF_GROUPS?.negative ?? []),
+    ...(cfg.BUFF_GROUPS?.special  ?? []),
+    ...(cfg.BUFF_GROUPS?.other    ?? []),
+    ...(cfg.BUFF_GROUPS?.custom   ?? []),
   ];
-  return sections.map(sec =>
-    `<optgroup label="${sec.label}">${sec.keys.map(k =>
-      `<option value="${k}" ${selected === k ? "selected" : ""}>${labels[k] ?? k}</option>`
-    ).join("")}</optgroup>`
-  ).join("");
+  const labelMap = _buffLabelMap();
+  for (const k of allGroups) {
+    const lbl = labelMap[k] ?? k;
+    map[lbl] = k;
+  }
+  // 动态注册的自定义 BUFF 也加入
+  if (CustomBuffRegistry) {
+    for (const [k, handler] of CustomBuffRegistry.entries()) {
+      if (handler?.label) map[handler.label] = k;
+    }
+  }
+  return map;
 }
 
-/** 触发BUFF专用下拉：只含特殊BUFF（排除震颤）+ 自定义 */
-function _buildTriggerBuffOptions(cfg, selected) {
-  const labels  = _buffLabelMap();
-  const special = (cfg.BUFF_GROUPS?.special ?? []).filter(k => k !== "tremor");
-  const opts    = special.map(k =>
-    `<option value="${k}" ${selected === k ? "selected" : ""}>${labels[k] ?? k}</option>`
-  ).join("");
-  return opts + `<option value="custom" ${selected === "custom" ? "selected" : ""}>自定义</option>`;
+/** 将存储的 typeKey（可能是旧的 "custom"+buffCustom）转为显示用中文标签 */
+function _keyToLabel(key, buffCustom = "") {
+  if (!key || key === "custom") return buffCustom || "";
+  return _buffLabelMap()[key] ?? key;
+}
+
+/** 生成全量 BUFF datalist HTML（所有分组 + 注册自定义） */
+function _buildBuffDatalistHtml(id, cfg) {
+  const labelToKey = _buffLabelToKey(cfg);
+  const opts = Object.keys(labelToKey).map(lbl => `<option value="${_esc(lbl)}">`).join("");
+  return `<datalist id="${id}">${opts}</datalist>`;
+}
+
+/** 生成触发BUFF专用 datalist（特殊BUFF排除震颤 + 注册自定义） */
+function _buildTriggerBuffDatalistHtml(id, cfg) {
+  const labelMap = _buffLabelMap();
+  const special  = (cfg.BUFF_GROUPS?.special ?? []).filter(k => k !== "tremor");
+  const labels   = new Set(special.map(k => labelMap[k] ?? k));
+  if (CustomBuffRegistry) {
+    for (const [, handler] of CustomBuffRegistry.entries()) {
+      if (handler?.label) labels.add(handler.label);
+    }
+  }
+  const opts = [...labels].map(lbl => `<option value="${_esc(lbl)}">`).join("");
+  return `<datalist id="${id}">${opts}</datalist>`;
 }
 
 function _buffLabelMap() {
-  return {
+  const base = {
     strong:"强壮", weak:"虚弱", endure:"忍耐", breach:"破绽",
     swift:"迅捷",  bind:"束缚", guard:"守护",  fragile:"易损",
     clashPowerUp:"拼点威力提升", clashPowerDown:"拼点威力降低",
@@ -1567,6 +1594,13 @@ function _buffLabelMap() {
     chaos:"陷入混乱", panic:"陷入恐慌", custom:"自定义",
     defensiveStance:"防御姿态",
   };
+  // 合并动态注册的自定义 BUFF
+  if (CustomBuffRegistry) {
+    for (const [k, handler] of CustomBuffRegistry.entries()) {
+      if (handler?.label) base[k] = handler.label;
+    }
+  }
+  return base;
 }
 
 /** 触发时机下拉（分组：物品 / 技能 / 通用） */
@@ -1587,9 +1621,9 @@ function _buildTriggerOpts(selected) {
 
 /** 前置条件行 HTML */
 function _buildCondRow(cond, idx, cfg) {
-  const buffOpts  = _buildBuffGroupOptions(cfg, cond?.buff);
   const condType  = cond?.type === "perN" ? "perN" : "hasBuff";
   const stacksLbl = condType === "perN" ? "每N层" : "层数≥";
+  const buffLabel = _keyToLabel(cond?.buff ?? "", cond?.buffCustom ?? "");
   return `
     <div class="ae-row ae-cond-row">
       <div class="ae-row-hd">
@@ -1608,11 +1642,9 @@ function _buildCondRow(cond, idx, cfg) {
           <option value="target" ${cond?.target === "target" ? "selected" : ""}>目标</option>
         </select>
         <label>BUFF</label>
-        <select class="ae-sel cond-buff">${buffOpts}</select>
-        <input class="ae-input cond-buff-custom" type="text"
-               placeholder="自定BUFF名称"
-               value="${_esc(cond?.buffCustom ?? "")}"
-               style="display:${(cond?.buff ?? "") === "custom" ? "inline-block" : "none"};width:90px;">
+        <input class="ae-input cond-buff" type="text" list="ae-buff-dl"
+               placeholder="输入或选择BUFF…" autocomplete="off" style="width:100px;"
+               value="${_esc(buffLabel)}">
         <label>强度≥</label>
         <input class="ae-input-sm cond-intensity" type="number" value="${cond?.intensity ?? 0}" min="0">
         <label class="cond-stacks-label">${stacksLbl}</label>
@@ -1635,7 +1667,6 @@ function _buildTargetOptions(selected) {
 
 /** 消耗行 HTML */
 function _buildCostRow(cost, idx, cfg) {
-  const buffOpts = _buildBuffGroupOptions(cfg, cost?.buff);
   const selType  = cost?.type ?? "forced";
   const isAttr   = selType === "attribute";
   const typeOpts = [
@@ -1664,11 +1695,9 @@ function _buildCostRow(cost, idx, cfg) {
         <select class="ae-sel cost-target">${_buildTargetOptions(cost?.target ?? "self")}</select>
         <span class="ae-cost-buff-sec" ${isAttr ? 'style="display:none"' : ""}>
           <label>BUFF</label>
-          <select class="ae-sel cost-buff">${buffOpts}</select>
-          <input class="ae-input cost-buff-custom" type="text"
-                 placeholder="自定BUFF名称"
-                 value="${_esc(cost?.buffCustom ?? "")}"
-                 style="display:${(cost?.buff ?? "") === "custom" ? "inline-block" : "none"};width:90px;">
+          <input class="ae-input cost-buff" type="text" list="ae-buff-dl"
+                 placeholder="输入或选择BUFF…" autocomplete="off" style="width:100px;"
+                 value="${_esc(_keyToLabel(cost?.buff ?? "", cost?.buffCustom ?? ""))}">
           <label>强度</label>
           <input class="ae-input-sm cost-intensity" type="number" value="${cost?.intensity ?? 0}" min="0">
           <label>层数</label>
@@ -1708,8 +1737,6 @@ function _buildEffectRow(eff, idx, cfg) {
   const isTriggerBuff  = type === "triggerBuff";
   const effOpts    = _activityEffectLabels()
     .map(e => `<option value="${e.value}" ${type === e.value ? "selected" : ""}>${e.label}</option>`).join("");
-  const buffOpts      = _buildBuffGroupOptions(cfg, eff?.buff);
-  const trigBuffOpts  = _buildTriggerBuffOptions(cfg, eff?.trigBuff);
   const roundVal   = eff?.round ?? "本回合";
   const roundOpts  = _ROUND_OPTIONS
     .map(v => `<option value="${v}" ${roundVal === v ? "selected" : ""}>${v}</option>`).join("");
@@ -1732,11 +1759,9 @@ function _buildEffectRow(eff, idx, cfg) {
         </span>
         <span class="ae-eff-buff-sec" ${isBuff ? "" : 'style="display:none"'}>
           <label>BUFF</label>
-          <select class="ae-sel eff-buff ae-eff-buff-sel">${buffOpts}</select>
-          <input class="ae-input eff-buff-custom" type="text"
-                 placeholder="自定BUFF名称"
-                 value="${_esc(eff?.buffCustom ?? "")}"
-                 style="display:${(eff?.buff ?? "") === "custom" ? "inline-block" : "none"};width:90px;">
+          <input class="ae-input eff-buff" type="text" list="ae-buff-dl"
+                 placeholder="输入或选择BUFF…" autocomplete="off" style="width:100px;"
+                 value="${_esc(_keyToLabel(eff?.buff ?? "", eff?.buffCustom ?? ""))}">
           <label>强度</label>
           <input class="ae-input-sm eff-intensity" type="number" value="${eff?.intensity ?? 0}" min="0">
           <label>层数</label>
@@ -1749,11 +1774,9 @@ function _buildEffectRow(eff, idx, cfg) {
         </span>
         <span class="ae-eff-trig-sec" ${isTriggerBuff ? "" : 'style="display:none"'}>
           <label>BUFF</label>
-          <select class="ae-sel eff-trig-buff ae-eff-trig-buff-sel">${trigBuffOpts}</select>
-          <input class="ae-input eff-trig-buff-custom" type="text"
-                 placeholder="自定BUFF名称"
-                 value="${_esc(eff?.trigBuffCustom ?? "")}"
-                 style="display:${(eff?.trigBuff ?? "") === "custom" ? "inline-block" : "none"};width:90px;">
+          <input class="ae-input eff-trig-buff" type="text" list="ae-trig-buff-dl"
+                 placeholder="输入或选择BUFF…" autocomplete="off" style="width:100px;"
+                 value="${_esc(_keyToLabel(eff?.trigBuff ?? "", eff?.trigBuffCustom ?? ""))}">
           <label>层数</label>
           <input class="ae-input-sm eff-trig-stacks" type="number" value="${eff?.trigStacks ?? 1}" min="1">
         </span>
@@ -1772,16 +1795,14 @@ function _buildEffectRow(eff, idx, cfg) {
     </div>`;
 }
 
-/** 随机BUFF池单行：下拉 + 强度 + 层数 + 删除 */
+/** 随机BUFF池单行：文本输入（datalist）+ 强度 + 层数 + 删除 */
 function _buildBuffPoolRow(entry, cfg) {
-  const buffOpts   = _buildBuffGroupOptions(cfg, entry?.buff);
-  const isCustom   = (entry?.buff ?? "") === "custom";
-  const customVal  = _esc(entry?.buffCustom ?? "");
+  const buffLabel = _keyToLabel(entry?.buff ?? "", entry?.buffCustom ?? "");
   return `
     <div class="ae-pool-row">
-      <select class="ae-sel ae-pool-buff-sel">${buffOpts}</select>
-      <input class="ae-input ae-pool-buff-custom" type="text" placeholder="自定BUFF名称"
-             value="${customVal}" style="display:${isCustom ? "inline-block" : "none"};width:80px;">
+      <input class="ae-input ae-pool-buff-input" type="text" list="ae-buff-dl"
+             placeholder="输入或选择BUFF…" autocomplete="off" style="width:100px;"
+             value="${_esc(buffLabel)}">
       <label>强度</label>
       <input class="ae-input-sm ae-pool-intensity" type="number" value="${entry?.intensity ?? 0}" min="0">
       <label>层数</label>
@@ -1821,10 +1842,6 @@ function _setupAeDialog(html, cfg) {
     sec.find(".ae-pool-list").append(_buildBuffPoolRow({}, cfg));
     _bindDel(html);
   });
-  html.on("change", ".ae-pool-buff-sel", function () {
-    $(this).closest(".ae-pool-row").find(".ae-pool-buff-custom")
-      .toggle($(this).val() === "custom");
-  });
   html.find(".ae-toggle-limit").on("click", () => {
     html.find(".ae-limit-body").toggle();
   });
@@ -1836,13 +1853,8 @@ function _setupAeDialog(html, cfg) {
   _bindCondType(html);
 }
 
-function _bindCondCostBuff(html) {
-  html.find(".cond-buff").off("change").on("change", function () {
-    $(this).closest(".ae-cond-row").find(".cond-buff-custom").toggle($(this).val() === "custom");
-  });
-  html.find(".cost-buff").off("change").on("change", function () {
-    $(this).closest(".ae-cost-row").find(".cost-buff-custom").toggle($(this).val() === "custom");
-  });
+function _bindCondCostBuff(_html) {
+  // no-op: BUFF 字段改用文本输入，无需监听 select 变化
 }
 
 /** 切换"拥有/每"时更新层数字段的标签提示 */
@@ -1895,35 +1907,29 @@ function _bindEffType(html) {
     row.find(".eff-value").attr("placeholder", _effValuePlaceholder(type));
     row.find(".ae-eff-trig-sec").toggle(isTriggerBuff);
     row.find(".ae-eff-random-sec").toggle(isRandomBuff);
-    // 切换效果类型时也检查自定义 BUFF 输入框
-    const buffVal = row.find(".ae-eff-buff-sel").val();
-    row.find(".eff-buff-custom").toggle(isBuff && buffVal === "custom");
-    const trigVal = row.find(".ae-eff-trig-buff-sel").val();
-    row.find(".eff-trig-buff-custom").toggle(isTriggerBuff && trigVal === "custom");
-  });
-  // 监听普通 BUFF 下拉改变
-  html.find(".ae-eff-buff-sel").off("change").on("change", function () {
-    $(this).closest(".ae-eff-row").find(".eff-buff-custom").toggle($(this).val() === "custom");
-  });
-  // 监听触发BUFF下拉改变
-  html.find(".ae-eff-trig-buff-sel").off("change").on("change", function () {
-    $(this).closest(".ae-eff-row").find(".eff-trig-buff-custom").toggle($(this).val() === "custom");
   });
 }
 
 /** 从 Dialog HTML 读取所有数据并返回 activity 对象 */
 function _readActivityForm(html, original) {
+  const cfg        = CONFIG.LIMBUSCOMPANY;
+  const labelToKey = _buffLabelToKey(cfg);
+  const resolveKey = (label) => {
+    const trimmed = (label || "").trim();
+    if (!trimmed) return "";
+    return labelToKey[trimmed] ?? normalizeBuffType("custom", trimmed);
+  };
+
   const preconditions = [];
   html.find(".ae-cond-row").each((_, el) => {
-    const $r      = $(el);
-    const buffVal = $r.find(".cond-buff").val() || "";
+    const $r = $(el);
     preconditions.push({
-      type:       $r.find(".cond-type").val() === "perN" ? "perN" : "hasBuff",
-      target:     $r.find(".cond-target").val()  || "self",
-      buff:       buffVal,
-      buffCustom: buffVal === "custom" ? ($r.find(".cond-buff-custom").val()?.trim() || "") : "",
-      intensity:  parseInt($r.find(".cond-intensity").val()) || 0,
-      stacks:     parseInt($r.find(".cond-stacks").val())    || 1,
+      type:      $r.find(".cond-type").val() === "perN" ? "perN" : "hasBuff",
+      target:    $r.find(".cond-target").val()  || "self",
+      buff:      resolveKey($r.find(".cond-buff").val()),
+      buffCustom: "",
+      intensity: parseInt($r.find(".cond-intensity").val()) || 0,
+      stacks:    parseInt($r.find(".cond-stacks").val())    || 1,
     });
   });
 
@@ -1940,12 +1946,11 @@ function _readActivityForm(html, original) {
         value:    parseInt($r.find(".cost-attr-value").val())  || 1,
       });
     } else {
-      const buffVal = $r.find(".cost-buff").val() || "";
       costs.push({
         type,
         target,
-        buff:       buffVal,
-        buffCustom: buffVal === "custom" ? ($r.find(".cost-buff-custom").val()?.trim() || "") : "",
+        buff:       resolveKey($r.find(".cost-buff").val()),
+        buffCustom: "",
         intensity:  parseInt($r.find(".cost-intensity").val()) || 0,
         stacks:     parseInt($r.find(".cost-stacks").val())    || 1,
       });
@@ -1962,13 +1967,10 @@ function _readActivityForm(html, original) {
     if (isRandomBuff) {
       const buffPool = [];
       $r.find(".ae-pool-row").each((_, pr) => {
-        const $pr      = $(pr);
-        const buffVal  = $pr.find(".ae-pool-buff-sel").val() || "";
-        const buffCustom = buffVal === "custom"
-          ? ($pr.find(".ae-pool-buff-custom").val()?.trim() || "") : "";
+        const $pr = $(pr);
         buffPool.push({
-          buff:       buffVal,
-          buffCustom,
+          buff:       resolveKey($pr.find(".ae-pool-buff-input").val()),
+          buffCustom: "",
           intensity:  parseInt($pr.find(".ae-pool-intensity").val()) || 0,
           stacks:     parseInt($pr.find(".ae-pool-stacks").val())    || 1,
         });
@@ -1984,22 +1986,18 @@ function _readActivityForm(html, original) {
       });
       return;
     }
-    const buffVal       = isBuff ? ($r.find(".eff-buff").val() || "") : "";
-    const buffCustom    = (buffVal === "custom") ? ($r.find(".eff-buff-custom").val()?.trim() || "") : "";
-    const isAddBuff     = type === "addBuff";
-    const trigBuffVal   = isTriggerBuff ? ($r.find(".eff-trig-buff").val() || "") : "";
-    const trigBuffCustom = (trigBuffVal === "custom") ? ($r.find(".eff-trig-buff-custom").val()?.trim() || "") : "";
+    const isAddBuff = type === "addBuff";
     effects.push({
       type,
       target:         $r.find(".eff-target").val()    || "self",
       round:          isAddBuff     ? ($r.find(".eff-round").val() || "本回合") : undefined,
-      buff:           buffVal,
-      buffCustom,
+      buff:           isBuff        ? resolveKey($r.find(".eff-buff").val()) : "",
+      buffCustom:     "",
       intensity:      isBuff        ? (parseInt($r.find(".eff-intensity").val()) || 0) : 0,
       stacks:         isBuff        ? (parseInt($r.find(".eff-stacks").val())    || 1) : 0,
       value:          (!isBuff && !isTriggerBuff) ? ($r.find(".eff-value").val()?.trim() || "") : "",
-      trigBuff:       trigBuffVal,
-      trigBuffCustom,
+      trigBuff:       isTriggerBuff ? resolveKey($r.find(".eff-trig-buff").val()) : "",
+      trigBuffCustom: "",
       trigStacks:     isTriggerBuff ? (parseInt($r.find(".eff-trig-stacks").val()) || 1) : 0,
     });
   });
