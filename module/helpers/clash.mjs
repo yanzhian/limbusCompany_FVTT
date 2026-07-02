@@ -746,7 +746,19 @@ export class ClashManager {
         <span style="font-weight:bold;color:#C9A84C;">⚡ [${trigger}] ${itemName}</span>
         ${msgs.map(m => `<div style="color:#E8C9A2;padding-left:8px;">${m}</div>`).join("")}
       </div>`).join(ClashManager._goldDivider());
-    return `<div class="limbus-clash-card" style="font-size:.8rem;line-height:1.7;">${rows}</div>`;
+    // 超过 2 个触发条目时折叠详情
+    const body = `<div style="font-size:.8rem;line-height:1.7;">${rows}</div>`;
+    if (entries.length <= 2) {
+      return `<div class="limbus-clash-card">${body}</div>`;
+    }
+    return `<div class="limbus-clash-card">
+      <details>
+        <summary style="cursor:pointer;font-size:.8rem;color:#C9A84C;font-weight:bold;user-select:none;list-style:none;">
+          ▼ 详细信息（${entries.length} 条触发效果）
+        </summary>
+        ${body}
+      </details>
+    </div>`;
   }
 
   /**
@@ -2275,7 +2287,11 @@ export class ClashManager {
       await ClashManager._applyActivities(eq, "受到伤害时", defCtx2);
     }
 
-    await ClashManager._applyAndSendTake(baseActor, finalDamage, { calcNotes, attacker: atkActor });
+    const _buffHookMsgs2 = [];
+    await ClashManager._applyAndSendTake(baseActor, finalDamage, { calcNotes, attacker: atkActor, hookMsgs: _buffHookMsgs2 });
+    if (_buffHookMsgs2.length) {
+      _actMsgs2.push({ trigger: "受到伤害时", itemName: baseActor.name, msgs: _buffHookMsgs2 });
+    }
 
     // [攻击后]：结算完毕
     await ClashManager._applyActivities(atkItem2, "攻击后", atkCtx2);
@@ -2437,7 +2453,11 @@ export class ClashManager {
       calcNotes.push(`${resParts.join(" × ")}：${step} → ${finalDamage}`);
     }
 
-    await ClashManager._applyAndSendTake(defActor, finalDamage, { calcNotes, attacker: atkActor });
+    const _buffHookMsgsCl = [];
+    await ClashManager._applyAndSendTake(defActor, finalDamage, { calcNotes, attacker: atkActor, hookMsgs: _buffHookMsgsCl });
+    if (_buffHookMsgsCl.length) {
+      _actMsgs2.push({ trigger: "受到伤害时", itemName: defActor.name, msgs: _buffHookMsgsCl });
+    }
 
     // 若是非 linked token，额外同步 HP
     if (selActor !== defActor && selActor.isToken) {
@@ -2484,7 +2504,7 @@ export class ClashManager {
    * @param {object} [opts]
    * @param {boolean} [opts.isSeismic=false]  是否为【震颤引爆】类型攻击
    */
-  static async _applyAndSendTake(actor, damage, { isSeismic = false, calcNotes = [], attacker = null } = {}) {
+  static async _applyAndSendTake(actor, damage, { isSeismic = false, calcNotes = [], attacker = null, hookMsgs = null } = {}) {
     const sys   = actor.system;
     const maxHp = sys.hp?.max ?? 1;
 
@@ -2547,11 +2567,17 @@ export class ClashManager {
     }
 
     // ── 自定义 BUFF onTakeDamage 钩子 ────────────────────────────────────
+    const _hookLines = [];
     for (const buff of foundry.utils.deepClone(actor.system?.buffs ?? [])) {
       const handler = resolveBuffHandler(buff);
       if (typeof handler?.onTakeDamage === "function") {
-        await handler.onTakeDamage(actor, buff, { attacker });
+        const result = await handler.onTakeDamage(actor, buff, { attacker });
+        if (typeof result === "string" && result) _hookLines.push(result);
       }
+    }
+    // 将钩子消息合并到调用方提供的 hookMsgs 数组（供 _flushActMsgs 汇总）
+    if (hookMsgs && _hookLines.length) {
+      for (const line of _hookLines) hookMsgs.push(line);
     }
 
     await ClashManager._sendTakeMsg(actor, damage, oldHp, newHp, maxHp, chaosTriggered,

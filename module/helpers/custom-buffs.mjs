@@ -212,13 +212,9 @@ registerCustomBuff("butterfly", {
       await target.update({ "system.sanity.value": newSan });
     }
 
-    await ChatMessage.create({
-      speaker: ChatMessage.getSpeaker({ actor }),
-      content: `<div class="limbuscompany chat-clash">
-        <strong>${actor.name}</strong>【蝶】触发（剩余 ${newStacks} 层）：
-        ${target ? `为 <strong>${target.name}</strong> 恢复 <strong>${sanHeal}</strong> 点理智。` : ""}
-        自身获得 1 层【沉沦】（强度 2）。
-      </div>`,
-    });
+    // 返回消息文本，由 _applyAndSendTake 收集后并入 ⚡ 活动消息
+    return `【蝶】触发（剩余 <strong>${newStacks}</strong> 层）：`
+      + (target ? ` 为 <strong>${target.name}</strong> 恢复 <strong>${sanHeal}</strong> 点理智。` : "")
+      + ` 自身获得 1 层【沉沦】（强度 2）。`;
   },
 });
