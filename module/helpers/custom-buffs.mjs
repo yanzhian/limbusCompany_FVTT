@@ -173,7 +173,7 @@ registerCustomBuff("butterfly", {
   async onTakeDamage(actor, buff, ctx) {
     if ((buff.stacks ?? 0) <= 0) return;
 
-    // 消耗 1 层蝶
+    // 在同一个 buffs 快照上完成：蝶-1层 + 沉沦+1层，合并为一次 update
     const buffs = foundry.utils.deepClone(actor.system?.buffs ?? []);
     const idx   = buffs.findIndex(b => b.id === buff.id);
     if (idx < 0) return;
@@ -183,9 +183,24 @@ registerCustomBuff("butterfly", {
     } else {
       buffs[idx].stacks = newStacks;
     }
+
+    // 沉沦 +1 层（强度 2）
+    const si = buffs.findIndex(b => b.type === "sinking");
+    if (si >= 0) {
+      buffs[si].stacks = (buffs[si].stacks ?? 0) + 1;
+    } else {
+      buffs.push({
+        id:        foundry.utils.randomID(),
+        type:      "sinking",
+        name:      "沉沦",
+        intensity: 2,
+        stacks:    1,
+        whenAdded: "本回合",
+      });
+    }
     await actor.update({ "system.buffs": buffs });
 
-    // 为目标（伤害来源）恢复 1D6 理智
+    // 为伤害来源（attacker）恢复 1D6 理智
     const target = ctx?.attacker ?? null;
     let sanHeal = 0;
     if (target) {
@@ -196,24 +211,6 @@ registerCustomBuff("butterfly", {
       const newSan = Math.min(95, curSan + sanHeal);
       await target.update({ "system.sanity.value": newSan });
     }
-
-    // 为自己添加 1 层沉沦（强度 2）
-    const sinkingBuff = (actor.system?.buffs ?? []).find(b => b.type === "sinking");
-    const updatedBuffs = foundry.utils.deepClone(actor.system?.buffs ?? []);
-    if (sinkingBuff) {
-      const si = updatedBuffs.findIndex(b => b.type === "sinking");
-      updatedBuffs[si].stacks = (updatedBuffs[si].stacks ?? 0) + 1;
-    } else {
-      updatedBuffs.push({
-        id:        foundry.utils.randomID(),
-        type:      "sinking",
-        name:      "沉沦",
-        intensity: 2,
-        stacks:    1,
-        whenAdded: "本回合",
-      });
-    }
-    await actor.update({ "system.buffs": updatedBuffs });
 
     await ChatMessage.create({
       speaker: ChatMessage.getSpeaker({ actor }),

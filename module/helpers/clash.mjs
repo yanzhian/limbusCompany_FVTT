@@ -2275,7 +2275,7 @@ export class ClashManager {
       await ClashManager._applyActivities(eq, "受到伤害时", defCtx2);
     }
 
-    await ClashManager._applyAndSendTake(baseActor, finalDamage, { calcNotes });
+    await ClashManager._applyAndSendTake(baseActor, finalDamage, { calcNotes, attacker: atkActor });
 
     // [攻击后]：结算完毕
     await ClashManager._applyActivities(atkItem2, "攻击后", atkCtx2);
@@ -2437,7 +2437,7 @@ export class ClashManager {
       calcNotes.push(`${resParts.join(" × ")}：${step} → ${finalDamage}`);
     }
 
-    await ClashManager._applyAndSendTake(defActor, finalDamage, { calcNotes });
+    await ClashManager._applyAndSendTake(defActor, finalDamage, { calcNotes, attacker: atkActor });
 
     // 若是非 linked token，额外同步 HP
     if (selActor !== defActor && selActor.isToken) {
@@ -2484,7 +2484,7 @@ export class ClashManager {
    * @param {object} [opts]
    * @param {boolean} [opts.isSeismic=false]  是否为【震颤引爆】类型攻击
    */
-  static async _applyAndSendTake(actor, damage, { isSeismic = false, calcNotes = [] } = {}) {
+  static async _applyAndSendTake(actor, damage, { isSeismic = false, calcNotes = [], attacker = null } = {}) {
     const sys   = actor.system;
     const maxHp = sys.hp?.max ?? 1;
 
@@ -2547,10 +2547,10 @@ export class ClashManager {
     }
 
     // ── 自定义 BUFF onTakeDamage 钩子 ────────────────────────────────────
-    for (const buff of (actor.system?.buffs ?? [])) {
+    for (const buff of foundry.utils.deepClone(actor.system?.buffs ?? [])) {
       const handler = resolveBuffHandler(buff);
       if (typeof handler?.onTakeDamage === "function") {
-        await handler.onTakeDamage(actor, buff, {});
+        await handler.onTakeDamage(actor, buff, { attacker });
       }
     }
 
