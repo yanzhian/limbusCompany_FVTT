@@ -1915,7 +1915,8 @@ function _readActivityForm(html, original) {
   const resolveKey = (label) => {
     const trimmed = (label || "").trim();
     if (!trimmed) return "";
-    return labelToKey[trimmed] ?? normalizeBuffType("custom", trimmed);
+    // 优先匹配已知标签→typeKey；未知文字直接作为 type 存储（clash.mjs 能正确处理）
+    return labelToKey[trimmed] ?? normalizeBuffType(trimmed, trimmed);
   };
 
   const preconditions = [];
