@@ -181,8 +181,6 @@ export class LimbusItemSheet extends ItemSheet {
     // ── Activity 触发时机 & 效果类型选项 ─────────────────────────────────
     context.activityTriggers = cfg.ACTIVITY_TRIGGERS ?? [];
     context.activityEffects  = _activityEffectLabels();
-    context.buffGroupOptions = _buildBuffGroupOptions(cfg);
-
     return context;
   }
 
