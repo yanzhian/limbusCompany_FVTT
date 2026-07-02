@@ -1633,33 +1633,35 @@ export class LimbusActorSheet extends ActorSheet {
   /* ─── BUFF 管理 ─────────────────────────────────────────────────────────── */
 
   async _onAddBuff(event) {
-    const cfg      = CONFIG.LIMBUSCOMPANY;
-    const groups   = cfg.BUFF_GROUPS;
-    const allBuffs = cfg.BUFF_TYPES;
+    // 构建 label→typeKey 映射，涵盖所有已知 BUFF
+    const labelToKey = {};
+    const cfg = CONFIG.LIMBUSCOMPANY;
+    const allGroups = [
+      ...(cfg.BUFF_GROUPS.positive ?? []),
+      ...(cfg.BUFF_GROUPS.negative ?? []),
+      ...(cfg.BUFF_GROUPS.special  ?? []),
+      ...(cfg.BUFF_GROUPS.other    ?? []),
+      ...(cfg.BUFF_GROUPS.custom   ?? []),
+    ];
+    for (const k of allGroups) {
+      labelToKey[_buffLabel(k)] = k;
+    }
+    // 自定义注册表中的 BUFF 也加入（处理动态注册情况）
+    for (const [k, handler] of CustomBuffRegistry.entries()) {
+      if (handler?.label) labelToKey[handler.label] = k;
+    }
 
-    // 构建选项 HTML（分组）
-    const buildGroupOptions = () => {
-      const sections = [
-        { label: "增益",      keys: groups.positive ?? [] },
-        { label: "减益",      keys: groups.negative ?? [] },
-        { label: "特殊",      keys: groups.special  ?? [] },
-        { label: "其他",      keys: groups.other    ?? [] },
-        { label: "自定义BUFF", keys: groups.custom   ?? [] },
-      ];
-      return sections.map(sec =>
-        `<optgroup label="${sec.label}">${sec.keys.map(k => `<option value="${k}">${_buffLabel(k)}</option>`).join("")}</optgroup>`
-      ).join("");
-    };
+    const datalistOptions = Object.keys(labelToKey)
+      .map(lbl => `<option value="${lbl}">`)
+      .join("");
 
     const content = `
       <div class="limbuscompany add-buff-dialog">
         <div class="form-group">
-          <label>选择BUFF</label>
-          <select name="buffType">${buildGroupOptions()}</select>
-        </div>
-        <div class="form-group custom-buff-row" style="display:none">
-          <label>自定义BUFF</label>
-          <input type="text" name="customName" placeholder="输入文本"/>
+          <label>BUFF名称</label>
+          <input type="text" name="buffName" list="add-buff-datalist"
+                 placeholder="输入或选择BUFF名称…" autocomplete="off" style="width:100%"/>
+          <datalist id="add-buff-datalist">${datalistOptions}</datalist>
         </div>
         <div class="form-group">
           <label>回合</label>
@@ -1681,17 +1683,14 @@ export class LimbusActorSheet extends ActorSheet {
         add: {
           label: "添加",
           callback: async (html) => {
-            let type        = html.find("[name='buffType']").val();
-            const custom    = html.find("[name='customName']").val().trim();
+            const inputName = html.find("[name='buffName']").val().trim();
             const whenAdded = html.find("[name='whenAdded']").val();
             const intensity = parseInt(html.find("[name='intensity']").val()) || 1;
             const stacks    = parseInt(html.find("[name='stacks']").val())    || 1;
 
-            // 若用户选择"自定义"并输入了文字，尝试解析为注册的自定义 BUFF 类型
-            if (type === "custom" && custom) {
-              type = normalizeBuffType("custom", custom);
-            }
-            const name = type === "custom" ? (custom || "自定义") : _buffLabel(type);
+            // 通过中文名反查 typeKey；匹配不到则视为纯自定义文本
+            let type = labelToKey[inputName] ?? normalizeBuffType("custom", inputName);
+            const name = inputName || "自定义";
 
             await this.actor.addBuff({ type, name, intensity, stacks, whenAdded,
               icon: _buffIconPath(type, name) });
@@ -1703,14 +1702,6 @@ export class LimbusActorSheet extends ActorSheet {
     });
 
     dlg.render(true);
-
-    // 监听 select 变化显示/隐藏自定义输入
-    setTimeout(() => {
-      const sel = dlg.element?.find("[name='buffType']");
-      sel?.on("change", (e) => {
-        dlg.element.find(".custom-buff-row").toggle(e.target.value === "custom");
-      });
-    }, 50);
   }
 
   async _onBuffTrigger(event) {
