@@ -2155,6 +2155,44 @@ export class ClashManager {
     const gs = (actor, type) => ClashManager._getBuffVal(actor, type).stacks;
     const gi = (actor, type) => ClashManager._getBuffVal(actor, type).intensity;
 
+    // 优先使用 base actor（确保角色卡与 linked tokens 同步）
+    const baseActor = game.actors.get(selActor.id) ?? selActor;
+
+    // ── Activity 触发（承受路径）—— 必须在伤害计算之前，公式可能被修改 ─────
+    const atkItem2  = atkActor?.items?.get(initFlags.itemId) ?? null;
+    const _fc2      = {};
+    const _actMsgs2 = [];
+    const atkCtx2 = { atkActor, defActor: baseActor, owner: atkActor, other: baseActor, _fireCounts: _fc2, _actMsgs: _actMsgs2 };
+    const defCtx2 = { atkActor, defActor: baseActor, owner: baseActor, other: atkActor, _fireCounts: _fc2, _actMsgs: _actMsgs2 };
+
+    // 记录触发前原始公式，用于检测变化后重投
+    const atkBaseFormulaOrig2 = initFlags.baseFormula ?? initFlags.formula;
+
+    // [攻击前] [攻击时]
+    await ClashManager._applyActivities(atkItem2, "攻击前", atkCtx2);
+    await ClashManager._applyActivities(atkItem2, "攻击时", atkCtx2);
+
+    // [攻击时] 可能修改骰子公式（diceAdj/diceFacesAdj/baseValue），检测并重投
+    let finalRollTotal = rollTotal;
+    {
+      const newAtkBase = atkItem2?.system?.diceFormula ?? atkBaseFormulaOrig2;
+      if (newAtkBase !== atkBaseFormulaOrig2) {
+        const bonusPart  = (initFlags.formula ?? "").slice(atkBaseFormulaOrig2.length);
+        const newAtkFull = newAtkBase + bonusPart;
+        const rerollAtk  = new Roll(newAtkFull);
+        await rerollAtk.evaluate();
+        finalRollTotal = rerollAtk.total;
+        _actMsgs2.push({
+          trigger:  "公式重投",
+          itemName: atkItem2?.name ?? "攻击方",
+          msgs:     [`公式变化（${atkBaseFormulaOrig2} → ${newAtkBase}），重新投骰：${rerollAtk.result} = <b>${rerollAtk.total}</b>`],
+        });
+      }
+    }
+
+    // [命中时]：承受始终命中
+    await ClashManager._applyActivities(atkItem2, "命中时", atkCtx2);
+
     // ── 攻击方 BUFF 修正（承受不拼点，拼点威力↑↓不计入）──────────────────
     const strong  = atkActor ? gs(atkActor, "strong") : 0;
     const weak    = atkActor ? gs(atkActor, "weak")   : 0;
@@ -2165,8 +2203,8 @@ export class ClashManager {
     const defLv   = ClashManager._effDefLv(defActor);
     const lvBonus = Math.floor(Math.max(0, atkLv - defLv) / 3);
 
-    // ── 有效骰数 ──────────────────────────────────────────────────────────
-    const effectiveAtk = rollTotal + atkDiceMod + lvBonus;
+    // ── 有效骰数（使用重投后的 finalRollTotal）─────────────────────────────
+    const effectiveAtk = finalRollTotal + atkDiceMod + lvBonus;
 
     // ── 守护（层数）/ 易损（层数） ──────────────────────────────────────
     const guard   = gs(defActor, "guard");
@@ -2186,7 +2224,7 @@ export class ClashManager {
 
     // ── 逐步结算说明 ──────────────────────────────────────────────────────
     const calcNotes = [];
-    let step = rollTotal;
+    let step = finalRollTotal;
 
     calcNotes.push(`骰点结果：${step}`);
 
@@ -2220,23 +2258,6 @@ export class ClashManager {
       if (sinMult  !== 1.0) resParts.push(`${SIN_LABELS[sinType]  ?? sinType}罪孽抗性${sinResStr}`);
       calcNotes.push(`${resParts.join(" × ")}：${step} → ${finalDamage}`);
     }
-
-    // 优先使用 base actor（确保角色卡与 linked tokens 同步）
-    const baseActor = game.actors.get(selActor.id) ?? selActor;
-
-    // ── Activity 触发（承受路径） ─────────────────────────────────────────
-    const atkItem2  = atkActor?.items?.get(initFlags.itemId) ?? null;
-    const _fc2      = {};
-    const _actMsgs2 = [];   // 汇总收集桶，避免并发 ChatMessage.create 触发 Foundry 清理竞态
-    const atkCtx2 = { atkActor, defActor: baseActor, owner: atkActor, other: baseActor, _fireCounts: _fc2, _actMsgs: _actMsgs2 };
-    const defCtx2 = { atkActor, defActor: baseActor, owner: baseActor, other: atkActor, _fireCounts: _fc2, _actMsgs: _actMsgs2 };
-
-    // [攻击前] [攻击时]：承受时结算伤害前触发
-    await ClashManager._applyActivities(atkItem2, "攻击前", atkCtx2);
-    await ClashManager._applyActivities(atkItem2, "攻击时", atkCtx2);
-
-    // [命中时]：承受始终命中
-    await ClashManager._applyActivities(atkItem2, "命中时", atkCtx2);
 
     // [暴击命中时]：检查攻击方是否有【呼吸法】触发暴击
     const breatheBuff2 = atkActor ? ClashManager._getBuff(atkActor, "breathing") : null;
