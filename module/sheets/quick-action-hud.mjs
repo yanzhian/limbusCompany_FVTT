@@ -323,6 +323,10 @@ export class QuickActionHUD extends Application {
         $panel.hide();
         $btn.removeClass("qa-btn--active");
       } else {
+        // 关闭其他已开面板，保持同一时刻只有一个面板展开
+        html.find(".qa-panel").hide();
+        html.find(".qa-btn[data-panel]").removeClass("qa-btn--active");
+        this._openPanels.clear();
         this._openPanels.add(panelKey);
         $panel.css("display", "flex");
         $btn.addClass("qa-btn--active");
