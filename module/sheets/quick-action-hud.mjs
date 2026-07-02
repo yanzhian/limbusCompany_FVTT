@@ -528,6 +528,14 @@ export class QuickActionHUD extends Application {
     if (item.type === "consumable" && (item.system.quantity ?? 0) <= 0) {
       ui.notifications.warn("数量不足。"); return;
     }
+    // 装备激活消耗 1 行动值
+    if (item.type === "equipment") {
+      const curAp = this._actor?.system?.ap?.value ?? 0;
+      if (curAp < 1) {
+        ui.notifications.warn("行动值不足，无法激活装备。"); return;
+      }
+      await this._actor.update({ "system.ap.value": curAp - 1 });
+    }
     await ClashManager._applyActivities(item, "使用时", {
       owner: this._actor, atkActor: this._actor, defActor: null, _fireCounts: {},
     });
