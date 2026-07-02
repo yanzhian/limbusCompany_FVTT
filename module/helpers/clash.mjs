@@ -2546,6 +2546,14 @@ export class ClashManager {
       await actor.checkAndTriggerChaos(newHp, oldHp, { silent: true });
     }
 
+    // ── 自定义 BUFF onTakeDamage 钩子 ────────────────────────────────────
+    for (const buff of (actor.system?.buffs ?? [])) {
+      const handler = resolveBuffHandler(buff);
+      if (typeof handler?.onTakeDamage === "function") {
+        await handler.onTakeDamage(actor, buff, {});
+      }
+    }
+
     await ClashManager._sendTakeMsg(actor, damage, oldHp, newHp, maxHp, chaosTriggered,
       { ruptureDmg, sanityDmg, tremorTriggered, chaosName, calcNotes });
   }
