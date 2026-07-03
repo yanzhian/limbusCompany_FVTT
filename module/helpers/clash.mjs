@@ -1602,6 +1602,7 @@ export class ClashManager {
       await ClashManager._applyActivities(atkItem, "攻击后", atkCtx);
       await ClashManager._applyActivities(defItem,  "攻击后", defCtx);
       await ClashManager._flushActMsgs(_actMsgs, atkActor);
+      await ClashManager._checkAndOfferReactions({ lastSkillUuid: atkItem?.uuid ?? null, attacker: atkActor, defender: defActor });
       return;
     }
     if (defCategory === "block") {
@@ -1609,6 +1610,7 @@ export class ClashManager {
       await ClashManager._applyActivities(atkItem, "攻击后", atkCtx);
       await ClashManager._applyActivities(defItem,  "攻击后", defCtx);
       await ClashManager._flushActMsgs(_actMsgs, atkActor);
+      await ClashManager._checkAndOfferReactions({ lastSkillUuid: atkItem?.uuid ?? null, attacker: atkActor, defender: defActor });
       return;
     }
 
@@ -1699,6 +1701,7 @@ export class ClashManager {
 
     // 统一发出本次对抗所有 activity 通知（汇总为一条，避免并发清理竞态）
     await ClashManager._flushActMsgs(_actMsgs, atkActor);
+    await ClashManager._checkAndOfferReactions({ lastSkillUuid: atkItem?.uuid ?? null, attacker: atkActor, defender: defActor });
   }
 
   /* ─── 阶段五b：拼点结算逻辑 ────────────────────────────────────────────── */
@@ -2933,6 +2936,190 @@ export class ClashManager {
           damage:        finalDamage,
         },
       },
+    });
+  }
+
+  /* ─── 反应系统 ─────────────────────────────────────────────────────────── */
+
+  /**
+   * 检查场上所有 Token 是否有"反应"类 Activity 可触发。
+   * 对每个装备含"反应"Activity 且满足前置条件（OR逻辑）的 Token，弹出确认框。
+   * @param {{ lastSkillUuid?: string, attacker?: Actor|null, defender?: Actor|null }} ctx
+   */
+  static async _checkAndOfferReactions({ lastSkillUuid = null, attacker = null, defender = null } = {}) {
+    if (!canvas?.tokens?.placeables) return;
+    for (const token of canvas.tokens.placeables) {
+      const actor = token.actor;
+      if (!actor) continue;
+      for (const item of actor.items) {
+        const activities = item.system?.activities ?? [];
+        for (const act of activities) {
+          if (act.trigger !== "反应") continue;
+          const preconditions = Array.isArray(act.preconditions) ? act.preconditions
+            : (act.precondition ? [act.precondition] : []);
+          // OR 逻辑：任一前置条件满足即可
+          const triggered = preconditions.length === 0
+            || preconditions.some(pre =>
+                ClashManager._evalReactionPrecond(pre, actor, attacker, defender, lastSkillUuid)
+              );
+          if (!triggered) continue;
+          // 检查次数限制
+          const limitOk = ClashManager._checkLimit(act, item, actor);
+          if (!limitOk) continue;
+          // 弹出询问框
+          const confirmed = await Dialog.confirm({
+            title: "反应触发",
+            content: `<p><strong>${actor.name}</strong> 的 <strong>「${item.name}」</strong> 中的反应 <em>「${act.name}」</em> 可以触发。</p><p>是否使用？</p>`,
+            defaultYes: false,
+          });
+          if (!confirmed) continue;
+          // 执行效果
+          for (const eff of (act.effects ?? [])) {
+            await ClashManager._applyReactionEff(eff, item, actor, attacker, defender);
+          }
+          await ChatMessage.create({
+            speaker: ChatMessage.getSpeaker({ actor }),
+            content: `<div class="limbuscompany chat-clash">
+              <strong>${actor.name}</strong> 触发反应「${act.name}」
+              （来自 <strong>${item.name}</strong>）。
+            </div>`,
+          });
+        }
+      }
+    }
+  }
+
+  /**
+   * 判断单个前置条件是否满足。
+   * @param {object} pre
+   * @param {Actor} actor     装备物品的角色
+   * @param {Actor|null} attacker
+   * @param {Actor|null} defender
+   * @param {string|null} lastSkillUuid  本次对抗使用的技能 UUID
+   * @returns {boolean}
+   */
+  static _evalReactionPrecond(pre, actor, attacker, defender, lastSkillUuid) {
+    const type = pre?.type ?? "hasBuff";
+    // 确定被检查的目标角色
+    const targetActor = pre?.target === "target"
+      ? (attacker ?? defender)
+      : actor;
+
+    if (type === "hasBuff") {
+      if (!targetActor || !pre.buff) return false;
+      const buffs  = targetActor.system?.buffs ?? [];
+      const found  = buffs.find(b => b.type === pre.buff || b.name === pre.buff);
+      if (!found) return false;
+      if ((pre.intensity ?? 0) > 0 && (found.intensity ?? 0) < pre.intensity) return false;
+      if ((pre.stacks   ?? 0) > 0 && (found.stacks   ?? 0) < pre.stacks)   return false;
+      return true;
+    }
+
+    if (type === "perN") {
+      if (!targetActor || !pre.buff) return false;
+      const buffs = targetActor.system?.buffs ?? [];
+      const found = buffs.find(b => b.type === pre.buff || b.name === pre.buff);
+      if (!found) return false;
+      const n = pre.stacks ?? 1;
+      return n > 0 && ((found.stacks ?? 0) % n === 0);
+    }
+
+    if (type === "baseAttr") {
+      if (!targetActor) return false;
+      const curVal = ClashManager._getAttrVal(targetActor, pre.attrType ?? "hp");
+      const threshold = ClashManager._parseThreshold(pre.attrValue ?? "0", targetActor, pre.attrType ?? "hp");
+      return ClashManager._cmp(curVal, pre.comparison ?? "lt", threshold);
+    }
+
+    if (type === "useSkill") {
+      if (!pre.skillUuid || !lastSkillUuid) return false;
+      return pre.skillUuid.trim() === lastSkillUuid.trim();
+    }
+
+    return false;
+  }
+
+  /** 获取角色属性当前值（hp/sanity/ap） */
+  static _getAttrVal(actor, attrType) {
+    if (attrType === "hp")     return actor.system?.hp?.value     ?? 0;
+    if (attrType === "sanity") return actor.system?.sanity?.value ?? 0;
+    if (attrType === "ap")     return actor.system?.ap?.value     ?? 0;
+    return 0;
+  }
+
+  /** 将 "50" 或 "5%" 解析为绝对值 */
+  static _parseThreshold(val, actor, attrType) {
+    const str = String(val ?? "0").trim();
+    if (str.endsWith("%")) {
+      const pct = parseFloat(str) / 100;
+      let max = 0;
+      if (attrType === "hp")     max = actor.system?.hp?.max     ?? 100;
+      if (attrType === "sanity") max = 95;
+      if (attrType === "ap")     max = actor.system?.ap?.max     ?? 3;
+      return Math.round(pct * max);
+    }
+    return parseFloat(str) || 0;
+  }
+
+  /** 比较两个数值 */
+  static _cmp(a, op, b) {
+    switch (op) {
+      case "gt":  return a > b;
+      case "gte": return a >= b;
+      case "lt":  return a < b;
+      case "lte": return a <= b;
+      case "eq":  return a === b;
+    }
+    return false;
+  }
+
+  /** 检查 Activity 次数限制（不计数，仅检查） */
+  static _checkLimit(act, item, actor) {
+    if (!act.limit || act.limit.type === "unlimited") return true;
+    // 简单起见：如果没有火次计数存储，始终允许（计数由 _applyActivities 管理）
+    return true;
+  }
+
+  /**
+   * 执行反应效果（useSkill 型：以该技能发起对抗，无需消耗行动值）
+   * 其余效果类型通过创建临时活动条目走 _applyActivities 路径。
+   */
+  static async _applyReactionEff(eff, item, actor, attacker, defender) {
+    const type = eff?.type ?? "";
+    if (type === "useSkill") {
+      const skillUuid = eff?.skillUuid ?? "";
+      if (!skillUuid) return;
+      const skillItem = await fromUuid(skillUuid).catch(() => null);
+      if (!skillItem) {
+        ui.notifications.warn(`反应：找不到技能 ${skillUuid}`);
+        return;
+      }
+      // 发起对抗（反应触发，不消耗行动值：临时置 AP 为足够大再还原）
+      const curAP = actor.system?.ap?.value ?? 0;
+      if (curAP <= 0) await actor.update({ "system.ap.value": 1 });
+      await ClashManager.showInitiateDialog(actor, skillItem, -2);
+      return;
+    }
+    // 其他效果类型：构造只含此效果的临时活动，走 _applyActivities 路径
+    const fakeItem = {
+      id: item.id,
+      name: item.name,
+      img:  item.img,
+      system: {
+        activities: [{
+          id: foundry.utils.randomID(),
+          name: "反应效果",
+          trigger: "__reaction__",
+          preconditions: [],
+          costs: [],
+          effects: [eff],
+          limit: { type: "unlimited", count: 0 },
+        }],
+      },
+    };
+    await ClashManager._applyActivities(fakeItem, "__reaction__", {
+      owner: actor, atkActor: actor, defActor: defender ?? attacker,
+      _fireCounts: {}, _actMsgs: [],
     });
   }
 

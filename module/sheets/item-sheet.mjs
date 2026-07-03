@@ -706,6 +706,12 @@ export class LimbusItemSheet extends ItemSheet {
             <select class="ae-select" name="act-trigger">
               ${_buildTriggerOpts(act.trigger)}
             </select>
+            <div class="ae-reaction-note" style="display:${act.trigger === "反应" ? "block" : "none"};
+                 margin-top:4px;padding:4px 8px;background:#2a1a00;border-left:3px solid #C9A84C;
+                 color:#C9A84C;font-size:.75rem;line-height:1.4;">
+              ⚡ 反应模式：场上任意 Token 装备本物品且满足前置条件（OR 逻辑）时可触发。<br>
+              "使用技能"条件：对抗结算后弹出询问框。
+            </div>
           </div>
 
           <div class="ae-section">
@@ -1526,6 +1532,7 @@ function _activityEffectLabels() {
     { value: "baseValue",    label: "基础值" },
     { value: "seismicBlast", label: "震颤引爆" },
     { value: "triggerBuff",  label: "触发BUFF" },
+    { value: "useSkill",     label: "使用技能（发起对抗）" },
   ];
 }
 
@@ -1601,7 +1608,7 @@ function _buffLabelMap() {
   return base;
 }
 
-/** 触发时机下拉（分组：物品 / 技能 / 通用） */
+/** 触发时机下拉（分组：物品 / 技能 / 通用 / 反应） */
 function _buildTriggerOpts(selected) {
   const groups = [
     { label: "── 物品 ──",  values: ["使用时"] },
@@ -1609,6 +1616,7 @@ function _buildTriggerOpts(selected) {
                                        "拼点时", "拼点成功", "拼点失败",
                                        "命中时", "暴击命中时"] },
     { label: "── 通用 ──",  values: ["回合开始时", "回合结束时", "受到伤害时"] },
+    { label: "── 反应 ──",  values: ["反应"] },
   ];
   return groups.map(g =>
     `<optgroup label="${g.label}">${g.values.map(v =>
@@ -1619,9 +1627,21 @@ function _buildTriggerOpts(selected) {
 
 /** 前置条件行 HTML */
 function _buildCondRow(cond, idx, cfg) {
-  const condType  = cond?.type === "perN" ? "perN" : "hasBuff";
-  const stacksLbl = condType === "perN" ? "每N层" : "层数≥";
-  const buffLabel = _keyToLabel(cond?.buff ?? "", cond?.buffCustom ?? "");
+  const condType   = ["perN","baseAttr","useSkill"].includes(cond?.type) ? cond.type : "hasBuff";
+  const isBuffSec  = condType === "hasBuff" || condType === "perN";
+  const isAttrSec  = condType === "baseAttr";
+  const isSkillSec = condType === "useSkill";
+  const stacksLbl  = condType === "perN" ? "每N层" : "层数≥";
+  const buffLabel  = _keyToLabel(cond?.buff ?? "", cond?.buffCustom ?? "");
+
+  const attrTypeOpts = [
+    ["hp","生命值"],["sanity","理智值"],["ap","行动值"],
+  ].map(([v,l]) => `<option value="${v}" ${(cond?.attrType ?? "hp") === v ? "selected":""}>${l}</option>`).join("");
+
+  const cmpOpts = [
+    ["gt","大于"],["gte","大于等于"],["lt","小于"],["lte","小于等于"],["eq","等于"],
+  ].map(([v,l]) => `<option value="${v}" ${(cond?.comparison ?? "lt") === v ? "selected":""}>${l}</option>`).join("");
+
   return `
     <div class="ae-row ae-cond-row">
       <div class="ae-row-hd">
@@ -1631,22 +1651,38 @@ function _buildCondRow(cond, idx, cfg) {
       <div class="ae-row-fields">
         <label>类型</label>
         <select class="ae-sel cond-type">
-          <option value="hasBuff" ${condType === "hasBuff" ? "selected" : ""}>拥有</option>
-          <option value="perN"    ${condType === "perN"    ? "selected" : ""}>每</option>
+          <option value="hasBuff"  ${condType === "hasBuff"  ? "selected" : ""}>拥有</option>
+          <option value="perN"     ${condType === "perN"     ? "selected" : ""}>每</option>
+          <option value="baseAttr" ${condType === "baseAttr" ? "selected" : ""}>基础属性</option>
+          <option value="useSkill" ${condType === "useSkill" ? "selected" : ""}>使用技能</option>
         </select>
         <label>目标</label>
         <select class="ae-sel cond-target">
           <option value="self"   ${(cond?.target ?? "self") === "self"   ? "selected" : ""}>自己</option>
           <option value="target" ${cond?.target === "target" ? "selected" : ""}>目标</option>
         </select>
-        <label>BUFF</label>
-        <input class="ae-input cond-buff" type="text" list="ae-buff-dl"
-               placeholder="输入或选择BUFF…" autocomplete="off" style="width:100px;"
-               value="${_esc(buffLabel)}">
-        <label>强度≥</label>
-        <input class="ae-input-sm cond-intensity" type="number" value="${cond?.intensity ?? 0}" min="0">
-        <label class="cond-stacks-label">${stacksLbl}</label>
-        <input class="ae-input-sm cond-stacks"    type="number" value="${cond?.stacks ?? 1}"    min="0">
+        <span class="ae-cond-buff-sec" ${isBuffSec ? "" : 'style="display:none"'}>
+          <label>BUFF</label>
+          <input class="ae-input cond-buff" type="text" list="ae-buff-dl"
+                 placeholder="输入或选择BUFF…" autocomplete="off" style="width:100px;"
+                 value="${_esc(buffLabel)}">
+          <label>强度≥</label>
+          <input class="ae-input-sm cond-intensity" type="number" value="${cond?.intensity ?? 0}" min="0">
+          <label class="cond-stacks-label">${stacksLbl}</label>
+          <input class="ae-input-sm cond-stacks" type="number" value="${cond?.stacks ?? 1}" min="0">
+        </span>
+        <span class="ae-cond-attr-sec" ${isAttrSec ? "" : 'style="display:none"'}>
+          <label>属性</label>
+          <select class="ae-sel cond-attr-type">${attrTypeOpts}</select>
+          <select class="ae-sel cond-comparison">${cmpOpts}</select>
+          <input class="ae-input-sm cond-attr-value" type="text"
+                 value="${_esc(cond?.attrValue ?? "")}" placeholder="50 或 5%">
+        </span>
+        <span class="ae-cond-skill-sec" ${isSkillSec ? "" : 'style="display:none"'}>
+          <label>技能UUID</label>
+          <input class="ae-input cond-skill-uuid" type="text"
+                 value="${_esc(cond?.skillUuid ?? "")}" placeholder="Item.xxx…" style="width:140px;">
+        </span>
       </div>
     </div>`;
 }
@@ -1711,7 +1747,8 @@ function _buildCostRow(cost, idx, cfg) {
     </div>`;
 }
 
-const _BUFF_EFFECTS   = new Set(["addBuff", "removeBuff"]);
+const _BUFF_EFFECTS    = new Set(["addBuff", "removeBuff"]);
+const _USESKILL_EFFECTS = new Set(["useSkill"]);
 
 // 支持"无符号=绝对赋值，+/-=相对增减"语义的效果类型
 const _SIGNED_VALUE_EFFECTS = new Set([
@@ -1733,13 +1770,14 @@ function _buildEffectRow(eff, idx, cfg) {
   const isAddBuff      = type === "addBuff";
   const isRandomBuff   = type === "randomBuff";
   const isTriggerBuff  = type === "triggerBuff";
+  const isUseSkill     = type === "useSkill";
   const effOpts    = _activityEffectLabels()
     .map(e => `<option value="${e.value}" ${type === e.value ? "selected" : ""}>${e.label}</option>`).join("");
   const roundVal   = eff?.round ?? "本回合";
   const roundOpts  = _ROUND_OPTIONS
     .map(v => `<option value="${v}" ${roundVal === v ? "selected" : ""}>${v}</option>`).join("");
   const formulaVal = _esc(eff?.value ?? "");
-  const isValSec   = !isBuff && !isTriggerBuff && !isRandomBuff;
+  const isValSec   = !isBuff && !isTriggerBuff && !isRandomBuff && !isUseSkill;
   return `
     <div class="ae-row ae-eff-row">
       <div class="ae-row-hd">
@@ -1788,6 +1826,11 @@ function _buildEffectRow(eff, idx, cfg) {
               .map(entry => _buildBuffPoolRow(entry, cfg)).join("")}
           </div>
           <button type="button" class="ae-add-pool-buff ae-add-btn">＋ 添加BUFF</button>
+        </span>
+        <span class="ae-eff-useskill-sec" ${isUseSkill ? "" : 'style="display:none"'}>
+          <label>技能UUID</label>
+          <input class="ae-input eff-skill-uuid" type="text"
+                 value="${_esc(eff?.skillUuid ?? "")}" placeholder="Item.xxx…" style="width:140px;">
         </span>
       </div>
     </div>`;
@@ -1844,6 +1887,11 @@ function _setupAeDialog(html, cfg) {
     html.find(".ae-limit-body").toggle();
   });
 
+  // 触发时机：切换为"反应"时显示说明注释
+  html.find("[name='act-trigger']").on("change", function () {
+    html.find(".ae-reaction-note").toggle($(this).val() === "反应");
+  });
+
   _bindDel(html);
   _bindEffType(html);
   _bindCondCostBuff(html);
@@ -1855,12 +1903,18 @@ function _bindCondCostBuff(_html) {
   // no-op: BUFF 字段改用文本输入，无需监听 select 变化
 }
 
-/** 切换"拥有/每"时更新层数字段的标签提示 */
+/** 切换条件类型时控制各子区段显示 */
 function _bindCondType(html) {
   html.find(".cond-type").off("change").on("change", function () {
-    const row    = $(this).closest(".ae-cond-row");
-    const isPerN = $(this).val() === "perN";
-    row.find(".cond-stacks-label").text(isPerN ? "每N层" : "层数≥");
+    const row      = $(this).closest(".ae-cond-row");
+    const type     = $(this).val();
+    const isBuffSec  = type === "hasBuff" || type === "perN";
+    const isAttrSec  = type === "baseAttr";
+    const isSkillSec = type === "useSkill";
+    row.find(".cond-stacks-label").text(type === "perN" ? "每N层" : "层数≥");
+    row.find(".ae-cond-buff-sec").toggle(isBuffSec);
+    row.find(".ae-cond-attr-sec").toggle(isAttrSec);
+    row.find(".ae-cond-skill-sec").toggle(isSkillSec);
   });
 }
 
@@ -1899,12 +1953,14 @@ function _bindEffType(html) {
     const isAddBuff     = type === "addBuff";
     const isRandomBuff  = type === "randomBuff";
     const isTriggerBuff = type === "triggerBuff";
+    const isUseSkill    = type === "useSkill";
     row.find(".ae-eff-round-sec").toggle(isAddBuff);
     row.find(".ae-eff-buff-sec").toggle(isBuff);
-    row.find(".ae-eff-val-sec").toggle(!isBuff && !isTriggerBuff && !isRandomBuff);
+    row.find(".ae-eff-val-sec").toggle(!isBuff && !isTriggerBuff && !isRandomBuff && !isUseSkill);
     row.find(".eff-value").attr("placeholder", _effValuePlaceholder(type));
     row.find(".ae-eff-trig-sec").toggle(isTriggerBuff);
     row.find(".ae-eff-random-sec").toggle(isRandomBuff);
+    row.find(".ae-eff-useskill-sec").toggle(isUseSkill);
   });
 }
 
@@ -1921,15 +1977,32 @@ function _readActivityForm(html, original) {
 
   const preconditions = [];
   html.find(".ae-cond-row").each((_, el) => {
-    const $r = $(el);
-    preconditions.push({
-      type:      $r.find(".cond-type").val() === "perN" ? "perN" : "hasBuff",
-      target:    $r.find(".cond-target").val()  || "self",
-      buff:      resolveKey($r.find(".cond-buff").val()),
-      buffCustom: "",
-      intensity: parseInt($r.find(".cond-intensity").val()) || 0,
-      stacks:    parseInt($r.find(".cond-stacks").val())    || 1,
-    });
+    const $r      = $(el);
+    const condType = $r.find(".cond-type").val() || "hasBuff";
+    if (condType === "baseAttr") {
+      preconditions.push({
+        type:       "baseAttr",
+        target:     $r.find(".cond-target").val() || "self",
+        attrType:   $r.find(".cond-attr-type").val() || "hp",
+        comparison: $r.find(".cond-comparison").val() || "lt",
+        attrValue:  $r.find(".cond-attr-value").val()?.trim() || "0",
+      });
+    } else if (condType === "useSkill") {
+      preconditions.push({
+        type:      "useSkill",
+        target:    $r.find(".cond-target").val() || "self",
+        skillUuid: $r.find(".cond-skill-uuid").val()?.trim() || "",
+      });
+    } else {
+      preconditions.push({
+        type:       condType === "perN" ? "perN" : "hasBuff",
+        target:     $r.find(".cond-target").val()  || "self",
+        buff:       resolveKey($r.find(".cond-buff").val()),
+        buffCustom: "",
+        intensity:  parseInt($r.find(".cond-intensity").val()) || 0,
+        stacks:     parseInt($r.find(".cond-stacks").val())    || 1,
+      });
+    }
   });
 
   const costs = [];
@@ -1985,7 +2058,16 @@ function _readActivityForm(html, original) {
       });
       return;
     }
-    const isAddBuff = type === "addBuff";
+    const isAddBuff  = type === "addBuff";
+    const isUseSkill = type === "useSkill";
+    if (isUseSkill) {
+      effects.push({
+        type,
+        target:    $r.find(".eff-target").val() || "self",
+        skillUuid: $r.find(".eff-skill-uuid").val()?.trim() || "",
+      });
+      return;
+    }
     effects.push({
       type,
       target:         $r.find(".eff-target").val()    || "self",
