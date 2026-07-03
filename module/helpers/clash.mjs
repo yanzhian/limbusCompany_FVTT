@@ -1602,7 +1602,7 @@ export class ClashManager {
       await ClashManager._applyActivities(atkItem, "攻击后", atkCtx);
       await ClashManager._applyActivities(defItem,  "攻击后", defCtx);
       await ClashManager._flushActMsgs(_actMsgs, atkActor);
-      await ClashManager._checkAndOfferReactions({ lastSkillUuid: atkItem?.uuid ?? null, attacker: atkActor, defender: defActor });
+      await ClashManager._broadcastAndCheckReactions({ lastSkillUuid: atkItem?.uuid ?? null, attacker: atkActor, defender: defActor });
       return;
     }
     if (defCategory === "block") {
@@ -1610,7 +1610,7 @@ export class ClashManager {
       await ClashManager._applyActivities(atkItem, "攻击后", atkCtx);
       await ClashManager._applyActivities(defItem,  "攻击后", defCtx);
       await ClashManager._flushActMsgs(_actMsgs, atkActor);
-      await ClashManager._checkAndOfferReactions({ lastSkillUuid: atkItem?.uuid ?? null, attacker: atkActor, defender: defActor });
+      await ClashManager._broadcastAndCheckReactions({ lastSkillUuid: atkItem?.uuid ?? null, attacker: atkActor, defender: defActor });
       return;
     }
 
@@ -1701,7 +1701,7 @@ export class ClashManager {
 
     // 统一发出本次对抗所有 activity 通知（汇总为一条，避免并发清理竞态）
     await ClashManager._flushActMsgs(_actMsgs, atkActor);
-    await ClashManager._checkAndOfferReactions({ lastSkillUuid: atkItem?.uuid ?? null, attacker: atkActor, defender: defActor });
+    await ClashManager._broadcastAndCheckReactions({ lastSkillUuid: atkItem?.uuid ?? null, attacker: atkActor, defender: defActor });
   }
 
   /* ─── 阶段五b：拼点结算逻辑 ────────────────────────────────────────────── */
@@ -2942,18 +2942,40 @@ export class ClashManager {
   /* ─── 反应系统 ─────────────────────────────────────────────────────────── */
 
   /**
+   * 广播反应检查到所有客户端，同时在本客户端运行。
+   * 由 GM 结算完成后调用。
+   */
+  static async _broadcastAndCheckReactions({ lastSkillUuid = null, attacker = null, defender = null } = {}) {
+    const data = {
+      lastSkillUuid,
+      attackerId: attacker?.id ?? null,
+      defenderId: defender?.id ?? null,
+    };
+    // 广播给其他所有客户端
+    game.socket.emit("system.limbusCompany_FVTT", { type: "reactionCheck", data });
+    // 本客户端（GM）也运行一次，仅处理 GM 自己拥有的 actor
+    await ClashManager._checkAndOfferReactions({ lastSkillUuid, attacker, defender });
+  }
+
+  /**
    * 检查场上所有 Token 是否有"反应"类 Activity 可触发。
-   * 对每个装备含"反应"Activity 且满足前置条件（OR逻辑）的 Token，弹出确认框。
+   * 只对当前用户拥有控制权的 actor 弹出确认框（防止多个客户端重复弹框）。
    * @param {{ lastSkillUuid?: string, attacker?: Actor|null, defender?: Actor|null }} ctx
    */
   static async _checkAndOfferReactions({ lastSkillUuid = null, attacker = null, defender = null } = {}) {
     if (!canvas?.tokens?.placeables) return;
-    console.log("[ClashManager][反应] 开始扫描反应条件 | lastSkillUuid:", lastSkillUuid,
+    console.log("[ClashManager][反应] 开始扫描反应条件 | 用户:", game.user.name,
+      "| lastSkillUuid:", lastSkillUuid,
       "| 攻击方:", attacker?.name ?? null, "| 防守方:", defender?.name ?? null,
       "| Token数量:", canvas.tokens.placeables.length);
     for (const token of canvas.tokens.placeables) {
       const actor = token.actor;
       if (!actor) continue;
+      // 只处理当前用户拥有控制权的 actor，避免多端重复弹框
+      if (!actor.isOwner) {
+        console.log(`[ClashManager][反应] 跳过「${actor.name}」（非本用户控制）`);
+        continue;
+      }
       for (const item of actor.items) {
         const activities = item.system?.activities ?? [];
         for (const act of activities) {
@@ -3133,8 +3155,18 @@ export class ClashManager {
 
   /* ─── Socket 消息处理：由主入口统一注册单一监听器后调用 ─────────────── */
 
-  /** GM 端处理 socket 消息（clashResolve / activityActivate） */
+  /** 处理 socket 消息（clashResolve / activityActivate / reactionCheck） */
   static async handleSocketMsg(msg) {
+    // 反应检查广播：所有客户端均处理，各自只弹出自己拥有控制权的 actor 的对话框
+    if (msg.type === "reactionCheck") {
+      const { lastSkillUuid, attackerId, defenderId } = msg.data ?? {};
+      const attacker = attackerId ? game.actors.get(attackerId) : null;
+      const defender = defenderId ? game.actors.get(defenderId) : null;
+      console.log("[ClashManager][反应] 收到 reactionCheck socket | 用户:", game.user.name);
+      await ClashManager._checkAndOfferReactions({ lastSkillUuid, attacker, defender });
+      return;
+    }
+
     // 玩家委托GM执行物品 [使用时] Activity（群体目标需GM权限更新其他Actor）
     if (msg.type === "activityActivate") {
       if (!game.user.isGM) return;
