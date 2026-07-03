@@ -2306,6 +2306,7 @@ export class ClashManager {
 
     // 统一发出本次承受所有 activity 通知
     await ClashManager._flushActMsgs(_actMsgs2, atkActor);
+    await ClashManager._broadcastAndCheckReactions({ lastSkillUuid: atkItem2?.uuid ?? null, attacker: atkActor, defender: defActor });
 
     // 若选中的是非 linked token actor，额外同步该 token 的 HP
     if (selActor !== baseActor && selActor.isToken) {
