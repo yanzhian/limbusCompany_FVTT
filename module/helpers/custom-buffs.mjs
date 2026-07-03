@@ -79,8 +79,8 @@ export function normalizeBuffType(type, name = "") {
  */
 registerCustomBuff("defensiveStance", {
   label: "防御姿态",
-  description: "- 最大值：4 层\n- 获得层数时刷新（替换），不叠加\n- 回合结束时层数减少 1，减至 0 时移除\n- 使本单位速度值固定为最小值\n- 拼点胜利时，使目标震颤引爆\n- 不会因受到伤害而陷入混乱",
-  maxStacks:     4,
+  description: "- 最大值：2 层\n- 获得层数时刷新（替换），不叠加\n- 回合结束时层数减少 1，减至 0 时移除\n- 使本单位速度值固定为最小值\n- 拼点胜利时，使目标震颤引爆\n- 不会因受到伤害而陷入混乱",
+  maxStacks:     2,
   refreshOnGain: true,
 
   /** 回合结束：层数-1，归零时移除 */
