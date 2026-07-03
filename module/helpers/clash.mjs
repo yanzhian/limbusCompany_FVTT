@@ -2965,23 +2965,15 @@ export class ClashManager {
    */
   static async _checkAndOfferReactions({ lastSkillUuid = null, attacker = null, defender = null } = {}) {
     if (!canvas?.tokens?.placeables) return;
-    console.log("[ClashManager][反应] 开始扫描反应条件 | 用户:", game.user.name,
-      "| lastSkillUuid:", lastSkillUuid,
-      "| 攻击方:", attacker?.name ?? null, "| 防守方:", defender?.name ?? null,
-      "| Token数量:", canvas.tokens.placeables.length);
     for (const token of canvas.tokens.placeables) {
       const actor = token.actor;
       if (!actor) continue;
       // 只处理当前用户拥有控制权的 actor，避免多端重复弹框
-      if (!actor.isOwner) {
-        console.log(`[ClashManager][反应] 跳过「${actor.name}」（非本用户控制）`);
-        continue;
-      }
+      if (!actor.isOwner) continue;
       for (const item of actor.items) {
         const activities = item.system?.activities ?? [];
         for (const act of activities) {
           if (act.trigger !== "反应") continue;
-          console.log(`[ClashManager][反应] 检查 Token「${actor.name}」物品「${item.name}」活动「${act.name}」`);
           const preconditions = Array.isArray(act.preconditions) ? act.preconditions
             : (act.precondition ? [act.precondition] : []);
           // OR 逻辑：任一前置条件满足即可
@@ -2989,13 +2981,10 @@ export class ClashManager {
             || preconditions.some(pre =>
                 ClashManager._evalReactionPrecond(pre, actor, attacker, defender, lastSkillUuid)
               );
-          console.log(`[ClashManager][反应]   前置条件 OR 结果:`, triggered,
-            "| 条件数:", preconditions.length, preconditions);
           if (!triggered) continue;
           // 检查次数限制
           const limitOk = ClashManager._checkLimit(act, item, actor);
-          if (!limitOk) { console.log("[ClashManager][反应]   次数限制未通过"); continue; }
-          console.log(`[ClashManager][反应]   ✅ 触发！弹出确认框`);
+          if (!limitOk) continue;
           // 弹出询问框
           const confirmed = await Dialog.confirm({
             title: "反应触发",
@@ -3034,7 +3023,6 @@ export class ClashManager {
     const targetActor = (pre?.target === "target" || pre?.target === "allEnemy" || pre?.target === "allEnemyOther")
       ? (defender ?? attacker)
       : actor;
-    console.log(`[ClashManager][反应]     单条件 type=${type} target=${pre?.target} → 检查角色:`, targetActor?.name ?? null);
 
     if (type === "hasBuff") {
       if (!targetActor || !pre.buff) return false;
@@ -3163,7 +3151,6 @@ export class ClashManager {
       const { lastSkillUuid, attackerId, defenderId } = msg.data ?? {};
       const attacker = attackerId ? game.actors.get(attackerId) : null;
       const defender = defenderId ? game.actors.get(defenderId) : null;
-      console.log("[ClashManager][反应] 收到 reactionCheck socket | 用户:", game.user.name);
       await ClashManager._checkAndOfferReactions({ lastSkillUuid, attacker, defender });
       return;
     }
