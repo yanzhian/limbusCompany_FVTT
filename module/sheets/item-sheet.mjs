@@ -706,12 +706,6 @@ export class LimbusItemSheet extends ItemSheet {
             <select class="ae-select" name="act-trigger">
               ${_buildTriggerOpts(act.trigger)}
             </select>
-            <div class="ae-reaction-note" style="display:${act.trigger === "反应" ? "block" : "none"};
-                 margin-top:4px;padding:4px 8px;background:#2a1a00;border-left:3px solid #C9A84C;
-                 color:#C9A84C;font-size:.75rem;line-height:1.4;">
-              ⚡ 反应模式：场上任意 Token 装备本物品且满足前置条件（OR 逻辑）时可触发。<br>
-              "使用技能"条件：对抗结算后弹出询问框。
-            </div>
           </div>
 
           <div class="ae-section">
@@ -1532,7 +1526,7 @@ function _activityEffectLabels() {
     { value: "baseValue",    label: "基础值" },
     { value: "seismicBlast", label: "震颤引爆" },
     { value: "triggerBuff",  label: "触发BUFF" },
-    { value: "useSkill",     label: "使用技能（发起对抗）" },
+    { value: "useSkill",     label: "使用技能" },
   ];
 }
 
@@ -1657,10 +1651,7 @@ function _buildCondRow(cond, idx, cfg) {
           <option value="useSkill" ${condType === "useSkill" ? "selected" : ""}>使用技能</option>
         </select>
         <label>目标</label>
-        <select class="ae-sel cond-target">
-          <option value="self"   ${(cond?.target ?? "self") === "self"   ? "selected" : ""}>自己</option>
-          <option value="target" ${cond?.target === "target" ? "selected" : ""}>目标</option>
-        </select>
+        <select class="ae-sel cond-target">${_buildTargetOptions(cond?.target ?? "self")}</select>
         <span class="ae-cond-buff-sec" ${isBuffSec ? "" : 'style="display:none"'}>
           <label>BUFF</label>
           <input class="ae-input cond-buff" type="text" list="ae-buff-dl"
@@ -1681,7 +1672,10 @@ function _buildCondRow(cond, idx, cfg) {
         <span class="ae-cond-skill-sec" ${isSkillSec ? "" : 'style="display:none"'}>
           <label>技能UUID</label>
           <input class="ae-input cond-skill-uuid" type="text"
-                 value="${_esc(cond?.skillUuid ?? "")}" placeholder="Item.xxx…" style="width:140px;">
+                 value="${_esc(cond?.skillUuid ?? "")}" placeholder="Item.xxx…" style="width:130px;">
+          <img class="ae-skill-preview" data-uuid-src="cond-skill-uuid"
+               src="${_esc(cond?.skillUuid ? "icons/svg/item-bag.svg" : "")}"
+               style="width:20px;height:20px;object-fit:cover;border-radius:3px;vertical-align:middle;${cond?.skillUuid ? "" : "display:none;"}">
         </span>
       </div>
     </div>`;
@@ -1787,8 +1781,10 @@ function _buildEffectRow(eff, idx, cfg) {
       <div class="ae-row-fields">
         <label>类型</label>
         <select class="ae-sel ae-eff-type eff-type">${effOpts}</select>
-        <label>目标</label>
-        <select class="ae-sel eff-target">${_buildTargetOptions(eff?.target ?? "self")}</select>
+        <span class="ae-eff-target-sec" ${isUseSkill ? 'style="display:none"' : ""}>
+          <label>目标</label>
+          <select class="ae-sel eff-target">${_buildTargetOptions(eff?.target ?? "self")}</select>
+        </span>
         <span class="ae-eff-round-sec" ${isAddBuff ? "" : 'style="display:none"'}>
           <label>回合</label>
           <select class="ae-sel eff-round">${roundOpts}</select>
@@ -1830,7 +1826,10 @@ function _buildEffectRow(eff, idx, cfg) {
         <span class="ae-eff-useskill-sec" ${isUseSkill ? "" : 'style="display:none"'}>
           <label>技能UUID</label>
           <input class="ae-input eff-skill-uuid" type="text"
-                 value="${_esc(eff?.skillUuid ?? "")}" placeholder="Item.xxx…" style="width:140px;">
+                 value="${_esc(eff?.skillUuid ?? "")}" placeholder="Item.xxx…" style="width:130px;">
+          <img class="ae-skill-preview" data-uuid-src="eff-skill-uuid"
+               src="${_esc(eff?.skillUuid ? "icons/svg/item-bag.svg" : "")}"
+               style="width:20px;height:20px;object-fit:cover;border-radius:3px;vertical-align:middle;${eff?.skillUuid ? "" : "display:none;"}">
         </span>
       </div>
     </div>`;
@@ -1887,16 +1886,37 @@ function _setupAeDialog(html, cfg) {
     html.find(".ae-limit-body").toggle();
   });
 
-  // 触发时机：切换为"反应"时显示说明注释
-  html.find("[name='act-trigger']").on("change", function () {
-    html.find(".ae-reaction-note").toggle($(this).val() === "反应");
-  });
-
   _bindDel(html);
   _bindEffType(html);
   _bindCondCostBuff(html);
   _bindCostType(html);
   _bindCondType(html);
+  _bindSkillUuidPreview(html);
+}
+
+/** UUID 输入框实时预览技能图标 */
+function _bindSkillUuidPreview(html) {
+  // 初始加载：填充已有 UUID 的图标
+  html.find(".ae-skill-preview[data-uuid-src]").each(async (_, img) => {
+    const $img = $(img);
+    const inputCls = $img.data("uuid-src");
+    const $input = $img.closest("span").find(`.${inputCls}`);
+    const uuid = $input.val()?.trim();
+    if (!uuid) return;
+    const itm = await fromUuid(uuid).catch(() => null);
+    if (itm?.img) { $img.attr("src", itm.img).attr("title", itm.name).show(); }
+  });
+
+  // 动态监听 UUID 输入变化
+  html.on("input", ".cond-skill-uuid, .eff-skill-uuid", async function () {
+    const $input = $(this);
+    const $img = $input.closest("span").find(".ae-skill-preview");
+    const uuid = $input.val()?.trim();
+    if (!uuid) { $img.hide(); return; }
+    const itm = await fromUuid(uuid).catch(() => null);
+    if (itm?.img) { $img.attr("src", itm.img).attr("title", itm.name).show(); }
+    else { $img.hide(); }
+  });
 }
 
 function _bindCondCostBuff(_html) {
@@ -1954,6 +1974,7 @@ function _bindEffType(html) {
     const isRandomBuff  = type === "randomBuff";
     const isTriggerBuff = type === "triggerBuff";
     const isUseSkill    = type === "useSkill";
+    row.find(".ae-eff-target-sec").toggle(!isUseSkill);
     row.find(".ae-eff-round-sec").toggle(isAddBuff);
     row.find(".ae-eff-buff-sec").toggle(isBuff);
     row.find(".ae-eff-val-sec").toggle(!isBuff && !isTriggerBuff && !isRandomBuff && !isUseSkill);
