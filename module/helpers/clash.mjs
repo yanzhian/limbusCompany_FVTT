@@ -1591,16 +1591,21 @@ export class ClashManager {
     ) ? { ...initFlags, rollTotal: atkFinalTotal, formula: atkFinalFormula, weight: atkWeightCur }
       : initFlags;
 
+    // 构造最终防守骰对象（含公式重投后的 total）
+    const defFinalRoll = defFinalTotal !== defRoll.total
+      ? { ...defRoll, total: defFinalTotal }
+      : defRoll;
+
     // 反击/防御：不走拼点流程，直接结算
     if (defCategory === "counter") {
-      await ClashManager._resolveDirectCounter(atkActor, defActor, effectiveInitFlags, defItem, defRoll, defFormula);
+      await ClashManager._resolveDirectCounter(atkActor, defActor, effectiveInitFlags, defItem, defFinalRoll, defFinalFormula);
       await ClashManager._applyActivities(atkItem, "攻击后", atkCtx);
       await ClashManager._applyActivities(defItem,  "攻击后", defCtx);
       await ClashManager._flushActMsgs(_actMsgs, atkActor);
       return;
     }
     if (defCategory === "block") {
-      await ClashManager._resolveDirectBlock(atkActor, defActor, effectiveInitFlags, defItem, defRoll, defFormula);
+      await ClashManager._resolveDirectBlock(atkActor, defActor, effectiveInitFlags, defItem, defFinalRoll, defFinalFormula);
       await ClashManager._applyActivities(atkItem, "攻击后", atkCtx);
       await ClashManager._applyActivities(defItem,  "攻击后", defCtx);
       await ClashManager._flushActMsgs(_actMsgs, atkActor);
