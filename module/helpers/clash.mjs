@@ -1117,10 +1117,6 @@ export class ClashManager {
     // 流血：发起者执行攻击动作时触发
     await ClashManager._processBleed(actor);
 
-    // ── [使用时] Activity 触发（单独触发，直接发消息）──────────────────
-    await ClashManager._applyActivitiesAndEquip(item, "使用时", {
-      owner: actor, atkActor: actor, defActor: null, _fireCounts: {},
-    });
 
     // 推进战斗槽 + 扣 AP
     // slotIndex >= 0：从战斗槽触发，推进 6-bag + 扣 AP（延迟动画后）
@@ -1519,10 +1515,6 @@ export class ClashManager {
     // 拼点结算所需的攻击方角色（提前获取，供 [使用时] 触发使用）
     const atkActor = game.actors.get(initFlags.attackerId);
 
-    // ── [使用时] Activity 触发（防守方使用技能进行对抗，与发起方对称）───
-    await ClashManager._applyActivitiesAndEquip(defItem, "使用时", {
-      owner: defActor, atkActor, defActor, _fireCounts: {},
-    });
 
     // 扣防守方 AP（恐慌时使用 EGO 免 AP 消耗）
     const defIsEgo     = (defItem.system?.type === "ego");
