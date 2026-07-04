@@ -1605,8 +1605,7 @@ function _buffLabelMap() {
 /** 触发时机下拉（分组：物品 / 技能 / 通用 / 反应） */
 function _buildTriggerOpts(selected) {
   const groups = [
-    { label: "── 物品 ──",  values: ["使用时"] },
-    { label: "── 技能 ──",  values: ["使用时", "攻击前", "攻击时", "攻击后",
+    { label: "── 使用 ──",  values: ["使用时", "攻击前", "攻击时", "攻击后",
                                        "拼点时", "拼点成功", "拼点失败",
                                        "命中时", "暴击命中时"] },
     { label: "── 通用 ──",  values: ["回合开始时", "回合结束时", "受到伤害时"] },
