@@ -179,6 +179,17 @@ export class ClashManager {
     return items;
   }
 
+  /** 对 item 触发 trigger，同时对 ctx.owner 装备格中所有物品也触发同一 trigger。
+   *  "受到伤害时" 各路径已单独处理装备格循环，不应使用此方法。 */
+  static async _applyActivitiesAndEquip(item, trigger, ctx) {
+    await ClashManager._applyActivities(item, trigger, ctx);
+    const owner = ctx.owner ?? null;
+    if (!owner) return;
+    for (const eq of ClashManager._getEquippedItems(owner)) {
+      await ClashManager._applyActivities(eq, trigger, ctx);
+    }
+  }
+
   static _buffLabel(type) {
     const labels = {
       strong:"强壮", weak:"虚弱", endure:"忍耐", breach:"破绽",
@@ -1105,9 +1116,8 @@ export class ClashManager {
     await ClashManager._processBleed(actor);
 
     // ── [使用时] Activity 触发（单独触发，直接发消息）──────────────────
-    await ClashManager._applyActivities(item, "使用时", {
+    await ClashManager._applyActivitiesAndEquip(item, "使用时", {
       owner: actor, atkActor: actor, defActor: null, _fireCounts: {},
-      // 无 _actMsgs：使用时独立场景，立即发出
     });
 
     // 推进战斗槽 + 扣 AP
@@ -1508,9 +1518,8 @@ export class ClashManager {
     const atkActor = game.actors.get(initFlags.attackerId);
 
     // ── [使用时] Activity 触发（防守方使用技能进行对抗，与发起方对称）───
-    await ClashManager._applyActivities(defItem, "使用时", {
+    await ClashManager._applyActivitiesAndEquip(defItem, "使用时", {
       owner: defActor, atkActor, defActor, _fireCounts: {},
-      // 无 _actMsgs：使用时独立场景，立即发出
     });
 
     // 扣防守方 AP（恐慌时使用 EGO 免 AP 消耗）
@@ -1544,14 +1553,14 @@ export class ClashManager {
     const defBaseFormulaOrig = defItem?.system?.diceFormula ?? defFormula;
 
     // ── [攻击前]：玩家B点击【对抗】后，拼点/结算前触发 ──────────────────
-    await ClashManager._applyActivities(atkItem, "攻击前", atkCtx);
-    await ClashManager._applyActivities(defItem, "攻击前", defCtx);
+    await ClashManager._applyActivitiesAndEquip(atkItem, "攻击前", atkCtx);
+    await ClashManager._applyActivitiesAndEquip(defItem, "攻击前", defCtx);
 
     // ── [攻击时] / [拼点时]：无论对抗类型，攻击时效果均应在此触发 ───────
-    await ClashManager._applyActivities(atkItem, "攻击时", atkCtx);
-    await ClashManager._applyActivities(atkItem, "拼点时", atkCtx);
-    await ClashManager._applyActivities(defItem,  "攻击时", defCtx);
-    await ClashManager._applyActivities(defItem,  "拼点时", defCtx);
+    await ClashManager._applyActivitiesAndEquip(atkItem, "攻击时", atkCtx);
+    await ClashManager._applyActivitiesAndEquip(atkItem, "拼点时", atkCtx);
+    await ClashManager._applyActivitiesAndEquip(defItem,  "攻击时", defCtx);
+    await ClashManager._applyActivitiesAndEquip(defItem,  "拼点时", defCtx);
 
     // ── [攻击时/拼点时] 可能修改骰子公式（diceAdj/diceFacesAdj/baseValue）──
     // 若公式与发起时不同，重新投骰，保留手动加值部分
@@ -1599,16 +1608,16 @@ export class ClashManager {
     // 反击/防御：不走拼点流程，直接结算
     if (defCategory === "counter") {
       await ClashManager._resolveDirectCounter(atkActor, defActor, effectiveInitFlags, defItem, defFinalRoll, defFinalFormula);
-      await ClashManager._applyActivities(atkItem, "攻击后", atkCtx);
-      await ClashManager._applyActivities(defItem,  "攻击后", defCtx);
+      await ClashManager._applyActivitiesAndEquip(atkItem, "攻击后", atkCtx);
+      await ClashManager._applyActivitiesAndEquip(defItem,  "攻击后", defCtx);
       await ClashManager._flushActMsgs(_actMsgs, atkActor);
       await ClashManager._broadcastAndCheckReactions({ lastSkillUuid: atkItem?.uuid ?? null, attacker: atkActor, defender: defActor });
       return;
     }
     if (defCategory === "block") {
       await ClashManager._resolveDirectBlock(atkActor, defActor, effectiveInitFlags, defItem, defFinalRoll, defFinalFormula);
-      await ClashManager._applyActivities(atkItem, "攻击后", atkCtx);
-      await ClashManager._applyActivities(defItem,  "攻击后", defCtx);
+      await ClashManager._applyActivitiesAndEquip(atkItem, "攻击后", atkCtx);
+      await ClashManager._applyActivitiesAndEquip(defItem,  "攻击后", defCtx);
       await ClashManager._flushActMsgs(_actMsgs, atkActor);
       await ClashManager._broadcastAndCheckReactions({ lastSkillUuid: atkItem?.uuid ?? null, attacker: atkActor, defender: defActor });
       return;
@@ -1640,13 +1649,13 @@ export class ClashManager {
     if (!isTie) {
       if (atkWins) {
         // 攻击方拼点胜
-        await ClashManager._applyActivities(atkItem, "拼点成功", atkCtx);
-        await ClashManager._applyActivities(defItem,  "拼点失败", defCtx);
+        await ClashManager._applyActivitiesAndEquip(atkItem, "拼点成功", atkCtx);
+        await ClashManager._applyActivitiesAndEquip(defItem,  "拼点失败", defCtx);
         // 命中（攻击方对防守方造成伤害）
         if (!dodgeWin) {
-          await ClashManager._applyActivities(atkItem, "命中时", atkCtx);
+          await ClashManager._applyActivitiesAndEquip(atkItem, "命中时", atkCtx);
           if (breatheCrit) {
-            await ClashManager._applyActivities(atkItem, "暴击命中时", atkCtx);
+            await ClashManager._applyActivitiesAndEquip(atkItem, "暴击命中时", atkCtx);
           }
           // 防守方受到伤害（技能 + 装备格物品）
           await ClashManager._applyActivities(defItem, "受到伤害时", defCtx);
@@ -1656,11 +1665,11 @@ export class ClashManager {
         }
       } else {
         // 防守方拼点胜（攻击方落败）
-        await ClashManager._applyActivities(atkItem, "拼点失败", atkCtx);
-        await ClashManager._applyActivities(defItem,  "拼点成功", defCtx);
+        await ClashManager._applyActivitiesAndEquip(atkItem, "拼点失败", atkCtx);
+        await ClashManager._applyActivitiesAndEquip(defItem,  "拼点成功", defCtx);
         // 防守方命中攻击方（闪避胜利不造成伤害，其余胜利均命中）
         if (!dodgeWin) {
-          await ClashManager._applyActivities(defItem, "命中时", defCtx);
+          await ClashManager._applyActivitiesAndEquip(defItem, "命中时", defCtx);
           // 攻击方受到伤害（技能 + 装备格物品）
           await ClashManager._applyActivities(atkItem, "受到伤害时", atkCtx);
           for (const eq of ClashManager._getEquippedItems(atkActor)) {
@@ -1696,8 +1705,8 @@ export class ClashManager {
     await ClashManager._sendResolveMsg(resolution, effectiveInitFlags, defActor, defItem, defFormula, sanityNotes);
 
     // ── [攻击后]：结算完对抗结果后触发 ────────────────────────────────
-    await ClashManager._applyActivities(atkItem, "攻击后", atkCtx);
-    await ClashManager._applyActivities(defItem,  "攻击后", defCtx);
+    await ClashManager._applyActivitiesAndEquip(atkItem, "攻击后", atkCtx);
+    await ClashManager._applyActivitiesAndEquip(defItem,  "攻击后", defCtx);
 
     // 统一发出本次对抗所有 activity 通知（汇总为一条，避免并发清理竞态）
     await ClashManager._flushActMsgs(_actMsgs, atkActor);
@@ -2110,12 +2119,12 @@ export class ClashManager {
     const defCtx2 = { atkActor, defActor, owner: defActor, other: atkActor, _fireCounts: _fc2, _actMsgs: _actMsgs2 };
 
     if (atkWins) {
-      await ClashManager._applyActivities(atkItemDoc, "拼点成功", atkCtx2);
-      await ClashManager._applyActivities(defItemDoc,  "拼点失败", defCtx2);
+      await ClashManager._applyActivitiesAndEquip(atkItemDoc, "拼点成功", atkCtx2);
+      await ClashManager._applyActivitiesAndEquip(defItemDoc,  "拼点失败", defCtx2);
       if (!dodgeWin) {
-        await ClashManager._applyActivities(atkItemDoc, "命中时", atkCtx2);
+        await ClashManager._applyActivitiesAndEquip(atkItemDoc, "命中时", atkCtx2);
         if (breatheCrit) {
-          await ClashManager._applyActivities(atkItemDoc, "暴击命中时", atkCtx2);
+          await ClashManager._applyActivitiesAndEquip(atkItemDoc, "暴击命中时", atkCtx2);
         }
         await ClashManager._applyActivities(defItemDoc, "受到伤害时", defCtx2);
         for (const eq of ClashManager._getEquippedItems(defActor)) {
@@ -2123,10 +2132,10 @@ export class ClashManager {
         }
       }
     } else {
-      await ClashManager._applyActivities(atkItemDoc, "拼点失败", atkCtx2);
-      await ClashManager._applyActivities(defItemDoc,  "拼点成功", defCtx2);
+      await ClashManager._applyActivitiesAndEquip(atkItemDoc, "拼点失败", atkCtx2);
+      await ClashManager._applyActivitiesAndEquip(defItemDoc,  "拼点成功", defCtx2);
       if (!dodgeWin) {
-        await ClashManager._applyActivities(defItemDoc, "命中时", defCtx2);
+        await ClashManager._applyActivitiesAndEquip(defItemDoc, "命中时", defCtx2);
         await ClashManager._applyActivities(atkItemDoc, "受到伤害时", atkCtx2);
         for (const eq of ClashManager._getEquippedItems(atkActor)) {
           await ClashManager._applyActivities(eq, "受到伤害时", atkCtx2);
@@ -2189,8 +2198,8 @@ export class ClashManager {
     const atkBaseFormulaOrig2 = initFlags.baseFormula ?? initFlags.formula;
 
     // [攻击前] [攻击时]
-    await ClashManager._applyActivities(atkItem2, "攻击前", atkCtx2);
-    await ClashManager._applyActivities(atkItem2, "攻击时", atkCtx2);
+    await ClashManager._applyActivitiesAndEquip(atkItem2, "攻击前", atkCtx2);
+    await ClashManager._applyActivitiesAndEquip(atkItem2, "攻击时", atkCtx2);
 
     // [攻击时] 可能修改骰子公式（diceAdj/diceFacesAdj/baseValue），检测并重投
     let finalRollTotal = rollTotal;
@@ -2211,7 +2220,7 @@ export class ClashManager {
     }
 
     // [命中时]：承受始终命中
-    await ClashManager._applyActivities(atkItem2, "命中时", atkCtx2);
+    await ClashManager._applyActivitiesAndEquip(atkItem2, "命中时", atkCtx2);
 
     // ── 攻击方 BUFF 修正（承受不拼点，拼点威力↑↓不计入）──────────────────
     const strong  = atkActor ? gs(atkActor, "strong") : 0;
@@ -2285,7 +2294,7 @@ export class ClashManager {
       const critChance = (breatheBuff2.intensity ?? 0) * 0.05;
       if (Math.random() < critChance) {
         await ClashManager._reduceBuffStacks(atkActor, "breathing");
-        await ClashManager._applyActivities(atkItem2, "暴击命中时", atkCtx2);
+        await ClashManager._applyActivitiesAndEquip(atkItem2, "暴击命中时", atkCtx2);
       }
     }
 
@@ -2302,7 +2311,7 @@ export class ClashManager {
     }
 
     // [攻击后]：结算完毕
-    await ClashManager._applyActivities(atkItem2, "攻击后", atkCtx2);
+    await ClashManager._applyActivitiesAndEquip(atkItem2, "攻击后", atkCtx2);
 
     // 统一发出本次承受所有 activity 通知
     await ClashManager._flushActMsgs(_actMsgs2, atkActor);
