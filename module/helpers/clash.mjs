@@ -336,6 +336,8 @@ export class ClashManager {
    * @param {object} [ctx._fireCounts]  每轮次数计数器（调用方传入同一对象以跨 trigger 共享）
    */
   static async _applyActivities(item, trigger, ctx = {}) {
+    // 技能（type==="skill"）不响应[使用时]，该触发时机仅限装备格物品
+    if (trigger === "使用时" && item?.type === "skill") return;
     const acts = item?.system?.activities;
     if (!Array.isArray(acts) || acts.length === 0) return;
 
