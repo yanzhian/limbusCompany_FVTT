@@ -2979,9 +2979,9 @@ export class ClashManager {
           if (act.trigger !== "反应") continue;
           const preconditions = Array.isArray(act.preconditions) ? act.preconditions
             : (act.precondition ? [act.precondition] : []);
-          // OR 逻辑：任一前置条件满足即可
+          // AND 逻辑：所有前置条件均需满足
           const triggered = preconditions.length === 0
-            || preconditions.some(pre =>
+            || preconditions.every(pre =>
                 ClashManager._evalReactionPrecond(pre, actor, attacker, defender, lastSkillUuid)
               );
           if (!triggered) continue;
