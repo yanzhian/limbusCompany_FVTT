@@ -371,11 +371,13 @@ export class ClashManager {
         const buff    = precTgt ? ClashManager._getBuff(precTgt, preBuffType) : null;
 
         if (pre.type === "perN") {
-          // 【每】：层数 ≥ N（N = pre.stacks）才满足，倍数 = floor(当前层数 / N)
+          // 【每】：层数 ≥ N（N = pre.stacks）才满足，倍数 = floor(当前层数 / N)，可选上限 maxTimes
           const n = Math.max(1, pre.stacks ?? 1);
           if (!buff || (buff.stacks ?? 0) < n) { precondFail = true; break; }
           if ((pre.intensity ?? 0) > 0 && (buff.intensity ?? 0) < pre.intensity) { precondFail = true; break; }
-          precondMultiplier *= Math.floor((buff.stacks ?? 0) / n);
+          let times = Math.floor((buff.stacks ?? 0) / n);
+          if ((pre.maxTimes ?? 0) > 0) times = Math.min(times, pre.maxTimes);
+          precondMultiplier *= times;
         } else {
           // 【拥有】（默认）：达到指定强度/层数阈值即满足
           if (!buff) { precondFail = true; break; }

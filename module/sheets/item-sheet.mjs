@@ -1660,6 +1660,10 @@ function _buildCondRow(cond, idx, cfg) {
           <input class="ae-input-sm cond-intensity" type="number" value="${cond?.intensity ?? 0}" min="0">
           <label class="cond-stacks-label">${stacksLbl}</label>
           <input class="ae-input-sm cond-stacks" type="number" value="${cond?.stacks ?? 1}" min="0">
+          <span class="ae-cond-pern-max" ${condType === "perN" ? "" : 'style="display:none"'}>
+            <label>最大倍数</label>
+            <input class="ae-input-sm cond-max-times" type="number" value="${cond?.maxTimes ?? 0}" min="0" placeholder="0=无限">
+          </span>
         </span>
         <span class="ae-cond-attr-sec" ${isAttrSec ? "" : 'style="display:none"'}>
           <label>属性</label>
@@ -1934,6 +1938,7 @@ function _bindCondType(html) {
     row.find(".ae-cond-buff-sec").toggle(isBuffSec);
     row.find(".ae-cond-attr-sec").toggle(isAttrSec);
     row.find(".ae-cond-skill-sec").toggle(isSkillSec);
+    row.find(".ae-cond-pern-max").toggle(type === "perN");
   });
 }
 
@@ -2014,13 +2019,15 @@ function _readActivityForm(html, original) {
         skillUuid: $r.find(".cond-skill-uuid").val()?.trim() || "",
       });
     } else {
+      const isPerN = condType === "perN";
       preconditions.push({
-        type:       condType === "perN" ? "perN" : "hasBuff",
+        type:       isPerN ? "perN" : "hasBuff",
         target:     $r.find(".cond-target").val()  || "self",
         buff:       resolveKey($r.find(".cond-buff").val()),
         buffCustom: "",
         intensity:  parseInt($r.find(".cond-intensity").val()) || 0,
         stacks:     parseInt($r.find(".cond-stacks").val())    || 1,
+        ...(isPerN ? { maxTimes: parseInt($r.find(".cond-max-times").val()) || 0 } : {}),
       });
     }
   });
