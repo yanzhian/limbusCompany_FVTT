@@ -218,3 +218,50 @@ registerCustomBuff("butterfly", {
       + ` 自身获得 1 层【沉沦】（强度 2）。`;
   },
 });
+
+/* ─── 基础 BUFF 描述注册（仅 label + description，逻辑由 clash.mjs 内置处理）── */
+
+registerCustomBuff("tremor", {
+  label: "震颤",
+  description: "受到造成【震颤引爆】的攻击时，混乱阈值前移等同于本效果强度的数值。\n回合结束后，本效果的层数减少 1 层。",
+});
+
+registerCustomBuff("seismicBlast", {
+  label: "震颤引爆",
+  description: "使目标的混乱阈值前移与震颤强度相同的数值。",
+});
+
+registerCustomBuff("sinking", {
+  label: "沉沦",
+  description: "[受到伤害时]：失去数值等同于本效果强度的固定理智值点数。\n效果生效后，本效果的层数减少 1 层。",
+});
+
+registerCustomBuff("burn", {
+  label: "烧伤",
+  description: "[回合结束时]：减少 1 层【烧伤】层数，受到【烧伤】强度的固定伤害。",
+});
+
+registerCustomBuff("rupture", {
+  label: "破裂",
+  description: "[受到伤害时]：减少 1 层【破裂】层数，受到【破裂】强度的固定伤害。",
+});
+
+registerCustomBuff("bleed", {
+  label: "流血",
+  description: "[攻击时]：减少 1 层【流血】层数，受到【流血】强度的固定伤害。",
+});
+
+registerCustomBuff("charge", {
+  label: "充能",
+  description: "·特殊技能需要消耗层数。\n[回合结束时]：减少 1 层【充能】层数。",
+});
+
+registerCustomBuff("breathing", {
+  label: "呼吸法",
+  description: "[命中时]：本次攻击根据强度×5%的概率暴击，如果暴击则减少 1 层【呼吸法】层数。\n[回合结束时]：减少 1 层【呼吸法】层数。",
+});
+
+registerCustomBuff("bullet", {
+  label: "子弹",
+  description: "·特殊技能需要消耗层数。",
+});
