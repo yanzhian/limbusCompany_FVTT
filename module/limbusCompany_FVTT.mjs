@@ -425,6 +425,17 @@ Hooks.on("combatStart", (combat) => {
   }
 });
 
+/** 战斗结束（删除 Combat 文档）：重置遭遇战触发次数计数 */
+Hooks.on("deleteCombat", async (combat) => {
+  if (!game.user.isGM) return;
+  for (const combatant of combat.combatants) {
+    const actor = combatant.actor;
+    if (!actor) continue;
+    await actor.unsetFlag("limbusCompany_FVTT", "encounterFireCounts");
+    await actor.unsetFlag("limbusCompany_FVTT", "turnFireCounts");
+  }
+});
+
 /**
  * 回合结束时处理特殊状态（陷入混乱/陷入恐慌 自动移除）
  */
@@ -444,8 +455,9 @@ Hooks.on("updateCombat", async (combat, changed) => {
     if (!actor || actor.type !== "character") continue;
     const buffs = actor.system.buffs ?? [];
 
-    // 每轮重置拼点胜利计数（用于理智增加量递增计算）
+    // 每轮重置拼点胜利计数 & 每回合效果触发次数
     await actor.unsetFlag("limbusCompany_FVTT", "clashWinsThisRound");
+    await actor.unsetFlag("limbusCompany_FVTT", "turnFireCounts");
 
     // ── 回合结束 BUFF 清理与晋升 ────────────────────────────────────────
     // 移除本轮有效的临时 BUFF（强壮/虚弱/混乱/恐慌等），将下回合 BUFF 转为本回合

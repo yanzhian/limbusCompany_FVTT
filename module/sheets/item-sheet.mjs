@@ -683,7 +683,7 @@ export class LimbusItemSheet extends ItemSheet {
     const effects = Array.isArray(act.effects)
       ? foundry.utils.deepClone(act.effects)
       : (act.effect ? [act.effect] : []);
-    const hasLimit = act.limit?.type === "perTurn";
+    const limitType = act.limit?.type ?? "unlimited";
 
     const content = `
       ${_buildBuffDatalistHtml("ae-buff-dl", cfg)}
@@ -747,10 +747,15 @@ export class LimbusItemSheet extends ItemSheet {
               <span class="ae-section-title">次数限制</span>
               <button type="button" class="ae-add-btn ae-toggle-limit">＋</button>
             </div>
-            <div class="ae-limit-body" style="display:${hasLimit ? "flex" : "none"}">
-              <label class="ae-label">每回合上限</label>
+            <div class="ae-limit-body" style="display:${limitType !== "unlimited" ? "flex" : "none"}">
+              <select class="ae-select ae-input-sm" name="act-limit-type">
+                <option value="unlimited"  ${limitType === "unlimited"   ? "selected" : ""}>无限制</option>
+                <option value="perTurn"    ${limitType === "perTurn"     ? "selected" : ""}>每回合</option>
+                <option value="perEncounter" ${limitType === "perEncounter" ? "selected" : ""}>每次遭遇战</option>
+              </select>
               <input class="ae-input ae-input-sm" type="number" name="act-limit-count"
                      value="${act.limit?.count ?? 1}" min="1">
+              <label class="ae-label">次</label>
             </div>
           </div>
 
@@ -2112,6 +2117,7 @@ function _readActivityForm(html, original) {
 
   const limitVisible = html.find(".ae-limit-body").is(":visible");
   const limitCount   = parseInt(html.find("[name='act-limit-count']").val()) || 1;
+  const limitTypeVal = html.find("[name='act-limit-type']").val() || "perTurn";
 
   return {
     ...original,
@@ -2121,7 +2127,7 @@ function _readActivityForm(html, original) {
     costs,
     effects,
     limit: {
-      type:  limitVisible ? "perTurn" : "unlimited",
+      type:  limitVisible ? limitTypeVal : "unlimited",
       count: limitVisible ? limitCount : 0,
     },
   };

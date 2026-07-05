@@ -350,11 +350,17 @@ export class ClashManager {
     for (const act of acts) {
       if (!act?.trigger || act.trigger !== trigger) continue;
 
-      // ── 次数限制（perTurn）──────────────────────────────────────────────
-      if (act.limit?.type === "perTurn" && (act.limit.count ?? 0) > 0) {
-        const key   = `${item.id}_${trigger}`;
-        const fired = ctx._fireCounts[key] ?? 0;
-        if (fired >= act.limit.count) continue;
+      // ── 次数限制（perTurn / perEncounter）────────────────────────────────
+      const limitType  = act.limit?.type;
+      const limitCount = act.limit?.count ?? 0;
+      const actKey     = `${item.id}_${act.name ?? trigger}`;
+      if (limitType === "perTurn" && limitCount > 0) {
+        const counts = owner?.getFlag?.("limbusCompany_FVTT", "turnFireCounts") ?? {};
+        if ((counts[actKey] ?? 0) >= limitCount) continue;
+      }
+      if (limitType === "perEncounter" && limitCount > 0) {
+        const counts = owner?.getFlag?.("limbusCompany_FVTT", "encounterFireCounts") ?? {};
+        if ((counts[actKey] ?? 0) >= limitCount) continue;
       }
 
       // ── 前置条件 ─────────────────────────────────────────────────────
@@ -719,10 +725,12 @@ export class ClashManager {
         } // end for effTgt
       }
 
-      // 记录触发次数
-      if (act.limit?.type === "perTurn") {
-        const key = `${item.id}_${trigger}`;
-        ctx._fireCounts[key] = (ctx._fireCounts[key] ?? 0) + 1;
+      // 记录触发次数（写入 actor flags 以实现跨 action 持久化）
+      if ((limitType === "perTurn" || limitType === "perEncounter") && limitCount > 0 && owner?.setFlag) {
+        const flagKey = limitType === "perTurn" ? "turnFireCounts" : "encounterFireCounts";
+        const counts  = foundry.utils.deepClone(owner.getFlag?.("limbusCompany_FVTT", flagKey) ?? {});
+        counts[actKey] = (counts[actKey] ?? 0) + 1;
+        await owner.setFlag("limbusCompany_FVTT", flagKey, counts);
       }
     }
 
