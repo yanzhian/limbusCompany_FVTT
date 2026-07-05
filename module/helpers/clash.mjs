@@ -1604,7 +1604,13 @@ export class ClashManager {
     // 反击/防御：不走拼点流程，直接结算
     if (defCategory === "counter") {
       await ClashManager._resolveDirectCounter(atkActor, defActor, effectiveInitFlags, defItem, defFinalRoll, defFinalFormula);
-      await ClashManager._applyActivitiesAndEquip(atkItem, "攻击后", atkCtx);
+      // 反击：守方拼点胜/主动命中攻方，攻方拼点败/被命中
+      await ClashManager._applyActivitiesAndEquip(defItem,  "拼点成功", defCtx);
+      await ClashManager._applyActivitiesAndEquip(atkItem,  "拼点失败", atkCtx);
+      // 双方互相命中（攻方命中守方 + 守方反击命中攻方）
+      await ClashManager._applyActivitiesAndEquip(atkItem,  "命中时", atkCtx);
+      await ClashManager._applyActivitiesAndEquip(defItem,  "命中时", defCtx);
+      await ClashManager._applyActivitiesAndEquip(atkItem,  "攻击后", atkCtx);
       await ClashManager._applyActivitiesAndEquip(defItem,  "攻击后", defCtx);
       await ClashManager._flushActMsgs(_actMsgs, atkActor);
       await ClashManager._broadcastAndCheckReactions({ lastSkillUuid: atkItem?.uuid ?? null, attacker: atkActor, defender: defActor });
@@ -1612,7 +1618,9 @@ export class ClashManager {
     }
     if (defCategory === "block") {
       await ClashManager._resolveDirectBlock(atkActor, defActor, effectiveInitFlags, defItem, defFinalRoll, defFinalFormula);
-      await ClashManager._applyActivitiesAndEquip(atkItem, "攻击后", atkCtx);
+      // 格挡：攻方命中守方（守方未命中攻方）
+      await ClashManager._applyActivitiesAndEquip(atkItem,  "命中时", atkCtx);
+      await ClashManager._applyActivitiesAndEquip(atkItem,  "攻击后", atkCtx);
       await ClashManager._applyActivitiesAndEquip(defItem,  "攻击后", defCtx);
       await ClashManager._flushActMsgs(_actMsgs, atkActor);
       await ClashManager._broadcastAndCheckReactions({ lastSkillUuid: atkItem?.uuid ?? null, attacker: atkActor, defender: defActor });
