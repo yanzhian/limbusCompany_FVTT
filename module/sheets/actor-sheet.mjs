@@ -72,6 +72,14 @@ export class LimbusActorSheet extends ActorSheet {
     context.xpPercent     = system.xp.next  > 0 ? ((system.xp.value  / system.xp.next)  * 100) : 0;
     context.canLevelUp    = (system.xp.value ?? 0) > (system.xp.next ?? Number.MAX_SAFE_INTEGER);
     context.hpPercent     = system.hp.max   > 0 ? ((system.hp.value   / system.hp.max)   * 100) : 0;
+    // 护盾：叠加在血条右侧，超出血量上限部分也显示
+    const shieldBuff      = (system.buffs ?? []).find(b => b.type === "shield");
+    const shieldStacks    = shieldBuff?.stacks ?? 0;
+    const effectiveMax    = system.hp.max > 0 ? system.hp.max : 1;
+    context.shieldStacks  = shieldStacks;
+    // 护盾条宽度 = min(shieldStacks, max) / max * 100，右移 = hpPercent
+    context.shieldWidth   = Math.min(shieldStacks, effectiveMax) / effectiveMax * 100;
+    context.shieldOffset  = context.hpPercent; // 护盾条从HP末端开始
     context.sanityPercent = ((system.sanity.value - 5) / 90) * 100;
     context.isInPanic     = system.sanity.value <= 5;
 

@@ -2524,6 +2524,24 @@ export class ClashManager {
 
     // ── 受到伤害时 BUFF ────────────────────────────────────────────────────
 
+    // 【护盾】：每层抵挡 1 点伤害，先于其他伤害结算，剩余伤害再穿透
+    const shieldBuff = ClashManager._getBuff(actor, "shield");
+    if (shieldBuff && (shieldBuff.stacks ?? 0) > 0 && damage > 0) {
+      const absorbed   = Math.min(shieldBuff.stacks, damage);
+      const remaining  = shieldBuff.stacks - absorbed;
+      damage = damage - absorbed;
+      const buffs = foundry.utils.deepClone(actor.system?.buffs ?? []);
+      const si = buffs.findIndex(b => b.id === shieldBuff.id);
+      if (si >= 0) {
+        if (remaining <= 0) buffs.splice(si, 1);
+        else buffs[si] = { ...buffs[si], stacks: remaining };
+        await actor.update({ "system.buffs": buffs });
+      }
+      if (hookMsgs) {
+        hookMsgs.push(`【护盾】吸收 <strong>${absorbed}</strong> 点伤害（剩余 <strong>${remaining}</strong> 层）`);
+      }
+    }
+
     // 【破裂】：附加强度点固定伤害，层数-1
     const ruptureBuff = ClashManager._getBuff(actor, "rupture");
     let ruptureDmg = 0;

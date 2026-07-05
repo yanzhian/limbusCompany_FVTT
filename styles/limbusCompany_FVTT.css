@@ -330,6 +330,24 @@
   background: #A83232;
 }
 
+/* 护盾条：叠加在血条末端，position:absolute 允许超出血量上限显示 */
+.limbuscompany .resource-bar-fill.shield-fill {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  background: #1FADCF;
+  opacity: 0.85;
+  border-radius: 0 2px 2px 0;
+  transition: width 0.3s, left 0.3s;
+}
+
+.limbuscompany .shield-display {
+  font-size: 0.7rem;
+  color: #1FADCF;
+  margin-left: 4px;
+  white-space: nowrap;
+}
+
 .limbuscompany .resource-bar-fill.sanity-fill {
   background: linear-gradient(
     to left,

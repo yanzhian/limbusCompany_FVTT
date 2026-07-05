@@ -265,3 +265,21 @@ registerCustomBuff("bullet", {
   label: "子弹",
   description: "·特殊技能需要消耗层数。",
 });
+
+registerCustomBuff("shield", {
+  label: "护盾",
+  description: "受到伤害时：每层抵挡 1 点伤害（先于其他伤害结算）。\n回合结束时：移除全部护盾层数。\n护盾可以超出生命值上限存在。",
+
+  /** 回合结束：清除全部护盾 */
+  async onRoundEnd(actor, buff) {
+    const buffs = foundry.utils.deepClone(actor.system?.buffs ?? []);
+    const idx   = buffs.findIndex(b => b.id === buff.id);
+    if (idx < 0) return;
+    buffs.splice(idx, 1);
+    await actor.update({ "system.buffs": buffs });
+    await ChatMessage.create({
+      speaker: ChatMessage.getSpeaker({ actor }),
+      content: `<div class="limbuscompany chat-clash"><strong>${actor.name}</strong> 的【护盾】在回合结束时消散。</div>`,
+    });
+  },
+});
