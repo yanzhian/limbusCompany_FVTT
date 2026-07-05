@@ -1061,6 +1061,13 @@ export class LimbusActorSheet extends ActorSheet {
       if (curAp < 1) {
         ui.notifications.warn("行动值不足，无法激活装备。"); return;
       }
+      // 预检：若所有[使用时]效果均已达到次数限制，拒绝本次使用并给出黄色警告
+      const { blocked, reasons } = ClashManager._checkAllActivitiesBlocked(item, "使用时", this.actor);
+      if (blocked) {
+        const detail = reasons.length ? `（${reasons.join("；")}）` : "";
+        ui.notifications.warn(`【${item.name}】的使用次数已达上限，本次使用被取消。${detail}`);
+        return;
+      }
       await this.actor.update({ "system.ap.value": curAp - 1 });
     }
 

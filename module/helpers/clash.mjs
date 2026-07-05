@@ -3139,6 +3139,45 @@ export class ClashManager {
   }
 
   /**
+   * 检查某物品的指定触发时机是否全部被次数限制锁定。
+   * 返回 { blocked: boolean, reasons: string[] }
+   * blocked=true 意味着该 trigger 下所有 activity 均已达到限制，本次使用无任何效果。
+   */
+  static _checkAllActivitiesBlocked(item, trigger, actor) {
+    const acts = (item?.system?.activities ?? []).filter(a => a?.trigger === trigger);
+    if (acts.length === 0) return { blocked: false, reasons: [] };
+
+    const reasons = [];
+    let blockedCount = 0;
+
+    for (const act of acts) {
+      const limitType  = act.limit?.type;
+      const limitCount = act.limit?.count ?? 0;
+      if (!limitType || limitType === "unlimited" || limitCount <= 0) continue;
+
+      const actKey = `${item.id}_${act.name ?? trigger}`;
+      if (limitType === "perTurn") {
+        const counts = actor?.getFlag?.("limbusCompany_FVTT", "turnFireCounts") ?? {};
+        if ((counts[actKey] ?? 0) >= limitCount) {
+          blockedCount++;
+          reasons.push(`【${act.name || trigger}】本回合已使用 ${limitCount} 次`);
+        }
+      } else if (limitType === "perEncounter") {
+        const counts = actor?.getFlag?.("limbusCompany_FVTT", "encounterFireCounts") ?? {};
+        if ((counts[actKey] ?? 0) >= limitCount) {
+          blockedCount++;
+          reasons.push(`【${act.name || trigger}】本场对局已使用 ${limitCount} 次`);
+        }
+      }
+    }
+
+    // 所有有限制的 activity 都被锁定，且没有无限制的 activity
+    const hasUnlimited = acts.some(a => !a.limit?.type || a.limit.type === "unlimited" || !(a.limit?.count > 0));
+    const blocked = !hasUnlimited && blockedCount === acts.length;
+    return { blocked, reasons };
+  }
+
+  /**
    * 执行反应效果（useSkill 型：以该技能发起对抗，无需消耗行动值）
    * 其余效果类型通过创建临时活动条目走 _applyActivities 路径。
    */
