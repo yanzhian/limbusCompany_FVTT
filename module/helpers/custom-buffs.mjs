@@ -277,9 +277,9 @@ registerCustomBuff("shield", {
     if (idx < 0) return;
     buffs.splice(idx, 1);
     await actor.update({ "system.buffs": buffs });
-    await ChatMessage.create({
-      speaker: ChatMessage.getSpeaker({ actor }),
-      content: `<div class="limbuscompany chat-clash"><strong>${actor.name}</strong> 的【护盾】在回合结束时消散。</div>`,
-    });
+    // await ChatMessage.create({
+    //   speaker: ChatMessage.getSpeaker({ actor }),
+    //   content: `<div class="limbuscompany chat-clash"><strong>${actor.name}</strong> 的【护盾】在回合结束时消散。</div>`,
+    // });
   },
 });
