@@ -1109,6 +1109,7 @@ export class ClashManager {
           type:        "clash-initiate",
           attackerId:  actor.id,
           itemId:      item.id,
+          itemUuid:    item.uuid ?? "",
           rollTotal:   roll.total,
           rollData:    roll.toJSON(),
           formula,
@@ -1544,7 +1545,10 @@ export class ClashManager {
     const defCategory = sys.category ?? "";
 
     // 攻击方技能物品（用于 activity 触发）
-    const atkItem = atkActor?.items?.get(initFlags.itemId) ?? null;
+    // 若技能由反应的 UUID 触发（非角色自有物品），需通过 fromUuid 回退查找
+    const atkItem = atkActor?.items?.get(initFlags.itemId)
+      ?? (initFlags.itemUuid ? await fromUuid(initFlags.itemUuid).catch(() => null) : null)
+      ?? null;
     // 共享的 perTurn 计数器（攻守双方共用，本次对抗内全程共享）
     // _actMsgs：汇总本次对抗所有 activity 消息，结束时统一发一条，避免并发 create 导致 Foundry 清理竞态
     const _fc      = {};
@@ -1944,6 +1948,7 @@ export class ClashManager {
       atkWeight:   initFlags.weight   ?? 1,
       atkRollBase: initFlags.rollTotal ?? 0,
       atkItemId:   initFlags.itemId   ?? "",
+      atkItemUuid: initFlags.itemUuid ?? "",
       defActorId:  defActor?.id  ?? "",
       defFormula:  defFormula    ?? "",
       defItemName, defItemImg,
@@ -2122,7 +2127,9 @@ export class ClashManager {
     const { atkWins, isTie: newIsTie, dodgeWin, breatheCrit } = resolution;
     if (newIsTie) return; // 再次平局，等待下一次重投
 
-    const atkItemDoc = atkActor?.items?.get(rerollData.atkItemId) ?? null;
+    const atkItemDoc = atkActor?.items?.get(rerollData.atkItemId)
+      ?? (rerollData.atkItemUuid ? await fromUuid(rerollData.atkItemUuid).catch(() => null) : null)
+      ?? null;
     const defItemDoc = defActor?.items?.get(rerollData.defItemId) ?? null;
 
     const _fc2      = {};
@@ -2200,7 +2207,9 @@ export class ClashManager {
     const baseActor = game.actors.get(selActor.id) ?? selActor;
 
     // ── Activity 触发（承受路径）—— 必须在伤害计算之前，公式可能被修改 ─────
-    const atkItem2  = atkActor?.items?.get(initFlags.itemId) ?? null;
+    const atkItem2  = atkActor?.items?.get(initFlags.itemId)
+      ?? (initFlags.itemUuid ? await fromUuid(initFlags.itemUuid).catch(() => null) : null)
+      ?? null;
     const _fc2      = {};
     const _actMsgs2 = [];
     const atkCtx2 = { atkActor, defActor: baseActor, owner: atkActor, other: baseActor, _fireCounts: _fc2, _actMsgs: _actMsgs2 };
