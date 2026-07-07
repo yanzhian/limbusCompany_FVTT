@@ -721,6 +721,45 @@ export class ClashManager {
             }
             break;
           }
+          case "useSkill": {
+            let skillItem = null;
+            if (eff.skillRef === "equipped") {
+              const slot  = eff.skillSlot ?? "basic";
+              const level = Math.max(1, parseInt(eff.skillLevel) || 1);
+              if (slot === "defense") {
+                const defId = owner?.system?.skills?.defense;
+                skillItem = defId ? owner?.items?.get(defId) : null;
+              } else {
+                const basicSlots = owner?.system?.skills?.basic ?? [];
+                skillItem = basicSlots[level - 1] ? owner?.items?.get(basicSlots[level - 1]) : null;
+              }
+              if (!skillItem) {
+                const lbl = slot === "defense" ? "守备技能" : `Lv.${level} 基础技能`;
+                descStr = `未找到已装备的${lbl}`;
+                break;
+              }
+            } else {
+              const uuid = eff.skillUuid ?? "";
+              if (!uuid) { descStr = "useSkill：未配置技能UUID"; break; }
+              skillItem = await fromUuid(uuid).catch(() => null);
+              if (!skillItem) { descStr = `useSkill：找不到技能 ${uuid}`; break; }
+            }
+            // 守备技能 → 触发其[使用时] Activities
+            if (skillItem.system?.type === "defense") {
+              await ClashManager._applyActivities(skillItem, "使用时", {
+                owner, atkActor: ctx.atkActor, defActor: ctx.defActor,
+                _fireCounts: {}, _actMsgs: ctx._actMsgs ?? [],
+              });
+              descStr = `触发【${skillItem.name}】[使用时]`;
+            } else {
+              // 非守备技能 → 弹出对抗发起窗口（仅限有 AP 的场景，AP 不足则跳过）
+              const curAP = owner?.system?.ap?.value ?? 0;
+              if (owner && curAP <= 0) await owner.update({ "system.ap.value": 1 });
+              await ClashManager.showInitiateDialog(owner, skillItem, -2);
+              descStr = `发起对抗：【${skillItem.name}】`;
+            }
+            break;
+          }
           default:
             // relatedSkillConvert 等其他特殊效果暂不在此处理
             descStr = `${eff.type} 效果触发`;
