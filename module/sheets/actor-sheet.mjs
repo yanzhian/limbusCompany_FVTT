@@ -1449,9 +1449,12 @@ export class LimbusActorSheet extends ActorSheet {
       const nextId = this._drawNextFromPool();
       state.slots.push(nextId);   // 补充到位置5
 
-      // 重置所有 transform（不带动画）
+      // 重置 wrapper 和内部 slot 的所有内联动画样式（不带动画）
       const $w2 = _wraps();
-      $w2.each((_, el) => $(el).css({ transition: "none", transform: "" }));
+      $w2.each((_, el) => {
+        $(el).css({ transition: "none", transform: "" });
+        $(el).find(".combat-skill-slot").css({ transition: "none", transform: "", opacity: "" });
+      });
 
       // 静态重渲染（应用最新状态）
       this._renderCombatSlots(this.element);
