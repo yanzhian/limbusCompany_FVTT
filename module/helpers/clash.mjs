@@ -3350,7 +3350,15 @@ export class ClashManager {
           return;
         }
       }
-      // 发起对抗（反应触发，不消耗行动值：临时置 AP 为足够大再还原）
+      // 守备技能：触发其"使用时" Activities，不发起对抗
+      if (skillItem.system?.type === "defense") {
+        await ClashManager._applyActivities(skillItem, "使用时", {
+          owner: actor, atkActor: actor, defActor: defender ?? attacker,
+          _fireCounts: {}, _actMsgs: [],
+        });
+        return;
+      }
+      // 非守备技能：发起对抗（反应触发，不消耗行动值：临时置 AP 为足够大再还原）
       const curAP = actor.system?.ap?.value ?? 0;
       if (curAP <= 0) await actor.update({ "system.ap.value": 1 });
       await ClashManager.showInitiateDialog(actor, skillItem, -2);
