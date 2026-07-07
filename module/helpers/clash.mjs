@@ -3325,12 +3325,32 @@ export class ClashManager {
   static async _applyReactionEff(eff, item, actor, attacker, defender) {
     const type = eff?.type ?? "";
     if (type === "useSkill") {
-      const skillUuid = eff?.skillUuid ?? "";
-      if (!skillUuid) return;
-      const skillItem = await fromUuid(skillUuid).catch(() => null);
-      if (!skillItem) {
-        ui.notifications.warn(`反应：找不到技能 ${skillUuid}`);
-        return;
+      let skillItem = null;
+      if (eff?.skillRef === "equipped") {
+        // 从拥有者已装备技能中查找
+        const slot  = eff.skillSlot ?? "basic";
+        const level = Math.max(1, parseInt(eff.skillLevel) || 1);
+        if (slot === "defense") {
+          const defId = actor.system?.skills?.defense;
+          skillItem = defId ? actor.items.get(defId) : null;
+        } else {
+          const basicSlots = actor.system?.skills?.basic ?? [];
+          const slotId = basicSlots[level - 1];
+          skillItem = slotId ? actor.items.get(slotId) : null;
+        }
+        if (!skillItem) {
+          const label = slot === "defense" ? "守备技能" : `Lv.${level} 基础技能`;
+          ui.notifications.warn(`反应：未找到已装备的${label}`);
+          return;
+        }
+      } else {
+        const skillUuid = eff?.skillUuid ?? "";
+        if (!skillUuid) return;
+        skillItem = await fromUuid(skillUuid).catch(() => null);
+        if (!skillItem) {
+          ui.notifications.warn(`反应：找不到技能 ${skillUuid}`);
+          return;
+        }
       }
       // 发起对抗（反应触发，不消耗行动值：临时置 AP 为足够大再还原）
       const curAP = actor.system?.ap?.value ?? 0;

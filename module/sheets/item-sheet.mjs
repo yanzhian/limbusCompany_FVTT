@@ -1835,12 +1835,29 @@ function _buildEffectRow(eff, idx, cfg) {
           <button type="button" class="ae-add-pool-buff ae-add-btn">＋ 添加BUFF</button>
         </span>
         <span class="ae-eff-useskill-sec" ${isUseSkill ? "" : 'style="display:none"'}>
-          <label>技能UUID</label>
-          <input class="ae-input eff-skill-uuid" type="text"
-                 value="${_esc(eff?.skillUuid ?? "")}" placeholder="Item.xxx…" style="width:130px;">
-          <img class="ae-skill-preview" data-uuid-src="eff-skill-uuid"
-               src="${_esc(eff?.skillUuid ? "icons/svg/item-bag.svg" : "")}"
-               style="width:20px;height:20px;object-fit:cover;border-radius:3px;vertical-align:middle;${eff?.skillUuid ? "" : "display:none;"}">
+          <label>来源</label>
+          <select class="ae-sel eff-skill-ref">
+            <option value="uuid"     ${(eff?.skillRef ?? "uuid") === "uuid"     ? "selected" : ""}>UUID</option>
+            <option value="equipped" ${(eff?.skillRef ?? "uuid") === "equipped" ? "selected" : ""}>已装备</option>
+          </select>
+          <span class="eff-useskill-uuid-sec" ${(eff?.skillRef ?? "uuid") !== "equipped" ? "" : 'style="display:none"'}>
+            <input class="ae-input eff-skill-uuid" type="text"
+                   value="${_esc(eff?.skillUuid ?? "")}" placeholder="Item.xxx…" style="width:120px;">
+            <img class="ae-skill-preview" data-uuid-src="eff-skill-uuid"
+                 src="${_esc(eff?.skillUuid ? "icons/svg/item-bag.svg" : "")}"
+                 style="width:20px;height:20px;object-fit:cover;border-radius:3px;vertical-align:middle;${eff?.skillUuid ? "" : "display:none;"}">
+          </span>
+          <span class="eff-useskill-equipped-sec" ${(eff?.skillRef ?? "uuid") === "equipped" ? "" : 'style="display:none"'}>
+            <select class="ae-sel eff-skill-slot">
+              <option value="basic"   ${(eff?.skillSlot ?? "basic") === "basic"   ? "selected" : ""}>基础技能</option>
+              <option value="defense" ${(eff?.skillSlot ?? "basic") === "defense" ? "selected" : ""}>守备技能</option>
+            </select>
+            <span class="eff-useskill-level-sec" ${(eff?.skillSlot ?? "basic") !== "defense" ? "" : 'style="display:none"'}>
+              <label>Lv.</label>
+              <input class="ae-input-sm eff-skill-level" type="number" min="1" max="6"
+                     value="${eff?.skillLevel ?? 1}" style="width:42px;">
+            </span>
+          </span>
         </span>
         <span class="ae-eff-dicetypechg-sec" ${isDiceTypeChg ? "" : 'style="display:none"'}>
           <label>骰子类型</label>
@@ -1894,6 +1911,7 @@ function _setupAeDialog(html, cfg) {
     list.append(_buildEffectRow({}, idx, cfg));
     _bindDel(html);
     _bindEffType(html);
+    _bindUseSkillSubtype(html);
   });
   html.on("click", ".ae-add-pool-buff", function () {
     const sec = $(this).closest(".ae-eff-random-sec");
@@ -1910,6 +1928,7 @@ function _setupAeDialog(html, cfg) {
   _bindCostType(html);
   _bindCondType(html);
   _bindSkillUuidPreview(html);
+  _bindUseSkillSubtype(html);
 }
 
 /** UUID 输入框实时预览技能图标 */
@@ -1939,6 +1958,21 @@ function _bindSkillUuidPreview(html) {
 
 function _bindCondCostBuff(_html) {
   // no-op: BUFF 字段改用文本输入，无需监听 select 变化
+}
+
+/** useSkill 效果：来源模式切换 & 技能槽选择联动 */
+function _bindUseSkillSubtype(html) {
+  html.find(".eff-skill-ref").off("change").on("change", function () {
+    const sec  = $(this).closest(".ae-eff-useskill-sec");
+    const isEq = $(this).val() === "equipped";
+    sec.find(".eff-useskill-uuid-sec").toggle(!isEq);
+    sec.find(".eff-useskill-equipped-sec").toggle(isEq);
+  });
+  html.find(".eff-skill-slot").off("change").on("change", function () {
+    const sec      = $(this).closest(".ae-eff-useskill-sec");
+    const isDef    = $(this).val() === "defense";
+    sec.find(".eff-useskill-level-sec").toggle(!isDef);
+  });
 }
 
 /** 切换条件类型时控制各子区段显示 */
@@ -2106,10 +2140,14 @@ function _readActivityForm(html, original) {
     const isUseSkill    = type === "useSkill";
     const isDiceTypeChg = type === "diceTypeChg";
     if (isUseSkill) {
+      const skillRef = $r.find(".eff-skill-ref").val() || "uuid";
       effects.push({
         type,
-        target:    $r.find(".eff-target").val() || "self",
-        skillUuid: $r.find(".eff-skill-uuid").val()?.trim() || "",
+        target:     $r.find(".eff-target").val() || "self",
+        skillRef,
+        skillUuid:  skillRef === "uuid" ? ($r.find(".eff-skill-uuid").val()?.trim() || "") : "",
+        skillSlot:  skillRef === "equipped" ? ($r.find(".eff-skill-slot").val() || "basic") : "",
+        skillLevel: skillRef === "equipped" ? (parseInt($r.find(".eff-skill-level").val()) || 1) : 1,
       });
       return;
     }
