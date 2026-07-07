@@ -337,9 +337,11 @@
   <div class="item-sheet-footer">
     <div class="footer-actions">
       <button class="item-send-chat sheet-btn">发送聊天框</button>
-      {{#unless isDefense}}
+      {{#if isDefense}}
+        <button class="item-activate sheet-btn">激活</button>
+      {{else}}
         <button class="item-start-clash sheet-btn">发起对抗</button>
-      {{/unless}}
+      {{/if}}
       <button class="activity-edit-toggle sheet-btn">编辑激活效果 {{#if activitiesExpanded}}▼{{else}}▲{{/if}}</button>
     </div>
   </div>

@@ -152,9 +152,11 @@
               <span class="col-qty">1</span>
               <span class="col-stellar">{{stellarCost}}</span>
               <span class="col-actions">
-                {{#unless (eq system.type 'defense')}}
+                {{#if (eq system.type 'defense')}}
+                  <button class="item-activate action-btn" data-item-id="{{_id}}" title="激活">⚡</button>
+                {{else}}
                   <button class="item-start-clash action-btn" data-item-id="{{_id}}" title="发起对抗">▶</button>
-                {{/unless}}
+                {{/if}}
                 <button class="item-more-menu action-btn" data-item-id="{{_id}}" title="更多">⋮</button>
                 <button class="item-favorite action-btn {{#if isFavorite}}fav-active{{/if}}" data-item-id="{{_id}}" title="收藏">★</button>
               </span>
