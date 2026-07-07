@@ -1718,12 +1718,14 @@ function _buildTargetOptions(selected) {
 /** 消耗行 HTML */
 function _buildCostRow(cost, idx, cfg) {
   const selType  = cost?.type ?? "forced";
-  const isAttr   = selType === "attribute";
+  const isAttr    = selType === "attribute";
+  const isDiscard = selType === "discard";
   const typeOpts = [
     ["perStack",  "【每】"],
     ["forced",    "强制消耗"],
     ["optional",  "可选消耗"],
     ["attribute", "基础属性"],
+    ["discard",   "丢弃"],
   ].map(([v, l]) => `<option value="${v}" ${selType === v ? "selected" : ""}>${l}</option>`).join("");
 
   const attrTypeOpts = [
@@ -1731,6 +1733,14 @@ function _buildCostRow(cost, idx, cfg) {
     ["sanity", "理智值"],
     ["ap",     "行动值"],
   ].map(([v, l]) => `<option value="${v}" ${(cost?.attrType ?? "hp") === v ? "selected" : ""}>${l}</option>`).join("");
+
+  const discardModeOpts = [
+    ["level",   "Lv等级"],
+    ["another", "另一个"],
+    ["reserve", "预备区"],
+  ].map(([v, l]) => `<option value="${v}" ${(cost?.discardMode ?? "level") === v ? "selected" : ""}>${l}</option>`).join("");
+
+  const discardModeIsLevel = (cost?.discardMode ?? "level") === "level";
 
   return `
     <div class="ae-row ae-cost-row">
@@ -1743,7 +1753,7 @@ function _buildCostRow(cost, idx, cfg) {
         <select class="ae-sel cost-type">${typeOpts}</select>
         <label>目标</label>
         <select class="ae-sel cost-target">${_buildTargetOptions(cost?.target ?? "self")}</select>
-        <span class="ae-cost-buff-sec" ${isAttr ? 'style="display:none"' : ""}>
+        <span class="ae-cost-buff-sec" ${(isAttr || isDiscard) ? 'style="display:none"' : ""}>
           <label>BUFF</label>
           <input class="ae-input cost-buff" type="text" list="ae-buff-dl"
                  placeholder="输入或选择BUFF…" autocomplete="off" style="width:100px;"
@@ -1758,6 +1768,14 @@ function _buildCostRow(cost, idx, cfg) {
           <select class="ae-sel cost-attr-type">${attrTypeOpts}</select>
           <label>数值</label>
           <input class="ae-input-sm cost-attr-value" type="number" value="${cost?.value ?? 1}" min="1">
+        </span>
+        <span class="ae-cost-discard-sec" ${isDiscard ? "" : 'style="display:none"'}>
+          <label>丢弃</label>
+          <select class="ae-sel cost-discard-mode">${discardModeOpts}</select>
+          <span class="ae-cost-discard-level-sec" ${discardModeIsLevel ? "" : 'style="display:none"'}>
+            <label>Lv.</label>
+            <input class="ae-input-sm cost-discard-level" type="number" value="${cost?.discardLevel ?? 1}" min="1" max="3">
+          </span>
         </span>
       </div>
     </div>`;
@@ -2005,10 +2023,18 @@ function _bindCondType(html) {
 
 function _bindCostType(html) {
   html.find(".cost-type").off("change").on("change", function () {
-    const row    = $(this).closest(".ae-cost-row");
-    const isAttr = $(this).val() === "attribute";
-    row.find(".ae-cost-buff-sec").toggle(!isAttr);
+    const row       = $(this).closest(".ae-cost-row");
+    const val       = $(this).val();
+    const isAttr    = val === "attribute";
+    const isDiscard = val === "discard";
+    row.find(".ae-cost-buff-sec").toggle(!isAttr && !isDiscard);
     row.find(".ae-cost-attr-sec").toggle(isAttr);
+    row.find(".ae-cost-discard-sec").toggle(isDiscard);
+  });
+  html.find(".cost-discard-mode").off("change").on("change", function () {
+    const row     = $(this).closest(".ae-cost-row");
+    const isLevel = $(this).val() === "level";
+    row.find(".ae-cost-discard-level-sec").toggle(isLevel);
   });
 }
 
@@ -2106,6 +2132,13 @@ function _readActivityForm(html, original) {
         target,
         attrType: $r.find(".cost-attr-type").val()             || "hp",
         value:    parseInt($r.find(".cost-attr-value").val())  || 1,
+      });
+    } else if (type === "discard") {
+      const discardMode = $r.find(".cost-discard-mode").val() || "level";
+      costs.push({
+        type,
+        discardMode,
+        ...(discardMode === "level" ? { discardLevel: parseInt($r.find(".cost-discard-level").val()) || 1 } : {}),
       });
     } else {
       costs.push({

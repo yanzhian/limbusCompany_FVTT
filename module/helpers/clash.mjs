@@ -413,6 +413,28 @@ export class ClashManager {
             else if (cost.attrType === "ap")      have = sys.ap?.value     ?? 0;
             if (have < need) { forcedFail = true; break; }
           }
+        } else if (cost.type === "discard") {
+          // 验证丢弃目标是否存在于战斗槽
+          const ownerSheet = owner?.sheet;
+          const bagState = ownerSheet?._combatBagState;
+          if (!bagState) { forcedFail = true; break; }
+          const mode = cost.discardMode ?? "level";
+          if (mode === "level") {
+            const level = cost.discardLevel ?? 1;
+            const found = [0, 1].some(i => {
+              const id = bagState.slots[i];
+              if (!id) return false;
+              const sk = owner.items.get(id);
+              return sk && (sk.system?.level ?? 1) === level;
+            });
+            if (!found) { forcedFail = true; break; }
+          } else if (mode === "another") {
+            const currentId = ctx._currentItemId ?? "";
+            const found = [0, 1].some(i => bagState.slots[i] && bagState.slots[i] !== currentId);
+            if (!found) { forcedFail = true; break; }
+          } else if (mode === "reserve") {
+            if (!bagState.slots[2]) { forcedFail = true; break; }
+          }
         } else if (cost.buff && cost.type === "forced") {
           const costBuffType = cost.buff === "custom" ? (cost.buffCustom || "custom") : cost.buff;
           const costTgts = ClashManager._resolveTargets(cost.target ?? "self", owner, other);
@@ -428,9 +450,33 @@ export class ClashManager {
 
       // 倍数默认取自【每】前置条件计算结果；若另有 perStack 消耗，会在下方覆盖为实际消耗层数
       let perStackMultiplier = precondMultiplier;
+      let _discardedItemId = null;
       for (const cost of costs) {
         if (!cost) continue;
-        if (cost.type === "attribute") {
+        if (cost.type === "discard") {
+          const ownerSheet = owner?.sheet;
+          if (ownerSheet?._discardCombatSkill) {
+            const mode  = cost.discardMode ?? "level";
+            const level = cost.discardLevel ?? 1;
+            const currentId = ctx._currentItemId ?? item?.id ?? "";
+            const { discardedId } = await ownerSheet._discardCombatSkill(mode, level, currentId);
+            _discardedItemId = discardedId;
+            // 触发被丢弃技能的【丢弃时】活动
+            if (discardedId) {
+              const discardedItem = owner.items.get(discardedId);
+              if (discardedItem) {
+                await ClashManager._applyActivities(discardedItem, "丢弃时", {
+                  owner,
+                  atkActor: ctx.atkActor ?? owner,
+                  defActor: ctx.defActor ?? (other ?? owner),
+                  _fireCounts: ctx._fireCounts ?? {},
+                  _actMsgs:   ctx._actMsgs   ?? [],
+                });
+              }
+            }
+          }
+          continue;
+        } else if (cost.type === "attribute") {
           // 消耗基础属性
           const costTgts = ClashManager._resolveTargets(cost.target ?? "self", owner, other);
           const need = cost.value ?? 1;
@@ -1603,8 +1649,8 @@ export class ClashManager {
     // _actMsgs：汇总本次对抗所有 activity 消息，结束时统一发一条，避免并发 create 导致 Foundry 清理竞态
     const _fc      = {};
     const _actMsgs = [];
-    const atkCtx = { atkActor, defActor, owner: atkActor, other: defActor, _fireCounts: _fc, _actMsgs };
-    const defCtx = { atkActor, defActor, owner: defActor, other: atkActor, _fireCounts: _fc, _actMsgs };
+    const atkCtx = { atkActor, defActor, owner: atkActor, other: defActor, _fireCounts: _fc, _actMsgs, _currentItemId: atkItem?.id ?? "" };
+    const defCtx = { atkActor, defActor, owner: defActor, other: atkActor, _fireCounts: _fc, _actMsgs, _currentItemId: defItem?.id ?? "" };
 
     // 在任何 activity 触发前，记录攻守双方当前骰子公式（用于之后检测公式变化后重投）
     const atkBaseFormulaOrig = initFlags.baseFormula ?? initFlags.formula;
@@ -2199,8 +2245,8 @@ export class ClashManager {
 
     const _fc2      = {};
     const _actMsgs2 = [];
-    const atkCtx2 = { atkActor, defActor, owner: atkActor, other: defActor, _fireCounts: _fc2, _actMsgs: _actMsgs2 };
-    const defCtx2 = { atkActor, defActor, owner: defActor, other: atkActor, _fireCounts: _fc2, _actMsgs: _actMsgs2 };
+    const atkCtx2 = { atkActor, defActor, owner: atkActor, other: defActor, _fireCounts: _fc2, _actMsgs: _actMsgs2, _currentItemId: atkItemDoc?.id ?? "" };
+    const defCtx2 = { atkActor, defActor, owner: defActor, other: atkActor, _fireCounts: _fc2, _actMsgs: _actMsgs2, _currentItemId: defItemDoc?.id ?? "" };
 
     let _unbreakableCounterArgs2 = null;
     if (atkWins) {
@@ -2290,8 +2336,8 @@ export class ClashManager {
       ?? null;
     const _fc2      = {};
     const _actMsgs2 = [];
-    const atkCtx2 = { atkActor, defActor: baseActor, owner: atkActor, other: baseActor, _fireCounts: _fc2, _actMsgs: _actMsgs2 };
-    const defCtx2 = { atkActor, defActor: baseActor, owner: baseActor, other: atkActor, _fireCounts: _fc2, _actMsgs: _actMsgs2 };
+    const atkCtx2 = { atkActor, defActor: baseActor, owner: atkActor, other: baseActor, _fireCounts: _fc2, _actMsgs: _actMsgs2, _currentItemId: atkItem2?.id ?? "" };
+    const defCtx2 = { atkActor, defActor: baseActor, owner: baseActor, other: atkActor, _fireCounts: _fc2, _actMsgs: _actMsgs2, _currentItemId: "" };
 
     // 记录触发前原始公式，用于检测变化后重投
     const atkBaseFormulaOrig2 = initFlags.baseFormula ?? initFlags.formula;

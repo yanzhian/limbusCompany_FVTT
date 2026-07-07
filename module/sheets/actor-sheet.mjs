@@ -1401,6 +1401,100 @@ export class LimbusActorSheet extends ActorSheet {
     return state.pool.shift() ?? null;
   }
 
+  /**
+   * 丢弃战斗槽中的技能
+   * @param {"level"|"another"|"reserve"} mode
+   * @param {number} level - 仅 mode==="level" 时有效
+   * @param {string} currentItemId - 当前正在使用的技能 ID（用于排除"另一个"时避免丢弃自身）
+   * @returns {{ discardedId: string|null, slotIndex: number }} 被丢弃的技能 ID 及槽位
+   */
+  async _discardCombatSkill(mode, level, currentItemId) {
+    const state = this._combatBagState;
+    if (!state) return { discardedId: null, slotIndex: -1 };
+
+    let targetSlot = -1;
+
+    if (mode === "level") {
+      // 在激活槽 0/1 中找第一个等于该等级的技能
+      for (let i = 0; i <= 1; i++) {
+        const id = state.slots[i];
+        if (!id) continue;
+        const sk = this.actor.items.get(id);
+        if (sk && (sk.system?.level ?? 1) === level) {
+          targetSlot = i;
+          break;
+        }
+      }
+    } else if (mode === "another") {
+      // 在激活槽 0/1 中找另一个（不是 currentItemId 的那个）
+      for (let i = 0; i <= 1; i++) {
+        if (state.slots[i] && state.slots[i] !== currentItemId) {
+          targetSlot = i;
+          break;
+        }
+      }
+    } else if (mode === "reserve") {
+      // 槽 2 是预备区
+      if (state.slots[2]) targetSlot = 2;
+    }
+
+    if (targetSlot === -1 || !state.slots[targetSlot]) return { discardedId: null, slotIndex: -1 };
+
+    const discardedId = state.slots[targetSlot];
+    // 执行丢弃动画（淡出），然后补充新牌
+    await this._animateDiscardSkill(targetSlot);
+    return { discardedId, slotIndex: targetSlot };
+  }
+
+  // 丢弃动画：指定槽淡出并补充新牌
+  async _animateDiscardSkill(slotIndex) {
+    const state = this._combatBagState;
+    if (!state) return;
+
+    const _wraps = () => this.element?.find(".basic-combat-section .combat-skill-slot-wrap");
+    const $wraps = _wraps();
+    if (!$wraps?.length || slotIndex >= $wraps.length) {
+      // 无 DOM，直接更新状态
+      state.slots.splice(slotIndex, 1);
+      const nextId = this._drawNextFromPool();
+      state.slots.push(nextId);
+      this._renderCombatSlots(this.element);
+      return;
+    }
+
+    return new Promise((resolve) => {
+      const $slot = $wraps.eq(slotIndex).find(".combat-skill-slot");
+      $slot.css({
+        transition: "opacity 0.25s ease, transform 0.25s ease",
+        opacity: "0",
+        transform: "scale(0.7)",
+      });
+
+      setTimeout(() => {
+        state.slots.splice(slotIndex, 1);
+        const nextId = this._drawNextFromPool();
+        state.slots.push(nextId);
+
+        const $w2 = _wraps();
+        $w2?.each((_, el) => {
+          $(el).css({ transition: "none", transform: "" });
+          $(el).find(".combat-skill-slot").css({ transition: "none", transform: "", opacity: "" });
+        });
+        this._renderCombatSlots(this.element);
+
+        const $newSlot = _wraps()?.eq(5).find(".combat-skill-slot");
+        if ($newSlot?.length) {
+          $newSlot.css({ opacity: "0", transform: "scale(0.7)" });
+          requestAnimationFrame(() => requestAnimationFrame(() => {
+            $newSlot.css({ transition: "opacity 0.3s ease, transform 0.3s ease", opacity: "1", transform: "scale(1)" });
+            setTimeout(() => $newSlot.css({ transition: "", transform: "" }), 350);
+          }));
+        }
+        resolve();
+      }, 280);
+    });
+  }
+
   // 带动画地使用指定激活槽技能（仅 slotIndex = 0 或 1）
   _animateCombatSkillUse(slotIndex) {
     if (!this.element?.length) return;
