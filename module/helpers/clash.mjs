@@ -1667,6 +1667,8 @@ export class ClashManager {
         // 攻击方拼点胜
         await ClashManager._applyActivitiesAndEquip(atkItem, "拼点成功", atkCtx);
         await ClashManager._applyActivitiesAndEquip(defItem,  "拼点失败", defCtx);
+        // 【不可摧毁】：防守方拼点失败后自动反击攻击方
+        await ClashManager._triggerUnbreakableCounter(defItem, defActor, atkActor, defCtx);
         // 命中（攻击方对防守方造成伤害）
         if (!dodgeWin) {
           await ClashManager._applyActivitiesAndEquip(atkItem, "命中时", atkCtx);
@@ -1683,6 +1685,8 @@ export class ClashManager {
         // 防守方拼点胜（攻击方落败）
         await ClashManager._applyActivitiesAndEquip(atkItem, "拼点失败", atkCtx);
         await ClashManager._applyActivitiesAndEquip(defItem,  "拼点成功", defCtx);
+        // 【不可摧毁】：攻击方拼点失败后自动反击防守方
+        await ClashManager._triggerUnbreakableCounter(atkItem, atkActor, defActor, atkCtx);
         // 防守方命中攻击方（闪避胜利不造成伤害，其余胜利均命中）
         if (!dodgeWin) {
           await ClashManager._applyActivitiesAndEquip(defItem, "命中时", defCtx);
@@ -2140,6 +2144,8 @@ export class ClashManager {
     if (atkWins) {
       await ClashManager._applyActivitiesAndEquip(atkItemDoc, "拼点成功", atkCtx2);
       await ClashManager._applyActivitiesAndEquip(defItemDoc,  "拼点失败", defCtx2);
+      // 【不可摧毁】：防守方拼点失败后自动反击
+      await ClashManager._triggerUnbreakableCounter(defItemDoc, defActor, atkActor, defCtx2);
       if (!dodgeWin) {
         await ClashManager._applyActivitiesAndEquip(atkItemDoc, "命中时", atkCtx2);
         if (breatheCrit) {
@@ -2153,6 +2159,8 @@ export class ClashManager {
     } else {
       await ClashManager._applyActivitiesAndEquip(atkItemDoc, "拼点失败", atkCtx2);
       await ClashManager._applyActivitiesAndEquip(defItemDoc,  "拼点成功", defCtx2);
+      // 【不可摧毁】：攻击方拼点失败后自动反击
+      await ClashManager._triggerUnbreakableCounter(atkItemDoc, atkActor, defActor, atkCtx2);
       if (!dodgeWin) {
         await ClashManager._applyActivitiesAndEquip(defItemDoc, "命中时", defCtx2);
         await ClashManager._applyActivities(atkItemDoc, "受到伤害时", atkCtx2);
@@ -2514,6 +2522,91 @@ export class ClashManager {
     }
   }
 
+  /* ─── 【不可摧毁】拼点失败触发反击 ──────────────────────────────────── */
+
+  /**
+   * 若 loserItem 的 diceType 为 "unbreakable"，在拼点失败后自动对 targetActor 发起反击：
+   * - 反击骰：技能公式剥除既有修正后，变动值固定为 +1（公式 = 纯骰部分 + "+1"）
+   * - 反击最终值 = 骰数 + 基础值 + BUFF（强壮/虚弱） × 抗性（守护/易损）
+   * - 可触发 loserItem 的 [命中时] / [暴击命中时] 效果
+   * @param {Item}  loserItem    拼点失败方的技能物品
+   * @param {Actor} loserActor   拼点失败方角色
+   * @param {Actor} targetActor  拼点胜利方角色（接受反击伤害）
+   * @param {object} loserCtx   loserActor 的 activity context（含 atkActor/defActor/owner/other）
+   */
+  static async _triggerUnbreakableCounter(loserItem, loserActor, targetActor, loserCtx) {
+    if (!loserItem || loserItem.system?.diceType !== "unbreakable") return;
+    if (!loserActor || !targetActor) return;
+
+    // 构造反击骰公式：剥除原公式末尾的 +N / -N，固定变动值为 +1
+    const baseFormula = loserItem.system?.diceFormula ?? "1d4";
+    const diceOnly    = baseFormula.replace(/\s*[+-]\s*\d+\s*$/, "").trim() || "1d4";
+    const counterFormula = `${diceOnly}+1`;
+
+    const counterRoll = new Roll(counterFormula);
+    await counterRoll.evaluate();
+    const rollBase = counterRoll.total;
+
+    // BUFF 修正（以失败方为攻击方：强壮/虚弱）
+    const gs = (actor, type) => ClashManager._getBuffVal(actor, type).stacks;
+    const strong  = gs(loserActor, "strong");
+    const weak    = gs(loserActor, "weak");
+    const buffMod = strong - weak;
+    const adjusted = rollBase + buffMod;
+
+    // 目标（胜利方）的守护/易损 + 物理/罪孽抗性
+    const cat = loserItem.system?.category ?? "";
+    const sin = loserItem.system?.sinType  ?? "";
+    const PHYS_CATS = new Set(["slash", "blunt", "pierce"]);
+    const SIN_TYPES = new Set(["wrath","lust","sloth","gluttony","gloom","pride","envy"]);
+    const effRes     = ClashManager._getEffectiveResistances(targetActor);
+    const physResStr = PHYS_CATS.has(cat) ? (effRes[cat] ?? "x1.0") : "x1.0";
+    const physMult   = ClashManager._parseResistance(physResStr);
+    const sinResStr  = SIN_TYPES.has(sin)
+      ? (targetActor.system?.egoResistances?.[sin] ?? "x1.0") : "x1.0";
+    const sinMult    = ClashManager._parseResistance(sinResStr);
+    const guard   = gs(targetActor, "guard");
+    const fragile = gs(targetActor, "fragile");
+    const adjustedBase = Math.max(0, adjusted + fragile - guard);
+    const finalDmg     = Math.max(0, Math.round(adjustedBase * physMult * sinMult));
+
+    // 呼吸暴击判定
+    const breatheBuff = ClashManager._getBuff(loserActor, "breathing");
+    let breatheCrit = false;
+    if (breatheBuff && breatheBuff.stacks > 0) {
+      breatheCrit = Math.random() < (breatheBuff.intensity ?? 1) * 0.05;
+      if (breatheCrit) await ClashManager._reduceBuffStacks(loserActor, "breathing");
+    }
+
+    // 触发 [命中时] / [暴击命中时]
+    await ClashManager._applyActivitiesAndEquip(loserItem, "命中时", loserCtx);
+    if (breatheCrit) await ClashManager._applyActivitiesAndEquip(loserItem, "暴击命中时", loserCtx);
+
+    // 构建结算说明
+    const calcNotes = [`【不可摧毁】反击骰：${counterFormula} = ${rollBase}`];
+    if (buffMod !== 0) calcNotes.push(`BUFF(强壮${strong}-虚弱${weak}=${buffMod >= 0 ? "+" : ""}${buffMod}) → ${adjusted}`);
+    if (fragile > 0 || guard > 0) calcNotes.push(`易损(+${fragile})/守护(-${guard}) → ${adjustedBase}`);
+    if (physMult !== 1.0 || sinMult !== 1.0) calcNotes.push(`抗性(${physResStr}×${sinResStr}) → ${finalDmg}`);
+    if (breatheCrit) calcNotes.push(`【呼吸】暴击！`);
+
+    // 发送反击触发聊天头（伤害消息由 _applyAndSendTake 单独发送）
+    await ClashManager._safeChatCreate({
+      speaker: ChatMessage.getSpeaker({ actor: loserActor }),
+      content: `<div class="limbuscompany chat-clash">
+        ${ClashManager._chatHeader(loserActor, "不可摧毁 · 拼点失败反击")}
+        <div style="margin:4px 0 2px;font-size:.82rem;">
+          <strong>${loserItem.name}</strong>（不可摧毁骰）触发，对
+          <strong>${targetActor.name}</strong> 发起反击
+          ${breatheCrit ? `<span style="color:#FFD066;font-weight:bold;">　暴击！</span>` : ""}
+        </div>
+      </div>`,
+    });
+
+    // 对目标造成伤害（包含破裂/沉沦/护盾/混乱等完整结算）
+    const hookMsgs = [];
+    await ClashManager._applyAndSendTake(targetActor, finalDmg, { attacker: loserActor, calcNotes, hookMsgs });
+  }
+
   /* ─── 阶段七：承受结算（应用伤害 + 发送聊天框） ─────────────────────── */
 
   static async handleApplyDamage(targetActorId, damage) {
@@ -2639,46 +2732,6 @@ export class ClashManager {
 
     await ClashManager._sendTakeMsg(actor, damage, oldHp, newHp, maxHp, chaosTriggered,
       { ruptureDmg, sanityDmg, tremorTriggered, chaosName, calcNotes });
-
-    // ── 【不可摧毁】自动反击 ──────────────────────────────────────────────
-    // 若受伤角色装备了 diceType==="unbreakable" 的攻击技能，且有攻击来源，则自动对攻击者造成伤害
-    if (attacker && attacker.id !== actor.id) {
-      const sys2       = actor.system ?? {};
-      const equippedSkillIds = [...(sys2.skills?.basic ?? []), ...Object.values(sys2.skills?.ego ?? {})].filter(Boolean);
-      for (const skillId of equippedSkillIds) {
-        const sk = actor.items.get(skillId);
-        if (!sk || sk.system?.diceType !== "unbreakable") continue;
-        // 使用技能骰子公式，但变动值固定为 +1
-        const baseFormula = sk.system?.diceFormula ?? "1d4";
-        const counterFormula = `${baseFormula}+1`;
-        const counterRoll = new Roll(counterFormula);
-        await counterRoll.evaluate();
-        const counterTotal = counterRoll.total;
-
-        // 对攻击者造成伤害（无视守护/易损修正，直接扣血）
-        const atkHpOld = attacker.system?.hp?.value ?? 0;
-        const atkHpNew = Math.max(0, atkHpOld - counterTotal);
-        await attacker.update({ "system.hp.value": atkHpNew });
-        if (attacker.checkAndTriggerChaos) {
-          await attacker.checkAndTriggerChaos(atkHpNew, atkHpOld, { silent: false });
-        }
-
-        await ClashManager._safeChatCreate({
-          speaker: ChatMessage.getSpeaker({ actor }),
-          content: `<div class="limbuscompany chat-clash">
-            ${ClashManager._chatHeader(actor, "不可摧毁 · 自动反击")}
-            <div style="margin:4px 0;font-size:.85rem;">
-              <strong>${actor.name}</strong> 的【${sk.name}】不可摧毁骰触发：<br>
-              骰子 ${counterFormula} → <strong>${counterTotal}</strong><br>
-              <strong>${attacker.name}</strong> 受到 <strong>${counterTotal}</strong> 点伤害
-              （HP ${atkHpOld} → ${atkHpNew}）
-            </div>
-          </div>`,
-        });
-        // 每角色只有第一个不可摧毁技能触发一次
-        break;
-      }
-    }
   }
 
   static async _sendTakeMsg(actor, damage, oldHp, newHp, maxHp, chaosTriggered,
