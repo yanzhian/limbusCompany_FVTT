@@ -1629,6 +1629,7 @@ function _buildTriggerOpts(selected) {
                                        "命中时", "暴击命中时"] },
     { label: "── 通用 ──",  values: ["回合开始时", "回合结束时", "受到伤害时"] },
     { label: "── 反应 ──",  values: ["反应"] },
+    { label: "── 丢弃 ──",  values: ["丢弃时"] },
   ];
   return groups.map(g =>
     `<optgroup label="${g.label}">${g.values.map(v =>
