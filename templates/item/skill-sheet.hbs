@@ -61,11 +61,21 @@
                 </select>
               {{/if}}
               <input type="text" name="system.diceFormula" value="{{diceFormulaDisplay}}" class="dice-formula-input" placeholder="1D4+2"/>
+              {{!-- 骰子类型：普通 / 不可摧毁 --}}
+              {{#unless isDefense}}
+                <select name="system.diceType" class="equip-subtype-sel dice-type-sel" title="骰子类型">
+                  <option value="normal"      {{#eq system.diceType "normal"}}selected{{/eq}}>一般骰子</option>
+                  <option value="unbreakable" {{#eq system.diceType "unbreakable"}}selected{{/eq}}>不可摧毁</option>
+                </select>
+              {{/unless}}
             {{else}}
               {{#if system.category}}
                 <img src="{{lookup @root.config.CATEGORY_ICON_PATHS system.category}}" class="category-icon" width="22" height="22" alt="{{system.category}}">
               {{/if}}
               <span class="dice-formula-display">{{diceFormulaDisplay}}</span>
+              {{#if (eq system.diceType "unbreakable")}}
+                <span class="dice-type-badge unbreakable-badge" title="不可摧毁：受到伤害后自动反击（变动值+1）">不可摧毁</span>
+              {{/if}}
             {{/if}}
           </div>
 

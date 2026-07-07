@@ -348,6 +348,25 @@
   white-space: nowrap;
 }
 
+.limbuscompany .dice-type-badge {
+  display: inline-block;
+  font-size: 0.65rem;
+  padding: 1px 5px;
+  border-radius: 3px;
+  margin-left: 4px;
+  white-space: nowrap;
+  font-weight: bold;
+}
+.limbuscompany .unbreakable-badge {
+  background: #4A2060;
+  color: #D4A0FF;
+  border: 1px solid #7040A0;
+}
+.limbuscompany .dice-type-sel {
+  font-size: 0.72rem;
+  max-width: 90px;
+}
+
 .limbuscompany .resource-bar-fill.sanity-fill {
   background: linear-gradient(
     to left,

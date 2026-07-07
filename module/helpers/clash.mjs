@@ -2639,6 +2639,46 @@ export class ClashManager {
 
     await ClashManager._sendTakeMsg(actor, damage, oldHp, newHp, maxHp, chaosTriggered,
       { ruptureDmg, sanityDmg, tremorTriggered, chaosName, calcNotes });
+
+    // ── 【不可摧毁】自动反击 ──────────────────────────────────────────────
+    // 若受伤角色装备了 diceType==="unbreakable" 的攻击技能，且有攻击来源，则自动对攻击者造成伤害
+    if (attacker && attacker.id !== actor.id) {
+      const sys2       = actor.system ?? {};
+      const equippedSkillIds = [...(sys2.skills?.basic ?? []), ...Object.values(sys2.skills?.ego ?? {})].filter(Boolean);
+      for (const skillId of equippedSkillIds) {
+        const sk = actor.items.get(skillId);
+        if (!sk || sk.system?.diceType !== "unbreakable") continue;
+        // 使用技能骰子公式，但变动值固定为 +1
+        const baseFormula = sk.system?.diceFormula ?? "1d4";
+        const counterFormula = `${baseFormula}+1`;
+        const counterRoll = new Roll(counterFormula);
+        await counterRoll.evaluate();
+        const counterTotal = counterRoll.total;
+
+        // 对攻击者造成伤害（无视守护/易损修正，直接扣血）
+        const atkHpOld = attacker.system?.hp?.value ?? 0;
+        const atkHpNew = Math.max(0, atkHpOld - counterTotal);
+        await attacker.update({ "system.hp.value": atkHpNew });
+        if (attacker.checkAndTriggerChaos) {
+          await attacker.checkAndTriggerChaos(atkHpNew, atkHpOld, { silent: false });
+        }
+
+        await ClashManager._safeChatCreate({
+          speaker: ChatMessage.getSpeaker({ actor }),
+          content: `<div class="limbuscompany chat-clash">
+            ${ClashManager._chatHeader(actor, "不可摧毁 · 自动反击")}
+            <div style="margin:4px 0;font-size:.85rem;">
+              <strong>${actor.name}</strong> 的【${sk.name}】不可摧毁骰触发：<br>
+              骰子 ${counterFormula} → <strong>${counterTotal}</strong><br>
+              <strong>${attacker.name}</strong> 受到 <strong>${counterTotal}</strong> 点伤害
+              （HP ${atkHpOld} → ${atkHpNew}）
+            </div>
+          </div>`,
+        });
+        // 每角色只有第一个不可摧毁技能触发一次
+        break;
+      }
+    }
   }
 
   static async _sendTakeMsg(actor, damage, oldHp, newHp, maxHp, chaosTriggered,
