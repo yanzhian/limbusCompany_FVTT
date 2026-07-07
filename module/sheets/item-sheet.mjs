@@ -367,6 +367,7 @@ export class LimbusItemSheet extends ItemSheet {
       _syncSel("system.level",         sys.level          ?? 1);
       _syncSel("system.egoDiceRating", sys.egoDiceRating  ?? "");
       _syncSel("system.counterType",   sys.counterType    ?? "slash");
+      _syncSel("system.diceType",      sys.diceType       ?? "normal");
     }
 
     // ── 链接方向箭头 ──────────────────────────────────────────────────────
