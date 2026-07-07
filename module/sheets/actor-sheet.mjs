@@ -1055,11 +1055,14 @@ export class LimbusActorSheet extends ActorSheet {
       ui.notifications.warn("数量不足。"); return;
     }
 
-    // 装备激活消耗 1 行动值
-    if (item.type === "equipment") {
+    // 装备 / 守备技能激活：消耗 1 行动值
+    const needsAp = item.type === "equipment"
+      || (item.type === "skill" && item.system?.type === "defense");
+    if (needsAp) {
       const curAp = this.actor.system?.ap?.value ?? 0;
+      const label = item.type === "equipment" ? "装备" : "守备技能";
       if (curAp < 1) {
-        ui.notifications.warn("行动值不足，无法激活装备。"); return;
+        ui.notifications.warn(`行动值不足，无法激活${label}。`); return;
       }
       // 预检：若所有[使用时]效果均已达到次数限制，拒绝本次使用并给出黄色警告
       const { blocked, reasons } = ClashManager._checkAllActivitiesBlocked(item, "使用时", this.actor);
