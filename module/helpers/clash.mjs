@@ -2526,26 +2526,32 @@ export class ClashManager {
 
   /**
    * 若 loserItem 的 diceType 为 "unbreakable"，在拼点失败后自动对 targetActor 发起反击：
-   * - 反击骰：技能公式剥除既有修正后，变动值固定为 +1（公式 = 纯骰部分 + "+1"）
-   * - 反击最终值 = 骰数 + 基础值 + BUFF（强壮/虚弱） × 抗性（守护/易损）
+   * - 变动值（面数）固定为 1：NdF+B → 每颗骰子固定投出 1 点 → 确定值 = 骰数N + 基础值B
+   * - 反击最终值 = (骰数 + 基础值) + BUFF（强壮/虚弱） × 抗性（守护/易损）
    * - 可触发 loserItem 的 [命中时] / [暴击命中时] 效果
-   * @param {Item}  loserItem    拼点失败方的技能物品
-   * @param {Actor} loserActor   拼点失败方角色
-   * @param {Actor} targetActor  拼点胜利方角色（接受反击伤害）
-   * @param {object} loserCtx   loserActor 的 activity context（含 atkActor/defActor/owner/other）
    */
   static async _triggerUnbreakableCounter(loserItem, loserActor, targetActor, loserCtx) {
     if (!loserItem || loserItem.system?.diceType !== "unbreakable") return;
     if (!loserActor || !targetActor) return;
 
-    // 构造反击骰公式：剥除原公式末尾的 +N / -N，固定变动值为 +1
+    // 解析技能公式，提取骰数（N）和基础值（B）
+    // 支持格式：NdF、NdF+B、NdF-B（F=面数，被替换为1，故每骰=1点）
     const baseFormula = loserItem.system?.diceFormula ?? "1d4";
-    const diceOnly    = baseFormula.replace(/\s*[+-]\s*\d+\s*$/, "").trim() || "1d4";
-    const counterFormula = `${diceOnly}+1`;
-
-    const counterRoll = new Roll(counterFormula);
-    await counterRoll.evaluate();
-    const rollBase = counterRoll.total;
+    const m = /^(\d+)[dD](\d+)\s*([+-]\s*\d+)?$/.exec(baseFormula.trim());
+    let rollBase;
+    let formulaDisplay;
+    if (m) {
+      const diceCount = parseInt(m[1]) || 1;
+      const modifier  = m[3] ? parseInt(m[3].replace(/\s/g, "")) : 0;
+      rollBase       = diceCount + modifier;          // 每骰面数=1 → NdF+B = N×1+B
+      formulaDisplay = `${diceCount}d1+${modifier} = ${diceCount}×1${modifier >= 0 ? "+" : ""}${modifier} = ${rollBase}`;
+    } else {
+      // 公式无法解析时回退为纯数值求值
+      const r = new Roll(baseFormula);
+      await r.evaluate();
+      rollBase       = r.total;
+      formulaDisplay = `${baseFormula} = ${rollBase}`;
+    }
 
     // BUFF 修正（以失败方为攻击方：强壮/虚弱）
     const gs = (actor, type) => ClashManager._getBuffVal(actor, type).stacks;
@@ -2583,7 +2589,7 @@ export class ClashManager {
     if (breatheCrit) await ClashManager._applyActivitiesAndEquip(loserItem, "暴击命中时", loserCtx);
 
     // 构建结算说明
-    const calcNotes = [`【不可摧毁】反击骰：${counterFormula} = ${rollBase}`];
+    const calcNotes = [`【不可摧毁】反击（变动值=1）：${formulaDisplay}`];
     if (buffMod !== 0) calcNotes.push(`BUFF(强壮${strong}-虚弱${weak}=${buffMod >= 0 ? "+" : ""}${buffMod}) → ${adjusted}`);
     if (fragile > 0 || guard > 0) calcNotes.push(`易损(+${fragile})/守护(-${guard}) → ${adjustedBase}`);
     if (physMult !== 1.0 || sinMult !== 1.0) calcNotes.push(`抗性(${physResStr}×${sinResStr}) → ${finalDmg}`);
