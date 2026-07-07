@@ -1533,6 +1533,7 @@ function _activityEffectLabels() {
     { value: "seismicBlast", label: "震颤引爆" },
     { value: "triggerBuff",  label: "触发BUFF" },
     { value: "useSkill",     label: "使用技能" },
+    { value: "diceTypeChg",  label: "骰子类型" },
   ];
 }
 
@@ -1774,13 +1775,14 @@ function _buildEffectRow(eff, idx, cfg) {
   const isRandomBuff   = type === "randomBuff";
   const isTriggerBuff  = type === "triggerBuff";
   const isUseSkill     = type === "useSkill";
+  const isDiceTypeChg  = type === "diceTypeChg";
   const effOpts    = _activityEffectLabels()
     .map(e => `<option value="${e.value}" ${type === e.value ? "selected" : ""}>${e.label}</option>`).join("");
   const roundVal   = eff?.round ?? "本回合";
   const roundOpts  = _ROUND_OPTIONS
     .map(v => `<option value="${v}" ${roundVal === v ? "selected" : ""}>${v}</option>`).join("");
   const formulaVal = _esc(eff?.value ?? "");
-  const isValSec   = !isBuff && !isTriggerBuff && !isRandomBuff && !isUseSkill;
+  const isValSec   = !isBuff && !isTriggerBuff && !isRandomBuff && !isUseSkill && !isDiceTypeChg;
   return `
     <div class="ae-row ae-eff-row">
       <div class="ae-row-hd">
@@ -1790,7 +1792,7 @@ function _buildEffectRow(eff, idx, cfg) {
       <div class="ae-row-fields">
         <label>类型</label>
         <select class="ae-sel ae-eff-type eff-type">${effOpts}</select>
-        <span class="ae-eff-target-sec" ${isUseSkill ? 'style="display:none"' : ""}>
+        <span class="ae-eff-target-sec" ${(isUseSkill || isDiceTypeChg) ? 'style="display:none"' : ""}>
           <label>目标</label>
           <select class="ae-sel eff-target">${_buildTargetOptions(eff?.target ?? "self")}</select>
         </span>
@@ -1839,6 +1841,13 @@ function _buildEffectRow(eff, idx, cfg) {
           <img class="ae-skill-preview" data-uuid-src="eff-skill-uuid"
                src="${_esc(eff?.skillUuid ? "icons/svg/item-bag.svg" : "")}"
                style="width:20px;height:20px;object-fit:cover;border-radius:3px;vertical-align:middle;${eff?.skillUuid ? "" : "display:none;"}">
+        </span>
+        <span class="ae-eff-dicetypechg-sec" ${isDiceTypeChg ? "" : 'style="display:none"'}>
+          <label>骰子类型</label>
+          <select class="ae-sel eff-dice-type-val">
+            <option value="normal"      ${(eff?.diceTypeVal ?? "normal") === "normal"      ? "selected" : ""}>一般骰子</option>
+            <option value="unbreakable" ${(eff?.diceTypeVal ?? "normal") === "unbreakable" ? "selected" : ""}>不可摧毁</option>
+          </select>
         </span>
       </div>
     </div>`;
@@ -1984,14 +1993,16 @@ function _bindEffType(html) {
     const isRandomBuff  = type === "randomBuff";
     const isTriggerBuff = type === "triggerBuff";
     const isUseSkill    = type === "useSkill";
-    row.find(".ae-eff-target-sec").toggle(!isUseSkill);
+    const isDiceTypeChg = type === "diceTypeChg";
+    row.find(".ae-eff-target-sec").toggle(!isUseSkill && !isDiceTypeChg);
     row.find(".ae-eff-round-sec").toggle(isAddBuff);
     row.find(".ae-eff-buff-sec").toggle(isBuff);
-    row.find(".ae-eff-val-sec").toggle(!isBuff && !isTriggerBuff && !isRandomBuff && !isUseSkill);
+    row.find(".ae-eff-val-sec").toggle(!isBuff && !isTriggerBuff && !isRandomBuff && !isUseSkill && !isDiceTypeChg);
     row.find(".eff-value").attr("placeholder", _effValuePlaceholder(type));
     row.find(".ae-eff-trig-sec").toggle(isTriggerBuff);
     row.find(".ae-eff-random-sec").toggle(isRandomBuff);
     row.find(".ae-eff-useskill-sec").toggle(isUseSkill);
+    row.find(".ae-eff-dicetypechg-sec").toggle(isDiceTypeChg);
   });
 }
 
@@ -2091,13 +2102,21 @@ function _readActivityForm(html, original) {
       });
       return;
     }
-    const isAddBuff  = type === "addBuff";
-    const isUseSkill = type === "useSkill";
+    const isAddBuff     = type === "addBuff";
+    const isUseSkill    = type === "useSkill";
+    const isDiceTypeChg = type === "diceTypeChg";
     if (isUseSkill) {
       effects.push({
         type,
         target:    $r.find(".eff-target").val() || "self",
         skillUuid: $r.find(".eff-skill-uuid").val()?.trim() || "",
+      });
+      return;
+    }
+    if (isDiceTypeChg) {
+      effects.push({
+        type,
+        diceTypeVal: $r.find(".eff-dice-type-val").val() || "normal",
       });
       return;
     }

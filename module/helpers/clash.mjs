@@ -714,6 +714,15 @@ export class ClashManager {
             descStr = `【${effTgt.name}】触发 ${actualStacks} 层【${buffLabel}】${dmgNote}`;
             break;
           }
+          case "diceTypeChg": {
+            const newDiceType = eff.diceTypeVal ?? "normal";
+            if (item && item.update) {
+              await item.update({ "system.diceType": newDiceType });
+              const label = newDiceType === "unbreakable" ? "不可摧毁" : "一般骰子";
+              descStr = `【${item.name}】骰子类型变更为【${label}】`;
+            }
+            break;
+          }
           default:
             // relatedSkillConvert 等其他特殊效果暂不在此处理
             descStr = `${eff.type} 效果触发`;
@@ -892,6 +901,10 @@ export class ClashManager {
       const pool  = (eff.buffPool ?? []).map(e => ClashManager._buffLabel(e.buff ?? "")).join("、");
       const count = eff.count ?? 1;
       return `为${tgt}随机抽取 ${count} 个BUFF（${pool || "未配置"}）`;
+    }
+    if (t === "diceTypeChg") {
+      const label = eff.diceTypeVal === "unbreakable" ? "不可摧毁" : "一般骰子";
+      return `技能骰子类型变更为【${label}】`;
     }
     return "";
   }
@@ -1662,13 +1675,17 @@ export class ClashManager {
 
     // ── [拼点成功/失败] / [命中时] / [暴击命中时] / [受到伤害时] ────────
     const { atkWins, isTie, dodgeWin, breatheCrit } = resolution;
+    // 【不可摧毁】反击暂存，稍后在 _sendResolveMsg 后触发
+    let _unbreakableCounterArgs = null;
     if (!isTie) {
       if (atkWins) {
         // 攻击方拼点胜
         await ClashManager._applyActivitiesAndEquip(atkItem, "拼点成功", atkCtx);
         await ClashManager._applyActivitiesAndEquip(defItem,  "拼点失败", defCtx);
-        // 【不可摧毁】：防守方拼点失败后自动反击攻击方
-        await ClashManager._triggerUnbreakableCounter(defItem, defActor, atkActor, defCtx);
+        // 【不可摧毁】：防守方拼点失败后自动反击攻击方（延迟到 _sendResolveMsg 后）
+        if (defItem?.system?.diceType === "unbreakable") {
+          _unbreakableCounterArgs = [defItem, defActor, atkActor, defCtx];
+        }
         // 命中（攻击方对防守方造成伤害）
         if (!dodgeWin) {
           await ClashManager._applyActivitiesAndEquip(atkItem, "命中时", atkCtx);
@@ -1685,8 +1702,10 @@ export class ClashManager {
         // 防守方拼点胜（攻击方落败）
         await ClashManager._applyActivitiesAndEquip(atkItem, "拼点失败", atkCtx);
         await ClashManager._applyActivitiesAndEquip(defItem,  "拼点成功", defCtx);
-        // 【不可摧毁】：攻击方拼点失败后自动反击防守方
-        await ClashManager._triggerUnbreakableCounter(atkItem, atkActor, defActor, atkCtx);
+        // 【不可摧毁】：攻击方拼点失败后自动反击防守方（延迟到 _sendResolveMsg 后）
+        if (atkItem?.system?.diceType === "unbreakable") {
+          _unbreakableCounterArgs = [atkItem, atkActor, defActor, atkCtx];
+        }
         // 防守方命中攻击方（闪避胜利不造成伤害，其余胜利均命中）
         if (!dodgeWin) {
           await ClashManager._applyActivitiesAndEquip(defItem, "命中时", defCtx);
@@ -1723,6 +1742,11 @@ export class ClashManager {
     }
 
     await ClashManager._sendResolveMsg(resolution, effectiveInitFlags, defActor, defItem, defFormula, sanityNotes);
+
+    // 【不可摧毁】反击消息在拼点对抗结果之后发出
+    if (_unbreakableCounterArgs) {
+      await ClashManager._triggerUnbreakableCounter(..._unbreakableCounterArgs);
+    }
 
     // ── [攻击后]：结算完对抗结果后触发 ────────────────────────────────
     await ClashManager._applyActivitiesAndEquip(atkItem, "攻击后", atkCtx);
@@ -2141,11 +2165,14 @@ export class ClashManager {
     const atkCtx2 = { atkActor, defActor, owner: atkActor, other: defActor, _fireCounts: _fc2, _actMsgs: _actMsgs2 };
     const defCtx2 = { atkActor, defActor, owner: defActor, other: atkActor, _fireCounts: _fc2, _actMsgs: _actMsgs2 };
 
+    let _unbreakableCounterArgs2 = null;
     if (atkWins) {
       await ClashManager._applyActivitiesAndEquip(atkItemDoc, "拼点成功", atkCtx2);
       await ClashManager._applyActivitiesAndEquip(defItemDoc,  "拼点失败", defCtx2);
-      // 【不可摧毁】：防守方拼点失败后自动反击
-      await ClashManager._triggerUnbreakableCounter(defItemDoc, defActor, atkActor, defCtx2);
+      // 【不可摧毁】：防守方拼点失败后自动反击（延迟到 _sendResolveMsg 后，此处已在其后）
+      if (defItemDoc?.system?.diceType === "unbreakable") {
+        _unbreakableCounterArgs2 = [defItemDoc, defActor, atkActor, defCtx2];
+      }
       if (!dodgeWin) {
         await ClashManager._applyActivitiesAndEquip(atkItemDoc, "命中时", atkCtx2);
         if (breatheCrit) {
@@ -2159,8 +2186,10 @@ export class ClashManager {
     } else {
       await ClashManager._applyActivitiesAndEquip(atkItemDoc, "拼点失败", atkCtx2);
       await ClashManager._applyActivitiesAndEquip(defItemDoc,  "拼点成功", defCtx2);
-      // 【不可摧毁】：攻击方拼点失败后自动反击
-      await ClashManager._triggerUnbreakableCounter(atkItemDoc, atkActor, defActor, atkCtx2);
+      // 【不可摧毁】：攻击方拼点失败后自动反击（延迟到 _sendResolveMsg 后，此处已在其后）
+      if (atkItemDoc?.system?.diceType === "unbreakable") {
+        _unbreakableCounterArgs2 = [atkItemDoc, atkActor, defActor, atkCtx2];
+      }
       if (!dodgeWin) {
         await ClashManager._applyActivitiesAndEquip(defItemDoc, "命中时", defCtx2);
         await ClashManager._applyActivities(atkItemDoc, "受到伤害时", atkCtx2);
@@ -2168,6 +2197,10 @@ export class ClashManager {
           await ClashManager._applyActivities(eq, "受到伤害时", atkCtx2);
         }
       }
+    }
+
+    if (_unbreakableCounterArgs2) {
+      await ClashManager._triggerUnbreakableCounter(..._unbreakableCounterArgs2);
     }
 
     await ClashManager._flushActMsgs(_actMsgs2, atkActor);
