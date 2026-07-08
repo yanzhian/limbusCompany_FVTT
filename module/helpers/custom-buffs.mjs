@@ -283,3 +283,32 @@ registerCustomBuff("shield", {
     // });
   },
 });
+
+/**
+ * 【血炎】
+ * - 最大值：3 层
+ * - 回合结束时层数 -1，归零时移除
+ */
+registerCustomBuff("bloodFlame", {
+  label:       "血炎",
+  description: "- 最大值：3 层\n- 回合结束时层数减少 1，归零时移除",
+  maxStacks:   3,
+
+  async onRoundEnd(actor, buff) {
+    const buffs = foundry.utils.deepClone(actor.system?.buffs ?? []);
+    const idx   = buffs.findIndex(b => b.id === buff.id);
+    if (idx < 0) return;
+    const newStacks = (buffs[idx].stacks ?? 1) - 1;
+    if (newStacks <= 0) {
+      buffs.splice(idx, 1);
+      await actor.update({ "system.buffs": buffs });
+      await ChatMessage.create({
+        speaker: ChatMessage.getSpeaker({ actor }),
+        content: `<div class="limbuscompany chat-clash"><strong>${actor.name}</strong> 的【血炎】已消散。</div>`,
+      });
+    } else {
+      buffs[idx].stacks = newStacks;
+      await actor.update({ "system.buffs": buffs });
+    }
+  },
+});
