@@ -369,7 +369,19 @@ export class ClashManager {
       // 【每】类前置条件按 floor(层数/N) 计算倍数，传递给后续效果（与 cost.type==="perStack" 共用倍数变量）
       let precondMultiplier = 1;
       for (const pre of preconditions) {
-        if (!pre?.buff) continue;
+        if (!pre) continue;
+
+        // ── baseAttr 类型：检查角色属性值 ──────────────────────────────
+        if (pre.type === "baseAttr") {
+          const precTgt = (pre.target ?? "self") === "self" ? owner : other;
+          if (!precTgt) { precondFail = true; break; }
+          const curVal   = ClashManager._getAttrVal(precTgt, pre.attrType ?? "hp");
+          const threshold = ClashManager._parseThreshold(pre.attrValue ?? "0", precTgt, pre.attrType ?? "hp");
+          if (!ClashManager._cmp(curVal, pre.comparison ?? "lt", threshold)) { precondFail = true; break; }
+          continue;
+        }
+
+        if (!pre.buff) continue;
         const preBuffType = pre.buff === "custom" ? (pre.buffCustom || "custom") : pre.buff;
         const precTgt = pre.target === "self" ? owner : other;
         const buff    = precTgt ? ClashManager._getBuff(precTgt, preBuffType) : null;
