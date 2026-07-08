@@ -252,8 +252,9 @@ registerCustomBuff("bleed", {
 });
 
 registerCustomBuff("charge", {
-  label: "充能",
-  description: "·特殊技能需要消耗层数。\n[回合结束时]：减少 1 层【充能】层数。",
+  label:     "充能",
+  description: "·特殊技能需要消耗层数。\n·最大值：20 层。\n[回合结束时]：减少 1 层【充能】层数。",
+  maxStacks: 20,
 });
 
 registerCustomBuff("breathing", {
