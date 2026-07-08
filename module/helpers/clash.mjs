@@ -2474,10 +2474,10 @@ export class ClashManager {
     await ClashManager._flushActMsgs(_actMsgs2, atkActor);
     await ClashManager._broadcastAndCheckReactions({ lastSkillUuid: atkItem2?.uuid ?? null, attacker: atkActor, defender: defActor });
 
-    // 若选中的是非 linked token actor，额外同步该 token 的 HP（以 baseActor 最终 HP 为准）
+    // 若选中的是非 linked token actor，额外同步该 token 的 HP
     if (selActor !== baseActor && selActor.isToken) {
-      const finalHp = baseActor.system?.hp?.value ?? 0;
-      await selActor.update({ "system.hp.value": finalHp });
+      const th = selActor.system?.hp?.value ?? 0;
+      await selActor.update({ "system.hp.value": Math.max(0, th - finalDamage) });
     }
 
     // ── 加重扩散：weight>=2 时发出额外承受卡 ──────────────────────────────
@@ -2634,10 +2634,10 @@ export class ClashManager {
       _actMsgs2.push({ trigger: "受到伤害时", itemName: defActor.name, msgs: _buffHookMsgsCl });
     }
 
-    // 若是非 linked token，额外同步 HP（以 defActor 最终 HP 为准）
+    // 若是非 linked token，额外同步 HP
     if (selActor !== defActor && selActor.isToken) {
-      const finalHp = defActor.system?.hp?.value ?? 0;
-      await selActor.update({ "system.hp.value": finalHp });
+      const cur = selActor.system?.hp?.value ?? 0;
+      await selActor.update({ "system.hp.value": Math.max(0, cur - finalDamage) });
     }
 
     // 更新扩散卡剩余次数
@@ -2757,10 +2757,10 @@ export class ClashManager {
 
     await ClashManager._applyAndSendTake(actor, damage);
 
-    // 若选中的是非 linked token actor（与 base actor 为不同文档），额外同步该 token 的 HP（以 actor 最终 HP 为准）
+    // 若选中的是非 linked token actor（与 base actor 为不同文档），额外同步该 token 的 HP
     if (selActor && selActor !== actor && selActor.isToken) {
-      const finalHp = actor.system?.hp?.value ?? 0;
-      await selActor.update({ "system.hp.value": finalHp });
+      const th = selActor.system?.hp?.value ?? 0;
+      await selActor.update({ "system.hp.value": Math.max(0, th - damage) });
     }
   }
 
@@ -2855,9 +2855,6 @@ export class ClashManager {
       const zeroCtx = { owner: actor, atkActor: attacker ?? actor, defActor: actor, _fireCounts: {}, _actMsgs: [] };
       for (const it of ClashManager._getEquippedItems(actor)) {
         await ClashManager._applyActivities(it, "HP归零时", zeroCtx);
-      }
-      if (zeroCtx._actMsgs.length) {
-        await ClashManager._flushActMsgs(zeroCtx._actMsgs, actor);
       }
     }
 
