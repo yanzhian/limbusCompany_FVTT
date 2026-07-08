@@ -522,7 +522,7 @@ Hooks.on("updateCombat", async (combat, changed) => {
       );
       await actor.update({ "system.hp.value": newHp });
       await actor.reduceBuffStacks?.("burn");
-      if (actor.checkAndTriggerChaos) await actor.checkAndTriggerChaos(newHp, oldHp, { silent: true });
+      if (actor.checkAndTriggerChaos) await actor.checkAndTriggerChaos(newHp, oldHp, { silent: true, source: "burn" });
       await ChatMessage.create({
         speaker: ChatMessage.getSpeaker({ actor }),
         content: `<div class="limbuscompany chat-clash">

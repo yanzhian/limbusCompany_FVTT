@@ -291,9 +291,14 @@ registerCustomBuff("shield", {
  */
 registerCustomBuff("bloodFlame", {
   label:         "血炎",
-  description:   "- 最大值：3 层\n- 获得层数时刷新（替换），不叠加\n- 回合结束时层数减少 1，归零时移除",
+  description:   "- 最大值：3 层\n- 获得层数时刷新（替换），不叠加\n- 回合结束时层数减少 1，归零时移除\n- 不会因【烧伤】伤害而陷入混乱",
   maxStacks:     3,
   refreshOnGain: true,
+
+  /** 仅免疫来自烧伤的混乱触发 */
+  beforeChaos(_actor, _buff, ctx) {
+    if (ctx?.source === "burn") return { immune: true };
+  },
 
   async onRoundEnd(actor, buff) {
     const buffs = foundry.utils.deepClone(actor.system?.buffs ?? []);

@@ -802,15 +802,16 @@ export class LimbusActor extends Actor {
    * @param {number} oldHP
    * @param {object} [opts]
    * @param {boolean} [opts.silent=false] 为 true 时跳过聊天框（调用方自行在消息中显示混乱信息）
+   * @param {string}  [opts.source=""]   伤害来源标识，如 "burn"，供 beforeChaos 判断免疫条件
    */
-  async checkAndTriggerChaos(newHP, oldHP, { silent = false } = {}) {
+  async checkAndTriggerChaos(newHP, oldHP, { silent = false, source = "" } = {}) {
     if (newHP >= oldHP) return; // HP 没有减少则不检查
 
-    // 检查自定义 BUFF beforeChaos 免疫（如【防御姿态】）
+    // 检查自定义 BUFF beforeChaos 免疫（如【防御姿态】【血炎】）
     for (const buff of (this.system?.buffs ?? [])) {
       const handler = resolveBuffHandler(buff);
       if (typeof handler?.beforeChaos === "function") {
-        const result = handler.beforeChaos(this, buff);
+        const result = handler.beforeChaos(this, buff, { source });
         if (result?.immune) return; // 免疫混乱触发
       }
     }
