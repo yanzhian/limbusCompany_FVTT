@@ -360,7 +360,7 @@
 .limbuscompany .unbreakable-badge {
   background: #5A1010;
   color: #FF9090;
-  border: 1px solid #A03030;
+  /* border: 1px solid #A03030; */
 }
 .limbuscompany .dice-type-sel {
   font-size: 0.72rem;
