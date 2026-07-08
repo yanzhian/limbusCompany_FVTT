@@ -1495,18 +1495,34 @@ export class LimbusActorSheet extends ActorSheet {
     });
   }
 
+  // 推进 bag 状态（无论角色卡是否打开都必须执行）
+  _advanceBagState(slotIndex) {
+    const state = this._combatBagState;
+    if (!state || !state.slots[slotIndex]) return;
+    state.slots.splice(slotIndex, 1);
+    const nextId = this._drawNextFromPool();
+    state.slots.push(nextId);
+  }
+
   // 带动画地使用指定激活槽技能（仅 slotIndex = 0 或 1）
   _animateCombatSkillUse(slotIndex) {
-    if (!this.element?.length) return;
+    const state = this._combatBagState;
+    if (!state || !state.slots[slotIndex]) return;
+
+    // 角色卡未打开：直接推进状态，不播放动画
+    if (!this.element?.length) {
+      this._advanceBagState(slotIndex);
+      return;
+    }
 
     // 每个阶段都通过 this.element 实时查询，避免因重渲染导致引用失效
     const _wraps = () => this.element.find(".basic-combat-section .combat-skill-slot-wrap");
 
     const $wraps = _wraps();
-    if (slotIndex >= $wraps.length) return;
-
-    const state = this._combatBagState;
-    if (!state || !state.slots[slotIndex]) return;
+    if (slotIndex >= $wraps.length) {
+      this._advanceBagState(slotIndex);
+      return;
+    }
 
     const $usedSlot = $wraps.eq(slotIndex).find(".combat-skill-slot");
 
@@ -1539,9 +1555,7 @@ export class LimbusActorSheet extends ActorSheet {
     // ── 第3阶段（310ms后）：更新状态，重渲染，新牌淡入 ──────────────────
     setTimeout(() => {
       // 更新 bag 状态
-      state.slots.splice(slotIndex, 1);
-      const nextId = this._drawNextFromPool();
-      state.slots.push(nextId);   // 补充到位置5
+      this._advanceBagState(slotIndex);
 
       // 重置 wrapper 和内部 slot 的所有内联动画样式（不带动画）
       const $w2 = _wraps();
