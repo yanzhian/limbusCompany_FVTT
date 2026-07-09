@@ -95,19 +95,20 @@ export class ClashManager {
       .map(id => (id ? actor.items.get(id) : null))
       .filter(item => item?.type === "equipment");
     const upper = equippedItems.find(eq => eq.system?.subtype === "upper");
-    if (upper?.system?.resistanceAdj) {
-      const adj = upper.system.resistanceAdj;
-      return {
-        slash:  adj.slash  ?? sys.resistances?.slash  ?? "x1.0",
-        blunt:  adj.blunt  ?? sys.resistances?.blunt  ?? "x1.0",
-        pierce: adj.pierce ?? sys.resistances?.pierce ?? "x1.0",
-      };
-    }
-    return {
-      slash:  sys.resistances?.slash  ?? "x1.0",
-      blunt:  sys.resistances?.blunt  ?? "x1.0",
-      pierce: sys.resistances?.pierce ?? "x1.0",
-    };
+    const base = upper?.system?.resistanceAdj
+      ? {
+          slash:  upper.system.resistanceAdj.slash  ?? sys.resistances?.slash  ?? "x1.0",
+          blunt:  upper.system.resistanceAdj.blunt  ?? sys.resistances?.blunt  ?? "x1.0",
+          pierce: upper.system.resistanceAdj.pierce ?? sys.resistances?.pierce ?? "x1.0",
+        }
+      : {
+          slash:  sys.resistances?.slash  ?? "x1.0",
+          blunt:  sys.resistances?.blunt  ?? "x1.0",
+          pierce: sys.resistances?.pierce ?? "x1.0",
+        };
+    // 【刺入之矢】：持有时斩击抗性强制为 x2.0
+    if (buffs.some(b => b.type === "piercingArrow")) base.slash = "x2.0";
+    return base;
   }
 
   static _getBuff(actor, type) {

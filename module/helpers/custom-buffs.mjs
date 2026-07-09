@@ -286,6 +286,17 @@ registerCustomBuff("shield", {
 });
 
 /**
+ * 【刺入之矢】
+ * - 最大值：1 层
+ * - 持有时斩击抗性强制为 x2.0（在 _getEffectiveResistances 中动态覆盖）
+ */
+registerCustomBuff("piercingArrow", {
+  label:       "刺入之矢",
+  description: "- 最大值：1 层\n- 将自己的斩击抗性转换为 x2.0",
+  maxStacks:   1,
+});
+
+/**
  * 【血炎】
  * - 最大值：3 层
  * - 回合结束时层数 -1，归零时移除

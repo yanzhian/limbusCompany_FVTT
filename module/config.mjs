@@ -172,6 +172,7 @@ LIMBUSCOMPANY.BUFF_TYPES = {
   // 注册自定义 BUFF（与 custom-buffs.mjs 中的 type 对应）
   defensiveStance: "防御姿态",
   butterfly:       "蝶",
+  piercingArrow:   "刺入之矢",
 };
 
 /** 分组，用于 BUFF 下拉菜单 */
@@ -180,7 +181,7 @@ LIMBUSCOMPANY.BUFF_GROUPS = {
   negative: ["weak", "breach", "bind", "fragile", "clashPowerDown", "atkLevelDown", "defLevelDown"],
   special:  ["burn", "bleed", "tremor", "rupture", "sinking", "breathing", "charge", "chaos", "panic"],
   other:    ["custom"],
-  custom:   ["defensiveStance", "butterfly"],
+  custom:   ["defensiveStance", "butterfly", "piercingArrow"],
 };
 
 /**
