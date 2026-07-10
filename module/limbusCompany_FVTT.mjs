@@ -443,10 +443,18 @@ Hooks.on("combatRound", (combat, _updateData, _options) => {
   // 在每个 combatant 轮次末尾由 combatTurn 钩子处理
 });
 
+// 去重：记录最近已处理的 combatId+round，防止 updateEmbeddedDocuments 引发的二次触发
+const _processedRoundKey = new Map();
+
 Hooks.on("updateCombat", async (combat, changed) => {
   // ── 每轮（round）结束：统一清 BUFF + 燃烧/充能/呼吸衰减（仅 GM 执行） ──
   if (!("round" in changed)) return;
   if (!game.user.isGM) return;
+
+  // 同一场战斗同一 round 只处理一次（防止批量更新先攻引发二次触发）
+  const dedupKey = `${combat.id}:${combat.round}`;
+  if (_processedRoundKey.get(dedupKey)) return;
+  _processedRoundKey.set(dedupKey, true);
 
   const TURN_END = CONFIG.LIMBUSCOMPANY?.TURN_END_BUFF_TYPES ?? new Set();
 
