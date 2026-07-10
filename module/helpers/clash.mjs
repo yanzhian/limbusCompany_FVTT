@@ -116,6 +116,22 @@ export class ClashManager {
     return (actor?.system?.buffs ?? []).find(b => b.type === type && b.whenAdded !== "下回合") ?? null;
   }
 
+  /**
+   * 安全更新文档：若当前用户无权限，通过 socket 委托 GM 执行。
+   * 用于跨所有权的 Actor/Item 更新（如攻击方客户端更新防御方 Actor/Item）。
+   */
+  static async _safeDocUpdate(doc, data) {
+    if (!doc) return;
+    if (doc.canUserModify?.(game.user, "update")) {
+      return doc.update(data);
+    }
+    game.socket?.emit("system.limbusCompany_FVTT", {
+      type: "gmDocUpdate",
+      uuid: doc.uuid,
+      data,
+    });
+  }
+
   static _getBuffVal(actor, type) {
     const b = ClashManager._getBuff(actor, type);
     return { intensity: b?.intensity ?? 0, stacks: b?.stacks ?? 0 };
@@ -163,7 +179,7 @@ export class ClashManager {
     const next = Math.max(0, (buffs[idx].stacks ?? 1) - amount);
     if (next <= 0) buffs.splice(idx, 1);
     else           buffs[idx] = { ...buffs[idx], stacks: next };
-    return actor.update({ "system.buffs": buffs });
+    return ClashManager._safeDocUpdate(actor, { "system.buffs": buffs });
   }
 
   /** 将 BUFF 类型键转换为中文显示名称。 */
@@ -250,17 +266,17 @@ export class ClashManager {
         whenAdded,
       });
     }
-    await actor.update({ "system.buffs": buffs });
+    await ClashManager._safeDocUpdate(actor, { "system.buffs": buffs });
   }
 
   /** 移除角色所有指定类型的 BUFF。 */
   static async _removeBuff(actor, type) {
     if (!actor || !type) return;
-    if (typeof actor.removeBuffsByType === "function") {
+    if (typeof actor.removeBuffsByType === "function" && actor.canUserModify?.(game.user, "update")) {
       return actor.removeBuffsByType(type);
     }
     const buffs = (actor.system?.buffs ?? []).filter(b => b.type !== type);
-    await actor.update({ "system.buffs": buffs });
+    await ClashManager._safeDocUpdate(actor, { "system.buffs": buffs });
   }
 
   /**
@@ -571,7 +587,7 @@ export class ClashManager {
             const nv  = mode === "absolute"
               ? Math.max(0, Math.min(max, val))
               : Math.max(0, Math.min(max, cur + val));
-            await effTgt.update({ "system.hp.value": nv });
+            await ClashManager._safeDocUpdate(effTgt, { "system.hp.value": nv });
             descStr = mode === "absolute"
               ? `【${effTgt.name}】HP 调整为 ${nv}`
               : `【${effTgt.name}】HP ${val >= 0 ? "+" : ""}${val}（${cur} → ${nv}）`;
@@ -582,10 +598,10 @@ export class ClashManager {
             const val    = _scaleVal(rawVal, mode);
             const cur    = effTgt.system?.sanity?.value ?? 50;
             const target = mode === "absolute" ? val : cur + val;
-            if (typeof effTgt.setSanity === "function") {
+            if (typeof effTgt.setSanity === "function" && effTgt.canUserModify?.(game.user, "update")) {
               await effTgt.setSanity(target);
             } else {
-              await effTgt.update({ "system.sanity.value": Math.max(5, Math.min(95, target)) });
+              await ClashManager._safeDocUpdate(effTgt, { "system.sanity.value": Math.max(5, Math.min(95, target)) });
             }
             descStr = mode === "absolute"
               ? `【${effTgt.name}】理智 调整为 ${Math.max(5, Math.min(95, target))}`
@@ -595,14 +611,14 @@ export class ClashManager {
           case "atkAdj": {
             const val = Number(eff.value ?? eff.intensity ?? 0) * perStackMultiplier;
             const cur = effTgt.system?.atk?.extra ?? 0;
-            await effTgt.update({ "system.atk.extra": cur + val });
+            await ClashManager._safeDocUpdate(effTgt, { "system.atk.extra": cur + val });
             descStr = `【${effTgt.name}】攻击等级 ${val >= 0 ? "+" : ""}${val}`;
             break;
           }
           case "defAdj": {
             const val = Number(eff.value ?? eff.intensity ?? 0) * perStackMultiplier;
             const cur = effTgt.system?.def?.extra ?? 0;
-            await effTgt.update({ "system.def.extra": cur + val });
+            await ClashManager._safeDocUpdate(effTgt, { "system.def.extra": cur + val });
             descStr = `【${effTgt.name}】防御等级 ${val >= 0 ? "+" : ""}${val}`;
             break;
           }
@@ -614,7 +630,7 @@ export class ClashManager {
             const nv  = mode === "absolute"
               ? Math.max(0, Math.min(max, val))
               : Math.max(0, Math.min(max, cur + val));
-            await effTgt.update({ "system.ap.value": nv });
+            await ClashManager._safeDocUpdate(effTgt, { "system.ap.value": nv });
             descStr = mode === "absolute"
               ? `【${effTgt.name}】行动值 调整为 ${nv}`
               : `【${effTgt.name}】行动值 ${val >= 0 ? "+" : ""}${val}（${cur} → ${nv}）`;
@@ -625,7 +641,7 @@ export class ClashManager {
             const val = _scaleVal(rawVal, mode);
             const cur = item.system?.weight ?? 0;
             const nv  = mode === "absolute" ? Math.max(0, val) : Math.max(0, cur + val);
-            await item.update({ "system.weight": nv });
+            await ClashManager._safeDocUpdate(item, { "system.weight": nv });
             descStr = mode === "absolute"
               ? `【${item.name}】加重值 调整为 ${nv}`
               : `【${item.name}】加重值 ${val >= 0 ? "+" : ""}${val}（${cur} → ${nv}）`;
@@ -637,7 +653,7 @@ export class ClashManager {
             const val = _scaleVal(rawVal, mode);
             const cur = item.system?.diceCount ?? 1;
             const nv  = mode === "absolute" ? Math.max(1, val) : Math.max(1, cur + val);
-            await item.update({ "system.diceCount": nv });
+            await ClashManager._safeDocUpdate(item, { "system.diceCount": nv });
             descStr = mode === "absolute"
               ? `【${item.name}】骰数 调整为 ${nv}d`
               : `【${item.name}】骰数 ${val >= 0 ? "+" : ""}${val}（${cur}d → ${nv}d）`;
@@ -649,7 +665,7 @@ export class ClashManager {
             const val = _scaleVal(rawVal, mode);
             const cur = item.system?.diceFaces ?? 4;
             const nv  = mode === "absolute" ? Math.max(2, val) : Math.max(2, cur + val);
-            await item.update({ "system.diceFaces": nv });
+            await ClashManager._safeDocUpdate(item, { "system.diceFaces": nv });
             descStr = mode === "absolute"
               ? `【${item.name}】面数 d${cur} → d${nv}`
               : `【${item.name}】面数 ${val >= 0 ? "+" : ""}${val}（d${cur} → d${nv}）`;
@@ -661,7 +677,7 @@ export class ClashManager {
             const val = _scaleVal(rawVal, mode);
             const cur = item.system?.baseValue ?? 0;
             const nv  = mode === "absolute" ? val : cur + val;
-            await item.update({ "system.baseValue": nv });
+            await ClashManager._safeDocUpdate(item, { "system.baseValue": nv });
             descStr = mode === "absolute"
               ? `【${item.name}】基础值 调整为 ${nv}`
               : `【${item.name}】基础值 ${val >= 0 ? "+" : ""}${val}（${cur} → ${nv}）`;
@@ -690,7 +706,7 @@ export class ClashManager {
                       percent:   Math.min(100, t.percent + tremorIntensity),
                       triggered: t.triggered,
                     }));
-                    await effTgt.update({ "system.chaosThresholds": tList });
+                    await ClashManager._safeDocUpdate(effTgt, { "system.chaosThresholds": tList });
                   })()
               );
               await ClashManager._reduceBuffStacks(effTgt, "tremor", 1);
@@ -764,7 +780,7 @@ export class ClashManager {
             }
             if (totalDmg > 0) {
               const curHp = effTgt.system?.hp?.value ?? 0;
-              await effTgt.update({ "system.hp.value": Math.max(0, curHp - totalDmg) });
+              await ClashManager._safeDocUpdate(effTgt, { "system.hp.value": Math.max(0, curHp - totalDmg) });
             }
 
             const buffLabel = ClashManager._buffLabel(buffType);
@@ -773,8 +789,8 @@ export class ClashManager {
           }
           case "diceTypeChg": {
             const newDiceType = eff.diceTypeVal ?? "normal";
-            if (item && item.update) {
-              await item.update({ "system.diceType": newDiceType });
+            if (item) {
+              await ClashManager._safeDocUpdate(item, { "system.diceType": newDiceType });
               const label = newDiceType === "unbreakable" ? "不可摧毁" : "一般骰子";
               descStr = `【${item.name}】骰子类型变更为【${label}】`;
             }
@@ -2788,7 +2804,7 @@ export class ClashManager {
       if (si >= 0) {
         if (remaining <= 0) buffs.splice(si, 1);
         else buffs[si] = { ...buffs[si], stacks: remaining };
-        await actor.update({ "system.buffs": buffs });
+        await ClashManager._safeDocUpdate(actor, { "system.buffs": buffs });
       }
       if (hookMsgs) {
         hookMsgs.push(`【护盾】吸收 <strong>${absorbed}</strong> 点伤害（剩余 <strong>${remaining}</strong> 层）`);
@@ -3503,6 +3519,18 @@ export class ClashManager {
       const attacker = attackerId ? game.actors.get(attackerId) : null;
       const defender = defenderId ? game.actors.get(defenderId) : null;
       await ClashManager._checkAndOfferReactions({ lastSkillUuid, attacker, defender });
+      return;
+    }
+
+    // 玩家无权限时委托 GM 执行任意文档更新（跨所有权 Actor/Item 写入）
+    if (msg.type === "gmDocUpdate") {
+      if (!game.user.isGM) return;
+      try {
+        const doc = msg.uuid ? await fromUuid(msg.uuid) : null;
+        if (doc) await doc.update(msg.data);
+      } catch (err) {
+        console.error("[ClashManager] gmDocUpdate 失败:", err);
+      }
       return;
     }
 
