@@ -106,8 +106,15 @@ export class ClashManager {
           blunt:  sys.resistances?.blunt  ?? "x1.0",
           pierce: sys.resistances?.pierce ?? "x1.0",
         };
-    // 【刺入之矢】：持有时斩击抗性强制为 x2.0
-    if (buffs.some(b => b.type === "piercingArrow")) base.slash = "x2.0";
+    // 自定义 BUFF modifyResistances 钩子：允许注册的 BUFF 修改物理抗性
+    // 钩子签名：modifyResistances(actor, buff, res) → 返回新的 res 对象或直接原地修改
+    for (const buff of buffs) {
+      const handler = resolveBuffHandler(buff);
+      if (typeof handler?.modifyResistances === "function") {
+        const result = handler.modifyResistances(actor, buff, base);
+        if (result && typeof result === "object") Object.assign(base, result);
+      }
+    }
     return base;
   }
 

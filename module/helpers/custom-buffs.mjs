@@ -12,6 +12,9 @@
  *     modifySpeedRoll(actor, ctx) {},       // 速度骰结果修正 → 返回最终 total（Number）
  *     onClashWin(carrier, opponent) {},     // 拼点胜利时回调 → 返回 Promise
  *     beforeChaos(actor, buff) {},          // 混乱触发前检查 → 返回 { immune: bool }
+ *     modifyResistances(actor, buff, res) {}, // 修改物理抗性：res = { slash, blunt, pierce }（"xN.0" 字符串），
+ *                                             // 可原地修改或返回部分覆盖对象（如 { slash: "x2.0" }）；
+ *                                             // 陷入混乱的强制抗性优先级更高，混乱时不会调用此钩子
  *   });
  *
  * 以上所有钩子均为可选。未提供的钩子不会被调用。
@@ -288,12 +291,16 @@ registerCustomBuff("shield", {
 /**
  * 【刺入之矢】
  * - 最大值：1 层
- * - 持有时斩击抗性强制为 x2.0（在 _getEffectiveResistances 中动态覆盖）
+ * - 持有时斩击抗性强制为 x2.0
  */
 registerCustomBuff("piercingArrow", {
   label:       "刺入之矢",
   description: "- 最大值：1 层\n- 将自己的斩击抗性转换为 x2.0",
   maxStacks:   1,
+
+  modifyResistances(_actor, _buff, _res) {
+    return { slash: "x2.0" };
+  },
 });
 
 /**

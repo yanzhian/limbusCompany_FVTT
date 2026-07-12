@@ -118,25 +118,8 @@ export class LimbusActorSheet extends ActorSheet {
       max: (system.speed.max ?? 0) + equipAdj.speed + buffSpeedMod,
     };
 
-    const equippedUpper = equippedItems.find(eq => eq.system?.subtype === "upper");
-    // 只有本回合有效的混乱 BUFF 才影响抗性显示
-    const _buffs         = (system.buffs ?? []).filter(b => b.whenAdded !== "下回合");
-    const hasChaosDouble = _buffs.some(b => b.type === "chaos_double_plus");
-    const hasChaosPlus   = _buffs.some(b => b.type === "chaos_plus");
-    const hasChaos       = _buffs.some(b => b.type === "chaos");
-    context.displayResistances = hasChaosDouble
-      ? { slash: "x3.0", blunt: "x3.0", pierce: "x3.0" }
-      : hasChaosPlus
-        ? { slash: "x2.5", blunt: "x2.5", pierce: "x2.5" }
-        : hasChaos
-          ? { slash: "x2.0", blunt: "x2.0", pierce: "x2.0" }
-          : equippedUpper?.system?.resistanceAdj
-        ? {
-          slash: equippedUpper.system.resistanceAdj.slash ?? system.resistances.slash,
-          blunt: equippedUpper.system.resistanceAdj.blunt ?? system.resistances.blunt,
-          pierce: equippedUpper.system.resistanceAdj.pierce ?? system.resistances.pierce,
-        }
-        : { ...system.resistances };
+    // 抗性显示与战斗结算共用同一逻辑（混乱强制值 > 自定义BUFF modifyResistances > 上装覆盖 > 基础值）
+    context.displayResistances = ClashManager._getEffectiveResistances(actor);
 
     const stellarMax = 30 + (system.level ?? 1);
     const equippedStellarCost = this._calcEquippedStellarCost();
