@@ -471,13 +471,14 @@ export class ClashManager {
           } else if (mode === "reserve") {
             if (!bagState.slots[2]) { forcedFail = true; break; }
           }
-        } else if (cost.buff && cost.type === "forced") {
+        } else if (cost.buff && (cost.type === "forced" || cost.type === "perStack")) {
+          // 强制消耗 / 【每】：层数不足（每N层的 N）则跳过整条 Activity
           const costBuffType = cost.buff === "custom" ? (cost.buffCustom || "custom") : cost.buff;
           const costTgts = ClashManager._resolveTargets(cost.target ?? "self", owner, other);
           if (costTgts.length === 0) { forcedFail = true; break; }
           for (const tgt of costTgts) {
             const existing = ClashManager._getBuff(tgt, costBuffType);
-            if ((existing?.stacks ?? 0) < (cost.stacks ?? 1)) { forcedFail = true; break; }
+            if ((existing?.stacks ?? 0) < Math.max(1, cost.stacks ?? 1)) { forcedFail = true; break; }
           }
         }
         if (forcedFail) break;
@@ -530,13 +531,17 @@ export class ClashManager {
           const costBuffType = cost.buff === "custom" ? (cost.buffCustom || "custom") : cost.buff;
           const costTgts = ClashManager._resolveTargets(cost.target ?? "self", owner, other);
           if (cost.type === "perStack") {
-            // 消耗第一个目标的全部层数，作为效果倍数
+            // 【每】：与前置条件的"每"一致——每 N 层为 1 倍，倍数 = floor(层数/N)，
+            // 可选最大倍数上限（maxTimes，0=无限），只消耗 倍数×N 层
             const tgt = costTgts[0];
             if (tgt) {
               const existing = ClashManager._getBuff(tgt, costBuffType);
-              const consumed = existing?.stacks ?? 0;
-              await ClashManager._removeBuff(tgt, costBuffType);
-              perStackMultiplier = consumed;
+              const have     = existing?.stacks ?? 0;
+              const n        = Math.max(1, cost.stacks ?? 1);
+              let   times    = Math.floor(have / n);
+              if ((cost.maxTimes ?? 0) > 0) times = Math.min(times, cost.maxTimes);
+              await ClashManager._reduceBuffStacks(tgt, costBuffType, times * n);
+              perStackMultiplier = times;
             }
           } else if (cost.type !== "none") {
             for (const tgt of costTgts) {

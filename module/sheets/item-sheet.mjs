@@ -1719,8 +1719,9 @@ function _buildTargetOptions(selected) {
 /** 消耗行 HTML */
 function _buildCostRow(cost, idx, cfg) {
   const selType  = cost?.type ?? "forced";
-  const isAttr    = selType === "attribute";
-  const isDiscard = selType === "discard";
+  const isAttr     = selType === "attribute";
+  const isDiscard  = selType === "discard";
+  const isPerStack = selType === "perStack";
   const typeOpts = [
     ["perStack",  "【每】"],
     ["forced",    "强制消耗"],
@@ -1761,8 +1762,12 @@ function _buildCostRow(cost, idx, cfg) {
                  value="${_esc(_keyToLabel(cost?.buff ?? "", cost?.buffCustom ?? ""))}">
           <label>强度</label>
           <input class="ae-input-sm cost-intensity" type="number" value="${cost?.intensity ?? 0}" min="0">
-          <label>层数</label>
+          <label class="cost-stacks-label">${isPerStack ? "每N层" : "层数"}</label>
           <input class="ae-input-sm cost-stacks"    type="number" value="${cost?.stacks ?? 1}"    min="0">
+          <span class="ae-cost-pern-max" ${isPerStack ? "" : 'style="display:none"'}>
+            <label>最大倍数</label>
+            <input class="ae-input-sm cost-max-times" type="number" value="${cost?.maxTimes ?? 0}" min="0" placeholder="0=无限">
+          </span>
         </span>
         <span class="ae-cost-attr-sec" ${isAttr ? "" : 'style="display:none"'}>
           <label>属性</label>
@@ -2028,9 +2033,12 @@ function _bindCostType(html) {
     const val       = $(this).val();
     const isAttr    = val === "attribute";
     const isDiscard = val === "discard";
+    const isPerStack = val === "perStack";
     row.find(".ae-cost-buff-sec").toggle(!isAttr && !isDiscard);
     row.find(".ae-cost-attr-sec").toggle(isAttr);
     row.find(".ae-cost-discard-sec").toggle(isDiscard);
+    row.find(".cost-stacks-label").text(isPerStack ? "每N层" : "层数");
+    row.find(".ae-cost-pern-max").toggle(isPerStack);
   });
   html.find(".cost-discard-mode").off("change").on("change", function () {
     const row     = $(this).closest(".ae-cost-row");
@@ -2149,6 +2157,7 @@ function _readActivityForm(html, original) {
         buffCustom: "",
         intensity:  parseInt($r.find(".cost-intensity").val()) || 0,
         stacks:     parseInt($r.find(".cost-stacks").val())    || 1,
+        ...(type === "perStack" ? { maxTimes: parseInt($r.find(".cost-max-times").val()) || 0 } : {}),
       });
     }
   });
