@@ -999,7 +999,7 @@ export class LimbusActor extends Actor {
    * 播放 DiceSoNice 动画，发送聊天消息，更新战斗跟踪器先攻值。
    * @returns {Promise<Roll>}
    */
-  async rollSpeedInitiative({ updateCombatant = true } = {}) {
+  async rollSpeedInitiative({ updateCombatant = true, chatMessage = true } = {}) {
     const sys = this.system;
     const agi = sys.attributes?.agi ?? 0;
 
@@ -1045,6 +1045,12 @@ export class LimbusActor extends Actor {
     const speedMin   = 1 + modifier;
     const speedMax   = 6 + modifier;
 
+    // 将结果附加到 roll 对象，供调用方使用（批量汇总时 chatMessage=false）
+    roll.finalTotal = finalTotal;
+    roll.speedMin   = speedMin;
+    roll.speedMax   = speedMax;
+    if (!chatMessage) return roll;
+
     await ChatMessage.create({
       speaker: ChatMessage.getSpeaker({ actor: this }),
       content: `
@@ -1068,8 +1074,6 @@ export class LimbusActor extends Actor {
         </div>`,
     });
 
-    // 将最终先攻值附加到 roll 对象，供调用方使用
-    roll.finalTotal = finalTotal;
     return roll;
   }
 }

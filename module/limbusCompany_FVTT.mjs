@@ -603,14 +603,42 @@ Hooks.on("updateCombat", async (combat, changed) => {
   // 先全部骰好并发聊天，最后一次性批量写入先攻值，只触发一次排序
   if ((changed.round ?? 0) > 1) {
     const initiativeUpdates = [];
+    const initiativeRows    = [];
     for (const combatant of combat.combatants) {
       const actor = combatant.actor;
       if (!actor || actor.type !== "character") continue;
-      const roll = await actor.rollSpeedInitiative({ updateCombatant: false });
-      initiativeUpdates.push({ _id: combatant.id, initiative: roll.finalTotal ?? roll.total });
+      const roll = await actor.rollSpeedInitiative({ updateCombatant: false, chatMessage: false });
+      const finalTotal = roll.finalTotal ?? roll.total;
+      initiativeUpdates.push({ _id: combatant.id, initiative: finalTotal });
+      initiativeRows.push({
+        img:      actor.img,
+        name:     actor.name,
+        speedMin: roll.speedMin ?? 0,
+        speedMax: roll.speedMax ?? 0,
+        finalTotal,
+      });
     }
     if (initiativeUpdates.length > 0) {
       await combat.updateEmbeddedDocuments("Combatant", initiativeUpdates);
+      // 全体先攻汇总为一张卡
+      const rowsHtml = initiativeRows.map(r => `
+        <div style="display:flex;align-items:center;gap:8px;margin:4px 0;">
+          <img src="${r.img}" alt="${r.name}"
+               style="width:30px;height:30px;object-fit:cover;border-radius:3px;border:1px solid #C9A84C;">
+          <span style="color:#E8C9A2;font-size:.85rem;flex:1;">${r.name}</span>
+          <span class="initiative-speed-range">${r.speedMin}–${r.speedMax}</span>
+          <span class="initiative-arrow">→</span>
+          <span class="initiative-total">${r.finalTotal}</span>
+        </div>`).join("");
+      await ChatMessage.create({
+        content: `
+          <div class="limbus-initiative-card">
+            <div class="ic-title" style="font-size:20px;">先攻骰掷</div>
+            <div class="ic-gold-divider"></div>
+            ${rowsHtml}
+            <div class="ic-gold-divider"></div>
+          </div>`,
+      });
     }
   }
 });
