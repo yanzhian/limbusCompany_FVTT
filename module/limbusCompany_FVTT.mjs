@@ -622,7 +622,7 @@ Hooks.on("updateCombat", async (combat, changed) => {
       await combat.updateEmbeddedDocuments("Combatant", initiativeUpdates);
       // 全体先攻汇总为一张卡
       const rowsHtml = initiativeRows.map(r => `
-        <div style="display:flex;align-items:center;gap:8px;padding:10px 12px 8px;">
+        <div style="display:flex;align-items:center;gap:8px;margin:4px 0;">
           <img src="${r.img}" alt="${r.name}"
                style="width:30px;height:30px;object-fit:cover;border-radius:50%;border:2px solid #3A5A1A;">
           <span style="color:#E8C9A2;font-size:.85rem;flex:1;">${r.name}</span>
@@ -632,7 +632,7 @@ Hooks.on("updateCombat", async (combat, changed) => {
         </div>`).join("");
       await ChatMessage.create({
         content: `
-          <div class="limbus-initiative-card">
+          <div class="limbus-initiative-card" style="padding:10px 12px 8px;">
             <div class="ic-title" style="font-size:20px;">先攻骰掷</div>
             <div class="ic-gold-divider"></div>
             ${rowsHtml}
