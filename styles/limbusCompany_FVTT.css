@@ -4600,6 +4600,7 @@ body.game .limbuscompany.app img {
 .ae-v2 .ae-add-btn {
   background: #3A2E1A; color: var(--text-gold); border: 1px solid #5A4A30;
   border-radius: 2px; padding: 1px 8px; font-size: .8rem; cursor: pointer;
+  max-width: 400px;
 }
 .ae-v2 .ae-add-btn:hover { background: #5A3E18; }
 
@@ -4615,6 +4616,7 @@ body.game .limbuscompany.app img {
 .ae-v2 .ae-del-btn {
   background: #5A1A1A; color: #FF9A9A; border: none;
   border-radius: 2px; padding: 0 6px; font-size: .8rem; cursor: pointer; line-height: 1.4;
+  max-width: 60px;
 }
 .ae-v2 .ae-del-btn:hover { background: #8B2222; }
 
