@@ -1840,7 +1840,7 @@ function _buildEffectRow(eff, idx, cfg) {
           <label>强度</label>
           <input class="ae-input-sm eff-intensity" type="number" value="${eff?.intensity ?? 0}" min="0">
           <label>层数</label>
-          <input class="ae-input-sm eff-stacks" type="number" value="${eff?.stacks ?? 1}" min="0">
+          <input class="ae-input-sm eff-stacks" type="number" value="${eff?.stacks ?? 0}" min="0">
         </span>
         <span class="ae-eff-val-sec" ${isValSec ? "" : 'style="display:none"'}>
           <label>相关数值</label>
@@ -2212,7 +2212,7 @@ function _readActivityForm(html, original) {
       buff:           isBuff        ? resolveKey($r.find(".eff-buff").val()) : "",
       buffCustom:     "",
       intensity:      isBuff        ? (parseInt($r.find(".eff-intensity").val()) || 0) : 0,
-      stacks:         isBuff        ? (parseInt($r.find(".eff-stacks").val())    || 1) : 0,
+      stacks:         isBuff        ? (parseInt($r.find(".eff-stacks").val())    || 0) : 0,
       value:          (!isBuff && !isTriggerBuff) ? ($r.find(".eff-value").val()?.trim() || "") : "",
       trigBuff:       isTriggerBuff ? resolveKey($r.find(".eff-trig-buff").val()) : "",
       trigBuffCustom: "",
