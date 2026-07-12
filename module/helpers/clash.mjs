@@ -2867,14 +2867,6 @@ export class ClashManager {
       await actor.checkAndTriggerChaos(newHp, oldHp, { silent: true });
     }
 
-    // ── HP归零时：HP 从正数被打至 0 时触发（遍历已装备的物品） ───────────
-    if (newHp === 0 && oldHp > 0) {
-      const zeroCtx = { owner: actor, atkActor: attacker ?? actor, defActor: actor, _fireCounts: {}, _actMsgs: [] };
-      for (const it of ClashManager._getEquippedItems(actor)) {
-        await ClashManager._applyActivities(it, "HP归零时", zeroCtx);
-      }
-    }
-
     // ── 自定义 BUFF onTakeDamage 钩子 ────────────────────────────────────
     const _hookLines = [];
     for (const buff of foundry.utils.deepClone(actor.system?.buffs ?? [])) {
