@@ -905,9 +905,9 @@ export class ClashManager {
 
   /** 构建活动效果汇总消息的 HTML 内容。指定 title 时始终折叠为一条摘要。 */
   static _buildActMsgContent(entries, title = "") {
-    const rows = entries.map(({ trigger, itemName, msgs }) => `
+    const rows = entries.map(({ trigger, itemName, ownerName, msgs }) => `
       <div style="margin-bottom:4px;">
-        <span style="font-weight:bold;color:#C9A84C;">⚡ [${trigger}] ${itemName}</span>
+        <span style="font-weight:bold;color:#C9A84C;">⚡ [${trigger}] ${ownerName && ownerName !== itemName ? `${ownerName}·` : ""}${itemName}</span>
         ${msgs.map(m => `<div style="color:#E8C9A2;padding-left:8px;">${m}</div>`).join("")}
       </div>`).join(ClashManager._goldDivider());
     const body = `<div style="font-size:.8rem;line-height:1.7;">${rows}</div>`;

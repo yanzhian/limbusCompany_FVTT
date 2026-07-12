@@ -458,6 +458,10 @@ Hooks.on("updateCombat", async (combat, changed) => {
 
   const TURN_END = CONFIG.LIMBUSCOMPANY?.TURN_END_BUFF_TYPES ?? new Set();
 
+  // 全体角色的回合开始/结束 Activity 消息各汇总为一条折叠消息
+  const endMsgs   = [];
+  const startMsgs = [];
+
   for (const combatant of combat.combatants) {
     const actor = combatant.actor;
     if (!actor || actor.type !== "character") continue;
@@ -563,11 +567,9 @@ Hooks.on("updateCombat", async (combat, changed) => {
     }
 
     // ── Activity 触发：[回合结束时] 与 [回合开始时] ─────────────────────
-    // 每个角色各收集一桶，最后各发一条可折叠汇总消息（避免刷屏）
+    // 收集到全体共享的桶，循环结束后统一发折叠汇总消息（避免刷屏）
     const sys       = actor.system ?? {};
     const roundCtx  = { owner: actor, atkActor: actor, defActor: null };
-    const endMsgs   = [];
-    const startMsgs = [];
 
     // 已装备技能
     const skillIds = [
@@ -590,10 +592,11 @@ Hooks.on("updateCombat", async (combat, changed) => {
       await ClashManager._applyActivities(eqItem, "回合结束时", { ...roundCtx, _fireCounts: {}, _actMsgs: endMsgs });
       await ClashManager._applyActivities(eqItem, "回合开始时", { ...roundCtx, _fireCounts: {}, _actMsgs: startMsgs });
     }
-
-    await ClashManager._flushActMsgs(endMsgs,   actor, { title: `${actor.name}·回合结束时` });
-    await ClashManager._flushActMsgs(startMsgs, actor, { title: `${actor.name}·回合开始时` });
   }
+
+  // 全体角色处理完毕：各发一条折叠汇总消息
+  await ClashManager._flushActMsgs(endMsgs,   null, { title: "回合结束时" });
+  await ClashManager._flushActMsgs(startMsgs, null, { title: "回合开始时" });
 
   // ── 一轮结束进入下一轮：重掷所有角色先攻 ──────────────────────────────
   // 第 0 → 1 轮跳过（战斗开始时已由 combatStart 钩子处理），之后每轮重掷
