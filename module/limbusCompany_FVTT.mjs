@@ -622,9 +622,9 @@ Hooks.on("updateCombat", async (combat, changed) => {
       await combat.updateEmbeddedDocuments("Combatant", initiativeUpdates);
       // 全体先攻汇总为一张卡
       const rowsHtml = initiativeRows.map(r => `
-        <div style="display:flex;align-items:center;gap:8px;margin:4px 0;">
+        <div style="display:flex;align-items:center;gap:8px;padding:10px 12px 8px;">
           <img src="${r.img}" alt="${r.name}"
-               style="width:30px;height:30px;object-fit:cover;border-radius:3px;border:1px solid #C9A84C;">
+               style="width:30px;height:30px;object-fit:cover;border-radius:50%;border:2px solid #3A5A1A;">
           <span style="color:#E8C9A2;font-size:.85rem;flex:1;">${r.name}</span>
           <span class="initiative-speed-range">${r.speedMin}–${r.speedMax}</span>
           <span class="initiative-arrow">→</span>
