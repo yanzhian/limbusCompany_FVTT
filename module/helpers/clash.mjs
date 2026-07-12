@@ -895,30 +895,33 @@ export class ClashManager {
    * @param {object[]} actMsgs  ctx._actMsgs 数组
    * @param {Actor}    speaker  消息发言人（通常为攻击方）
    */
-  static async _flushActMsgs(actMsgs, speaker) {
+  static async _flushActMsgs(actMsgs, speaker, { title = "" } = {}) {
     if (!actMsgs?.length) return;
     await ClashManager._safeChatCreate({
       speaker: ChatMessage.getSpeaker({ actor: speaker }),
-      content: ClashManager._buildActMsgContent(actMsgs),
+      content: ClashManager._buildActMsgContent(actMsgs, title),
     });
   }
 
-  /** 构建活动效果汇总消息的 HTML 内容。 */
-  static _buildActMsgContent(entries) {
+  /** 构建活动效果汇总消息的 HTML 内容。指定 title 时始终折叠为一条摘要。 */
+  static _buildActMsgContent(entries, title = "") {
     const rows = entries.map(({ trigger, itemName, msgs }) => `
       <div style="margin-bottom:4px;">
         <span style="font-weight:bold;color:#C9A84C;">⚡ [${trigger}] ${itemName}</span>
         ${msgs.map(m => `<div style="color:#E8C9A2;padding-left:8px;">${m}</div>`).join("")}
       </div>`).join(ClashManager._goldDivider());
-    // 超过 2 个触发条目时折叠详情
     const body = `<div style="font-size:.8rem;line-height:1.7;">${rows}</div>`;
-    if (entries.length <= 2) {
+    // 无标题且条目不多时直接平铺；否则折叠详情
+    if (!title && entries.length <= 2) {
       return `<div class="limbus-clash-card">${body}</div>`;
     }
+    const summaryLabel = title
+      ? `▼ ${title}：详细信息（${entries.length} 条触发效果）`
+      : `▼ 详细信息（${entries.length} 条触发效果）`;
     return `<div class="limbus-clash-card">
       <details>
         <summary style="cursor:pointer;font-size:.8rem;color:#C9A84C;font-weight:bold;user-select:none;list-style:none;">
-          ▼ 详细信息（${entries.length} 条触发效果）
+          ${summaryLabel}
         </summary>
         ${body}
       </details>

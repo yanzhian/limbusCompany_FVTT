@@ -563,8 +563,11 @@ Hooks.on("updateCombat", async (combat, changed) => {
     }
 
     // ── Activity 触发：[回合结束时] 与 [回合开始时] ─────────────────────
-    const sys      = actor.system ?? {};
-    const roundCtx = { owner: actor, atkActor: actor, defActor: null };
+    // 每个角色各收集一桶，最后各发一条可折叠汇总消息（避免刷屏）
+    const sys       = actor.system ?? {};
+    const roundCtx  = { owner: actor, atkActor: actor, defActor: null };
+    const endMsgs   = [];
+    const startMsgs = [];
 
     // 已装备技能
     const skillIds = [
@@ -575,8 +578,8 @@ Hooks.on("updateCombat", async (combat, changed) => {
     for (const skillId of skillIds) {
       const skillItem = actor.items.get(skillId);
       if (!skillItem) continue;
-      await ClashManager._applyActivities(skillItem, "回合结束时", { ...roundCtx, _fireCounts: {} });
-      await ClashManager._applyActivities(skillItem, "回合开始时", { ...roundCtx, _fireCounts: {} });
+      await ClashManager._applyActivities(skillItem, "回合结束时", { ...roundCtx, _fireCounts: {}, _actMsgs: endMsgs });
+      await ClashManager._applyActivities(skillItem, "回合开始时", { ...roundCtx, _fireCounts: {}, _actMsgs: startMsgs });
     }
 
     // 装备栏中的物品（只有装入装备格的才触发）
@@ -584,9 +587,12 @@ Hooks.on("updateCombat", async (combat, changed) => {
       const eqId   = sys.equipment?.[`slot${i}`];
       const eqItem = eqId ? actor.items.get(eqId) : null;
       if (!eqItem) continue;
-      await ClashManager._applyActivities(eqItem, "回合结束时", { ...roundCtx, _fireCounts: {} });
-      await ClashManager._applyActivities(eqItem, "回合开始时", { ...roundCtx, _fireCounts: {} });
+      await ClashManager._applyActivities(eqItem, "回合结束时", { ...roundCtx, _fireCounts: {}, _actMsgs: endMsgs });
+      await ClashManager._applyActivities(eqItem, "回合开始时", { ...roundCtx, _fireCounts: {}, _actMsgs: startMsgs });
     }
+
+    await ClashManager._flushActMsgs(endMsgs,   actor, { title: `${actor.name}·回合结束时` });
+    await ClashManager._flushActMsgs(startMsgs, actor, { title: `${actor.name}·回合开始时` });
   }
 
   // ── 一轮结束进入下一轮：重掷所有角色先攻 ──────────────────────────────
