@@ -390,7 +390,7 @@ export class ClashManager {
       const preconditions = Array.isArray(act.preconditions) ? act.preconditions
         : (act.precondition ? [act.precondition] : []);
       let precondFail = false;
-      // 【每】类前置条件按 floor(层数/N) 计算倍数，传递给后续效果（与 cost.type==="perStack" 共用倍数变量）
+      // 每类前置条件按 floor(层数/N) 计算倍数，传递给后续效果（与 cost.type==="perStack" 共用倍数变量）
       let precondMultiplier = 1;
       for (const pre of preconditions) {
         if (!pre) continue;
@@ -411,7 +411,7 @@ export class ClashManager {
         const buff    = precTgt ? ClashManager._getBuff(precTgt, preBuffType) : null;
 
         if (pre.type === "perN") {
-          // 【每】：层数 ≥ N（N = pre.stacks）才满足，倍数 = floor(当前层数 / N)，可选上限 maxTimes
+          // 每：层数 ≥ N（N = pre.stacks）才满足，倍数 = floor(当前层数 / N)，可选上限 maxTimes
           const n = Math.max(1, pre.stacks ?? 1);
           if (!buff || (buff.stacks ?? 0) < n) { precondFail = true; break; }
           if ((pre.intensity ?? 0) > 0 && (buff.intensity ?? 0) < pre.intensity) { precondFail = true; break; }
@@ -472,7 +472,7 @@ export class ClashManager {
             if (!bagState.slots[2]) { forcedFail = true; break; }
           }
         } else if (cost.buff && (cost.type === "forced" || cost.type === "perStack")) {
-          // 强制消耗 / 【每】：层数不足（每N层的 N）则跳过整条 Activity
+          // 强制消耗 / 每：层数不足（每N层的 N）则跳过整条 Activity
           const costBuffType = cost.buff === "custom" ? (cost.buffCustom || "custom") : cost.buff;
           const costTgts = ClashManager._resolveTargets(cost.target ?? "self", owner, other);
           if (costTgts.length === 0) { forcedFail = true; break; }
@@ -485,7 +485,7 @@ export class ClashManager {
       }
       if (forcedFail) continue;
 
-      // 倍数默认取自【每】前置条件计算结果；若另有 perStack 消耗，会在下方覆盖为实际消耗层数
+      // 倍数默认取自每前置条件计算结果；若另有 perStack 消耗，会在下方覆盖为实际消耗层数
       let perStackMultiplier = precondMultiplier;
       let _discardedItemId = null;
       for (const cost of costs) {
@@ -531,7 +531,7 @@ export class ClashManager {
           const costBuffType = cost.buff === "custom" ? (cost.buffCustom || "custom") : cost.buff;
           const costTgts = ClashManager._resolveTargets(cost.target ?? "self", owner, other);
           if (cost.type === "perStack") {
-            // 【每】：与前置条件的"每"一致——每 N 层为 1 倍，倍数 = floor(层数/N)，
+            // 每：与前置条件的"每"一致——每 N 层为 1 倍，倍数 = floor(层数/N)，
             // 可选最大倍数上限（maxTimes，0=无限），只消耗 倍数×N 层
             const tgt = costTgts[0];
             if (tgt) {
@@ -564,7 +564,7 @@ export class ClashManager {
         for (const effTgt of effTgts) {
 
         // BUFF 型效果用 intensity/stacks；数值型效果用 value
-        // 若存在【每】前置条件/消耗，stacks 和 数值型 val 均乘以倍数
+        // 若存在每前置条件/消耗，stacks 和 数值型 val 均乘以倍数
         const intensity = Number(eff.intensity ?? eff.value ?? 1);
         const stacks    = Number(eff.stacks    ?? 1) * perStackMultiplier;
         const buffType  = eff.buff === "custom" ? (eff.buffCustom || "custom") : (eff.buff || "");

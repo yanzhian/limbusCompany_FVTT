@@ -1723,7 +1723,7 @@ function _buildCostRow(cost, idx, cfg) {
   const isDiscard  = selType === "discard";
   const isPerStack = selType === "perStack";
   const typeOpts = [
-    ["perStack",  "【每】"],
+    ["perStack",  "每"],
     ["forced",    "强制消耗"],
     ["optional",  "可选消耗"],
     ["attribute", "基础属性"],
