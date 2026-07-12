@@ -1650,6 +1650,10 @@ function _buildCondRow(cond, idx, cfg) {
   const stacksCmpOpts = [
     ["gt","＞"],["gte","≥"],["lt","＜"],["lte","≤"],["eq","＝"],
   ].map(([v,l]) => `<option value="${v}" ${(cond?.comparison ?? "eq") === v ? "selected":""}>${l}</option>`).join("");
+
+  const cmpDimOpts = [
+    ["stacks","层数"],["intensity","强度"],
+  ].map(([v,l]) => `<option value="${v}" ${(cond?.compareDim ?? "stacks") === v ? "selected":""}>${l}</option>`).join("");
   const buffLabel  = _keyToLabel(cond?.buff ?? "", cond?.buffCustom ?? "");
 
   const attrTypeOpts = [
@@ -1686,8 +1690,9 @@ function _buildCondRow(cond, idx, cfg) {
             <label>强度≥</label>
             <input class="ae-input-sm cond-intensity" type="number" value="${cond?.intensity ?? 0}" min="0">
           </span>
-          <label class="cond-stacks-label">${stacksLbl}</label>
+          <label class="cond-stacks-label" ${isCompare ? 'style="display:none"' : ""}>${stacksLbl}</label>
           <span class="ae-cond-cmp-sec" ${isCompare ? "" : 'style="display:none"'}>
+            <select class="ae-sel cond-cmp-dim">${cmpDimOpts}</select>
             <select class="ae-sel cond-stacks-cmp">${stacksCmpOpts}</select>
           </span>
           <input class="ae-input-sm cond-stacks" type="number" value="${cond?.stacks ?? 1}" min="0">
@@ -2037,6 +2042,7 @@ function _bindCondType(html) {
     row.find(".ae-cond-skill-sec").toggle(isSkillSec);
     row.find(".ae-cond-pern-max").toggle(type === "perN");
     row.find(".ae-cond-intensity-sec").toggle(!isCompare);
+    row.find(".cond-stacks-label").toggle(!isCompare);
     row.find(".ae-cond-cmp-sec").toggle(isCompare);
   });
 }
@@ -2136,6 +2142,7 @@ function _readActivityForm(html, original) {
         target:     $r.find(".cond-target").val() || "self",
         buff:       resolveKey($r.find(".cond-buff").val()),
         buffCustom: "",
+        compareDim: $r.find(".cond-cmp-dim").val() || "stacks",
         comparison: $r.find(".cond-stacks-cmp").val() || "eq",
         stacks:     parseInt($r.find(".cond-stacks").val()) || 0,
       });

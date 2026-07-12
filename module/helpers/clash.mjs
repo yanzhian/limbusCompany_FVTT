@@ -411,8 +411,9 @@ export class ClashManager {
         const buff    = precTgt ? ClashManager._getBuff(precTgt, preBuffType) : null;
 
         if (pre.type === "buffCompare") {
-          // 【比较值】：BUFF 层数与指定值比较（未拥有视为 0 层）
-          const have = buff?.stacks ?? 0;
+          // 【比较值】：BUFF 层数或强度（compareDim）与指定值比较（未拥有视为 0）
+          const have = (pre.compareDim ?? "stacks") === "intensity"
+            ? (buff?.intensity ?? 0) : (buff?.stacks ?? 0);
           if (!ClashManager._cmp(have, pre.comparison ?? "eq", pre.stacks ?? 0)) { precondFail = true; break; }
           continue;
         }
@@ -3358,7 +3359,8 @@ export class ClashManager {
       if (!targetActor || !pre.buff) return false;
       const buffs = targetActor.system?.buffs ?? [];
       const found = buffs.find(b => b.type === pre.buff || b.name === pre.buff);
-      const have  = found?.stacks ?? 0;
+      const have  = (pre.compareDim ?? "stacks") === "intensity"
+        ? (found?.intensity ?? 0) : (found?.stacks ?? 0);
       return ClashManager._cmp(have, pre.comparison ?? "eq", pre.stacks ?? 0);
     }
 
