@@ -1640,11 +1640,16 @@ function _buildTriggerOpts(selected) {
 
 /** 前置条件行 HTML */
 function _buildCondRow(cond, idx, cfg) {
-  const condType   = ["perN","baseAttr","useSkill"].includes(cond?.type) ? cond.type : "hasBuff";
-  const isBuffSec  = condType === "hasBuff" || condType === "perN";
+  const condType   = ["perN","baseAttr","useSkill","buffCompare"].includes(cond?.type) ? cond.type : "hasBuff";
+  const isBuffSec  = condType === "hasBuff" || condType === "perN" || condType === "buffCompare";
   const isAttrSec  = condType === "baseAttr";
   const isSkillSec = condType === "useSkill";
-  const stacksLbl  = condType === "perN" ? "每N层" : "层数≥";
+  const isCompare  = condType === "buffCompare";
+  const stacksLbl  = condType === "perN" ? "每N层" : (isCompare ? "层数" : "层数≥");
+
+  const stacksCmpOpts = [
+    ["gt","＞"],["gte","≥"],["lt","＜"],["lte","≤"],["eq","＝"],
+  ].map(([v,l]) => `<option value="${v}" ${(cond?.comparison ?? "eq") === v ? "selected":""}>${l}</option>`).join("");
   const buffLabel  = _keyToLabel(cond?.buff ?? "", cond?.buffCustom ?? "");
 
   const attrTypeOpts = [
@@ -1664,10 +1669,11 @@ function _buildCondRow(cond, idx, cfg) {
       <div class="ae-row-fields">
         <label>类型</label>
         <select class="ae-sel cond-type">
-          <option value="hasBuff"  ${condType === "hasBuff"  ? "selected" : ""}>拥有</option>
-          <option value="perN"     ${condType === "perN"     ? "selected" : ""}>每</option>
-          <option value="baseAttr" ${condType === "baseAttr" ? "selected" : ""}>基础属性</option>
-          <option value="useSkill" ${condType === "useSkill" ? "selected" : ""}>使用技能</option>
+          <option value="hasBuff"     ${condType === "hasBuff"     ? "selected" : ""}>拥有</option>
+          <option value="perN"        ${condType === "perN"        ? "selected" : ""}>每</option>
+          <option value="buffCompare" ${condType === "buffCompare" ? "selected" : ""}>比较值</option>
+          <option value="baseAttr"    ${condType === "baseAttr"    ? "selected" : ""}>基础属性</option>
+          <option value="useSkill"    ${condType === "useSkill"    ? "selected" : ""}>使用技能</option>
         </select>
         <label>目标</label>
         <select class="ae-sel cond-target">${_buildTargetOptions(cond?.target ?? "self")}</select>
@@ -1676,9 +1682,14 @@ function _buildCondRow(cond, idx, cfg) {
           <input class="ae-input cond-buff" type="text" list="ae-buff-dl"
                  placeholder="输入或选择BUFF…" autocomplete="off" style="width:100px;"
                  value="${_esc(buffLabel)}">
-          <label>强度≥</label>
-          <input class="ae-input-sm cond-intensity" type="number" value="${cond?.intensity ?? 0}" min="0">
+          <span class="ae-cond-intensity-sec" ${isCompare ? 'style="display:none"' : ""}>
+            <label>强度≥</label>
+            <input class="ae-input-sm cond-intensity" type="number" value="${cond?.intensity ?? 0}" min="0">
+          </span>
           <label class="cond-stacks-label">${stacksLbl}</label>
+          <span class="ae-cond-cmp-sec" ${isCompare ? "" : 'style="display:none"'}>
+            <select class="ae-sel cond-stacks-cmp">${stacksCmpOpts}</select>
+          </span>
           <input class="ae-input-sm cond-stacks" type="number" value="${cond?.stacks ?? 1}" min="0">
           <span class="ae-cond-pern-max" ${condType === "perN" ? "" : 'style="display:none"'}>
             <label>最大倍数</label>
@@ -2016,14 +2027,17 @@ function _bindCondType(html) {
   html.find(".cond-type").off("change").on("change", function () {
     const row      = $(this).closest(".ae-cond-row");
     const type     = $(this).val();
-    const isBuffSec  = type === "hasBuff" || type === "perN";
+    const isBuffSec  = type === "hasBuff" || type === "perN" || type === "buffCompare";
     const isAttrSec  = type === "baseAttr";
     const isSkillSec = type === "useSkill";
-    row.find(".cond-stacks-label").text(type === "perN" ? "每N层" : "层数≥");
+    const isCompare  = type === "buffCompare";
+    row.find(".cond-stacks-label").text(type === "perN" ? "每N层" : (isCompare ? "层数" : "层数≥"));
     row.find(".ae-cond-buff-sec").toggle(isBuffSec);
     row.find(".ae-cond-attr-sec").toggle(isAttrSec);
     row.find(".ae-cond-skill-sec").toggle(isSkillSec);
     row.find(".ae-cond-pern-max").toggle(type === "perN");
+    row.find(".ae-cond-intensity-sec").toggle(!isCompare);
+    row.find(".ae-cond-cmp-sec").toggle(isCompare);
   });
 }
 
@@ -2115,6 +2129,15 @@ function _readActivityForm(html, original) {
         type:      "useSkill",
         target:    $r.find(".cond-target").val() || "self",
         skillUuid: $r.find(".cond-skill-uuid").val()?.trim() || "",
+      });
+    } else if (condType === "buffCompare") {
+      preconditions.push({
+        type:       "buffCompare",
+        target:     $r.find(".cond-target").val() || "self",
+        buff:       resolveKey($r.find(".cond-buff").val()),
+        buffCustom: "",
+        comparison: $r.find(".cond-stacks-cmp").val() || "eq",
+        stacks:     parseInt($r.find(".cond-stacks").val()) || 0,
       });
     } else {
       const isPerN = condType === "perN";

@@ -410,6 +410,13 @@ export class ClashManager {
         const precTgt = pre.target === "self" ? owner : other;
         const buff    = precTgt ? ClashManager._getBuff(precTgt, preBuffType) : null;
 
+        if (pre.type === "buffCompare") {
+          // 【比较值】：BUFF 层数与指定值比较（未拥有视为 0 层）
+          const have = buff?.stacks ?? 0;
+          if (!ClashManager._cmp(have, pre.comparison ?? "eq", pre.stacks ?? 0)) { precondFail = true; break; }
+          continue;
+        }
+
         if (pre.type === "perN") {
           // 每：层数 ≥ N（N = pre.stacks）才满足，倍数 = floor(当前层数 / N)，可选上限 maxTimes
           const n = Math.max(1, pre.stacks ?? 1);
@@ -3345,6 +3352,14 @@ export class ClashManager {
       if (!found) return false;
       const n = pre.stacks ?? 1;
       return n > 0 && ((found.stacks ?? 0) % n === 0);
+    }
+
+    if (type === "buffCompare") {
+      if (!targetActor || !pre.buff) return false;
+      const buffs = targetActor.system?.buffs ?? [];
+      const found = buffs.find(b => b.type === pre.buff || b.name === pre.buff);
+      const have  = found?.stacks ?? 0;
+      return ClashManager._cmp(have, pre.comparison ?? "eq", pre.stacks ?? 0);
     }
 
     if (type === "baseAttr") {
