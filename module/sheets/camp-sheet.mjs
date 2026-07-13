@@ -47,24 +47,24 @@ export class LimbusCampSheet extends ActorSheet {
    */
   static _opQueues = new Map();
 
-  /** 重渲染时同时保留水平滚动位置（scrollY 只处理垂直方向） */
+  /** 重渲染时同时保留水平滚动位置（Foundry scrollY 只处理垂直方向） */
   static _SCROLL_X_SELECTORS = [".camp-warehouse-grid-wrap", ".camp-char-grid-wrap", ".camp-recipe-list"];
 
-  /** @override */
-  async _render(force, options) {
-    // 渲染前记录各滚动容器的 scrollLeft
-    const saved = {};
-    if (this.element?.length) {
-      for (const sel of LimbusCampSheet._SCROLL_X_SELECTORS) {
-        const el = this.element.find(sel)[0];
-        if (el) saved[sel] = el.scrollLeft;
+  /** 实时记录的各容器 scrollLeft（scroll 事件持续更新，渲染后恢复） */
+  _scrollXPos = {};
+
+  /** 渲染后恢复水平滚动位置并重新挂监听（由 activateListeners 调用） */
+  _restoreScrollX(html) {
+    for (const sel of LimbusCampSheet._SCROLL_X_SELECTORS) {
+      const el = html.find(sel)[0];
+      if (!el) continue;
+      const saved = this._scrollXPos[sel];
+      if (saved != null) {
+        el.scrollLeft = saved;
+        // 布局/图片加载完成前 scrollLeft 可能被钳制为 0，rAF 再补一次
+        requestAnimationFrame(() => { el.scrollLeft = saved; });
       }
-    }
-    await super._render(force, options);
-    // 渲染后恢复
-    for (const [sel, left] of Object.entries(saved)) {
-      const el = this.element.find(sel)[0];
-      if (el) el.scrollLeft = left;
+      el.addEventListener("scroll", () => { this._scrollXPos[sel] = el.scrollLeft; }, { passive: true });
     }
   }
 
@@ -263,6 +263,9 @@ export class LimbusCampSheet extends ActorSheet {
   /** @override */
   activateListeners(html) {
     super.activateListeners(html);
+
+    // 恢复水平滚动位置（垂直由 defaultOptions.scrollY 处理）
+    this._restoreScrollX(html);
 
     // 编辑锁（GM 专用）
     html.find(".camp-lock-toggle").on("click", () => {
