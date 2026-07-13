@@ -24,6 +24,8 @@ export class LimbusCampSheet extends ActorSheet {
       width:     880,
       height:    580,
       resizable: true,
+      // 重渲染时保持这些容器的滚动位置（拖动仓库物品后不回顶）
+      scrollY:   [".camp-warehouse-grid-wrap", ".camp-char-grid-wrap", ".camp-recipe-list"],
     });
   }
 
