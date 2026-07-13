@@ -47,6 +47,27 @@ export class LimbusCampSheet extends ActorSheet {
    */
   static _opQueues = new Map();
 
+  /** 重渲染时同时保留水平滚动位置（scrollY 只处理垂直方向） */
+  static _SCROLL_X_SELECTORS = [".camp-warehouse-grid-wrap", ".camp-char-grid-wrap", ".camp-recipe-list"];
+
+  /** @override */
+  async _render(force, options) {
+    // 渲染前记录各滚动容器的 scrollLeft
+    const saved = {};
+    if (this.element?.length) {
+      for (const sel of LimbusCampSheet._SCROLL_X_SELECTORS) {
+        const el = this.element.find(sel)[0];
+        if (el) saved[sel] = el.scrollLeft;
+      }
+    }
+    await super._render(force, options);
+    // 渲染后恢复
+    for (const [sel, left] of Object.entries(saved)) {
+      const el = this.element.find(sel)[0];
+      if (el) el.scrollLeft = left;
+    }
+  }
+
   /* ─── getData ────────────────────────────────────────────────────────── */
 
   /** @override */
