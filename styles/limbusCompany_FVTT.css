@@ -6567,6 +6567,12 @@ input.item-piles-quantity {
 .camp-cg {
   --cell-size: 36px;
 }
+/* 仓库网格：滚动统一交给外层 grid-wrap（两个方向同一个滚动条组，
+   水平条固定显示在面板底部，不再需要拉到网格最底才能看见） */
+.limbuscompany .cg-wrap.camp-cg {
+  overflow:  visible;
+  max-width: none;
+}
 .camp-warehouse-drag-hint {
   text-align:  center;
   font-size:   0.72rem;

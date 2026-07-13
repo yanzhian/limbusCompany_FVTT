@@ -47,8 +47,13 @@ export class LimbusCampSheet extends ActorSheet {
    */
   static _opQueues = new Map();
 
-  /** 重渲染时同时保留水平滚动位置（Foundry scrollY 只处理垂直方向） */
-  static _SCROLL_X_SELECTORS = [".camp-warehouse-grid-wrap", ".camp-char-grid-wrap", ".camp-recipe-list"];
+  /** 重渲染时同时保留水平滚动位置（Foundry scrollY 只处理垂直方向）。
+   *  注意：水平滚动发生在内层 .cg-wrap（overflow:auto + max-width:100%），
+   *  与负责垂直滚动的外层 grid-wrap 不是同一个元素。 */
+  static _SCROLL_X_SELECTORS = [
+    ".camp-cg", ".camp-char-cg",
+    ".camp-warehouse-grid-wrap", ".camp-char-grid-wrap", ".camp-recipe-list",
+  ];
 
   /** 实时记录的各容器 scrollLeft（scroll 事件持续更新，渲染后恢复） */
   _scrollXPos = {};
