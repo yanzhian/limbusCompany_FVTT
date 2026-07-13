@@ -91,7 +91,7 @@
 
           {{!-- 物品图块 --}}
           {{#each placedItems}}
-            <div class="cg-item-tile {{#unless show}}cg-hidden{{/unless}}"
+            <div class="cg-item-tile {{#if isContainer}}cg-tile-container{{/if}} {{#unless show}}cg-hidden{{/unless}}"
                  style="grid-column:{{col}} / span {{w}}; grid-row:{{row}} / span {{h}}"
                  data-placement-idx="{{idx}}"
                  data-item-uuid="{{uuid}}"

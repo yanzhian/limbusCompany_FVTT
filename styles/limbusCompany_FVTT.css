@@ -6477,6 +6477,11 @@ input.item-piles-quantity {
 .item-view-toggle.active {
   color: var(--gold-active);
 }
+
+/* 营地仓库：容器图块永远置顶，保证可作为拖放目标 */
+.camp-cg .cg-item-tile.cg-tile-container {
+  z-index: 5;
+}
 .camp-warehouse-panel {
   flex:            0 0 44%;
   border-right:    1px solid var(--border-gold);

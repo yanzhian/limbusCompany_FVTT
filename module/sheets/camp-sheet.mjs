@@ -160,6 +160,7 @@ export class LimbusCampSheet extends ActorSheet {
         row:     p.y + 1,
         rotated: p.rotated ?? false,
         show,
+        isContainer: item.type === "container",
         item: { _id: item.id, name: item.name, img: item.img,
                 quantity: item.system?.quantity ?? 1 },
       });
@@ -413,6 +414,20 @@ export class LimbusCampSheet extends ActorSheet {
     const sourceActor = dropped.parent;
 
     if (!game.user.isGM) {
+      // 玩家把本营地容器内的物品移回仓库（物品本就属于 camp actor）
+      if (raw.fromContainer && raw.fromContainer.actorId === this.actor.id) {
+        game.socket.emit("system.limbusCompany_FVTT", {
+          type:            "campContainerToWarehouse",
+          campActorId:     this.actor.id,
+          containerItemId: raw.fromContainer.containerId,
+          placementIdx:    raw.fromContainer.placementIdx,
+          itemUuid:        raw.uuid ?? "",
+          targetX, targetY,
+          userId: game.user.id,
+        });
+        return;
+      }
+
       // 玩家只能拖入自己背包中的物品，通过 socket 委托 GM 执行
       const myChar = game.user.character;
       if (!myChar || !sourceActor || sourceActor.id !== myChar.id) {
@@ -514,11 +529,11 @@ export class LimbusCampSheet extends ActorSheet {
     this._campTitleCard = buildItemTitleCard(item);
     if (!this._campTitleCard) return;
 
-    // 定位：营地卡左侧，不够则右侧（与容器物品卡一致）
+    // 定位：营地卡右侧，不够则左侧
     const rect  = this.element[0].getBoundingClientRect();
     const cardW = 280, cardH = 500;
-    let left = rect.left - cardW - 8;
-    if (left < 8) left = rect.right + 8;
+    let left = rect.right + 8;
+    if (left + cardW > window.innerWidth - 8) left = rect.left - cardW - 8;
     const top = Math.max(8, Math.min(rect.top, window.innerHeight - cardH - 8));
 
     this._campTitleCard.css({ position: "fixed", left, top, zIndex: 99998 });
@@ -536,7 +551,10 @@ export class LimbusCampSheet extends ActorSheet {
   async _onCgTileDblClick(event) {
     const uuid = event.currentTarget.dataset.itemUuid ?? "";
     const item = await fromUuid(uuid).catch(() => null);
-    if (item?.type === "container") item.sheet?.render(true);
+    if (item?.type !== "container") return;
+    // 强制重新渲染（重读 contents），避免已打开的容器卡持有过期的
+    // 放置索引导致"此位置无法放置"误报
+    await item.sheet?.render(true, { focus: true });
   }
 
   /* ─── 拖放到仓库容器图块上：存入容器 ────────────────────────────────── */
@@ -1071,7 +1089,13 @@ export class LimbusCampSheet extends ActorSheet {
 
     // 创建物品到玩家角色
     if (itemData.system?.quantity !== undefined) itemData.system.quantity = qty;
-    await playerChar.createEmbeddedDocuments("Item", [itemData]);
+    const [newItem] = await playerChar.createEmbeddedDocuments("Item", [itemData]);
+
+    // 容器：把 camp actor 身上的内容物反向迁移到玩家角色（重写 contents uuid）
+    if (newItem?.type === "container") {
+      await LimbusCampSheet._migrateContainerContents(playerChar, newItem, campActorId);
+    }
+
     ui.notifications.info(`${item.name} ×${qty} 已移至 ${playerChar.name} 的背包。`);
   }
 
@@ -1253,6 +1277,70 @@ export class LimbusCampSheet extends ActorSheet {
     await container.update({ "system.contents": contents });
   }
 
+  /* ─── 静态：GM 端移除仓库放置记录并删除物品（物品已复制到别处） ────── */
+
+  static async _gmExecuteRemoveFromWarehouse({ campActorId, placementIdx, itemUuid }) {
+    const campActor = game.actors.get(campActorId);
+    if (!campActor) return;
+    const wc = foundry.utils.deepClone(campActor.system.warehouseContents ?? []);
+    const p  = wc[placementIdx];
+    if (!p || p.uuid !== itemUuid) return; // 防竞态：索引已变
+    wc.splice(placementIdx, 1);
+    await campActor.update({ "system.warehouseContents": wc });
+    const item = await fromUuid(itemUuid).catch(() => null);
+    if (item && item.parent?.id === campActorId) await item.delete();
+  }
+
+  /* ─── 静态：GM 端把营地容器内物品移回仓库 ──────────────────────────── */
+
+  static async _gmExecuteContainerToWarehouse({ campActorId, containerItemId, placementIdx, itemUuid, targetX, targetY }) {
+    const campActor = game.actors.get(campActorId);
+    const container = campActor?.items.get(containerItemId);
+    if (!container || container.type !== "container") return;
+
+    const contents = foundry.utils.deepClone(container.system.contents ?? []);
+    const cp = contents[placementIdx];
+    if (!cp || cp.uuid !== itemUuid) return; // 防竞态
+
+    const item = await fromUuid(itemUuid).catch(() => null);
+    if (!item || item.parent?.id !== campActorId) return;
+
+    // 仓库寻位（目标格优先，含旋转回退）
+    const sys  = campActor.system;
+    const cols = sys.warehouseSize?.width  ?? 7;
+    const rows = sys.warehouseSize?.height ?? 7;
+    const wc   = foundry.utils.deepClone(sys.warehouseContents ?? []);
+    const cap  = item.system?.capacity ?? { w: 1, h: 1 };
+    const iw = Math.max(1, cap.w ?? 1), ih = Math.max(1, cap.h ?? 1);
+    const canPlace = (x, y, w, h) => {
+      if (x < 0 || y < 0 || x + w > cols || y + h > rows) return false;
+      for (const p of wc) {
+        const pw = p.w ?? 1, ph = p.h ?? 1;
+        for (let dy = 0; dy < h; dy++)
+          for (let dx = 0; dx < w; dx++)
+            if (p.x <= x + dx && x + dx < p.x + pw &&
+                p.y <= y + dy && y + dy < p.y + ph) return false;
+      }
+      return true;
+    };
+    let place = canPlace(targetX ?? 0, targetY ?? 0, iw, ih)
+      ? { x: targetX, y: targetY, w: iw, h: ih, rotated: false } : null;
+    if (!place) {
+      outer: for (let y = 0; y < rows; y++) {
+        for (let x = 0; x < cols; x++) {
+          if (canPlace(x, y, iw, ih))              { place = { x, y, w: iw, h: ih, rotated: false }; break outer; }
+          if (iw !== ih && canPlace(x, y, ih, iw)) { place = { x, y, w: ih, h: iw, rotated: true  }; break outer; }
+        }
+      }
+    }
+    if (!place) { ui.notifications.warn("仓库空间不足，无法移出。"); return; }
+
+    contents.splice(placementIdx, 1);
+    await container.update({ "system.contents": contents });
+    wc.push({ uuid: itemUuid, x: place.x, y: place.y, w: place.w, h: place.h, rotated: place.rotated });
+    await campActor.update({ "system.warehouseContents": wc });
+  }
+
   /* ─── 静态：角色容器存入仓库时，迁移容器内物品到 camp actor ────────── */
 
   static async _migrateContainerContents(campActor, containerItem, sourceActorId) {
@@ -1289,7 +1377,9 @@ export class LimbusCampSheet extends ActorSheet {
       else if (msg.type === "campDropItem")   await LimbusCampSheet._gmExecuteDropItem(msg);
       else if (msg.type === "campMoveItem")   await LimbusCampSheet._gmExecuteMoveItem(msg);
       else if (msg.type === "campRotateItem") await LimbusCampSheet._gmExecuteRotateItem(msg);
-      else if (msg.type === "campStoreToContainer") await LimbusCampSheet._gmExecuteStoreToContainer(msg);
+      else if (msg.type === "campStoreToContainer")    await LimbusCampSheet._gmExecuteStoreToContainer(msg);
+      else if (msg.type === "campRemoveFromWarehouse") await LimbusCampSheet._gmExecuteRemoveFromWarehouse(msg);
+      else if (msg.type === "campContainerToWarehouse") await LimbusCampSheet._gmExecuteContainerToWarehouse(msg);
     }).finally(() => {
       if (LimbusCampSheet._opQueues.get(campActorId) === next)
         LimbusCampSheet._opQueues.delete(campActorId);

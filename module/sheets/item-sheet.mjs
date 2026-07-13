@@ -960,6 +960,21 @@ export class LimbusItemSheet extends ItemSheet {
     if (!dropped || dropped.type === "container") return;
     if (dropped.uuid === this.item.uuid) return;            // 禁止自引用
 
+    // 玩家把营地仓库物品拖入营地自身的容器：全程需 GM 权限，走 socket
+    if (raw.fromCampWarehouse && !game.user.isGM
+        && this.item.parent?.id === raw.fromCampWarehouse.campActorId) {
+      game.socket.emit("system.limbusCompany_FVTT", {
+        type:             "campStoreToContainer",
+        campActorId:      raw.fromCampWarehouse.campActorId,
+        containerItemId:  this.item.id,
+        itemUuid:         dropped.uuid,
+        fromWarehouseIdx: raw.fromCampWarehouse.placementIdx,
+        sourceActorId:    null,
+        userId:           game.user.id,
+      });
+      return;
+    }
+
     const cap = dropped.system?.capacity ?? { w: 1, h: 1 };
     const w = Math.max(1, cap.w ?? 1), h = Math.max(1, cap.h ?? 1);
 
@@ -979,17 +994,31 @@ export class LimbusItemSheet extends ItemSheet {
       const itemData = dropped.toObject();
       const [newItem] = await containerActor.createEmbeddedDocuments("Item", [itemData]);
       storedUuid = newItem.uuid;
-      // 若物品来自另一容器，先从源容器移除
-      if (raw.fromContainer) {
-        const { containerId, placementIdx } = raw.fromContainer;
-        const srcContainer = sourceActor.items.get(containerId);
-        if (srcContainer) {
-          const srcContents = foundry.utils.deepClone(srcContainer.system.contents ?? []);
-          srcContents.splice(placementIdx, 1);
-          await srcContainer.update({ "system.contents": srcContents });
+      if (raw.fromCampWarehouse) {
+        // 来自营地仓库：camp 侧清理（移除放置记录 + 删除物品）需 GM 权限
+        const { LimbusCampSheet } = await import("./camp-sheet.mjs");
+        const payload = {
+          type:         "campRemoveFromWarehouse",
+          campActorId:  raw.fromCampWarehouse.campActorId,
+          placementIdx: raw.fromCampWarehouse.placementIdx,
+          itemUuid:     dropped.uuid,
+          userId:       game.user.id,
+        };
+        if (game.user.isGM) await LimbusCampSheet._gmExecuteRemoveFromWarehouse(payload);
+        else game.socket.emit("system.limbusCompany_FVTT", payload);
+      } else {
+        // 若物品来自另一容器，先从源容器移除
+        if (raw.fromContainer) {
+          const { containerId, placementIdx } = raw.fromContainer;
+          const srcContainer = sourceActor.items.get(containerId);
+          if (srcContainer) {
+            const srcContents = foundry.utils.deepClone(srcContainer.system.contents ?? []);
+            srcContents.splice(placementIdx, 1);
+            await srcContainer.update({ "system.contents": srcContents });
+          }
         }
+        await dropped.delete();
       }
-      await dropped.delete();
     }
     // 世界金库拖入：容器为世界物品（无 Actor），物品来自某个 Actor → 存储完整数据并删除源物品
     else if (!containerActor && sourceActor) {
