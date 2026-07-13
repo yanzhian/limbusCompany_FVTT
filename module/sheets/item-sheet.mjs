@@ -1398,6 +1398,10 @@ function _subtypeLabel(sub) {
  * @param {Item} item
  * @returns {jQuery|null}
  */
+export function buildItemTitleCard(item) {
+  return _buildItemTitleCard(item);
+}
+
 function _buildItemTitleCard(item) {
   if (!item) return null;
   const sys = item.system;
