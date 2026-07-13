@@ -849,7 +849,7 @@ export class ClashManager {
             } else {
               // 非守备技能 → 弹出对抗发起窗口（仅限有 AP 的场景，AP 不足则跳过）
               const curAP = owner?.system?.ap?.value ?? 0;
-              if (owner && curAP <= 0) await owner.update({ "system.ap.value": 1 });
+              if (owner && curAP <= 0) await ClashManager._safeDocUpdate(owner, { "system.ap.value": 1 });
               await ClashManager.showInitiateDialog(owner, skillItem, -2);
               descStr = `发起对抗：【${skillItem.name}】`;
             }
@@ -867,11 +867,12 @@ export class ClashManager {
       }
 
       // 记录触发次数（写入 actor flags 以实现跨 action 持久化）
-      if ((limitType === "perTurn" || limitType === "perEncounter") && limitCount > 0 && owner?.setFlag) {
+      if ((limitType === "perTurn" || limitType === "perEncounter") && limitCount > 0 && owner) {
         const flagKey = limitType === "perTurn" ? "turnFireCounts" : "encounterFireCounts";
         const counts  = foundry.utils.deepClone(owner.getFlag?.("limbusCompany_FVTT", flagKey) ?? {});
         counts[actKey] = (counts[actKey] ?? 0) + 1;
-        await owner.setFlag("limbusCompany_FVTT", flagKey, counts);
+        // setFlag 本质是 Actor update，跨所有权时需委托 GM
+        await ClashManager._safeDocUpdate(owner, { [`flags.limbusCompany_FVTT.${flagKey}`]: counts });
       }
     }
 
