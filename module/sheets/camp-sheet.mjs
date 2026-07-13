@@ -1,8 +1,9 @@
 /**
  * camp-sheet.mjs — 营地角色卡 Sheet
  *
- * 双栏布局：
- *   左栏：仓库网格（7×7 默认，与容器网格完全相同的 cg-wrap 机制）
+ * 三栏布局：
+ *   左栏：当前玩家主控角色的背包网格（6×6 显示打包，拖拽存取仓库）
+ *   中栏：仓库网格（7×7 默认，与容器网格完全相同的 cg-wrap 机制）
  *   右栏：配方列表（制作 + GM 编辑）
  *
  * 权限区分：
@@ -10,6 +11,8 @@
  *   玩家 → 查看仓库、右键取出物品、查看可见配方、点击制作
  *         （玩家操作通过 socket 委托 GM 执行）
  */
+import { getBagItems, packBagGrid } from "../helpers/bag-grid.mjs";
+
 export class LimbusCampSheet extends ActorSheet {
 
   /** @override */
@@ -89,6 +92,25 @@ export class LimbusCampSheet extends ActorSheet {
                            !this._pendingCraftIds.has(recipe.id);
         return { ...recipe, canCraft, ingDetails };
       });
+
+    // ── 左栏：当前玩家主控角色的背包网格 ─────────────────────────────────
+    // GM 通常拥有全部角色，回退查找只对玩家生效，避免 GM 显示任意角色
+    const myChar = game.user.character
+      ?? (game.user.isGM ? null : game.actors.find(a => a.type === "character" && a.isOwner));
+    if (myChar) {
+      const bagItems = getBagItems(myChar);
+      const { tiles, rows, cells, usedCells } = packBagGrid(bagItems, 6, 6);
+      ctx.myChar = {
+        id:    myChar.id,
+        name:  myChar.name,
+        img:   myChar.img,
+        tiles, rows, cells,
+        used:  usedCells,
+        max:   36,
+      };
+    } else {
+      ctx.myChar = null;
+    }
 
     return ctx;
   }
@@ -236,18 +258,41 @@ export class LimbusCampSheet extends ActorSheet {
     // GM：仓库网格尺寸编辑（失焦/Enter 提交）
     html.find(".camp-grid-dim").on("change", this._onGridSizeChange.bind(this));
 
-    // 仓库网格：拖放
-    html.find(".cg-cell").on("dragover",   this._onCgCellDragOver.bind(this));
-    html.find(".cg-cell").on("dragleave",  this._onCgCellDragLeave.bind(this));
-    html.find(".cg-cell").on("drop",       this._onCgCellDrop.bind(this));
+    // 仓库网格：拖放（限定 .camp-cg 内，避免误绑左栏角色网格）
+    html.find(".camp-cg .cg-cell").on("dragover",   this._onCgCellDragOver.bind(this));
+    html.find(".camp-cg .cg-cell").on("dragleave",  this._onCgCellDragLeave.bind(this));
+    html.find(".camp-cg .cg-cell").on("drop",       this._onCgCellDrop.bind(this));
 
     // 仓库图块：拖拽开始
-    html.find(".cg-item-tile").on("dragstart", this._onCgTileDragStart.bind(this));
-    html.find(".cg-item-tile").on("mouseenter",  this._onCgTileHoverStart.bind(this));
-    html.find(".cg-item-tile").on("mouseleave",  this._onCgTileHoverEnd.bind(this));
+    html.find(".camp-cg .cg-item-tile").on("dragstart", this._onCgTileDragStart.bind(this));
+    html.find(".camp-cg .cg-item-tile").on("mouseenter",  this._onCgTileHoverStart.bind(this));
+    html.find(".camp-cg .cg-item-tile").on("mouseleave",  this._onCgTileHoverEnd.bind(this));
 
     // 仓库图块：右键菜单
-    html.find(".cg-item-tile").on("contextmenu", this._onCgTileMenu.bind(this));
+    html.find(".camp-cg .cg-item-tile").on("contextmenu", this._onCgTileMenu.bind(this));
+
+    // ── 左栏：角色背包网格 ──────────────────────────────────────────────
+    // 背包图块拖拽开始：标准 Item 拖拽数据（拖入仓库走既有 _onCgCellDrop 流程）
+    html.find(".camp-char-cg .cg-item-tile").on("dragstart", (event) => {
+      const uuid = event.currentTarget.dataset.itemUuid ?? "";
+      event.originalEvent.dataTransfer.setData("text/plain", JSON.stringify({ type: "Item", uuid }));
+      event.originalEvent.dataTransfer.effectAllowed = "move";
+    });
+    // 背包图块双击：打开物品卡
+    html.find(".camp-char-cg .cg-item-tile").on("dblclick", async (event) => {
+      const uuid = event.currentTarget.dataset.itemUuid ?? "";
+      const item = await fromUuid(uuid).catch(() => null);
+      item?.sheet?.render(true);
+    });
+    // 整个左栏作为"从仓库取出"的拖放目标
+    const charPanel = html.find(".camp-char-panel");
+    charPanel.on("dragover", (event) => {
+      event.preventDefault();
+      event.originalEvent.dataTransfer.dropEffect = "move";
+      charPanel.addClass("cg-drag-over");
+    });
+    charPanel.on("dragleave", () => charPanel.removeClass("cg-drag-over"));
+    charPanel.on("drop", this._onCharPanelDrop.bind(this));
 
     // 仓库图块：旋转（GM 解锁时显示）
     html.find(".cg-rotate-btn").on("click", this._onCgTileRotate.bind(this));
@@ -263,6 +308,27 @@ export class LimbusCampSheet extends ActorSheet {
     html.find(".camp-recipe-delete").on("click",    this._onDeleteRecipe.bind(this));
     html.find(".camp-recipe-hide").on("click",      this._onToggleRecipeHidden.bind(this));
     html.find(".camp-craft-btn:not([disabled])").on("click", this._onCraft.bind(this));
+  }
+
+  /* ─── 左栏角色面板：接收仓库图块拖放（= 取出到角色背包） ─────────────── */
+
+  async _onCharPanelDrop(event) {
+    event.preventDefault();
+    this.element.find(".camp-char-panel").removeClass("cg-drag-over");
+
+    let raw;
+    try { raw = JSON.parse(event.originalEvent.dataTransfer.getData("text/plain")); }
+    catch { return; }
+
+    // 只处理来自本营地仓库的图块
+    if (raw?.fromCampWarehouse?.campActorId !== this.actor.id) return;
+    const idx  = raw.fromCampWarehouse.placementIdx;
+    const item = await fromUuid(raw.uuid ?? "").catch(() => null);
+    if (!item) return;
+
+    // 全部数量取出（如需部分取出可用右键菜单）
+    const qty = item.system?.quantity ?? 1;
+    await this._executeItemTake(this.actor.id, raw.uuid, idx, qty);
   }
 
   /* ─── 网格尺寸编辑（GM） ─────────────────────────────────────────────── */

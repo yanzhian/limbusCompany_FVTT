@@ -33,7 +33,10 @@
       <div class="toolbar-btns">
         <button class="filter-favorite-btn toolbar-btn" title="收藏筛选"><i class="fas fa-star" aria-hidden="true"></i></button>
         <button class="filter-toggle-btn toolbar-btn" title="过滤"><i class="fas fa-filter" aria-hidden="true"></i></button>
-        <button class="filter-expand-all toolbar-btn" title="全部展开"><i class="fas fa-expand-alt" aria-hidden="true"></i></button>
+        <button class="item-view-toggle toolbar-btn {{#if itemGridView}}active{{/if}}"
+                title="{{#if itemGridView}}切换为列表视图{{else}}切换为网格视图{{/if}}">
+          <i class="fas fa-{{#if itemGridView}}list{{else}}th{{/if}}" aria-hidden="true"></i>
+        </button>
         <button class="filter-collapse-all toolbar-btn" title="全部折叠"><i class="fas fa-compress-alt" aria-hidden="true"></i></button>
         <button class="item-create-btn toolbar-btn {{#if inventoryOverCapacity}}btn-cap-blocked{{/if}}"
                 title="{{#if inventoryOverCapacity}}背包已满，无法添加{{else}}新建物品{{/if}}"
@@ -62,6 +65,30 @@
       </div>
     </div>
 
+    {{#if itemGridView}}
+    {{!-- ── 网格视图（6×N 自动打包，仅显示） ──────────────────────── --}}
+    <div class="bag-grid-wrap">
+      <div class="cg-wrap bag-cg" style="--grid-cols:6; --grid-rows:{{bagGrid.rows}}">
+        {{#each bagGrid.cells}}
+          <div class="cg-cell {{#if occupied}}cg-occupied{{/if}}"
+               style="grid-column:{{col}}; grid-row:{{row}}"></div>
+        {{/each}}
+        {{#each bagGrid.tiles}}
+          <div class="cg-item-tile"
+               style="grid-column:{{col}} / span {{w}}; grid-row:{{row}} / span {{h}}"
+               data-item-id="{{id}}"
+               data-item-uuid="{{uuid}}"
+               data-item-name="{{name}}"
+               draggable="true"
+               title="{{name}}（双击查看）">
+            <img src="{{img}}" class="cg-tile-icon" alt="{{name}}">
+            <span class="cg-tile-name">{{name}}</span>
+            {{#if quantity}}<span class="cg-tile-qty">×{{quantity}}</span>{{/if}}
+          </div>
+        {{/each}}
+      </div>
+    </div>
+    {{else}}
     {{!-- 列表表头 --}}
     <div class="list-header item-list-header">
       <span class="col-icon"></span>
@@ -120,6 +147,7 @@
     {{else}}
       <div class="list-empty">暂无物品</div>
     {{/each}}
+    {{/if}}{{!-- /itemGridView --}}
 
   </div>{{!-- /item-list-panel --}}
 

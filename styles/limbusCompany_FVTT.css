@@ -6432,14 +6432,53 @@ input.item-piles-quantity {
 }
 
 /* ── 通用：面板 ───────────────────────────────────────────────── */
+.camp-char-panel,
 .camp-warehouse-panel,
 .camp-recipe-panel {
   display:        flex;
   flex-direction: column;
   overflow:       hidden;
 }
+.camp-char-panel {
+  flex:            0 0 25%;
+  border-right:    1px solid var(--border-gold);
+}
+.camp-char-panel.cg-drag-over {
+  outline:         2px dashed var(--gold-active);
+  outline-offset:  -4px;
+}
+.camp-char-avatar {
+  width:         22px;
+  height:        22px;
+  object-fit:    cover;
+  border-radius: 50%;
+  border:        1px solid var(--border-gold);
+}
+.camp-char-grid-wrap {
+  flex:      1;
+  overflow:  auto;
+  padding:   8px;
+}
+.limbuscompany .cg-wrap.camp-char-cg {
+  --cg-cell: 34px;
+  --cg-gap:  2px;
+}
+
+/* ── 角色卡物品 Tab：网格视图 ─────────────────────────────────── */
+.bag-grid-wrap {
+  flex:      1;
+  overflow:  auto;
+  padding:   8px;
+}
+.limbuscompany .cg-wrap.bag-cg {
+  --cg-cell: 44px;
+  --cg-gap:  2px;
+}
+.item-view-toggle.active {
+  color: var(--gold-active);
+}
 .camp-warehouse-panel {
-  flex:            0 0 52%;
+  flex:            0 0 44%;
   border-right:    1px solid var(--border-gold);
 }
 .camp-recipe-panel {

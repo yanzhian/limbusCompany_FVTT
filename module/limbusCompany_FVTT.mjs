@@ -395,6 +395,17 @@ Hooks.on("updateActor", (actor) => {
   SquadHUD.onActorUpdate(actor);
 });
 
+/** 角色物品增删改 → 刷新打开中的营地卡（左栏角色背包面板） */
+const _refreshOpenCampSheets = (item) => {
+  if (item?.parent?.type !== "character") return;
+  for (const app of Object.values(ui.windows)) {
+    if (app instanceof LimbusCampSheet) app.render(false);
+  }
+};
+Hooks.on("createItem", _refreshOpenCampSheets);
+Hooks.on("deleteItem", _refreshOpenCampSheets);
+Hooks.on("updateItem", _refreshOpenCampSheets);
+
 /** Token 数据变化（非链接 Token）→ 也刷新 HUD */
 Hooks.on("updateToken", (token) => {
   const actor = token.actor;

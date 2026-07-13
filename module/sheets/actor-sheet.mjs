@@ -12,6 +12,7 @@
 
 import { ClashManager } from "../helpers/clash.mjs";
 import { CustomBuffRegistry, resolveBuffHandler, normalizeBuffType } from "../helpers/custom-buffs.mjs";
+import { getBagItems, packBagGrid } from "../helpers/bag-grid.mjs";
 
 /**
  * 以 actorId 为 key 的模块级战斗袋状态 Map。
@@ -177,6 +178,11 @@ export class LimbusActorSheet extends ActorSheet {
     context.inventoryMax  = INVENTORY_MAX;
     context.inventoryUsed = inventoryUsed;
     context.inventoryOverCapacity = inventoryUsed > INVENTORY_MAX;
+    // 物品 Tab 网格视图（工具栏切换按钮）
+    context.itemGridView = this._itemGridView ?? false;
+    if (context.itemGridView) {
+      context.bagGrid = packBagGrid(getBagItems(actor), 6, 6);
+    }
     // ── 技能分组（技能 Tab） ───────────────────────────────────────────────
     context.skillGroups = this._groupSkillItems();
 
@@ -549,6 +555,22 @@ export class LimbusActorSheet extends ActorSheet {
     html.find(".filter-apply-btn").on("click", this._onFilterApply.bind(this));
     html.find(".filter-expand-all").on("click", this._onExpandAll.bind(this));
     html.find(".filter-collapse-all").on("click", this._onCollapseAll.bind(this));
+
+    // ── 物品 Tab：网格/列表视图切换 ──────────────────────────────────────
+    html.find(".item-view-toggle").on("click", () => {
+      this._itemGridView = !(this._itemGridView ?? false);
+      this.render(false);
+    });
+    // 网格视图图块：拖拽（标准 Item 数据，可拖入营地仓库等）+ 双击打开
+    html.find(".bag-cg .cg-item-tile").on("dragstart", (event) => {
+      const uuid = event.currentTarget.dataset.itemUuid ?? "";
+      event.originalEvent.dataTransfer.setData("text/plain", JSON.stringify({ type: "Item", uuid }));
+      event.originalEvent.dataTransfer.effectAllowed = "move";
+    });
+    html.find(".bag-cg .cg-item-tile").on("dblclick", (event) => {
+      const item = this.actor.items.get(event.currentTarget.dataset.itemId ?? "");
+      item?.sheet?.render(true);
+    });
     html.find(".filter-favorite-btn").on("click", this._onFavFilter.bind(this));
 
     // ── 搜索框 ────────────────────────────────────────────────────────────
