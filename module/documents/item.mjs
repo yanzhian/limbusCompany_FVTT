@@ -353,6 +353,51 @@ export class ContainerData extends foundry.abstract.TypeDataModel {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+//  SkillBookData — 技能书数据模型
+// ═══════════════════════════════════════════════════════════════════════════
+
+export const SKILLBOOK_MAX_SLOTS = 16;
+
+export class SkillBookData extends foundry.abstract.TypeDataModel {
+  static defineSchema() {
+    const fields = foundry.data.fields;
+    return {
+      category: new fields.StringField({ required: false, initial: "" }),
+
+      // 存放的技能：{ uuid, itemData? }（uuid 用于 Actor 内嵌技能；itemData 用于世界金库存储）
+      skills: new fields.ArrayField(
+        new fields.SchemaField({
+          uuid:     new fields.StringField({ required: true, initial: "" }),
+          itemData: new fields.ObjectField({ required: false, nullable: true, initial: null }),
+        }),
+        { required: true, initial: [] }
+      ),
+
+      tags: new fields.ArrayField(
+        new fields.StringField({ required: true }),
+        { required: true, initial: [] }
+      ),
+
+      favorited: new fields.BooleanField({ required: true, initial: false }),
+
+      // 物品容量（技能书本身占用角色背包格数）
+      capacity: new fields.SchemaField({
+        w: new fields.NumberField({ required: true, integer: true, min: 1, max: 10, initial: 1 }),
+        h: new fields.NumberField({ required: true, integer: true, min: 1, max: 10, initial: 1 }),
+      }),
+
+      // 眼价格（供 Item Piles 商人/市场使用）
+      cost: new fields.NumberField({ required: true, integer: true, min: 0, initial: 0 }),
+
+      // ── 商人货架字段 ────────────────────────────────────────────────────
+      price:  new fields.NumberField({ required: true, integer: true, min: 0, initial: 0 }),
+      stock:  new fields.NumberField({ required: true, integer: true, min: -1, initial: -1 }),
+      hidden: new fields.BooleanField({ required: true, initial: false }),
+    };
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 //  LimbusItem — Item 文档类
 // ═══════════════════════════════════════════════════════════════════════════
 
@@ -539,7 +584,7 @@ export class LimbusItem extends Item {
       metaHtml = `<div class="ic-item-meta skill-meta">${catImgTag}<span class="ic-dice">${formula}</span></div>`;
     } else {
       // 物品类：type label + category
-      const typeLabels = { equipment:"装备", consumable:"消耗品", material:"材料", container:"容器" };
+      const typeLabels = { equipment:"装备", consumable:"消耗品", material:"材料", container:"容器", skillbook:"技能书" };
       const typeLabel  = typeLabels[this.type] ?? this.type;
       const catLabel   = sys.category ? ` · ${sys.category}` : "";
       metaHtml = `<div class="ic-item-meta">${typeLabel}${catLabel}</div>`;
@@ -582,6 +627,42 @@ export class LimbusItem extends Item {
       content,
       speaker: ChatMessage.getSpeaker({ actor }),
     });
+  }
+
+  // ─── 技能书：学习全部技能 ──────────────────────────────────────────────
+
+  /**
+   * 将技能书中存放的所有技能加入所属角色的技能列表，并删除该技能书。
+   * 仅当技能书归属于某个角色（this.actor）时可调用。
+   * @returns {Promise<void>}
+   */
+  async learnAllSkills() {
+    if (this.type !== "skillbook") return;
+    const actor = this.actor;
+    if (!actor) { ui.notifications?.warn("技能书不属于任何角色，无法学习。"); return; }
+
+    const entries = this.system.skills ?? [];
+    if (!entries.length) { ui.notifications?.warn("技能书是空的。"); return; }
+
+    const newSkillData = [];
+    for (const entry of entries) {
+      if (entry.uuid) {
+        const skillItem = await fromUuid(entry.uuid).catch(() => null);
+        if (!skillItem) continue;
+        const data = skillItem.toObject();
+        delete data._id;
+        newSkillData.push(data);
+      } else if (entry.itemData) {
+        const data = foundry.utils.deepClone(entry.itemData);
+        delete data._id;
+        newSkillData.push(data);
+      }
+    }
+
+    if (newSkillData.length) {
+      await actor.createEmbeddedDocuments("Item", newSkillData);
+    }
+    await this.delete();
   }
 
   // ─── 辅助：判断此技能是否为侵蚀形态 ──────────────────────────────────

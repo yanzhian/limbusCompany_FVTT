@@ -208,9 +208,13 @@ export class CharacterData extends foundry.abstract.TypeDataModel {
     // 防御等级基础值：体质÷3↓ + 等级
     this.def.base = Math.floor(con / 3) + level;
 
-    // 最大生命值：等级d10累计 + 体质×5
-    const rollTotal = Math.max(1, this.hp.rollTotal ?? 10);
-    this.hp.max = (con * 5) + rollTotal;
+    // 最大生命值：基础HP(体质) + (等级-1) × 成长系数(体质)
+    // 体质范围 1–8；基础HP 60→80，成长系数 2.0→3.0，线性插值
+    const conClamped = Math.max(1, Math.min(8, con));
+    const t = (conClamped - 1) / 7;
+    const hpBase   = 60 + t * 20;
+    const hpGrowth = 2.0 + t * 1.0;
+    this.hp.max = Math.round(hpBase + (Math.max(1, level) - 1) * hpGrowth);
 
     // 速度范围：1+敏捷 ~ 6+敏捷（1D6+敏捷）
     this.speed.min = 1 + agi;
@@ -730,11 +734,12 @@ export class LimbusActor extends Actor {
     }
 
     const nextLevel = currentLevel + 1;
-    const hpGainRoll = await this._rollHpGainForLevel(nextLevel);
-    const currRollTotal = sys.hp.rollTotal ?? Math.max(1, (sys.hp.max ?? 10) - ((sys.attributes?.con ?? 0) * 5));
-    const nextRollTotal = currRollTotal + hpGainRoll;
-    const con = sys.attributes?.con ?? 0;
-    const nextHPMax = (con * 5) + nextRollTotal;
+    const con = sys.attributes?.con ?? 1;
+    const conClamped = Math.max(1, Math.min(8, con));
+    const t = (conClamped - 1) / 7;
+    const hpBase   = 60 + t * 20;
+    const hpGrowth = 2.0 + t * 1.0;
+    const nextHPMax   = Math.round(hpBase + (nextLevel - 1) * hpGrowth);
     const nextHPValue = Math.min(Math.max(sys.hp.value ?? 0, 0), nextHPMax);
     const nextStellarMax = 30 + nextLevel;
     const nextAttrPoints = (nextLevel % 10 === 0) ? ((sys.attrPoints ?? 0) + 1) : (sys.attrPoints ?? 0);
@@ -744,7 +749,6 @@ export class LimbusActor extends Actor {
       "system.xp.value":          0,
       "system.attrPoints":        nextAttrPoints,
       "system.stellarMotes.max":  nextStellarMax,
-      "system.hp.rollTotal":      nextRollTotal,
       "system.hp.max":            nextHPMax,
       "system.hp.value":          nextHPValue,
     });
@@ -762,29 +766,6 @@ export class LimbusActor extends Actor {
     return gain;
   }
 
-  async _rollHpGainForLevel(level) {
-    const roll = await (new Roll("1d10")).evaluate();
-    const gain = roll.total ?? 1;
-
-    await ChatMessage.create({
-      speaker: ChatMessage.getSpeaker({ actor: this }),
-      content: `<div class="limbuscompany-card"><div class="card-title">升级生命值</div><div class="card-body">Lv ${level}：1D10 = <strong>${gain}</strong></div></div>`,
-      rolls: [roll],
-      type: CONST.CHAT_MESSAGE_STYLES.ROLL,
-    });
-
-    await Dialog.wait({
-      title: `升级到 Lv ${level}`,
-      content: `<div class="limbuscompany"><p>生命值成长掷骰结果：<strong>${gain}</strong>（1D10）</p><p>点击确认继续。</p></div>`,
-      buttons: {
-        ok: { label: "确认" },
-      },
-      default: "ok",
-      close: () => gain,
-    });
-
-    return gain;
-  }
 
   // ─── 长休 ──────────────────────────────────────────────────────────────
 
@@ -821,15 +802,16 @@ export class LimbusActor extends Actor {
    * @param {number} oldHP
    * @param {object} [opts]
    * @param {boolean} [opts.silent=false] 为 true 时跳过聊天框（调用方自行在消息中显示混乱信息）
+   * @param {string}  [opts.source=""]   伤害来源标识，如 "burn"，供 beforeChaos 判断免疫条件
    */
-  async checkAndTriggerChaos(newHP, oldHP, { silent = false } = {}) {
+  async checkAndTriggerChaos(newHP, oldHP, { silent = false, source = "" } = {}) {
     if (newHP >= oldHP) return; // HP 没有减少则不检查
 
-    // 检查自定义 BUFF beforeChaos 免疫（如【防御姿态】）
+    // 检查自定义 BUFF beforeChaos 免疫（如【防御姿态】【血炎】）
     for (const buff of (this.system?.buffs ?? [])) {
       const handler = resolveBuffHandler(buff);
       if (typeof handler?.beforeChaos === "function") {
-        const result = handler.beforeChaos(this, buff);
+        const result = handler.beforeChaos(this, buff, { source });
         if (result?.immune) return; // 免疫混乱触发
       }
     }
@@ -1017,7 +999,7 @@ export class LimbusActor extends Actor {
    * 播放 DiceSoNice 动画，发送聊天消息，更新战斗跟踪器先攻值。
    * @returns {Promise<Roll>}
    */
-  async rollSpeedInitiative({ updateCombatant = true } = {}) {
+  async rollSpeedInitiative({ updateCombatant = true, chatMessage = true } = {}) {
     const sys = this.system;
     const agi = sys.attributes?.agi ?? 0;
 
@@ -1063,6 +1045,12 @@ export class LimbusActor extends Actor {
     const speedMin   = 1 + modifier;
     const speedMax   = 6 + modifier;
 
+    // 将结果附加到 roll 对象，供调用方使用（批量汇总时 chatMessage=false）
+    roll.finalTotal = finalTotal;
+    roll.speedMin   = speedMin;
+    roll.speedMax   = speedMax;
+    if (!chatMessage) return roll;
+
     await ChatMessage.create({
       speaker: ChatMessage.getSpeaker({ actor: this }),
       content: `
@@ -1086,8 +1074,6 @@ export class LimbusActor extends Actor {
         </div>`,
     });
 
-    // 将最终先攻值附加到 roll 对象，供调用方使用
-    roll.finalTotal = finalTotal;
     return roll;
   }
 }

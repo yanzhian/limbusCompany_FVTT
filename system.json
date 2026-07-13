@@ -37,7 +37,8 @@
       "skill": {},
       "consumable": {},
       "material": {},
-      "container": {}
+      "container": {},
+      "skillbook": {}
     }
   },
   "socket": true,

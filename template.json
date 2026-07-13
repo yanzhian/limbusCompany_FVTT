@@ -9,12 +9,13 @@
     "loot": {}
   },
   "Item": {
-    "types": ["equipment", "skill", "consumable", "material", "container"],
+    "types": ["equipment", "skill", "consumable", "material", "container", "skillbook"],
     "templates": {},
     "equipment": {},
     "skill": {},
     "consumable": {},
     "material": {},
-    "container": {}
+    "container": {},
+    "skillbook": {}
   }
 }

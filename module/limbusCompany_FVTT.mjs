@@ -17,6 +17,7 @@ import {
   ConsumableData,
   MaterialData,
   ContainerData,
+  SkillBookData,
 } from "./documents/item.mjs";
 import { LimbusActorSheet }   from "./sheets/actor-sheet.mjs";
 import { LimbusItemSheet }    from "./sheets/item-sheet.mjs";
@@ -120,6 +121,7 @@ Hooks.once("init", () => {
     consumable: ConsumableData,
     material:   MaterialData,
     container:  ContainerData,
+    skillbook:  SkillBookData,
   };
 
   // ── 注册 Actor Sheet ───────────────────────────────────────────────────
@@ -423,6 +425,17 @@ Hooks.on("combatStart", (combat) => {
   }
 });
 
+/** 战斗结束（删除 Combat 文档）：重置遭遇战触发次数计数 */
+Hooks.on("deleteCombat", async (combat) => {
+  if (!game.user.isGM) return;
+  for (const combatant of combat.combatants) {
+    const actor = combatant.actor;
+    if (!actor) continue;
+    await actor.unsetFlag("limbusCompany_FVTT", "encounterFireCounts");
+    await actor.unsetFlag("limbusCompany_FVTT", "turnFireCounts");
+  }
+});
+
 /**
  * 回合结束时处理特殊状态（陷入混乱/陷入恐慌 自动移除）
  */
@@ -430,20 +443,33 @@ Hooks.on("combatRound", (combat, _updateData, _options) => {
   // 在每个 combatant 轮次末尾由 combatTurn 钩子处理
 });
 
+// 去重：记录最近已处理的 combatId+round，防止 updateEmbeddedDocuments 引发的二次触发
+const _processedRoundKey = new Map();
+
 Hooks.on("updateCombat", async (combat, changed) => {
   // ── 每轮（round）结束：统一清 BUFF + 燃烧/充能/呼吸衰减（仅 GM 执行） ──
   if (!("round" in changed)) return;
   if (!game.user.isGM) return;
 
+  // 同一场战斗同一 round 只处理一次（防止批量更新先攻引发二次触发）
+  const dedupKey = `${combat.id}:${combat.round}`;
+  if (_processedRoundKey.get(dedupKey)) return;
+  _processedRoundKey.set(dedupKey, true);
+
   const TURN_END = CONFIG.LIMBUSCOMPANY?.TURN_END_BUFF_TYPES ?? new Set();
+
+  // 全体角色的回合开始/结束 Activity 消息各汇总为一条折叠消息
+  const endMsgs   = [];
+  const startMsgs = [];
 
   for (const combatant of combat.combatants) {
     const actor = combatant.actor;
     if (!actor || actor.type !== "character") continue;
     const buffs = actor.system.buffs ?? [];
 
-    // 每轮重置拼点胜利计数（用于理智增加量递增计算）
+    // 每轮重置拼点胜利计数 & 每回合效果触发次数
     await actor.unsetFlag("limbusCompany_FVTT", "clashWinsThisRound");
+    await actor.unsetFlag("limbusCompany_FVTT", "turnFireCounts");
 
     // ── 回合结束 BUFF 清理与晋升 ────────────────────────────────────────
     // 移除本轮有效的临时 BUFF（强壮/虚弱/混乱/恐慌等），将下回合 BUFF 转为本回合
@@ -508,7 +534,7 @@ Hooks.on("updateCombat", async (combat, changed) => {
       );
       await actor.update({ "system.hp.value": newHp });
       await actor.reduceBuffStacks?.("burn");
-      if (actor.checkAndTriggerChaos) await actor.checkAndTriggerChaos(newHp, oldHp, { silent: true });
+      if (actor.checkAndTriggerChaos) await actor.checkAndTriggerChaos(newHp, oldHp, { silent: true, source: "burn" });
       await ChatMessage.create({
         speaker: ChatMessage.getSpeaker({ actor }),
         content: `<div class="limbuscompany chat-clash">
@@ -541,8 +567,9 @@ Hooks.on("updateCombat", async (combat, changed) => {
     }
 
     // ── Activity 触发：[回合结束时] 与 [回合开始时] ─────────────────────
-    const sys      = actor.system ?? {};
-    const roundCtx = { owner: actor, atkActor: actor, defActor: null };
+    // 收集到全体共享的桶，循环结束后统一发折叠汇总消息（避免刷屏）
+    const sys       = actor.system ?? {};
+    const roundCtx  = { owner: actor, atkActor: actor, defActor: null };
 
     // 已装备技能
     const skillIds = [
@@ -553,8 +580,8 @@ Hooks.on("updateCombat", async (combat, changed) => {
     for (const skillId of skillIds) {
       const skillItem = actor.items.get(skillId);
       if (!skillItem) continue;
-      await ClashManager._applyActivities(skillItem, "回合结束时", { ...roundCtx, _fireCounts: {} });
-      await ClashManager._applyActivities(skillItem, "回合开始时", { ...roundCtx, _fireCounts: {} });
+      await ClashManager._applyActivities(skillItem, "回合结束时", { ...roundCtx, _fireCounts: {}, _actMsgs: endMsgs });
+      await ClashManager._applyActivities(skillItem, "回合开始时", { ...roundCtx, _fireCounts: {}, _actMsgs: startMsgs });
     }
 
     // 装备栏中的物品（只有装入装备格的才触发）
@@ -562,24 +589,56 @@ Hooks.on("updateCombat", async (combat, changed) => {
       const eqId   = sys.equipment?.[`slot${i}`];
       const eqItem = eqId ? actor.items.get(eqId) : null;
       if (!eqItem) continue;
-      await ClashManager._applyActivities(eqItem, "回合结束时", { ...roundCtx, _fireCounts: {} });
-      await ClashManager._applyActivities(eqItem, "回合开始时", { ...roundCtx, _fireCounts: {} });
+      await ClashManager._applyActivities(eqItem, "回合结束时", { ...roundCtx, _fireCounts: {}, _actMsgs: endMsgs });
+      await ClashManager._applyActivities(eqItem, "回合开始时", { ...roundCtx, _fireCounts: {}, _actMsgs: startMsgs });
     }
   }
+
+  // 全体角色处理完毕：各发一条折叠汇总消息
+  await ClashManager._flushActMsgs(endMsgs,   null, { title: "回合结束时" });
+  await ClashManager._flushActMsgs(startMsgs, null, { title: "回合开始时" });
 
   // ── 一轮结束进入下一轮：重掷所有角色先攻 ──────────────────────────────
   // 第 0 → 1 轮跳过（战斗开始时已由 combatStart 钩子处理），之后每轮重掷
   // 先全部骰好并发聊天，最后一次性批量写入先攻值，只触发一次排序
   if ((changed.round ?? 0) > 1) {
     const initiativeUpdates = [];
+    const initiativeRows    = [];
     for (const combatant of combat.combatants) {
       const actor = combatant.actor;
       if (!actor || actor.type !== "character") continue;
-      const roll = await actor.rollSpeedInitiative({ updateCombatant: false });
-      initiativeUpdates.push({ _id: combatant.id, initiative: roll.finalTotal ?? roll.total });
+      const roll = await actor.rollSpeedInitiative({ updateCombatant: false, chatMessage: false });
+      const finalTotal = roll.finalTotal ?? roll.total;
+      initiativeUpdates.push({ _id: combatant.id, initiative: finalTotal });
+      initiativeRows.push({
+        img:      actor.img,
+        name:     actor.name,
+        speedMin: roll.speedMin ?? 0,
+        speedMax: roll.speedMax ?? 0,
+        finalTotal,
+      });
     }
     if (initiativeUpdates.length > 0) {
       await combat.updateEmbeddedDocuments("Combatant", initiativeUpdates);
+      // 全体先攻汇总为一张卡
+      const rowsHtml = initiativeRows.map(r => `
+        <div style="display:flex;align-items:center;gap:8px;margin:4px 0;">
+          <img src="${r.img}" alt="${r.name}"
+               style="width:30px;height:30px;object-fit:cover;border-radius:50%;border:2px solid #3A5A1A;">
+          <span style="color:#E8C9A2;font-size:.85rem;flex:1;">${r.name}</span>
+          <span class="initiative-speed-range">${r.speedMin}–${r.speedMax}</span>
+          <span class="initiative-arrow">→</span>
+          <span class="initiative-total">${r.finalTotal}</span>
+        </div>`).join("");
+      await ChatMessage.create({
+        content: `
+          <div class="limbus-initiative-card" style="padding:10px 12px 8px;">
+            <div class="ic-title" style="font-size:20px;">先攻骰掷</div>
+            <div class="ic-gold-divider"></div>
+            ${rowsHtml}
+            <div class="ic-gold-divider"></div>
+          </div>`,
+      });
     }
   }
 });
@@ -682,6 +741,7 @@ async function _preloadTemplates() {
     "systems/limbusCompany_FVTT/templates/item/skill-sheet.hbs",
     "systems/limbusCompany_FVTT/templates/item/consumable-sheet.hbs",
     "systems/limbusCompany_FVTT/templates/item/container-sheet.hbs",
+    "systems/limbusCompany_FVTT/templates/item/skillbook-sheet.hbs",
     // Combat
     "systems/limbusCompany_FVTT/templates/combat/combat-hud.hbs",
     // Partials

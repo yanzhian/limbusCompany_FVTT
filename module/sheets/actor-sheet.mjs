@@ -72,6 +72,14 @@ export class LimbusActorSheet extends ActorSheet {
     context.xpPercent     = system.xp.next  > 0 ? ((system.xp.value  / system.xp.next)  * 100) : 0;
     context.canLevelUp    = (system.xp.value ?? 0) > (system.xp.next ?? Number.MAX_SAFE_INTEGER);
     context.hpPercent     = system.hp.max   > 0 ? ((system.hp.value   / system.hp.max)   * 100) : 0;
+    // 护盾：叠加在血条右侧，超出血量上限部分也显示
+    const shieldBuff      = (system.buffs ?? []).find(b => b.type === "shield");
+    const shieldStacks    = shieldBuff?.stacks ?? 0;
+    const effectiveMax    = system.hp.max > 0 ? system.hp.max : 1;
+    context.shieldStacks  = shieldStacks;
+    // 护盾条宽度 = min(shieldStacks, max) / max * 100，右移 = hpPercent
+    context.shieldWidth   = Math.min(shieldStacks, effectiveMax) / effectiveMax * 100;
+    context.shieldOffset  = context.hpPercent; // 护盾条从HP末端开始
     context.sanityPercent = ((system.sanity.value - 5) / 90) * 100;
     context.isInPanic     = system.sanity.value <= 5;
 
@@ -110,25 +118,8 @@ export class LimbusActorSheet extends ActorSheet {
       max: (system.speed.max ?? 0) + equipAdj.speed + buffSpeedMod,
     };
 
-    const equippedUpper = equippedItems.find(eq => eq.system?.subtype === "upper");
-    // 只有本回合有效的混乱 BUFF 才影响抗性显示
-    const _buffs         = (system.buffs ?? []).filter(b => b.whenAdded !== "下回合");
-    const hasChaosDouble = _buffs.some(b => b.type === "chaos_double_plus");
-    const hasChaosPlus   = _buffs.some(b => b.type === "chaos_plus");
-    const hasChaos       = _buffs.some(b => b.type === "chaos");
-    context.displayResistances = hasChaosDouble
-      ? { slash: "x3.0", blunt: "x3.0", pierce: "x3.0" }
-      : hasChaosPlus
-        ? { slash: "x2.5", blunt: "x2.5", pierce: "x2.5" }
-        : hasChaos
-          ? { slash: "x2.0", blunt: "x2.0", pierce: "x2.0" }
-          : equippedUpper?.system?.resistanceAdj
-        ? {
-          slash: equippedUpper.system.resistanceAdj.slash ?? system.resistances.slash,
-          blunt: equippedUpper.system.resistanceAdj.blunt ?? system.resistances.blunt,
-          pierce: equippedUpper.system.resistanceAdj.pierce ?? system.resistances.pierce,
-        }
-        : { ...system.resistances };
+    // 抗性显示与战斗结算共用同一逻辑（混乱强制值 > 自定义BUFF modifyResistances > 上装覆盖 > 基础值）
+    context.displayResistances = ClashManager._getEffectiveResistances(actor);
 
     const stellarMax = 30 + (system.level ?? 1);
     const equippedStellarCost = this._calcEquippedStellarCost();
@@ -190,7 +181,11 @@ export class LimbusActorSheet extends ActorSheet {
     context.skillGroups = this._groupSkillItems();
 
     // ── BUFF 列表（战斗 Tab） ─────────────────────────────────────────────
-    context.buffs = system.buffs ?? [];
+    context.buffs = (system.buffs ?? []).map(b => ({
+      ...b,
+      icon:        _buffIconPath(b.type, b.name),
+      description: CustomBuffRegistry.get(b.type)?.description ?? "",
+    }));
     context.buffIcons = _buildBuffIconMap();
 
     // ── 基础技能战斗槽（6格占位，避免 {{#times}} 未注册问题） ─────────────
@@ -294,7 +289,7 @@ export class LimbusActorSheet extends ActorSheet {
   _calcInventoryCapacity() {
     const inContainer  = this._getItemsInContainers();
     let total = 0;
-    const nonSkillTypes = ["equipment", "consumable", "material", "container"];
+    const nonSkillTypes = ["equipment", "consumable", "material", "container", "skillbook"];
     for (const item of this.actor.items) {
       if (!nonSkillTypes.includes(item.type)) continue;
       if (inContainer.has(item.uuid)) continue; // 容器内物品不占背包容量
@@ -314,10 +309,11 @@ export class LimbusActorSheet extends ActorSheet {
       consumable:"消耗品",
       material:  "材料",
       container: "容器",
+      skillbook: "技能书",
     };
 
     const groups = {};
-    const nonSkillTypes  = ["equipment", "consumable", "material", "container"];
+    const nonSkillTypes  = ["equipment", "consumable", "material", "container", "skillbook"];
     const inContainer    = this._getItemsInContainers();
 
     for (const item of this.actor.items) {
@@ -333,7 +329,7 @@ export class LimbusActorSheet extends ActorSheet {
     }
 
     // Sort by predefined order
-    const order = [...subtypeOrder, "consumable", "material", "container"];
+    const order = [...subtypeOrder, "consumable", "material", "container", "skillbook"];
     return order
       .filter(k => groups[k])
       .map(k => groups[k]);
@@ -1042,11 +1038,21 @@ export class LimbusActorSheet extends ActorSheet {
       ui.notifications.warn("数量不足。"); return;
     }
 
-    // 装备激活消耗 1 行动值
-    if (item.type === "equipment") {
+    // 装备 / 守备技能激活：消耗 1 行动值
+    const needsAp = item.type === "equipment"
+      || (item.type === "skill" && item.system?.type === "defense");
+    if (needsAp) {
       const curAp = this.actor.system?.ap?.value ?? 0;
+      const label = item.type === "equipment" ? "装备" : "守备技能";
       if (curAp < 1) {
-        ui.notifications.warn("行动值不足，无法激活装备。"); return;
+        ui.notifications.warn(`行动值不足，无法激活${label}。`); return;
+      }
+      // 预检：若所有[使用时]效果均已达到次数限制，拒绝本次使用并给出黄色警告
+      const { blocked, reasons } = ClashManager._checkAllActivitiesBlocked(item, "使用时", this.actor);
+      if (blocked) {
+        const detail = reasons.length ? `（${reasons.join("；")}）` : "";
+        ui.notifications.warn(`【${item.name}】的使用次数已达上限，本次使用被取消。${detail}`);
+        return;
       }
       await this.actor.update({ "system.ap.value": curAp - 1 });
     }
@@ -1378,18 +1384,128 @@ export class LimbusActorSheet extends ActorSheet {
     return state.pool.shift() ?? null;
   }
 
+  /**
+   * 丢弃战斗槽中的技能
+   * @param {"level"|"another"|"reserve"} mode
+   * @param {number} level - 仅 mode==="level" 时有效
+   * @param {string} currentItemId - 当前正在使用的技能 ID（用于排除"另一个"时避免丢弃自身）
+   * @returns {{ discardedId: string|null, slotIndex: number }} 被丢弃的技能 ID 及槽位
+   */
+  async _discardCombatSkill(mode, level, currentItemId) {
+    const state = this._combatBagState;
+    if (!state) return { discardedId: null, slotIndex: -1 };
+
+    let targetSlot = -1;
+
+    if (mode === "level") {
+      // 在激活槽 0/1 中找第一个等于该等级的技能
+      for (let i = 0; i <= 1; i++) {
+        const id = state.slots[i];
+        if (!id) continue;
+        const sk = this.actor.items.get(id);
+        if (sk && (sk.system?.level ?? 1) === level) {
+          targetSlot = i;
+          break;
+        }
+      }
+    } else if (mode === "another") {
+      // 在激活槽 0/1 中找另一个（不是 currentItemId 的那个）
+      for (let i = 0; i <= 1; i++) {
+        if (state.slots[i] && state.slots[i] !== currentItemId) {
+          targetSlot = i;
+          break;
+        }
+      }
+    } else if (mode === "reserve") {
+      // 槽 2 是预备区
+      if (state.slots[2]) targetSlot = 2;
+    }
+
+    if (targetSlot === -1 || !state.slots[targetSlot]) return { discardedId: null, slotIndex: -1 };
+
+    const discardedId = state.slots[targetSlot];
+    // 执行丢弃动画（淡出），然后补充新牌
+    await this._animateDiscardSkill(targetSlot);
+    return { discardedId, slotIndex: targetSlot };
+  }
+
+  // 丢弃动画：指定槽淡出并补充新牌
+  async _animateDiscardSkill(slotIndex) {
+    const state = this._combatBagState;
+    if (!state) return;
+
+    const _wraps = () => this.element?.find(".basic-combat-section .combat-skill-slot-wrap");
+    const $wraps = _wraps();
+    if (!$wraps?.length || slotIndex >= $wraps.length) {
+      // 无 DOM，直接更新状态
+      state.slots.splice(slotIndex, 1);
+      const nextId = this._drawNextFromPool();
+      state.slots.push(nextId);
+      this._renderCombatSlots(this.element);
+      return;
+    }
+
+    return new Promise((resolve) => {
+      const $slot = $wraps.eq(slotIndex).find(".combat-skill-slot");
+      $slot.css({
+        transition: "opacity 0.25s ease, transform 0.25s ease",
+        opacity: "0",
+        transform: "scale(0.7)",
+      });
+
+      setTimeout(() => {
+        state.slots.splice(slotIndex, 1);
+        const nextId = this._drawNextFromPool();
+        state.slots.push(nextId);
+
+        const $w2 = _wraps();
+        $w2?.each((_, el) => {
+          $(el).css({ transition: "none", transform: "" });
+          $(el).find(".combat-skill-slot").css({ transition: "none", transform: "", opacity: "" });
+        });
+        this._renderCombatSlots(this.element);
+
+        const $newSlot = _wraps()?.eq(5).find(".combat-skill-slot");
+        if ($newSlot?.length) {
+          $newSlot.css({ opacity: "0", transform: "scale(0.7)" });
+          requestAnimationFrame(() => requestAnimationFrame(() => {
+            $newSlot.css({ transition: "opacity 0.3s ease, transform 0.3s ease", opacity: "1", transform: "scale(1)" });
+            setTimeout(() => $newSlot.css({ transition: "", transform: "" }), 350);
+          }));
+        }
+        resolve();
+      }, 280);
+    });
+  }
+
+  // 推进 bag 状态（无论角色卡是否打开都必须执行）
+  _advanceBagState(slotIndex) {
+    const state = this._combatBagState;
+    if (!state || !state.slots[slotIndex]) return;
+    state.slots.splice(slotIndex, 1);
+    const nextId = this._drawNextFromPool();
+    state.slots.push(nextId);
+  }
+
   // 带动画地使用指定激活槽技能（仅 slotIndex = 0 或 1）
   _animateCombatSkillUse(slotIndex) {
-    if (!this.element?.length) return;
+    const state = this._combatBagState;
+    if (!state || !state.slots[slotIndex]) return;
+
+    // 角色卡未打开：直接推进状态，不播放动画
+    if (!this.element?.length) {
+      this._advanceBagState(slotIndex);
+      return;
+    }
 
     // 每个阶段都通过 this.element 实时查询，避免因重渲染导致引用失效
     const _wraps = () => this.element.find(".basic-combat-section .combat-skill-slot-wrap");
 
     const $wraps = _wraps();
-    if (slotIndex >= $wraps.length) return;
-
-    const state = this._combatBagState;
-    if (!state || !state.slots[slotIndex]) return;
+    if (slotIndex >= $wraps.length) {
+      this._advanceBagState(slotIndex);
+      return;
+    }
 
     const $usedSlot = $wraps.eq(slotIndex).find(".combat-skill-slot");
 
@@ -1422,13 +1538,14 @@ export class LimbusActorSheet extends ActorSheet {
     // ── 第3阶段（310ms后）：更新状态，重渲染，新牌淡入 ──────────────────
     setTimeout(() => {
       // 更新 bag 状态
-      state.slots.splice(slotIndex, 1);
-      const nextId = this._drawNextFromPool();
-      state.slots.push(nextId);   // 补充到位置5
+      this._advanceBagState(slotIndex);
 
-      // 重置所有 transform（不带动画）
+      // 重置 wrapper 和内部 slot 的所有内联动画样式（不带动画）
       const $w2 = _wraps();
-      $w2.each((_, el) => $(el).css({ transition: "none", transform: "" }));
+      $w2.each((_, el) => {
+        $(el).css({ transition: "none", transform: "" });
+        $(el).find(".combat-skill-slot").css({ transition: "none", transform: "", opacity: "" });
+      });
 
       // 静态重渲染（应用最新状态）
       this._renderCombatSlots(this.element);
@@ -1628,33 +1745,35 @@ export class LimbusActorSheet extends ActorSheet {
   /* ─── BUFF 管理 ─────────────────────────────────────────────────────────── */
 
   async _onAddBuff(event) {
-    const cfg      = CONFIG.LIMBUSCOMPANY;
-    const groups   = cfg.BUFF_GROUPS;
-    const allBuffs = cfg.BUFF_TYPES;
+    // 构建 label→typeKey 映射，涵盖所有已知 BUFF
+    const labelToKey = {};
+    const cfg = CONFIG.LIMBUSCOMPANY;
+    const allGroups = [
+      ...(cfg.BUFF_GROUPS.positive ?? []),
+      ...(cfg.BUFF_GROUPS.negative ?? []),
+      ...(cfg.BUFF_GROUPS.special  ?? []),
+      ...(cfg.BUFF_GROUPS.other    ?? []),
+      ...(cfg.BUFF_GROUPS.custom   ?? []),
+    ];
+    for (const k of allGroups) {
+      labelToKey[_buffLabel(k)] = k;
+    }
+    // 自定义注册表中的 BUFF 也加入（处理动态注册情况）
+    for (const [k, handler] of CustomBuffRegistry.entries()) {
+      if (handler?.label) labelToKey[handler.label] = k;
+    }
 
-    // 构建选项 HTML（分组）
-    const buildGroupOptions = () => {
-      const sections = [
-        { label: "增益",      keys: groups.positive ?? [] },
-        { label: "减益",      keys: groups.negative ?? [] },
-        { label: "特殊",      keys: groups.special  ?? [] },
-        { label: "其他",      keys: groups.other    ?? [] },
-        { label: "自定义BUFF", keys: groups.custom   ?? [] },
-      ];
-      return sections.map(sec =>
-        `<optgroup label="${sec.label}">${sec.keys.map(k => `<option value="${k}">${_buffLabel(k)}</option>`).join("")}</optgroup>`
-      ).join("");
-    };
+    const datalistOptions = Object.keys(labelToKey)
+      .map(lbl => `<option value="${lbl}">`)
+      .join("");
 
     const content = `
       <div class="limbuscompany add-buff-dialog">
         <div class="form-group">
-          <label>选择BUFF</label>
-          <select name="buffType">${buildGroupOptions()}</select>
-        </div>
-        <div class="form-group custom-buff-row" style="display:none">
-          <label>自定义BUFF</label>
-          <input type="text" name="customName" placeholder="输入文本"/>
+          <label>BUFF名称</label>
+          <input type="text" name="buffName" list="add-buff-datalist"
+                 placeholder="输入或选择BUFF名称…" autocomplete="off" style="width:100%"/>
+          <datalist id="add-buff-datalist">${datalistOptions}</datalist>
         </div>
         <div class="form-group">
           <label>回合</label>
@@ -1676,17 +1795,14 @@ export class LimbusActorSheet extends ActorSheet {
         add: {
           label: "添加",
           callback: async (html) => {
-            let type        = html.find("[name='buffType']").val();
-            const custom    = html.find("[name='customName']").val().trim();
+            const inputName = html.find("[name='buffName']").val().trim();
             const whenAdded = html.find("[name='whenAdded']").val();
             const intensity = parseInt(html.find("[name='intensity']").val()) || 1;
             const stacks    = parseInt(html.find("[name='stacks']").val())    || 1;
 
-            // 若用户选择"自定义"并输入了文字，尝试解析为注册的自定义 BUFF 类型
-            if (type === "custom" && custom) {
-              type = normalizeBuffType("custom", custom);
-            }
-            const name = type === "custom" ? (custom || "自定义") : _buffLabel(type);
+            // 通过中文名反查 typeKey；匹配不到则视为纯自定义文本
+            let type = labelToKey[inputName] ?? normalizeBuffType("custom", inputName);
+            const name = inputName || "自定义";
 
             await this.actor.addBuff({ type, name, intensity, stacks, whenAdded,
               icon: _buffIconPath(type, name) });
@@ -1698,14 +1814,6 @@ export class LimbusActorSheet extends ActorSheet {
     });
 
     dlg.render(true);
-
-    // 监听 select 变化显示/隐藏自定义输入
-    setTimeout(() => {
-      const sel = dlg.element?.find("[name='buffType']");
-      sel?.on("change", (e) => {
-        dlg.element.find(".custom-buff-row").toggle(e.target.value === "custom");
-      });
-    }, 50);
   }
 
   async _onBuffTrigger(event) {

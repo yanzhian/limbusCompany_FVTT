@@ -12,6 +12,7 @@
  */
 
 import { ClashManager } from "../helpers/clash.mjs";
+import { CustomBuffRegistry } from "../helpers/custom-buffs.mjs";
 
 /* ─── 常量 ────────────────────────────────────────────────────────────────── */
 
@@ -241,7 +242,12 @@ export class QuickActionHUD extends Application {
     const slotCount = Math.max(8, Math.ceil(activeBuffs.length / 8) * 8);
     const buffSlots = Array.from({ length: slotCount }, (_, i) => {
       const buff = activeBuffs[i] ?? null;
-      return { index: i, buff, icon: buff ? _buffIcon(buff.type, buff.icon) : "" };
+      const handler = buff ? CustomBuffRegistry.get(buff.type) : null;
+      return {
+        index: i, buff,
+        icon:        buff ? _buffIcon(buff.type, buff.icon) : "",
+        description: handler?.description ?? "",
+      };
     });
 
     // 装备格物品（排除空格）
@@ -323,6 +329,10 @@ export class QuickActionHUD extends Application {
         $panel.hide();
         $btn.removeClass("qa-btn--active");
       } else {
+        // 关闭其他已开面板，保持同一时刻只有一个面板展开
+        html.find(".qa-panel").hide();
+        html.find(".qa-btn[data-panel]").removeClass("qa-btn--active");
+        this._openPanels.clear();
         this._openPanels.add(panelKey);
         $panel.css("display", "flex");
         $btn.addClass("qa-btn--active");
@@ -527,6 +537,14 @@ export class QuickActionHUD extends Application {
   async _activateItem(item) {
     if (item.type === "consumable" && (item.system.quantity ?? 0) <= 0) {
       ui.notifications.warn("数量不足。"); return;
+    }
+    // 装备激活消耗 1 行动值
+    if (item.type === "equipment") {
+      const curAp = this._actor?.system?.ap?.value ?? 0;
+      if (curAp < 1) {
+        ui.notifications.warn("行动值不足，无法激活装备。"); return;
+      }
+      await this._actor.update({ "system.ap.value": curAp - 1 });
     }
     await ClashManager._applyActivities(item, "使用时", {
       owner: this._actor, atkActor: this._actor, defActor: null, _fireCounts: {},

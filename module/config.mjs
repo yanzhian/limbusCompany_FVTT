@@ -169,6 +169,10 @@ LIMBUSCOMPANY.BUFF_TYPES = {
   panic:           "LIMBUSCOMPANY.Buff.Panic",
   // 自定义
   custom:          "LIMBUSCOMPANY.Buff.Custom",
+  // 注册自定义 BUFF（与 custom-buffs.mjs 中的 type 对应）
+  defensiveStance: "防御姿态",
+  butterfly:       "蝶",
+  piercingArrow:   "刺入之矢",
 };
 
 /** 分组，用于 BUFF 下拉菜单 */
@@ -177,7 +181,7 @@ LIMBUSCOMPANY.BUFF_GROUPS = {
   negative: ["weak", "breach", "bind", "fragile", "clashPowerDown", "atkLevelDown", "defLevelDown"],
   special:  ["burn", "bleed", "tremor", "rupture", "sinking", "breathing", "charge", "chaos", "panic"],
   other:    ["custom"],
-  custom:   ["defensiveStance"],
+  custom:   ["defensiveStance", "butterfly", "piercingArrow"],
 };
 
 /**
@@ -249,6 +253,7 @@ LIMBUSCOMPANY.ACTIVITY_TRIGGERS = [
   "拼点时", "拼点成功", "拼点失败",
   "命中时", "暴击命中时",
   "回合开始时", "回合结束时", "受到伤害时",
+  "反应", "丢弃时",
 ];
 
 // ─── 效果类型 ─────────────────────────────────────────────────────────────────

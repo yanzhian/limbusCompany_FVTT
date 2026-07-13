@@ -17,10 +17,12 @@
       <ul class="buff-list">
         {{#each buffs}}
           <li class="buff-row {{#if (eq whenAdded '下回合')}}buff-row--next-turn{{/if}}"
-              data-buff-id="{{id}}">
+              data-buff-id="{{id}}"
+              title="{{name}}{{#if description}}&#13;&#13;{{description}}{{/if}}">
             <span class="buff-col-icon">
               {{#if icon}}
-                <img src="{{icon}}" width="16" height="16" alt="{{name}}">
+                <img src="{{icon}}" width="16" height="16" alt="{{name}}"
+                     title="{{name}}{{#if description}}&#13;&#13;{{description}}{{/if}}">
               {{else}}
                 <span class="buff-icon-placeholder"></span>
               {{/if}}

@@ -144,7 +144,7 @@
         {{#if buff}}
           <div class="qa-buff-slot qa-buff-slot--filled"
                data-buff-id="{{buff.id}}"
-               title="{{buff.name}}&#13;强度:{{buff.intensity}}  层数:{{buff.stacks}}">
+               title="{{buff.name}}  强度:{{buff.intensity}}  层数:{{buff.stacks}}{{#if description}}&#13;&#13;{{description}}{{/if}}">
             {{#if icon}}<img class="qa-buff-icon" src="{{icon}}" alt="{{buff.name}}">{{/if}}
             <span class="qa-buff-intensity">{{buff.intensity}}</span>
             <span class="qa-buff-stacks">{{buff.stacks}}</span>

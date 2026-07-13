@@ -12,6 +12,9 @@
  *     modifySpeedRoll(actor, ctx) {},       // 速度骰结果修正 → 返回最终 total（Number）
  *     onClashWin(carrier, opponent) {},     // 拼点胜利时回调 → 返回 Promise
  *     beforeChaos(actor, buff) {},          // 混乱触发前检查 → 返回 { immune: bool }
+ *     modifyResistances(actor, buff, res) {}, // 修改物理抗性：res = { slash, blunt, pierce }（"xN.0" 字符串），
+ *                                             // 可原地修改或返回部分覆盖对象（如 { slash: "x2.0" }）；
+ *                                             // 陷入混乱的强制抗性优先级更高，混乱时不会调用此钩子
  *   });
  *
  * 以上所有钩子均为可选。未提供的钩子不会被调用。
@@ -79,8 +82,8 @@ export function normalizeBuffType(type, name = "") {
  */
 registerCustomBuff("defensiveStance", {
   label: "防御姿态",
-
-  maxStacks:     4,
+  description: "- 最大值：2 层\n- 获得层数时刷新（替换），不叠加\n- 回合结束时层数减少 1，减至 0 时移除\n- 使本单位速度值固定为最小值\n- 拼点胜利时，使目标震颤引爆\n- 不会因受到伤害而陷入混乱",
+  maxStacks:     2,
   refreshOnGain: true,
 
   /** 回合结束：层数-1，归零时移除 */
@@ -157,5 +160,175 @@ registerCustomBuff("defensiveStance", {
   /** 免疫因受到伤害触发的混乱（beforeChaos 返回 { immune: true }） */
   beforeChaos(actor, _buff) {
     return { immune: true };
+  },
+});
+
+/**
+ * 【蝶】
+ * - 最大值：10 层
+ * - 受到伤害时，消耗 1 层，为目标恢复 1D6 理智值，为自己添加 1 层【沉沦2】
+ */
+registerCustomBuff("butterfly", {
+  label:       "蝶",
+  maxStacks:   10,
+  description: "- 最大值：10 层\n- 受到伤害时，消耗 1 层，为目标恢复 1D6 的理智值，为自己添加 1 层【沉沦2】",
+
+  async onTakeDamage(actor, buff, ctx) {
+    if ((buff.stacks ?? 0) <= 0) return;
+
+    // 在同一个 buffs 快照上完成：蝶-1层 + 沉沦+1层，合并为一次 update
+    const buffs = foundry.utils.deepClone(actor.system?.buffs ?? []);
+    const idx   = buffs.findIndex(b => b.id === buff.id);
+    if (idx < 0) return;
+    const newStacks = (buffs[idx].stacks ?? 1) - 1;
+    if (newStacks <= 0) {
+      buffs.splice(idx, 1);
+    } else {
+      buffs[idx].stacks = newStacks;
+    }
+
+    // 沉沦 +1 层（强度 2）
+    const si = buffs.findIndex(b => b.type === "sinking");
+    if (si >= 0) {
+      buffs[si].stacks = (buffs[si].stacks ?? 0) + 1;
+    } else {
+      buffs.push({
+        id:        foundry.utils.randomID(),
+        type:      "sinking",
+        name:      "沉沦",
+        intensity: 2,
+        stacks:    1,
+        whenAdded: "本回合",
+      });
+    }
+    await actor.update({ "system.buffs": buffs });
+
+    // 为伤害来源（attacker）恢复 1D6 理智
+    const target = ctx?.attacker ?? null;
+    let sanHeal = 0;
+    if (target) {
+      const healRoll = new Roll("1d6");
+      await healRoll.evaluate();
+      sanHeal = healRoll.total;
+      const curSan = target.system?.sanity?.value ?? 50;
+      const newSan = Math.min(95, curSan + sanHeal);
+      await target.update({ "system.sanity.value": newSan });
+    }
+
+    // 返回消息文本，由 _applyAndSendTake 收集后并入 ⚡ 活动消息
+    return `【蝶】触发（剩余 <strong>${newStacks}</strong> 层）：`
+      + (target ? ` 为 <strong>${target.name}</strong> 恢复 <strong>${sanHeal}</strong> 点理智。` : "")
+      + ` 自身获得 1 层【沉沦】（强度 2）。`;
+  },
+});
+
+/* ─── 基础 BUFF 描述注册（仅 label + description，逻辑由 clash.mjs 内置处理）── */
+
+registerCustomBuff("tremor", {
+  label: "震颤",
+  description: "受到造成【震颤引爆】的攻击时，混乱阈值前移等同于本效果强度的数值。\n回合结束后，本效果的层数减少 1 层。",
+});
+
+registerCustomBuff("seismicBlast", {
+  label: "震颤引爆",
+  description: "使目标的混乱阈值前移与震颤强度相同的数值。",
+});
+
+registerCustomBuff("sinking", {
+  label: "沉沦",
+  description: "[受到伤害时]：失去数值等同于本效果强度的固定理智值点数。\n效果生效后，本效果的层数减少 1 层。",
+});
+
+registerCustomBuff("burn", {
+  label: "烧伤",
+  description: "[回合结束时]：减少 1 层【烧伤】层数，受到【烧伤】强度的固定伤害。",
+});
+
+registerCustomBuff("rupture", {
+  label: "破裂",
+  description: "[受到伤害时]：减少 1 层【破裂】层数，受到【破裂】强度的固定伤害。",
+});
+
+registerCustomBuff("bleed", {
+  label: "流血",
+  description: "[攻击时]：减少 1 层【流血】层数，受到【流血】强度的固定伤害。",
+});
+
+registerCustomBuff("charge", {
+  label:     "充能",
+  description: "·特殊技能需要消耗层数。\n·最大值：20 层。\n[回合结束时]：减少 1 层【充能】层数。",
+  maxStacks: 20,
+});
+
+registerCustomBuff("breathing", {
+  label: "呼吸法",
+  description: "[命中时]：本次攻击根据强度×5%的概率暴击，如果暴击则减少 1 层【呼吸法】层数。\n[回合结束时]：减少 1 层【呼吸法】层数。",
+});
+
+registerCustomBuff("bullet", {
+  label: "子弹",
+  description: "·特殊技能需要消耗层数。",
+});
+
+registerCustomBuff("shield", {
+  label: "护盾",
+  description: "受到伤害时：每层抵挡 1 点伤害（先于其他伤害结算）。\n回合结束时：移除全部护盾层数。\n护盾可以超出生命值上限存在。",
+
+  /** 回合结束：清除全部护盾 */
+  async onRoundEnd(actor, buff) {
+    const buffs = foundry.utils.deepClone(actor.system?.buffs ?? []);
+    const idx   = buffs.findIndex(b => b.id === buff.id);
+    if (idx < 0) return;
+    buffs.splice(idx, 1);
+    await actor.update({ "system.buffs": buffs });
+    // await ChatMessage.create({
+    //   speaker: ChatMessage.getSpeaker({ actor }),
+    //   content: `<div class="limbuscompany chat-clash"><strong>${actor.name}</strong> 的【护盾】在回合结束时消散。</div>`,
+    // });
+  },
+});
+
+/**
+ * 【刺入之矢】
+ * - 最大值：1 层
+ * - 持有时斩击抗性强制为 x2.0
+ */
+registerCustomBuff("piercingArrow", {
+  label:       "刺入之矢",
+  description: "- 最大值：1 层\n- 将自己的斩击抗性转换为 x2.0",
+  maxStacks:   1,
+
+  modifyResistances(_actor, _buff, _res) {
+    return { slash: "x2.0" };
+  },
+});
+
+/**
+ * 【血炎】
+ * - 最大值：3 层
+ * - 回合结束时层数 -1，归零时移除
+ */
+registerCustomBuff("bloodFlame", {
+  label:         "血炎",
+  description:   "- 最大值：3 层\n- 获得层数时刷新（替换），不叠加\n- 回合结束时层数减少 1，归零时移除\n- 不会因【烧伤】伤害而陷入混乱",
+  maxStacks:     3,
+  refreshOnGain: true,
+
+  /** 仅免疫来自烧伤的混乱触发 */
+  beforeChaos(_actor, _buff, ctx) {
+    if (ctx?.source === "burn") return { immune: true };
+  },
+
+  async onRoundEnd(actor, buff) {
+    const buffs = foundry.utils.deepClone(actor.system?.buffs ?? []);
+    const idx   = buffs.findIndex(b => b.id === buff.id);
+    if (idx < 0) return;
+    const newStacks = (buffs[idx].stacks ?? 1) - 1;
+    if (newStacks <= 0) {
+      buffs.splice(idx, 1);
+    } else {
+      buffs[idx].stacks = newStacks;
+    }
+    await actor.update({ "system.buffs": buffs });
   },
 });
