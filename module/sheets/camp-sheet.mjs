@@ -286,6 +286,7 @@ export class LimbusCampSheet extends ActorSheet {
     // ── 左栏：角色背包网格 ──────────────────────────────────────────────
     // 背包图块拖拽开始：标准 Item 拖拽数据（拖入仓库走既有 _onCgCellDrop 流程）
     html.find(".camp-char-cg .cg-item-tile").on("dragstart", (event) => {
+      this._onCgTileHoverEnd(); // 拖动开始即关闭 Title 卡
       const uuid = event.currentTarget.dataset.itemUuid ?? "";
       event.originalEvent.dataTransfer.setData("text/plain", JSON.stringify({ type: "Item", uuid }));
       event.originalEvent.dataTransfer.effectAllowed = "move";
@@ -493,6 +494,7 @@ export class LimbusCampSheet extends ActorSheet {
   /* ─── 仓库图块拖拽开始 ───────────────────────────────────────────────── */
 
   _onCgTileDragStart(event) {
+    this._onCgTileHoverEnd(); // 拖动开始即关闭 Title 卡
     const tile = event.currentTarget;
     const idx  = parseInt(tile.dataset.placementIdx ?? "-1");
     if (idx < 0) return;
@@ -521,9 +523,13 @@ export class LimbusCampSheet extends ActorSheet {
     const tile = event.currentTarget;
     $(tile).addClass("cg-tile-hover");
 
+    // 序号守卫：await 期间若已 hoverEnd/dragstart（序号推进），放弃追加，
+    // 避免拖动中出现无法关闭的孤儿 Title 卡
+    const seq = this._campHoverSeq = (this._campHoverSeq ?? 0) + 1;
+
     const uuid = tile.dataset.itemUuid ?? "";
     const item = await fromUuid(uuid).catch(() => null);
-    if (!item) return;
+    if (!item || seq !== this._campHoverSeq) return;
 
     this._campTitleCard?.remove();
     this._campTitleCard = buildItemTitleCard(item);
@@ -542,6 +548,7 @@ export class LimbusCampSheet extends ActorSheet {
 
   _onCgTileHoverEnd(event) {
     if (event) $(event.currentTarget).removeClass("cg-tile-hover");
+    this._campHoverSeq = (this._campHoverSeq ?? 0) + 1; // 使进行中的 hoverStart 失效
     this._campTitleCard?.remove();
     this._campTitleCard = null;
   }

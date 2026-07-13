@@ -1199,6 +1199,7 @@ export class LimbusItemSheet extends ItemSheet {
   /* ─── 物品格：开始拖拽（内部重定位）────────────────────────────────────── */
 
   _onCgTileDragStart(event) {
+    this._onCgTileHoverEnd(); // 拖动开始即关闭 Title 卡
     const tile  = event.currentTarget;
     const idx   = parseInt(tile.dataset.placementIdx ?? 0);
     const uuid  = tile.dataset.itemUuid ?? "";
@@ -1267,9 +1268,11 @@ export class LimbusItemSheet extends ItemSheet {
     if (!uuid) return;
 
     this._onCgTileHoverEnd();
+    // 序号守卫：await 期间若已 hoverEnd/dragstart，放弃追加（避免孤儿卡）
+    const seq = this._cgHoverSeq = (this._cgHoverSeq ?? 0) + 1;
 
     const item = await fromUuid(uuid).catch(() => null);
-    if (!item) return;
+    if (!item || seq !== this._cgHoverSeq) return;
 
     this._cgTitleCard = _buildItemTitleCard(item);
     if (!this._cgTitleCard) return;
@@ -1286,6 +1289,7 @@ export class LimbusItemSheet extends ItemSheet {
   }
 
   _onCgTileHoverEnd() {
+    this._cgHoverSeq = (this._cgHoverSeq ?? 0) + 1; // 使进行中的 hoverStart 失效
     this._cgTitleCard?.remove();
     this._cgTitleCard = null;
   }
