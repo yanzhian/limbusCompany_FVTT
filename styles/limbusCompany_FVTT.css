@@ -6440,7 +6440,7 @@ input.item-piles-quantity {
   overflow:       hidden;
 }
 .camp-char-panel {
-  flex:            0 0 25%;
+  flex:            0 0 250px;   /* 固定宽度，缩放窗口不变；容量超出向下扩展（6×N） */
   border-right:    1px solid var(--border-gold);
 }
 .camp-char-panel.cg-drag-over {
@@ -6483,11 +6483,13 @@ input.item-piles-quantity {
   z-index: 5;
 }
 .camp-warehouse-panel {
-  flex:            0 0 44%;
+  flex:            1;           /* 唯一随窗口缩放变化的面板 */
+  min-width:       0;
   border-right:    1px solid var(--border-gold);
 }
 .camp-recipe-panel {
-  flex:            1;
+  flex:            0 0 400px;   /* 固定宽度，缩放窗口不变 */
+  max-width:       400px;
 }
 
 .camp-panel-header {
