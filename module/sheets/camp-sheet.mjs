@@ -1078,13 +1078,27 @@ export class LimbusCampSheet extends ActorSheet {
     }
     await campActor.update({ "system.warehouseContents": newContents });
 
+    // 制作聊天卡（商人交易卡同款风格）
     const triggerUser = game.users.get(userId);
+    const triggerChar = triggerUser?.character;
     await ChatMessage.create({
-      content: `<div class="limbuscompany chat-camp">
-        ${triggerUser ? `<strong>${triggerUser.name}</strong> 在` : ""}营地【${campActor.name}】制作了
-        <img src="${recipe.outputImg}" width="16" height="16" style="vertical-align:middle">
-        <strong>${recipe.outputName} ×${recipe.outputQuantity}</strong>，已存入仓库！
-      </div>`,
+      content: `
+        <div class="limbus-merchant-purchase-card">
+          <div class="purchase-header">
+            <img src="${campActor.img}" class="purchase-merchant-img" alt="${campActor.name}">
+            <div class="purchase-title">
+              <span class="purchase-name">${triggerChar?.name ?? triggerUser?.name ?? "营地"}</span>
+              <span class="purchase-sub">在营地【${campActor.name}】制作，已存入仓库</span>
+            </div>
+          </div>
+          <div class="ic-gold-divider"></div>
+          <div class="purchase-item-row">
+            <img src="${recipe.outputImg}" class="purchase-item-icon" alt="${recipe.outputName}">
+            <span class="purchase-item-name">${recipe.outputName}${recipe.outputQuantity > 1 ? ` ×${recipe.outputQuantity}` : ""}</span>
+          </div>
+          <div class="ic-gold-divider"></div>
+        </div>`,
+      speaker: triggerChar ? ChatMessage.getSpeaker({ actor: triggerChar }) : undefined,
     });
   }
 
