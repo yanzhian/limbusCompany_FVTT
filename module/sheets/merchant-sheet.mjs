@@ -48,6 +48,80 @@ export class LimbusMerchantSheet extends ActorSheet {
   /** 每个商人 Actor 的 GM 端操作串行队列（防并发超卖） */
   static _opQueues = new Map();
 
+  /**
+   * 交易聊天消息实时聚合器（与战利品 _scheduleChatMsg 同机制）
+   * key: `${kind}_${charId}_${merchantId}`（kind = buy | sell，买入卖出分开聚合）
+   * 首笔交易立即创建聊天消息，30 秒内后续交易 update 追加到同一条；
+   * 所有异步操作经 entry.chain 串行化防竞态。
+   */
+  static _chatSessions = new Map();
+  static _chatTimers   = new Map();
+
+  /** 构建聚合交易消息 HTML（同名物品合并计数、金额累加） */
+  static _buildTradeChatContent({ kind, merchant, char, items }) {
+    const merged = [];
+    const seen   = new Map();
+    for (const i of items) {
+      if (seen.has(i.name)) {
+        const m = merged[seen.get(i.name)];
+        m.qty   += i.qty;
+        m.total += i.total;
+      } else {
+        seen.set(i.name, merged.length);
+        merged.push({ ...i });
+      }
+    }
+    const verb = kind === "buy" ? "花费" : "获得";
+    const rows = merged.map(i => `
+      <div class="purchase-item-row">
+        <img src="${i.img}" class="purchase-item-icon" alt="${i.name}">
+        <span class="purchase-item-name">${i.name}${i.qty > 1 ? ` ×${i.qty}` : ""}</span>
+        <span class="purchase-item-price">${verb} <strong>${i.total}</strong> 眼</span>
+      </div>`).join("");
+    return `
+      <div class="limbus-merchant-purchase-card">
+        <div class="purchase-header">
+          <img src="${merchant.img}" class="purchase-merchant-img" alt="${merchant.name}">
+          <div class="purchase-title">
+            <span class="purchase-name">${char.name}</span>
+            <span class="purchase-sub">${kind === "buy" ? `从 ${merchant.name} 购买` : `卖给 ${merchant.name}`}</span>
+          </div>
+        </div>
+        <div class="ic-gold-divider"></div>
+        ${rows}
+        <div class="ic-gold-divider"></div>
+      </div>`;
+  }
+
+  /** 记录一笔交易：首笔创建消息，30 秒内后续交易追加到同一条 */
+  static _scheduleTradeMsg(kind, merchant, char, itemName, itemImg, price) {
+    const key = `${kind}_${char.id}_${merchant.id}`;
+
+    let entry = LimbusMerchantSheet._chatSessions.get(key);
+    if (!entry) {
+      entry = { kind, merchant, char, items: [], msg: null, chain: Promise.resolve() };
+      LimbusMerchantSheet._chatSessions.set(key, entry);
+    }
+    entry.items.push({ name: itemName, img: itemImg, qty: 1, total: price });
+
+    entry.chain = entry.chain.then(async () => {
+      const content = LimbusMerchantSheet._buildTradeChatContent(entry);
+      if (!entry.msg) {
+        entry.msg = await ChatMessage.create({
+          content, speaker: ChatMessage.getSpeaker({ actor: entry.char }),
+        });
+      } else {
+        await entry.msg.update({ content });
+      }
+    });
+
+    clearTimeout(LimbusMerchantSheet._chatTimers.get(key));
+    LimbusMerchantSheet._chatTimers.set(key, setTimeout(() => {
+      LimbusMerchantSheet._chatSessions.delete(key);
+      LimbusMerchantSheet._chatTimers.delete(key);
+    }, 30_000));
+  }
+
   /* ─── getData ────────────────────────────────────────────────────────── */
 
   /** @override */
@@ -395,12 +469,8 @@ export class LimbusMerchantSheet extends ActorSheet {
       await item.update({ "system.stock": Math.max(0, stock - 1) });
     }
 
-    // ④ 公开聊天卡
-    await ChatMessage.create({
-      content: LimbusMerchantSheet._buildTradeCard(merchant, char, item.name, item.img,
-        `从 ${merchant.name} 购买`, `花费 <strong>${price}</strong> 眼`),
-      speaker: ChatMessage.getSpeaker({ actor: char }),
-    });
+    // ④ 聚合聊天卡（30 秒内连续购买合并到一条消息）
+    LimbusMerchantSheet._scheduleTradeMsg("buy", merchant, char, item.name, item.img, price);
   }
 
   /* ─── GM 端权威执行：卖出（物品原价上架商人货架，可买回） ─────────────── */
@@ -439,33 +509,8 @@ export class LimbusMerchantSheet extends ActorSheet {
     itemData.system.hidden = false;
     await merchant.createEmbeddedDocuments("Item", [itemData]);
 
-    // ③ 公开聊天卡
-    await ChatMessage.create({
-      content: LimbusMerchantSheet._buildTradeCard(merchant, char, itemName, itemImg,
-        `卖给 ${merchant.name}`, `获得 <strong>${sellPrice}</strong> 眼`),
-      speaker: ChatMessage.getSpeaker({ actor: char }),
-    });
-  }
-
-  /** 交易聊天卡 HTML */
-  static _buildTradeCard(merchant, char, itemName, itemImg, subLabel, priceLabel) {
-    return `
-      <div class="limbus-merchant-purchase-card">
-        <div class="purchase-header">
-          <img src="${merchant.img}" class="purchase-merchant-img" alt="${merchant.name}">
-          <div class="purchase-title">
-            <span class="purchase-name">${char.name}</span>
-            <span class="purchase-sub">${subLabel}</span>
-          </div>
-        </div>
-        <div class="ic-gold-divider"></div>
-        <div class="purchase-item-row">
-          <img src="${itemImg}" class="purchase-item-icon" alt="${itemName}">
-          <span class="purchase-item-name">${itemName}</span>
-          <span class="purchase-item-price">${priceLabel}</span>
-        </div>
-        <div class="ic-gold-divider"></div>
-      </div>`;
+    // ③ 聚合聊天卡（30 秒内连续卖出合并到一条消息，与买入分开）
+    LimbusMerchantSheet._scheduleTradeMsg("sell", merchant, char, itemName, itemImg, sellPrice);
   }
 
   /* ─── Socket 消息处理（按 merchantId 串行队列，防并发超卖） ───────────── */
