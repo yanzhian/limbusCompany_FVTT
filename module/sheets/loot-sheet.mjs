@@ -50,7 +50,7 @@ export class LimbusLootSheet extends ActorSheet {
   static _chatSessions = new Map();
   static _chatTimers   = new Map();
 
-  /** 构建聊天消息 HTML 内容（相同物品合并计数） */
+  /** 构建聊天消息 HTML 内容（相同物品合并计数，商人交易卡同款风格） */
   static _buildLootChatContent({ playerChar, lootActor, items }) {
     // 按物品名称合并数量
     const merged = [];
@@ -63,18 +63,24 @@ export class LimbusLootSheet extends ActorSheet {
         merged.push({ ...i });
       }
     }
-    const rows = merged.map(i =>
-      `<div class="loot-chat-item">` +
-      `<img src="${i.img}" width="16" height="16" style="vertical-align:middle;margin-right:4px">` +
-      `<strong>${i.name}</strong> ×${i.qty}</div>`
-    ).join("");
-    return `<div class="limbuscompany loot-chat-msg">
-      <div class="loot-chat-header">
-        <strong>${playerChar.name}</strong>
-        &nbsp;从战利品【${lootActor.name}】中取出了
-      </div>
-      ${rows}
-    </div>`;
+    const rows = merged.map(i => `
+      <div class="purchase-item-row">
+        <img src="${i.img}" class="purchase-item-icon" alt="${i.name}">
+        <span class="purchase-item-name">${i.name}${i.qty > 1 ? ` ×${i.qty}` : ""}</span>
+      </div>`).join("");
+    return `
+      <div class="limbus-merchant-purchase-card">
+        <div class="purchase-header">
+          <img src="${lootActor.img}" class="purchase-merchant-img" alt="${lootActor.name}">
+          <div class="purchase-title">
+            <span class="purchase-name">${playerChar.name}</span>
+            <span class="purchase-sub">从战利品【${lootActor.name}】中取出</span>
+          </div>
+        </div>
+        <div class="ic-gold-divider"></div>
+        ${rows}
+        <div class="ic-gold-divider"></div>
+      </div>`;
   }
 
   /**
@@ -97,7 +103,9 @@ export class LimbusLootSheet extends ActorSheet {
     entry.chain = entry.chain.then(async () => {
       const content = LimbusLootSheet._buildLootChatContent(entry);
       if (!entry.msg) {
-        entry.msg = await ChatMessage.create({ content });
+        entry.msg = await ChatMessage.create({
+          content, speaker: ChatMessage.getSpeaker({ actor: entry.playerChar }),
+        });
       } else {
         await entry.msg.update({ content });
       }
