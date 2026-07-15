@@ -538,6 +538,7 @@ export class LimbusActorSheet extends ActorSheet {
 
     // ── 物品行操作 ────────────────────────────────────────────────────────
     html.find(".item-activate").on("click",   this._onItemActivate.bind(this));
+    html.find(".item-learn-skillbook").on("click", this._onSkillBookLearn.bind(this));
     html.find(".item-favorite").on("click",   this._onItemFavorite.bind(this));
     html.find(".item-more-menu").on("click",  this._onItemContextMenu.bind(this));
     html.find(".item-row .item-name").on("click", this._onItemOpen.bind(this));
@@ -2040,6 +2041,19 @@ export class LimbusActorSheet extends ActorSheet {
     this._titleCardWheelHandler = null;
     this._titleCard?.remove();
     this._titleCard = null;
+  }
+
+  /** 物品列表：技能书「学习技能」按钮（确认后学习全部技能并消耗技能书） */
+  async _onSkillBookLearn(event) {
+    const itemId = event.currentTarget.dataset.itemId ?? "";
+    const book   = this.actor.items.get(itemId);
+    if (!book || book.type !== "skillbook") return;
+    const confirmed = await Dialog.confirm({
+      title:   "学习技能",
+      content: `<p>确定学习技能书「${book.name}」中的全部技能？技能书将被消耗。</p>`,
+    });
+    if (!confirmed) return;
+    await book.learnAllSkills();
   }
 
   /** 网格视图：拖到容器图块上，自动寻位存入容器（容器不能存放容器） */
