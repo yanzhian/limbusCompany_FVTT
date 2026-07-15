@@ -5964,6 +5964,21 @@ input.item-piles-quantity {
   white-space: pre-wrap;
 }
 
+/* 普通文本编辑框（替代富文本编辑器） */
+.merchant-desc-edit {
+  width:       100%;
+  height:      100%;
+  min-height:  80px;
+  resize:      none;
+  background:  var(--bg-panel);
+  border:      1px solid var(--border-gold);
+  border-radius: 3px;
+  color:       var(--text-main);
+  font-size:   0.78rem;
+  line-height: 1.5;
+  padding:     4px 6px;
+}
+
 /* 富文本编辑器（ProseMirror） */
 .merchant-desc-wrap .editor {
   height: 100%;

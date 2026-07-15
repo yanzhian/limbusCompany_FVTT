@@ -94,7 +94,7 @@ Hooks.once("init", () => {
   game.socket.on("system.limbusCompany_FVTT", async (msg) => {
     await SinResourceHUD.handleSocketMsg(msg);
     await ClashManager.handleSocketMsg(msg);
-    await _handleMerchantSocketMsg(msg);
+    await LimbusMerchantSheet.handleSocketMsg(msg);
     await LimbusCampSheet.handleSocketMsg(msg);
     await LimbusLootSheet.handleSocketMsg(msg);
   });
@@ -796,28 +796,6 @@ function _localizeConfig() {
   for (const [key, i18nKey] of Object.entries(cfg.SKILL_TYPES)) {
     cfg.SKILL_TYPES[key] = game.i18n.localize(i18nKey);
   }
-}
-
-/* ─── 商人购买 Socket 处理（GM 端执行库存扣减） ──────────────────────────── */
-
-/**
- * 处理来自玩家的商人购买 socket 消息。
- * 仅 GM 执行，负责更新 merchant actor 上对应 Item 的 stock。
- * @param {object} msg
- */
-async function _handleMerchantSocketMsg(msg) {
-  if (msg.type !== "merchantPurchase") return;
-  if (!game.user.isGM) return;
-
-  const merchant = game.actors.get(msg.merchantId);
-  const item     = merchant?.items.get(msg.itemId);
-  if (!item) return;
-
-  const currentStock = item.system.stock ?? -1;
-  if (currentStock === -1) return; // 无限库存，不处理
-
-  const newStock = Math.max(0, currentStock - 1);
-  await item.update({ "system.stock": newStock });
 }
 
 /* ─── Handlebars 辅助函数注册 ────────────────────────────────────────────── */
