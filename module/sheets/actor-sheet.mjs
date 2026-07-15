@@ -216,6 +216,16 @@ export class LimbusActorSheet extends ActorSheet {
     }));
     context.resistanceValues = cfg.RESISTANCE_VALUES ?? ["x0.5","x1.0","x2.0","x2.5","x3.0"];
 
+    // ── 恐慌类型槽位（战斗 Tab 罪孽抗性下方） ────────────────────────────
+    context.panicSlots = [
+      { key: "lowMorale", label: "士气低落" },
+      { key: "panic",     label: "陷入恐慌" },
+    ].map(s => {
+      const id   = system.panicSlots?.[s.key] ?? "";
+      const item = id ? actor.items.get(id) : null;
+      return { ...s, item: item ? { id: item.id, name: item.name, img: item.img } : null };
+    });
+
     // ── 本地过滤状态（不持久化） ──────────────────────────────────────────
     context.filterState = this._filterState ?? { categories: [] };
 
@@ -556,6 +566,33 @@ export class LimbusActorSheet extends ActorSheet {
     html.find(".filter-apply-btn").on("click", this._onFilterApply.bind(this));
     html.find(".filter-expand-all").on("click", this._onExpandAll.bind(this));
     html.find(".filter-collapse-all").on("click", this._onCollapseAll.bind(this));
+
+    // ── 恐慌类型槽位（战斗 Tab）──────────────────────────────────────────
+    html.find(".panic-slot").on("dragover", (e) => {
+      e.preventDefault();
+      $(e.currentTarget).addClass("cg-drag-over");
+    });
+    html.find(".panic-slot").on("dragleave", (e) => $(e.currentTarget).removeClass("cg-drag-over"));
+    html.find(".panic-slot").on("drop", this._onPanicSlotDrop.bind(this));
+    html.find(".panic-slot").on("dblclick", (e) => {
+      const slot = e.currentTarget.dataset.slot;
+      const id   = this.actor.system.panicSlots?.[slot] ?? "";
+      this.actor.items.get(id)?.sheet?.render(true);
+    });
+    html.find(".panic-slot").on("contextmenu", async (e) => {
+      e.preventDefault();
+      const slot = e.currentTarget.dataset.slot;
+      const id   = this.actor.system.panicSlots?.[slot] ?? "";
+      if (!id) return;
+      const item = this.actor.items.get(id);
+      const confirmed = await Dialog.confirm({
+        title:   "移除恐慌卡",
+        content: `<p>确定移除【${item?.name ?? "恐慌卡"}】？（将从角色身上删除）</p>`,
+      });
+      if (!confirmed) return;
+      await this.actor.update({ [`system.panicSlots.${slot}`]: "" });
+      if (item) await item.delete();
+    });
 
     // ── 物品 Tab：网格/列表视图切换 ──────────────────────────────────────
     html.find(".item-view-toggle").on("click", () => {
@@ -2038,6 +2075,44 @@ export class LimbusActorSheet extends ActorSheet {
     this._titleCardWheelHandler = null;
     this._titleCard?.remove();
     this._titleCard = null;
+  }
+
+  /** 恐慌槽位：拖入恐慌卡（世界/目录物品复制嵌入，本角色物品直接引用） */
+  async _onPanicSlotDrop(event) {
+    event.preventDefault();
+    $(event.currentTarget).removeClass("cg-drag-over");
+    const slot = event.currentTarget.dataset.slot;
+    if (!slot) return;
+
+    let raw;
+    try { raw = JSON.parse(event.originalEvent.dataTransfer.getData("text/plain")); }
+    catch { return; }
+    if (raw?.type !== "Item") return;
+
+    const dropped = await Item.fromDropData(raw).catch(() => null);
+    if (!dropped) return;
+    if (dropped.type !== "panic") {
+      ui.notifications.warn("只能放入「恐慌」类型的物品。");
+      return;
+    }
+
+    let itemId = dropped.id;
+    if (dropped.parent?.id !== this.actor.id) {
+      // 外部物品：复制嵌入本角色
+      const data = dropped.toObject();
+      delete data._id;
+      const [newItem] = await this.actor.createEmbeddedDocuments("Item", [data]);
+      itemId = newItem.id;
+    }
+
+    // 替换旧卡：若旧卡不再被任何槽引用则删除
+    const oldId = this.actor.system.panicSlots?.[slot] ?? "";
+    await this.actor.update({ [`system.panicSlots.${slot}`]: itemId });
+    if (oldId && oldId !== itemId) {
+      const stillUsed = Object.entries(this.actor.system.panicSlots ?? {})
+        .some(([k, v]) => k !== slot && v === oldId);
+      if (!stillUsed) await this.actor.items.get(oldId)?.delete();
+    }
   }
 
   /** 物品列表：技能书「学习技能」按钮（确认后学习全部技能并消耗技能书） */

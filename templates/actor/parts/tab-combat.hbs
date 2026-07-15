@@ -180,6 +180,27 @@
       </div>
     </div>{{!-- /sin-resist-section --}}
 
+    {{!-- 恐慌类型区 --}}
+    <div class="combat-section panic-type-section">
+      <div class="combat-section-header">
+        <span class="combat-section-title">恐慌类型</span>
+      </div>
+      <div class="panic-slot-row">
+        {{#each panicSlots}}
+          <div class="panic-slot-group">
+            <span class="panic-slot-label">{{label}}</span>
+            <div class="panic-slot {{#if item}}panic-slot-filled{{/if}}"
+                 data-slot="{{key}}"
+                 title="{{#if item}}{{item.name}}（双击查看，右键移除）{{else}}拖入恐慌卡{{/if}}">
+              {{#if item}}
+                <img src="{{item.img}}" alt="{{item.name}}">
+              {{/if}}
+            </div>
+          </div>
+        {{/each}}
+      </div>
+    </div>{{!-- /panic-type-section --}}
+
   </div>{{!-- /combat-skills-panel --}}
 
 </div>

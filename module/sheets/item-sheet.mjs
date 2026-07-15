@@ -37,6 +37,7 @@ export class LimbusItemSheet extends ItemSheet {
       material:   "consumable-sheet",   // 共用一套模板
       container:  "container-sheet",
       skillbook:  "skillbook-sheet",
+      panic:      "panic-sheet",
     };
     const name = typeMap[this.item.type] ?? "equipment-sheet";
     return `systems/limbusCompany_FVTT/templates/item/${name}.hbs`;
@@ -153,6 +154,11 @@ export class LimbusItemSheet extends ItemSheet {
       context.isConsumable = item.type === "consumable";
       context.isMaterial   = item.type === "material";
       context.typeLabel    = item.type === "consumable" ? "消耗品" : "材料";
+    }
+
+    // ── 恐慌卡专用数据 ────────────────────────────────────────────────────
+    if (item.type === "panic") {
+      context.typeLabel = "恐慌";
     }
 
     // ── 容器专用数据 ──────────────────────────────────────────────────────
@@ -1667,6 +1673,7 @@ function _buildTriggerOpts(selected) {
     { label: "── 通用 ──",  values: ["回合开始时", "回合结束时", "受到伤害时"] },
     { label: "── 反应 ──",  values: ["反应"] },
     { label: "── 丢弃 ──",  values: ["丢弃时"] },
+    { label: "── 恐慌 ──",  values: ["恐慌触发时"] },
   ];
   return groups.map(g =>
     `<optgroup label="${g.label}">${g.values.map(v =>

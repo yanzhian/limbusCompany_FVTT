@@ -135,6 +135,12 @@ export class CharacterData extends foundry.abstract.TypeDataModel {
         ],
       }),
 
+      // ── 恐慌类型槽位（战斗 Tab 罪孽抗性下方，存嵌入恐慌卡的 itemId） ──
+      panicSlots: new fields.SchemaField({
+        lowMorale: new fields.StringField({ required: false, initial: "" }),
+        panic:     new fields.StringField({ required: false, initial: "" }),
+      }),
+
       // ── 七宗罪资源（公共资源，暂存于角色数据） ───────────────────────
       sins: new fields.SchemaField({
         wrath:    new fields.NumberField({ required: true, integer: true, min: 0, initial: 0 }),
@@ -955,12 +961,23 @@ export class LimbusActor extends Actor {
   // ─── 理智检查（恐慌状态） ──────────────────────────────────────────────
 
   /**
-   * 设置理智值并检查恐慌状态（≤5 触发恐慌）
+   * 设置理智值并检查恐慌状态（≤30 士气低落，≤5 陷入恐慌，可叠加）
    * @param {number} value
    */
   async setSanity(value) {
-    const clamped = Math.min(95, Math.max(5, value));
+    const oldSanity = this.system.sanity?.value ?? 50;
+    const clamped   = Math.min(95, Math.max(5, value));
     await this.update({ "system.sanity.value": clamped });
+
+    // 理智从 >30 跌至 ≤30：立即【士气低落】（本回合生效，回合结束移除）
+    const alreadyLowMorale = (this.system.buffs ?? []).some(b => b.type === "lowMorale");
+    if (clamped <= 30 && oldSanity > 30 && !alreadyLowMorale) {
+      await this.addBuff({ type: "lowMorale", name: "士气低落", intensity: 1, stacks: 1, whenAdded: "本回合" });
+      await ChatMessage.create({
+        content: `<div class="limbuscompany chat-clash"><strong>${this.name}</strong> 理智跌至 ${clamped}——【士气低落】！</div>`,
+      });
+      await this.triggerPanicActivities("lowMorale");
+    }
 
     // 理智降至5时，为角色添加「下回合」恐慌 BUFF（避免重复添加）
     const alreadyHasPanic = (this.system.buffs ?? []).some(b => b.type === "panic");
@@ -970,6 +987,24 @@ export class LimbusActor extends Actor {
         content: `<div class="limbuscompany chat-clash"><strong>${this.name}</strong> 理智跌至 ${clamped}——下回合将【陷入恐慌】！</div>`,
       });
     }
+  }
+
+  /**
+   * 触发恐慌槽位物品的「恐慌触发时」activities。
+   * @param {"lowMorale"|"panic"} slot
+   */
+  async triggerPanicActivities(slot) {
+    const itemId = this.system.panicSlots?.[slot] ?? "";
+    const item   = itemId ? this.items.get(itemId) : null;
+    if (!item) return;
+    const { ClashManager } = await import("../helpers/clash.mjs");
+    const msgs = [];
+    await ClashManager._applyActivities(item, "恐慌触发时", {
+      owner: this, atkActor: this, defActor: null, _fireCounts: {}, _actMsgs: msgs,
+    });
+    await ClashManager._flushActMsgs(msgs, this, {
+      title: `${this.name}·${slot === "panic" ? "陷入恐慌" : "士气低落"}`,
+    });
   }
 
   // ─── 辅助：获取已装备物品（从 actor.items） ────────────────────────────

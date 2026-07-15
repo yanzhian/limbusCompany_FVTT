@@ -398,6 +398,23 @@ export class SkillBookData extends foundry.abstract.TypeDataModel {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+//  PanicData — 恐慌卡数据模型（士气低落/陷入恐慌的可更换效果配置）
+// ═══════════════════════════════════════════════════════════════════════════
+
+export class PanicData extends foundry.abstract.TypeDataModel {
+  static defineSchema() {
+    const fields = foundry.data.fields;
+    return {
+      // 描述（显示在恐慌卡上）
+      description: new fields.HTMLField({ required: false, initial: "" }),
+      tags:        new fields.StringField({ required: false, initial: "" }),
+      // 效果触发器（使用触发时机「恐慌触发时」，槽位决定何时触发）
+      activities:  new fields.ArrayField(makeActivitySchema(), { required: true, initial: [] }),
+    };
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 //  LimbusItem — Item 文档类
 // ═══════════════════════════════════════════════════════════════════════════
 
@@ -584,7 +601,7 @@ export class LimbusItem extends Item {
       metaHtml = `<div class="ic-item-meta skill-meta">${catImgTag}<span class="ic-dice">${formula}</span></div>`;
     } else {
       // 物品类：type label + category
-      const typeLabels = { equipment:"装备", consumable:"消耗品", material:"材料", container:"容器", skillbook:"技能书" };
+      const typeLabels = { equipment:"装备", consumable:"消耗品", material:"材料", container:"容器", skillbook:"技能书", panic:"恐慌" };
       const typeLabel  = typeLabels[this.type] ?? this.type;
       const catLabel   = sys.category ? ` · ${sys.category}` : "";
       metaHtml = `<div class="ic-item-meta">${typeLabel}${catLabel}</div>`;

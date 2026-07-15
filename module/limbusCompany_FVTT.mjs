@@ -18,6 +18,7 @@ import {
   MaterialData,
   ContainerData,
   SkillBookData,
+  PanicData,
 } from "./documents/item.mjs";
 import { LimbusActorSheet }   from "./sheets/actor-sheet.mjs";
 import { LimbusItemSheet }    from "./sheets/item-sheet.mjs";
@@ -122,6 +123,7 @@ Hooks.once("init", () => {
     material:   MaterialData,
     container:  ContainerData,
     skillbook:  SkillBookData,
+    panic:      PanicData,
   };
 
   // ── 注册 Actor Sheet ───────────────────────────────────────────────────
@@ -516,18 +518,25 @@ Hooks.on("updateCombat", async (combat, changed) => {
       });
     }
 
-    // 恐慌 BUFF 本回合首次激活：清空 AP 并公告
+    // 恐慌 BUFF 本回合首次激活：公告并触发恐慌卡效果
+    // （具体效果如清空 AP 由恐慌卡的「恐慌触发时」activities 配置）
     if (panicActivating) {
-      await actor.update({ "system.ap.value": 0 });
       await ChatMessage.create({
         speaker: ChatMessage.getSpeaker({ actor }),
         content: `<div class="limbuscompany chat-clash"><strong>${actor.name}</strong>【陷入恐慌】！无法使用基础及守备技能，E.G.O 不消耗理智但罪孽资源 ×1.5。</div>`,
       });
+      await actor.triggerPanicActivities?.("panic");
     }
     // 一轮结束进入下一轮：非恐慌角色补满行动点
     // （第 0→1 轮由 combatStart 钩子已处理，跳过）
     else if ((changed.round ?? 0) > 1) {
       await actor.update({ "system.ap.value": actor.system.ap.max ?? 3 });
+    }
+
+    // 士气低落：回合结束已随 TURN_END 移除；若理智仍 ≤30 则继续添加并再次触发
+    if ((actor.system.sanity?.value ?? 50) <= 30) {
+      await actor.addBuff({ type: "lowMorale", name: "士气低落", intensity: 1, stacks: 1, whenAdded: "本回合" });
+      await actor.triggerPanicActivities?.("lowMorale");
     }
 
     // 更新后重新读取 buffs（上面 update 已改变数据）
@@ -753,6 +762,7 @@ async function _preloadTemplates() {
     "systems/limbusCompany_FVTT/templates/item/consumable-sheet.hbs",
     "systems/limbusCompany_FVTT/templates/item/container-sheet.hbs",
     "systems/limbusCompany_FVTT/templates/item/skillbook-sheet.hbs",
+    "systems/limbusCompany_FVTT/templates/item/panic-sheet.hbs",
     // Combat
     "systems/limbusCompany_FVTT/templates/combat/combat-hud.hbs",
     // Partials

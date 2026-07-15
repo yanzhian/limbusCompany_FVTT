@@ -167,6 +167,7 @@ LIMBUSCOMPANY.BUFF_TYPES = {
   charge:          "LIMBUSCOMPANY.Buff.Charge",
   chaos:           "LIMBUSCOMPANY.Buff.Chaos",
   panic:           "LIMBUSCOMPANY.Buff.Panic",
+  lowMorale:       "士气低落",
   // 自定义
   custom:          "LIMBUSCOMPANY.Buff.Custom",
   // 注册自定义 BUFF（与 custom-buffs.mjs 中的 type 对应）
@@ -179,7 +180,7 @@ LIMBUSCOMPANY.BUFF_TYPES = {
 LIMBUSCOMPANY.BUFF_GROUPS = {
   positive: ["strong", "endure", "swift", "guard", "clashPowerUp", "atkLevelUp", "defLevelUp"],
   negative: ["weak", "breach", "bind", "fragile", "clashPowerDown", "atkLevelDown", "defLevelDown"],
-  special:  ["burn", "bleed", "tremor", "rupture", "sinking", "breathing", "charge", "chaos", "panic"],
+  special:  ["burn", "bleed", "tremor", "rupture", "sinking", "breathing", "charge", "chaos", "panic", "lowMorale"],
   other:    ["custom"],
   custom:   ["defensiveStance", "butterfly", "piercingArrow"],
 };
@@ -198,7 +199,7 @@ LIMBUSCOMPANY.TURN_END_BUFF_TYPES = new Set([
   "atkLevelUp",    "atkLevelDown",
   "defLevelUp",    "defLevelDown",
   "chaos", "chaos_plus", "chaos_double_plus",
-  "panic",
+  "panic", "lowMorale",
 ]);
 
 // ─── 技能类型 ─────────────────────────────────────────────────────────────────
@@ -253,7 +254,7 @@ LIMBUSCOMPANY.ACTIVITY_TRIGGERS = [
   "拼点时", "拼点成功", "拼点失败",
   "命中时", "暴击命中时",
   "回合开始时", "回合结束时", "受到伤害时",
-  "反应", "丢弃时",
+  "反应", "丢弃时", "恐慌触发时",
 ];
 
 // ─── 效果类型 ─────────────────────────────────────────────────────────────────
