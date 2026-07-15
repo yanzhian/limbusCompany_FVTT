@@ -26,6 +26,8 @@ export class LimbusMerchantSheet extends ActorSheet {
       height:    560,
       resizable: true,
       tabs: [{ navSelector: ".merchant-tabs", contentSelector: ".merchant-tab-body", initial: "sell" }],
+      // 重渲染（买卖后）保持各 Tab 表格的滚动位置
+      scrollY:   [".merchant-tab-content", ".merchant-desc-wrap"],
     });
   }
 
