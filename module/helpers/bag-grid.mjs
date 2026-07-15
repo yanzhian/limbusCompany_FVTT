@@ -72,11 +72,12 @@ export function packBagGrid(items, cols = 6, minRows = 6) {
 
     maxRow = Math.max(maxRow, place.y + place.h);
     tiles.push({
-      id:       item.id,
-      uuid:     item.uuid,
-      name:     item.name,
-      img:      item.img,
-      quantity: item.system?.quantity ?? 1,
+      id:          item.id,
+      uuid:        item.uuid,
+      name:        item.name,
+      img:         item.img,
+      quantity:    item.system?.quantity ?? 1,
+      isContainer: item.type === "container",
       x: place.x, y: place.y, w: place.w, h: place.h,
       col: place.x + 1, row: place.y + 1,
     });

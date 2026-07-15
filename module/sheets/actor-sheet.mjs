@@ -563,6 +563,7 @@ export class LimbusActorSheet extends ActorSheet {
     });
     // 网格视图图块：拖拽（标准 Item 数据，可拖入营地仓库等）+ 双击打开
     html.find(".bag-cg .cg-item-tile").on("dragstart", (event) => {
+      this._onItemHoverEnd(); // 拖动开始即关闭 Title 卡
       const uuid = event.currentTarget.dataset.itemUuid ?? "";
       event.originalEvent.dataTransfer.setData("text/plain", JSON.stringify({ type: "Item", uuid }));
       event.originalEvent.dataTransfer.effectAllowed = "move";
@@ -571,6 +572,28 @@ export class LimbusActorSheet extends ActorSheet {
       const item = this.actor.items.get(event.currentTarget.dataset.itemId ?? "");
       item?.sheet?.render(true);
     });
+    // 网格视图图块：悬停 Title 卡（复用现有 _buildTitleCard，显示在角色卡左侧）
+    html.find(".bag-cg .cg-item-tile").on("mouseenter", (event) => {
+      const item = this.actor.items.get(event.currentTarget.dataset.itemId ?? "");
+      if (!item) return;
+      this._onItemHoverEnd();
+      this._titleCard = this._buildTitleCard(item);
+      if (!this._titleCard) return;
+      const rect  = this.element[0].getBoundingClientRect();
+      const cardW = 280, cardH = 500;
+      let left = rect.left - cardW - 8;
+      if (left < 8) left = rect.right + 8;
+      const top = Math.max(8, Math.min(rect.top, window.innerHeight - cardH - 8));
+      this._titleCard.css({ position: "fixed", left, top, zIndex: 99998 });
+      $("body").append(this._titleCard);
+    });
+    html.find(".bag-cg .cg-item-tile").on("mouseleave", () => this._onItemHoverEnd());
+    // 网格视图：拖到容器图块上 = 自动寻位存入容器
+    html.find(".bag-cg .cg-item-tile.cg-tile-container").on("dragover", (event) => {
+      event.preventDefault();
+      event.originalEvent.dataTransfer.dropEffect = "move";
+    });
+    html.find(".bag-cg .cg-item-tile.cg-tile-container").on("drop", this._onBagTileDropOnContainer.bind(this));
     html.find(".filter-favorite-btn").on("click", this._onFavFilter.bind(this));
 
     // ── 搜索框 ────────────────────────────────────────────────────────────
@@ -2017,6 +2040,61 @@ export class LimbusActorSheet extends ActorSheet {
     this._titleCardWheelHandler = null;
     this._titleCard?.remove();
     this._titleCard = null;
+  }
+
+  /** 网格视图：拖到容器图块上，自动寻位存入容器（容器不能存放容器） */
+  async _onBagTileDropOnContainer(event) {
+    const container = this.actor.items.get(event.currentTarget.dataset.itemId ?? "");
+    if (container?.type !== "container") return;
+
+    let raw;
+    try { raw = JSON.parse(event.originalEvent.dataTransfer.getData("text/plain")); }
+    catch { return; }
+    if (raw?.type !== "Item" || !raw.uuid) return;
+
+    const dragged = await fromUuid(raw.uuid).catch(() => null);
+    if (!dragged || dragged.id === container.id) return;
+    // 只处理本角色背包内的物品（跨来源拖入仍走原有流程）
+    if (dragged.parent?.id !== this.actor.id) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+
+    if (dragged.type === "container") {
+      ui.notifications.warn("容器不能存放容器。");
+      return;
+    }
+
+    // 容器内自动寻位（首适应 + 旋转）
+    const gw       = container.system.gridSize?.width  ?? 3;
+    const gh       = container.system.gridSize?.height ?? 3;
+    const contents = foundry.utils.deepClone(container.system.contents ?? []);
+    // 已在该容器内则不重复放入
+    if (contents.some(p => p.uuid === dragged.uuid)) return;
+    const cap = dragged.system?.capacity ?? { w: 1, h: 1 };
+    const iw = Math.max(1, cap.w ?? 1), ih = Math.max(1, cap.h ?? 1);
+    const canPlace = (x, y, w, h) => {
+      if (x < 0 || y < 0 || x + w > gw || y + h > gh) return false;
+      for (const p of contents) {
+        const pw = p.w ?? 1, ph = p.h ?? 1;
+        for (let dy = 0; dy < h; dy++)
+          for (let dx = 0; dx < w; dx++)
+            if (p.x <= x + dx && x + dx < p.x + pw &&
+                p.y <= y + dy && y + dy < p.y + ph) return false;
+      }
+      return true;
+    };
+    let place = null;
+    outer: for (let y = 0; y < gh; y++) {
+      for (let x = 0; x < gw; x++) {
+        if (canPlace(x, y, iw, ih))              { place = { x, y, w: iw, h: ih, rotated: false }; break outer; }
+        if (iw !== ih && canPlace(x, y, ih, iw)) { place = { x, y, w: ih, h: iw, rotated: true  }; break outer; }
+      }
+    }
+    if (!place) { ui.notifications.warn(`【${container.name}】空间不足，无法存入。`); return; }
+
+    contents.push({ uuid: dragged.uuid, x: place.x, y: place.y, w: place.w, h: place.h, rotated: place.rotated });
+    await container.update({ "system.contents": contents });
   }
 
   /** 战斗槽悬浮 Title 卡（基础/EGO/守备） */
