@@ -334,10 +334,12 @@ export class LimbusLootSheet extends ActorSheet {
       this._revealingSet.add(idx);
 
       const $t = $(tile);
-      $t.removeClass("loot-tile--silhouette").addClass("loot-tile--revealing");
-      // 动画结束（800ms）后才写入揭晓状态——期间 revealed 仍为 false，无法拾取
+      // 揭晓中：保持剪影 + 旋转 ♻（期间 revealed 仍为 false，无法拾取）
+      $t.addClass("loot-tile--searching");
       setTimeout(() => {
         this._revealingSet.delete(idx);
+        $t.removeClass("loot-tile--silhouette loot-tile--searching")
+          .addClass("loot-tile--revealing");
         game.socket.emit("system.limbusCompany_FVTT", {
           type: "lootRevealItem",
           lootActorId: this.actor.id, placementIdx: idx, itemUuid: uuid,

@@ -7548,8 +7548,7 @@ input.item-piles-quantity {
 /* ── 剪影状态 ────────────────────────────────────────────────────────────── */
 
 .loot-tile--silhouette {
-  cursor: default;
-  pointer-events: none; /* 搜索中禁止交互 */
+  cursor: pointer; /* 可双击揭晓 */
 }
 
 /* 图片变为纯黑轮廓 */
@@ -7564,19 +7563,25 @@ input.item-piles-quantity {
   opacity: 0;
 }
 
-/* ♻ 旋转搜索符号（居中悬浮在图块上） */
+/* ? 未揭晓标记（静态；揭晓动画时替换为旋转 ♻） */
 .loot-tile--silhouette::before {
-  content:         "♻";
+  content:         "?";
   position:        absolute;
   top:             50%;
   left:            50%;
   transform:       translate(-50%, -50%);
   font-size:       20px;
-  color:           rgba(200, 158, 112, 0.75);
-  animation:       loot-spin 1.1s linear infinite;
+  font-weight:     bold;
+  color:           rgba(200, 158, 112, 0.85);
   z-index:         5;
   pointer-events:  none;
   text-shadow:     0 0 8px rgba(200, 158, 112, 0.4);
+}
+
+/* 揭晓动画进行中：旋转 ♻（双击后 800ms） */
+.loot-tile--searching::before {
+  content:   "♻";
+  animation: loot-spin 1.1s linear infinite;
 }
 
 /* ── 揭示瞬间动画 ────────────────────────────────────────────────────────── */
