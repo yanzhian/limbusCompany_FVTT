@@ -1134,8 +1134,10 @@ export class LimbusActorSheet extends ActorSheet {
     const favs   = new Set(this.actor.getFlag("limbusCompany_FVTT", "favorites") ?? []);
     if (favs.has(itemId)) favs.delete(itemId);
     else favs.add(itemId);
-    await this.actor.setFlag("limbusCompany_FVTT", "favorites", [...favs]);
+    // 立即切换按钮高亮（不依赖重渲染），再持久化
+    $(event.currentTarget).toggleClass("fav-active", favs.has(itemId));
     this.__favorites = favs;
+    await this.actor.setFlag("limbusCompany_FVTT", "favorites", [...favs]);
   }
 
   _onItemContextMenu(event) {
