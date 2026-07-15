@@ -975,28 +975,23 @@ export class LimbusActorSheet extends ActorSheet {
           callback: async (html) => {
             const bonus = parseInt(html.find("[name='bonus']").val()) || 0;
             const coins  = Math.max(2, attrVal + bonus);
-            // 每枚硬币：Roll 1d2，≥2 = 正面
-            const rollFormula = Array.from({ length: coins }, () => "1d2").join("+");
+            // 每枚硬币：Roll 1d10，结果 < 属性值 = 正面
+            const rollFormula = Array.from({ length: coins }, () => "1d10").join("+");
             const roll = new Roll(rollFormula);
             await roll.evaluate();
-            const heads = roll.terms.reduce((sum, t, i) => {
-              if (i % 2 !== 0) return sum; // operator terms
-              return sum + (t.results?.filter(r => r.result >= 2).length ?? 0);
-            }, 0);
 
-            // 实际统计正面
+            // 统计正面
             let headCount = 0;
             for (const term of roll.terms) {
               if (term.results) {
-                headCount += term.results.filter(r => r.result >= 2).length;
+                headCount += term.results.filter(r => r.result < attrVal).length;
               }
             }
 
-            const difficulty = attrVal; // 难度 = 属性值
-            let resultText, resultClass;
-            if (headCount > difficulty)      { resultText = "成功";     resultClass = "result-success"; }
-            else if (headCount === difficulty){ resultText = "完美成功"; resultClass = "result-perfect"; }
-            else                             { resultText = "失败";     resultClass = "result-fail"; }
+            const difficulty = 3; // 默认难度
+            const success     = headCount >= difficulty;
+            const resultText  = success ? "成功" : "失败";
+            const resultClass = success ? "result-success" : "result-fail";
 
             const COIN_FACE = "systems/limbusCompany_FVTT/assets/icons/Base_icon/硬币_正面.webp";
             const COIN_TAIL = "systems/limbusCompany_FVTT/assets/icons/Base_icon/硬币_反面.webp";
@@ -1005,7 +1000,7 @@ export class LimbusActorSheet extends ActorSheet {
             for (const term of roll.terms) {
               if (!term.results) continue;
               for (const r of term.results) {
-                coinResults.push(r.result >= 2);
+                coinResults.push(r.result < attrVal);
               }
             }
             const coinRowHtml = coinResults.map(isHeads =>
