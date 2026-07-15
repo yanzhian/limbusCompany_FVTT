@@ -1,13 +1,19 @@
 /**
- * loot-sheet.mjs — 战利品 Actor Sheet
+ * loot-sheet.mjs — 战利品 Actor Sheet（宝箱：物品单向流向玩家角色）
  *
  * 两种视角：
- *   GM      → 编辑锁控制：拖入物品、调整网格尺寸、编辑/填充货币
- *   玩家    → 限制权限：查看网格、右键拿走物品、货币【拿走】【一键平分】
+ *   GM      → 编辑锁控制：拖入物品、调整网格尺寸、编辑/填充货币；
+ *             右栏"战利品清单"：拖入随机表(RollTable)/物品快速建表，
+ *             底部【补充战利品】按权重随机抽取 N 次填充网格
+ *   玩家    → 双击剪影揭晓物品（揭晓中不可拾取），揭晓后双击确认
+ *             放入自己的角色背包；右键菜单可部分取出；货币【拿走】【一键平分】
  *
  * 玩家操作均通过 socket 委托 GM 执行，保证数据一致性。
- * socket 消息类型：lootTakeItem / lootTakeCurrency / lootSplitCurrency / lootMoveItem
+ * socket 消息类型：lootTakeItem / lootTakeCurrency / lootSplitCurrency /
+ *                lootMoveItem / lootRevealItem
  */
+import { buildItemTitleCard } from "./item-sheet.mjs";
+
 export class LimbusLootSheet extends ActorSheet {
 
   /** @override */
@@ -15,9 +21,10 @@ export class LimbusLootSheet extends ActorSheet {
     return foundry.utils.mergeObject(super.defaultOptions, {
       classes:   ["limbuscompany", "sheet", "actor", "loot"],
       template:  "systems/limbusCompany_FVTT/templates/actor/loot-sheet.hbs",
-      width:     400,
+      width:     game.user?.isGM ? 700 : 400,
       height:    520,
       resizable: true,
+      scrollY:   [".loot-grid-wrap", ".loot-table-list"],
     });
   }
 
@@ -129,6 +136,9 @@ export class LimbusLootSheet extends ActorSheet {
     ctx.placedItems = placedItems;
     ctx.allCells    = allCells;
 
+    // GM 右栏：战利品清单
+    ctx.lootTable = (sys.lootTable ?? []).map(e => ({ ...e }));
+
     return ctx;
   }
 
@@ -163,13 +173,20 @@ export class LimbusLootSheet extends ActorSheet {
         for (let dx = 0; dx < w; dx++)
           occupied.add(`${p.x + dx},${p.y + dy}`);
 
+      // 玩家视角：未揭晓的物品遮蔽名称/图标/数量（剪影 + ???）
+      const revealed = p.revealed ?? false;
+      const masked   = !revealed && !game.user.isGM;
       placedItems.push({
         uuid: p.uuid, idx,
-        item: { id: item.id, name: item.name, img: item.img,
-                quantity: item.system?.quantity ?? null },
+        item: masked
+          ? { id: item.id, name: "???", img: "icons/svg/mystery-man.svg", quantity: null }
+          : { id: item.id, name: item.name, img: item.img,
+              quantity: item.system?.quantity ?? null },
         x: p.x, y: p.y, w, h,
         col: p.x + 1, row: p.y + 1,
         rotated: p.rotated && w !== h,
+        revealed,
+        masked,
         show: true,
       });
     }
@@ -248,61 +265,102 @@ export class LimbusLootSheet extends ActorSheet {
     html.find(".cg-item-tile").on("dragstart",   this._onTileDragStart.bind(this));
     html.find(".cg-item-tile").on("contextmenu", this._onTileContextMenu.bind(this));
 
+    // ── 图块双击：玩家揭晓 / 拾取 ────────────────────────────────────────
+    html.find(".cg-item-tile").on("dblclick", this._onTileDblClick.bind(this));
+
+    // ── 图块悬停 Title 卡（未揭晓的玩家视角不显示，避免剧透） ────────────
+    html.find(".cg-item-tile").on("mouseenter", this._onTileHoverStart.bind(this));
+    html.find(".cg-item-tile").on("mouseleave", this._onTileHoverEnd.bind(this));
+
     if (isGM) {
       this._activateGMListeners(html);
     } else {
       this._activatePlayerListeners(html);
-      // 玩家首次打开时播放揭示动画（GM 跳过）
-      this._maybePlayReveal(html);
     }
   }
 
-  /* ─── 关闭时取消揭示动画 ───────────────────────────────────────────────── */
+  /* ─── 图块悬停 Title 卡 ──────────────────────────────────────────────── */
 
-  /** @override */
-  async close(options) {
-    this._revealId++; // 令进行中的揭示循环提前退出
-    return super.close(options);
+  async _onTileHoverStart(event) {
+    const tile = event.currentTarget;
+    // 玩家视角：未揭晓（剪影）不显示 Title 卡
+    if (!game.user.isGM && tile.dataset.revealed !== "true") return;
+
+    const seq  = this._lootHoverSeq = (this._lootHoverSeq ?? 0) + 1;
+    const uuid = tile.dataset.itemUuid ?? "";
+    const item = await fromUuid(uuid).catch(() => null);
+    if (!item || seq !== this._lootHoverSeq) return;
+
+    this._lootTitleCard?.remove();
+    this._lootTitleCard = buildItemTitleCard(item);
+    if (!this._lootTitleCard) return;
+
+    const rect  = this.element[0].getBoundingClientRect();
+    const cardW = 280, cardH = 500;
+    let left = rect.right + 8;
+    if (left + cardW > window.innerWidth - 8) left = rect.left - cardW - 8;
+    const top = Math.max(8, Math.min(rect.top, window.innerHeight - cardH - 8));
+    this._lootTitleCard.css({ position: "fixed", left, top, zIndex: 99998 });
+    $("body").append(this._lootTitleCard);
   }
 
-  /* ─── 战利品揭示动画 ────────────────────────────────────────────────────── */
+  _onTileHoverEnd() {
+    this._lootHoverSeq = (this._lootHoverSeq ?? 0) + 1;
+    this._lootTitleCard?.remove();
+    this._lootTitleCard = null;
+  }
 
-  /**
-   * 玩家首次打开战利品时：全部物品呈现黑色剪影 + ♻ 旋转，
-   * 每隔 1 秒依次揭示一件，完成后将"已揭示"状态写入用户 Flag。
-   * 再次打开时直接跳过动画。
-   */
-  async _maybePlayReveal(html) {
-    const flagKey = `lootRevealed_${this.actor.id}`;
-    if (game.user.getFlag("limbusCompany_FVTT", flagKey)) {
-      // 动画已完成或已在进行中，取消可能仍在运行的旧循环
-      this._revealId++;
+  /* ─── 图块双击：揭晓 / 拾取 ──────────────────────────────────────────── */
+
+  async _onTileDblClick(event) {
+    const tile = event.currentTarget;
+    const idx  = parseInt(tile.dataset.placementIdx ?? -1);
+    const uuid = tile.dataset.itemUuid ?? "";
+    if (idx < 0) return;
+
+    // GM 双击：直接打开物品卡
+    if (game.user.isGM) {
+      const itm = await fromUuid(uuid).catch(() => null);
+      itm?.sheet?.render(true);
       return;
     }
 
-    const tiles = html.find(".cg-item-tile").toArray();
+    const revealed = tile.dataset.revealed === "true";
 
-    // 立即持久化"已见过"标记，防止取出物品触发重渲染时重播动画
-    await game.user.setFlag("limbusCompany_FVTT", flagKey, true);
+    // ── 未揭晓：播放揭晓动画，结束后持久化 revealed ─────────────────────
+    if (!revealed) {
+      this._revealingSet ??= new Set();
+      if (this._revealingSet.has(idx)) return; // 揭晓动画进行中
+      this._revealingSet.add(idx);
 
-    if (tiles.length === 0) return;
-
-    // 用版本号标记本次动画，关闭时自增以终止旧循环
-    const myId = ++this._revealId;
-
-    // 初始：全部变为剪影
-    $(tiles).addClass("loot-tile--silhouette");
-
-    for (const tile of tiles) {
-      // 等待 1s（搜索中…）
-      await new Promise(r => setTimeout(r, 1000));
-      if (this._revealId !== myId) return; // 动画已被取消（窗口关闭）
-
-      // 揭示该物品
       const $t = $(tile);
       $t.removeClass("loot-tile--silhouette").addClass("loot-tile--revealing");
-      setTimeout(() => $t.removeClass("loot-tile--revealing"), 450);
+      // 动画结束（800ms）后才写入揭晓状态——期间 revealed 仍为 false，无法拾取
+      setTimeout(() => {
+        this._revealingSet.delete(idx);
+        game.socket.emit("system.limbusCompany_FVTT", {
+          type: "lootRevealItem",
+          lootActorId: this.actor.id, placementIdx: idx, itemUuid: uuid,
+          userId: game.user.id,
+        });
+      }, 800);
+      return;
     }
+
+    // ── 已揭晓：确认后放入自己的角色背包（全部数量） ────────────────────
+    const item = await fromUuid(uuid).catch(() => null);
+    if (!item) { ui.notifications.warn("物品不存在，可能已被取走。"); return; }
+    const myChar = game.user.character
+      ?? game.actors.find(a => a.type === "character" && a.isOwner);
+    if (!myChar) { ui.notifications.warn("找不到你的角色，无法拾取。"); return; }
+
+    const qty = item.system?.quantity ?? 1;
+    const confirmed = await Dialog.confirm({
+      title:   "拾取战利品",
+      content: `<p>将 <strong>${item.name}</strong>${qty > 1 ? ` ×${qty}` : ""} 放入 <strong>${myChar.name}</strong> 的背包？</p>`,
+    });
+    if (!confirmed) return;
+    await this._executeItemTake(this.actor.id, uuid, idx, qty);
   }
 
   _activateGMListeners(html) {
@@ -328,6 +386,162 @@ export class LimbusLootSheet extends ActorSheet {
 
     // 填充货币按钮
     html.find(".loot-fill-btn").on("click", () => this._onFillCurrency());
+
+    // ── 战利品清单（右栏） ──────────────────────────────────────────────
+    const panel = html.find(".loot-table-panel");
+    panel.on("dragover", (e) => { e.preventDefault(); panel.addClass("cg-drag-over"); });
+    panel.on("dragleave", () => panel.removeClass("cg-drag-over"));
+    panel.on("drop", this._onLootTableDrop.bind(this));
+
+    // 条目权重编辑
+    html.find(".loot-table-weight").on("change", async (e) => {
+      const id     = e.currentTarget.closest("[data-entry-id]")?.dataset.entryId;
+      const weight = Math.max(0, parseInt(e.currentTarget.value) || 0);
+      const table  = foundry.utils.deepClone(this.actor.system.lootTable ?? []);
+      const entry  = table.find(t => t.id === id);
+      if (!entry) return;
+      entry.weight = weight;
+      await this.actor.update({ "system.lootTable": table });
+    });
+
+    // 条目删除
+    html.find(".loot-table-del").on("click", async (e) => {
+      const id    = e.currentTarget.closest("[data-entry-id]")?.dataset.entryId;
+      const table = (this.actor.system.lootTable ?? []).filter(t => t.id !== id);
+      await this.actor.update({ "system.lootTable": table });
+    });
+
+    // 补充战利品
+    html.find(".loot-refill-btn").on("click", () => this._onRefillLoot());
+  }
+
+  /* ─── 战利品清单：拖入随机表(RollTable)或物品 ─────────────────────────── */
+
+  async _onLootTableDrop(event) {
+    event.preventDefault();
+    this.element.find(".loot-table-panel").removeClass("cg-drag-over");
+
+    let raw;
+    try { raw = JSON.parse(event.originalEvent.dataTransfer.getData("text/plain")); }
+    catch { return; }
+
+    const table = foundry.utils.deepClone(this.actor.system.lootTable ?? []);
+
+    // ── 拖入 Foundry 随机表：展开全部结果为清单条目 ─────────────────────
+    if (raw?.type === "RollTable") {
+      const rollTable = await fromUuid(raw.uuid).catch(() => null);
+      if (!rollTable) return;
+      let added = 0, skipped = 0;
+      for (const result of rollTable.results) {
+        // 仅处理指向文档（Item）的结果
+        const docUuid = result.documentUuid
+          ?? (result.documentCollection && result.documentId
+              ? (result.documentCollection.includes(".")
+                  ? `Compendium.${result.documentCollection}.Item.${result.documentId}`
+                  : `${result.documentCollection}.${result.documentId}`)
+              : null);
+        const doc = docUuid ? await fromUuid(docUuid).catch(() => null) : null;
+        if (!doc || doc.documentName !== "Item") { skipped++; continue; }
+        const data = doc.toObject();
+        delete data._id;
+        table.push({
+          id:       foundry.utils.randomID(),
+          name:     doc.name,
+          img:      doc.img,
+          weight:   Math.max(0, Math.round(result.weight ?? 1)),
+          itemData: data,
+        });
+        added++;
+      }
+      await this.actor.update({ "system.lootTable": table });
+      ui.notifications.info(`已从随机表「${rollTable.name}」导入 ${added} 个条目${skipped ? `（跳过 ${skipped} 个非物品结果）` : ""}。`);
+      return;
+    }
+
+    // ── 拖入单个物品：添加一条 ──────────────────────────────────────────
+    if (raw?.type === "Item") {
+      const item = await Item.fromDropData(raw).catch(() => null);
+      if (!item) return;
+      const data = item.toObject();
+      delete data._id;
+      table.push({
+        id:       foundry.utils.randomID(),
+        name:     item.name,
+        img:      item.img,
+        weight:   1,
+        itemData: data,
+      });
+      await this.actor.update({ "system.lootTable": table });
+    }
+  }
+
+  /* ─── 补充战利品：按权重从清单随机抽取 N 次填入网格 ───────────────────── */
+
+  async _onRefillLoot() {
+    const entries = (this.actor.system.lootTable ?? []).filter(e => (e.weight ?? 0) > 0 && e.itemData);
+    if (!entries.length) {
+      ui.notifications.warn("战利品清单为空（或所有条目权重为 0），请先拖入随机表或物品。");
+      return;
+    }
+
+    const sheet = this;
+    new Dialog({
+      title: "补充战利品",
+      content: `<div class="limbuscompany" style="padding:6px 0">
+        <label style="display:flex;align-items:center;gap:8px">
+          骰掷次数：
+          <input type="number" id="loot-refill-count" value="1" min="1" max="50" style="width:60px">
+          <span>（从清单按权重随机抽取）</span>
+        </label>
+      </div>`,
+      buttons: {
+        roll: {
+          label: "骰掷",
+          callback: async (dlg) => {
+            const count = Math.min(50, Math.max(1, parseInt(dlg.find("#loot-refill-count").val()) || 1));
+            await sheet._executeRefill(entries, count);
+          },
+        },
+        cancel: { label: "取消" },
+      },
+      default: "roll",
+    }).render(true);
+  }
+
+  async _executeRefill(entries, count) {
+    const totalWeight = entries.reduce((s, e) => s + e.weight, 0);
+    const pulled = [];
+    for (let i = 0; i < count; i++) {
+      let r = Math.random() * totalWeight;
+      for (const e of entries) {
+        r -= e.weight;
+        if (r < 0) { pulled.push(e); break; }
+      }
+    }
+
+    let placedCount = 0;
+    const names = [];
+    for (const entry of pulled) {
+      const data = foundry.utils.deepClone(entry.itemData);
+      delete data._id;
+      const cap = data.system?.capacity ?? { w: 1, h: 1 };
+      const w = Math.max(1, cap.w ?? 1), h = Math.max(1, cap.h ?? 1);
+      const place = this._autoPlace(w, h);
+      if (!place) {
+        ui.notifications.warn(`网格空间不足，仅放入 ${placedCount}/${pulled.length} 件。`);
+        break;
+      }
+      const [newItem] = await this.actor.createEmbeddedDocuments("Item", [data]);
+      const contents  = foundry.utils.deepClone(this.actor.system.lootContents ?? []);
+      contents.push({ uuid: newItem.uuid, x: place.x, y: place.y, w: place.w, h: place.h,
+                      rotated: place.rotated, revealed: false });
+      await this.actor.update({ "system.lootContents": contents });
+      names.push(entry.name);
+      placedCount++;
+    }
+    if (placedCount > 0) {
+      ui.notifications.info(`补充了 ${placedCount} 件战利品：${names.join("、")}`);
+    }
   }
 
   _activatePlayerListeners(html) {
@@ -349,6 +563,7 @@ export class LimbusLootSheet extends ActorSheet {
   }
 
   _onTileDragStart(event) {
+    this._onTileHoverEnd(); // 拖动开始即关闭 Title 卡
     const tile     = event.currentTarget;
     const idx      = parseInt(tile.dataset.placementIdx ?? -1);
     if (idx < 0) return;
@@ -457,6 +672,12 @@ export class LimbusLootSheet extends ActorSheet {
     const uuid  = tile.data("itemUuid") ?? tile.data("item-uuid") ?? "";
     const iname = tile.data("itemName") ?? tile.data("item-name") ?? "";
     if (idx < 0) return;
+
+    // 玩家：未揭晓的物品不可操作（先双击揭晓）
+    if (!game.user.isGM && event.currentTarget.dataset.revealed !== "true") {
+      ui.notifications.warn("双击揭晓后才能拾取。");
+      return;
+    }
 
     $(".cg-ctx-menu").remove();
 
@@ -679,6 +900,14 @@ export class LimbusLootSheet extends ActorSheet {
     const item = await fromUuid(itemUuid).catch(() => null);
     if (!item || item.parent?.id !== lootActorId) return;
 
+    // 玩家发起的取出必须先揭晓（GM 不受限制）
+    const triggerUser = game.users.get(userId);
+    const placement   = (lootActor.system.lootContents ?? [])[placementIdx];
+    if (!triggerUser?.isGM && !(placement?.revealed ?? false)) {
+      ui.notifications.warn(`[战利品] ${item.name} 尚未揭晓，无法拾取。`);
+      return;
+    }
+
     const playerChar = game.actors.get(charId) ??
       game.actors.find(a => a.type === "character" &&
         (a.ownership?.[userId] ?? 0) >= CONST.DOCUMENT_OWNERSHIP_LEVELS.OWNER);
@@ -753,6 +982,18 @@ export class LimbusLootSheet extends ActorSheet {
     );
   }
 
+  /** 玩家双击揭晓：写入 placement.revealed = true */
+  static async _gmExecuteRevealItem({ lootActorId, placementIdx, itemUuid }) {
+    const lootActor = game.actors.get(lootActorId);
+    if (!lootActor) return;
+    const contents = foundry.utils.deepClone(lootActor.system.lootContents ?? []);
+    const p = contents[placementIdx];
+    if (!p || p.uuid !== itemUuid) return; // 防竞态：索引已变
+    if (p.revealed) return;
+    p.revealed = true;
+    await lootActor.update({ "system.lootContents": contents });
+  }
+
   static async _gmExecuteMoveItem({ lootActorId, placementIdx, nx, ny }) {
     const lootActor = game.actors.get(lootActorId);
     if (!lootActor) return;
@@ -782,6 +1023,7 @@ export class LimbusLootSheet extends ActorSheet {
       else if (msg.type === "lootTakeCurrency")  await LimbusLootSheet._gmExecuteTakeCurrency(msg);
       else if (msg.type === "lootSplitCurrency") await LimbusLootSheet._gmExecuteSplitCurrency(msg);
       else if (msg.type === "lootMoveItem")      await LimbusLootSheet._gmExecuteMoveItem(msg);
+      else if (msg.type === "lootRevealItem")    await LimbusLootSheet._gmExecuteRevealItem(msg);
     }).finally(() => {
       if (LimbusLootSheet._opQueues.get(lootActorId) === next)
         LimbusLootSheet._opQueues.delete(lootActorId);

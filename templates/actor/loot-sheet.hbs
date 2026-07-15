@@ -46,44 +46,78 @@
   </div>
   {{/if}}
 
-  {{!-- ── 网格 ────────────────────────────────────────────────────────────── --}}
-  <div class="loot-grid-wrap">
-    <div class="cg-wrap loot-cg" style="--grid-cols:{{gridCols}}; --grid-rows:{{gridRows}}">
+  {{!-- ── 主体：网格（左） + GM 战利品清单（右） ──────────────────────────── --}}
+  <div class="loot-body">
 
-      {{!-- 背景格（拖放目标） --}}
-      {{#each allCells}}
-        <div class="cg-cell {{#if occupied}}cg-occupied{{/if}}"
-             style="grid-column:{{col}}; grid-row:{{row}}"
-             data-x="{{x}}" data-y="{{y}}">
+    <div class="loot-grid-col">
+      <div class="loot-grid-wrap">
+        <div class="cg-wrap loot-cg" style="--grid-cols:{{gridCols}}; --grid-rows:{{gridRows}}">
+
+          {{!-- 背景格（拖放目标） --}}
+          {{#each allCells}}
+            <div class="cg-cell {{#if occupied}}cg-occupied{{/if}}"
+                 style="grid-column:{{col}}; grid-row:{{row}}"
+                 data-x="{{x}}" data-y="{{y}}">
+            </div>
+          {{/each}}
+
+          {{!-- 物品图块 --}}
+          {{#each placedItems}}
+            <div class="cg-item-tile {{#unless show}}cg-hidden{{/unless}} {{#if masked}}loot-tile--silhouette{{/if}}"
+                 style="grid-column:{{col}} / span {{w}}; grid-row:{{row}} / span {{h}}"
+                 data-placement-idx="{{idx}}"
+                 data-item-uuid="{{uuid}}"
+                 data-item-name="{{item.name}}"
+                 data-revealed="{{revealed}}"
+                 draggable="true"
+                 title="{{#if masked}}？？？（双击揭晓）{{else}}{{item.name}}（双击拾取，右键菜单）{{/if}}">
+              <img src="{{item.img}}" class="cg-tile-icon" alt="{{item.name}}">
+              <span class="cg-tile-name">{{item.name}}</span>
+              {{#if item.quantity}}<span class="cg-tile-qty">×{{item.quantity}}</span>{{/if}}
+              {{#if (and ../isGM ../editUnlocked)}}
+                <button type="button" class="cg-rotate-btn" data-placement-idx="{{idx}}" title="旋转">↻</button>
+              {{/if}}
+            </div>
+          {{/each}}
+
+        </div>{{!-- /cg-wrap --}}
+      </div>{{!-- /loot-grid-wrap --}}
+
+      {{!-- ── 提示 ──────────────────────────────────────────────────────── --}}
+      {{#if (and isGM editUnlocked)}}
+        <div class="loot-drag-hint">
+          <i class="fas fa-arrow-down"></i> 将物品拖入网格以存入战利品
         </div>
-      {{/each}}
+      {{/if}}
+    </div>{{!-- /loot-grid-col --}}
 
-      {{!-- 物品图块 --}}
-      {{#each placedItems}}
-        <div class="cg-item-tile {{#unless show}}cg-hidden{{/unless}}"
-             style="grid-column:{{col}} / span {{w}}; grid-row:{{row}} / span {{h}}"
-             data-placement-idx="{{idx}}"
-             data-item-uuid="{{uuid}}"
-             data-item-name="{{item.name}}"
-             draggable="true"
-             title="{{item.name}}（右键菜单）">
-          <img src="{{item.img}}" class="cg-tile-icon" alt="{{item.name}}">
-          <span class="cg-tile-name">{{item.name}}</span>
-          {{#if item.quantity}}<span class="cg-tile-qty">×{{item.quantity}}</span>{{/if}}
-          {{#if (and ../isGM ../editUnlocked)}}
-            <button type="button" class="cg-rotate-btn" data-placement-idx="{{idx}}" title="旋转">↻</button>
-          {{/if}}
+    {{!-- ── GM 右栏：战利品清单 ─────────────────────────────────────────── --}}
+    {{#if isGM}}
+      <div class="loot-table-panel">
+        <div class="loot-table-header">
+          <i class="fas fa-scroll"></i> 战利品清单
+          <span class="loot-table-count">{{lootTable.length}} 条</span>
         </div>
-      {{/each}}
+        <div class="loot-table-list">
+          {{#each lootTable}}
+            <div class="loot-table-entry" data-entry-id="{{id}}">
+              <img src="{{img}}" class="loot-table-entry-icon" alt="{{name}}">
+              <span class="loot-table-entry-name" title="{{name}}">{{name}}</span>
+              <label class="loot-table-weight-label" title="权重">
+                <input type="number" class="loot-table-weight" value="{{weight}}" min="0">
+              </label>
+              <button type="button" class="loot-table-del icon-btn" title="删除条目">×</button>
+            </div>
+          {{else}}
+            <div class="loot-table-empty">拖入随机表(RollTable)或物品以创建清单</div>
+          {{/each}}
+        </div>
+        <button type="button" class="loot-refill-btn sheet-btn" title="从清单按权重随机抽取，填入网格">
+          <i class="fas fa-dice"></i> 补充战利品
+        </button>
+      </div>
+    {{/if}}
 
-    </div>{{!-- /cg-wrap --}}
-  </div>{{!-- /loot-grid-wrap --}}
-
-  {{!-- ── 提示 ────────────────────────────────────────────────────────────── --}}
-  {{#if (and isGM editUnlocked)}}
-    <div class="loot-drag-hint">
-      <i class="fas fa-arrow-down"></i> 将物品拖入网格以存入战利品
-    </div>
-  {{/if}}
+  </div>{{!-- /loot-body --}}
 
 </form>

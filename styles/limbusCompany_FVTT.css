@@ -7415,6 +7415,97 @@ input.item-piles-quantity {
   color:     var(--text-dim, #786455);
 }
 
+/* ── 主体：网格（左） + GM 战利品清单（右） ─────────────────────────────── */
+
+.loot-body {
+  display:  flex;
+  flex:     1;
+  overflow: hidden;
+  gap:      0;
+}
+.loot-grid-col {
+  display:        flex;
+  flex-direction: column;
+  flex:           1;
+  min-width:      0;
+  overflow:       hidden;
+}
+
+/* GM 右栏：战利品清单 */
+.loot-table-panel {
+  flex:           0 0 260px;
+  display:        flex;
+  flex-direction: column;
+  overflow:       hidden;
+  border-left:    1px solid var(--border-gold, #5F3E21);
+}
+.loot-table-panel.cg-drag-over {
+  outline:        2px dashed var(--gold-active, #C9A84C);
+  outline-offset: -4px;
+}
+.loot-table-header {
+  display:       flex;
+  align-items:   center;
+  gap:           6px;
+  padding:       6px 10px;
+  font-size:     0.8rem;
+  font-weight:   600;
+  color:         var(--text-sub, #A08A6E);
+  border-bottom: 1px solid var(--border-gold, #5F3E21);
+  flex-shrink:   0;
+}
+.loot-table-count {
+  margin-left: auto;
+  font-size:   0.72rem;
+  color:       var(--text-dim, #786455);
+}
+.loot-table-list {
+  flex:     1;
+  overflow: auto;
+  padding:  6px;
+}
+.loot-table-entry {
+  display:       flex;
+  align-items:   center;
+  gap:           6px;
+  padding:       3px 4px;
+  border-radius: 3px;
+}
+.loot-table-entry:hover { background: rgba(201, 168, 76, .08); }
+.loot-table-entry-icon {
+  width:         22px;
+  height:        22px;
+  object-fit:    cover;
+  border-radius: 3px;
+  border:        1px solid var(--border-gold, #5F3E21);
+}
+.loot-table-entry-name {
+  flex:          1;
+  font-size:     0.78rem;
+  overflow:      hidden;
+  text-overflow: ellipsis;
+  white-space:   nowrap;
+}
+.loot-table-weight { width: 44px; }
+.loot-table-del {
+  background: none;
+  border:     none;
+  color:      var(--text-dim, #786455);
+  cursor:     pointer;
+}
+.loot-table-del:hover { color: #E84444; }
+.loot-table-empty {
+  padding:    16px 8px;
+  text-align: center;
+  font-size:  0.75rem;
+  color:      var(--text-dim, #786455);
+  font-style: italic;
+}
+.loot-refill-btn {
+  margin:      6px;
+  flex-shrink: 0;
+}
+
 /* ── 网格容器 ────────────────────────────────────────────────────────────── */
 
 .loot-grid-wrap {

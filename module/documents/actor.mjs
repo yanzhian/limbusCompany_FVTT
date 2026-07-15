@@ -367,14 +367,26 @@ export class LootData extends foundry.abstract.TypeDataModel {
   static defineSchema() {
     const fields = foundry.data.fields;
 
-    // 放置记录（与营地仓库格式相同）
+    // 放置记录（与营地仓库格式相同 + 揭晓状态）
     const placementSchema = new fields.SchemaField({
-      uuid:    new fields.StringField({ required: true, initial: "" }),
-      x:       new fields.NumberField({ required: true, integer: true, min: 0, initial: 0 }),
-      y:       new fields.NumberField({ required: true, integer: true, min: 0, initial: 0 }),
-      w:       new fields.NumberField({ required: true, integer: true, min: 1, initial: 1 }),
-      h:       new fields.NumberField({ required: true, integer: true, min: 1, initial: 1 }),
-      rotated: new fields.BooleanField({ initial: false }),
+      uuid:     new fields.StringField({ required: true, initial: "" }),
+      x:        new fields.NumberField({ required: true, integer: true, min: 0, initial: 0 }),
+      y:        new fields.NumberField({ required: true, integer: true, min: 0, initial: 0 }),
+      w:        new fields.NumberField({ required: true, integer: true, min: 1, initial: 1 }),
+      h:        new fields.NumberField({ required: true, integer: true, min: 1, initial: 1 }),
+      rotated:  new fields.BooleanField({ initial: false }),
+      // 玩家双击揭晓前显示为剪影，且不可拾取
+      revealed: new fields.BooleanField({ initial: false }),
+    });
+
+    // 战利品清单条目（随机表条目：权重抽取用）
+    const lootTableEntrySchema = new fields.SchemaField({
+      id:       new fields.StringField({ required: true, initial: () => foundry.utils.randomID() }),
+      name:     new fields.StringField({ required: true, initial: "" }),
+      img:      new fields.StringField({ required: false, initial: "icons/svg/item-bag.svg" }),
+      weight:   new fields.NumberField({ required: true, integer: true, min: 0, initial: 1 }),
+      // 物品完整数据快照（补充战利品时据此创建）
+      itemData: new fields.ObjectField({ required: false, nullable: true, initial: null }),
     });
 
     return {
@@ -387,6 +399,8 @@ export class LootData extends foundry.abstract.TypeDataModel {
       lootContents: new fields.ArrayField(placementSchema, { required: true, initial: [] }),
       // 眼（货币）
       currency: new fields.NumberField({ required: true, integer: true, min: 0, initial: 0 }),
+      // 战利品清单（GM 补充战利品时的随机抽取表）
+      lootTable: new fields.ArrayField(lootTableEntrySchema, { required: true, initial: [] }),
     };
   }
 }
