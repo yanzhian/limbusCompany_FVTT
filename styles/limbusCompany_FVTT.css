@@ -1495,6 +1495,48 @@ select#chat-whisper-to {
 .dice-total.success { color: var(--gold-active); }
 .dice-total.failure { color: var(--red-danger); }
 
+/* ── v13 默认骰子卡可读性增强（公式条/骰面明细/总计框） ────────── */
+
+/* 公式条（顶部 "1d4"、"1d6 + 5"） */
+.chat-message .dice-roll .dice-formula {
+  background:    var(--bg-panel);
+  border:        1px solid var(--border-gold);
+  border-radius: 3px;
+  color:         var(--text-main);
+  text-shadow:   none;
+}
+
+/* 骰面明细：部件公式（左上角 "1d4"）与部件小计 */
+.chat-message .dice-roll .dice-tooltip .part-formula {
+  color:       var(--text-sub);
+  background:  transparent;
+  text-shadow: none;
+}
+.chat-message .dice-roll .dice-tooltip .part-total {
+  color:       var(--gold-active);
+  background:  var(--bg-panel);
+  border:      1px solid var(--border-gold);
+  text-shadow: none;
+}
+
+/* 单个骰子图标与点数：黑色骰面在暗底上不可见 → 提亮为金铜色 */
+.chat-message .dice-roll .dice-tooltip .dice-rolls .roll {
+  color:       var(--text-main);
+  text-shadow: 0 0 2px rgba(0, 0, 0, .8);
+  filter:      invert(0.82) sepia(0.35) saturate(2.2) hue-rotate(-18deg) brightness(1.05);
+}
+.chat-message .dice-roll .dice-tooltip .dice-rolls .roll.max { filter: invert(0.82) sepia(0.6) saturate(3) hue-rotate(-25deg) brightness(1.25); }
+.chat-message .dice-roll .dice-tooltip .dice-rolls .roll.min { filter: invert(0.5) sepia(0.8) saturate(4) hue-rotate(-50deg) brightness(0.9); }
+
+/* 总计框（底部大数字）：核心样式黑底黑字 → 面板底 + 金字 */
+.chat-message .dice-roll .dice-total {
+  background:    var(--bg-panel);
+  border:        1px solid var(--border-gold);
+  border-radius: 3px;
+  color:         var(--gold-active);
+  text-shadow:   none;
+}
+
 /* ─── §2-F  对话框（.dialog） ──────────────────────────────── */
 
 /* 通用弹窗容器 */
