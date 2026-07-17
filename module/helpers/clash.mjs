@@ -3284,6 +3284,9 @@ export class ClashManager {
     for (const token of canvas.tokens.placeables) {
       const actor = token.actor;
       if (!actor) continue;
+      // 仅 character 参与反应（camp/loot/merchant 等容器型 Actor 的
+      // 嵌入物品——如营地仓库存放的装备——不应触发反应）
+      if (actor.type !== "character") continue;
       // 只处理当前用户拥有控制权的 actor，避免多端重复弹框
       if (!actor.isOwner) continue;
       for (const item of actor.items) {
