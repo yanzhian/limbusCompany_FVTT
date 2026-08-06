@@ -263,13 +263,16 @@ export class ClashManager {
       const icon = isCustomRegistered
         ? `${iconBase}Custom_buffs/${iconName}.webp`
         : (iconName !== type ? `${iconBase}${iconName}.webp` : `${iconBase}Custom_buffs/${type}.webp`);
+      // 新建 BUFF 时，层数/强度为 0 视为 1（不存在"0层/0强度"的新BUFF）
+      const initStacks    = stacks    > 0 ? stacks    : 1;
+      const initIntensity = intensity > 0 ? intensity : 1;
       buffs.push({
         id:        foundry.utils.randomID(),
         type,
         name:      iconName,
         icon,
-        intensity,
-        stacks:    Math.min(stacks, maxStacks),
+        intensity: initIntensity,
+        stacks:    Math.min(initStacks, maxStacks),
         whenAdded,
       });
     }

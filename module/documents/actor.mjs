@@ -909,8 +909,9 @@ export class LimbusActor extends Actor {
       type:      buffData.type ?? "custom",
       name:      buffData.name ?? "自定义",
       icon:      buffData.icon ?? "",
-      intensity: buffData.intensity ?? 1,
-      stacks:    buffData.stacks ?? 1,
+      // 新建 BUFF 时，层数/强度为 0 视为 1
+      intensity: (buffData.intensity ?? 1) > 0 ? buffData.intensity : 1,
+      stacks:    (buffData.stacks    ?? 1) > 0 ? buffData.stacks    : 1,
       whenAdded: buffData.whenAdded ?? "本回合",
     });
     return this.update({ "system.buffs": buffs });
