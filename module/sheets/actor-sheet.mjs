@@ -501,8 +501,9 @@ export class LimbusActorSheet extends ActorSheet {
     // 属性鉴定
     html.find(".attr-check-btn").on("click", this._onAttributeCheck.bind(this));
 
-    // 背景：添加/修改（打开创建向导）
+    // 背景：未设置 → 打开创建向导；已设置 → 打开背景物品卡
     html.find('[data-action="open-background-wizard"]').on("click", this._onOpenBackgroundWizard.bind(this));
+    html.find('[data-action="open-background-item"]').on("click", this._onOpenBackgroundItem.bind(this));
 
     // 发送聊天框（物品行）
     html.find(".item-send-chat").on("click", this._onSendToChat.bind(this));
@@ -1108,6 +1109,16 @@ export class LimbusActorSheet extends ActorSheet {
     if (!this.isEditable) return;
     const { BackgroundWizard } = await import("./background-wizard.mjs");
     new BackgroundWizard(this.actor).render(true);
+  }
+
+  /** 已选择背景：点击直接打开该背景物品卡（而不是重新创建） */
+  async _onOpenBackgroundItem(ev) {
+    ev.preventDefault();
+    const uuid = this.actor.system.background?.uuid ?? "";
+    if (!uuid) return;
+    const item = await fromUuid(uuid).catch(() => null);
+    if (!item) { ui.notifications.warn("背景物品已失效。"); return; }
+    item.sheet?.render(true);
   }
 
   /* ─── 物品操作 ──────────────────────────────────────────────────────────── */
