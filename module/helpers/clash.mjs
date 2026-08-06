@@ -184,8 +184,9 @@ export class ClashManager {
     const idx   = buffs.findIndex(b => b.type === type);
     if (idx === -1) return;
     const next = Math.max(0, (buffs[idx].stacks ?? 1) - amount);
-    if (next <= 0) buffs.splice(idx, 1);
-    else           buffs[idx] = { ...buffs[idx], stacks: next };
+    const keepAtZero = resolveBuffHandler(buffs[idx])?.keepAtZero ?? false;
+    if (next <= 0 && !keepAtZero) buffs.splice(idx, 1);
+    else                          buffs[idx] = { ...buffs[idx], stacks: next };
     return ClashManager._safeDocUpdate(actor, { "system.buffs": buffs });
   }
 
@@ -397,6 +398,19 @@ export class ClashManager {
       let precondMultiplier = 1;
       for (const pre of preconditions) {
         if (!pre) continue;
+
+        // ── category 类型：检查本条 Activity 所属技能/物品的分类 ──────
+        if (pre.type === "category") {
+          const cats = Array.isArray(pre.categories) ? pre.categories : [];
+          if (cats.length === 0 || !cats.includes(item.system?.category)) { precondFail = true; break; }
+          continue;
+        }
+
+        // ── useSkill 类型：检查本条 Activity 所属技能/物品自身的名称/标签/UUID ──
+        if (pre.type === "useSkill") {
+          if (!ClashManager._matchSkillIdentity(item, pre)) { precondFail = true; break; }
+          continue;
+        }
 
         // ── baseAttr 类型：检查角色属性值 ──────────────────────────────
         if (pre.type === "baseAttr") {
@@ -808,6 +822,27 @@ export class ClashManager {
 
             const buffLabel = ClashManager._buffLabel(buffType);
             descStr = `【${effTgt.name}】触发 ${actualStacks} 层【${buffLabel}】${dmgNote}`;
+            break;
+          }
+          case "extraDamage": {
+            // 追加伤害：按选定物理分类/罪孽类型乘抗性，直接造成 HP 伤害
+            // （不经过拼点/骰数结算流程，perStackMultiplier 支持"每N层"等前置放大）
+            const rawVal = await ClashManager._evalValue(eff.value);
+            const scaled = _scaleVal(rawVal, "relative"); // 始终按倍数缩放（无绝对值语义）
+            const physMult = eff.dmgCategory
+              ? ClashManager._parseResistance(ClashManager._getEffectiveResistances(effTgt)[eff.dmgCategory] ?? "x1.0")
+              : 1.0;
+            const sinMult = eff.dmgSinType
+              ? ClashManager._parseResistance(effTgt.system?.egoResistances?.[eff.dmgSinType] ?? "x1.0")
+              : 1.0;
+            const dmg = Math.max(0, Math.round(scaled * physMult * sinMult));
+            if (dmg > 0) {
+              const curHp = effTgt.system?.hp?.value ?? 0;
+              await ClashManager._safeDocUpdate(effTgt, { "system.hp.value": Math.max(0, curHp - dmg) });
+            }
+            const catLabel = eff.dmgCategory ? `【${ClashManager._catLabel(eff.dmgCategory)}】` : "";
+            const sinLabel = eff.dmgSinType   ? `【${ClashManager._sinLabel(eff.dmgSinType)}】`   : "";
+            descStr = `对【${effTgt.name}】造成 ${dmg} 点${catLabel}${sinLabel}追加伤害`;
             break;
           }
           case "diceTypeChg": {
@@ -3299,10 +3334,13 @@ export class ClashManager {
           const preconditions = Array.isArray(act.preconditions) ? act.preconditions
             : (act.precondition ? [act.precondition] : []);
           // AND 逻辑：所有前置条件均需满足
-          const triggered = preconditions.length === 0
-            || preconditions.every(pre =>
-                ClashManager._evalReactionPrecond(pre, actor, attacker, defender, lastSkillUuid)
-              );
+          let triggered = true;
+          for (const pre of preconditions) {
+            if (!await ClashManager._evalReactionPrecond(pre, actor, attacker, defender, lastSkillUuid)) {
+              triggered = false;
+              break;
+            }
+          }
           if (!triggered) continue;
           // 检查次数限制
           const limitOk = ClashManager._checkLimit(act, item, actor);
@@ -3339,7 +3377,7 @@ export class ClashManager {
    * @param {string|null} lastSkillUuid  本次对抗使用的技能 UUID
    * @returns {boolean}
    */
-  static _evalReactionPrecond(pre, actor, attacker, defender, lastSkillUuid) {
+  static async _evalReactionPrecond(pre, actor, attacker, defender, lastSkillUuid) {
     const type = pre?.type ?? "hasBuff";
     // 确定被检查的目标角色（群体目标取攻/守方）
     const targetActor = (pre?.target === "target" || pre?.target === "allEnemy" || pre?.target === "allEnemyOther")
@@ -3382,10 +3420,52 @@ export class ClashManager {
     }
 
     if (type === "useSkill") {
-      if (!pre.skillUuid || !lastSkillUuid) return false;
-      return pre.skillUuid.trim() === lastSkillUuid.trim();
+      // lastSkillUuid 恒来自攻击方技能（广播时固定传 atkItem.uuid），故施放者视为 attacker
+      if (!lastSkillUuid || !attacker) return false;
+      const scope = ClashManager._resolveTargets(pre.target ?? "self", actor, attacker);
+      if (!scope.some(a => a.id === attacker.id)) return false;
+      if (pre.skillUuid) return pre.skillUuid.trim() === lastSkillUuid.trim();
+      if (pre.skillNameOrTag) {
+        const val = pre.skillNameOrTag.trim();
+        if (!val) return false;
+        const skillItem = await fromUuid(lastSkillUuid).catch(() => null);
+        if (!skillItem) return false;
+        if (skillItem.name === val) return true;
+        const tags = String(skillItem.system?.tags ?? "").split("/").map(t => t.trim()).filter(Boolean);
+        return tags.includes(val);
+      }
+      return false;
     }
 
+    if (type === "category") {
+      // 使用分类：检查本次对抗使用的技能（lastSkillUuid）分类是否命中所选项之一
+      if (!lastSkillUuid) return false;
+      const cats = Array.isArray(pre.categories) ? pre.categories : [];
+      if (cats.length === 0) return false;
+      const skillItem = await fromUuid(lastSkillUuid).catch(() => null);
+      if (!skillItem) return false;
+      return cats.includes(skillItem.system?.category);
+    }
+
+    return false;
+  }
+
+  /**
+   * 判断某个技能/物品是否与"使用技能"前置条件描述的对象一致。
+   * UUID 精确匹配优先；否则按 [技能名称] 或 [标签]（任一满足）匹配。
+   * @param {Item} skillItem
+   * @param {{skillUuid?:string, skillNameOrTag?:string}} pre
+   */
+  static _matchSkillIdentity(skillItem, pre) {
+    if (!skillItem) return false;
+    if (pre.skillUuid) return skillItem.uuid === pre.skillUuid.trim();
+    if (pre.skillNameOrTag) {
+      const val = pre.skillNameOrTag.trim();
+      if (!val) return false;
+      if (skillItem.name === val) return true;
+      const tags = String(skillItem.system?.tags ?? "").split("/").map(t => t.trim()).filter(Boolean);
+      return tags.includes(val);
+    }
     return false;
   }
 

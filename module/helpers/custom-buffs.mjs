@@ -8,6 +8,8 @@
  *     label:         "显示名称",
  *     maxStacks:     4,          // 可选：最大层数上限（超出则截断）
  *     refreshOnGain: true,       // 可选：获得时刷新（不叠加层数，直接替换）
+ *     keepAtZero:    true,       // 可选：层数减至 0 时不自动清除（仍以 0 层留在状态栏，
+ *                                //       需手动 removeBuff 或其他效果移除）
  *     onRoundEnd(actor, buff) {},           // 回合结束时回调 → 返回 Promise
  *     modifySpeedRoll(actor, ctx) {},       // 速度骰结果修正 → 返回最终 total（Number）
  *     onClashWin(carrier, opponent) {},     // 拼点胜利时回调 → 返回 Promise

@@ -1589,6 +1589,7 @@ function _activityEffectLabels() {
     { value: "triggerBuff",  label: "触发BUFF" },
     { value: "useSkill",     label: "使用技能" },
     { value: "diceTypeChg",  label: "骰子类型" },
+    { value: "extraDamage",  label: "追加伤害" },
   ];
 }
 
@@ -1684,11 +1685,13 @@ function _buildTriggerOpts(selected) {
 
 /** 前置条件行 HTML */
 function _buildCondRow(cond, idx, cfg) {
-  const condType   = ["perN","baseAttr","useSkill","buffCompare"].includes(cond?.type) ? cond.type : "hasBuff";
+  const condType   = ["perN","baseAttr","useSkill","buffCompare","category"].includes(cond?.type) ? cond.type : "hasBuff";
   const isBuffSec  = condType === "hasBuff" || condType === "perN" || condType === "buffCompare";
   const isAttrSec  = condType === "baseAttr";
   const isSkillSec = condType === "useSkill";
+  const isCatSec   = condType === "category";
   const isCompare  = condType === "buffCompare";
+  const selCats    = Array.isArray(cond?.categories) ? cond.categories : [];
   const stacksLbl  = condType === "perN" ? "每N层" : (isCompare ? "层数" : "层数≥");
 
   const stacksCmpOpts = [
@@ -1722,9 +1725,12 @@ function _buildCondRow(cond, idx, cfg) {
           <option value="buffCompare" ${condType === "buffCompare" ? "selected" : ""}>比较值</option>
           <option value="baseAttr"    ${condType === "baseAttr"    ? "selected" : ""}>基础属性</option>
           <option value="useSkill"    ${condType === "useSkill"    ? "selected" : ""}>使用技能</option>
+          <option value="category"    ${condType === "category"    ? "selected" : ""}>使用分类</option>
         </select>
-        <label>目标</label>
-        <select class="ae-sel cond-target">${_buildTargetOptions(cond?.target ?? "self")}</select>
+        <span class="ae-cond-target-sec" ${isCatSec ? 'style="display:none"' : ""}>
+          <label>目标</label>
+          <select class="ae-sel cond-target">${_buildTargetOptions(cond?.target ?? "self")}</select>
+        </span>
         <span class="ae-cond-buff-sec" ${isBuffSec ? "" : 'style="display:none"'}>
           <label>BUFF</label>
           <input class="ae-input cond-buff" type="text" list="ae-buff-dl"
@@ -1755,10 +1761,19 @@ function _buildCondRow(cond, idx, cfg) {
         <span class="ae-cond-skill-sec" ${isSkillSec ? "" : 'style="display:none"'}>
           <label>技能UUID</label>
           <input class="ae-input cond-skill-uuid" type="text"
-                 value="${_esc(cond?.skillUuid ?? "")}" placeholder="Item.xxx…" style="width:130px;">
+                 value="${_esc(cond?.skillUuid ?? "")}" placeholder="Item.xxx…（精确匹配，优先）" style="width:130px;">
           <img class="ae-skill-preview" data-uuid-src="cond-skill-uuid"
                src="${_esc(cond?.skillUuid ? "icons/svg/item-bag.svg" : "")}"
                style="width:20px;height:20px;object-fit:cover;border-radius:3px;vertical-align:middle;${cond?.skillUuid ? "" : "display:none;"}">
+          <label>或 名称/标签</label>
+          <input class="ae-input cond-skill-name-tag" type="text"
+                 value="${_esc(cond?.skillNameOrTag ?? "")}" placeholder="技能名称 或 标签，任一满足即可" style="width:130px;">
+        </span>
+        <span class="ae-cond-category-sec" ${isCatSec ? "" : 'style="display:none"'}>
+          <label>分类（任一满足）</label>
+          <label class="ae-cond-cat-cb"><input type="checkbox" class="cond-category-cb" value="slash"  ${selCats.includes("slash")  ? "checked" : ""}> 斩击</label>
+          <label class="ae-cond-cat-cb"><input type="checkbox" class="cond-category-cb" value="blunt"  ${selCats.includes("blunt")  ? "checked" : ""}> 打击</label>
+          <label class="ae-cond-cat-cb"><input type="checkbox" class="cond-category-cb" value="pierce" ${selCats.includes("pierce") ? "checked" : ""}> 突刺</label>
         </span>
       </div>
     </div>`;
@@ -1872,6 +1887,7 @@ function _buildEffectRow(eff, idx, cfg) {
   const isTriggerBuff  = type === "triggerBuff";
   const isUseSkill     = type === "useSkill";
   const isDiceTypeChg  = type === "diceTypeChg";
+  const isExtraDamage  = type === "extraDamage";
   const effOpts    = _activityEffectLabels()
     .map(e => `<option value="${e.value}" ${type === e.value ? "selected" : ""}>${e.label}</option>`).join("");
   const roundVal   = eff?.round ?? "本回合";
@@ -1960,6 +1976,22 @@ function _buildEffectRow(eff, idx, cfg) {
           <select class="ae-sel eff-dice-type-val">
             <option value="normal"      ${(eff?.diceTypeVal ?? "normal") === "normal"      ? "selected" : ""}>一般骰子</option>
             <option value="unbreakable" ${(eff?.diceTypeVal ?? "normal") === "unbreakable" ? "selected" : ""}>不可摧毁</option>
+          </select>
+        </span>
+        <span class="ae-eff-extradmg-sec" ${isExtraDamage ? "" : 'style="display:none"'}>
+          <label>物理分类</label>
+          <select class="ae-sel eff-extradmg-category">
+            <option value="" ${!eff?.dmgCategory ? "selected" : ""}>（不计算物理抗性）</option>
+            <option value="slash"  ${eff?.dmgCategory === "slash"  ? "selected" : ""}>斩击</option>
+            <option value="blunt"  ${eff?.dmgCategory === "blunt"  ? "selected" : ""}>打击</option>
+            <option value="pierce" ${eff?.dmgCategory === "pierce" ? "selected" : ""}>突刺</option>
+          </select>
+          <label>罪孽类型</label>
+          <select class="ae-sel eff-extradmg-sin">
+            <option value="" ${!eff?.dmgSinType ? "selected" : ""}>（不计算罪孽抗性）</option>
+            ${["wrath","lust","sloth","gluttony","gloom","pride","envy"].map(s =>
+              `<option value="${s}" ${eff?.dmgSinType === s ? "selected" : ""}>${cfg.SIN_LABELS_ZH?.[s] ?? s}</option>`
+            ).join("")}
           </select>
         </span>
       </div>
@@ -2079,11 +2111,14 @@ function _bindCondType(html) {
     const isBuffSec  = type === "hasBuff" || type === "perN" || type === "buffCompare";
     const isAttrSec  = type === "baseAttr";
     const isSkillSec = type === "useSkill";
+    const isCatSec   = type === "category";
     const isCompare  = type === "buffCompare";
     row.find(".cond-stacks-label").text(type === "perN" ? "每N层" : (isCompare ? "层数" : "层数≥"));
     row.find(".ae-cond-buff-sec").toggle(isBuffSec);
     row.find(".ae-cond-attr-sec").toggle(isAttrSec);
     row.find(".ae-cond-skill-sec").toggle(isSkillSec);
+    row.find(".ae-cond-category-sec").toggle(isCatSec);
+    row.find(".ae-cond-target-sec").toggle(!isCatSec);
     row.find(".ae-cond-pern-max").toggle(type === "perN");
     row.find(".ae-cond-intensity-sec").toggle(!isCompare);
     row.find(".cond-stacks-label").toggle(!isCompare);
@@ -2139,6 +2174,7 @@ function _bindEffType(html) {
     const isTriggerBuff = type === "triggerBuff";
     const isUseSkill    = type === "useSkill";
     const isDiceTypeChg = type === "diceTypeChg";
+    const isExtraDamage = type === "extraDamage";
     row.find(".ae-eff-target-sec").toggle(!isUseSkill && !isDiceTypeChg);
     row.find(".ae-eff-round-sec").toggle(isAddBuff);
     row.find(".ae-eff-buff-sec").toggle(isBuff);
@@ -2148,6 +2184,7 @@ function _bindEffType(html) {
     row.find(".ae-eff-random-sec").toggle(isRandomBuff);
     row.find(".ae-eff-useskill-sec").toggle(isUseSkill);
     row.find(".ae-eff-dicetypechg-sec").toggle(isDiceTypeChg);
+    row.find(".ae-eff-extradmg-sec").toggle(isExtraDamage);
   });
 }
 
@@ -2176,10 +2213,14 @@ function _readActivityForm(html, original) {
       });
     } else if (condType === "useSkill") {
       preconditions.push({
-        type:      "useSkill",
-        target:    $r.find(".cond-target").val() || "self",
-        skillUuid: $r.find(".cond-skill-uuid").val()?.trim() || "",
+        type:           "useSkill",
+        target:         $r.find(".cond-target").val() || "self",
+        skillUuid:      $r.find(".cond-skill-uuid").val()?.trim() || "",
+        skillNameOrTag: $r.find(".cond-skill-name-tag").val()?.trim() || "",
       });
+    } else if (condType === "category") {
+      const cats = $r.find(".cond-category-cb:checked").map((_, el) => el.value).get();
+      preconditions.push({ type: "category", categories: cats });
     } else if (condType === "buffCompare") {
       preconditions.push({
         type:       "buffCompare",
@@ -2287,6 +2328,7 @@ function _readActivityForm(html, original) {
       });
       return;
     }
+    const isExtraDamage = type === "extraDamage";
     effects.push({
       type,
       target:         $r.find(".eff-target").val()    || "self",
@@ -2299,6 +2341,10 @@ function _readActivityForm(html, original) {
       trigBuff:       isTriggerBuff ? resolveKey($r.find(".eff-trig-buff").val()) : "",
       trigBuffCustom: "",
       trigStacks:     isTriggerBuff ? (parseInt($r.find(".eff-trig-stacks").val()) || 1) : 0,
+      ...(isExtraDamage ? {
+        dmgCategory: $r.find(".eff-extradmg-category").val() || "",
+        dmgSinType:  $r.find(".eff-extradmg-sin").val()      || "",
+      } : {}),
     });
   });
 

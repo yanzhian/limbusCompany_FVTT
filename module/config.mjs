@@ -264,7 +264,7 @@ LIMBUSCOMPANY.ACTIVITY_EFFECTS = [
   "hpAdj", "sanityAdj",
   "atkAdj", "defAdj", "speedAdj",
   "diceAdj", "seismicBlast",
-  "relatedSkillConvert",
+  "relatedSkillConvert", "extraDamage",
 ];
 
 // ─── 骰子类型 ─────────────────────────────────────────────────────────────────

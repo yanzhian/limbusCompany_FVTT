@@ -945,8 +945,10 @@ export class LimbusActor extends Actor {
     const idx   = buffs.findIndex(b => b.type === type);
     if (idx === -1) return;
     const next = Math.max(0, (buffs[idx].stacks ?? 1) - amount);
-    if (next <= 0) buffs.splice(idx, 1);
-    else           buffs[idx] = { ...buffs[idx], stacks: next };
+    // 自定义 BUFF 可选 keepAtZero：层数为 0 时不自动清除（仅归零，仍显示在状态栏）
+    const keepAtZero = resolveBuffHandler(buffs[idx])?.keepAtZero ?? false;
+    if (next <= 0 && !keepAtZero) buffs.splice(idx, 1);
+    else                          buffs[idx] = { ...buffs[idx], stacks: next };
     return this.update({ "system.buffs": buffs });
   }
 
