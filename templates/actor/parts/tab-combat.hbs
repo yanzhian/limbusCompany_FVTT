@@ -198,6 +198,27 @@
             </div>
           </div>
         {{/each}}
+
+        <span class="panic-counter-sep">｜</span>
+
+        {{!-- 恐慌计数：左 3-2-1 红（恐慌），右 1-2-3 蓝（坚定） --}}
+        <div class="panic-counter-row" title="回合结束理智≤10自动鉴定；点击圆点可手动调整（点亮3立即触发）">
+          <span class="panic-counter-label">恐慌</span>
+          <span class="panic-counter-dot panic-counter-fear {{#if (lte 3 panicCounters.fear)}}lit{{/if}} {{#unless canEditPanicCounters}}readonly{{/unless}}"
+                data-side="fear" data-index="3"></span>
+          <span class="panic-counter-dot panic-counter-fear {{#if (lte 2 panicCounters.fear)}}lit{{/if}} {{#unless canEditPanicCounters}}readonly{{/unless}}"
+                data-side="fear" data-index="2"></span>
+          <span class="panic-counter-dot panic-counter-fear {{#if (lte 1 panicCounters.fear)}}lit{{/if}} {{#unless canEditPanicCounters}}readonly{{/unless}}"
+                data-side="fear" data-index="1"></span>
+          <span class="panic-counter-mid"></span>
+          <span class="panic-counter-dot panic-counter-resolve {{#if (lte 1 panicCounters.resolve)}}lit{{/if}} {{#unless canEditPanicCounters}}readonly{{/unless}}"
+                data-side="resolve" data-index="1"></span>
+          <span class="panic-counter-dot panic-counter-resolve {{#if (lte 2 panicCounters.resolve)}}lit{{/if}} {{#unless canEditPanicCounters}}readonly{{/unless}}"
+                data-side="resolve" data-index="2"></span>
+          <span class="panic-counter-dot panic-counter-resolve {{#if (lte 3 panicCounters.resolve)}}lit{{/if}} {{#unless canEditPanicCounters}}readonly{{/unless}}"
+                data-side="resolve" data-index="3"></span>
+          <span class="panic-counter-label">坚定</span>
+        </div>
       </div>
     </div>{{!-- /panic-type-section --}}
 

@@ -141,6 +141,12 @@ export class CharacterData extends foundry.abstract.TypeDataModel {
         panic:     new fields.StringField({ required: false, initial: "" }),
       }),
 
+      // ── 恐慌/坚定计数（陷入恐慌回合结束鉴定用，各 0-3） ────────────
+      panicCounters: new fields.SchemaField({
+        fear:    new fields.NumberField({ required: true, integer: true, min: 0, max: 3, initial: 0 }),
+        resolve: new fields.NumberField({ required: true, integer: true, min: 0, max: 3, initial: 0 }),
+      }),
+
       // ── 七宗罪资源（公共资源，暂存于角色数据） ───────────────────────
       sins: new fields.SchemaField({
         wrath:    new fields.NumberField({ required: true, integer: true, min: 0, initial: 0 }),
@@ -961,49 +967,115 @@ export class LimbusActor extends Actor {
   // ─── 理智检查（恐慌状态） ──────────────────────────────────────────────
 
   /**
-   * 设置理智值并检查恐慌状态（≤30 士气低落，≤5 陷入恐慌，可叠加）
+   * 设置理智值并检查恐慌状态。
+   * ≤30：士气低落（一场遭遇战只触发一次效果，无需鉴定）。
+   * ≤10：由 updateCombat 回合结束钩子驱动坚定/恐慌鉴定（见 performPanicCheck）。
    * @param {number} value
    */
   async setSanity(value) {
-    const oldSanity = this.system.sanity?.value ?? 50;
-    const clamped   = Math.min(95, Math.max(5, value));
+    const clamped = Math.min(95, Math.max(5, value));
     await this.update({ "system.sanity.value": clamped });
 
-    // 理智从 >30 跌至 ≤30：立即【士气低落】（本回合生效，回合结束移除）
-    const alreadyLowMorale = (this.system.buffs ?? []).some(b => b.type === "lowMorale");
-    if (clamped <= 30 && oldSanity > 30 && !alreadyLowMorale) {
-      await this.addBuff({ type: "lowMorale", name: "士气低落", intensity: 1, stacks: 1, whenAdded: "本回合" });
-      await ChatMessage.create({
-        content: `<div class="limbuscompany chat-clash"><strong>${this.name}</strong> 理智跌至 ${clamped}——【士气低落】！</div>`,
-      });
-      await this.triggerPanicActivities("lowMorale");
-    }
-
-    // 理智降至5时，为角色添加「下回合」恐慌 BUFF（避免重复添加）
-    const alreadyHasPanic = (this.system.buffs ?? []).some(b => b.type === "panic");
-    if (clamped <= 5 && !alreadyHasPanic) {
-      await this.addBuff({ type: "panic", name: "陷入恐慌", intensity: 1, stacks: 1, whenAdded: "下回合" });
-      await ChatMessage.create({
-        content: `<div class="limbuscompany chat-clash"><strong>${this.name}</strong> 理智跌至 ${clamped}——下回合将【陷入恐慌】！</div>`,
-      });
+    // 士气低落：一场遭遇战只触发一次（无论跨阈值多少次），不重新鉴定
+    if (clamped <= 30) {
+      const firedKey = "lowMoraleFiredEncounter";
+      const alreadyFired = this.getFlag("limbusCompany_FVTT", firedKey) ?? false;
+      // 视觉状态：本回合有效的士气低落 BUFF（回合结束由 TURN_END 统一移除）
+      const alreadyLowMorale = (this.system.buffs ?? []).some(b => b.type === "lowMorale");
+      if (!alreadyLowMorale) {
+        await this.addBuff({ type: "lowMorale", name: "士气低落", intensity: 1, stacks: 1, whenAdded: "本回合" });
+      }
+      if (!alreadyFired) {
+        await this.setFlag("limbusCompany_FVTT", firedKey, true);
+        await ChatMessage.create({
+          content: `<div class="limbuscompany chat-clash"><strong>${this.name}</strong> 理智跌至 ${clamped}——【士气低落】！</div>`,
+        });
+        await this.triggerPanicActivities("lowMorale", "恐慌触发时");
+      }
     }
   }
 
   /**
-   * 触发恐慌槽位物品的「恐慌触发时」activities。
-   * @param {"lowMorale"|"panic"} slot
+   * 陷入恐慌鉴定（回合结束时，理智 ≤10 自动调用一次）：
+   * 投掷 1 枚 1d10，结果 ≤ 智力 → 坚定+1，否则 → 恐慌+1。
+   * 任一计数达到 3 时立即触发对应效果并重置理智（不清空计数——
+   * 计数清空交由 clearPanicCountersIfTriggered 在下一回合开始时执行）。
    */
-  async triggerPanicActivities(slot) {
+  async performPanicCheck() {
+    const int = this.system.attributes?.int ?? 0;
+    const roll = new Roll("1d10");
+    await roll.evaluate();
+    const success = (roll.total ?? 0) <= int;
+
+    const side = success ? "resolve" : "fear";
+    await ChatMessage.create({
+      content: `<div class="limbuscompany chat-clash">
+        <strong>${this.name}</strong> 陷入恐慌鉴定：1d10 = <strong>${roll.total}</strong>（智力 ${int}）
+        → ${success ? "坚定" : "恐慌"} +1
+      </div>`,
+    });
+    await this.addPanicCounter(side);
+  }
+
+  /**
+   * 恐慌/坚定计数 +1（不超过 3），达到 3 时立即触发对应效果。
+   * @param {"fear"|"resolve"} side
+   */
+  async addPanicCounter(side) {
+    const cur = this.system.panicCounters?.[side] ?? 0;
+    const next = Math.min(3, cur + 1);
+    await this.update({ [`system.panicCounters.${side}`]: next });
+    if (next >= 3) await this._resolvePanicOutcome(side);
+  }
+
+  /**
+   * 手动设置恐慌/坚定计数（拖动圆点）。设为 3 时立即触发对应效果。
+   * @param {"fear"|"resolve"} side
+   * @param {number} value  0-3
+   */
+  async setPanicCounter(side, value) {
+    const clamped = Math.max(0, Math.min(3, value));
+    await this.update({ [`system.panicCounters.${side}`]: clamped });
+    if (clamped >= 3) await this._resolvePanicOutcome(side);
+  }
+
+  /** 恐慌/坚定计数达到 3：触发对应效果 + 重置理智（30 恐慌 / 70 坚定）。 */
+  async _resolvePanicOutcome(side) {
+    const isFear = side === "fear";
+    await this.setSanity(isFear ? 30 : 70);
+    await ChatMessage.create({
+      content: `<div class="limbuscompany chat-clash">
+        <strong>${this.name}</strong> ${isFear ? "恐慌" : "坚定"}计数达到 3——
+        触发【${isFear ? "恐慌触发时" : "坚定触发时"}】，理智调整为 ${isFear ? 30 : 70}。
+      </div>`,
+    });
+    await this.triggerPanicActivities("panic", isFear ? "恐慌触发时" : "坚定触发时");
+  }
+
+  /** 回合开始时调用：若恐慌/坚定计数存在已点亮的「3」，清空双方计数。 */
+  async clearPanicCountersIfTriggered() {
+    const { fear = 0, resolve = 0 } = this.system.panicCounters ?? {};
+    if (fear >= 3 || resolve >= 3) {
+      await this.update({ "system.panicCounters.fear": 0, "system.panicCounters.resolve": 0 });
+    }
+  }
+
+  /**
+   * 触发恐慌槽位物品的指定 activities 触发时机。
+   * @param {"lowMorale"|"panic"} slot
+   * @param {string} triggerName  "恐慌触发时" | "坚定触发时"
+   */
+  async triggerPanicActivities(slot, triggerName = "恐慌触发时") {
     const itemId = this.system.panicSlots?.[slot] ?? "";
     const item   = itemId ? this.items.get(itemId) : null;
     if (!item) return;
     const { ClashManager } = await import("../helpers/clash.mjs");
     const msgs = [];
-    await ClashManager._applyActivities(item, "恐慌触发时", {
+    await ClashManager._applyActivities(item, triggerName, {
       owner: this, atkActor: this, defActor: null, _fireCounts: {}, _actMsgs: msgs,
     });
     await ClashManager._flushActMsgs(msgs, this, {
-      title: `${this.name}·${slot === "panic" ? "陷入恐慌" : "士气低落"}`,
+      title: `${this.name}·${triggerName}`,
     });
   }
 

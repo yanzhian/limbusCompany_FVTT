@@ -226,6 +226,13 @@ export class LimbusActorSheet extends ActorSheet {
       return { ...s, item: item ? { id: item.id, name: item.name, img: item.img } : null };
     });
 
+    // ── 恐慌/坚定计数（角色所有者+GM 可手动调整） ────────────────────────
+    context.panicCounters = {
+      fear:    system.panicCounters?.fear    ?? 0,
+      resolve: system.panicCounters?.resolve ?? 0,
+    };
+    context.canEditPanicCounters = actor.isOwner;
+
     // ── 本地过滤状态（不持久化） ──────────────────────────────────────────
     context.filterState = this._filterState ?? { categories: [] };
 
@@ -592,6 +599,16 @@ export class LimbusActorSheet extends ActorSheet {
       if (!confirmed) return;
       await this.actor.update({ [`system.panicSlots.${slot}`]: "" });
       if (item) await item.delete();
+    });
+
+    // ── 恐慌/坚定计数圆点（角色所有者+GM 可点击） ─────────────────────────
+    html.find(".panic-counter-dot:not(.readonly)").on("click", async (e) => {
+      const side  = e.currentTarget.dataset.side;   // "fear" | "resolve"
+      const index = parseInt(e.currentTarget.dataset.index);
+      const cur   = this.actor.system.panicCounters?.[side] ?? 0;
+      // 点击已点亮的最高位 = 点熄（退回 index-1）；否则点亮到 index
+      const next  = cur === index ? index - 1 : index;
+      await this.actor.setPanicCounter?.(side, next);
     });
 
     // ── 物品 Tab：网格/列表视图切换 ──────────────────────────────────────

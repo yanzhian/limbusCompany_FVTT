@@ -6578,6 +6578,52 @@ input.item-piles-quantity {
   border-color: var(--gold-active);
   background:   rgba(201, 168, 76, .15);
 }
+
+/* ── 恐慌/坚定计数圆点 ────────────────────────────────────────── */
+.panic-counter-sep {
+  color:      var(--text-dim);
+  margin:     0 4px;
+  font-size:  1rem;
+}
+.panic-counter-row {
+  display:     flex;
+  align-items: center;
+  gap:         4px;
+}
+.panic-counter-label {
+  font-size: 0.75rem;
+  color:     var(--text-sub);
+  margin:    0 2px;
+}
+.panic-counter-mid {
+  width: 6px;
+}
+.panic-counter-dot {
+  width:         14px;
+  height:        14px;
+  border-radius: 50%;
+  border:        1px solid var(--border-gold);
+  background:    rgba(0, 0, 0, .3);
+  cursor:        pointer;
+  transition:    background .15s, box-shadow .15s;
+  flex-shrink:   0;
+}
+.panic-counter-dot:hover:not(.readonly) {
+  box-shadow: 0 0 4px rgba(201, 168, 76, .6);
+}
+.panic-counter-dot.readonly {
+  cursor: default;
+}
+.panic-counter-fear.lit {
+  background:   #C0392B;
+  border-color: #E74C3C;
+  box-shadow:   0 0 5px rgba(231, 76, 60, .7);
+}
+.panic-counter-resolve.lit {
+  background:   #2E86C1;
+  border-color: #5DADE2;
+  box-shadow:   0 0 5px rgba(93, 173, 226, .7);
+}
 .camp-warehouse-panel {
   flex:            1;           /* 唯一随窗口缩放变化的面板 */
   min-width:       0;

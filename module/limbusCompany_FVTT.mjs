@@ -426,14 +426,17 @@ Hooks.on("combatStart", (combat) => {
   for (const combatant of combat.combatants) {
     const actor = combatant.actor;
     if (!actor || actor.type !== "character") continue;
-    actor.longRest().then(() => {
+    actor.longRest().then(async () => {
       // longRest 已重置 HP/理智/AP/混乱阈值
       // 但战斗开始时不重置 HP，仅重置其他值
-      actor.update({
-        "system.sanity.value":    50,
-        "system.ap.value":        3,
-        "system.chaosThresholds": actor.system.getDefaultChaosThresholds?.() ?? [],
+      await actor.update({
+        "system.sanity.value":         50,
+        "system.ap.value":             3,
+        "system.chaosThresholds":      actor.system.getDefaultChaosThresholds?.() ?? [],
+        "system.panicCounters.fear":    0,
+        "system.panicCounters.resolve": 0,
       });
+      await actor.unsetFlag("limbusCompany_FVTT", "lowMoraleFiredEncounter");
     });
   }
 });
@@ -446,6 +449,10 @@ Hooks.on("deleteCombat", async (combat) => {
     if (!actor) continue;
     await actor.unsetFlag("limbusCompany_FVTT", "encounterFireCounts");
     await actor.unsetFlag("limbusCompany_FVTT", "turnFireCounts");
+    await actor.unsetFlag("limbusCompany_FVTT", "lowMoraleFiredEncounter");
+    if (actor.type === "character") {
+      await actor.update({ "system.panicCounters.fear": 0, "system.panicCounters.resolve": 0 });
+    }
   }
 });
 
@@ -533,11 +540,20 @@ Hooks.on("updateCombat", async (combat, changed) => {
       await actor.update({ "system.ap.value": actor.system.ap.max ?? 3 });
     }
 
-    // 士气低落：回合结束已随 TURN_END 移除；若理智仍 ≤30 则继续添加并再次触发
+    // 士气低落：BUFF 已随 TURN_END 移除；若理智仍 ≤30 需重新挂上视觉状态，
+    // 但效果触发（一场遭遇战仅一次）由 setSanity 内的 flag 把关，不会重复弹卡
     if ((actor.system.sanity?.value ?? 50) <= 30) {
-      await actor.addBuff({ type: "lowMorale", name: "士气低落", intensity: 1, stacks: 1, whenAdded: "本回合" });
-      await actor.triggerPanicActivities?.("lowMorale");
+      await actor.setSanity(actor.system.sanity.value);
     }
+
+    // 陷入恐慌：理智 ≤10 时，回合结束自动做一次坚定/恐慌鉴定
+    if ((actor.system.sanity?.value ?? 50) <= 10) {
+      await actor.performPanicCheck?.();
+    }
+
+    // 回合开始（本次 hook 同时代表"下一回合开始"）：
+    // 若恐慌/坚定计数存在已点亮的"3"，清空双方计数
+    await actor.clearPanicCountersIfTriggered?.();
 
     // 更新后重新读取 buffs（上面 update 已改变数据）
     const freshBuffs = actor.system.buffs ?? [];
