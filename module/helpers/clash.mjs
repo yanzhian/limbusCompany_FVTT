@@ -854,6 +854,52 @@ export class ClashManager {
             }
             break;
           }
+          case "relatedSkillConvert": {
+            // 相关技能转换：将"本骰"（item）永久替换为相关技能池中的技能（随机或指定序号）
+            // 序号约定：1=原本（自身，no-op），2起对应池内顺序（pool[序号-2]）
+            const relOwner = item?.parent ?? owner;
+            if (!relOwner || !item) { descStr = "相关技能转换：找不到所属角色"; break; }
+            const pool = item.system?.relatedSkill?.pool ?? [];
+
+            let targetUuid = null;
+            if ((eff.relMode ?? "random") === "specific") {
+              const idxSel = Math.max(1, Math.round(Number(eff.relIndex ?? 1)));
+              if (idxSel === 1) { descStr = `【${item.name}】维持原本形态`; break; }
+              const entry = pool[idxSel - 2];
+              if (!entry?.itemUuid) { descStr = `相关技能转换：序号 ${idxSel} 无对应技能`; break; }
+              targetUuid = entry.itemUuid;
+            } else {
+              const validPool = pool.filter(p => p?.itemUuid);
+              if (!validPool.length) { descStr = `相关技能转换：【${item.name}】相关技能池为空`; break; }
+              targetUuid = validPool[Math.floor(Math.random() * validPool.length)].itemUuid;
+            }
+
+            const srcItem = await fromUuid(targetUuid).catch(() => null);
+            if (!srcItem) { descStr = "相关技能转换：找不到目标技能"; break; }
+
+            try {
+              // 复用已存在的相关技能副本（按来源 UUID 标记），避免重复转换时反复创建
+              let newItem = relOwner.items.find(
+                i => i.getFlag?.("limbusCompany_FVTT", "relatedSourceUuid") === targetUuid
+              );
+              if (!newItem) {
+                const data = srcItem.toObject();
+                delete data._id;
+                foundry.utils.setProperty(data, "flags.limbusCompany_FVTT.relatedSourceUuid", targetUuid);
+                const [created] = await relOwner.createEmbeddedDocuments("Item", [data]);
+                newItem = created;
+              }
+
+              const replaced = await relOwner.replaceSkillSlot?.(item.id, newItem.id);
+              descStr = replaced
+                ? `【${item.name}】永久转换为【${newItem.name}】`
+                : `相关技能转换：未找到【${item.name}】所在的技能槽位`;
+            } catch (err) {
+              console.error("ClashManager: relatedSkillConvert 执行失败", err);
+              descStr = "相关技能转换：执行出错（可能缺少权限），请检查控制台";
+            }
+            break;
+          }
           case "useSkill": {
             let skillItem = null;
             if (eff.skillRef === "equipped") {
@@ -1425,19 +1471,14 @@ export class ClashManager {
                  alt="${item.name}">
           </div>`;
       }
-      const hasRel = !!(item.system?.relatedSkill?.itemUuid);
+      // 旧版"相关技能"单槽临时切换按钮已废弃（改由④效果「相关技能转换」
+      // 永久替换技能槽位实现，见 relatedSkillConvert case）
       return `
         <div class="clash-pick-slot ${extraClass}" data-item-id="${item.id}" data-slot-index="${slotIdx}" title="${item.name}"
              style="position:relative;width:52px;height:52px;cursor:pointer;flex-shrink:0;">
           <img src="${item.img}"
                style="width:52px;height:52px;object-fit:cover;border:2px solid ${sin};"
                alt="${item.name}">
-          ${hasRel ? `<button class="clash-pick-rel" data-base-id="${item.id}"
-                               title="切换相关技能"
-                               style="position:absolute;top:-4px;right:-4px;width:16px;height:16px;
-                                      border-radius:50%;border:1px solid #C9A84C;background:none;
-                                      color:#9A8462;font-size:9px;cursor:pointer;padding:0;
-                                      line-height:16px;text-align:center;">↺</button>` : ""}
         </div>`;
     };
 
@@ -1514,40 +1555,12 @@ export class ClashManager {
 
         // 选中技能（携带 slotIdx 供后续推进战斗袋）
         dlgHtml.on("click", ".clash-pick-slot:not(.clash-pick-empty):not(.clash-pick-disabled)", (e) => {
-          if ($(e.target).hasClass("clash-pick-rel")) return; // 不触发 related toggle
           const itemId  = e.currentTarget.dataset.itemId;
           const slotIdx = parseInt(e.currentTarget.dataset.slotIndex ?? "-1");
           const item    = actor.items.get(itemId);
           if (!item) return;
           dlg.close();
           onPick(item, slotIdx);
-        });
-
-        // 切换相关技能
-        dlgHtml.on("click", ".clash-pick-rel", (e) => {
-          e.stopPropagation();
-          const $btn   = $(e.currentTarget);
-          const baseId = $btn.data("base-id");
-          const base   = actor.items.get(baseId);
-          if (!base) return;
-          const relUuid = base.system?.relatedSkill?.itemUuid;
-          if (!relUuid) return;
-
-          $btn.toggleClass("rel-active");
-          const $slot = $btn.closest(".clash-pick-slot");
-
-          if ($btn.hasClass("rel-active")) {
-            const relItem = typeof fromUuidSync !== "undefined" ? fromUuidSync(relUuid) : null;
-            if (relItem) {
-              $slot.data("item-id", relItem.id).attr("data-item-id", relItem.id);
-              $slot.find("img").attr("src", relItem.img);
-              $btn.css("color", "#6EE06E").css("border-color", "#6EE06E");
-            }
-          } else {
-            $slot.data("item-id", baseId).attr("data-item-id", baseId);
-            $slot.find("img").attr("src", base.img);
-            $btn.css("color", "#9A8462").css("border-color", "#C9A84C");
-          }
         });
       },
     }, { width: 320 });

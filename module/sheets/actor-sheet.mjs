@@ -1450,23 +1450,9 @@ export class LimbusActorSheet extends ActorSheet {
       const sinColor = CONFIG.LIMBUSCOMPANY?.SIN_COLORS?.[mainItem?.system?.sinType] ?? "";
       $slot.css("--slot-sin-color", (sinColor && i < 2) ? sinColor : "");
 
-      // 相关技能切换按钮（激活槽且有关联技能时显示）
-      const hasRelated = !!(mainItem?.system?.relatedSkill?.itemUuid);
-      const showToggle = hasRelated && i < 2;
-      $toggle.toggle(showToggle);
-
-      // 若处于相关技能模式，用相关技能图标/名称覆盖
-      if (showToggle && state.relatedMode?.[i]) {
-        const relUuid = mainItem.system.relatedSkill.itemUuid;
-        const relItem = typeof fromUuidSync !== "undefined" ? fromUuidSync(relUuid) : null;
-        if (relItem) {
-          $slot.find("img").attr("src", relItem.img ?? "");
-          if ($name.length) $name.text(relItem.name ?? "");
-        }
-        $toggle.addClass("related-active");
-      } else {
-        $toggle.removeClass("related-active");
-      }
+      // 旧版"相关技能"单槽临时切换机制已废弃（改由④效果「相关技能转换」
+      // 永久替换技能槽位实现，见 clash.mjs relatedSkillConvert）
+      $toggle.hide().removeClass("related-active");
     });
   }
 
@@ -1679,16 +1665,9 @@ export class LimbusActorSheet extends ActorSheet {
     }
 
     const slotIndex = parseInt($slot.attr("data-slot-index") ?? "0");
-    const state = this._combatBagState;
 
-    // 若处于相关技能显示模式，使用相关技能；否则使用主技能
-    let item = this.actor.items.get(itemId);
+    const item = this.actor.items.get(itemId);
     if (!item) return;
-    if (state?.relatedMode?.[slotIndex] && item.system?.relatedSkill?.itemUuid) {
-      const relUuid = item.system.relatedSkill.itemUuid;
-      const relItem = typeof fromUuidSync !== "undefined" ? fromUuidSync(relUuid) : null;
-      if (relItem) item = relItem;
-    }
 
     this._showClashDialog(item, slotIndex);
   }

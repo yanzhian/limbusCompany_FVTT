@@ -1116,6 +1116,51 @@ export class LimbusActor extends Actor {
     return result;
   }
 
+  /**
+   * 将技能槽位中的 oldItemId 永久替换为 newItemId（相关技能转换用）。
+   * 依次检查基础技能槽（数组）、守备技能槽（单值）、EGO 技能槽（按等级），
+   * 命中的每一处都会替换（理论上同一 id 只会出现在一处）。
+   * @param {string} oldItemId
+   * @param {string} newItemId
+   * @returns {Promise<boolean>} 是否找到并替换了槽位
+   */
+  async replaceSkillSlot(oldItemId, newItemId) {
+    if (!oldItemId || !newItemId || oldItemId === newItemId) return false;
+    const sys = this.system;
+    const updates = {};
+    let changed = false;
+
+    const basic = [...(sys.skills?.basic ?? [])];
+    const bIdx  = basic.indexOf(oldItemId);
+    if (bIdx >= 0) {
+      basic[bIdx] = newItemId;
+      updates["system.skills.basic"] = basic;
+      changed = true;
+    }
+
+    if (sys.skills?.defense === oldItemId) {
+      updates["system.skills.defense"] = newItemId;
+      changed = true;
+    }
+
+    const ego = { ...(sys.skills?.ego ?? {}) };
+    for (const grade of Object.keys(ego)) {
+      if (ego[grade] === oldItemId) {
+        ego[grade] = newItemId;
+        updates["system.skills.ego"] = ego;
+        changed = true;
+      }
+    }
+
+    if (changed) {
+      // 跨客户端执行时（如对方触发本方技能的转换效果），当前用户可能没有本
+      // Actor 的写权限，复用 ClashManager._safeDocUpdate 经 socket 委托 GM 执行
+      const { ClashManager } = await import("../helpers/clash.mjs");
+      await ClashManager._safeDocUpdate(this, updates);
+    }
+    return changed;
+  }
+
   // ─── 先攻骰掷 ─────────────────────────────────────────────────────────
 
   /**

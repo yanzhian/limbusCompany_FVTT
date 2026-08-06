@@ -275,8 +275,3 @@ LIMBUSCOMPANY.DICE_TYPES = {
   severing:    "LIMBUSCOMPANY.DiceType.Severing",
 };
 
-// ─── 技能触发条件（relatedSkill.trigger） ─────────────────────────────────────
-
-LIMBUSCOMPANY.RELATED_SKILL_TRIGGERS = [
-  "命中时", "暴击命中时", "拼点成功", "拼点失败", "攻击时", "使用时",
-];

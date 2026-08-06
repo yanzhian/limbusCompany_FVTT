@@ -84,21 +84,19 @@ export class LimbusItemSheet extends ItemSheet {
       context.isCounterType = sys.type === "defense" &&
         (sys.category === "counter" || sys.category === "clashCounter");
 
-      // 相关技能解析
-      const relUuid = sys.relatedSkill?.itemUuid;
-      if (relUuid) {
-        const relItem = await fromUuid(relUuid).catch(() => null);
-        context.relatedSkillItem = relItem ? {
-          _id:          relItem.id,
-          name:         relItem.name,
-          img:          relItem.img,
-          system:       relItem.system,
-          sinColor:     cfg.SIN_COLORS?.[relItem.system?.sinType] ?? "#2A7A2A",
-          categoryIcon: _getCategoryIcon(relItem.system?.category),
-        } : null;
-      } else {
-        context.relatedSkillItem = null;
-      }
+      // 相关技能池解析（v2：数组，配合④效果「相关技能转换」使用）
+      const relPool = sys.relatedSkill?.pool ?? [];
+      context.relatedSkillPool = await Promise.all(relPool.map(async (p, i) => {
+        const relItem = p?.itemUuid ? await fromUuid(p.itemUuid).catch(() => null) : null;
+        return {
+          idx:      i,
+          poolNo:   i + 2, // 选择器编号：1=原本(自身)，2起对应池内顺序
+          itemUuid: p?.itemUuid ?? "",
+          name:     relItem?.name ?? "",
+          img:      relItem?.img  ?? "",
+          resolved: !!relItem,
+        };
+      }));
 
       // EGO 消耗行
       // 注意：schema 字段名为 sinCost[].sinType 和 egoResistanceAdj[].{sinType,multiplier}
@@ -123,9 +121,6 @@ export class LimbusItemSheet extends ItemSheet {
 
       // 加重值小方块
       context.weightSquares = Array.from({ length: sys.weight ?? 0 }, (_, i) => i);
-
-      // 触发条件
-      context.relatedTriggers = cfg.RELATED_SKILL_TRIGGERS ?? [];
     }
 
     // ── 装备专用数据 ──────────────────────────────────────────────────────
@@ -348,6 +343,15 @@ export class LimbusItemSheet extends ItemSheet {
 
     // ── 相关技能 [+] ─────────────────────────────────────────────────────
     html.find(".related-skill-toggle").on("click", this._onRelatedToggle.bind(this));
+
+    // ── 相关技能池：拖入添加 / 移除 ──────────────────────────────────────
+    html.find(".related-pool-dropzone").on("dragover", (e) => {
+      e.preventDefault();
+      $(e.currentTarget).addClass("cg-drag-over");
+    });
+    html.find(".related-pool-dropzone").on("dragleave", (e) => $(e.currentTarget).removeClass("cg-drag-over"));
+    html.find(".related-pool-dropzone").on("drop", this._onRelatedPoolDrop.bind(this));
+    html.find(".related-pool-remove").on("click", this._onRelatedPoolRemove.bind(this));
 
     if (!this.isEditable) return;
 
@@ -807,6 +811,37 @@ export class LimbusItemSheet extends ItemSheet {
   _onRelatedToggle(event) {
     this._relatedExpanded = !this.relatedExpanded;
     this.render(false);
+  }
+
+  /** 拖入技能 → 加入相关技能池（不可拖入自身；技能类型物品之外的忽略） */
+  async _onRelatedPoolDrop(event) {
+    event.preventDefault();
+    $(event.currentTarget).removeClass("cg-drag-over");
+
+    let raw;
+    try { raw = JSON.parse(event.originalEvent.dataTransfer.getData("text/plain")); }
+    catch { return; }
+    const dropped = await Item.fromDropData(raw).catch(() => null);
+    if (!dropped || dropped.type !== "skill") {
+      ui.notifications.warn("只能将「技能」类型物品拖入相关技能池。");
+      return;
+    }
+    if (dropped.uuid === this.item.uuid) {
+      ui.notifications.warn("不能将技能自身加入相关技能池。");
+      return;
+    }
+    const pool = foundry.utils.deepClone(this.item.system.relatedSkill?.pool ?? []);
+    pool.push({ itemUuid: dropped.uuid });
+    await this.item.update({ "system.relatedSkill.pool": pool });
+  }
+
+  /** 从相关技能池移除指定索引条目 */
+  async _onRelatedPoolRemove(event) {
+    const idx = parseInt(event.currentTarget.dataset.poolIdx ?? "-1");
+    if (idx < 0) return;
+    const pool = foundry.utils.deepClone(this.item.system.relatedSkill?.pool ?? []);
+    pool.splice(idx, 1);
+    await this.item.update({ "system.relatedSkill.pool": pool });
   }
 
   /* ─── 修正行 ────────────────────────────────────────────────────────────── */
@@ -1590,6 +1625,7 @@ function _activityEffectLabels() {
     { value: "useSkill",     label: "使用技能" },
     { value: "diceTypeChg",  label: "骰子类型" },
     { value: "extraDamage",  label: "追加伤害" },
+    { value: "relatedSkillConvert", label: "相关技能转换" },
   ];
 }
 
@@ -1888,13 +1924,15 @@ function _buildEffectRow(eff, idx, cfg) {
   const isUseSkill     = type === "useSkill";
   const isDiceTypeChg  = type === "diceTypeChg";
   const isExtraDamage  = type === "extraDamage";
+  const isRelConvert   = type === "relatedSkillConvert";
   const effOpts    = _activityEffectLabels()
     .map(e => `<option value="${e.value}" ${type === e.value ? "selected" : ""}>${e.label}</option>`).join("");
   const roundVal   = eff?.round ?? "本回合";
   const roundOpts  = _ROUND_OPTIONS
     .map(v => `<option value="${v}" ${roundVal === v ? "selected" : ""}>${v}</option>`).join("");
   const formulaVal = _esc(eff?.value ?? "");
-  const isValSec   = !isBuff && !isTriggerBuff && !isRandomBuff && !isUseSkill && !isDiceTypeChg;
+  const isValSec   = !isBuff && !isTriggerBuff && !isRandomBuff && !isUseSkill && !isDiceTypeChg && !isRelConvert;
+  const relMode    = eff?.relMode ?? "random";
   return `
     <div class="ae-row ae-eff-row">
       <div class="ae-row-hd">
@@ -1904,7 +1942,7 @@ function _buildEffectRow(eff, idx, cfg) {
       <div class="ae-row-fields">
         <label>类型</label>
         <select class="ae-sel ae-eff-type eff-type">${effOpts}</select>
-        <span class="ae-eff-target-sec" ${(isUseSkill || isDiceTypeChg) ? 'style="display:none"' : ""}>
+        <span class="ae-eff-target-sec" ${(isUseSkill || isDiceTypeChg || isRelConvert) ? 'style="display:none"' : ""}>
           <label>目标</label>
           <select class="ae-sel eff-target">${_buildTargetOptions(eff?.target ?? "self")}</select>
         </span>
@@ -1994,6 +2032,19 @@ function _buildEffectRow(eff, idx, cfg) {
             ).join("")}
           </select>
         </span>
+        <span class="ae-eff-relconvert-sec" ${isRelConvert ? "" : 'style="display:none"'}>
+          <label>方式</label>
+          <select class="ae-sel eff-relconvert-mode">
+            <option value="random"   ${relMode === "random"   ? "selected" : ""}>随机（从相关池抽取）</option>
+            <option value="specific" ${relMode === "specific" ? "selected" : ""}>指定（按序号）</option>
+          </select>
+          <span class="ae-eff-relconvert-idx-sec" ${relMode === "specific" ? "" : 'style="display:none"'}>
+            <label>序号</label>
+            <input class="ae-input-sm eff-relconvert-idx" type="number" min="1"
+                   value="${eff?.relIndex ?? 1}" title="1=原本（自身），2起对应相关技能池顺序">
+          </span>
+          <span class="ae-eff-relconvert-hint">永久替换本技能在角色技能槽中的位置</span>
+        </span>
       </div>
     </div>`;
 }
@@ -2039,6 +2090,7 @@ function _setupAeDialog(html, cfg) {
     list.append(_buildEffectRow({}, idx, cfg));
     _bindDel(html);
     _bindEffType(html);
+    _bindRelConvertMode(html);
     _bindUseSkillSubtype(html);
   });
   html.on("click", ".ae-add-pool-buff", function () {
@@ -2052,6 +2104,7 @@ function _setupAeDialog(html, cfg) {
 
   _bindDel(html);
   _bindEffType(html);
+  _bindRelConvertMode(html);
   _bindCondCostBuff(html);
   _bindCostType(html);
   _bindCondType(html);
@@ -2175,16 +2228,25 @@ function _bindEffType(html) {
     const isUseSkill    = type === "useSkill";
     const isDiceTypeChg = type === "diceTypeChg";
     const isExtraDamage = type === "extraDamage";
-    row.find(".ae-eff-target-sec").toggle(!isUseSkill && !isDiceTypeChg);
+    const isRelConvert  = type === "relatedSkillConvert";
+    row.find(".ae-eff-target-sec").toggle(!isUseSkill && !isDiceTypeChg && !isRelConvert);
     row.find(".ae-eff-round-sec").toggle(isAddBuff);
     row.find(".ae-eff-buff-sec").toggle(isBuff);
-    row.find(".ae-eff-val-sec").toggle(!isBuff && !isTriggerBuff && !isRandomBuff && !isUseSkill && !isDiceTypeChg);
+    row.find(".ae-eff-val-sec").toggle(!isBuff && !isTriggerBuff && !isRandomBuff && !isUseSkill && !isDiceTypeChg && !isRelConvert);
     row.find(".eff-value").attr("placeholder", _effValuePlaceholder(type));
     row.find(".ae-eff-trig-sec").toggle(isTriggerBuff);
     row.find(".ae-eff-random-sec").toggle(isRandomBuff);
     row.find(".ae-eff-useskill-sec").toggle(isUseSkill);
     row.find(".ae-eff-dicetypechg-sec").toggle(isDiceTypeChg);
     row.find(".ae-eff-extradmg-sec").toggle(isExtraDamage);
+    row.find(".ae-eff-relconvert-sec").toggle(isRelConvert);
+  });
+}
+
+function _bindRelConvertMode(html) {
+  html.find(".eff-relconvert-mode").off("change").on("change", function () {
+    const row = $(this).closest(".ae-eff-row");
+    row.find(".ae-eff-relconvert-idx-sec").toggle($(this).val() === "specific");
   });
 }
 
@@ -2325,6 +2387,15 @@ function _readActivityForm(html, original) {
       effects.push({
         type,
         diceTypeVal: $r.find(".eff-dice-type-val").val() || "normal",
+      });
+      return;
+    }
+    if (type === "relatedSkillConvert") {
+      const relMode = $r.find(".eff-relconvert-mode").val() || "random";
+      effects.push({
+        type,
+        relMode,
+        relIndex: relMode === "specific" ? Math.max(1, parseInt($r.find(".eff-relconvert-idx").val()) || 1) : 0,
       });
       return;
     }
