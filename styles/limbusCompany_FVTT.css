@@ -4610,7 +4610,7 @@ body.game .limbuscompany.app img {
   color: var(--text-main); border-radius: 2px; padding: 3px 6px; font-size: .8rem;
 }
 .ae-v2 .ae-input-sm {
-  width: 52px; background: var(--bg-panel); border: 1px solid #5A4A30;
+  width: 120px; background: var(--bg-panel); border: 1px solid #5A4A30;
   color: var(--text-main); border-radius: 2px; padding: 2px 4px;
   font-size: .75rem; text-align: center;
 }
@@ -4689,7 +4689,7 @@ body.game .limbuscompany.app img {
 }
 .limbuscompany .inline-row { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
 .limbuscompany .inline-row label { display: inline; }
-.limbuscompany .inline-row input { width: 60px !important; }
+.limbuscompany .inline-row input { width: 120px !important; }
 .limbuscompany .form-group-inline { display: flex; align-items: center; gap: 6px; font-size: .75rem; }
 
 /* ─── §3-Q  对话框通用（鉴定弹窗 / 添加BUFF / 发起对抗） ─────────── */
