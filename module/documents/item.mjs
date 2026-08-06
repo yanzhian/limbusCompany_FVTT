@@ -419,6 +419,51 @@ export class PanicData extends foundry.abstract.TypeDataModel {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+//  BackgroundData — 背景物品数据模型
+//  （角色创建向导用：背景名称/简介 + 初始物品 + 按等级解锁的升级奖励物品）
+// ═══════════════════════════════════════════════════════════════════════════
+
+/** 物品引用条目：uuid 用于世界/合集包物品；itemData 为完整数据快照（拖入时缓存，防止源物品被删除后失效） */
+function makeItemRefSchema() {
+  const fields = foundry.data.fields;
+  return new fields.SchemaField({
+    id:       new fields.StringField({ required: true, initial: () => foundry.utils.randomID() }),
+    uuid:     new fields.StringField({ required: true, initial: "" }),
+    itemData: new fields.ObjectField({ required: false, nullable: true, initial: null }),
+  });
+}
+
+export class BackgroundData extends foundry.abstract.TypeDataModel {
+  static defineSchema() {
+    const fields = foundry.data.fields;
+
+    // 等级奖励条目：达到某等级时解锁的物品列表
+    const levelRewardSchema = new fields.SchemaField({
+      id:    new fields.StringField({ required: true, initial: () => foundry.utils.randomID() }),
+      level: new fields.NumberField({ required: true, integer: true, min: 1, initial: 5 }),
+      items: new fields.ArrayField(makeItemRefSchema(), { required: true, initial: [] }),
+    });
+
+    return {
+      // 副标题（显示在背景名称下方，如"收尾人"）
+      subtitle: new fields.StringField({ required: false, initial: "" }),
+
+      // 简介（富文本，支持图文）
+      description: new fields.HTMLField({ required: false, initial: "" }),
+
+      // 初始物品：创建角色时立即获得
+      startingItems: new fields.ArrayField(makeItemRefSchema(), { required: true, initial: [] }),
+
+      // 升级奖励：按等级解锁
+      levelRewards: new fields.ArrayField(levelRewardSchema, { required: true, initial: [] }),
+
+      // 合集包浏览器分类标签（如"事务所"/"协会"/"世界之翼"），供背景选择向导筛选
+      category: new fields.StringField({ required: false, initial: "" }),
+    };
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 //  LimbusItem — Item 文档类
 // ═══════════════════════════════════════════════════════════════════════════
 
@@ -607,7 +652,7 @@ export class LimbusItem extends Item {
       metaHtml = `<div class="ic-item-meta skill-meta">${catImgTag}<span class="ic-dice">${formula}</span></div>`;
     } else {
       // 物品类：type label + category
-      const typeLabels = { equipment:"装备", consumable:"消耗品", material:"材料", container:"容器", skillbook:"技能书", panic:"恐慌" };
+      const typeLabels = { equipment:"装备", consumable:"消耗品", material:"材料", container:"容器", skillbook:"技能书", panic:"恐慌", background:"背景" };
       const typeLabel  = typeLabels[this.type] ?? this.type;
       const catLabel   = sys.category ? ` · ${sys.category}` : "";
       metaHtml = `<div class="ic-item-meta">${typeLabel}${catLabel}</div>`;
@@ -620,6 +665,7 @@ export class LimbusItem extends Item {
         (this.type === "equipment"  ? sys.effect     : null) ??
         (this.type === "consumable" ? sys.effect : null) ??
         (this.type === "material"   ? sys.effect : null) ??
+        (this.type === "background" ? sys.description : null) ??
         "";
       if (!raw) return "";
       return `<div class="ic-desc">${raw}</div>`;

@@ -19,6 +19,7 @@ import {
   ContainerData,
   SkillBookData,
   PanicData,
+  BackgroundData,
 } from "./documents/item.mjs";
 import { LimbusActorSheet }   from "./sheets/actor-sheet.mjs";
 import { LimbusItemSheet }    from "./sheets/item-sheet.mjs";
@@ -124,6 +125,7 @@ Hooks.once("init", () => {
     container:  ContainerData,
     skillbook:  SkillBookData,
     panic:      PanicData,
+    background: BackgroundData,
   };
 
   // ── 注册 Actor Sheet ───────────────────────────────────────────────────
@@ -779,6 +781,7 @@ async function _preloadTemplates() {
     "systems/limbusCompany_FVTT/templates/item/container-sheet.hbs",
     "systems/limbusCompany_FVTT/templates/item/skillbook-sheet.hbs",
     "systems/limbusCompany_FVTT/templates/item/panic-sheet.hbs",
+    "systems/limbusCompany_FVTT/templates/item/background-sheet.hbs",
     // Combat
     "systems/limbusCompany_FVTT/templates/combat/combat-hud.hbs",
     // Partials

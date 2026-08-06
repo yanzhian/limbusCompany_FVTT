@@ -38,6 +38,7 @@ export class LimbusItemSheet extends ItemSheet {
       container:  "container-sheet",
       skillbook:  "skillbook-sheet",
       panic:      "panic-sheet",
+      background: "background-sheet",
     };
     const name = typeMap[this.item.type] ?? "equipment-sheet";
     return `systems/limbusCompany_FVTT/templates/item/${name}.hbs`;
@@ -179,6 +180,18 @@ export class LimbusItemSheet extends ItemSheet {
       context.skillBookUsed = (sys.skills ?? []).length;
     }
 
+    // ── 背景专用数据 ────────────────────────────────────────────────────────
+    if (item.type === "background") {
+      context.startingItems = await this._resolveItemRefs(sys.startingItems ?? []);
+      context.levelRewards  = await Promise.all(
+        (sys.levelRewards ?? []).map(async (lr) => ({
+          id:    lr.id,
+          level: lr.level,
+          items: await this._resolveItemRefs(lr.items ?? []),
+        }))
+      );
+    }
+
     // ── Activity 触发时机 & 效果类型选项 ─────────────────────────────────
     context.activityTriggers = cfg.ACTIVITY_TRIGGERS ?? [];
     context.activityEffects  = _activityEffectLabels();
@@ -264,6 +277,29 @@ export class LimbusItemSheet extends ItemSheet {
       });
     }
     return slots;
+  }
+
+  /**
+   * 将通用物品引用条目（{id, uuid, itemData?}）解析为模板所需显示数据。
+   * 用于背景物品的"初始物品"/"升级奖励物品"（可存放任意物品类型，含技能书）。
+   * @returns {Promise<Array>}
+   */
+  async _resolveItemRefs(entries) {
+    const out = [];
+    for (const entry of entries) {
+      let item = null;
+      if (entry?.uuid) item = await fromUuid(entry.uuid).catch(() => null);
+      if (!item && entry?.itemData) {
+        item = { id: null, name: entry.itemData.name ?? "未知物品", img: entry.itemData.img ?? "icons/svg/item-bag.svg", type: entry.itemData.type ?? "" };
+      }
+      if (!item) continue;
+      out.push({
+        id:   entry.id,
+        uuid: entry.uuid ?? "",
+        item: { name: item.name, img: item.img, type: item.type },
+      });
+    }
+    return out;
   }
 
   /**
@@ -420,6 +456,18 @@ export class LimbusItemSheet extends ItemSheet {
     html.find(".skillbook-slot").on("contextmenu",   this._onSkillBookSlotMenu.bind(this));
     html.find(".skillbook-slot").on("mouseenter",    this._onCgTileHover.bind(this));
     html.find(".skillbook-slot").on("mouseleave",    this._onCgTileHoverEnd.bind(this));
+
+    // ── 背景 ─────────────────────────────────────────────────────────────
+    html.find(".bg-dropzone").on("dragover",  this._onSkillBookDragOver.bind(this));
+    html.find(".bg-dropzone").on("dragleave", this._onSkillBookDragLeave.bind(this));
+    html.find(".bg-dropzone").on("drop",      this._onBgItemDrop.bind(this));
+    html.find(".bg-item-remove").on("click",  this._onBgItemRemove.bind(this));
+    html.find(".bg-item-chip").on("mouseenter", this._onCgTileHover.bind(this));
+    html.find(".bg-item-chip").on("mouseleave", this._onCgTileHoverEnd.bind(this));
+    html.find(".bg-add-level").on("click",    this._onBgAddLevelReward.bind(this));
+    html.find(".bg-level-remove").on("click", this._onBgRemoveLevelReward.bind(this));
+    html.find(".bg-level-input").on("change", this._onBgLevelChange.bind(this));
+    html.find(".bg-edit-rewards-btn").on("click", this._onToggleLock.bind(this));
     html.find(".skillbook-learn-btn").on("click",    this._onSkillBookLearn.bind(this));
   }
 
@@ -1235,6 +1283,77 @@ export class LimbusItemSheet extends ItemSheet {
     });
     if (!confirmed) return;
     await this.item.learnAllSkills();
+  }
+
+  /* ─── 背景：初始物品 / 升级奖励物品 拖入放置（不移动/删除源物品，仅引用+快照） ── */
+
+  async _onBgItemDrop(event) {
+    event.preventDefault();
+    const $zone = $(event.currentTarget).removeClass("cg-drag-over");
+    const levelId = $zone.data("levelId") || null;
+
+    let raw;
+    try { raw = JSON.parse(event.originalEvent.dataTransfer.getData("text/plain")); }
+    catch { return; }
+    if (raw.type !== "Item") return;
+
+    const dropped = await Item.fromDropData(raw).catch(() => null);
+    if (!dropped) { ui.notifications.warn("无法解析拖入的物品。"); return; }
+
+    const itemData = dropped.toObject();
+    delete itemData._id;
+    const entry = { id: foundry.utils.randomID(), uuid: dropped.uuid ?? "", itemData };
+
+    if (levelId) {
+      const rewards = foundry.utils.deepClone(this.item.system.levelRewards ?? []);
+      const lr = rewards.find(r => r.id === levelId);
+      if (!lr) return;
+      lr.items.push(entry);
+      await this.item.update({ "system.levelRewards": rewards });
+    } else {
+      const items = foundry.utils.deepClone(this.item.system.startingItems ?? []);
+      items.push(entry);
+      await this.item.update({ "system.startingItems": items });
+    }
+  }
+
+  async _onBgItemRemove(event) {
+    event.stopPropagation();
+    const refId   = event.currentTarget.dataset.refId;
+    const levelId = event.currentTarget.dataset.levelId || null;
+    if (levelId) {
+      const rewards = foundry.utils.deepClone(this.item.system.levelRewards ?? []);
+      const lr = rewards.find(r => r.id === levelId);
+      if (!lr) return;
+      lr.items = lr.items.filter(i => i.id !== refId);
+      await this.item.update({ "system.levelRewards": rewards });
+    } else {
+      const items = (this.item.system.startingItems ?? []).filter(i => i.id !== refId);
+      await this.item.update({ "system.startingItems": items });
+    }
+  }
+
+  async _onBgAddLevelReward() {
+    const rewards = foundry.utils.deepClone(this.item.system.levelRewards ?? []);
+    const nextLevel = rewards.length ? Math.max(...rewards.map(r => r.level)) + 5 : 5;
+    rewards.push({ id: foundry.utils.randomID(), level: nextLevel, items: [] });
+    await this.item.update({ "system.levelRewards": rewards });
+  }
+
+  async _onBgRemoveLevelReward(event) {
+    const levelId = event.currentTarget.dataset.levelId;
+    const rewards = (this.item.system.levelRewards ?? []).filter(r => r.id !== levelId);
+    await this.item.update({ "system.levelRewards": rewards });
+  }
+
+  async _onBgLevelChange(event) {
+    const levelId = event.currentTarget.dataset.levelId;
+    const val = Math.max(1, parseInt(event.currentTarget.value) || 1);
+    const rewards = foundry.utils.deepClone(this.item.system.levelRewards ?? []);
+    const lr = rewards.find(r => r.id === levelId);
+    if (!lr) return;
+    lr.level = val;
+    await this.item.update({ "system.levelRewards": rewards });
   }
 
   /* ─── 物品格：开始拖拽（内部重定位）────────────────────────────────────── */

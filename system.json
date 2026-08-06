@@ -39,7 +39,8 @@
       "material": {},
       "container": {},
       "skillbook": {},
-      "panic": {}
+      "panic": {},
+      "background": {}
     }
   },
   "socket": true,

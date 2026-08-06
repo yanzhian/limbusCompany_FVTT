@@ -7809,6 +7809,63 @@ input.item-piles-quantity {
   font-size: .78rem;
 }
 
+/* ═══ 背景物品卡 ═══════════════════════════════════════════════════ */
+.limbuscompany .bg-subtitle-label { font-size: .8rem; color: var(--gold-active); }
+.limbuscompany .bg-section-title {
+  font-size: .8rem; font-weight: bold; color: var(--text-main);
+  padding: 6px 10px 2px;
+}
+.limbuscompany .bg-level-block { margin: 4px 10px 10px; }
+.limbuscompany .bg-level-hd {
+  display: flex; align-items: center; gap: 6px;
+  font-size: .78rem; color: var(--text-sub);
+  padding: 2px 0 4px;
+}
+.limbuscompany .bg-level-remove {
+  background: none; border: none; color: var(--text-dim);
+  cursor: pointer; font-size: .85rem; line-height: 1;
+}
+.limbuscompany .bg-level-remove:hover { color: var(--red-danger); }
+.limbuscompany .bg-dropzone {
+  display: flex; flex-wrap: wrap; align-content: flex-start;
+  gap: 6px;
+  min-height: 64px;
+  padding: 8px;
+  background: #5F3E22;
+  border: 1px solid rgba(95,62,33,.45);
+  border-radius: 4px;
+}
+.limbuscompany .bg-dropzone.cg-drag-over {
+  background: rgba(229,186,37,.18);
+  border-color: var(--gold-active);
+}
+.limbuscompany .bg-item-chip {
+  display: flex; align-items: center; gap: 4px;
+  padding: 3px 6px;
+  background: rgba(0,0,0,.25);
+  border: 1px solid rgba(201,168,76,.3);
+  border-radius: 3px;
+  cursor: default;
+}
+.limbuscompany .bg-item-icon { width: 22px; height: 22px; object-fit: cover; border-radius: 3px; }
+.limbuscompany .bg-item-name { font-size: .74rem; color: var(--text-main); max-width: 110px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.limbuscompany .bg-item-remove {
+  background: none; border: none; color: var(--text-dim);
+  cursor: pointer; font-size: .8rem; line-height: 1; margin-left: 2px;
+}
+.limbuscompany .bg-item-remove:hover { color: var(--red-danger); }
+.limbuscompany .bg-empty-hint {
+  width: 100%;
+  display: flex; align-items: center; justify-content: center;
+  color: var(--text-dim);
+  font-size: .74rem;
+}
+.limbuscompany .bg-add-level {
+  display: block;
+  margin: 4px 10px 10px;
+  width: calc(100% - 20px);
+}
+
 /* ═══ Activity 编辑器：随机BUFF池 ═══════════════════════════════════ */
 .ae-eff-random-sec {
   display: contents;
