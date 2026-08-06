@@ -69,6 +69,12 @@ export class LimbusActorSheet extends ActorSheet {
     context.isEditable = this.isEditable;
     this._editUnlocked ??= false;
 
+    // ── 背景（name-row-top：未设置显示"添加背景"，否则显示背景名称） ──────
+    const bgUuid = system.background?.uuid ?? "";
+    context.backgroundName = bgUuid
+      ? (await fromUuid(bgUuid).catch(() => null))?.name ?? "（背景已失效）"
+      : "";
+
     // ── 经验/HP/理智百分比 ────────────────────────────────────────────────
     context.xpPercent     = system.xp.next  > 0 ? ((system.xp.value  / system.xp.next)  * 100) : 0;
     context.canLevelUp    = (system.xp.value ?? 0) > (system.xp.next ?? Number.MAX_SAFE_INTEGER);
@@ -494,6 +500,9 @@ export class LimbusActorSheet extends ActorSheet {
 
     // 属性鉴定
     html.find(".attr-check-btn").on("click", this._onAttributeCheck.bind(this));
+
+    // 背景：添加/修改（打开创建向导）
+    html.find('[data-action="open-background-wizard"]').on("click", this._onOpenBackgroundWizard.bind(this));
 
     // 发送聊天框（物品行）
     html.find(".item-send-chat").on("click", this._onSendToChat.bind(this));
@@ -1090,6 +1099,15 @@ export class LimbusActorSheet extends ActorSheet {
       },
       default: "roll",
     }).render(true);
+  }
+
+  /* ─── 背景创建向导 ──────────────────────────────────────────────────────── */
+
+  async _onOpenBackgroundWizard(ev) {
+    ev.preventDefault();
+    if (!this.isEditable) return;
+    const { BackgroundWizard } = await import("./background-wizard.mjs");
+    new BackgroundWizard(this.actor).render(true);
   }
 
   /* ─── 物品操作 ──────────────────────────────────────────────────────────── */

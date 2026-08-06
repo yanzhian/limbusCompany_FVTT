@@ -1,0 +1,113 @@
+{{!-- background-wizard.hbs — 角色创建向导 --}}
+<div class="bgw-root">
+
+  <div class="bgw-steps">
+    <span class="bgw-step-dot {{#if (eq step 1)}}active{{/if}}">1 背景</span>
+    <span class="bgw-step-dot {{#if (eq step 2)}}active{{/if}}">2 属性</span>
+    <span class="bgw-step-dot {{#if (eq step 3)}}active{{/if}}">3 恐慌</span>
+    <span class="bgw-step-dot {{#if (eq step 4)}}active{{/if}}">4 物品</span>
+  </div>
+
+  {{!-- ── Step 1：选择背景 ─────────────────────────────────────────── --}}
+  {{#if (eq step 1)}}
+  <div class="bgw-panel">
+    <input type="text" class="bgw-search-input" data-target="bg" value="{{bgSearch}}" placeholder="搜索背景（名称/分类）...">
+    <div class="bgw-list">
+      {{#each bgList}}
+        <div class="bgw-list-item {{#if (eq uuid ../selectedBgUuid)}}selected{{/if}}"
+             data-bg-uuid="{{uuid}}" title="{{name}}">
+          <img src="{{img}}" class="bgw-list-icon" alt="{{name}}">
+          <div class="bgw-list-info">
+            <div class="bgw-list-name">{{name}}</div>
+            {{#if category}}<div class="bgw-list-cat">{{category}}</div>{{/if}}
+          </div>
+        </div>
+      {{else}}
+        <div class="bgw-empty">未找到背景物品</div>
+      {{/each}}
+    </div>
+  </div>
+  {{/if}}
+
+  {{!-- ── Step 2：属性分配 ─────────────────────────────────────────── --}}
+  {{#if (eq step 2)}}
+  <div class="bgw-panel">
+    <div class="bgw-attr-remaining">剩余属性点：<span class="{{#unless remaining}}zero{{/unless}}">{{remaining}}</span></div>
+    <div class="bgw-attr-list">
+      {{#each attrs}}
+        <div class="bgw-attr-row">
+          <span class="bgw-attr-label">{{label}}</span>
+          <button type="button" class="bgw-attr-minus" data-attr="{{key}}">−</button>
+          <span class="bgw-attr-value">{{value}}</span>
+          <button type="button" class="bgw-attr-plus" data-attr="{{key}}">＋</button>
+        </div>
+      {{/each}}
+    </div>
+  </div>
+  {{/if}}
+
+  {{!-- ── Step 3：恐慌卡选择 ───────────────────────────────────────── --}}
+  {{#if (eq step 3)}}
+  <div class="bgw-panel bgw-panic-panel">
+    <div class="bgw-panic-col">
+      <div class="bgw-panic-hd">士气低落</div>
+      <input type="text" class="bgw-search-input" data-target="lowMorale" value="{{panicSearch.lowMorale}}" placeholder="搜索...">
+      <div class="bgw-list bgw-panic-list">
+        {{#each lowMoraleList}}
+          <div class="bgw-panic-item {{#if (eq uuid ../panicSelected.lowMorale)}}selected{{/if}}"
+               data-slot="lowMorale" data-item-uuid="{{uuid}}" title="{{name}}">
+            <img src="{{img}}" class="bgw-list-icon" alt="{{name}}">
+            <span class="bgw-list-name">{{name}}</span>
+          </div>
+        {{else}}
+          <div class="bgw-empty">未找到恐慌卡</div>
+        {{/each}}
+      </div>
+    </div>
+    <div class="bgw-panic-col">
+      <div class="bgw-panic-hd">陷入恐慌</div>
+      <input type="text" class="bgw-search-input" data-target="panic" value="{{panicSearch.panic}}" placeholder="搜索...">
+      <div class="bgw-list bgw-panic-list">
+        {{#each panicList}}
+          <div class="bgw-panic-item {{#if (eq uuid ../panicSelected.panic)}}selected{{/if}}"
+               data-slot="panic" data-item-uuid="{{uuid}}" title="{{name}}">
+            <img src="{{img}}" class="bgw-list-icon" alt="{{name}}">
+            <span class="bgw-list-name">{{name}}</span>
+          </div>
+        {{else}}
+          <div class="bgw-empty">未找到恐慌卡</div>
+        {{/each}}
+      </div>
+    </div>
+  </div>
+  {{/if}}
+
+  {{!-- ── Step 4：初始物品确认 ─────────────────────────────────────── --}}
+  {{#if (eq step 4)}}
+  <div class="bgw-panel">
+    {{#if background}}
+      <div class="bgw-bg-summary">
+        <img src="{{background.img}}" class="bgw-list-icon" alt="{{background.name}}">
+        <span class="bgw-bg-name">{{background.name}}</span>
+      </div>
+    {{/if}}
+    <div class="bgw-section-title">初始物品</div>
+    <div class="bgw-item-grid">
+      {{#each startingItems}}
+        <div class="bgw-item-chip" data-item-uuid="{{uuid}}" title="{{name}}">
+          <img src="{{img}}" class="bgw-item-icon" alt="{{name}}">
+        </div>
+      {{else}}
+        <div class="bgw-empty">此背景无初始物品</div>
+      {{/each}}
+    </div>
+  </div>
+  {{/if}}
+
+  <div class="bgw-footer">
+    {{#if (gt step 1)}}<button type="button" class="bgw-back sheet-btn">上一步</button>{{/if}}
+    {{#if (lte step 3)}}<button type="button" class="bgw-next sheet-btn" {{#unless canNext}}disabled{{/unless}}>下一步</button>{{/if}}
+    {{#if (eq step 4)}}<button type="button" class="bgw-finish sheet-btn">完成</button>{{/if}}
+  </div>
+
+</div>

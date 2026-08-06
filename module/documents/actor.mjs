@@ -200,8 +200,13 @@ export class CharacterData extends foundry.abstract.TypeDataModel {
       // ── 背景信息（纯自由文本，不参与规则运算） ───────────────────────
       biography: new fields.HTMLField({ required: false, initial: "" }),
 
-      // ── 背景标签（如：背景-收尾人-7阶） ─────────────────────────────
+      // ── 背景标签（旧版自由文本，逐步由下方 background.uuid 结构化背景取代） ──
       backgroundTag: new fields.StringField({ required: false, initial: "" }),
+
+      // ── 背景（指向"背景"类型物品的 UUID，由创建向导写入） ──────────────
+      background: new fields.SchemaField({
+        uuid: new fields.StringField({ required: false, initial: "" }),
+      }),
 
       // ── 属性点（每 10 级 +1） ─────────────────────────────────────────
       attrPoints: new fields.NumberField({ required: true, integer: true, min: 0, initial: 0 }),
