@@ -501,9 +501,10 @@ export class LimbusActorSheet extends ActorSheet {
     // 属性鉴定
     html.find(".attr-check-btn").on("click", this._onAttributeCheck.bind(this));
 
-    // 背景：未设置 → 打开创建向导；已设置 → 打开背景物品卡
+    // 背景：未设置 → 打开创建向导；已设置 → 打开背景物品卡；右键 → 查看/删除
     html.find('[data-action="open-background-wizard"]').on("click", this._onOpenBackgroundWizard.bind(this));
     html.find('[data-action="open-background-item"]').on("click", this._onOpenBackgroundItem.bind(this));
+    html.find('[data-action="open-background-item"]').on("contextmenu", this._onBackgroundContextMenu.bind(this));
 
     // 发送聊天框（物品行）
     html.find(".item-send-chat").on("click", this._onSendToChat.bind(this));
@@ -1119,6 +1120,36 @@ export class LimbusActorSheet extends ActorSheet {
     const item = await fromUuid(uuid).catch(() => null);
     if (!item) { ui.notifications.warn("背景物品已失效。"); return; }
     item.sheet?.render(true);
+  }
+
+  /** 已选择背景：右键菜单「查看/删除」（删除即清空 system.background.uuid，二次确认） */
+  async _onBackgroundContextMenu(ev) {
+    ev.preventDefault();
+    if (!this.isEditable) return;
+    const uuid = this.actor.system.background?.uuid ?? "";
+    if (!uuid) return;
+
+    this._renderContextMenu(ev, [
+      {
+        name: "查看/编辑", icon: "<i class='fas fa-edit'></i>",
+        callback: async () => {
+          const item = await fromUuid(uuid).catch(() => null);
+          if (!item) { ui.notifications.warn("背景物品已失效。"); return; }
+          item.sheet?.render(true);
+        },
+      },
+      {
+        name: "删除", icon: "<i class='fas fa-trash'></i>",
+        callback: async () => {
+          const confirmed = await Dialog.confirm({
+            title:   "移除背景",
+            content: "<p>确定要移除当前角色的背景吗？此操作不会删除背景物品本身，也不会撤销已获得的属性点/物品，仅解除角色与该背景的关联。</p>",
+          });
+          if (!confirmed) return;
+          await this.actor.update({ "system.background.uuid": "" });
+        },
+      },
+    ]);
   }
 
   /* ─── 物品操作 ──────────────────────────────────────────────────────────── */
