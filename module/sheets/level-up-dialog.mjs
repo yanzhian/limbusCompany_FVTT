@@ -1,8 +1,10 @@
 /**
- * level-up-dialog.mjs — 角色升级确认对话框
+ * level-up-dialog.mjs — 角色升级对话框
  *
- * 展示：提升生命值(原→现)、增加星光值(原→现)、升级奖励（背景该等级对应物品）。
- * 点击"确认升级"后调用 actor.levelUpByXp() 实际写入数据并发放奖励物品。
+ * 两阶段：
+ *   1. 提升生命值/星光（等级/生命值/星光：原→现），点击"下一步"实际应用升级
+ *      （写入数据 + 按背景 levelRewards 发放本级奖励物品）
+ *   2. 等级奖励物品展示，点击"完成"关闭对话框
  */
 import { buildItemTitleCard } from "./item-sheet.mjs";
 
@@ -13,7 +15,7 @@ export class LevelUpDialog extends Application {
       id:        "level-up-dialog",
       classes:   ["limbuscompany", "level-up-dialog"],
       template:  "systems/limbusCompany_FVTT/templates/apps/level-up-dialog.hbs",
-      title:     "角色升级",
+      title:     "升级",
       width:     420,
       height:    "auto",
       resizable: false,
@@ -23,19 +25,23 @@ export class LevelUpDialog extends Application {
   constructor(actor, options = {}) {
     super(options);
     this.actor = actor;
+    this.step = 1;
+    this.result = null; // levelUpByXp() 返回的预览/结果数据，第 2 步展示用
     this._titleCard = null;
   }
 
   async getData(options = {}) {
     const ctx = await super.getData(options);
-    ctx.preview = await this.actor.getLevelUpPreview();
+    ctx.step = this.step;
+    ctx.bgName = (await fromUuid(this.actor.system.background?.uuid ?? "").catch(() => null))?.name ?? "";
+    ctx.preview = this.step === 1 ? await this.actor.getLevelUpPreview() : this.result;
     return ctx;
   }
 
   activateListeners(html) {
     super.activateListeners(html);
-    html.find(".lud-confirm").on("click", this._onConfirm.bind(this));
-    html.find(".lud-cancel").on("click", () => this.close());
+    html.find(".lud-next").on("click", this._onNext.bind(this));
+    html.find(".lud-finish, .lud-cancel").on("click", () => this.close());
     html.find(".lud-item-chip[data-item-uuid]")
       .on("mouseenter", this._onHover.bind(this))
       .on("mouseleave", this._onHoverEnd.bind(this));
@@ -60,30 +66,13 @@ export class LevelUpDialog extends Application {
     this._titleCard = null;
   }
 
-  async _onConfirm(event) {
+  async _onNext(event) {
     event.preventDefault();
-    const preview = await this.actor.levelUpByXp();
-    if (!preview) return;
-
-    const rewardsHtml = preview.rewards.length
-      ? `<div class="lud-chat-rewards">${preview.rewards.map(r =>
-          `<div class="lud-chat-reward"><img src="${r.img}" alt="${r.name}"><span>${r.name}</span></div>`
-        ).join("")}</div>`
-      : "";
-
-    await ChatMessage.create({
-      speaker: ChatMessage.getSpeaker({ actor: this.actor }),
-      content: `
-        <div class="limbus-title-card">
-          <div class="tc-header"><strong>${this.actor.name}</strong> 升级至 <strong>Lv ${preview.nextLevel}</strong></div>
-          <div class="lud-chat-row">生命值上限：${preview.hpFrom} → ${preview.hpTo}</div>
-          <div class="lud-chat-row">星芒上限：${preview.stellarFrom} → ${preview.stellarTo}</div>
-          ${rewardsHtml}
-        </div>`,
-    });
-
-    ui.notifications.info(`已升级至 Lv ${preview.nextLevel}。`);
-    this.close();
+    const result = await this.actor.levelUpByXp();
+    if (!result) return;
+    this.result = result;
+    this.step = 2;
+    this.render();
   }
 
   close(options) {

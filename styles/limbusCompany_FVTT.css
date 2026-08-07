@@ -7958,19 +7958,28 @@ input.item-piles-quantity {
 .bgw-next:disabled { opacity: .4; cursor: not-allowed; }
 
 /* ═══ 升级对话框（level-up-dialog） ═══ */
-.level-up-dialog .window-content { padding: 0; background: #1c140c; }
-.lud-root { display: flex; flex-direction: column; gap: 8px; padding: 14px; color: #C9B79C; }
-.lud-title { text-align: center; font-size: 17px; color: #C58C4E; margin-bottom: 4px; }
-.lud-row { display: flex; justify-content: space-between; padding: 5px 8px; background: #241808; border-radius: 2px; }
-.lud-label { color: #8a7a6a; }
-.lud-value strong { color: #C58C4E; }
-.lud-section-title { font-size: 13px; color: #8a7a6a; margin-top: 6px; }
-.lud-item-grid { display: flex; flex-wrap: wrap; gap: 8px; min-height: 50px; }
-.lud-item-chip { width: 50px; height: 50px; border-radius: 2px; overflow: hidden; border: 1px solid #3a2a18; }
-.lud-item-icon { width: 100%; height: 100%; object-fit: cover; }
+.level-up-dialog .window-content { padding: 0; background: transparent; }
+.lud-root {
+  display: flex; flex-direction: column; gap: 6px; padding: 18px;
+  color: #C9B79C; background: linear-gradient(180deg, #241a10 0%, #120c07 100%);
+  border-radius: 6px;
+}
+.lud-card-title { text-align: center; font-size: 26px; color: #E8D9C0; font-weight: bold; }
+.lud-card-subtitle { text-align: center; font-size: 13px; color: #8a7a6a; margin-bottom: 4px; }
+.lud-section-title {
+  font-size: 15px; color: #C9B79C; padding-bottom: 6px;
+  border-bottom: 1px solid #5a3f22; margin-bottom: 4px;
+}
+.lud-rows { display: flex; flex-direction: column; gap: 10px; padding: 6px 0; }
+.lud-row { display: flex; align-items: center; gap: 10px; }
+.lud-label { color: #8a7a6a; flex: 1; }
+.lud-value { font-size: 20px; color: #C9B79C; min-width: 36px; text-align: center; }
+.lud-value-new { color: #C58C4E; font-weight: bold; }
+.lud-arrow { color: #8a7a6a; font-size: 16px; }
+.lud-item-list { display: flex; flex-direction: column; gap: 6px; min-height: 40px; padding: 4px 0; }
+.lud-item-row { display: flex; align-items: center; gap: 10px; padding: 4px 0; }
+.lud-item-icon { width: 40px; height: 40px; object-fit: cover; border-radius: 2px; border: 1px solid #3a2a18; }
+.lud-item-name { color: #C9B79C; }
 .lud-empty { text-align: center; color: #6a5a48; padding: 10px 0; font-size: 13px; }
-.lud-footer { display: flex; justify-content: flex-end; gap: 8px; padding-top: 8px; border-top: 1px solid #3a2a18; margin-top: 4px; }
-.lud-chat-rewards { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
-.lud-chat-reward { display: flex; align-items: center; gap: 4px; font-size: 12px; }
-.lud-chat-reward img { width: 22px; height: 22px; object-fit: cover; border-radius: 2px; }
-.lud-chat-row { font-size: 13px; margin-top: 2px; }
+.lud-footer { display: flex; justify-content: center; padding-top: 10px; }
+.lud-footer .sheet-btn { width: 100%; }

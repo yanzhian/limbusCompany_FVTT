@@ -1,38 +1,54 @@
-{{!-- level-up-dialog.hbs — 角色升级确认对话框 --}}
+{{!-- level-up-dialog.hbs — 角色升级对话框（两阶段） --}}
 <div class="lud-root">
-  {{#if preview}}
-    <div class="lud-title">Lv {{preview.currentLevel}} → Lv {{preview.nextLevel}}</div>
+  <div class="lud-card-title">升级</div>
+  {{#if bgName}}<div class="lud-card-subtitle">{{bgName}}</div>{{/if}}
 
-    <div class="lud-row">
-      <span class="lud-label">提升生命值</span>
-      <span class="lud-value">{{preview.hpFrom}} → <strong>{{preview.hpTo}}</strong></span>
-    </div>
-    <div class="lud-row">
-      <span class="lud-label">增加星光值</span>
-      <span class="lud-value">{{preview.stellarFrom}} → <strong>{{preview.stellarTo}}</strong></span>
-    </div>
-    {{#if (gt preview.attrPointsTo preview.attrPointsFrom)}}
-      <div class="lud-row">
-        <span class="lud-label">属性点</span>
-        <span class="lud-value">{{preview.attrPointsFrom}} → <strong>{{preview.attrPointsTo}}</strong></span>
+  {{#if preview}}
+
+    {{#if (eq step 1)}}
+      <div class="lud-section-title">提升生命值/星光</div>
+      <div class="lud-rows">
+        <div class="lud-row">
+          <span class="lud-label">您的等级</span>
+          <span class="lud-value">{{preview.currentLevel}}</span>
+          <span class="lud-arrow">→</span>
+          <span class="lud-value lud-value-new">{{preview.nextLevel}}</span>
+        </div>
+        <div class="lud-row">
+          <span class="lud-label">您的生命值</span>
+          <span class="lud-value">{{preview.hpFrom}}</span>
+          <span class="lud-arrow">→</span>
+          <span class="lud-value lud-value-new">{{preview.hpTo}}</span>
+        </div>
+        <div class="lud-row">
+          <span class="lud-label">您的星光</span>
+          <span class="lud-value">{{preview.stellarFrom}}</span>
+          <span class="lud-arrow">→</span>
+          <span class="lud-value lud-value-new">{{preview.stellarTo}}</span>
+        </div>
+      </div>
+      <div class="lud-footer">
+        <button type="button" class="lud-next sheet-btn">下一步</button>
       </div>
     {{/if}}
 
-    <div class="lud-section-title">升级奖励</div>
-    <div class="lud-item-grid">
-      {{#each preview.rewards}}
-        <div class="lud-item-chip" data-item-uuid="{{uuid}}" title="{{name}}">
-          <img src="{{img}}" class="lud-item-icon" alt="{{name}}">
-        </div>
-      {{else}}
-        <div class="lud-empty">本级无升级奖励</div>
-      {{/each}}
-    </div>
+    {{#if (eq step 2)}}
+      <div class="lud-section-title">等级奖励物品</div>
+      <div class="lud-item-list">
+        {{#each preview.rewards}}
+          <div class="lud-item-row" data-item-uuid="{{uuid}}" title="{{name}}">
+            <img src="{{img}}" class="lud-item-icon" alt="{{name}}">
+            <span class="lud-item-name">{{name}}</span>
+          </div>
+        {{else}}
+          <div class="lud-empty">本级无升级奖励</div>
+        {{/each}}
+      </div>
+      <div class="lud-footer">
+        <button type="button" class="lud-finish sheet-btn">完成</button>
+      </div>
+    {{/if}}
 
-    <div class="lud-footer">
-      <button type="button" class="lud-cancel sheet-btn">取消</button>
-      <button type="button" class="lud-confirm sheet-btn">确认升级</button>
-    </div>
   {{else}}
     <div class="lud-empty">经验值未超过升级阈值，暂无法升级。</div>
     <div class="lud-footer">
