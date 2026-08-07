@@ -5409,14 +5409,13 @@ body.game .limbuscompany.app img {
   border-radius:   6px;
   /* 静止时：半透明背景，保留图标+数值可见 */
   background:      rgba(10, 7, 3, 0.45);
-  border:          1px solid rgba(90, 58, 26, 0.3);
-  transition:      background 0.35s ease, border-color 0.35s ease;
+  border:          none;
+  transition:      background 0.35s ease;
 }
 
 #limbus-sin-resource-hud.sin-hud-hover .sin-hud-bar,
 #limbus-sin-resource-hud.sin-hud-dragging .sin-hud-bar {
   background:   rgba(10, 7, 3, 0.88);
-  border-color: rgba(90, 58, 26, 0.7);
 }
 
 /* ── 每个罪孽条目 ── */
@@ -5432,7 +5431,7 @@ body.game .limbuscompany.app img {
   width:         32px;
   height:        32px;
   border-radius: 50%;
-  border:        2px solid currentColor;
+  border:        none;
   object-fit:    cover;
   flex-shrink:   0;
 }
@@ -5455,7 +5454,6 @@ body.game .limbuscompany.app img {
   color:        #E5B681;
   background:   transparent;
   border:       none;
-  border-bottom: 1px solid rgba(200, 158, 112, 0.3);
   outline:      none;
   text-align:   center;
   padding:      0;
@@ -5467,7 +5465,7 @@ body.game .limbuscompany.app img {
   margin: 0;
 }
 .limbus-sin-hud .sin-hud-value-input:focus {
-  border-bottom-color: #C89E70;
+  outline: none;
 }
 
 /* ── 重置按钮 ── */
@@ -5498,19 +5496,19 @@ body.game .limbuscompany.app img {
 }
 .limbus-sin-hud .field-hud-icon {
   width: 32px; height: 32px; object-fit: cover; border-radius: 50%;
-  border: 2px solid #C89E70; flex-shrink: 0;
+  border: none; flex-shrink: 0;
 }
 .limbus-sin-hud .field-hud-value {
   font-size: 20px; font-weight: bold; min-width: 20px; text-align: center; color: #E5B681;
 }
 .limbus-sin-hud .field-hud-value-input {
   font-size: 20px; font-weight: bold; width: 40px; color: #E5B681;
-  background: transparent; border: none; border-bottom: 1px solid rgba(200, 158, 112, 0.3);
+  background: transparent; border: none;
   outline: none; text-align: center; padding: 0; -moz-appearance: textfield;
 }
 .limbus-sin-hud .field-hud-value-input::-webkit-outer-spin-button,
 .limbus-sin-hud .field-hud-value-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
-.limbus-sin-hud .field-hud-value-input:focus { border-bottom-color: #C89E70; }
+.limbus-sin-hud .field-hud-value-input:focus { outline: none; }
 .limbus-sin-hud .field-hud-remove {
   background: transparent; border: none; color: #8a7a6a; cursor: pointer;
   font-size: 14px; line-height: 1; padding: 0 2px;
