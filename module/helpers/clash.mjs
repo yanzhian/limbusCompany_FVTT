@@ -873,9 +873,27 @@ export class ClashManager {
               totalDmg = actualStacks * intensity;
               dmgNote  = `，受到 ${totalDmg} 点伤害（${actualStacks}×${intensity}）`;
             } else if (buffType === "sinking" && intensity > 0) {
-              const sanity = effTgt.system?.sanity?.value ?? 50;
-              totalDmg = actualStacks * intensity * sanity;
-              dmgNote  = `，受到 ${totalDmg} 点理智伤害（${actualStacks}×${intensity}×${sanity}）`;
+              // 【沉沦】：为目标造成 强度等级的理智伤害；理智因此跌至下限 5 时，
+              // 额外造成 强度等级的【忧郁】罪孽伤害（按目标忧郁抗性结算，非 HP_DMG_BUFFS 通用公式）
+              const sanityDmg = actualStacks * intensity;
+              if (typeof effTgt.setSanity === "function") {
+                await effTgt.setSanity((effTgt.system?.sanity?.value ?? 50) - sanityDmg);
+              } else {
+                const curSanity = effTgt.system?.sanity?.value ?? 50;
+                await ClashManager._safeDocUpdate(effTgt, {
+                  "system.sanity.value": Math.max(5, Math.min(95, curSanity - sanityDmg)),
+                });
+              }
+              dmgNote = `，理智 -${sanityDmg}`;
+              if ((effTgt.system?.sanity?.value ?? 50) === 5) {
+                const gloomMult = ClashManager._parseResistance(effTgt.system?.egoResistances?.gloom ?? "x1.0");
+                const gloomDmg  = Math.max(0, Math.round(intensity * gloomMult));
+                if (gloomDmg > 0) {
+                  const curHp = effTgt.system?.hp?.value ?? 0;
+                  await ClashManager._safeDocUpdate(effTgt, { "system.hp.value": Math.max(0, curHp - gloomDmg) });
+                  dmgNote += `，理智见底额外受到 ${gloomDmg} 点【忧郁】伤害`;
+                }
+              }
             }
             if (totalDmg > 0) {
               const curHp = effTgt.system?.hp?.value ?? 0;
@@ -2999,9 +3017,19 @@ export class ClashManager {
     // 更新 HP
     await actor.update({ "system.hp.value": newHp });
 
-    // 沉沦：更新理智值（setSanity 内部会检查恐慌状态）
+    // 沉沦：更新理智值（setSanity 内部会检查恐慌状态）；
+    // 若理智因此跌至下限 5，额外造成【沉沦】强度等级的【忧郁】罪孽伤害（按目标忧郁抗性结算）
+    let sinkingGloomDmg = 0;
     if (sanityDmg > 0 && typeof actor.setSanity === "function") {
       await actor.setSanity((actor.system.sanity?.value ?? 50) - sanityDmg);
+      if ((actor.system.sanity?.value ?? 50) === 5) {
+        const gloomMult = ClashManager._parseResistance(actor.system?.egoResistances?.gloom ?? "x1.0");
+        sinkingGloomDmg = Math.max(0, Math.round((sinkingBuff?.intensity ?? 0) * gloomMult));
+        if (sinkingGloomDmg > 0) {
+          const curHp2 = actor.system.hp?.value ?? 0;
+          await ClashManager._safeDocUpdate(actor, { "system.hp.value": Math.max(0, curHp2 - sinkingGloomDmg) });
+        }
+      }
     }
 
     // 触发混乱效果（silent=true：混乱信息已在取血消息中展示，无需额外聊天框，避免双次 ChatMessage.create 触发 Foundry 清理竞态）
@@ -3023,17 +3051,20 @@ export class ClashManager {
       for (const line of _hookLines) hookMsgs.push(line);
     }
 
-    await ClashManager._sendTakeMsg(actor, damage, oldHp, newHp, maxHp, chaosTriggered,
-      { ruptureDmg, sanityDmg, tremorTriggered, chaosName, calcNotes });
+    // 沉沦忧郁追加伤害发生在 HP 结算之后，需将最终 HP 一并传给聊天框显示
+    const finalHp = Math.max(0, newHp - sinkingGloomDmg);
+    await ClashManager._sendTakeMsg(actor, damage, oldHp, finalHp, maxHp, chaosTriggered,
+      { ruptureDmg, sanityDmg, sinkingGloomDmg, tremorTriggered, chaosName, calcNotes });
   }
 
   static async _sendTakeMsg(actor, damage, oldHp, newHp, maxHp, chaosTriggered,
-      { ruptureDmg = 0, sanityDmg = 0, tremorTriggered = false, chaosName = "陷入混乱", calcNotes = [] } = {}) {
+      { ruptureDmg = 0, sanityDmg = 0, sinkingGloomDmg = 0, tremorTriggered = false, chaosName = "陷入混乱", calcNotes = [] } = {}) {
     const hpPct    = Math.max(0, Math.round((newHp / maxHp) * 100));
-    const totalDmg = damage + ruptureDmg;
+    const totalDmg = damage + ruptureDmg + sinkingGloomDmg;
     const extraLines = [];
     if (ruptureDmg   > 0) extraLines.push(`【破裂】附加 +${ruptureDmg} 点固定伤害`);
     if (sanityDmg    > 0) extraLines.push(`【沉沦】附加 ${sanityDmg} 点侵蚀度（理智-${sanityDmg}）`);
+    if (sinkingGloomDmg > 0) extraLines.push(`【沉沦】理智见底：额外受到 ${sinkingGloomDmg} 点【忧郁】伤害`);
     if (tremorTriggered)  extraLines.push(`【震颤】引爆：混乱阈值前移`);
 
     const content = `
