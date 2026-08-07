@@ -59,6 +59,8 @@ export class BackgroundWizard extends Application {
 
     this._titleCard = null;
     this._focusState = null; // { selector, start, end } —— 重渲染后恢复搜索框焦点/光标位置
+    this._composing = false; // 是否正处于输入法组合输入会话中
+    this._searchDebounceTimer = null;
   }
 
   /* ─── 数据收集：世界物品 + 合集包物品 ──────────────────────────────────── */
@@ -185,11 +187,7 @@ export class BackgroundWizard extends Application {
     this._restoreFocus(html);
 
     // Step1
-    html.find(".bgw-search-input[data-target='bg']").on("input", (ev) => {
-      this.bgSearch = ev.currentTarget.value;
-      this._saveFocus(ev.currentTarget);
-      this.render();
-    });
+    this._bindSearchInput(html, ".bgw-search-input[data-target='bg']", (v) => { this.bgSearch = v; });
     html.find(".bgw-list-item[data-bg-uuid]").on("click", (ev) => {
       this.selectedBgUuid = ev.currentTarget.dataset.bgUuid;
       this.render();
@@ -209,21 +207,47 @@ export class BackgroundWizard extends Application {
     html.find(".bgw-attr-minus").on("click", (ev) => this._onAttrAdjust(ev, -1));
 
     // Step3
-    html.find(".bgw-search-input[data-target='lowMorale']").on("input", (ev) => {
-      this.panicSearch.lowMorale = ev.currentTarget.value;
-      this._saveFocus(ev.currentTarget);
-      this.render();
-    });
-    html.find(".bgw-search-input[data-target='panic']").on("input", (ev) => {
-      this.panicSearch.panic = ev.currentTarget.value;
-      this._saveFocus(ev.currentTarget);
-      this.render();
-    });
+    this._bindSearchInput(html, ".bgw-search-input[data-target='lowMorale']", (v) => { this.panicSearch.lowMorale = v; });
+    this._bindSearchInput(html, ".bgw-search-input[data-target='panic']",     (v) => { this.panicSearch.panic     = v; });
     html.find(".bgw-panic-item[data-slot][data-item-uuid]").on("click", (ev) => {
       const { slot, itemUuid } = ev.currentTarget.dataset;
       this.panicSelected[slot] = itemUuid;
       this.render();
     });
+  }
+
+  /**
+   * 绑定搜索框：兼容中文输入法（IME）组合输入，并对重渲染做防抖。
+   * 原先每次 `input` 都同步 `this.render()`，会在浏览器仍在处理当前按键事件、
+   * 或输入法组合会话进行中时就把 input 的 DOM 节点整体替换掉，导致：
+   *   1. 英文输入：偶发重复插入字符（DOM 在事件分发中途被替换）
+   *   2. 中文输入：输入法组合窗口被打断，无法正常拼字上屏
+   * 修复方式：组合输入期间（compositionstart~compositionend）不触发重渲染；
+   * 非组合输入用短防抖延迟重渲染，让浏览器先完整处理完当前按键。
+   */
+  _bindSearchInput(html, selector, apply) {
+    const el = html.find(selector)[0];
+    if (!el) return;
+
+    el.addEventListener("compositionstart", () => { this._composing = true; });
+    el.addEventListener("compositionend", () => {
+      this._composing = false;
+      apply(el.value);
+      this._saveFocus(el);
+      this._scheduleRender();
+    });
+    el.addEventListener("input", () => {
+      apply(el.value);
+      this._saveFocus(el);
+      if (this._composing) return; // 组合输入进行中，等待 compositionend 再重渲染
+      this._scheduleRender();
+    });
+  }
+
+  /** 防抖重渲染：避免在浏览器仍处理当前按键事件时就替换 DOM。 */
+  _scheduleRender() {
+    clearTimeout(this._searchDebounceTimer);
+    this._searchDebounceTimer = setTimeout(() => this.render(), 120);
   }
 
   /** 记录当前搜索框的焦点位置（data-target 值 + 光标选区），供重渲染后恢复。 */
@@ -346,5 +370,11 @@ export class BackgroundWizard extends Application {
     ui.notifications.info(`背景「${bg.name}」已应用。`);
     this.close();
     this.actor.sheet?.render(false);
+  }
+
+  close(options) {
+    clearTimeout(this._searchDebounceTimer);
+    this._onHoverEnd();
+    return super.close(options);
   }
 }
