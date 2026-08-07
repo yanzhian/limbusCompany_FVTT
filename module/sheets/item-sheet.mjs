@@ -1667,12 +1667,24 @@ export function resolveBuffMeta(nameOrType) {
     };
   }
 
-  const label = _buffLabelMap()[type] ?? nameOrType;
+  const knownLabel = _buffLabelMap()[type];
+  if (knownLabel) {
+    // 标准/特殊 BUFF：图标在 Buff_icon/ 根目录，说明文字来自 BUFF_DESCRIPTIONS
+    return {
+      type,
+      label:       knownLabel,
+      icon:        `${iconBase}${knownLabel}.webp`,
+      description: cfg.BUFF_DESCRIPTIONS?.[type] ?? "",
+    };
+  }
+
+  // 既不在 CustomBuffRegistry，也不在标准 BUFF_TYPES 里 → 视为「计数 BUFF」
+  // （只用于层数计数，没有独立效果逻辑），图标仍从 Custom_buffs/ 子目录找
   return {
     type,
-    label,
-    icon:        `${iconBase}${label}.webp`,
-    description: cfg.BUFF_DESCRIPTIONS?.[type] ?? "",
+    label:       nameOrType,
+    icon:        `${iconBase}Custom_buffs/${nameOrType}.webp`,
+    description: "计数 BUFF：仅记录层数，无独立效果逻辑",
   };
 }
 
