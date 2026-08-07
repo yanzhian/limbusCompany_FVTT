@@ -48,7 +48,6 @@ export class BackgroundWizard extends Application {
 
     // Step 3
     this.panicSearch = { lowMorale: "", panic: "" };
-    this.panicOpen   = { lowMorale: false, panic: false }; // 下拉展开状态
     this.panicSelected = {
       lowMorale: actor.system.panicSlots?.lowMorale
         ? actor.items.get(actor.system.panicSlots.lowMorale)?.uuid ?? ""
@@ -147,16 +146,9 @@ export class BackgroundWizard extends Application {
 
     if (this.step === 3) {
       ctx.panicSearch = this.panicSearch;
-      ctx.panicOpen   = this.panicOpen;
       ctx.lowMoraleList = await this._gatherItems("panic", this.panicSearch.lowMorale);
       ctx.panicList     = await this._gatherItems("panic", this.panicSearch.panic);
       ctx.panicSelected = this.panicSelected;
-      ctx.lowMoraleCurrentName = this.panicSelected.lowMorale
-        ? (await fromUuid(this.panicSelected.lowMorale).catch(() => null))?.name ?? "（未知）"
-        : "未选择";
-      ctx.panicCurrentName = this.panicSelected.panic
-        ? (await fromUuid(this.panicSelected.panic).catch(() => null))?.name ?? "（未知）"
-        : "未选择";
       ctx.canNext = !!this.panicSelected.lowMorale && !!this.panicSelected.panic;
     }
 
@@ -221,16 +213,7 @@ export class BackgroundWizard extends Application {
     html.find(".bgw-panic-item[data-slot][data-item-uuid]").on("click", (ev) => {
       const { slot, itemUuid } = ev.currentTarget.dataset;
       this.panicSelected[slot] = itemUuid;
-      this.panicOpen[slot] = false;
       this.render();
-    });
-    html.find(".bgw-panic-dd-hd").each((_, el) => {
-      const slot = el.closest(".bgw-panic-dd")?.dataset.slot;
-      if (!slot) return;
-      el.addEventListener("click", () => {
-        this.panicOpen[slot] = !this.panicOpen[slot];
-        this.render();
-      });
     });
   }
 

@@ -90,13 +90,9 @@
     {{#if bgName}}<div class="bgw-card-subtitle">{{bgName}}</div>{{/if}}
     <div class="bgw-card-section-hd"><span>选择恐慌 3/4</span></div>
 
-    <div class="bgw-panic-dd" data-slot="lowMorale">
-      <div class="bgw-panic-dd-hd">
-        <span class="bgw-panic-dd-label">1.士气低落</span>
-        <i class="fas fa-chevron-down bgw-panic-dd-caret"></i>
-        <span class="bgw-panic-dd-current">{{lowMoraleCurrentName}}</span>
-      </div>
-      <div class="bgw-panic-dd-body {{#unless panicOpen.lowMorale}}collapsed{{/unless}}">
+    <div class="bgw-panic-cols">
+      <div class="bgw-panic-col">
+        <div class="bgw-panic-hd">士气低落</div>
         <input type="text" class="bgw-search-input" data-target="lowMorale" value="{{panicSearch.lowMorale}}" placeholder="搜索...">
         <div class="bgw-list bgw-panic-list">
           {{#each lowMoraleList}}
@@ -110,15 +106,9 @@
           {{/each}}
         </div>
       </div>
-    </div>
 
-    <div class="bgw-panic-dd" data-slot="panic">
-      <div class="bgw-panic-dd-hd">
-        <span class="bgw-panic-dd-label">2.陷入恐慌</span>
-        <i class="fas fa-chevron-down bgw-panic-dd-caret"></i>
-        <span class="bgw-panic-dd-current">{{panicCurrentName}}</span>
-      </div>
-      <div class="bgw-panic-dd-body {{#unless panicOpen.panic}}collapsed{{/unless}}">
+      <div class="bgw-panic-col">
+        <div class="bgw-panic-hd">陷入恐慌</div>
         <input type="text" class="bgw-search-input" data-target="panic" value="{{panicSearch.panic}}" placeholder="搜索...">
         <div class="bgw-list bgw-panic-list">
           {{#each panicList}}
@@ -138,14 +128,10 @@
 
   {{!-- ── Step 4：初始物品确认 ─────────────────────────────────────── --}}
   {{#if (eq step 4)}}
-  <div class="bgw-panel">
-    {{#if background}}
-      <div class="bgw-bg-summary">
-        <img src="{{background.img}}" class="bgw-list-icon" alt="{{background.name}}">
-        <span class="bgw-bg-name">{{background.name}}</span>
-      </div>
-    {{/if}}
-    <div class="bgw-section-title">初始物品</div>
+  <div class="bgw-panel bgw-card">
+    <div class="bgw-card-title">背景选项</div>
+    {{#if background}}<div class="bgw-card-subtitle">{{background.name}}</div>{{/if}}
+    <div class="bgw-card-section-hd"><span>初始物品 4/4</span></div>
     <div class="bgw-item-grid">
       {{#each startingItems}}
         <div class="bgw-item-chip" data-item-uuid="{{uuid}}" title="{{name}}">
