@@ -58,6 +58,7 @@ export class BackgroundWizard extends Application {
     };
 
     this._titleCard = null;
+    this._focusState = null; // { selector, start, end } —— 重渲染后恢复搜索框焦点/光标位置
   }
 
   /* ─── 数据收集：世界物品 + 合集包物品 ──────────────────────────────────── */
@@ -176,13 +177,17 @@ export class BackgroundWizard extends Application {
   activateListeners(html) {
     super.activateListeners(html);
 
-    html.find(".bgw-back").on("click", () => { this.step = Math.max(1, this.step - 1); this.render(); });
+    html.find(".bgw-back").on("click", () => { this._focusState = null; this.step = Math.max(1, this.step - 1); this.render(); });
     html.find(".bgw-next").on("click", () => this._onNext());
     html.find(".bgw-finish").on("click", () => this._onFinish());
+
+    // 搜索框：重渲染后恢复光标焦点（否则每输入 1 个字符就因整块重渲染而失焦）
+    this._restoreFocus(html);
 
     // Step1
     html.find(".bgw-search-input[data-target='bg']").on("input", (ev) => {
       this.bgSearch = ev.currentTarget.value;
+      this._saveFocus(ev.currentTarget);
       this.render();
     });
     html.find(".bgw-list-item[data-bg-uuid]").on("click", (ev) => {
@@ -205,16 +210,39 @@ export class BackgroundWizard extends Application {
 
     // Step3
     html.find(".bgw-search-input[data-target='lowMorale']").on("input", (ev) => {
-      this.panicSearch.lowMorale = ev.currentTarget.value; this.render();
+      this.panicSearch.lowMorale = ev.currentTarget.value;
+      this._saveFocus(ev.currentTarget);
+      this.render();
     });
     html.find(".bgw-search-input[data-target='panic']").on("input", (ev) => {
-      this.panicSearch.panic = ev.currentTarget.value; this.render();
+      this.panicSearch.panic = ev.currentTarget.value;
+      this._saveFocus(ev.currentTarget);
+      this.render();
     });
     html.find(".bgw-panic-item[data-slot][data-item-uuid]").on("click", (ev) => {
       const { slot, itemUuid } = ev.currentTarget.dataset;
       this.panicSelected[slot] = itemUuid;
       this.render();
     });
+  }
+
+  /** 记录当前搜索框的焦点位置（data-target 值 + 光标选区），供重渲染后恢复。 */
+  _saveFocus(el) {
+    this._focusState = {
+      target: el.dataset.target,
+      start:  el.selectionStart,
+      end:    el.selectionEnd,
+    };
+  }
+
+  /** 重渲染完成后恢复搜索框焦点与光标位置（整块模板重渲染会销毁原 input DOM）。 */
+  _restoreFocus(html) {
+    const state = this._focusState;
+    if (!state) return;
+    const el = html.find(`.bgw-search-input[data-target='${state.target}']`)[0];
+    if (!el) return;
+    el.focus();
+    el.setSelectionRange(state.start, state.end);
   }
 
   _onAttrAdjust(ev, dir) {
@@ -257,6 +285,7 @@ export class BackgroundWizard extends Application {
     if (this.step === 3 && (!this.panicSelected.lowMorale || !this.panicSelected.panic)) {
       ui.notifications.warn("请选择士气低落与陷入恐慌对应的卡片。"); return;
     }
+    this._focusState = null;
     this.step = Math.min(4, this.step + 1);
     this.render();
   }
