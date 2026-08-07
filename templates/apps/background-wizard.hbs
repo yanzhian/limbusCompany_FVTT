@@ -8,23 +8,52 @@
     <span class="bgw-step-dot {{#if (eq step 4)}}active{{/if}}">4 物品</span>
   </div>
 
-  {{!-- ── Step 1：选择背景 ─────────────────────────────────────────── --}}
+  {{!-- ── Step 1：选择背景（合集包浏览器） ─────────────────────────────── --}}
   {{#if (eq step 1)}}
-  <div class="bgw-panel">
-    <input type="text" class="bgw-search-input" data-target="bg" value="{{bgSearch}}" placeholder="搜索背景（名称/分类）...">
-    <div class="bgw-list">
-      {{#each bgList}}
-        <div class="bgw-list-item {{#if (eq uuid ../selectedBgUuid)}}selected{{/if}}"
-             data-bg-uuid="{{uuid}}" title="{{name}}">
-          <img src="{{img}}" class="bgw-list-icon" alt="{{name}}">
-          <div class="bgw-list-info">
-            <div class="bgw-list-name">{{name}}</div>
-            {{#if category}}<div class="bgw-list-cat">{{category}}</div>{{/if}}
-          </div>
+  <div class="bgw-panel bgw-browser-panel">
+    <div class="bgw-browser-title">合集包浏览器</div>
+    <div class="bgw-browser-body">
+
+      {{!-- 左栏：搜索 + 合集（文件夹）筛选 --}}
+      <div class="bgw-browser-left">
+        <div class="bgw-search-wrap">
+          <input type="text" class="bgw-search-input" data-target="bg" value="{{bgSearch}}" placeholder="搜索...">
+          <i class="fas fa-search bgw-search-icon"></i>
         </div>
-      {{else}}
-        <div class="bgw-empty">未找到背景物品</div>
-      {{/each}}
+        <div class="bgw-cat-list">
+          {{#each bgCategories}}
+            <label class="bgw-cat-row">
+              <span class="bgw-cat-check {{#if active}}checked{{/if}}" data-category="{{name}}"></span>
+              <span class="bgw-cat-name">{{name}}</span>
+            </label>
+          {{/each}}
+        </div>
+      </div>
+
+      {{!-- 右栏：结果列表 --}}
+      <div class="bgw-browser-right">
+        <div class="bgw-result-hd">
+          <span class="bgw-result-hd-name">结果</span>
+          <span class="bgw-result-hd-res">资源</span>
+        </div>
+        <div class="bgw-list">
+          {{#each bgList}}
+            <div class="bgw-list-item {{#if (eq uuid ../selectedBgUuid)}}selected{{/if}}"
+                 data-bg-uuid="{{uuid}}" title="{{name}}">
+              <img src="{{img}}" class="bgw-list-icon" alt="{{name}}">
+              <div class="bgw-list-info">
+                <div class="bgw-list-name">{{name}}</div>
+                <div class="bgw-list-cat">{{category}}</div>
+              </div>
+              <span class="bgw-result-cat">{{category}}</span>
+              <span class="bgw-list-check {{#if (eq uuid ../selectedBgUuid)}}checked{{/if}}"></span>
+            </div>
+          {{else}}
+            <div class="bgw-empty">未找到背景物品</div>
+          {{/each}}
+        </div>
+      </div>
+
     </div>
   </div>
   {{/if}}

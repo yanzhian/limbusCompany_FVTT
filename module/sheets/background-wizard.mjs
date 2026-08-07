@@ -19,9 +19,9 @@ export class BackgroundWizard extends Application {
       id:        "background-wizard",
       classes:   ["limbuscompany", "background-wizard"],
       template:  "systems/limbusCompany_FVTT/templates/apps/background-wizard.hbs",
-      title:     "创建角色 — 背景",
-      width:     720,
-      height:    640,
+      title:     "背景选项",
+      width:     780,
+      height:    680,
       resizable: true,
     });
   }
@@ -34,7 +34,8 @@ export class BackgroundWizard extends Application {
     this.step = 1;
 
     // Step 1
-    this.bgSearch     = "";
+    this.bgSearch       = "";
+    this.bgCategoryFilter = new Set(); // 左侧「合集」勾选筛选（文件夹名）
     this.selectedBgUuid = actor.system.background?.uuid ?? "";
 
     // Step 2 —— 从当前角色属性出发，允许在固定预算内重新分配
@@ -59,34 +60,58 @@ export class BackgroundWizard extends Application {
 
   /* ─── 数据收集：世界物品 + 合集包物品 ──────────────────────────────────── */
 
-  async _gatherItems(type, search = "") {
-    const out = [];
+  /**
+   * 收集指定类型的物品（世界物品 + 全部合集包），并解析「合集」名称：
+   * 优先使用所在文件夹名称（世界物品的 Folder / 合集包的 Folder），
+   * 没有文件夹时退回 system.category 字段，都没有则归为「未分类」。
+   * @param {string} type   物品类型（如 "background" / "panic"）
+   * @returns {Promise<Array<{uuid,name,img,category}>>} 未经搜索/筛选过滤的全量列表
+   */
+  async _gatherAll(type) {
+    const out  = [];
     const seen = new Set();
-    const term = search.trim().toLowerCase();
 
-    const pushItem = (item, uuid) => {
-      if (!item || item.type !== type) return;
+    const pushItem = (uuid, name, img, category) => {
       if (seen.has(uuid)) return;
-      const name = item.name ?? "";
-      const category = item.system?.category ?? "";
-      if (term && !name.toLowerCase().includes(term) && !category.toLowerCase().includes(term)) return;
       seen.add(uuid);
-      out.push({ uuid, name, img: item.img, category });
+      out.push({ uuid, name, img, category: category || "未分类" });
     };
 
-    for (const item of game.items) pushItem(item, item.uuid);
+    for (const item of game.items) {
+      if (item.type !== type) continue;
+      const category = item.folder?.name || item.system?.category || "";
+      pushItem(item.uuid, item.name, item.img, category);
+    }
 
     for (const pack of game.packs) {
       if (pack.documentName !== "Item") continue;
-      const index = await pack.getIndex({ fields: ["type", "system.category", "img"] });
+      const index = await pack.getIndex({ fields: ["type", "system.category", "img", "folder"] });
       for (const entry of index) {
         if (entry.type !== type) continue;
-        pushItem({ name: entry.name, img: entry.img, type: entry.type, system: entry.system }, entry.uuid);
+        const folder = entry.folder ? pack.folders.get(entry.folder) : null;
+        const category = folder?.name || entry.system?.category || "";
+        pushItem(entry.uuid, entry.name, entry.img, category);
       }
     }
 
     out.sort((a, b) => a.name.localeCompare(b.name, "zh"));
     return out;
+  }
+
+  /**
+   * 按搜索词 + 已勾选合集筛选 _gatherAll() 的结果。
+   * @param {string} type
+   * @param {string} search
+   * @param {Set<string>} [categoryFilter]  为空表示不筛选（显示全部合集）
+   */
+  async _gatherItems(type, search = "", categoryFilter = null) {
+    const all  = await this._gatherAll(type);
+    const term = search.trim().toLowerCase();
+    return all.filter((it) => {
+      if (categoryFilter && categoryFilter.size && !categoryFilter.has(it.category)) return false;
+      if (term && !it.name.toLowerCase().includes(term) && !it.category.toLowerCase().includes(term)) return false;
+      return true;
+    });
   }
 
   /* ─── getData ────────────────────────────────────────────────────────── */
@@ -96,8 +121,11 @@ export class BackgroundWizard extends Application {
     ctx.step = this.step;
 
     if (this.step === 1) {
+      const all = await this._gatherAll("background");
+      ctx.bgCategories = [...new Set(all.map(i => i.category))].sort((a, b) => a.localeCompare(b, "zh"))
+        .map((name) => ({ name, active: this.bgCategoryFilter.has(name) }));
       ctx.bgSearch = this.bgSearch;
-      ctx.bgList   = await this._gatherItems("background", this.bgSearch);
+      ctx.bgList   = await this._gatherItems("background", this.bgSearch, this.bgCategoryFilter);
       ctx.selectedBgUuid = this.selectedBgUuid;
       ctx.canNext = !!this.selectedBgUuid;
     }
@@ -152,6 +180,12 @@ export class BackgroundWizard extends Application {
     });
     html.find(".bgw-list-item[data-bg-uuid]").on("click", (ev) => {
       this.selectedBgUuid = ev.currentTarget.dataset.bgUuid;
+      this.render();
+    });
+    html.find(".bgw-cat-check[data-category]").on("click", (ev) => {
+      const cat = ev.currentTarget.dataset.category;
+      if (this.bgCategoryFilter.has(cat)) this.bgCategoryFilter.delete(cat);
+      else this.bgCategoryFilter.add(cat);
       this.render();
     });
     html.find(".bgw-list-item[data-item-uuid], .bgw-item-chip[data-item-uuid]")

@@ -7922,6 +7922,45 @@ input.item-piles-quantity {
 .bgw-list-cat { font-size: 11px; color: #8a7a6a; }
 .bgw-empty { text-align: center; color: #6a5a48; padding: 20px 0; font-size: 13px; }
 
+/* ── 合集包浏览器（左：搜索+合集筛选 / 右：结果表） ── */
+.bgw-browser-panel {
+  background: linear-gradient(180deg, #241a10 0%, #150f09 100%);
+  border-radius: 4px; padding: 12px; gap: 10px;
+}
+.bgw-browser-title { text-align: center; font-size: 18px; color: #C58C4E; flex-shrink: 0; }
+.bgw-browser-body { flex: 1; display: flex; gap: 14px; min-height: 0; }
+.bgw-browser-left { width: 210px; flex-shrink: 0; display: flex; flex-direction: column; gap: 8px; }
+.bgw-search-wrap { position: relative; flex-shrink: 0; }
+.bgw-search-wrap .bgw-search-input { padding-right: 26px; }
+.bgw-search-icon { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); color: #8a7a6a; font-size: 12px; pointer-events: none; }
+.bgw-cat-list { display: flex; flex-direction: column; gap: 6px; overflow-y: auto; }
+.bgw-cat-row { display: flex; align-items: center; gap: 8px; cursor: pointer; padding: 2px 0; }
+.bgw-cat-check {
+  width: 16px; height: 16px; border: 1px solid #6a5a48; border-radius: 2px;
+  background: #150f09; flex-shrink: 0; display: inline-block;
+}
+.bgw-cat-check.checked { background: #C58C4E; border-color: #C58C4E; }
+.bgw-cat-name { font-size: 13px; color: #C9B79C; }
+.bgw-browser-right { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+.bgw-result-hd {
+  display: flex; justify-content: space-between; align-items: center;
+  background: #C9B79C; color: #241808; font-size: 12px; font-weight: bold;
+  padding: 5px 10px; border-radius: 2px 2px 0 0; flex-shrink: 0;
+}
+.bgw-browser-right .bgw-list { border: 1px solid #3a2a18; border-top: none; padding: 4px; gap: 0; }
+.bgw-browser-right .bgw-list-item {
+  border-radius: 0; border: none; border-bottom: 1px solid #2b1d10; background: transparent; padding: 6px 6px;
+}
+.bgw-browser-right .bgw-list-item:last-child { border-bottom: none; }
+.bgw-browser-right .bgw-list-item.selected { background: #3B2412; }
+.bgw-browser-right .bgw-list-item .bgw-list-info { flex: 1; }
+.bgw-result-cat { font-size: 12px; color: #8a7a6a; flex-shrink: 0; margin-right: 8px; }
+.bgw-list-check {
+  width: 16px; height: 16px; border: 1px solid #6a5a48; border-radius: 2px;
+  background: #150f09; flex-shrink: 0; display: inline-block;
+}
+.bgw-list-check.checked { background: #C58C4E; border-color: #C58C4E; }
+
 .bgw-attr-remaining { text-align: center; font-size: 15px; margin-bottom: 6px; }
 .bgw-attr-remaining span { color: #C58C4E; font-weight: bold; }
 .bgw-attr-remaining span.zero { color: #7fae6a; }
