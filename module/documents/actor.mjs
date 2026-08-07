@@ -749,20 +749,16 @@ export class LimbusActor extends Actor {
   }
 
   /**
-   * 手动升级：当经验值大于当前升级阈值时可触发。
-   * 升级后：等级+1，经验清零，星芒上限更新，按规则掷 1D10 增加最大生命值。
+   * 计算升级预览（不修改数据），供升级对话框展示"原→现"数值与本级奖励物品。
+   * @returns {Promise<object|null>} 无法升级时返回 null
    */
-  async levelUpByXp() {
+  async getLevelUpPreview() {
     const xpTable = CONFIG.LIMBUSCOMPANY?.LEVEL_XP ?? [];
     const sys = this.system;
     const currentLevel = sys.level;
     const needed = xpTable[currentLevel] ?? null;
     const currentXp = sys.xp.value ?? 0;
-
-    if (needed === null || currentXp <= needed) {
-      ui.notifications?.warn?.("经验值未超过升级阈值，无法升级。");
-      return;
-    }
+    if (needed === null || currentXp <= needed) return null;
 
     const nextLevel = currentLevel + 1;
     const con = sys.attributes?.con ?? 1;
@@ -775,26 +771,64 @@ export class LimbusActor extends Actor {
     const nextStellarMax = 30 + nextLevel;
     const nextAttrPoints = (nextLevel % 10 === 0) ? ((sys.attrPoints ?? 0) + 1) : (sys.attrPoints ?? 0);
 
-    return this.update({
-      "system.level":             nextLevel,
+    // 背景升级奖励：匹配 nextLevel 的物品条目
+    const rewards = [];
+    const bgUuid = sys.background?.uuid ?? "";
+    if (bgUuid) {
+      const bg = await fromUuid(bgUuid).catch(() => null);
+      const entry = bg?.system?.levelRewards?.find(r => Number(r.level) === nextLevel);
+      for (const ref of entry?.items ?? []) {
+        const it = ref.uuid ? await fromUuid(ref.uuid).catch(() => null) : null;
+        rewards.push({
+          uuid: ref.uuid,
+          name: it?.name ?? ref.itemData?.name ?? "（未知物品）",
+          img:  it?.img  ?? ref.itemData?.img  ?? "icons/svg/item-bag.svg",
+        });
+      }
+    }
+
+    return {
+      currentLevel, nextLevel,
+      hpFrom: sys.hp.max, hpTo: nextHPMax, hpValueTo: nextHPValue,
+      stellarFrom: sys.stellarMotes.max, stellarTo: nextStellarMax,
+      attrPointsFrom: sys.attrPoints ?? 0, attrPointsTo: nextAttrPoints,
+      rewards,
+    };
+  }
+
+  /**
+   * 应用升级：等级+1，经验清零，生命/星芒上限更新，按背景等级奖励发放物品。
+   * @returns {Promise<object|null>} 升级预览数据（用于聊天记录展示），无法升级时返回 null
+   */
+  async levelUpByXp() {
+    const preview = await this.getLevelUpPreview();
+    if (!preview) {
+      ui.notifications?.warn?.("经验值未超过升级阈值，无法升级。");
+      return null;
+    }
+
+    await this.update({
+      "system.level":             preview.nextLevel,
       "system.xp.value":          0,
-      "system.attrPoints":        nextAttrPoints,
-      "system.stellarMotes.max":  nextStellarMax,
-      "system.hp.max":            nextHPMax,
-      "system.hp.value":          nextHPValue,
+      "system.attrPoints":        preview.attrPointsTo,
+      "system.stellarMotes.max":  preview.stellarTo,
+      "system.hp.max":            preview.hpTo,
+      "system.hp.value":          preview.hpValueTo,
     });
 
-    await Dialog.wait({
-      title: `升级到 Lv ${level}`,
-      content: `<div class="limbuscompany"><p>生命值成长掷骰结果：<strong>${gain}</strong>（1D10）</p><p>点击确认继续。</p></div>`,
-      buttons: {
-        ok: { label: "确认" },
-      },
-      default: "ok",
-      close: () => gain,
-    });
+    if (preview.rewards.length) {
+      const toCreate = [];
+      for (const r of preview.rewards) {
+        const src = r.uuid ? await fromUuid(r.uuid).catch(() => null) : null;
+        const data = src ? src.toObject() : null;
+        if (!data) continue;
+        delete data._id;
+        toCreate.push(data);
+      }
+      if (toCreate.length) await this.createEmbeddedDocuments("Item", toCreate);
+    }
 
-    return gain;
+    return preview;
   }
 
 

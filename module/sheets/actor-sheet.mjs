@@ -2023,7 +2023,8 @@ export class LimbusActorSheet extends ActorSheet {
 
   async _onLevelUpClick(event) {
     event.preventDefault();
-    await this.actor.levelUpByXp?.();
+    const { LevelUpDialog } = await import("./level-up-dialog.mjs");
+    new LevelUpDialog(this.actor).render(true);
   }
 
   /* ─── 编辑锁 ─────────────────────────────────────────────────────────────── */

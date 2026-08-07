@@ -783,6 +783,7 @@ async function _preloadTemplates() {
     "systems/limbusCompany_FVTT/templates/item/panic-sheet.hbs",
     "systems/limbusCompany_FVTT/templates/item/background-sheet.hbs",
     "systems/limbusCompany_FVTT/templates/apps/background-wizard.hbs",
+    "systems/limbusCompany_FVTT/templates/apps/level-up-dialog.hbs",
     // Combat
     "systems/limbusCompany_FVTT/templates/combat/combat-hud.hbs",
     // Partials
