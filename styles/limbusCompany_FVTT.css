@@ -8096,3 +8096,10 @@ input.item-piles-quantity {
   color: #9FC2E0; cursor: help; font-weight: bold;
 }
 .desc-item-chip:hover { color: #6FA8D8; text-decoration: underline; }
+
+/* [触发时机] 静态标签（不可悬停搜索，仅按类别着色） */
+.desc-trigger-chip { font-weight: bold; }
+.desc-trigger-chip.trigger-blue   { color: #9FC2E0; }
+.desc-trigger-chip.trigger-green  { color: #7FBF7F; }
+.desc-trigger-chip.trigger-orange { color: #E0A050; }
+.desc-trigger-chip.trigger-red    { color: #E84444; }

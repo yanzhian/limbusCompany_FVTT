@@ -918,11 +918,16 @@ Hooks.once("init", () => {
     let s = html instanceof Handlebars.SafeString ? html.toString() : String(html ?? "");
     s = s.replace(/【([^【】]+)】/g, (_m, name) =>
       `<span class="desc-buff-chip" data-buff-name="${Handlebars.escapeExpression(name)}">【${Handlebars.escapeExpression(name)}】</span>`);
-    // [XXX] 与既有的"[触发时机]："书写惯例共用方括号，触发时机关键字（见
-    // ACTIVITY_TRIGGERS）不视为物品引用，原样保留，避免被误转成搜索不到的物品 chip
-    const triggerSet = new Set(CONFIG.LIMBUSCOMPANY?.ACTIVITY_TRIGGERS ?? []);
-    s = s.replace(/\[([^\[\]<>]+)\]/g, (m, name) => {
-      if (triggerSet.has(name.trim())) return m;
+    // [XXX] 与既有的"[触发时机]："书写惯例共用方括号：触发时机关键字改成按类别
+    // 着色的静态标签（不可悬停搜索），其余方括号文字才当作物品引用 chip 处理
+    const TRIGGER_COLORS = { "激活": "blue", "拼点成功": "orange", "拼点失败": "red" };
+    const triggerSet = new Set([...(CONFIG.LIMBUSCOMPANY?.ACTIVITY_TRIGGERS ?? []), "激活"]);
+    s = s.replace(/\[([^\[\]<>]+)\]/g, (_m, name) => {
+      const trimmed = name.trim();
+      if (triggerSet.has(trimmed)) {
+        const color = TRIGGER_COLORS[trimmed] ?? "green";
+        return `<span class="desc-trigger-chip trigger-${color}">[${Handlebars.escapeExpression(name)}]</span>`;
+      }
       return `<span class="desc-item-chip" data-item-name="${Handlebars.escapeExpression(name)}">[${Handlebars.escapeExpression(name)}]</span>`;
     });
     return new Handlebars.SafeString(s);
