@@ -10,6 +10,8 @@
 import { buildItemTitleCard } from "./item-sheet.mjs";
 
 const ATTR_KEYS = ["str", "agi", "con", "int", "per", "cha"];
+const ATTR_MIN = 2;
+const ATTR_MAX = 8;
 const ATTR_LABELS = { str: "力量", agi: "敏捷", con: "体质", int: "智力", per: "感知", cha: "魅力" };
 
 export class BackgroundWizard extends Application {
@@ -45,7 +47,8 @@ export class BackgroundWizard extends Application {
     this.attrBudget = ATTR_KEYS.reduce((s, k) => s + this.attrs[k], 0);
 
     // Step 3
-    this.panicSearch   = { lowMorale: "", panic: "" };
+    this.panicSearch = { lowMorale: "", panic: "" };
+    this.panicOpen   = { lowMorale: false, panic: false }; // 下拉展开状态
     this.panicSelected = {
       lowMorale: actor.system.panicSlots?.lowMorale
         ? actor.items.get(actor.system.panicSlots.lowMorale)?.uuid ?? ""
@@ -119,6 +122,9 @@ export class BackgroundWizard extends Application {
   async getData(options = {}) {
     const ctx = await super.getData(options);
     ctx.step = this.step;
+    ctx.bgName = this.selectedBgUuid
+      ? (await fromUuid(this.selectedBgUuid).catch(() => null))?.name ?? ""
+      : "";
 
     if (this.step === 1) {
       const all = await this._gatherAll("background");
@@ -134,14 +140,23 @@ export class BackgroundWizard extends Application {
       ctx.attrs  = ATTR_KEYS.map((k) => ({ key: k, label: ATTR_LABELS[k], value: this.attrs[k] }));
       const used = ATTR_KEYS.reduce((s, k) => s + this.attrs[k], 0);
       ctx.remaining = this.attrBudget - used;
+      ctx.attrMin = ATTR_MIN;
+      ctx.attrMax = ATTR_MAX;
       ctx.canNext = ctx.remaining === 0;
     }
 
     if (this.step === 3) {
       ctx.panicSearch = this.panicSearch;
+      ctx.panicOpen   = this.panicOpen;
       ctx.lowMoraleList = await this._gatherItems("panic", this.panicSearch.lowMorale);
       ctx.panicList     = await this._gatherItems("panic", this.panicSearch.panic);
       ctx.panicSelected = this.panicSelected;
+      ctx.lowMoraleCurrentName = this.panicSelected.lowMorale
+        ? (await fromUuid(this.panicSelected.lowMorale).catch(() => null))?.name ?? "（未知）"
+        : "未选择";
+      ctx.panicCurrentName = this.panicSelected.panic
+        ? (await fromUuid(this.panicSelected.panic).catch(() => null))?.name ?? "（未知）"
+        : "未选择";
       ctx.canNext = !!this.panicSelected.lowMorale && !!this.panicSelected.panic;
     }
 
@@ -206,7 +221,16 @@ export class BackgroundWizard extends Application {
     html.find(".bgw-panic-item[data-slot][data-item-uuid]").on("click", (ev) => {
       const { slot, itemUuid } = ev.currentTarget.dataset;
       this.panicSelected[slot] = itemUuid;
+      this.panicOpen[slot] = false;
       this.render();
+    });
+    html.find(".bgw-panic-dd-hd").each((_, el) => {
+      const slot = el.closest(".bgw-panic-dd")?.dataset.slot;
+      if (!slot) return;
+      el.addEventListener("click", () => {
+        this.panicOpen[slot] = !this.panicOpen[slot];
+        this.render();
+      });
     });
   }
 
@@ -215,7 +239,7 @@ export class BackgroundWizard extends Application {
     if (!ATTR_KEYS.includes(key)) return;
     const cur = this.attrs[key];
     const next = cur + dir;
-    if (next < 2 || next > 10) return;
+    if (next < ATTR_MIN || next > ATTR_MAX) return;
     const used = ATTR_KEYS.reduce((s, k) => s + this.attrs[k], 0);
     if (dir > 0 && used >= this.attrBudget) return; // 预算不足
     this.attrs[key] = next;
