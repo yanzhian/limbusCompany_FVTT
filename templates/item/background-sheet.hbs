@@ -50,6 +50,19 @@
       </div>
     </div>
 
+    {{!-- ── 势力/阵营标签（供场地资源等玩法逻辑匹配） ───────────────────── --}}
+    <div class="item-tags-row">
+      <div class="tags-area">
+        {{#if (and isEditable (not isLocked))}}
+          <input type="text" name="system.tags" value="{{system.tags}}" class="tags-input" placeholder="势力标签（如：拉曼却/血魔）"/>
+        {{else}}
+          {{#each (split system.tags "/")}}
+            {{#if this}}<span class="tag">{{trim this}}</span>{{/if}}
+          {{/each}}
+        {{/if}}
+      </div>
+    </div>
+
     <div class="equip-divider"></div>
 
     {{!-- ── 简介（富文本，支持图文） ──────────────────────────────────── --}}

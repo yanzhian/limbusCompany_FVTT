@@ -334,3 +334,82 @@ registerCustomBuff("bloodFlame", {
     await actor.update({ "system.buffs": buffs });
   },
 });
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   场地资源（FieldResourceRegistry）
+   ═══════════════════════════════════════════════════════════════════════════
+
+   与 CustomBuffRegistry 是姐妹关系但完全独立：场地资源是"全局公共计数器"，
+   不会写入任何角色的 system.buffs，因此天然无法作为 BUFF 施加给角色。
+
+   存储/同步：由 sin-resource-hud.mjs 负责（world-scope game.settings + socket
+   委托 GM 写入），本文件只维护"有哪些场地资源、它们各自的被动规则"这份定义表。
+   物品 Activity 编辑器里"消耗/效果"新增的【公用场地】选项，读写的就是这份
+   存储，与 CustomBuffRegistry 驱动的角色 BUFF 系统完全不共用数据。
+
+   用法：
+   registerFieldResource("场地名字", {
+     maxStacks: 999,                 // 可选，默认无上限
+     triggerBackgroundTags: ["血魔"], // 遭遇战开始时，若在场任意角色背景 tags
+                                      // 命中列表中任一项，则激活该场地资源
+     roundStartTags: ["拉曼却", "血魔"], // 可选：onRoundStart 的角色匹配名单，
+                                      // 缺省时与 triggerBackgroundTags 相同
+     async onStatusTick(ctx) {
+       // ctx = { buffType, intensity, stacksConsumed, name, addStacks(delta) }
+       // 在【流血/烧伤/破裂/沉沦/震颤】造成跳动伤害后，由 ClashManager 广播调用
+     },
+     async onRoundStart(ctx) {
+       // ctx = { actor, addBuff(type, intensity, stacks, whenAdded) }
+       // 每轮"回合开始时"处理，对每个行动角色调用一次（GM 端触发）
+     },
+   });
+*/
+
+/** @type {Map<string, object>} */
+export const FieldResourceRegistry = new Map();
+
+/**
+ * 注册一个场地资源定义（详见文件头本节用法说明）。
+ * @param {string} name    场地名字（同时作为存储 key 与 Activity 编辑器里输入的匹配串）
+ * @param {object} config  { maxStacks, triggerBackgroundTags, roundStartTags, onStatusTick, onRoundStart }
+ */
+export function registerFieldResource(name, config = {}) {
+  FieldResourceRegistry.set(name, {
+    name,
+    maxStacks:             config.maxStacks ?? Infinity,
+    triggerBackgroundTags: config.triggerBackgroundTags ?? [],
+    roundStartTags:        config.roundStartTags ?? config.triggerBackgroundTags ?? [],
+    onStatusTick:          typeof config.onStatusTick === "function" ? config.onStatusTick : null,
+    onRoundStart:          typeof config.onRoundStart === "function" ? config.onRoundStart : null,
+  });
+}
+
+/**
+ * 【血宴】场地资源
+ * - 最大值：999 层
+ * - 任意角色受到【流血】跳动伤害时：为血宴添加与该次流血强度相同的层数
+ * - 背景标签为【拉曼却】或【血魔】的角色，回合开始时：
+ *   获得 1 层 5 级（强度5）【流血】 + 3 层【攻击等级提升】
+ */
+registerFieldResource("血宴", {
+  maxStacks:             999,
+  triggerBackgroundTags: ["血魔"],
+  roundStartTags:        ["拉曼却", "血魔"],
+
+  async onStatusTick(ctx) {
+    if (ctx.buffType !== "bleed") return;
+    if (!(ctx.intensity > 0)) return;
+    await ctx.addStacks(ctx.intensity);
+  },
+
+  async onRoundStart(ctx) {
+    const bgUuid = ctx.actor?.system?.background?.uuid ?? "";
+    if (!bgUuid) return;
+    const bgItem = await fromUuid(bgUuid).catch(() => null);
+    const tags = String(bgItem?.system?.tags ?? "")
+      .split("/").map(t => t.trim()).filter(Boolean);
+    if (!tags.some(t => this.roundStartTags.includes(t))) return;
+    await ctx.addBuff("bleed",      5, 1, "本回合");
+    await ctx.addBuff("atkLevelUp", 0, 3, "本回合");
+  },
+});

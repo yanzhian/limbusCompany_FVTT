@@ -5488,6 +5488,34 @@ body.game .limbuscompany.app img {
   transform: rotate(180deg);
 }
 
+/* ── 场地资源（并入七宗罪池同一条 bar，仅显示已激活的条目） ── */
+.limbus-sin-hud .field-hud-divider {
+  width: 1px; align-self: stretch; margin: 4px 6px;
+  background: rgba(200, 158, 112, 0.3); flex-shrink: 0;
+}
+.limbus-sin-hud .field-hud-entry {
+  display: flex; align-items: center; gap: 4px; flex-shrink: 0;
+}
+.limbus-sin-hud .field-hud-name {
+  font-size: 13px; color: #C89E70; white-space: nowrap;
+}
+.limbus-sin-hud .field-hud-value {
+  font-size: 20px; font-weight: bold; min-width: 20px; text-align: center; color: #E5B681;
+}
+.limbus-sin-hud .field-hud-value-input {
+  font-size: 20px; font-weight: bold; width: 40px; color: #E5B681;
+  background: transparent; border: none; border-bottom: 1px solid rgba(200, 158, 112, 0.3);
+  outline: none; text-align: center; padding: 0; -moz-appearance: textfield;
+}
+.limbus-sin-hud .field-hud-value-input::-webkit-outer-spin-button,
+.limbus-sin-hud .field-hud-value-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.limbus-sin-hud .field-hud-value-input:focus { border-bottom-color: #C89E70; }
+.limbus-sin-hud .field-hud-remove {
+  background: transparent; border: none; color: #8a7a6a; cursor: pointer;
+  font-size: 14px; line-height: 1; padding: 0 2px;
+}
+.limbus-sin-hud .field-hud-remove:hover { color: #E84444; }
+
 /* ============================================================
    快捷操作 HUD — Quick Action HUD
    ============================================================ */

@@ -4,7 +4,7 @@
  */
 
 import { SinResourceHUD } from "./sin-resource-hud.mjs";
-import { CustomBuffRegistry, resolveBuffHandler } from "./custom-buffs.mjs";
+import { CustomBuffRegistry, resolveBuffHandler, FieldResourceRegistry } from "./custom-buffs.mjs";
 
 export class ClashManager {
 
@@ -137,6 +137,27 @@ export class ClashManager {
       uuid: doc.uuid,
       data,
     });
+  }
+
+  /**
+   * 广播【流血/烧伤/破裂/沉沦/震颤】跳动伤害事件给所有已注册的场地资源。
+   * 由 _processBleed / triggerBuff 效果分支 / 承伤结算中破裂沉沦震颤三处调用。
+   * @param {string} buffType        跳动的状态 type（bleed/burn/rupture/sinking/tremor）
+   * @param {number} intensity       该状态的强度
+   * @param {number} [stacksConsumed=1] 本次消耗的层数
+   */
+  static async _tickFieldResources(buffType, intensity, stacksConsumed = 1) {
+    for (const [name, def] of FieldResourceRegistry) {
+      if (typeof def.onStatusTick !== "function") continue;
+      try {
+        await def.onStatusTick({
+          buffType, intensity, stacksConsumed, name,
+          addStacks: (delta) => SinResourceHUD.addFieldResourceStacks(name, delta),
+        });
+      } catch (err) {
+        console.error(`ClashManager: 场地资源【${name}】onStatusTick 执行出错`, err);
+      }
+    }
   }
 
   static _getBuffVal(actor, type) {
@@ -422,6 +443,14 @@ export class ClashManager {
           continue;
         }
 
+        // ── fieldResource 类型：检查公用场地当前层数（只读，不消耗）────
+        if (pre.type === "fieldResource") {
+          if (!pre.fieldName) { precondFail = true; break; }
+          const have = SinResourceHUD.getFieldResourceStacks(pre.fieldName);
+          if (!ClashManager._cmp(have, pre.comparison ?? "gte", pre.stacks ?? 0)) { precondFail = true; break; }
+          continue;
+        }
+
         if (!pre.buff) continue;
         const preBuffType = pre.buff === "custom" ? (pre.buffCustom || "custom") : pre.buff;
         const precTgt = pre.target === "self" ? owner : other;
@@ -496,6 +525,11 @@ export class ClashManager {
           } else if (mode === "reserve") {
             if (!bagState.slots[2]) { forcedFail = true; break; }
           }
+        } else if (cost.target === "field" && (cost.type === "forced" || cost.type === "perStack")) {
+          // 公用场地：层数不足（每N层的 N）则跳过整条 Activity
+          if (!cost.fieldName) { forcedFail = true; break; }
+          const have = SinResourceHUD.getFieldResourceStacks(cost.fieldName);
+          if (have < Math.max(1, cost.stacks ?? 1)) { forcedFail = true; break; }
         } else if (cost.buff && (cost.type === "forced" || cost.type === "perStack")) {
           // 强制消耗 / 每：层数不足（每N层的 N）则跳过整条 Activity
           const costBuffType = cost.buff === "custom" ? (cost.buffCustom || "custom") : cost.buff;
@@ -572,6 +606,18 @@ export class ClashManager {
             for (const tgt of costTgts) {
               await ClashManager._reduceBuffStacks(tgt, costBuffType, cost.stacks ?? 1);
             }
+          }
+        } else if (cost.target === "field" && cost.fieldName) {
+          // 公用场地：每 / 强制消耗 / 可选消耗（不足时可选消耗直接跳过，不报错）
+          if (cost.type === "perStack") {
+            const have  = SinResourceHUD.getFieldResourceStacks(cost.fieldName);
+            const n     = Math.max(1, cost.stacks ?? 1);
+            let   times = Math.floor(have / n);
+            if ((cost.maxTimes ?? 0) > 0) times = Math.min(times, cost.maxTimes);
+            await SinResourceHUD.consumeFieldResourceStacks(cost.fieldName, times * n);
+            perStackMultiplier = times;
+          } else if (cost.type !== "none") {
+            await SinResourceHUD.consumeFieldResourceStacks(cost.fieldName, cost.stacks ?? 1);
           }
         }
       }
@@ -720,6 +766,22 @@ export class ClashManager {
               : `【${item.name}】基础值 ${val >= 0 ? "+" : ""}${val}（${cur} → ${nv}）`;
             break;
           }
+          case "fieldResource": {
+            // 公用场地：全局共享计数器，与角色/物品无关，忽略 effTgt 循环（同 diceTypeChg 等）
+            const fieldName = eff.fieldName ?? "";
+            if (!fieldName) { descStr = "公用场地效果：未填写场地名字"; break; }
+            const { mode, value: rawVal } = await ClashManager._evalSignedValue(eff.value, eff.intensity);
+            const val = _scaleVal(rawVal, mode);
+            const cur = SinResourceHUD.getFieldResourceStacks(fieldName);
+            if (mode === "absolute") {
+              await SinResourceHUD.setFieldResourceStacks(fieldName, val);
+              descStr = `场地【${fieldName}】层数 调整为 ${Math.max(0, val)}`;
+            } else {
+              await SinResourceHUD.addFieldResourceStacks(fieldName, val);
+              descStr = `场地【${fieldName}】层数 ${val >= 0 ? "+" : ""}${val}（${cur} → ${Math.max(0, cur + val)}）`;
+            }
+            break;
+          }
           case "seismicBlast": {
             // 对目标触发【震颤引爆】N次（N = eff.value）
             // 每次引爆：消耗目标1层【震颤】，所有混乱阈值前移【震颤强度】%
@@ -822,6 +884,7 @@ export class ClashManager {
 
             const buffLabel = ClashManager._buffLabel(buffType);
             descStr = `【${effTgt.name}】触发 ${actualStacks} 层【${buffLabel}】${dmgNote}`;
+            await ClashManager._tickFieldResources(buffType, intensity, actualStacks);
             break;
           }
           case "extraDamage": {
@@ -1052,6 +1115,7 @@ export class ClashManager {
     const bleedChaosName     = _BC_NAMES[bleedNewLevel - 1] ?? "陷入混乱";
     await actor.update({ "system.hp.value": newHp });
     await ClashManager._reduceBuffStacks(actor, "bleed");
+    await ClashManager._tickFieldResources("bleed", dmg, 1);
     if (actor.checkAndTriggerChaos) await actor.checkAndTriggerChaos(newHp, oldHp, { silent: true });
 
     await ClashManager._safeChatCreate({
@@ -2892,6 +2956,7 @@ export class ClashManager {
     if (ruptureBuff && ruptureBuff.stacks > 0) {
       ruptureDmg = ruptureBuff.intensity ?? 0;
       await ClashManager._reduceBuffStacks(actor, "rupture");
+      await ClashManager._tickFieldResources("rupture", ruptureBuff.intensity ?? 0, 1);
     }
 
     // 【沉沦】：增加强度点侵蚀度（降低理智），层数-1
@@ -2900,6 +2965,7 @@ export class ClashManager {
     if (sinkingBuff && sinkingBuff.stacks > 0) {
       sanityDmg = sinkingBuff.intensity ?? 0;
       await ClashManager._reduceBuffStacks(actor, "sinking");
+      await ClashManager._tickFieldResources("sinking", sinkingBuff.intensity ?? 0, 1);
     }
 
     // 【震颤】：受到震颤引爆攻击时，混乱阈值前移强度值，层数-1
@@ -2909,6 +2975,7 @@ export class ClashManager {
       if (tremorBuff && tremorBuff.stacks > 0) {
         await actor.triggerSeismicBlast?.(tremorBuff.intensity ?? 0);
         await ClashManager._reduceBuffStacks(actor, "tremor");
+        await ClashManager._tickFieldResources("tremor", tremorBuff.intensity ?? 0, 1);
         tremorTriggered = true;
       }
     }

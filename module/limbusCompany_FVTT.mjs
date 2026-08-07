@@ -29,7 +29,7 @@ import { LimbusLootSheet }    from "./sheets/loot-sheet.mjs";
 import { GMConsole }          from "./sheets/gm-console.mjs";
 import { SquadHUD }           from "./sheets/squad-hud.mjs";
 import { ClashManager }     from "./helpers/clash.mjs";
-import { CustomBuffRegistry, resolveBuffHandler } from "./helpers/custom-buffs.mjs";
+import { CustomBuffRegistry, resolveBuffHandler, FieldResourceRegistry } from "./helpers/custom-buffs.mjs";
 import { SinResourceHUD }   from "./helpers/sin-resource-hud.mjs";
 import { QuickActionHUD }   from "./sheets/quick-action-hud.mjs";
 import { registerItemPiles } from "./helpers/item-piles.mjs";
@@ -441,6 +441,29 @@ Hooks.on("combatStart", (combat) => {
       await actor.unsetFlag("limbusCompany_FVTT", "lowMoraleFiredEncounter");
     });
   }
+
+  // ── 场地资源：遭遇战开始时，扫描全体角色背景 tags，命中则激活对应场地 ──
+  // 仅 GM 端执行一次，避免多客户端并发写入 world setting
+  if (game.user.isGM) {
+    (async () => {
+      const tagSet = new Set();
+      for (const combatant of combat.combatants) {
+        const actor  = combatant.actor;
+        const bgUuid = actor?.system?.background?.uuid;
+        if (!bgUuid) continue;
+        const bgItem = await fromUuid(bgUuid).catch(() => null);
+        for (const t of String(bgItem?.system?.tags ?? "").split("/")) {
+          const trimmed = t.trim();
+          if (trimmed) tagSet.add(trimmed);
+        }
+      }
+      for (const [name, def] of FieldResourceRegistry) {
+        if (def.triggerBackgroundTags?.some(t => tagSet.has(t))) {
+          await SinResourceHUD.ensureFieldResourceActive(name);
+        }
+      }
+    })();
+  }
 });
 
 /** 战斗结束（删除 Combat 文档）：重置遭遇战触发次数计数 */
@@ -572,6 +595,7 @@ Hooks.on("updateCombat", async (combat, changed) => {
       );
       await actor.update({ "system.hp.value": newHp });
       await actor.reduceBuffStacks?.("burn");
+      await ClashManager._tickFieldResources("burn", dmg, 1);
       if (actor.checkAndTriggerChaos) await actor.checkAndTriggerChaos(newHp, oldHp, { silent: true, source: "burn" });
       await ChatMessage.create({
         speaker: ChatMessage.getSpeaker({ actor }),
@@ -601,6 +625,20 @@ Hooks.on("updateCombat", async (combat, changed) => {
       const handler = resolveBuffHandler(buff);
       if (typeof handler?.onRoundEnd === "function") {
         await handler.onRoundEnd(actor, buff);
+      }
+    }
+
+    // ── 场地资源 onRoundStart 钩子：每回合开始对每个行动角色调用一次 ──────
+    for (const [fieldName, def] of FieldResourceRegistry) {
+      if (typeof def.onRoundStart !== "function") continue;
+      try {
+        await def.onRoundStart({
+          actor,
+          addBuff: (type, intensity, stacks, whenAdded) =>
+            ClashManager._addBuff(actor, type, intensity, stacks, whenAdded),
+        });
+      } catch (err) {
+        console.error(`场地资源【${fieldName}】onRoundStart 执行出错`, err);
       }
     }
 

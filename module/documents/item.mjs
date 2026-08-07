@@ -459,6 +459,10 @@ export class BackgroundData extends foundry.abstract.TypeDataModel {
 
       // 合集包浏览器分类标签（如"事务所"/"协会"/"世界之翼"），供背景选择向导筛选
       category: new fields.StringField({ required: false, initial: "" }),
+
+      // 势力/阵营标签（斜杠分隔，如"拉曼却/血魔"）：多个背景可共享同一标签，
+      // 供场地资源（FieldResourceRegistry）等按 tag 匹配的玩法逻辑使用
+      tags: new fields.StringField({ required: false, initial: "" }),
     };
   }
 }

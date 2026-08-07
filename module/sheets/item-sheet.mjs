@@ -1745,6 +1745,7 @@ function _activityEffectLabels() {
     { value: "diceTypeChg",  label: "骰子类型" },
     { value: "extraDamage",  label: "追加伤害" },
     { value: "relatedSkillConvert", label: "相关技能转换" },
+    { value: "fieldResource", label: "公用场地" },
   ];
 }
 
@@ -1840,11 +1841,12 @@ function _buildTriggerOpts(selected) {
 
 /** 前置条件行 HTML */
 function _buildCondRow(cond, idx, cfg) {
-  const condType   = ["perN","baseAttr","useSkill","buffCompare","category"].includes(cond?.type) ? cond.type : "hasBuff";
+  const condType   = ["perN","baseAttr","useSkill","buffCompare","category","fieldResource"].includes(cond?.type) ? cond.type : "hasBuff";
   const isBuffSec  = condType === "hasBuff" || condType === "perN" || condType === "buffCompare";
   const isAttrSec  = condType === "baseAttr";
   const isSkillSec = condType === "useSkill";
   const isCatSec   = condType === "category";
+  const isFieldSec = condType === "fieldResource";
   const isCompare  = condType === "buffCompare";
   const selCats    = Array.isArray(cond?.categories) ? cond.categories : [];
   const stacksLbl  = condType === "perN" ? "每N层" : (isCompare ? "层数" : "层数≥");
@@ -1852,6 +1854,10 @@ function _buildCondRow(cond, idx, cfg) {
   const stacksCmpOpts = [
     ["gt","＞"],["gte","≥"],["lt","＜"],["lte","≤"],["eq","＝"],
   ].map(([v,l]) => `<option value="${v}" ${(cond?.comparison ?? "eq") === v ? "selected":""}>${l}</option>`).join("");
+
+  const fieldCmpOpts = [
+    ["gt","＞"],["gte","≥"],["lt","＜"],["lte","≤"],["eq","＝"],
+  ].map(([v,l]) => `<option value="${v}" ${(cond?.comparison ?? "gte") === v ? "selected":""}>${l}</option>`).join("");
 
   const cmpDimOpts = [
     ["stacks","层数"],["intensity","强度"],
@@ -1881,8 +1887,9 @@ function _buildCondRow(cond, idx, cfg) {
           <option value="baseAttr"    ${condType === "baseAttr"    ? "selected" : ""}>基础属性</option>
           <option value="useSkill"    ${condType === "useSkill"    ? "selected" : ""}>使用技能</option>
           <option value="category"    ${condType === "category"    ? "selected" : ""}>使用分类</option>
+          <option value="fieldResource" ${condType === "fieldResource" ? "selected" : ""}>公用场地</option>
         </select>
-        <span class="ae-cond-target-sec" ${isCatSec ? 'style="display:none"' : ""}>
+        <span class="ae-cond-target-sec" ${(isCatSec || isFieldSec) ? 'style="display:none"' : ""}>
           <label>目标</label>
           <select class="ae-sel cond-target">${_buildTargetOptions(cond?.target ?? "self")}</select>
         </span>
@@ -1930,6 +1937,14 @@ function _buildCondRow(cond, idx, cfg) {
           <label class="ae-cond-cat-cb"><input type="checkbox" class="cond-category-cb" value="blunt"  ${selCats.includes("blunt")  ? "checked" : ""}> 打击</label>
           <label class="ae-cond-cat-cb"><input type="checkbox" class="cond-category-cb" value="pierce" ${selCats.includes("pierce") ? "checked" : ""}> 突刺</label>
         </span>
+        <span class="ae-cond-field-sec" ${isFieldSec ? "" : 'style="display:none"'}>
+          <label>场地名字</label>
+          <input class="ae-input cond-field-name" type="text"
+                 value="${_esc(cond?.fieldName ?? "")}" placeholder="如：血宴" style="width:90px;">
+          <label>层数</label>
+          <select class="ae-sel cond-field-cmp">${fieldCmpOpts}</select>
+          <input class="ae-input-sm cond-field-stacks" type="number" value="${cond?.stacks ?? 0}" min="0">
+        </span>
       </div>
     </div>`;
 }
@@ -1973,6 +1988,7 @@ function _buildCostRow(cost, idx, cfg) {
   ].map(([v, l]) => `<option value="${v}" ${(cost?.discardMode ?? "level") === v ? "selected" : ""}>${l}</option>`).join("");
 
   const discardModeIsLevel = (cost?.discardMode ?? "level") === "level";
+  const isField = cost?.target === "field";
 
   return `
     <div class="ae-row ae-cost-row">
@@ -1984,8 +2000,17 @@ function _buildCostRow(cost, idx, cfg) {
         <label>类型</label>
         <select class="ae-sel cost-type">${typeOpts}</select>
         <label>目标</label>
-        <select class="ae-sel cost-target">${_buildTargetOptions(cost?.target ?? "self")}</select>
-        <span class="ae-cost-buff-sec" ${(isAttr || isDiscard) ? 'style="display:none"' : ""}>
+        <select class="ae-sel cost-target">${_buildTargetOptions(cost?.target ?? "self")}
+          <option value="field" ${isField ? "selected" : ""}>公用场地</option>
+        </select>
+        <span class="ae-cost-field-sec" ${isField ? "" : 'style="display:none"'}>
+          <label>场地名字</label>
+          <input class="ae-input cost-field-name" type="text"
+                 value="${_esc(cost?.fieldName ?? "")}" placeholder="如：血宴" style="width:90px;">
+          <label class="cost-stacks-label">${isPerStack ? "每N层" : "层数"}</label>
+          <input class="ae-input-sm cost-stacks" type="number" value="${cost?.stacks ?? 1}" min="0">
+        </span>
+        <span class="ae-cost-buff-sec" ${(isAttr || isDiscard || isField) ? 'style="display:none"' : ""}>
           <label>BUFF</label>
           <input class="ae-input cost-buff" type="text" list="ae-buff-dl"
                  placeholder="输入或选择BUFF…" autocomplete="off" style="width:100px;"
@@ -2044,13 +2069,14 @@ function _buildEffectRow(eff, idx, cfg) {
   const isDiceTypeChg  = type === "diceTypeChg";
   const isExtraDamage  = type === "extraDamage";
   const isRelConvert   = type === "relatedSkillConvert";
+  const isFieldEff     = type === "fieldResource";
   const effOpts    = _activityEffectLabels()
     .map(e => `<option value="${e.value}" ${type === e.value ? "selected" : ""}>${e.label}</option>`).join("");
   const roundVal   = eff?.round ?? "本回合";
   const roundOpts  = _ROUND_OPTIONS
     .map(v => `<option value="${v}" ${roundVal === v ? "selected" : ""}>${v}</option>`).join("");
   const formulaVal = _esc(eff?.value ?? "");
-  const isValSec   = !isBuff && !isTriggerBuff && !isRandomBuff && !isUseSkill && !isDiceTypeChg && !isRelConvert;
+  const isValSec   = !isBuff && !isTriggerBuff && !isRandomBuff && !isUseSkill && !isDiceTypeChg && !isRelConvert && !isFieldEff;
   const relMode    = eff?.relMode ?? "random";
   return `
     <div class="ae-row ae-eff-row">
@@ -2061,9 +2087,17 @@ function _buildEffectRow(eff, idx, cfg) {
       <div class="ae-row-fields">
         <label>类型</label>
         <select class="ae-sel ae-eff-type eff-type">${effOpts}</select>
-        <span class="ae-eff-target-sec" ${(isUseSkill || isDiceTypeChg || isRelConvert) ? 'style="display:none"' : ""}>
+        <span class="ae-eff-target-sec" ${(isUseSkill || isDiceTypeChg || isRelConvert || isFieldEff) ? 'style="display:none"' : ""}>
           <label>目标</label>
           <select class="ae-sel eff-target">${_buildTargetOptions(eff?.target ?? "self")}</select>
+        </span>
+        <span class="ae-eff-field-sec" ${isFieldEff ? "" : 'style="display:none"'}>
+          <label>场地名字</label>
+          <input class="ae-input eff-field-name" type="text"
+                 value="${_esc(eff?.fieldName ?? "")}" placeholder="如：血宴" style="width:90px;">
+          <label>层数</label>
+          <input class="ae-input eff-field-stacks" type="text" placeholder="${_effValuePlaceholder("hpAdj")}"
+                 value="${_esc(eff?.value ?? "")}" style="width:110px;">
         </span>
         <span class="ae-eff-round-sec" ${isAddBuff ? "" : 'style="display:none"'}>
           <label>回合</label>
@@ -2284,13 +2318,15 @@ function _bindCondType(html) {
     const isAttrSec  = type === "baseAttr";
     const isSkillSec = type === "useSkill";
     const isCatSec   = type === "category";
+    const isFieldSec = type === "fieldResource";
     const isCompare  = type === "buffCompare";
     row.find(".cond-stacks-label").text(type === "perN" ? "每N层" : (isCompare ? "层数" : "层数≥"));
     row.find(".ae-cond-buff-sec").toggle(isBuffSec);
     row.find(".ae-cond-attr-sec").toggle(isAttrSec);
     row.find(".ae-cond-skill-sec").toggle(isSkillSec);
     row.find(".ae-cond-category-sec").toggle(isCatSec);
-    row.find(".ae-cond-target-sec").toggle(!isCatSec);
+    row.find(".ae-cond-field-sec").toggle(isFieldSec);
+    row.find(".ae-cond-target-sec").toggle(!isCatSec && !isFieldSec);
     row.find(".ae-cond-pern-max").toggle(type === "perN");
     row.find(".ae-cond-intensity-sec").toggle(!isCompare);
     row.find(".cond-stacks-label").toggle(!isCompare);
@@ -2299,17 +2335,24 @@ function _bindCondType(html) {
 }
 
 function _bindCostType(html) {
-  html.find(".cost-type").off("change").on("change", function () {
-    const row       = $(this).closest(".ae-cost-row");
-    const val       = $(this).val();
-    const isAttr    = val === "attribute";
-    const isDiscard = val === "discard";
-    const isPerStack = val === "perStack";
-    row.find(".ae-cost-buff-sec").toggle(!isAttr && !isDiscard);
+  const refreshRow = (row) => {
+    const val        = row.find(".cost-type").val();
+    const isField     = row.find(".cost-target").val() === "field";
+    const isAttr      = val === "attribute";
+    const isDiscard   = val === "discard";
+    const isPerStack  = val === "perStack";
+    row.find(".ae-cost-field-sec").toggle(isField);
+    row.find(".ae-cost-buff-sec").toggle(!isAttr && !isDiscard && !isField);
     row.find(".ae-cost-attr-sec").toggle(isAttr);
     row.find(".ae-cost-discard-sec").toggle(isDiscard);
     row.find(".cost-stacks-label").text(isPerStack ? "每N层" : "层数");
     row.find(".ae-cost-pern-max").toggle(isPerStack);
+  };
+  html.find(".cost-type").off("change").on("change", function () {
+    refreshRow($(this).closest(".ae-cost-row"));
+  });
+  html.find(".cost-target").off("change").on("change", function () {
+    refreshRow($(this).closest(".ae-cost-row"));
   });
   html.find(".cost-discard-mode").off("change").on("change", function () {
     const row     = $(this).closest(".ae-cost-row");
@@ -2348,10 +2391,13 @@ function _bindEffType(html) {
     const isDiceTypeChg = type === "diceTypeChg";
     const isExtraDamage = type === "extraDamage";
     const isRelConvert  = type === "relatedSkillConvert";
-    row.find(".ae-eff-target-sec").toggle(!isUseSkill && !isDiceTypeChg && !isRelConvert);
+    const isFieldEff    = type === "fieldResource";
+    row.find(".ae-eff-target-sec").toggle(!isUseSkill && !isDiceTypeChg && !isRelConvert && !isFieldEff);
+    row.find(".ae-eff-field-sec").toggle(isFieldEff);
+    row.find(".eff-field-stacks").attr("placeholder", _effValuePlaceholder("hpAdj"));
     row.find(".ae-eff-round-sec").toggle(isAddBuff);
     row.find(".ae-eff-buff-sec").toggle(isBuff);
-    row.find(".ae-eff-val-sec").toggle(!isBuff && !isTriggerBuff && !isRandomBuff && !isUseSkill && !isDiceTypeChg && !isRelConvert);
+    row.find(".ae-eff-val-sec").toggle(!isBuff && !isTriggerBuff && !isRandomBuff && !isUseSkill && !isDiceTypeChg && !isRelConvert && !isFieldEff);
     row.find(".eff-value").attr("placeholder", _effValuePlaceholder(type));
     row.find(".ae-eff-trig-sec").toggle(isTriggerBuff);
     row.find(".ae-eff-random-sec").toggle(isRandomBuff);
@@ -2402,6 +2448,13 @@ function _readActivityForm(html, original) {
     } else if (condType === "category") {
       const cats = $r.find(".cond-category-cb:checked").map((_, el) => el.value).get();
       preconditions.push({ type: "category", categories: cats });
+    } else if (condType === "fieldResource") {
+      preconditions.push({
+        type:       "fieldResource",
+        fieldName:  $r.find(".cond-field-name").val()?.trim() || "",
+        comparison: $r.find(".cond-field-cmp").val() || "gte",
+        stacks:     parseInt($r.find(".cond-field-stacks").val()) || 0,
+      });
     } else if (condType === "buffCompare") {
       preconditions.push({
         type:       "buffCompare",
@@ -2444,6 +2497,14 @@ function _readActivityForm(html, original) {
         type,
         discardMode,
         ...(discardMode === "level" ? { discardLevel: parseInt($r.find(".cost-discard-level").val()) || 1 } : {}),
+      });
+    } else if (target === "field") {
+      costs.push({
+        type,
+        target,
+        fieldName: $r.find(".cost-field-name").val()?.trim() || "",
+        stacks:    parseInt($r.find(".cost-stacks").val())   || 1,
+        ...(type === "perStack" ? { maxTimes: parseInt($r.find(".cost-max-times").val()) || 0 } : {}),
       });
     } else {
       costs.push({
@@ -2506,6 +2567,14 @@ function _readActivityForm(html, original) {
       effects.push({
         type,
         diceTypeVal: $r.find(".eff-dice-type-val").val() || "normal",
+      });
+      return;
+    }
+    if (type === "fieldResource") {
+      effects.push({
+        type,
+        fieldName: $r.find(".eff-field-name").val()?.trim() || "",
+        value:     $r.find(".eff-field-stacks").val()?.trim() || "",
       });
       return;
     }
