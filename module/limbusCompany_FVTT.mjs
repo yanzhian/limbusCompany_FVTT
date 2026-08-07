@@ -909,28 +909,73 @@ Hooks.once("init", () => {
   });
 
   /**
-   * 物品描述文本自动替换：
-   *   【XXX】→ BUFF 图标+名字的可悬停 chip（悬停显示 BUFF Title 卡）
-   *   [XXX]  → 物品引用的可悬停 chip（悬停按名字搜索世界物品/合集包，显示物品 Title 卡）
+   * 物品描述文本自动替换（三种记号互不冲突，各管各的）：
+   *   【XXX】 → BUFF 图标+名字的可悬停 chip（悬停显示 BUFF Title 卡）
+   *   "XXX"  → 物品引用的可悬停 chip（悬停按名字搜索世界物品/合集包，显示物品 Title 卡）
+   *   [XXX]  → 触发时机静态标签（按类别着色，不可悬停搜索）
    * 与 item-sheet.mjs 的 .desc-buff-chip / .desc-item-chip 悬停绑定配套使用。
+   *
+   * 用 DOM TreeWalker 只处理文本节点（而非对整段 HTML 字符串做正则替换），
+   * 避免匹配到标签属性里本来就存在的双引号（class="..."/style="..." 等），
+   * 那样会把属性值当成"物品名"误替换，破坏原有 HTML 结构。
    */
   Handlebars.registerHelper("linkify", (html) => {
-    let s = html instanceof Handlebars.SafeString ? html.toString() : String(html ?? "");
-    s = s.replace(/【([^【】]+)】/g, (_m, name) =>
-      `<span class="desc-buff-chip" data-buff-name="${Handlebars.escapeExpression(name)}">【${Handlebars.escapeExpression(name)}】</span>`);
-    // [XXX] 与既有的"[触发时机]："书写惯例共用方括号：触发时机关键字改成按类别
-    // 着色的静态标签（不可悬停搜索），其余方括号文字才当作物品引用 chip 处理
+    const raw = html instanceof Handlebars.SafeString ? html.toString() : String(html ?? "");
+    if (!raw.trim()) return new Handlebars.SafeString(raw);
+
     const TRIGGER_COLORS = { "激活": "blue", "拼点成功": "orange", "拼点失败": "red" };
     const triggerSet = new Set([...(CONFIG.LIMBUSCOMPANY?.ACTIVITY_TRIGGERS ?? []), "激活"]);
-    s = s.replace(/\[([^\[\]<>]+)\]/g, (_m, name) => {
-      const trimmed = name.trim();
-      if (triggerSet.has(trimmed)) {
-        const color = TRIGGER_COLORS[trimmed] ?? "green";
-        return `<span class="desc-trigger-chip trigger-${color}">[${Handlebars.escapeExpression(name)}]</span>`;
+    const pattern = /【([^【】]+)】|"([^"]+)"|\[([^\[\]]+)\]/g;
+
+    const container = document.createElement("div");
+    container.innerHTML = raw;
+
+    const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT, null);
+    const textNodes = [];
+    let n;
+    while ((n = walker.nextNode())) textNodes.push(n);
+
+    for (const textNode of textNodes) {
+      const text = textNode.nodeValue;
+      if (!/[【"\[]/.test(text)) continue; // 快速跳过不含任何目标符号的文本节点
+
+      const frag = document.createDocumentFragment();
+      let lastIndex = 0;
+      let m;
+      pattern.lastIndex = 0;
+      while ((m = pattern.exec(text))) {
+        if (m.index > lastIndex) frag.appendChild(document.createTextNode(text.slice(lastIndex, m.index)));
+
+        if (m[1] !== undefined) {
+          const span = document.createElement("span");
+          span.className = "desc-buff-chip";
+          span.dataset.buffName = m[1];
+          span.textContent = `【${m[1]}】`;
+          frag.appendChild(span);
+        } else if (m[2] !== undefined) {
+          const span = document.createElement("span");
+          span.className = "desc-item-chip";
+          span.dataset.itemName = m[2];
+          span.textContent = `"${m[2]}"`;
+          frag.appendChild(span);
+        } else {
+          const trimmed = m[3].trim();
+          if (triggerSet.has(trimmed)) {
+            const span = document.createElement("span");
+            span.className = `desc-trigger-chip trigger-${TRIGGER_COLORS[trimmed] ?? "green"}`;
+            span.textContent = `[${m[3]}]`;
+            frag.appendChild(span);
+          } else {
+            frag.appendChild(document.createTextNode(m[0])); // 未知方括号内容：原样保留
+          }
+        }
+        lastIndex = pattern.lastIndex;
       }
-      return `<span class="desc-item-chip" data-item-name="${Handlebars.escapeExpression(name)}">[${Handlebars.escapeExpression(name)}]</span>`;
-    });
-    return new Handlebars.SafeString(s);
+      if (lastIndex < text.length) frag.appendChild(document.createTextNode(text.slice(lastIndex)));
+      textNode.parentNode.replaceChild(frag, textNode);
+    }
+
+    return new Handlebars.SafeString(container.innerHTML);
   });
 
   /** 判断值是否大于 */

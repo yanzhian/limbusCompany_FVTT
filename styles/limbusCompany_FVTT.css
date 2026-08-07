@@ -8087,7 +8087,7 @@ input.item-piles-quantity {
   white-space: normal;
 }
 
-/* 描述文本内的 【BUFF】/[物品] 悬停 chip */
+/* 描述文本内的 【BUFF】/"物品" 悬停 chip */
 .desc-buff-chip {
   color: #E5B681; cursor: help; font-weight: bold;
 }

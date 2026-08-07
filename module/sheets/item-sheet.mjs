@@ -1482,7 +1482,7 @@ export class LimbusItemSheet extends ItemSheet {
     $("body").append(this._cgTitleCard);
   }
 
-  /** [物品名字] chip 悬停：按名字搜索世界物品/合集包，展示物品 Title 卡 */
+  /** "物品名字" chip 悬停：按名字搜索世界物品/合集包，展示物品 Title 卡 */
   async _onDescItemChipHover(event) {
     const name = event.currentTarget.dataset.itemName;
     if (!name) return;
@@ -1709,7 +1709,7 @@ export function buildBuffTitleCard(nameOrType) {
 }
 
 /**
- * 按名字搜索物品（世界物品优先，其次全部合集包），供 [物品名字] 描述 chip 悬停解析使用。
+ * 按名字搜索物品（世界物品优先，其次全部合集包），供 "物品名字" 描述 chip 悬停解析使用。
  * 精确匹配优先；找不到精确匹配时退回第一个名字包含该文字的结果。
  * @param {string} name
  * @returns {Promise<Item|null>}
