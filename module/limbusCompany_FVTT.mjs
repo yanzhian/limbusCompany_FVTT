@@ -918,8 +918,13 @@ Hooks.once("init", () => {
     let s = html instanceof Handlebars.SafeString ? html.toString() : String(html ?? "");
     s = s.replace(/【([^【】]+)】/g, (_m, name) =>
       `<span class="desc-buff-chip" data-buff-name="${Handlebars.escapeExpression(name)}">【${Handlebars.escapeExpression(name)}】</span>`);
-    s = s.replace(/\[([^\[\]<>]+)\]/g, (_m, name) =>
-      `<span class="desc-item-chip" data-item-name="${Handlebars.escapeExpression(name)}">[${Handlebars.escapeExpression(name)}]</span>`);
+    // [XXX] 与既有的"[触发时机]："书写惯例共用方括号，触发时机关键字（见
+    // ACTIVITY_TRIGGERS）不视为物品引用，原样保留，避免被误转成搜索不到的物品 chip
+    const triggerSet = new Set(CONFIG.LIMBUSCOMPANY?.ACTIVITY_TRIGGERS ?? []);
+    s = s.replace(/\[([^\[\]<>]+)\]/g, (m, name) => {
+      if (triggerSet.has(name.trim())) return m;
+      return `<span class="desc-item-chip" data-item-name="${Handlebars.escapeExpression(name)}">[${Handlebars.escapeExpression(name)}]</span>`;
+    });
     return new Handlebars.SafeString(s);
   });
 
