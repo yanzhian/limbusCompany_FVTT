@@ -7980,14 +7980,14 @@ input.item-piles-quantity {
 
 .bgw-attr-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px 10px; padding: 6px 0; }
 .bgw-attr-col { display: flex; flex-direction: column; align-items: center; gap: 6px; }
-.bgw-attr-label { font-size: 13px; color: #8a7a6a; }
-.bgw-attr-adjust { display: flex; align-items: center; gap: 8px; }
+.bgw-attr-label { font-size: 32px; color: #AE9475; }
+.bgw-attr-adjust { display: flex; align-items: center; gap: 20px; }
 .bgw-attr-adjust .bgw-attr-minus, .bgw-attr-adjust .bgw-attr-plus {
-  width: 22px; height: 22px; background: #3B2412; color: #C9B79C; border: 1px solid #5a3f22;
-  border-radius: 2px; cursor: pointer; font-size: 14px; line-height: 1;
+  width: 32px; height: 32px; background: #3B2412; color: #C9B79C; border: 1px solid #5a3f22;
+  border-radius: 2px; cursor: pointer; font-size: 18px; line-height: 1;
 }
 .bgw-attr-adjust .bgw-attr-minus:hover, .bgw-attr-adjust .bgw-attr-plus:hover { background: #4a2f18; color: #C58C4E; }
-.bgw-attr-adjust .bgw-attr-value { font-size: 20px; color: #C9B79C; min-width: 20px; text-align: center; }
+.bgw-attr-adjust .bgw-attr-value { font-size: 42px; color: #C9B79C; min-width: 20px; text-align: center; }
 
 .bgw-panic-dd { border: 1px solid #3a2a18; border-radius: 2px; margin-top: 8px; overflow: hidden; }
 .bgw-panic-dd-hd { display: flex; align-items: center; gap: 8px; padding: 8px 10px; cursor: pointer; background: #241808; }
