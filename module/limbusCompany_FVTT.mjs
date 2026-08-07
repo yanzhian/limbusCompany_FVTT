@@ -908,6 +908,21 @@ Hooks.once("init", () => {
     return s.trim();
   });
 
+  /**
+   * 物品描述文本自动替换：
+   *   【XXX】→ BUFF 图标+名字的可悬停 chip（悬停显示 BUFF Title 卡）
+   *   [XXX]  → 物品引用的可悬停 chip（悬停按名字搜索世界物品/合集包，显示物品 Title 卡）
+   * 与 item-sheet.mjs 的 .desc-buff-chip / .desc-item-chip 悬停绑定配套使用。
+   */
+  Handlebars.registerHelper("linkify", (html) => {
+    let s = html instanceof Handlebars.SafeString ? html.toString() : String(html ?? "");
+    s = s.replace(/【([^【】]+)】/g, (_m, name) =>
+      `<span class="desc-buff-chip" data-buff-name="${Handlebars.escapeExpression(name)}">【${Handlebars.escapeExpression(name)}】</span>`);
+    s = s.replace(/\[([^\[\]<>]+)\]/g, (_m, name) =>
+      `<span class="desc-item-chip" data-item-name="${Handlebars.escapeExpression(name)}">[${Handlebars.escapeExpression(name)}]</span>`);
+    return new Handlebars.SafeString(s);
+  });
+
   /** 判断值是否大于 */
   Handlebars.registerHelper("gt", (a, b) => a > b);
 

@@ -70,7 +70,7 @@
       {{#if (and isEditable (not isLocked))}}
         {{editor system.description target="system.description" button=false editable=true engine="prosemirror"}}
       {{else}}
-        <div class="item-desc-display">{{{system.description}}}</div>
+        <div class="item-desc-display">{{{linkify system.description}}}</div>
       {{/if}}
     </div>
 

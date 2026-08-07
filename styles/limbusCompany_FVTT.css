@@ -8061,3 +8061,38 @@ input.item-piles-quantity {
 .lud-empty { text-align: center; color: #6a5a48; padding: 10px 0; font-size: 13px; }
 .lud-footer { display: flex; justify-content: center; padding-top: 10px; }
 .lud-footer .sheet-btn { width: 100%; }
+
+/* ═══ BUFF Title 卡 + 物品描述文本 linkify chip ═══ */
+
+/* BUFF Title 卡：图标+名字 / 金色渐变分割线 / 说明文字（自适应高度，不套用基础卡的固定 500px） */
+.limbus-buff-title-card {
+  width: 300px; height: auto; max-height: none;
+  padding: 10px 12px;
+}
+.limbus-buff-title-card .btc-header {
+  display: flex; align-items: center; gap: 8px;
+}
+.limbus-buff-title-card .btc-icon {
+  width: 28px; height: 28px; object-fit: cover; border-radius: 4px; flex-shrink: 0;
+}
+.limbus-buff-title-card .btc-name {
+  font-size: 18px; font-weight: bold; color: #E8D9C0;
+}
+.limbus-buff-title-card .btc-divider {
+  height: 1px; margin: 8px 0;
+  background: linear-gradient(90deg, transparent 0%, var(--gold-active, #C58C4E) 50%, transparent 100%);
+}
+.limbus-buff-title-card .btc-desc {
+  font-size: 13px; line-height: 1.6; color: var(--text-sub, #C9B79C);
+  white-space: normal;
+}
+
+/* 描述文本内的 【BUFF】/[物品] 悬停 chip */
+.desc-buff-chip {
+  color: #E5B681; cursor: help; font-weight: bold;
+}
+.desc-buff-chip:hover { color: #C58C4E; text-decoration: underline; }
+.desc-item-chip {
+  color: #9FC2E0; cursor: help; font-weight: bold;
+}
+.desc-item-chip:hover { color: #6FA8D8; text-decoration: underline; }

@@ -469,6 +469,12 @@ export class LimbusItemSheet extends ItemSheet {
     html.find(".bg-level-input").on("change", this._onBgLevelChange.bind(this));
     html.find(".bg-edit-rewards-btn").on("click", this._onToggleLock.bind(this));
     html.find(".skillbook-learn-btn").on("click",    this._onSkillBookLearn.bind(this));
+
+    // ── 描述文本内自动生成的 BUFF/物品悬停 chip（【】/[] linkify 产物）───────
+    html.on("mouseenter", ".desc-buff-chip", this._onDescBuffChipHover.bind(this));
+    html.on("mouseleave", ".desc-buff-chip", this._onCgTileHoverEnd.bind(this));
+    html.on("mouseenter", ".desc-item-chip", this._onDescItemChipHover.bind(this));
+    html.on("mouseleave", ".desc-item-chip", this._onCgTileHoverEnd.bind(this));
   }
 
 
@@ -1454,6 +1460,46 @@ export class LimbusItemSheet extends ItemSheet {
     this._cgTitleCard = null;
   }
 
+  /* ─── 描述文本 linkify chip：悬停 Title 卡 ──────────────────────────────── */
+
+  /** 定位规则与 _onCgTileHover 一致：贴在触发元素左侧，不够则右侧 */
+  _positionDescCard(card, anchorEl) {
+    const rect  = anchorEl.getBoundingClientRect();
+    const cardW = 280, cardH = 500;
+    let left = rect.left - cardW - 8;
+    if (left < 8) left = rect.right + 8;
+    const top = Math.max(8, Math.min(rect.top, window.innerHeight - cardH - 8));
+    card.css({ position: "fixed", left, top, zIndex: 99998 });
+  }
+
+  /** 【BUFF名字】chip 悬停：同步解析并展示 BUFF Title 卡 */
+  _onDescBuffChipHover(event) {
+    const name = event.currentTarget.dataset.buffName;
+    if (!name) return;
+    this._onCgTileHoverEnd();
+    this._cgTitleCard = buildBuffTitleCard(name);
+    this._positionDescCard(this._cgTitleCard, event.currentTarget);
+    $("body").append(this._cgTitleCard);
+  }
+
+  /** [物品名字] chip 悬停：按名字搜索世界物品/合集包，展示物品 Title 卡 */
+  async _onDescItemChipHover(event) {
+    const name = event.currentTarget.dataset.itemName;
+    if (!name) return;
+    const anchorEl = event.currentTarget;
+
+    this._onCgTileHoverEnd();
+    const seq = this._cgHoverSeq = (this._cgHoverSeq ?? 0) + 1;
+
+    const item = await _findItemByName(name);
+    if (!item || seq !== this._cgHoverSeq) return;
+
+    this._cgTitleCard = _buildItemTitleCard(item);
+    if (!this._cgTitleCard) return;
+    this._positionDescCard(this._cgTitleCard, anchorEl);
+    $("body").append(this._cgTitleCard);
+  }
+
   /* ─── 物品格：右键菜单 ──────────────────────────────────────────────────── */
 
   async _onCgTileMenu(event) {
@@ -1593,6 +1639,89 @@ function _subtypeLabel(sub) {
  */
 export function buildItemTitleCard(item) {
   return _buildItemTitleCard(item);
+}
+
+/**
+ * 解析 BUFF 名称/type → { type, label, icon, description }。
+ * 优先按 CustomBuffRegistry 精确 type 匹配，其次按显示名称模糊匹配已注册自定义 BUFF，
+ * 最后回退标准 BUFF_TYPES/BUFF_DESCRIPTIONS。图标路径规则与 ClashManager._addBuff 一致：
+ * 自定义注册 BUFF 放在 Custom_buffs/ 子目录，标准 BUFF 直接放在 Buff_icon/ 下。
+ * @param {string} nameOrType  物品描述【】里写的文字，可以是 type 或中文显示名
+ * @returns {{type:string,label:string,icon:string,description:string}}
+ */
+export function resolveBuffMeta(nameOrType) {
+  const cfg = CONFIG.LIMBUSCOMPANY ?? {};
+  // 优先按中文显示名反查 type key（描述文本里写的通常是"流血"而非"bleed"），
+  // 找不到再退回 normalizeBuffType（兼容直接写 type key 的情况）
+  const labelToKey = _buffLabelToKey(cfg);
+  const type = labelToKey[nameOrType] ?? normalizeBuffType(nameOrType, nameOrType);
+
+  const iconBase = "systems/limbusCompany_FVTT/assets/icons/Buff_icon/";
+  const custom = CustomBuffRegistry.get(type);
+  if (custom) {
+    return {
+      type,
+      label:       custom.label ?? type,
+      icon:        `${iconBase}Custom_buffs/${custom.label ?? type}.webp`,
+      description: custom.description ?? "",
+    };
+  }
+
+  const label = _buffLabelMap()[type] ?? nameOrType;
+  return {
+    type,
+    label,
+    icon:        `${iconBase}${label}.webp`,
+    description: cfg.BUFF_DESCRIPTIONS?.[type] ?? "",
+  };
+}
+
+/**
+ * 构建 BUFF Title 卡（图标+名字 / 金色渐变分割线 / 说明文字）。
+ * @param {string} nameOrType
+ * @returns {jQuery}
+ */
+export function buildBuffTitleCard(nameOrType) {
+  const meta = resolveBuffMeta(nameOrType);
+  const descHtml = meta.description
+    ? _esc(meta.description).replace(/\n/g, "<br>")
+    : "（暂无说明）";
+  return $(`<div class="limbus-title-card limbus-buff-title-card">
+    <div class="btc-header">
+      <img class="btc-icon" src="${_esc(meta.icon)}" alt="${_esc(meta.label)}">
+      <span class="btc-name">${_esc(meta.label)}</span>
+    </div>
+    <div class="btc-divider"></div>
+    <div class="btc-desc">${descHtml}</div>
+  </div>`);
+}
+
+/**
+ * 按名字搜索物品（世界物品优先，其次全部合集包），供 [物品名字] 描述 chip 悬停解析使用。
+ * 精确匹配优先；找不到精确匹配时退回第一个名字包含该文字的结果。
+ * @param {string} name
+ * @returns {Promise<Item|null>}
+ */
+async function _findItemByName(name) {
+  const term = name.trim().toLowerCase();
+  if (!term) return null;
+
+  let fallback = null;
+  for (const item of game.items) {
+    if (item.name.toLowerCase() === term) return item;
+    if (!fallback && item.name.toLowerCase().includes(term)) fallback = item;
+  }
+  for (const pack of game.packs) {
+    if (pack.documentName !== "Item") continue;
+    const index = await pack.getIndex({ fields: [] });
+    for (const entry of index) {
+      if (entry.name.toLowerCase() === term) return await fromUuid(entry.uuid).catch(() => null);
+      if (!fallback && entry.name.toLowerCase().includes(term)) {
+        fallback = await fromUuid(entry.uuid).catch(() => null);
+      }
+    }
+  }
+  return fallback;
 }
 
 function _buildItemTitleCard(item) {

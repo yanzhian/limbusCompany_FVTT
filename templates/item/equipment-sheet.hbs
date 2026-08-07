@@ -160,7 +160,7 @@
       {{#if (and isEditable (not isLocked))}}
         {{editor system.effect target="system.effect" button=false editable=true engine="prosemirror"}}
       {{else}}
-        <div class="item-desc-display">{{{system.effect}}}</div>
+        <div class="item-desc-display">{{{linkify system.effect}}}</div>
       {{/if}}
     </div>
 
