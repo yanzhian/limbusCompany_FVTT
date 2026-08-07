@@ -33,7 +33,7 @@
       <div class="field-hud-divider"></div>
       {{#each fieldEntries}}
         <div class="field-hud-entry" title="场地资源：{{name}}">
-          <span class="field-hud-name">{{name}}</span>
+          <img class="field-hud-icon" src="{{icon}}" alt="{{name}}">
           {{#if ../isGM}}
             <input class="field-hud-value-input" type="number"
                    data-field="{{name}}" value="{{value}}" min="0">

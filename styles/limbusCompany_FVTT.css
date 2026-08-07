@@ -5496,8 +5496,9 @@ body.game .limbuscompany.app img {
 .limbus-sin-hud .field-hud-entry {
   display: flex; align-items: center; gap: 4px; flex-shrink: 0;
 }
-.limbus-sin-hud .field-hud-name {
-  font-size: 13px; color: #C89E70; white-space: nowrap;
+.limbus-sin-hud .field-hud-icon {
+  width: 32px; height: 32px; object-fit: cover; border-radius: 50%;
+  border: 2px solid #C89E70; flex-shrink: 0;
 }
 .limbus-sin-hud .field-hud-value {
   font-size: 20px; font-weight: bold; min-width: 20px; text-align: center; color: #E5B681;

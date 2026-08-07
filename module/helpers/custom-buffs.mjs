@@ -349,6 +349,7 @@ registerCustomBuff("bloodFlame", {
 
    用法：
    registerFieldResource("场地名字", {
+     icon: "systems/limbusCompany_FVTT/assets/icons/Buff_icon/Custom_buffs/xxx.webp", // 可选，sin-hud 面板图标
      maxStacks: 999,                 // 可选，默认无上限
      triggerBackgroundTags: ["血魔"], // 遭遇战开始时，若在场任意角色背景 tags
                                       // 命中列表中任一项，则激活该场地资源
@@ -362,6 +363,11 @@ registerCustomBuff("bloodFlame", {
        // ctx = { actor, addBuff(type, intensity, stacks, whenAdded) }
        // 每轮"回合开始时"处理，对每个行动角色调用一次（GM 端触发）
      },
+     async onConsumed(ctx) {
+       // ctx = { amount, addStacksTo(otherFieldName, delta) }
+       // 本场地资源被 Activity「消耗」类型成功扣除时调用（用于联动其他计数场地，
+       // 如"消耗XX总数"这类只增不减的统计型场地）
+     },
    });
 */
 
@@ -371,16 +377,18 @@ export const FieldResourceRegistry = new Map();
 /**
  * 注册一个场地资源定义（详见文件头本节用法说明）。
  * @param {string} name    场地名字（同时作为存储 key 与 Activity 编辑器里输入的匹配串）
- * @param {object} config  { maxStacks, triggerBackgroundTags, roundStartTags, onStatusTick, onRoundStart }
+ * @param {object} config  { icon, maxStacks, triggerBackgroundTags, roundStartTags, onStatusTick, onRoundStart, onConsumed }
  */
 export function registerFieldResource(name, config = {}) {
   FieldResourceRegistry.set(name, {
     name,
+    icon:                   config.icon ?? "",
     maxStacks:             config.maxStacks ?? Infinity,
     triggerBackgroundTags: config.triggerBackgroundTags ?? [],
     roundStartTags:        config.roundStartTags ?? config.triggerBackgroundTags ?? [],
     onStatusTick:          typeof config.onStatusTick === "function" ? config.onStatusTick : null,
     onRoundStart:          typeof config.onRoundStart === "function" ? config.onRoundStart : null,
+    onConsumed:            typeof config.onConsumed   === "function" ? config.onConsumed   : null,
   });
 }
 
@@ -390,8 +398,10 @@ export function registerFieldResource(name, config = {}) {
  * - 任意角色受到【流血】跳动伤害时：为血宴添加与该次流血强度相同的层数
  * - 背景标签为【拉曼却】或【血魔】的角色，回合开始时：
  *   获得 1 层 5 级（强度5）【流血】 + 3 层【攻击等级提升】
+ * - 每被 Activity 消耗一次，累加进【消耗血宴总数】
  */
 registerFieldResource("血宴", {
+  icon:                   "systems/limbusCompany_FVTT/assets/icons/Buff_icon/Custom_buffs/血宴.webp",
   maxStacks:             999,
   triggerBackgroundTags: ["血魔"],
   roundStartTags:        ["拉曼却", "血魔"],
@@ -412,4 +422,20 @@ registerFieldResource("血宴", {
     await ctx.addBuff("bleed",      5, 1, "本回合");
     await ctx.addBuff("atkLevelUp", 0, 3, "本回合");
   },
+
+  async onConsumed(ctx) {
+    if (!(ctx.amount > 0)) return;
+    await ctx.addStacksTo("消耗血宴总数", ctx.amount);
+  },
+});
+
+/**
+ * 【消耗血宴总数】场地资源
+ * - 纯统计型计数器：只在【血宴】被 Activity 消耗时累加，不会自然衰减/上限截断
+ * - 与【血宴】同批背景标签下随遭遇战一起激活（初始 0 层，方便一开场就能看到）
+ */
+registerFieldResource("消耗血宴总数", {
+  icon:                   "systems/limbusCompany_FVTT/assets/icons/Buff_icon/Custom_buffs/消耗血宴总数.webp",
+  maxStacks:             Infinity,
+  triggerBackgroundTags: ["血魔"],
 });

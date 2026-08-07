@@ -155,6 +155,7 @@ export class SinResourceHUD extends Application {
     const fields      = _getFieldResources();
     const fieldEntries = Object.keys(fields).map(name => ({
       name,
+      icon:      FieldResourceRegistry.get(name)?.icon || "icons/svg/mystery-man.svg",
       value:     fields[name] ?? 0,
       maxStacks: FieldResourceRegistry.get(name)?.maxStacks ?? Infinity,
     }));
@@ -364,6 +365,20 @@ export class SinResourceHUD extends Application {
     const need   = Number(amount || 0);
     if (cur < need) return false;
     await _setFieldResources({ [name]: cur - need });
+
+    // 联动：被消耗的场地资源自身可注册 onConsumed 钩子（如"消耗XX总数"统计场地）
+    const def = FieldResourceRegistry.get(name);
+    if (typeof def?.onConsumed === "function") {
+      try {
+        await def.onConsumed({
+          amount: need,
+          addStacksTo: (otherName, delta) => SinResourceHUD.addFieldResourceStacks(otherName, delta),
+        });
+      } catch (err) {
+        console.error(`场地资源【${name}】onConsumed 执行出错`, err);
+      }
+    }
+
     return true;
   }
 
