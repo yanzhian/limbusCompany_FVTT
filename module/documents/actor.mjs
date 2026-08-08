@@ -945,9 +945,9 @@ export class LimbusActor extends Actor {
     const buffs = [...(this.system.buffs ?? [])];
     const type  = buffData.type ?? "custom";
 
-    // 基础特殊类 BUFF（烧伤/流血/破裂/震颤）：不存在"0层"或"0级"的这类 BUFF，
+    // 基础特殊类 BUFF（烧伤/流血/破裂/震颤/沉沦；呼吸法/充能例外，不算在内）：不存在"0层"或"0级"的这类 BUFF，
     // 层数/强度为 0 时自动订正为 1；增益/减益与自定义 BUFF 不受此规则影响
-    const zeroDefault = ["burn", "bleed", "rupture", "tremor"].includes(type);
+    const zeroDefault = ["burn", "bleed", "rupture", "tremor", "sinking"].includes(type);
     const rawIntensity = buffData.intensity ?? 1;
     const rawStacks    = buffData.stacks    ?? 1;
 
