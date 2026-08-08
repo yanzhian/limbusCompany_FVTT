@@ -361,8 +361,14 @@ export class ClashManager {
   /**
    * 根据目标类型解析实际 Actor 列表。
    * "self"/"target" 返回单体数组；群体目标从队伍设置读取。
+   * "bgTag" 是异步的（需 fromUuid 解析背景物品），因此本方法整体为 async，
+   * 调用方需 await。
+   * @param {string} targetType
+   * @param {Actor|null} owner
+   * @param {Actor|null} other
+   * @param {{targetTag?:string, targetTagCount?:number}} [meta]  target==="bgTag" 时使用
    */
-  static _resolveTargets(targetType, owner, other) {
+  static async _resolveTargets(targetType, owner, other, meta = {}) {
     if (targetType === "self")   return owner ? [owner] : [];
     if (targetType === "target") return other ? [other] : [];
 
@@ -377,6 +383,21 @@ export class ClashManager {
     const foeIds   = inTeam1 ? team2Ids : inTeam2 ? team1Ids : [];
     const toActors = ids => ids.map(id => game.actors.get(id)).filter(Boolean);
 
+    if (targetType === "bgTag") {
+      // 背景标签：本队中"背景带有该标签"的角色数量 ≥ targetTagCount 时，
+      // 这些角色均视为合法目标；数量不足则视为无目标（效果不生效）。
+      const tagName = (meta?.targetTag ?? "").trim();
+      const minCount = Math.max(1, meta?.targetTagCount ?? 1);
+      if (!tagName) return [];
+      const candidates = toActors(myIds.length ? myIds : (ownerId ? [ownerId] : []));
+      const matched = [];
+      for (const actor of candidates) {
+        const tags = await ClashManager._getBackgroundTags(actor);
+        if (tags.includes(tagName)) matched.push(actor);
+      }
+      return matched.length >= minCount ? matched : [];
+    }
+
     switch (targetType) {
       case "allTeam":       return toActors(myIds);
       case "allTeamOther":  return toActors(myIds.filter(id => id !== ownerId));
@@ -384,6 +405,14 @@ export class ClashManager {
       case "allEnemyOther": return toActors(foeIds.filter(id => id !== ownerId));
       default:              return other ? [other] : [];
     }
+  }
+
+  /** 解析角色背景物品的标签数组（"/" 分隔），解析失败返回空数组 */
+  static async _getBackgroundTags(actor) {
+    const bgUuid = actor?.system?.background?.uuid;
+    if (!bgUuid) return [];
+    const bg = await fromUuid(bgUuid).catch(() => null);
+    return String(bg?.system?.tags ?? "").split("/").map(t => t.trim()).filter(Boolean);
   }
 
   /**
@@ -513,7 +542,7 @@ export class ClashManager {
         if (!cost) continue;
         if (cost.type === "attribute") {
           // 基础属性消耗：始终视为强制
-          const costTgts = ClashManager._resolveTargets(cost.target ?? "self", owner, other);
+          const costTgts = await ClashManager._resolveTargets(cost.target ?? "self", owner, other, cost);
           if (costTgts.length === 0) { forcedFail = true; break; }
           const need = cost.value ?? 1;
           for (const tgt of costTgts) {
@@ -554,7 +583,7 @@ export class ClashManager {
         } else if (cost.buff && (cost.type === "forced" || cost.type === "perStack")) {
           // 强制消耗 / 每：层数不足（每N层的 N）则跳过整条 Activity
           const costBuffType = cost.buff === "custom" ? (cost.buffCustom || "custom") : cost.buff;
-          const costTgts = ClashManager._resolveTargets(cost.target ?? "self", owner, other);
+          const costTgts = await ClashManager._resolveTargets(cost.target ?? "self", owner, other, cost);
           if (costTgts.length === 0) { forcedFail = true; break; }
           for (const tgt of costTgts) {
             const existing = ClashManager._getBuff(tgt, costBuffType);
@@ -595,7 +624,7 @@ export class ClashManager {
           continue;
         } else if (cost.type === "attribute") {
           // 消耗基础属性
-          const costTgts = ClashManager._resolveTargets(cost.target ?? "self", owner, other);
+          const costTgts = await ClashManager._resolveTargets(cost.target ?? "self", owner, other, cost);
           const need = cost.value ?? 1;
           for (const tgt of costTgts) {
             const sys = tgt.system;
@@ -609,7 +638,7 @@ export class ClashManager {
           }
         } else if (cost.buff) {
           const costBuffType = cost.buff === "custom" ? (cost.buffCustom || "custom") : cost.buff;
-          const costTgts = ClashManager._resolveTargets(cost.target ?? "self", owner, other);
+          const costTgts = await ClashManager._resolveTargets(cost.target ?? "self", owner, other, cost);
           if (cost.type === "perStack") {
             // 每：与前置条件的"每"一致——每 N 层为 1 倍，倍数 = floor(层数/N)，
             // 可选最大倍数上限（maxTimes，0=无限），只消耗 倍数×N 层
@@ -650,7 +679,7 @@ export class ClashManager {
 
       for (const eff of effects) {
         if (!eff?.type) continue;
-        const effTgts = ClashManager._resolveTargets(eff.target ?? "self", owner, other);
+        const effTgts = await ClashManager._resolveTargets(eff.target ?? "self", owner, other, eff);
         if (effTgts.length === 0) continue;
 
         for (const effTgt of effTgts) {
@@ -3554,7 +3583,7 @@ export class ClashManager {
     if (type === "useSkill") {
       // lastSkillUuid 恒来自攻击方技能（广播时固定传 atkItem.uuid），故施放者视为 attacker
       if (!lastSkillUuid || !attacker) return false;
-      const scope = ClashManager._resolveTargets(pre.target ?? "self", actor, attacker);
+      const scope = await ClashManager._resolveTargets(pre.target ?? "self", actor, attacker, pre);
       if (!scope.some(a => a.id === attacker.id)) return false;
       if (pre.skillUuid) return pre.skillUuid.trim() === lastSkillUuid.trim();
       if (pre.skillNameOrTag) {
