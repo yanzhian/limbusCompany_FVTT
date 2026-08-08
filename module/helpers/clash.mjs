@@ -433,16 +433,24 @@ export class ClashManager {
       for (const pre of preconditions) {
         if (!pre) continue;
 
-        // ── category 类型：检查本条 Activity 所属技能/物品的分类 ──────
+        // ── category 类型：检查"本次由 owner 实际使用的技能"的分类 ──────
+        // 注意：该 Activity 可能挂在装备/被动物品上（通过 _applyActivitiesAndEquip 的
+        // 已装备物品遍历触发），此时不能直接查 item 自身的分类（装备的 category 是
+        // 自由文本，如"匕首"，根本不属于 slash/blunt/pierce）——需改查 ctx._currentItemId
+        // 指向的、本次对抗中 owner 实际打出的技能。若取不到（如非对抗流程触发），
+        // 退回检查 item 自身分类，保持向下兼容。
         if (pre.type === "category") {
+          const actingItem = (owner?.items?.get?.(ctx._currentItemId ?? "")) ?? item;
           const cats = Array.isArray(pre.categories) ? pre.categories : [];
-          if (cats.length === 0 || !cats.includes(item.system?.category)) { precondFail = true; break; }
+          if (cats.length === 0 || !cats.includes(actingItem?.system?.category)) { precondFail = true; break; }
           continue;
         }
 
-        // ── useSkill 类型：检查本条 Activity 所属技能/物品自身的名称/标签/UUID ──
+        // ── useSkill 类型：检查"本次由 owner 实际使用的技能"的名称/标签/UUID ──
+        // 同上，优先取 ctx._currentItemId 指向的实际使用技能，取不到时退回 item 自身。
         if (pre.type === "useSkill") {
-          if (!ClashManager._matchSkillIdentity(item, pre)) { precondFail = true; break; }
+          const actingItem = (owner?.items?.get?.(ctx._currentItemId ?? "")) ?? item;
+          if (!ClashManager._matchSkillIdentity(actingItem, pre)) { precondFail = true; break; }
           continue;
         }
 
