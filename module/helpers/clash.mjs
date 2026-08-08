@@ -2922,7 +2922,7 @@ export class ClashManager {
     await ClashManager._safeChatCreate({
       speaker: ChatMessage.getSpeaker({ actor: loserActor }),
       content: `<div class="limbuscompany chat-clash">
-        ${ClashManager._chatHeader(loserActor, "不可摧毁 · 拼点失败反击")}
+        ${ClashManager._chatHeader(loserActor, "不可摧毁拼点失败反击")}
         <div style="margin:4px 0 2px;font-size:.82rem;">
           <strong>${loserItem.name}</strong>（不可摧毁骰）触发，对
           <strong>${targetActor.name}</strong> 发起反击
