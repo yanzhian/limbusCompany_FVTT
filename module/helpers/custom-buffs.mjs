@@ -17,6 +17,12 @@
  *     modifyResistances(actor, buff, res) {}, // 修改物理抗性：res = { slash, blunt, pierce }（"xN.0" 字符串），
  *                                             // 可原地修改或返回部分覆盖对象（如 { slash: "x2.0" }）；
  *                                             // 陷入混乱的强制抗性优先级更高，混乱时不会调用此钩子
+ *     modifyIncomingDamage(actor, buff, ctx) {}, // 受到伤害结算前调用，ctx = { damage, attacker }；
+ *                                             // 返回 { damage?: number, hpLock?: number } 覆盖本次伤害/
+ *                                             // 生命值锁定（hpLock 非空时跳过护盾/破裂/沉沦/震颤结算，HP 直接钉死）
+ *     onHit(actor, buff, ctx) {},            // 自己任意技能/装备 [命中时] 结算后调用（异步），
+ *                                             // ctx = { item, category, target, addBuff(type,intensity,stacks,whenAdded),
+ *                                             //          getBuff(type), dealDamage(targetActor, category, rollFormula) }
  *   });
  *
  * 以上所有钩子均为可选。未提供的钩子不会被调用。
@@ -221,6 +227,87 @@ registerCustomBuff("butterfly", {
     return `【蝶】触发（剩余 <strong>${newStacks}</strong> 层）：`
       + (target ? ` 为 <strong>${target.name}</strong> 恢复 <strong>${sanHeal}</strong> 点理智。` : "")
       + ` 自身获得 1 层【沉沦】（强度 2）。`;
+  },
+});
+
+/**
+ * 【百折不挠】
+ * - 最大值：1 层
+ * - 获得层数时刷新（替换），不叠加
+ * - 回合结束时层数减少 1，归零时移除
+ * - 本回合生命值锁定为 1，且受到伤害为 0
+ */
+registerCustomBuff("indomitable", {
+  label:         "百折不挠",
+  description:   "- 最大值：1 层\n- 获得层数时刷新（替换），不叠加\n- 回合结束时层数减少 1，归零时移除\n- 本回合生命值锁定为 1，且受到伤害为 0",
+  maxStacks:     1,
+  refreshOnGain: true,
+
+  /** 受到伤害前：伤害归零 + 生命值锁定为 1（跳过护盾/破裂/沉沦/震颤结算） */
+  modifyIncomingDamage(_actor, _buff, _ctx) {
+    return { damage: 0, hpLock: 1 };
+  },
+
+  async onRoundEnd(actor, buff) {
+    const buffs = foundry.utils.deepClone(actor.system?.buffs ?? []);
+    const idx   = buffs.findIndex(b => b.id === buff.id);
+    if (idx < 0) return;
+    const newStacks = (buffs[idx].stacks ?? 1) - 1;
+    if (newStacks <= 0) {
+      buffs.splice(idx, 1);
+    } else {
+      buffs[idx].stacks = newStacks;
+    }
+    await actor.update({ "system.buffs": buffs });
+  },
+});
+
+/**
+ * 【故土剑术】
+ * - 最大值：2 层
+ * - 获得层数时刷新（替换），不叠加
+ * - 回合结束时层数减少 1，归零时移除
+ * - 自己"斩击"分类的技能[命中时]：为自己添加 5 级【呼吸法】，
+ *   之后每有 5 级【呼吸法】强度，对目标造成 1D4 的斩击伤害（最多 2 次）
+ */
+registerCustomBuff("nativeSwordArt", {
+  label:         "故土剑术",
+  description:   "- 最大值：2 层\n- 获得层数时刷新（替换），不叠加\n- 回合结束时层数减少 1，归零时移除\n- 自己\"斩击\"类型的骰子[命中时]：为自己添加 5 级【呼吸法】，每有 5 级【呼吸法】对目标造成 1D4 的斩击伤害（最多2次）",
+  maxStacks:     2,
+  refreshOnGain: true,
+
+  async onRoundEnd(actor, buff) {
+    const buffs = foundry.utils.deepClone(actor.system?.buffs ?? []);
+    const idx   = buffs.findIndex(b => b.id === buff.id);
+    if (idx < 0) return;
+    const newStacks = (buffs[idx].stacks ?? 1) - 1;
+    if (newStacks <= 0) {
+      buffs.splice(idx, 1);
+    } else {
+      buffs[idx].stacks = newStacks;
+    }
+    await actor.update({ "system.buffs": buffs });
+  },
+
+  /**
+   * [命中时]（仅本次使用的技能分类为"斩击"才触发）：
+   * 为自己添加 5 级（强度5）呼吸法，随后按呼吸法当前强度，每 5 点对目标
+   * 造成 1D4 斩击伤害，最多 2 次（即呼吸法强度达到 10 时封顶）。
+   * ClashManager 内部方法不直接 import（避免与 clash.mjs 循环依赖），
+   * 所需操作全部通过 ctx 回调（addBuff/getBuff/dealDamage）下发。
+   */
+  async onHit(_actor, _buff, ctx) {
+    if ((ctx?.category ?? "") !== "slash") return;
+
+    await ctx.addBuff?.("breathing", 5, 1, "本回合");
+
+    const target = ctx?.target ?? null;
+    if (!target) return;
+    const breathing = ctx.getBuff?.("breathing");
+    const times = Math.min(2, Math.floor((breathing?.intensity ?? 0) / 5));
+    for (let i = 0; i < times; i++) {
+      await ctx.dealDamage?.(target, "slash", "1d4");
+    }
   },
 });
 

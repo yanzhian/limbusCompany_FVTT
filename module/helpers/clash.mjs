@@ -241,6 +241,35 @@ export class ClashManager {
     for (const eq of ClashManager._getEquippedItems(owner)) {
       await ClashManager._applyActivities(eq, trigger, ctx);
     }
+
+    // ── 自定义 BUFF onHit 钩子（如【故土剑术】）─────────────────────────
+    // 每次 [命中时] 结算（无论走哪条对抗路径，均汇聚于本方法）触发一次，
+    // 按本次实际使用的 item 分类（斩击/打击/突刺）判断是否命中该 BUFF 的条件。
+    // ClashManager 内部方法不直接暴露给 custom-buffs.mjs（避免循环 import），
+    // 需要的操作一律通过 ctx 回调函数下发。
+    if (trigger === "命中时") {
+      for (const buff of foundry.utils.deepClone(owner.system?.buffs ?? [])) {
+        const handler = resolveBuffHandler(buff);
+        if (typeof handler?.onHit !== "function") continue;
+        await handler.onHit(owner, buff, {
+          item,
+          category: item?.system?.category ?? "",
+          target:   ctx.other ?? null,
+          addBuff:  (type, intensity, stacks, whenAdded) => ClashManager._addBuff(owner, type, intensity, stacks, whenAdded),
+          getBuff:  (type) => ClashManager._getBuff(owner, type),
+          dealDamage: async (targetActor, category, formula) => {
+            if (!targetActor) return 0;
+            const roll = new Roll(formula);
+            await roll.evaluate();
+            const resStr = ClashManager._getEffectiveResistances(targetActor)[category] ?? "x1.0";
+            const mult   = ClashManager._parseResistance(resStr);
+            const dmg    = Math.max(0, Math.round(roll.total * mult));
+            await ClashManager._applyAndSendTake(targetActor, dmg, { attacker: owner });
+            return dmg;
+          },
+        });
+      }
+    }
   }
 
   static _buffLabel(type) {
@@ -2998,60 +3027,73 @@ export class ClashManager {
     const sys   = actor.system;
     const maxHp = sys.hp?.max ?? 1;
 
+    // ── 受到伤害前：自定义 BUFF 伤害覆盖钩子（如【百折不挠】：伤害归零 + 生命值锁定）──
+    // hpLockValue 非 null 时，本次结算跳过护盾/破裂/沉沦/震颤，HP 直接钉死为该值。
+    let hpLockValue = null;
+    for (const buff of foundry.utils.deepClone(actor.system?.buffs ?? [])) {
+      const handler = resolveBuffHandler(buff);
+      if (typeof handler?.modifyIncomingDamage !== "function") continue;
+      const result = handler.modifyIncomingDamage(actor, buff, { damage, attacker });
+      if (result && typeof result === "object") {
+        if (typeof result.damage === "number") damage = result.damage;
+        if (typeof result.hpLock === "number")  hpLockValue = result.hpLock;
+      }
+    }
+
     // ── 受到伤害时 BUFF ────────────────────────────────────────────────────
 
-    // 【护盾】：每层抵挡 1 点伤害，先于其他伤害结算，剩余伤害再穿透
-    const shieldBuff = ClashManager._getBuff(actor, "shield");
-    if (shieldBuff && (shieldBuff.stacks ?? 0) > 0 && damage > 0) {
-      const absorbed   = Math.min(shieldBuff.stacks, damage);
-      const remaining  = shieldBuff.stacks - absorbed;
-      damage = damage - absorbed;
-      const buffs = foundry.utils.deepClone(actor.system?.buffs ?? []);
-      const si = buffs.findIndex(b => b.id === shieldBuff.id);
-      if (si >= 0) {
-        if (remaining <= 0) buffs.splice(si, 1);
-        else buffs[si] = { ...buffs[si], stacks: remaining };
-        await ClashManager._safeDocUpdate(actor, { "system.buffs": buffs });
+    let ruptureDmg = 0, sanityDmg = 0, tremorTriggered = false, sinkingBuff = null;
+    if (hpLockValue == null) {
+      // 【护盾】：每层抵挡 1 点伤害，先于其他伤害结算，剩余伤害再穿透
+      const shieldBuff = ClashManager._getBuff(actor, "shield");
+      if (shieldBuff && (shieldBuff.stacks ?? 0) > 0 && damage > 0) {
+        const absorbed   = Math.min(shieldBuff.stacks, damage);
+        const remaining  = shieldBuff.stacks - absorbed;
+        damage = damage - absorbed;
+        const buffs = foundry.utils.deepClone(actor.system?.buffs ?? []);
+        const si = buffs.findIndex(b => b.id === shieldBuff.id);
+        if (si >= 0) {
+          if (remaining <= 0) buffs.splice(si, 1);
+          else buffs[si] = { ...buffs[si], stacks: remaining };
+          await ClashManager._safeDocUpdate(actor, { "system.buffs": buffs });
+        }
+        if (hookMsgs) {
+          hookMsgs.push(`【护盾】吸收 <strong>${absorbed}</strong> 点伤害（剩余 <strong>${remaining}</strong> 层）`);
+        }
       }
-      if (hookMsgs) {
-        hookMsgs.push(`【护盾】吸收 <strong>${absorbed}</strong> 点伤害（剩余 <strong>${remaining}</strong> 层）`);
+
+      // 【破裂】：附加强度点固定伤害，层数-1
+      const ruptureBuff = ClashManager._getBuff(actor, "rupture");
+      if (ruptureBuff && ruptureBuff.stacks > 0) {
+        ruptureDmg = ruptureBuff.intensity ?? 0;
+        await ClashManager._reduceBuffStacks(actor, "rupture");
+        await ClashManager._tickFieldResources("rupture", ruptureBuff.intensity ?? 0, 1);
+      }
+
+      // 【沉沦】：增加强度点侵蚀度（降低理智），层数-1
+      sinkingBuff = ClashManager._getBuff(actor, "sinking");
+      if (sinkingBuff && sinkingBuff.stacks > 0) {
+        sanityDmg = sinkingBuff.intensity ?? 0;
+        await ClashManager._reduceBuffStacks(actor, "sinking");
+        await ClashManager._tickFieldResources("sinking", sinkingBuff.intensity ?? 0, 1);
+      }
+
+      // 【震颤】：受到震颤引爆攻击时，混乱阈值前移强度值，层数-1
+      if (isSeismic) {
+        const tremorBuff = ClashManager._getBuff(actor, "tremor");
+        if (tremorBuff && tremorBuff.stacks > 0) {
+          await actor.triggerSeismicBlast?.(tremorBuff.intensity ?? 0);
+          await ClashManager._reduceBuffStacks(actor, "tremor");
+          await ClashManager._tickFieldResources("tremor", tremorBuff.intensity ?? 0, 1);
+          tremorTriggered = true;
+        }
       }
     }
 
-    // 【破裂】：附加强度点固定伤害，层数-1
-    const ruptureBuff = ClashManager._getBuff(actor, "rupture");
-    let ruptureDmg = 0;
-    if (ruptureBuff && ruptureBuff.stacks > 0) {
-      ruptureDmg = ruptureBuff.intensity ?? 0;
-      await ClashManager._reduceBuffStacks(actor, "rupture");
-      await ClashManager._tickFieldResources("rupture", ruptureBuff.intensity ?? 0, 1);
-    }
-
-    // 【沉沦】：增加强度点侵蚀度（降低理智），层数-1
-    const sinkingBuff = ClashManager._getBuff(actor, "sinking");
-    let sanityDmg = 0;
-    if (sinkingBuff && sinkingBuff.stacks > 0) {
-      sanityDmg = sinkingBuff.intensity ?? 0;
-      await ClashManager._reduceBuffStacks(actor, "sinking");
-      await ClashManager._tickFieldResources("sinking", sinkingBuff.intensity ?? 0, 1);
-    }
-
-    // 【震颤】：受到震颤引爆攻击时，混乱阈值前移强度值，层数-1
-    let tremorTriggered = false;
-    if (isSeismic) {
-      const tremorBuff = ClashManager._getBuff(actor, "tremor");
-      if (tremorBuff && tremorBuff.stacks > 0) {
-        await actor.triggerSeismicBlast?.(tremorBuff.intensity ?? 0);
-        await ClashManager._reduceBuffStacks(actor, "tremor");
-        await ClashManager._tickFieldResources("tremor", tremorBuff.intensity ?? 0, 1);
-        tremorTriggered = true;
-      }
-    }
-
-    // ── HP 结算（基础伤害 + 破裂附加） ────────────────────────────────────
+    // ── HP 结算（基础伤害 + 破裂附加；生命值锁定时直接钉死为 hpLockValue） ──
     const totalDmg = damage + ruptureDmg;
     const oldHp    = sys.hp?.value ?? 0;
-    const newHp    = Math.max(0, oldHp - totalDmg);
+    const newHp    = hpLockValue != null ? hpLockValue : Math.max(0, oldHp - totalDmg);
 
     // 提前判断混乱阈值（用于聊天框显示，含升级逻辑）
     const _CHAOS_TYPES  = ["chaos", "chaos_plus", "chaos_double_plus"];
@@ -3102,6 +3144,7 @@ export class ClashManager {
     }
 
     // 沉沦忧郁追加伤害发生在 HP 结算之后，需将最终 HP 一并传给聊天框显示
+    // （生命值锁定时 sinkingGloomDmg 恒为 0，finalHp 与 newHp 一致，仍钉死为 hpLockValue）
     const finalHp = Math.max(0, newHp - sinkingGloomDmg);
     await ClashManager._sendTakeMsg(actor, damage, oldHp, finalHp, maxHp, chaosTriggered,
       { ruptureDmg, sanityDmg, sinkingGloomDmg, tremorTriggered, chaosName, calcNotes });
