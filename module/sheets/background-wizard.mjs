@@ -7,7 +7,7 @@
  *   3. 选择恐慌卡（士气低落 / 陷入恐慌，各自从 type="panic" 物品中选择）
  *   4. 确认初始物品（预览背景提供的初始物品，完成后写入角色）
  */
-import { buildItemTitleCard, closeTitleCardUnlessLocked } from "./item-sheet.mjs";
+import { buildItemTitleCard, closeTitleCardUnlessLocked, toggleTitleCardLock } from "./item-sheet.mjs";
 
 const ATTR_KEYS = ["str", "agi", "con", "int", "per", "cha"];
 const ATTR_MIN = 2;
@@ -200,7 +200,12 @@ export class BackgroundWizard extends Application {
     });
     html.find(".bgw-list-item[data-item-uuid], .bgw-item-chip[data-item-uuid]")
       .on("mouseenter", this._onHover.bind(this))
-      .on("mouseleave", () => this._onHoverEnd());
+      .on("mouseleave", () => this._onHoverEnd())
+      .on("mousedown", (ev) => {
+        if (ev.button !== 1) return;
+        ev.preventDefault();
+        toggleTitleCardLock(this._titleCard);
+      });
 
     // Step2
     html.find(".bgw-attr-plus").on("click", (ev) => this._onAttrAdjust(ev, 1));

@@ -13,7 +13,7 @@
 import { ClashManager } from "../helpers/clash.mjs";
 import { CustomBuffRegistry, resolveBuffHandler, normalizeBuffType } from "../helpers/custom-buffs.mjs";
 import { getBagItems, packBagGrid } from "../helpers/bag-grid.mjs";
-import { buildItemTitleCard, closeTitleCardUnlessLocked } from "./item-sheet.mjs";
+import { buildItemTitleCard, closeTitleCardUnlessLocked, toggleTitleCardLock } from "./item-sheet.mjs";
 
 /**
  * 以 actorId 为 key 的模块级战斗袋状态 Map。
@@ -520,6 +520,13 @@ export class LimbusActorSheet extends ActorSheet {
     html.find(".equip-slot[data-item-id]").on("mouseleave", () => this._onItemHoverEnd());
     html.find(".skill-slot-wrap[data-item-id]").on("mouseenter", this._onItemHover.bind(this));
     html.find(".skill-slot-wrap[data-item-id]").on("mouseleave", () => this._onItemHoverEnd());
+    // 图标本身也能中键锁定 Title 卡，不必先把鼠标挪到卡片上
+    html.find(".item-icon[data-item-id], .equip-slot[data-item-id], .skill-slot-wrap[data-item-id]")
+      .on("mousedown", (ev) => {
+        if (ev.button !== 1) return;
+        ev.preventDefault();
+        toggleTitleCardLock(this._titleCard);
+      });
 
     // Tab 切换时跟踪当前 tab ID（跨重渲染保持状态）
     html.find(".sheet-tabs .item[data-tab]").on("click", (ev) => {
@@ -656,6 +663,11 @@ export class LimbusActorSheet extends ActorSheet {
       this._finalizeTitleCard();
     });
     html.find(".bag-cg .cg-item-tile").on("mouseleave", () => this._onItemHoverEnd());
+    html.find(".bag-cg .cg-item-tile").on("mousedown", (ev) => {
+      if (ev.button !== 1) return;
+      ev.preventDefault();
+      toggleTitleCardLock(this._titleCard);
+    });
     // 网格视图：拖到容器图块上 = 自动寻位存入容器
     html.find(".bag-cg .cg-item-tile.cg-tile-container").on("dragover", (event) => {
       event.preventDefault();
@@ -702,7 +714,12 @@ export class LimbusActorSheet extends ActorSheet {
     // ── 战斗技能槽悬浮 Title 卡（事件委托，兼容动态写入的 data-item-id）────
     html.find(".tab[data-tab='战斗']")
       .on("mouseenter", ".combat-skill-slot[data-item-id]", (ev) => this._onCombatSlotHover(ev))
-      .on("mouseleave", ".combat-skill-slot[data-item-id]", ()   => this._onItemHoverEnd());
+      .on("mouseleave", ".combat-skill-slot[data-item-id]", ()   => this._onItemHoverEnd())
+      .on("mousedown", ".combat-skill-slot[data-item-id]", (ev) => {
+        if (ev.button !== 1) return;
+        ev.preventDefault();
+        toggleTitleCardLock(this._titleCard);
+      });
   }
 
   /* ─── 拖放处理 ──────────────────────────────────────────────────────────── */

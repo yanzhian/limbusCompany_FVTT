@@ -13,7 +13,7 @@
 
 import { ClashManager } from "../helpers/clash.mjs";
 import { CustomBuffRegistry } from "../helpers/custom-buffs.mjs";
-import { closeTitleCardUnlessLocked } from "./item-sheet.mjs";
+import { closeTitleCardUnlessLocked, toggleTitleCardLock } from "./item-sheet.mjs";
 
 /* ─── 常量 ────────────────────────────────────────────────────────────────── */
 
@@ -529,7 +529,12 @@ export class QuickActionHUD extends Application {
 
     html.find(hoverTargets)
       .on("mouseenter", (e) => this._onHudItemHover(e))
-      .on("mouseleave", () => this._onHudItemHoverEnd());
+      .on("mouseleave", () => this._onHudItemHoverEnd())
+      .on("mousedown", (ev) => {
+        if (ev.button !== 1) return;
+        ev.preventDefault();
+        toggleTitleCardLock(this._hudTitleCard);
+      });
   }
 
   /* ─── 内部辅助 ───────────────────────────────────────────────────────────── */

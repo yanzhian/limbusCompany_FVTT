@@ -13,7 +13,7 @@
  * merchantSell），按 merchantId 串行队列防并发超卖；库存/货币校验
  * 以 GM 端数据为准，客户端校验仅作友好提示。
  */
-import { buildItemTitleCard, closeTitleCardUnlessLocked } from "./item-sheet.mjs";
+import { buildItemTitleCard, closeTitleCardUnlessLocked, toggleTitleCardLock } from "./item-sheet.mjs";
 
 export class LimbusMerchantSheet extends ActorSheet {
 
@@ -207,6 +207,11 @@ export class LimbusMerchantSheet extends ActorSheet {
 
     // ── 悬停 Title 卡（货物行 & 卖出行） ──────────────────────────────────
     html.find(".merchant-item-row").on("mouseenter", this._onRowHoverStart.bind(this));
+    html.find(".merchant-item-row").on("mousedown", (ev) => {
+      if (ev.button !== 1) return;
+      ev.preventDefault();
+      toggleTitleCardLock(this._merchantTitleCard);
+    });
     html.find(".merchant-item-row").on("mouseleave", () => this._onRowHoverEnd());
 
     // ── 编辑锁（GM 专用）────────────────────────────────────────────────

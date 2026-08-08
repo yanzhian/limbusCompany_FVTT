@@ -1700,25 +1700,63 @@ function _positionTitleCard(card, anchorEl) {
  * @param {jQuery} card
  * @returns {jQuery} 原样返回 card，方便链式调用
  */
+/**
+ * 中键切换锁定状态（BUFF Title 卡不支持锁定，直接忽略）。
+ * 供卡片本体的中键点击、以及触发源（图标/格子）本身的中键点击共用。
+ * @param {jQuery} card
+ */
+export function toggleTitleCardLock(card) {
+  if (!card?.length || card.hasClass("limbus-buff-title-card")) return;
+  if (card.data("tcLocked")) {
+    closeTitleCard(card); // 已锁定：再次中键 = 关闭卡片
+  } else {
+    card.data("tcLocked", true);
+    card.addClass("tc-locked");
+  }
+}
+
+/** 长按卡片顶部（tc-header/btc-header）拖动整张卡片 */
+function _wireCardDrag(card) {
+  const header = card.find(".tc-header, .btc-header")[0];
+  if (!header) return;
+  header.style.cursor = "grab";
+
+  let dragging = false, startX = 0, startY = 0, originLeft = 0, originTop = 0;
+  const onMouseMove = (e) => {
+    if (!dragging) return;
+    card.css({
+      left: originLeft + e.clientX - startX,
+      top:  originTop  + e.clientY - startY,
+    });
+  };
+  const onMouseUp = () => {
+    dragging = false;
+    header.style.cursor = "grab";
+    $(document).off("mousemove", onMouseMove).off("mouseup", onMouseUp);
+  };
+  header.addEventListener("mousedown", (ev) => {
+    if (ev.button !== 0) return; // 仅响应鼠标左键
+    ev.preventDefault();
+    startX = ev.clientX; startY = ev.clientY;
+    originLeft = parseInt(card.css("left")) || 0;
+    originTop  = parseInt(card.css("top"))  || 0;
+    dragging = true;
+    header.style.cursor = "grabbing";
+    $(document).on("mousemove", onMouseMove).on("mouseup", onMouseUp);
+  });
+}
+
 function _wireCardInteractivity(card) {
   if (!card?.length) return card;
   card.css("pointer-events", "auto");
 
-  // BUFF Title 卡不支持鼠标中键锁定（仅普通悬停即用即走），但描述里若引用了
-  // 其他 BUFF/物品，卡内 chip 悬停仍要正常工作，所以只跳过锁定这一段逻辑
-  if (!card.hasClass("limbus-buff-title-card")) {
-    card.on("mousedown", (ev) => {
-      if (ev.button !== 1) return; // 仅响应鼠标中键
-      ev.preventDefault();
-      if (card.data("tcLocked")) {
-        // 已锁定：再次中键 = 关闭卡片
-        closeTitleCard(card);
-      } else {
-        card.data("tcLocked", true);
-        card.addClass("tc-locked");
-      }
-    });
-  }
+  card.on("mousedown", (ev) => {
+    if (ev.button !== 1) return; // 仅响应鼠标中键
+    ev.preventDefault();
+    toggleTitleCardLock(card);
+  });
+
+  _wireCardDrag(card);
 
   card.find(".desc-buff-chip").each((_i, chipEl) => {
     attachHoverableTitleCard(chipEl, () => buildBuffTitleCard(chipEl.dataset.buffName));
@@ -1776,6 +1814,12 @@ export function attachHoverableTitleCard(anchorEl, buildFn) {
 
   anchorEl.addEventListener("mouseenter", open);
   anchorEl.addEventListener("mouseleave", scheduleClose);
+  // 触发源（图标/格子）本身也能中键锁定，不必先把鼠标挪到卡片上再点
+  anchorEl.addEventListener("mousedown", (ev) => {
+    if (ev.button !== 1 || !card) return;
+    ev.preventDefault();
+    toggleTitleCardLock(card);
+  });
 
   return {
     close() {

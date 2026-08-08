@@ -6,7 +6,7 @@
  *      （写入数据 + 按背景 levelRewards 发放本级奖励物品）
  *   2. 等级奖励物品展示，点击"完成"关闭对话框
  */
-import { buildItemTitleCard, closeTitleCardUnlessLocked } from "./item-sheet.mjs";
+import { buildItemTitleCard, closeTitleCardUnlessLocked, toggleTitleCardLock } from "./item-sheet.mjs";
 
 export class LevelUpDialog extends Application {
 
@@ -44,7 +44,12 @@ export class LevelUpDialog extends Application {
     html.find(".lud-finish, .lud-cancel").on("click", () => this.close());
     html.find(".lud-item-chip[data-item-uuid]")
       .on("mouseenter", this._onHover.bind(this))
-      .on("mouseleave", () => this._onHoverEnd());
+      .on("mouseleave", () => this._onHoverEnd())
+      .on("mousedown", (ev) => {
+        if (ev.button !== 1) return;
+        ev.preventDefault();
+        toggleTitleCardLock(this._titleCard);
+      });
   }
 
   async _onHover(event) {

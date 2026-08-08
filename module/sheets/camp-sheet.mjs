@@ -12,7 +12,7 @@
  *         （玩家操作通过 socket 委托 GM 执行）
  */
 import { getBagItems, packBagGrid } from "../helpers/bag-grid.mjs";
-import { buildItemTitleCard, closeTitleCardUnlessLocked } from "./item-sheet.mjs";
+import { buildItemTitleCard, closeTitleCardUnlessLocked, toggleTitleCardLock } from "./item-sheet.mjs";
 
 export class LimbusCampSheet extends ActorSheet {
 
@@ -299,6 +299,11 @@ export class LimbusCampSheet extends ActorSheet {
     // 仓库图块：拖拽开始
     html.find(".camp-cg .cg-item-tile").on("dragstart", this._onCgTileDragStart.bind(this));
     html.find(".camp-cg .cg-item-tile").on("mouseenter",  this._onCgTileHoverStart.bind(this));
+    html.find(".camp-cg .cg-item-tile").on("mousedown", (ev) => {
+      if (ev.button !== 1) return;
+      ev.preventDefault();
+      toggleTitleCardLock(this._campTitleCard);
+    });
     html.find(".camp-cg .cg-item-tile").on("mouseleave",  (ev) => this._onCgTileHoverEnd(ev));
 
     // 仓库图块：右键菜单
@@ -330,6 +335,11 @@ export class LimbusCampSheet extends ActorSheet {
     });
     // 背包图块悬停：Title 卡
     html.find(".camp-char-cg .cg-item-tile").on("mouseenter", this._onCgTileHoverStart.bind(this));
+    html.find(".camp-char-cg .cg-item-tile").on("mousedown", (ev) => {
+      if (ev.button !== 1) return;
+      ev.preventDefault();
+      toggleTitleCardLock(this._campTitleCard);
+    });
     html.find(".camp-char-cg .cg-item-tile").on("mouseleave", (ev) => this._onCgTileHoverEnd(ev));
     // 整个左栏作为"从仓库取出"的拖放目标
     const charPanel = html.find(".camp-char-panel");

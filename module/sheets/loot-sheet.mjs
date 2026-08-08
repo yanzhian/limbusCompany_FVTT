@@ -12,7 +12,7 @@
  * socket 消息类型：lootTakeItem / lootTakeCurrency / lootSplitCurrency /
  *                lootMoveItem / lootRevealItem
  */
-import { buildItemTitleCard, closeTitleCardUnlessLocked } from "./item-sheet.mjs";
+import { buildItemTitleCard, closeTitleCardUnlessLocked, toggleTitleCardLock } from "./item-sheet.mjs";
 
 export class LimbusLootSheet extends ActorSheet {
 
@@ -278,6 +278,11 @@ export class LimbusLootSheet extends ActorSheet {
 
     // ── 图块悬停 Title 卡（未揭晓的玩家视角不显示，避免剧透） ────────────
     html.find(".cg-item-tile").on("mouseenter", this._onTileHoverStart.bind(this));
+    html.find(".cg-item-tile").on("mousedown", (ev) => {
+      if (ev.button !== 1) return;
+      ev.preventDefault();
+      toggleTitleCardLock(this._lootTitleCard);
+    });
     html.find(".cg-item-tile").on("mouseleave", () => this._onTileHoverEnd());
 
     if (isGM) {
