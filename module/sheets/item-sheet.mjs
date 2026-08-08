@@ -2156,6 +2156,7 @@ function _buildCondRow(cond, idx, cfg) {
         <span class="ae-cond-target-sec" ${(isCatSec || isFieldSec) ? 'style="display:none"' : ""}>
           <label>目标</label>
           <select class="ae-sel cond-target">${_buildTargetOptions(cond?.target ?? "self")}</select>
+          ${_buildBgTagFields("cond", cond)}
         </span>
         <span class="ae-cond-buff-sec" ${isBuffSec ? "" : 'style="display:none"'}>
           <label>BUFF</label>
@@ -2222,7 +2223,35 @@ function _buildTargetOptions(selected) {
     ["allTeamOther",  "本队其他全部"],
     ["allEnemy",      "敌对全部"],
     ["allEnemyOther", "敌对其他全部"],
+    ["bgTag",         "背景标签"],
   ].map(([v, l]) => `<option value="${v}" ${selected === v ? "selected" : ""}>${l}</option>`).join("");
+}
+
+/**
+ * 「背景标签」目标的附加输入框（标签名字 + 数量）。
+ * prefix 区分挂在条件/消耗/效果哪个区块（cond / cost / eff），class 名带前缀以免互相冲突。
+ * 语义：本队中"背景带有该标签"的角色数量 ≥ 所填数量时，这些角色均视为合法目标；
+ * 数量不足则目标为空（效果不生效）。
+ */
+function _buildBgTagFields(prefix, obj) {
+  const isBgTag = (obj?.target ?? "self") === "bgTag";
+  return `
+    <span class="ae-${prefix}-bgtag-sec" ${isBgTag ? "" : 'style="display:none"'}>
+      <label>标签</label>
+      <input class="ae-input-sm ${prefix}-bgtag-name" type="text"
+             value="${_esc(obj?.targetTag ?? "")}" placeholder="如：剑契组" style="width:70px;">
+      <label>数量≥</label>
+      <input class="ae-input-sm ${prefix}-bgtag-count" type="number"
+             value="${obj?.targetTagCount ?? 1}" min="1" style="width:50px;">
+    </span>`;
+}
+
+/** 从行 DOM 读取「背景标签」目标的附加数据 */
+function _readBgTagMeta($r, prefix) {
+  return {
+    targetTag:      $r.find(`.${prefix}-bgtag-name`).val()?.trim() || "",
+    targetTagCount: Math.max(1, parseInt($r.find(`.${prefix}-bgtag-count`).val()) || 1),
+  };
 }
 
 /** 消耗行 HTML */
@@ -2267,6 +2296,7 @@ function _buildCostRow(cost, idx, cfg) {
         <select class="ae-sel cost-target">${_buildTargetOptions(cost?.target ?? "self")}
           <option value="field" ${isField ? "selected" : ""}>公用场地</option>
         </select>
+        ${_buildBgTagFields("cost", cost)}
         <span class="ae-cost-field-sec" ${isField ? "" : 'style="display:none"'}>
           <label>场地名字</label>
           <input class="ae-input cost-field-name" type="text"
@@ -2354,6 +2384,7 @@ function _buildEffectRow(eff, idx, cfg) {
         <span class="ae-eff-target-sec" ${(isUseSkill || isDiceTypeChg || isRelConvert || isFieldEff) ? 'style="display:none"' : ""}>
           <label>目标</label>
           <select class="ae-sel eff-target">${_buildTargetOptions(eff?.target ?? "self")}</select>
+          ${_buildBgTagFields("eff", eff)}
         </span>
         <span class="ae-eff-field-sec" ${isFieldEff ? "" : 'style="display:none"'}>
           <label>场地名字</label>
@@ -2492,6 +2523,7 @@ function _setupAeDialog(html, cfg) {
     _bindDel(html);
     _bindCondCostBuff(html);
     _bindCondType(html);
+    _bindTargetBgTag(html);
   });
   html.find(".ae-add-cost").on("click", () => {
     const list = html.find(".ae-cost-list");
@@ -2500,6 +2532,7 @@ function _setupAeDialog(html, cfg) {
     _bindDel(html);
     _bindCondCostBuff(html);
     _bindCostType(html);
+    _bindTargetBgTag(html);
   });
   html.find(".ae-add-effect").on("click", () => {
     const list = html.find(".ae-effect-list");
@@ -2509,6 +2542,7 @@ function _setupAeDialog(html, cfg) {
     _bindEffType(html);
     _bindRelConvertMode(html);
     _bindUseSkillSubtype(html);
+    _bindTargetBgTag(html);
   });
   html.on("click", ".ae-add-pool-buff", function () {
     const sec = $(this).closest(".ae-eff-random-sec");
@@ -2527,6 +2561,7 @@ function _setupAeDialog(html, cfg) {
   _bindCondType(html);
   _bindSkillUuidPreview(html);
   _bindUseSkillSubtype(html);
+  _bindTargetBgTag(html);
 }
 
 /** UUID 输入框实时预览技能图标 */
@@ -2625,6 +2660,15 @@ function _bindCostType(html) {
   });
 }
 
+/** 目标下拉切换到「背景标签」时显示标签名字/数量输入框 */
+function _bindTargetBgTag(html) {
+  html.find(".cond-target, .cost-target, .eff-target").off("change.bgtag").on("change.bgtag", function () {
+    const sel    = $(this);
+    const prefix = sel.hasClass("cond-target") ? "cond" : sel.hasClass("cost-target") ? "cost" : "eff";
+    sel.closest(".ae-row-fields").find(`.ae-${prefix}-bgtag-sec`).toggle(sel.val() === "bgTag");
+  });
+}
+
 function _bindDel(html) {
   html.find(".ae-del-precond").off("click").on("click", function () {
     $(this).closest(".ae-cond-row").remove();
@@ -2701,6 +2745,7 @@ function _readActivityForm(html, original) {
         attrType:   $r.find(".cond-attr-type").val() || "hp",
         comparison: $r.find(".cond-comparison").val() || "lt",
         attrValue:  $r.find(".cond-attr-value").val()?.trim() || "0",
+        ..._readBgTagMeta($r, "cond"),
       });
     } else if (condType === "useSkill") {
       preconditions.push({
@@ -2708,6 +2753,7 @@ function _readActivityForm(html, original) {
         target:         $r.find(".cond-target").val() || "self",
         skillUuid:      $r.find(".cond-skill-uuid").val()?.trim() || "",
         skillNameOrTag: $r.find(".cond-skill-name-tag").val()?.trim() || "",
+        ..._readBgTagMeta($r, "cond"),
       });
     } else if (condType === "category") {
       const cats = $r.find(".cond-category-cb:checked").map((_, el) => el.value).get();
@@ -2728,6 +2774,7 @@ function _readActivityForm(html, original) {
         compareDim: $r.find(".cond-cmp-dim").val() || "stacks",
         comparison: $r.find(".cond-stacks-cmp").val() || "eq",
         stacks:     parseInt($r.find(".cond-stacks").val()) || 0,
+        ..._readBgTagMeta($r, "cond"),
       });
     } else {
       const isPerN = condType === "perN";
@@ -2738,6 +2785,7 @@ function _readActivityForm(html, original) {
         buffCustom: "",
         intensity:  parseInt($r.find(".cond-intensity").val()) || 0,
         stacks:     parseInt($r.find(".cond-stacks").val())    || 1,
+        ..._readBgTagMeta($r, "cond"),
         ...(isPerN ? { maxTimes: parseInt($r.find(".cond-max-times").val()) || 0 } : {}),
       });
     }
@@ -2754,6 +2802,7 @@ function _readActivityForm(html, original) {
         target,
         attrType: $r.find(".cost-attr-type").val()             || "hp",
         value:    parseInt($r.find(".cost-attr-value").val())  || 1,
+        ..._readBgTagMeta($r, "cost"),
       });
     } else if (type === "discard") {
       const discardMode = $r.find(".cost-discard-mode").val() || "level";
@@ -2778,6 +2827,7 @@ function _readActivityForm(html, original) {
         buffCustom: "",
         intensity:  parseInt($r.find(".cost-intensity").val()) || 0,
         stacks:     parseInt($r.find(".cost-stacks").val())    || 1,
+        ..._readBgTagMeta($r, "cost"),
         ...(type === "perStack" ? { maxTimes: parseInt($r.find(".cost-max-times").val()) || 0 } : {}),
       });
     }
@@ -2809,6 +2859,7 @@ function _readActivityForm(html, original) {
         buffPool,
         buff: "", buffCustom: "", intensity: 0, stacks: 0,
         value: "", trigBuff: "", trigBuffCustom: "", trigStacks: 0,
+        ..._readBgTagMeta($r, "eff"),
       });
       return;
     }
@@ -2824,6 +2875,7 @@ function _readActivityForm(html, original) {
         skillUuid:  skillRef === "uuid" ? ($r.find(".eff-skill-uuid").val()?.trim() || "") : "",
         skillSlot:  skillRef === "equipped" ? ($r.find(".eff-skill-slot").val() || "basic") : "",
         skillLevel: skillRef === "equipped" ? (parseInt($r.find(".eff-skill-level").val()) || 1) : 1,
+        ..._readBgTagMeta($r, "eff"),
       });
       return;
     }
@@ -2864,6 +2916,7 @@ function _readActivityForm(html, original) {
       trigBuff:       isTriggerBuff ? resolveKey($r.find(".eff-trig-buff").val()) : "",
       trigBuffCustom: "",
       trigStacks:     isTriggerBuff ? (parseInt($r.find(".eff-trig-stacks").val()) || 1) : 0,
+      ..._readBgTagMeta($r, "eff"),
       ...(isExtraDamage ? {
         dmgCategory: $r.find(".eff-extradmg-category").val() || "",
         dmgSinType:  $r.find(".eff-extradmg-sin").val()      || "",
