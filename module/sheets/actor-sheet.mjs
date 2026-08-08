@@ -13,7 +13,7 @@
 import { ClashManager } from "../helpers/clash.mjs";
 import { CustomBuffRegistry, resolveBuffHandler, normalizeBuffType } from "../helpers/custom-buffs.mjs";
 import { getBagItems, packBagGrid } from "../helpers/bag-grid.mjs";
-import { buildItemTitleCard, closeTitleCardUnlessLocked } from "./item-sheet.mjs";
+import { buildItemTitleCard, closeTitleCardUnlessLocked, closeTitleCard } from "./item-sheet.mjs";
 
 /**
  * 以 actorId 为 key 的模块级战斗袋状态 Map。
@@ -2129,19 +2129,35 @@ export class LimbusActorSheet extends ActorSheet {
   }
 
   /**
-   * 卡片本体挂上"鼠标进入取消关闭 / 鼠标离开重新排队关闭"，让用户有机会把鼠标
-   * 移到卡片上（含按下鼠标中键锁定）；锁定状态下软关闭会被 closeTitleCardUnlessLocked 拦下。
+   * 卡片本体挂上"鼠标进入取消关闭 / 鼠标离开立即关闭"：让用户有机会把鼠标移到
+   * 卡片上（含按下鼠标中键锁定）；但一旦真正离开卡片本体，无论是否锁定都关闭——
+   * 这是锁定后用来关闭卡片的手势（另外中键再点一次卡片本体也会关闭，见
+   * item-sheet.mjs 的 _wireCardInteractivity）。
    */
   _finalizeTitleCard() {
     if (!this._titleCard?.length) return;
     this._titleCard.on("mouseenter", () => clearTimeout(this._titleCardCloseTimer));
-    this._titleCard.on("mouseleave", () => this._onItemHoverEnd());
+    this._titleCard.on("mouseleave", () => {
+      clearTimeout(this._titleCardCloseTimer);
+      this._clearTitleCardWheel();
+      closeTitleCard(this._titleCard);
+      this._titleCard = null;
+    });
+  }
+
+  _clearTitleCardWheel() {
+    if (this._titleCardWheelEl && this._titleCardWheelHandler) {
+      this._titleCardWheelEl.removeEventListener("wheel", this._titleCardWheelHandler);
+    }
+    this._titleCardWheelEl = null;
+    this._titleCardWheelHandler = null;
   }
 
   /**
    * @param {boolean} [force=false]  true=立即强制关闭（忽略锁定，用于拖拽开始/
-   *   即将打开新卡片等清场场景）；false=按 150ms 延迟软关闭（给鼠标时间移到卡片
-   *   上，锁定的卡片不会被摘掉）
+   *   即将打开新卡片等清场场景）；false=按 150ms 延迟软关闭——只影响"离开触发源"
+   *   这一路径，锁定的卡片不会被这条路径摘掉（要关闭锁定卡片需离开卡片本体，
+   *   或中键再点一次卡片，见 _finalizeTitleCard / item-sheet.mjs）
    */
   _onItemHoverEnd(force = false) {
     if (!force) {
@@ -2150,11 +2166,7 @@ export class LimbusActorSheet extends ActorSheet {
       return;
     }
     clearTimeout(this._titleCardCloseTimer);
-    if (this._titleCardWheelEl && this._titleCardWheelHandler) {
-      this._titleCardWheelEl.removeEventListener("wheel", this._titleCardWheelHandler);
-    }
-    this._titleCardWheelEl = null;
-    this._titleCardWheelHandler = null;
+    this._clearTitleCardWheel();
     closeTitleCardUnlessLocked(this._titleCard);
     if (!this._titleCard?.data("tcLocked")) this._titleCard = null;
   }

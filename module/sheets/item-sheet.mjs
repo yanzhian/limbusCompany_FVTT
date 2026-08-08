@@ -1677,6 +1677,11 @@ export function closeTitleCardUnlessLocked(card) {
   card.remove();
 }
 
+/** 无条件关闭：用于"鼠标真正离开卡片本体"这一刻——无论是否锁定都该消失 */
+export function closeTitleCard(card) {
+  card?.remove();
+}
+
 /** 定位规则：贴在触发元素左侧，不够则右侧（与既有各处 hover 定位逻辑一致） */
 function _positionTitleCard(card, anchorEl) {
   const rect  = anchorEl.getBoundingClientRect();
@@ -1702,8 +1707,13 @@ function _wireCardInteractivity(card) {
   card.on("mousedown", (ev) => {
     if (ev.button !== 1) return; // 仅响应鼠标中键
     ev.preventDefault();
-    card.data("tcLocked", true);
-    card.addClass("tc-locked");
+    if (card.data("tcLocked")) {
+      // 已锁定：再次中键 = 关闭卡片
+      closeTitleCard(card);
+    } else {
+      card.data("tcLocked", true);
+      card.addClass("tc-locked");
+    }
   });
 
   card.find(".desc-buff-chip").each((_i, chipEl) => {
@@ -1738,12 +1748,18 @@ export function attachHoverableTitleCard(anchorEl, buildFn) {
   const cancelClose = () => {
     if (closeTimer) { clearTimeout(closeTimer); closeTimer = null; }
   };
-  const doClose = () => {
-    if (card && !card.data("tcLocked")) { card.remove(); card = null; }
-  };
-  const scheduleClose = () => {
+  // 离开触发源（锚点）：锁定的卡片不受影响，只有未锁定时才会真正关闭
+  const scheduleCloseFromAnchor = () => {
     cancelClose();
-    closeTimer = setTimeout(doClose, 150);
+    closeTimer = setTimeout(() => {
+      if (card && !card.data("tcLocked")) { card.remove(); card = null; }
+    }, 150);
+  };
+  // 离开卡片本体：无论是否锁定都关闭——这才是锁定后真正的"关闭手势"
+  const closeFromCard = () => {
+    cancelClose();
+    card?.remove();
+    card = null;
   };
 
   const open = async () => {
@@ -1756,11 +1772,11 @@ export function attachHoverableTitleCard(anchorEl, buildFn) {
     _positionTitleCard(card, anchorEl);
     $("body").append(card);
     card.on("mouseenter", cancelClose);
-    card.on("mouseleave", scheduleClose);
+    card.on("mouseleave", closeFromCard);
   };
 
   anchorEl.addEventListener("mouseenter", open);
-  anchorEl.addEventListener("mouseleave", scheduleClose);
+  anchorEl.addEventListener("mouseleave", scheduleCloseFromAnchor);
 
   return {
     close() {

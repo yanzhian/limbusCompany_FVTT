@@ -13,7 +13,7 @@
 
 import { ClashManager } from "../helpers/clash.mjs";
 import { CustomBuffRegistry } from "../helpers/custom-buffs.mjs";
-import { closeTitleCardUnlessLocked } from "./item-sheet.mjs";
+import { closeTitleCardUnlessLocked, closeTitleCard } from "./item-sheet.mjs";
 
 /* ─── 常量 ────────────────────────────────────────────────────────────────── */
 
@@ -588,7 +588,12 @@ export class QuickActionHUD extends Application {
     this._hudTitleCard.css({ position: "fixed", left, top, zIndex: 99999 });
     $("body").append(this._hudTitleCard);
     this._hudTitleCard.on("mouseenter", () => clearTimeout(this._hudTitleCardCloseTimer));
-    this._hudTitleCard.on("mouseleave", () => this._onHudItemHoverEnd());
+    this._hudTitleCard.on("mouseleave", () => {
+      clearTimeout(this._hudTitleCardCloseTimer);
+      this._clearHudTitleCardWheel();
+      closeTitleCard(this._hudTitleCard);
+      this._hudTitleCard = null;
+    });
 
     // 允许鼠标在图标上滚动时滚动描述区
     this._hudTitleCardWheelEl = el;
@@ -605,6 +610,14 @@ export class QuickActionHUD extends Application {
    * @param {boolean} [force=false]  true=立即强制关闭（忽略锁定）；
    *   false=延迟 150ms 软关闭（锁定的卡片会被 closeTitleCardUnlessLocked 拦下）
    */
+  _clearHudTitleCardWheel() {
+    if (this._hudTitleCardWheelEl && this._hudTitleCardWheelHandler) {
+      this._hudTitleCardWheelEl.removeEventListener("wheel", this._hudTitleCardWheelHandler);
+    }
+    this._hudTitleCardWheelEl = null;
+    this._hudTitleCardWheelHandler = null;
+  }
+
   _onHudItemHoverEnd(force = false) {
     if (!force) {
       clearTimeout(this._hudTitleCardCloseTimer);
@@ -612,11 +625,7 @@ export class QuickActionHUD extends Application {
       return;
     }
     clearTimeout(this._hudTitleCardCloseTimer);
-    if (this._hudTitleCardWheelEl && this._hudTitleCardWheelHandler) {
-      this._hudTitleCardWheelEl.removeEventListener("wheel", this._hudTitleCardWheelHandler);
-    }
-    this._hudTitleCardWheelEl = null;
-    this._hudTitleCardWheelHandler = null;
+    this._clearHudTitleCardWheel();
     closeTitleCardUnlessLocked(this._hudTitleCard);
     if (!this._hudTitleCard?.data("tcLocked")) this._hudTitleCard = null;
   }

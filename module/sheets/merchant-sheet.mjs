@@ -13,7 +13,7 @@
  * merchantSell），按 merchantId 串行队列防并发超卖；库存/货币校验
  * 以 GM 端数据为准，客户端校验仅作友好提示。
  */
-import { buildItemTitleCard, closeTitleCardUnlessLocked } from "./item-sheet.mjs";
+import { buildItemTitleCard, closeTitleCardUnlessLocked, closeTitleCard } from "./item-sheet.mjs";
 
 export class LimbusMerchantSheet extends ActorSheet {
 
@@ -248,7 +248,11 @@ export class LimbusMerchantSheet extends ActorSheet {
     this._merchantTitleCard.css({ position: "fixed", left, top, zIndex: 99998 });
     $("body").append(this._merchantTitleCard);
     this._merchantTitleCard.on("mouseenter", () => clearTimeout(this._merchantCloseTimer));
-    this._merchantTitleCard.on("mouseleave", () => this._onRowHoverEnd());
+    this._merchantTitleCard.on("mouseleave", () => {
+      clearTimeout(this._merchantCloseTimer);
+      closeTitleCard(this._merchantTitleCard);
+      this._merchantTitleCard = null;
+    });
   }
 
   /**
