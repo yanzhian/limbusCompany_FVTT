@@ -13,7 +13,7 @@
 import { ClashManager } from "../helpers/clash.mjs";
 import { CustomBuffRegistry, resolveBuffHandler, normalizeBuffType } from "../helpers/custom-buffs.mjs";
 import { getBagItems, packBagGrid } from "../helpers/bag-grid.mjs";
-import { buildItemTitleCard, closeTitleCardUnlessLocked, closeTitleCard } from "./item-sheet.mjs";
+import { buildItemTitleCard, closeTitleCardUnlessLocked } from "./item-sheet.mjs";
 
 /**
  * 以 actorId 为 key 的模块级战斗袋状态 Map。
@@ -2129,20 +2129,14 @@ export class LimbusActorSheet extends ActorSheet {
   }
 
   /**
-   * 卡片本体挂上"鼠标进入取消关闭 / 鼠标离开立即关闭"：让用户有机会把鼠标移到
-   * 卡片上（含按下鼠标中键锁定）；但一旦真正离开卡片本体，无论是否锁定都关闭——
-   * 这是锁定后用来关闭卡片的手势（另外中键再点一次卡片本体也会关闭，见
-   * item-sheet.mjs 的 _wireCardInteractivity）。
+   * 卡片本体挂上"鼠标进入取消关闭 / 鼠标离开重新排队关闭"，让用户有机会把鼠标
+   * 移到卡片上；锁定的卡片只能靠中键再点一次关闭（见 item-sheet.mjs 的
+   * _wireCardInteractivity），离开触发源/卡片本体都不会关闭锁定的卡片。
    */
   _finalizeTitleCard() {
     if (!this._titleCard?.length) return;
     this._titleCard.on("mouseenter", () => clearTimeout(this._titleCardCloseTimer));
-    this._titleCard.on("mouseleave", () => {
-      clearTimeout(this._titleCardCloseTimer);
-      this._clearTitleCardWheel();
-      closeTitleCard(this._titleCard);
-      this._titleCard = null;
-    });
+    this._titleCard.on("mouseleave", () => this._onItemHoverEnd());
   }
 
   _clearTitleCardWheel() {

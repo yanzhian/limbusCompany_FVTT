@@ -4357,6 +4357,7 @@ body.game .limbuscompany.app img {
 /* ─── §3-O  Title 卡片（悬停弹出） ─────────────────────────────── */
 
 .limbus-title-card {
+  position: relative;
   width: 280px; height: 500px; max-height: 500px;
   background: linear-gradient(180deg, var(--bg-darkest) 0%, var(--bg-mid) 50%, var(--bg-darkest) 100%);
   border: 1px solid var(--border-gold); border-radius: 4px;
@@ -4365,10 +4366,17 @@ body.game .limbuscompany.app img {
   display: flex;
   flex-direction: column;
 }
-/* 鼠标中键点击锁定：高亮描边提示"已锁定，移出卡片本体才会关闭" */
+/* 鼠标中键点击锁定：高亮描边提示"已锁定"（唯一的关闭方式是再点一次中键） */
 .limbus-title-card.tc-locked {
   border-color: var(--gold-active, #C58C4E);
   box-shadow: 0 0 0 1px var(--gold-active, #C58C4E), 0 8px 32px rgba(0,0,0,.85);
+}
+/* 左下角常驻提示：唯一的锁定/关闭方式是鼠标中键 */
+.limbus-title-card::after {
+  content: "鼠标中间锁定/关闭";
+  position: absolute; left: 8px; bottom: 6px;
+  font-size: 14px; color: #E8C99D;
+  pointer-events: none;
 }
 .tc-header {
   padding: 6px 10px; font-size: .9rem; font-weight: bold; color: #fff;

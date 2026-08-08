@@ -13,7 +13,7 @@
 
 import { ClashManager } from "../helpers/clash.mjs";
 import { CustomBuffRegistry } from "../helpers/custom-buffs.mjs";
-import { closeTitleCardUnlessLocked, closeTitleCard } from "./item-sheet.mjs";
+import { closeTitleCardUnlessLocked } from "./item-sheet.mjs";
 
 /* ─── 常量 ────────────────────────────────────────────────────────────────── */
 
@@ -588,12 +588,7 @@ export class QuickActionHUD extends Application {
     this._hudTitleCard.css({ position: "fixed", left, top, zIndex: 99999 });
     $("body").append(this._hudTitleCard);
     this._hudTitleCard.on("mouseenter", () => clearTimeout(this._hudTitleCardCloseTimer));
-    this._hudTitleCard.on("mouseleave", () => {
-      clearTimeout(this._hudTitleCardCloseTimer);
-      this._clearHudTitleCardWheel();
-      closeTitleCard(this._hudTitleCard);
-      this._hudTitleCard = null;
-    });
+    this._hudTitleCard.on("mouseleave", () => this._onHudItemHoverEnd());
 
     // 允许鼠标在图标上滚动时滚动描述区
     this._hudTitleCardWheelEl = el;

@@ -12,7 +12,7 @@
  * socket 消息类型：lootTakeItem / lootTakeCurrency / lootSplitCurrency /
  *                lootMoveItem / lootRevealItem
  */
-import { buildItemTitleCard, closeTitleCardUnlessLocked, closeTitleCard } from "./item-sheet.mjs";
+import { buildItemTitleCard, closeTitleCardUnlessLocked } from "./item-sheet.mjs";
 
 export class LimbusLootSheet extends ActorSheet {
 
@@ -311,11 +311,7 @@ export class LimbusLootSheet extends ActorSheet {
     this._lootTitleCard.css({ position: "fixed", left, top, zIndex: 99998 });
     $("body").append(this._lootTitleCard);
     this._lootTitleCard.on("mouseenter", () => clearTimeout(this._lootCloseTimer));
-    this._lootTitleCard.on("mouseleave", () => {
-      clearTimeout(this._lootCloseTimer);
-      closeTitleCard(this._lootTitleCard);
-      this._lootTitleCard = null;
-    });
+    this._lootTitleCard.on("mouseleave", () => this._onTileHoverEnd());
   }
 
   /**

@@ -12,7 +12,7 @@
  *         （玩家操作通过 socket 委托 GM 执行）
  */
 import { getBagItems, packBagGrid } from "../helpers/bag-grid.mjs";
-import { buildItemTitleCard, closeTitleCardUnlessLocked, closeTitleCard } from "./item-sheet.mjs";
+import { buildItemTitleCard, closeTitleCardUnlessLocked } from "./item-sheet.mjs";
 
 export class LimbusCampSheet extends ActorSheet {
 
@@ -576,11 +576,7 @@ export class LimbusCampSheet extends ActorSheet {
     this._campTitleCard.css({ position: "fixed", left, top, zIndex: 99998 });
     $("body").append(this._campTitleCard);
     this._campTitleCard.on("mouseenter", () => clearTimeout(this._campCloseTimer));
-    this._campTitleCard.on("mouseleave", () => {
-      clearTimeout(this._campCloseTimer);
-      closeTitleCard(this._campTitleCard);
-      this._campTitleCard = null;
-    });
+    this._campTitleCard.on("mouseleave", () => this._onCgTileHoverEnd(null));
   }
 
   /**

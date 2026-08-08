@@ -1745,21 +1745,16 @@ export function attachHoverableTitleCard(anchorEl, buildFn) {
   let closeTimer = null;
   let seq = 0;
 
+  // 锁定的卡片只有一种关闭方式：鼠标中键再点一次（见 _wireCardInteractivity）。
+  // 离开触发源/离开卡片本体都不会关闭锁定的卡片，只对未锁定的普通悬停生效。
   const cancelClose = () => {
     if (closeTimer) { clearTimeout(closeTimer); closeTimer = null; }
   };
-  // 离开触发源（锚点）：锁定的卡片不受影响，只有未锁定时才会真正关闭
-  const scheduleCloseFromAnchor = () => {
+  const scheduleClose = () => {
     cancelClose();
     closeTimer = setTimeout(() => {
       if (card && !card.data("tcLocked")) { card.remove(); card = null; }
     }, 150);
-  };
-  // 离开卡片本体：无论是否锁定都关闭——这才是锁定后真正的"关闭手势"
-  const closeFromCard = () => {
-    cancelClose();
-    card?.remove();
-    card = null;
   };
 
   const open = async () => {
@@ -1772,11 +1767,11 @@ export function attachHoverableTitleCard(anchorEl, buildFn) {
     _positionTitleCard(card, anchorEl);
     $("body").append(card);
     card.on("mouseenter", cancelClose);
-    card.on("mouseleave", closeFromCard);
+    card.on("mouseleave", scheduleClose);
   };
 
   anchorEl.addEventListener("mouseenter", open);
-  anchorEl.addEventListener("mouseleave", scheduleCloseFromAnchor);
+  anchorEl.addEventListener("mouseleave", scheduleClose);
 
   return {
     close() {

@@ -6,7 +6,7 @@
  *      （写入数据 + 按背景 levelRewards 发放本级奖励物品）
  *   2. 等级奖励物品展示，点击"完成"关闭对话框
  */
-import { buildItemTitleCard, closeTitleCardUnlessLocked, closeTitleCard } from "./item-sheet.mjs";
+import { buildItemTitleCard, closeTitleCardUnlessLocked } from "./item-sheet.mjs";
 
 export class LevelUpDialog extends Application {
 
@@ -60,11 +60,7 @@ export class LevelUpDialog extends Application {
     $("body").append(card);
     this._titleCard = card;
     card.on("mouseenter", () => clearTimeout(this._titleCardCloseTimer));
-    card.on("mouseleave", () => {
-      clearTimeout(this._titleCardCloseTimer);
-      closeTitleCard(this._titleCard);
-      this._titleCard = null;
-    });
+    card.on("mouseleave", () => this._onHoverEnd());
   }
 
   /**
