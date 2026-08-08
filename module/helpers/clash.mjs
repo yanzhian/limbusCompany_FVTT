@@ -512,6 +512,15 @@ export class ClashManager {
           continue;
         }
 
+        // ── level 类型：检查"本次由 owner 实际使用的技能"的等级（1/2/3）──
+        // 与 category/useSkill 同理，优先取 ctx._currentItemId 指向的实际使用技能。
+        if (pre.type === "level") {
+          const actingItem = (owner?.items?.get?.(ctx._currentItemId ?? "")) ?? item;
+          const lvl = actingItem?.system?.level ?? 0;
+          if (!ClashManager._cmp(lvl, pre.comparison ?? "eq", pre.level ?? 1)) { precondFail = true; break; }
+          continue;
+        }
+
         // ── baseAttr 类型：检查角色属性值 ──────────────────────────────
         if (pre.type === "baseAttr") {
           const precTgt = (pre.target ?? "self") === "self" ? owner : other;
@@ -3649,6 +3658,14 @@ export class ClashManager {
       const skillItem = await fromUuid(lastSkillUuid).catch(() => null);
       if (!skillItem) return false;
       return cats.includes(skillItem.system?.category);
+    }
+
+    if (type === "level") {
+      // 使用等级：检查本次对抗使用的技能（lastSkillUuid）等级是否满足比较条件
+      if (!lastSkillUuid) return false;
+      const skillItem = await fromUuid(lastSkillUuid).catch(() => null);
+      if (!skillItem) return false;
+      return ClashManager._cmp(skillItem.system?.level ?? 0, pre.comparison ?? "eq", pre.level ?? 1);
     }
 
     return false;

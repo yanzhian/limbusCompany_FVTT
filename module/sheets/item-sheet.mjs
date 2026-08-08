@@ -2105,15 +2105,20 @@ function _buildTriggerOpts(selected) {
 
 /** 前置条件行 HTML */
 function _buildCondRow(cond, idx, cfg) {
-  const condType   = ["perN","baseAttr","useSkill","buffCompare","category","fieldResource"].includes(cond?.type) ? cond.type : "hasBuff";
+  const condType   = ["perN","baseAttr","useSkill","buffCompare","category","fieldResource","level"].includes(cond?.type) ? cond.type : "hasBuff";
   const isBuffSec  = condType === "hasBuff" || condType === "perN" || condType === "buffCompare";
   const isAttrSec  = condType === "baseAttr";
   const isSkillSec = condType === "useSkill";
   const isCatSec   = condType === "category";
   const isFieldSec = condType === "fieldResource";
+  const isLevelSec = condType === "level";
   const isCompare  = condType === "buffCompare";
   const selCats    = Array.isArray(cond?.categories) ? cond.categories : [];
   const stacksLbl  = condType === "perN" ? "每N层" : (isCompare ? "层数" : "层数≥");
+
+  const levelCmpOpts = [
+    ["gt","＞"],["gte","≥"],["lt","＜"],["lte","≤"],["eq","＝"],
+  ].map(([v,l]) => `<option value="${v}" ${(cond?.comparison ?? "eq") === v ? "selected":""}>${l}</option>`).join("");
 
   const stacksCmpOpts = [
     ["gt","＞"],["gte","≥"],["lt","＜"],["lte","≤"],["eq","＝"],
@@ -2151,9 +2156,10 @@ function _buildCondRow(cond, idx, cfg) {
           <option value="baseAttr"    ${condType === "baseAttr"    ? "selected" : ""}>基础属性</option>
           <option value="useSkill"    ${condType === "useSkill"    ? "selected" : ""}>使用技能</option>
           <option value="category"    ${condType === "category"    ? "selected" : ""}>使用分类</option>
+          <option value="level"       ${condType === "level"       ? "selected" : ""}>使用等级</option>
           <option value="fieldResource" ${condType === "fieldResource" ? "selected" : ""}>公用场地</option>
         </select>
-        <span class="ae-cond-target-sec" ${(isCatSec || isFieldSec) ? 'style="display:none"' : ""}>
+        <span class="ae-cond-target-sec" ${(isCatSec || isFieldSec || isLevelSec) ? 'style="display:none"' : ""}>
           <label>目标</label>
           <select class="ae-sel cond-target">${_buildTargetOptions(cond?.target ?? "self")}</select>
           ${_buildBgTagFields("cond", cond)}
@@ -2201,6 +2207,15 @@ function _buildCondRow(cond, idx, cfg) {
           <label class="ae-cond-cat-cb"><input type="checkbox" class="cond-category-cb" value="slash"  ${selCats.includes("slash")  ? "checked" : ""}> 斩击</label>
           <label class="ae-cond-cat-cb"><input type="checkbox" class="cond-category-cb" value="blunt"  ${selCats.includes("blunt")  ? "checked" : ""}> 打击</label>
           <label class="ae-cond-cat-cb"><input type="checkbox" class="cond-category-cb" value="pierce" ${selCats.includes("pierce") ? "checked" : ""}> 突刺</label>
+        </span>
+        <span class="ae-cond-level-sec" ${isLevelSec ? "" : 'style="display:none"'}>
+          <label>等级</label>
+          <select class="ae-sel cond-level-cmp">${levelCmpOpts}</select>
+          <select class="ae-sel cond-level">
+            <option value="1" ${(cond?.level ?? 1) === 1 ? "selected" : ""}>Lv.1</option>
+            <option value="2" ${(cond?.level ?? 1) === 2 ? "selected" : ""}>Lv.2</option>
+            <option value="3" ${(cond?.level ?? 1) === 3 ? "selected" : ""}>Lv.3</option>
+          </select>
         </span>
         <span class="ae-cond-field-sec" ${isFieldSec ? "" : 'style="display:none"'}>
           <label>场地名字</label>
@@ -2618,6 +2633,7 @@ function _bindCondType(html) {
     const isSkillSec = type === "useSkill";
     const isCatSec   = type === "category";
     const isFieldSec = type === "fieldResource";
+    const isLevelSec = type === "level";
     const isCompare  = type === "buffCompare";
     row.find(".cond-stacks-label").text(type === "perN" ? "每N层" : (isCompare ? "层数" : "层数≥"));
     row.find(".ae-cond-buff-sec").toggle(isBuffSec);
@@ -2625,7 +2641,8 @@ function _bindCondType(html) {
     row.find(".ae-cond-skill-sec").toggle(isSkillSec);
     row.find(".ae-cond-category-sec").toggle(isCatSec);
     row.find(".ae-cond-field-sec").toggle(isFieldSec);
-    row.find(".ae-cond-target-sec").toggle(!isCatSec && !isFieldSec);
+    row.find(".ae-cond-level-sec").toggle(isLevelSec);
+    row.find(".ae-cond-target-sec").toggle(!isCatSec && !isFieldSec && !isLevelSec);
     row.find(".ae-cond-pern-max").toggle(type === "perN");
     row.find(".ae-cond-intensity-sec").toggle(!isCompare);
     row.find(".cond-stacks-label").toggle(!isCompare);
@@ -2758,6 +2775,12 @@ function _readActivityForm(html, original) {
     } else if (condType === "category") {
       const cats = $r.find(".cond-category-cb:checked").map((_, el) => el.value).get();
       preconditions.push({ type: "category", categories: cats });
+    } else if (condType === "level") {
+      preconditions.push({
+        type:       "level",
+        comparison: $r.find(".cond-level-cmp").val() || "eq",
+        level:      parseInt($r.find(".cond-level").val()) || 1,
+      });
     } else if (condType === "fieldResource") {
       preconditions.push({
         type:       "fieldResource",
