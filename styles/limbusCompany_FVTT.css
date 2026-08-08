@@ -5370,6 +5370,124 @@ body.game .limbuscompany.app img {
   line-height: 1;
 }
 
+/* ============================================================
+   §3-V  恐慌鉴定聊天卡片 — limbus-panic-check-card
+   ============================================================ */
+
+.chat-message .message-content:has(.limbus-panic-check-card) {
+  padding: 0;
+}
+
+.limbus-panic-check-card {
+  background: linear-gradient(180deg, #121A24 0%, #090C11 100%);
+  border: 1px solid #1E4A6E;
+  border-radius: 6px;
+  overflow: hidden;
+  font-family: var(--font-main);
+  color: var(--text-main);
+}
+
+.limbus-panic-check-card .ic-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px 8px;
+}
+
+.limbus-panic-check-card .ic-actor-avatar {
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid #1E4A6E;
+  flex-shrink: 0;
+}
+
+.limbus-panic-check-card .ic-actor-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.limbus-panic-check-card .ic-title {
+  font-size: 20px;
+  font-weight: bold;
+  color: #A2C9E8;
+  line-height: 1.2;
+}
+
+.limbus-panic-check-card .ic-player {
+  font-size: 13px;
+  color: #A1CAE8;
+  opacity: 0.65;
+}
+
+.limbus-panic-check-card .ic-blue-divider {
+  height: 1px;
+  background: linear-gradient(
+    to right,
+    transparent 0%,
+    #20507A 25%,
+    #5DADE2 50%,
+    #20507A 75%,
+    transparent 100%
+  );
+  margin: 0 0 8px;
+}
+
+/* 结果行：1d10 结果 + 智力 + 判定结果 */
+.limbus-panic-check-card .panic-check-result-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 14px 10px;
+}
+
+.limbus-panic-check-card .panic-check-roll {
+  font-size: 14px;
+  color: #9AB4C6;
+}
+
+.limbus-panic-check-card .panic-check-arrow {
+  font-size: 14px;
+  color: #4A6A7A;
+}
+
+.limbus-panic-check-card .panic-check-outcome {
+  font-size: 28px;
+  font-weight: bold;
+  line-height: 1;
+}
+
+.limbus-panic-check-card .panic-check-outcome.is-resolve {
+  color: #5DADE2;
+}
+
+.limbus-panic-check-card .panic-check-outcome.is-fear {
+  color: #E74C3C;
+}
+
+/* 状态行：公布当前坚定/恐慌计数 */
+.limbus-panic-check-card .panic-check-status-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  padding: 0 14px 10px;
+  font-size: 13px;
+}
+
+.limbus-panic-check-card .panic-status-resolve {
+  color: #5DADE2;
+  font-weight: bold;
+}
+
+.limbus-panic-check-card .panic-status-fear {
+  color: #E74C3C;
+  font-weight: bold;
+}
+
 /* ══════════════════════════════════════════════════════════════════════════
    全局罪孽资源 HUD
    位置：left:710px / top:135px（设计图坐标）

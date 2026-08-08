@@ -566,11 +566,6 @@ Hooks.on("updateCombat", async (combat, changed) => {
       await actor.update({ "system.ap.value": actor.system.ap.max ?? 3 });
     }
 
-    // 士气低落：BUFF 已随 TURN_END 移除；若理智仍 ≤30 需重新挂上视觉状态，
-    // 但效果触发（一场遭遇战仅一次）由 setSanity 内的 flag 把关，不会重复弹卡
-    if ((actor.system.sanity?.value ?? 50) <= 30) {
-      await actor.setSanity(actor.system.sanity.value);
-    }
 
     // 陷入恐慌：理智 ≤10 时，回合结束自动做一次坚定/恐慌鉴定
     if ((actor.system.sanity?.value ?? 50) <= 10) {

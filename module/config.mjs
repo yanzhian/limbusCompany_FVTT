@@ -231,7 +231,8 @@ LIMBUSCOMPANY.TURN_END_BUFF_TYPES = new Set([
   "atkLevelUp",    "atkLevelDown",
   "defLevelUp",    "defLevelDown",
   "chaos", "chaos_plus", "chaos_double_plus",
-  "panic", "lowMorale",
+  "panic",
+  // 士气低落不再作为 BUFF 添加（不出现在状态栏），此处无需再列入清除名单
 ]);
 
 // ─── 技能类型 ─────────────────────────────────────────────────────────────────

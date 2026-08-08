@@ -1025,15 +1025,12 @@ export class LimbusActor extends Actor {
     const clamped = Math.min(95, Math.max(5, value));
     await this.update({ "system.sanity.value": clamped });
 
-    // 士气低落：一场遭遇战只触发一次（无论跨阈值多少次），不重新鉴定
+    // 士气低落：一场遭遇战只触发一次（无论跨阈值多少次），不重新鉴定。
+    // 士气低落不是 BUFF，不写入 system.buffs，也就不会出现在状态栏上——
+    // 只是理智≤30 时的一次性效果触发（恐慌卡 activities）+ 聊天提示。
     if (clamped <= 30) {
       const firedKey = "lowMoraleFiredEncounter";
       const alreadyFired = this.getFlag("limbusCompany_FVTT", firedKey) ?? false;
-      // 视觉状态：本回合有效的士气低落 BUFF（回合结束由 TURN_END 统一移除）
-      const alreadyLowMorale = (this.system.buffs ?? []).some(b => b.type === "lowMorale");
-      if (!alreadyLowMorale) {
-        await this.addBuff({ type: "lowMorale", name: "士气低落", intensity: 1, stacks: 1, whenAdded: "本回合" });
-      }
       if (!alreadyFired) {
         await this.setFlag("limbusCompany_FVTT", firedKey, true);
         await ChatMessage.create({
@@ -1057,11 +1054,40 @@ export class LimbusActor extends Actor {
     const success = (roll.total ?? 0) <= int;
 
     const side = success ? "resolve" : "fear";
+
+    // 预先算出计数 +1 后的数值用于卡片公示（与 addPanicCounter 的 clamp 逻辑一致），
+    // 实际写入仍交给 addPanicCounter，保证结果卡先于其可能触发的后续消息出现在聊天记录中。
+    const curFear    = this.system.panicCounters?.fear ?? 0;
+    const curResolve = this.system.panicCounters?.resolve ?? 0;
+    const nextFear    = side === "fear"    ? Math.min(3, curFear + 1)    : curFear;
+    const nextResolve = side === "resolve" ? Math.min(3, curResolve + 1) : curResolve;
+
+    const ownerUser  = game.users?.find(u => !u.isGM && u.character?.id === this.id);
+    const playerName = ownerUser?.name ?? game.user?.name ?? this.name;
+
     await ChatMessage.create({
-      content: `<div class="limbuscompany chat-clash">
-        <strong>${this.name}</strong> 陷入恐慌鉴定：1d10 = <strong>${roll.total}</strong>（智力 ${int}）
-        → ${success ? "坚定" : "恐慌"} +1
-      </div>`,
+      speaker: ChatMessage.getSpeaker({ actor: this }),
+      content: `
+        <div class="limbus-panic-check-card">
+          <div class="ic-header">
+            <img class="ic-actor-avatar" src="${this.img}" alt="${this.name}">
+            <div class="ic-actor-info">
+              <div class="ic-title">恐慌鉴定</div>
+              <div class="ic-player">${playerName}</div>
+            </div>
+          </div>
+          <div class="ic-blue-divider"></div>
+          <div class="panic-check-result-row">
+            <span class="panic-check-roll">1d10 = ${roll.total}（智力 ${int}）</span>
+            <span class="panic-check-arrow">→</span>
+            <span class="panic-check-outcome ${success ? "is-resolve" : "is-fear"}">${success ? "坚定" : "恐慌"} +1</span>
+          </div>
+          <div class="ic-blue-divider"></div>
+          <div class="panic-check-status-row">
+            <span class="panic-status-resolve">坚定 ${nextResolve}/3</span>
+            <span class="panic-status-fear">恐慌 ${nextFear}/3</span>
+          </div>
+        </div>`,
     });
     await this.addPanicCounter(side);
   }
