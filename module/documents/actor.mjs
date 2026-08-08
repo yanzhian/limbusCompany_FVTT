@@ -943,14 +943,21 @@ export class LimbusActor extends Actor {
    */
   async addBuff(buffData) {
     const buffs = [...(this.system.buffs ?? [])];
+    const type  = buffData.type ?? "custom";
+
+    // 基础特殊类 BUFF（烧伤/流血/破裂/震颤）：不存在"0层"或"0级"的这类 BUFF，
+    // 层数/强度为 0 时自动订正为 1；增益/减益与自定义 BUFF 不受此规则影响
+    const zeroDefault = ["burn", "bleed", "rupture", "tremor"].includes(type);
+    const rawIntensity = buffData.intensity ?? 1;
+    const rawStacks    = buffData.stacks    ?? 1;
+
     buffs.push({
       id:        foundry.utils.randomID(),
-      type:      buffData.type ?? "custom",
+      type,
       name:      buffData.name ?? "自定义",
       icon:      buffData.icon ?? "",
-      // 新建 BUFF 时，层数/强度为 0 视为 1
-      intensity: (buffData.intensity ?? 1) > 0 ? buffData.intensity : 1,
-      stacks:    (buffData.stacks    ?? 1) > 0 ? buffData.stacks    : 1,
+      intensity: (zeroDefault && !(rawIntensity > 0)) ? 1 : rawIntensity,
+      stacks:    (zeroDefault && !(rawStacks    > 0)) ? 1 : rawStacks,
       whenAdded: buffData.whenAdded ?? "本回合",
     });
     return this.update({ "system.buffs": buffs });

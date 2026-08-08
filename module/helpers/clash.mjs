@@ -8,6 +8,13 @@ import { CustomBuffRegistry, resolveBuffHandler, FieldResourceRegistry } from ".
 
 export class ClashManager {
 
+  /**
+   * 基础特殊类 BUFF：不存在"0层"或"0级"的这类 BUFF，_addBuff 会把传入的
+   * 0 层数/0 强度自动订正为 1（见 _addBuff 内的判定）。
+   * @type {Set<string>}
+   */
+  static ZERO_DEFAULT_BUFF_TYPES = new Set(["burn", "bleed", "rupture", "tremor"]);
+
   /* ─── 工具函数 ─────────────────────────────────────────────────────────── */
 
   /**
@@ -257,6 +264,15 @@ export class ClashManager {
   /** 给角色添加或叠加 BUFF。已有同类型则层数和强度均累加；无则新增。 */
   static async _addBuff(actor, type, intensity = 1, stacks = 1, whenAdded = "本回合") {
     if (!actor || !type) return;
+
+    // 基础特殊类 BUFF（烧伤/流血/破裂/震颤）：不存在"0层"或"0级"的这类 BUFF，
+    // 传入的层数/强度若为 0 一律视为 1（无论是新建还是叠加到已有 BUFF 上）。
+    // 增益/减益（strong/weak/atkLevelUp 等）与自定义注册 BUFF 不受此规则影响。
+    if (ClashManager.ZERO_DEFAULT_BUFF_TYPES.has(type)) {
+      if (!(stacks    > 0)) stacks    = 1;
+      if (!(intensity > 0)) intensity = 1;
+    }
+
     const buffs = foundry.utils.deepClone(actor.system?.buffs ?? []);
 
     // 查询自定义 BUFF 处理器（maxStacks / refreshOnGain）
@@ -285,16 +301,13 @@ export class ClashManager {
       const icon = isCustomRegistered
         ? `${iconBase}Custom_buffs/${iconName}.webp`
         : (iconName !== type ? `${iconBase}${iconName}.webp` : `${iconBase}Custom_buffs/${type}.webp`);
-      // 新建 BUFF 时，层数/强度为 0 视为 1（不存在"0层/0强度"的新BUFF）
-      const initStacks    = stacks    > 0 ? stacks    : 1;
-      const initIntensity = intensity > 0 ? intensity : 1;
       buffs.push({
         id:        foundry.utils.randomID(),
         type,
         name:      iconName,
         icon,
-        intensity: initIntensity,
-        stacks:    Math.min(initStacks, maxStacks),
+        intensity,
+        stacks:    Math.min(stacks, maxStacks),
         whenAdded,
       });
     }
