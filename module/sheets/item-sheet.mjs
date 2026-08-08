@@ -14,8 +14,12 @@
 import { ClashManager } from "../helpers/clash.mjs";
 import { SKILLBOOK_MAX_SLOTS } from "../documents/item.mjs";
 import { CustomBuffRegistry, normalizeBuffType } from "../helpers/custom-buffs.mjs";
+import { linkifyHtml } from "../helpers/linkify.mjs";
 
 export class LimbusItemSheet extends ItemSheet {
+
+  /** 当前 sheet 绑定的所有 Title 卡 hover controller（activateListeners 时填充） */
+  _titleCardCtrls = [];
 
   /* ─── 默认选项 ──────────────────────────────────────────────────────────── */
 
@@ -37,6 +41,8 @@ export class LimbusItemSheet extends ItemSheet {
       material:   "consumable-sheet",   // 共用一套模板
       container:  "container-sheet",
       skillbook:  "skillbook-sheet",
+      panic:      "panic-sheet",
+      background: "background-sheet",
     };
     const name = typeMap[this.item.type] ?? "equipment-sheet";
     return `systems/limbusCompany_FVTT/templates/item/${name}.hbs`;
@@ -83,21 +89,19 @@ export class LimbusItemSheet extends ItemSheet {
       context.isCounterType = sys.type === "defense" &&
         (sys.category === "counter" || sys.category === "clashCounter");
 
-      // 相关技能解析
-      const relUuid = sys.relatedSkill?.itemUuid;
-      if (relUuid) {
-        const relItem = await fromUuid(relUuid).catch(() => null);
-        context.relatedSkillItem = relItem ? {
-          _id:          relItem.id,
-          name:         relItem.name,
-          img:          relItem.img,
-          system:       relItem.system,
-          sinColor:     cfg.SIN_COLORS?.[relItem.system?.sinType] ?? "#2A7A2A",
-          categoryIcon: _getCategoryIcon(relItem.system?.category),
-        } : null;
-      } else {
-        context.relatedSkillItem = null;
-      }
+      // 相关技能池解析（v2：数组，配合④效果「相关技能转换」使用）
+      const relPool = sys.relatedSkill?.pool ?? [];
+      context.relatedSkillPool = await Promise.all(relPool.map(async (p, i) => {
+        const relItem = p?.itemUuid ? await fromUuid(p.itemUuid).catch(() => null) : null;
+        return {
+          idx:      i,
+          poolNo:   i + 2, // 选择器编号：1=原本(自身)，2起对应池内顺序
+          itemUuid: p?.itemUuid ?? "",
+          name:     relItem?.name ?? "",
+          img:      relItem?.img  ?? "",
+          resolved: !!relItem,
+        };
+      }));
 
       // EGO 消耗行
       // 注意：schema 字段名为 sinCost[].sinType 和 egoResistanceAdj[].{sinType,multiplier}
@@ -122,9 +126,6 @@ export class LimbusItemSheet extends ItemSheet {
 
       // 加重值小方块
       context.weightSquares = Array.from({ length: sys.weight ?? 0 }, (_, i) => i);
-
-      // 触发条件
-      context.relatedTriggers = cfg.RELATED_SKILL_TRIGGERS ?? [];
     }
 
     // ── 装备专用数据 ──────────────────────────────────────────────────────
@@ -155,6 +156,11 @@ export class LimbusItemSheet extends ItemSheet {
       context.typeLabel    = item.type === "consumable" ? "消耗品" : "材料";
     }
 
+    // ── 恐慌卡专用数据 ────────────────────────────────────────────────────
+    if (item.type === "panic") {
+      context.typeLabel = "恐慌";
+    }
+
     // ── 容器专用数据 ──────────────────────────────────────────────────────
     if (item.type === "container") {
       const cols = Math.max(1, Math.min(10, sys.gridSize?.width  ?? 3));
@@ -176,6 +182,18 @@ export class LimbusItemSheet extends ItemSheet {
       context.skillSlots = await this._buildSkillBookSlots(sys.skills ?? []);
       context.skillBookMax  = SKILLBOOK_MAX_SLOTS;
       context.skillBookUsed = (sys.skills ?? []).length;
+    }
+
+    // ── 背景专用数据 ────────────────────────────────────────────────────────
+    if (item.type === "background") {
+      context.startingItems = await this._resolveItemRefs(sys.startingItems ?? []);
+      context.levelRewards  = await Promise.all(
+        (sys.levelRewards ?? []).map(async (lr) => ({
+          id:    lr.id,
+          level: lr.level,
+          items: await this._resolveItemRefs(lr.items ?? []),
+        }))
+      );
     }
 
     // ── Activity 触发时机 & 效果类型选项 ─────────────────────────────────
@@ -266,6 +284,29 @@ export class LimbusItemSheet extends ItemSheet {
   }
 
   /**
+   * 将通用物品引用条目（{id, uuid, itemData?}）解析为模板所需显示数据。
+   * 用于背景物品的"初始物品"/"升级奖励物品"（可存放任意物品类型，含技能书）。
+   * @returns {Promise<Array>}
+   */
+  async _resolveItemRefs(entries) {
+    const out = [];
+    for (const entry of entries) {
+      let item = null;
+      if (entry?.uuid) item = await fromUuid(entry.uuid).catch(() => null);
+      if (!item && entry?.itemData) {
+        item = { id: null, name: entry.itemData.name ?? "未知物品", img: entry.itemData.img ?? "icons/svg/item-bag.svg", type: entry.itemData.type ?? "" };
+      }
+      if (!item) continue;
+      out.push({
+        id:   entry.id,
+        uuid: entry.uuid ?? "",
+        item: { name: item.name, img: item.img, type: item.type },
+      });
+    }
+    return out;
+  }
+
+  /**
    * 自动扫描容器，找到第一个可放入的位置。
    * 按行优先顺序扫描：先以原始尺寸尝试，找不到则以旋转尺寸再次扫描。
    * @param {number} w @param {number} h @param {number} [excludeIdx=-1]
@@ -343,6 +384,15 @@ export class LimbusItemSheet extends ItemSheet {
     // ── 相关技能 [+] ─────────────────────────────────────────────────────
     html.find(".related-skill-toggle").on("click", this._onRelatedToggle.bind(this));
 
+    // ── 相关技能池：拖入添加 / 移除 ──────────────────────────────────────
+    html.find(".related-pool-dropzone").on("dragover", (e) => {
+      e.preventDefault();
+      $(e.currentTarget).addClass("cg-drag-over");
+    });
+    html.find(".related-pool-dropzone").on("dragleave", (e) => $(e.currentTarget).removeClass("cg-drag-over"));
+    html.find(".related-pool-dropzone").on("drop", this._onRelatedPoolDrop.bind(this));
+    html.find(".related-pool-remove").on("click", this._onRelatedPoolRemove.bind(this));
+
     if (!this.isEditable) return;
 
     // ── 装备子类型：强制同步当前值（避免浏览器回退首项） ───────────────
@@ -395,8 +445,6 @@ export class LimbusItemSheet extends ItemSheet {
     html.find(".cg-cell").on("click",     this._onCgCellClick.bind(this));
     html.find(".cg-item-tile").on("dragstart",   this._onCgTileDragStart.bind(this));
     html.find(".cg-item-tile").on("contextmenu", this._onCgTileMenu.bind(this));
-    html.find(".cg-item-tile").on("mouseenter",  this._onCgTileHover.bind(this));
-    html.find(".cg-item-tile").on("mouseleave",  this._onCgTileHoverEnd.bind(this));
     html.find(".cg-rotate-btn").on("click",      this._onCgTileRotate.bind(this));
     // 解锁状态下，空格子显示 pointer 光标（提示可点击锁定）
     if (!this.isLocked && this.item.type === "container") {
@@ -408,9 +456,30 @@ export class LimbusItemSheet extends ItemSheet {
     html.find(".skillbook-dropzone").on("dragleave", this._onSkillBookDragLeave.bind(this));
     html.find(".skillbook-dropzone").on("drop",      this._onSkillBookDrop.bind(this));
     html.find(".skillbook-slot").on("contextmenu",   this._onSkillBookSlotMenu.bind(this));
-    html.find(".skillbook-slot").on("mouseenter",    this._onCgTileHover.bind(this));
-    html.find(".skillbook-slot").on("mouseleave",    this._onCgTileHoverEnd.bind(this));
+
+    // ── 背景 ─────────────────────────────────────────────────────────────
+    html.find(".bg-dropzone").on("dragover",  this._onSkillBookDragOver.bind(this));
+    html.find(".bg-dropzone").on("dragleave", this._onSkillBookDragLeave.bind(this));
+    html.find(".bg-dropzone").on("drop",      this._onBgItemDrop.bind(this));
+    html.find(".bg-item-remove").on("click",  this._onBgItemRemove.bind(this));
+    html.find(".bg-add-level").on("click",    this._onBgAddLevelReward.bind(this));
+    html.find(".bg-level-remove").on("click", this._onBgRemoveLevelReward.bind(this));
+    html.find(".bg-level-input").on("change", this._onBgLevelChange.bind(this));
+    html.find(".bg-edit-rewards-btn").on("click", this._onToggleLock.bind(this));
     html.find(".skillbook-learn-btn").on("click",    this._onSkillBookLearn.bind(this));
+
+    // ── 物品图块 / 描述文本内 BUFF/物品悬停 chip：统一 Title 卡绑定 ─────────
+    this._titleCardCtrls = [];
+    this._bindItemTitleCardHover(html, ".cg-item-tile, .skillbook-slot, .bg-item-chip");
+    html.find(".desc-buff-chip").each((_i, el) => {
+      this._titleCardCtrls.push(attachHoverableTitleCard(el, () => buildBuffTitleCard(el.dataset.buffName)));
+    });
+    html.find(".desc-item-chip").each((_i, el) => {
+      this._titleCardCtrls.push(attachHoverableTitleCard(el, async () => {
+        const item = await _findItemByName(el.dataset.itemName);
+        return item ? _buildItemTitleCard(item) : null;
+      }));
+    });
   }
 
 
@@ -513,7 +582,7 @@ export class LimbusItemSheet extends ItemSheet {
   /* ─── 关闭时清理 ───────────────────────────────────────────────────────── */
 
   async close(options = {}) {
-    this._onCgTileHoverEnd();
+    this._forceCloseAllTitleCards();
     return super.close(options);
   }
 
@@ -803,6 +872,37 @@ export class LimbusItemSheet extends ItemSheet {
     this.render(false);
   }
 
+  /** 拖入技能 → 加入相关技能池（不可拖入自身；技能类型物品之外的忽略） */
+  async _onRelatedPoolDrop(event) {
+    event.preventDefault();
+    $(event.currentTarget).removeClass("cg-drag-over");
+
+    let raw;
+    try { raw = JSON.parse(event.originalEvent.dataTransfer.getData("text/plain")); }
+    catch { return; }
+    const dropped = await Item.fromDropData(raw).catch(() => null);
+    if (!dropped || dropped.type !== "skill") {
+      ui.notifications.warn("只能将「技能」类型物品拖入相关技能池。");
+      return;
+    }
+    if (dropped.uuid === this.item.uuid) {
+      ui.notifications.warn("不能将技能自身加入相关技能池。");
+      return;
+    }
+    const pool = foundry.utils.deepClone(this.item.system.relatedSkill?.pool ?? []);
+    pool.push({ itemUuid: dropped.uuid });
+    await this.item.update({ "system.relatedSkill.pool": pool });
+  }
+
+  /** 从相关技能池移除指定索引条目 */
+  async _onRelatedPoolRemove(event) {
+    const idx = parseInt(event.currentTarget.dataset.poolIdx ?? "-1");
+    if (idx < 0) return;
+    const pool = foundry.utils.deepClone(this.item.system.relatedSkill?.pool ?? []);
+    pool.splice(idx, 1);
+    await this.item.update({ "system.relatedSkill.pool": pool });
+  }
+
   /* ─── 修正行 ────────────────────────────────────────────────────────────── */
 
   async _onModifierAdd(event) {
@@ -960,6 +1060,21 @@ export class LimbusItemSheet extends ItemSheet {
     if (!dropped || dropped.type === "container") return;
     if (dropped.uuid === this.item.uuid) return;            // 禁止自引用
 
+    // 玩家把营地仓库物品拖入营地自身的容器：全程需 GM 权限，走 socket
+    if (raw.fromCampWarehouse && !game.user.isGM
+        && this.item.parent?.id === raw.fromCampWarehouse.campActorId) {
+      game.socket.emit("system.limbusCompany_FVTT", {
+        type:             "campStoreToContainer",
+        campActorId:      raw.fromCampWarehouse.campActorId,
+        containerItemId:  this.item.id,
+        itemUuid:         dropped.uuid,
+        fromWarehouseIdx: raw.fromCampWarehouse.placementIdx,
+        sourceActorId:    null,
+        userId:           game.user.id,
+      });
+      return;
+    }
+
     const cap = dropped.system?.capacity ?? { w: 1, h: 1 };
     const w = Math.max(1, cap.w ?? 1), h = Math.max(1, cap.h ?? 1);
 
@@ -979,17 +1094,31 @@ export class LimbusItemSheet extends ItemSheet {
       const itemData = dropped.toObject();
       const [newItem] = await containerActor.createEmbeddedDocuments("Item", [itemData]);
       storedUuid = newItem.uuid;
-      // 若物品来自另一容器，先从源容器移除
-      if (raw.fromContainer) {
-        const { containerId, placementIdx } = raw.fromContainer;
-        const srcContainer = sourceActor.items.get(containerId);
-        if (srcContainer) {
-          const srcContents = foundry.utils.deepClone(srcContainer.system.contents ?? []);
-          srcContents.splice(placementIdx, 1);
-          await srcContainer.update({ "system.contents": srcContents });
+      if (raw.fromCampWarehouse) {
+        // 来自营地仓库：camp 侧清理（移除放置记录 + 删除物品）需 GM 权限
+        const { LimbusCampSheet } = await import("./camp-sheet.mjs");
+        const payload = {
+          type:         "campRemoveFromWarehouse",
+          campActorId:  raw.fromCampWarehouse.campActorId,
+          placementIdx: raw.fromCampWarehouse.placementIdx,
+          itemUuid:     dropped.uuid,
+          userId:       game.user.id,
+        };
+        if (game.user.isGM) await LimbusCampSheet._gmExecuteRemoveFromWarehouse(payload);
+        else game.socket.emit("system.limbusCompany_FVTT", payload);
+      } else {
+        // 若物品来自另一容器，先从源容器移除
+        if (raw.fromContainer) {
+          const { containerId, placementIdx } = raw.fromContainer;
+          const srcContainer = sourceActor.items.get(containerId);
+          if (srcContainer) {
+            const srcContents = foundry.utils.deepClone(srcContainer.system.contents ?? []);
+            srcContents.splice(placementIdx, 1);
+            await srcContainer.update({ "system.contents": srcContents });
+          }
         }
+        await dropped.delete();
       }
-      await dropped.delete();
     }
     // 世界金库拖入：容器为世界物品（无 Actor），物品来自某个 Actor → 存储完整数据并删除源物品
     else if (!containerActor && sourceActor) {
@@ -1167,9 +1296,81 @@ export class LimbusItemSheet extends ItemSheet {
     await this.item.learnAllSkills();
   }
 
+  /* ─── 背景：初始物品 / 升级奖励物品 拖入放置（不移动/删除源物品，仅引用+快照） ── */
+
+  async _onBgItemDrop(event) {
+    event.preventDefault();
+    const $zone = $(event.currentTarget).removeClass("cg-drag-over");
+    const levelId = $zone.data("levelId") || null;
+
+    let raw;
+    try { raw = JSON.parse(event.originalEvent.dataTransfer.getData("text/plain")); }
+    catch { return; }
+    if (raw.type !== "Item") return;
+
+    const dropped = await Item.fromDropData(raw).catch(() => null);
+    if (!dropped) { ui.notifications.warn("无法解析拖入的物品。"); return; }
+
+    const itemData = dropped.toObject();
+    delete itemData._id;
+    const entry = { id: foundry.utils.randomID(), uuid: dropped.uuid ?? "", itemData };
+
+    if (levelId) {
+      const rewards = foundry.utils.deepClone(this.item.system.levelRewards ?? []);
+      const lr = rewards.find(r => r.id === levelId);
+      if (!lr) return;
+      lr.items.push(entry);
+      await this.item.update({ "system.levelRewards": rewards });
+    } else {
+      const items = foundry.utils.deepClone(this.item.system.startingItems ?? []);
+      items.push(entry);
+      await this.item.update({ "system.startingItems": items });
+    }
+  }
+
+  async _onBgItemRemove(event) {
+    event.stopPropagation();
+    const refId   = event.currentTarget.dataset.refId;
+    const levelId = event.currentTarget.dataset.levelId || null;
+    if (levelId) {
+      const rewards = foundry.utils.deepClone(this.item.system.levelRewards ?? []);
+      const lr = rewards.find(r => r.id === levelId);
+      if (!lr) return;
+      lr.items = lr.items.filter(i => i.id !== refId);
+      await this.item.update({ "system.levelRewards": rewards });
+    } else {
+      const items = (this.item.system.startingItems ?? []).filter(i => i.id !== refId);
+      await this.item.update({ "system.startingItems": items });
+    }
+  }
+
+  async _onBgAddLevelReward() {
+    const rewards = foundry.utils.deepClone(this.item.system.levelRewards ?? []);
+    const nextLevel = rewards.length ? Math.max(...rewards.map(r => r.level)) + 5 : 5;
+    rewards.push({ id: foundry.utils.randomID(), level: nextLevel, items: [] });
+    await this.item.update({ "system.levelRewards": rewards });
+  }
+
+  async _onBgRemoveLevelReward(event) {
+    const levelId = event.currentTarget.dataset.levelId;
+    const rewards = (this.item.system.levelRewards ?? []).filter(r => r.id !== levelId);
+    await this.item.update({ "system.levelRewards": rewards });
+  }
+
+  async _onBgLevelChange(event) {
+    const levelId = event.currentTarget.dataset.levelId;
+    const val = Math.max(1, parseInt(event.currentTarget.value) || 1);
+    const rewards = foundry.utils.deepClone(this.item.system.levelRewards ?? []);
+    const lr = rewards.find(r => r.id === levelId);
+    if (!lr) return;
+    lr.level = val;
+    await this.item.update({ "system.levelRewards": rewards });
+  }
+
   /* ─── 物品格：开始拖拽（内部重定位）────────────────────────────────────── */
 
   _onCgTileDragStart(event) {
+    this._forceCloseAllTitleCards(); // 拖动开始即关闭 Title 卡
     const tile  = event.currentTarget;
     const idx   = parseInt(tile.dataset.placementIdx ?? 0);
     const uuid  = tile.dataset.itemUuid ?? "";
@@ -1230,35 +1431,29 @@ export class LimbusItemSheet extends ItemSheet {
     await this.item.update({ "system.lockedCells": lockedCells });
   }
 
-  /* ─── 物品图块：悬停 Title 卡 ───────────────────────────────────────────── */
+  /* ─── 物品图块 / 描述文本 chip：悬停 Title 卡 ────────────────────────────
+   * 统一走 attachHoverableTitleCard（含关闭延迟、鼠标中键锁定、卡片内嵌套
+   * chip 悬停）。每次 activateListeners 重新绑定时清空旧 controller 列表，
+   * 并在 close()/开始拖拽时统一强制关闭（忽略锁定，避免卡片残留）。
+   * ────────────────────────────────────────────────────────────────────── */
 
-  async _onCgTileHover(event) {
-    const tile = event.currentTarget;
-    const uuid = tile.dataset.itemUuid;
-    if (!uuid) return;
-
-    this._onCgTileHoverEnd();
-
-    const item = await fromUuid(uuid).catch(() => null);
-    if (!item) return;
-
-    this._cgTitleCard = _buildItemTitleCard(item);
-    if (!this._cgTitleCard) return;
-
-    // 定位：在物品卡左侧，不够则右侧
-    const rect  = this.element[0].getBoundingClientRect();
-    const cardW = 280, cardH = 500;
-    let left = rect.left - cardW - 8;
-    if (left < 8) left = rect.right + 8;
-    const top = Math.max(8, Math.min(rect.top, window.innerHeight - cardH - 8));
-
-    this._cgTitleCard.css({ position: "fixed", left, top, zIndex: 99998 });
-    $("body").append(this._cgTitleCard);
+  /** 绑定 [selector → 悬停解析 Item] 的 Title 卡；controller 收进 this._titleCardCtrls 统一管理 */
+  _bindItemTitleCardHover(html, selector) {
+    html.find(selector).each((_i, el) => {
+      const ctrl = attachHoverableTitleCard(el, async () => {
+        const uuid = el.dataset.itemUuid;
+        if (!uuid) return null;
+        const item = await fromUuid(uuid).catch(() => null);
+        return item ? _buildItemTitleCard(item) : null;
+      });
+      this._titleCardCtrls.push(ctrl);
+    });
   }
 
-  _onCgTileHoverEnd() {
-    this._cgTitleCard?.remove();
-    this._cgTitleCard = null;
+  /** 强制关闭当前 sheet 绑定的所有 Title 卡（忽略锁定），sheet 关闭/开始拖拽时调用 */
+  _forceCloseAllTitleCards() {
+    for (const ctrl of this._titleCardCtrls) ctrl.close();
+    this._titleCardCtrls = [];
   }
 
   /* ─── 物品格：右键菜单 ──────────────────────────────────────────────────── */
@@ -1398,6 +1593,272 @@ function _subtypeLabel(sub) {
  * @param {Item} item
  * @returns {jQuery|null}
  */
+export function buildItemTitleCard(item) {
+  return _buildItemTitleCard(item);
+}
+
+/**
+ * 解析 BUFF 名称/type → { type, label, icon, description }。
+ * 优先按 CustomBuffRegistry 精确 type 匹配，其次按显示名称模糊匹配已注册自定义 BUFF，
+ * 最后回退标准 BUFF_TYPES/BUFF_DESCRIPTIONS。图标路径规则与 ClashManager._addBuff 一致：
+ * 自定义注册 BUFF 放在 Custom_buffs/ 子目录，标准 BUFF 直接放在 Buff_icon/ 下。
+ * @param {string} nameOrType  物品描述【】里写的文字，可以是 type 或中文显示名
+ * @returns {{type:string,label:string,icon:string,description:string}}
+ */
+export function resolveBuffMeta(nameOrType) {
+  const cfg = CONFIG.LIMBUSCOMPANY ?? {};
+  // 优先按中文显示名反查 type key（描述文本里写的通常是"流血"而非"bleed"），
+  // 找不到再退回 normalizeBuffType（兼容直接写 type key 的情况）
+  const labelToKey = _buffLabelToKey(cfg);
+  const type = labelToKey[nameOrType] ?? normalizeBuffType(nameOrType, nameOrType);
+
+  const iconBase = "systems/limbusCompany_FVTT/assets/icons/Buff_icon/";
+  const custom = CustomBuffRegistry.get(type);
+  if (custom) {
+    return {
+      type,
+      label:       custom.label ?? type,
+      icon:        `${iconBase}Custom_buffs/${custom.label ?? type}.webp`,
+      description: custom.description ?? "",
+    };
+  }
+
+  const knownLabel = _buffLabelMap()[type];
+  if (knownLabel) {
+    // 标准/特殊 BUFF：图标在 Buff_icon/ 根目录，说明文字来自 BUFF_DESCRIPTIONS
+    return {
+      type,
+      label:       knownLabel,
+      icon:        `${iconBase}${knownLabel}.webp`,
+      description: cfg.BUFF_DESCRIPTIONS?.[type] ?? "",
+    };
+  }
+
+  // 既不在 CustomBuffRegistry，也不在标准 BUFF_TYPES 里 → 视为「计数 BUFF」
+  // （只用于层数计数，没有独立效果逻辑），图标仍从 Custom_buffs/ 子目录找
+  return {
+    type,
+    label:       nameOrType,
+    icon:        `${iconBase}Custom_buffs/${nameOrType}.webp`,
+    description: "计数 BUFF：仅记录层数，无独立效果逻辑",
+  };
+}
+
+/**
+ * 构建 BUFF Title 卡（图标+名字 / 金色渐变分割线 / 说明文字）。
+ * @param {string} nameOrType
+ * @returns {jQuery}
+ */
+export function buildBuffTitleCard(nameOrType) {
+  const meta = resolveBuffMeta(nameOrType);
+  const descHtml = meta.description
+    ? linkifyHtml(_esc(meta.description).replace(/\n/g, "<br>"))
+    : "（暂无说明）";
+  return _wireCardInteractivity($(`<div class="limbus-title-card limbus-buff-title-card">
+    <div class="btc-header">
+      <img class="btc-icon" src="${_esc(meta.icon)}" alt="${_esc(meta.label)}">
+      <span class="btc-name">${_esc(meta.label)}</span>
+    </div>
+    <div class="btc-divider"></div>
+    <div class="btc-desc">${descHtml}</div>
+  </div>`));
+}
+
+/* ─── Title 卡交互：鼠标中键锁定 + 卡片内 chip 悬停显示嵌套卡 ──────────────
+ * 所有由 buildItemTitleCard/buildBuffTitleCard 产出的卡片都自动带上这套交互，
+ * 调用方（actor-sheet.mjs 等各处 hover 绑定）无需额外处理，只需把原来
+ * "hoverEnd 时无条件 card?.remove()" 改成 closeTitleCardUnlessLocked(card)，
+ * 让锁定后的卡片不会因为离开触发源就被摘掉。
+ * ────────────────────────────────────────────────────────────────────── */
+
+/** hoverEnd 时用这个代替 `card?.remove()`：卡片被锁定时保留，其余情况照常移除 */
+export function closeTitleCardUnlessLocked(card) {
+  if (!card || card.data("tcLocked")) return;
+  card.remove();
+}
+
+/** 无条件关闭：用于"鼠标真正离开卡片本体"这一刻——无论是否锁定都该消失 */
+export function closeTitleCard(card) {
+  card?.remove();
+}
+
+/** 定位规则：贴在触发元素左侧，不够则右侧（与既有各处 hover 定位逻辑一致） */
+function _positionTitleCard(card, anchorEl) {
+  const rect  = anchorEl.getBoundingClientRect();
+  const cardW = 280, cardH = 500;
+  let left = rect.left - cardW - 8;
+  if (left < 8) left = rect.right + 8;
+  const top = Math.max(8, Math.min(rect.top, window.innerHeight - cardH - 8));
+  card.css({ position: "fixed", left, top, zIndex: 99998 });
+}
+
+/**
+ * 给任意 Title 卡挂上：
+ *   - 恒定 pointer-events:auto（不然鼠标中键点击等交互压根传不到卡片上）
+ *   - 鼠标中键点击卡片本体 → 锁定（加 .tc-locked，之后离开触发源不再自动关闭）
+ *   - 卡片描述文本 linkify 产生的 .desc-buff-chip/.desc-item-chip → 悬停展示嵌套卡
+ * @param {jQuery} card
+ * @returns {jQuery} 原样返回 card，方便链式调用
+ */
+/**
+ * 中键切换锁定状态（BUFF Title 卡不支持锁定，直接忽略）。
+ * 供卡片本体的中键点击、以及触发源（图标/格子）本身的中键点击共用。
+ * @param {jQuery} card
+ */
+export function toggleTitleCardLock(card) {
+  if (!card?.length || card.hasClass("limbus-buff-title-card")) return;
+  if (card.data("tcLocked")) {
+    closeTitleCard(card); // 已锁定：再次中键 = 关闭卡片
+  } else {
+    card.data("tcLocked", true);
+    card.addClass("tc-locked");
+  }
+}
+
+/** 长按卡片顶部（tc-header/btc-header）拖动整张卡片 */
+function _wireCardDrag(card) {
+  const header = card.find(".tc-header, .btc-header")[0];
+  if (!header) return;
+  header.style.cursor = "grab";
+
+  let dragging = false, startX = 0, startY = 0, originLeft = 0, originTop = 0;
+  const onMouseMove = (e) => {
+    if (!dragging) return;
+    card.css({
+      left: originLeft + e.clientX - startX,
+      top:  originTop  + e.clientY - startY,
+    });
+  };
+  const onMouseUp = () => {
+    dragging = false;
+    header.style.cursor = "grab";
+    $(document).off("mousemove", onMouseMove).off("mouseup", onMouseUp);
+  };
+  header.addEventListener("mousedown", (ev) => {
+    if (ev.button !== 0) return; // 仅响应鼠标左键
+    ev.preventDefault();
+    startX = ev.clientX; startY = ev.clientY;
+    originLeft = parseInt(card.css("left")) || 0;
+    originTop  = parseInt(card.css("top"))  || 0;
+    dragging = true;
+    header.style.cursor = "grabbing";
+    $(document).on("mousemove", onMouseMove).on("mouseup", onMouseUp);
+  });
+}
+
+function _wireCardInteractivity(card) {
+  if (!card?.length) return card;
+  card.css("pointer-events", "auto");
+
+  card.on("mousedown", (ev) => {
+    if (ev.button !== 1) return; // 仅响应鼠标中键
+    ev.preventDefault();
+    toggleTitleCardLock(card);
+  });
+
+  _wireCardDrag(card);
+
+  card.find(".desc-buff-chip").each((_i, chipEl) => {
+    attachHoverableTitleCard(chipEl, () => buildBuffTitleCard(chipEl.dataset.buffName));
+  });
+  card.find(".desc-item-chip").each((_i, chipEl) => {
+    attachHoverableTitleCard(chipEl, async () => {
+      const item = await _findItemByName(chipEl.dataset.itemName);
+      return item ? _buildItemTitleCard(item) : null;
+    });
+  });
+
+  return card;
+}
+
+/**
+ * 通用「悬停出 Title 卡」绑定：处理开合时机（关闭前留一小段延迟，让鼠标来得及
+ * 移到卡片上——否则贴着触发源摆放的卡片在鼠标离开触发源瞬间就被摘掉，永远够
+ * 不到，鼠标中键锁定也就无从谈起），并自动接入 _wireCardInteractivity（锁定 +
+ * 卡片内嵌套 chip 悬停，因此本函数天然支持递归嵌套）。
+ * @param {HTMLElement} anchorEl
+ * @param {() => (jQuery|null|Promise<jQuery|null>)} buildFn  构建卡片内容，可异步
+ * @returns {{ close: () => void }}
+ */
+export function attachHoverableTitleCard(anchorEl, buildFn) {
+  if (!anchorEl) return { close() {} };
+
+  let card = null;
+  let closeTimer = null;
+  let seq = 0;
+
+  // 锁定的卡片只有一种关闭方式：鼠标中键再点一次（见 _wireCardInteractivity）。
+  // 离开触发源/离开卡片本体都不会关闭锁定的卡片，只对未锁定的普通悬停生效。
+  const cancelClose = () => {
+    if (closeTimer) { clearTimeout(closeTimer); closeTimer = null; }
+  };
+  const scheduleClose = () => {
+    cancelClose();
+    closeTimer = setTimeout(() => {
+      if (card && !card.data("tcLocked")) { card.remove(); card = null; }
+    }, 150);
+  };
+
+  const open = async () => {
+    cancelClose();
+    const mySeq = ++seq;
+    const built = await buildFn();
+    if (!built || mySeq !== seq) return;
+    card?.remove();
+    card = built; // _wireCardInteractivity 已经在 build 阶段挂好了
+    _positionTitleCard(card, anchorEl);
+    $("body").append(card);
+    card.on("mouseenter", cancelClose);
+    card.on("mouseleave", scheduleClose);
+  };
+
+  anchorEl.addEventListener("mouseenter", open);
+  anchorEl.addEventListener("mouseleave", scheduleClose);
+  // 触发源（图标/格子）本身也能中键锁定，不必先把鼠标挪到卡片上再点
+  anchorEl.addEventListener("mousedown", (ev) => {
+    if (ev.button !== 1 || !card) return;
+    ev.preventDefault();
+    toggleTitleCardLock(card);
+  });
+
+  return {
+    close() {
+      seq++;
+      cancelClose();
+      card?.remove();
+      card = null;
+    },
+  };
+}
+
+/**
+ * 按名字搜索物品（世界物品优先，其次全部合集包），供 "物品名字" 描述 chip 悬停解析使用。
+ * 精确匹配优先；找不到精确匹配时退回第一个名字包含该文字的结果。
+ * @param {string} name
+ * @returns {Promise<Item|null>}
+ */
+async function _findItemByName(name) {
+  const term = name.trim().toLowerCase();
+  if (!term) return null;
+
+  let fallback = null;
+  for (const item of game.items) {
+    if (item.name.toLowerCase() === term) return item;
+    if (!fallback && item.name.toLowerCase().includes(term)) fallback = item;
+  }
+  for (const pack of game.packs) {
+    if (pack.documentName !== "Item") continue;
+    const index = await pack.getIndex({ fields: [] });
+    for (const entry of index) {
+      if (entry.name.toLowerCase() === term) return await fromUuid(entry.uuid).catch(() => null);
+      if (!fallback && entry.name.toLowerCase().includes(term)) {
+        fallback = await fromUuid(entry.uuid).catch(() => null);
+      }
+    }
+  }
+  return fallback;
+}
+
 function _buildItemTitleCard(item) {
   if (!item) return null;
   const sys = item.system;
@@ -1409,8 +1870,8 @@ function _buildItemTitleCard(item) {
     const tags = (Array.isArray(sys.tags) ? sys.tags : String(sys.tags ?? "").split("/"))
       .map(t => String(t).trim()).filter(Boolean);
     const weightCount = Number(sys.weight ?? 0);
-    const descText    = sys.effectDesc ?? sys.description ?? "";
-    return $(`<div class="limbus-title-card limbus-title-card-skill">
+    const descText    = linkifyHtml(sys.effectDesc ?? sys.description ?? "");
+    return _wireCardInteractivity($(`<div class="limbus-title-card limbus-title-card-skill">
       <div class="tc-header" style="background:${sinColor}">${item.name}</div>
       <div class="tc-row2">
         <img src="${_getCategoryIcon(sys.category)}" class="tc-cat-icon" alt="">
@@ -1425,7 +1886,7 @@ function _buildItemTitleCard(item) {
         <img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/Starlight.webp" class="tc-starlight-icon" alt="星芒">
         <span class="tc-stellar-cost">${stellarCost}</span>
       </div>
-    </div>`);
+    </div>`));
   }
 
   // 装备 / 消耗品 / 材料 / 容器
@@ -1433,7 +1894,7 @@ function _buildItemTitleCard(item) {
   const stellarCost  = sys.stellarCost ?? 0;
   const tags = (Array.isArray(sys.tags) ? sys.tags : String(sys.tags ?? "").split("/"))
     .map(t => String(t).trim()).filter(Boolean);
-  const descText     = sys.effect ?? sys.description ?? sys.effectDesc ?? "";
+  const descText     = linkifyHtml(sys.effect ?? sys.description ?? sys.effectDesc ?? "");
 
   if (item.type === "equipment") {
     const fmt = v => { const n = Number(v) || 0; return `${n > 0 ? "+" : ""}${n}`; };
@@ -1451,7 +1912,7 @@ function _buildItemTitleCard(item) {
       if (sys.subtype !== "upper") modRows.push(`<div class="modifier-row"><img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/Speed.webp" class="mod-icon" alt="SPD"><span class="mod-val">${fmt(sys.speedAdj)}</span></div>`);
     }
     const tagsHtml = tags.map(t => `<span class="tc-skill-tag">${t}</span>`).join("");
-    return $(`<div class="limbus-title-card limbus-title-card-equip">
+    return _wireCardInteractivity($(`<div class="limbus-title-card limbus-title-card-equip">
       <div class="tc-header tce-header">${item.name}</div>
       <div class="tce-info-row">
         <div class="tce-info-left">
@@ -1470,14 +1931,14 @@ function _buildItemTitleCard(item) {
         <img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/Starlight.webp" class="tc-starlight-icon" alt="星芒">
         <span class="tc-stellar-cost">${stellarCost}</span>
       </div>
-    </div>`);
+    </div>`));
   }
 
   // 消耗品 / 材料 / 容器 — 简单卡片
   const typeLabel = typeLabels[item.type] ?? item.type;
   const catLabel  = sys.category ? ` · ${sys.category}` : "";
   const tagsHtml  = tags.map(t => `<span class="tc-skill-tag">${t}</span>`).join("");
-  return $(`<div class="limbus-title-card limbus-title-card-equip">
+  return _wireCardInteractivity($(`<div class="limbus-title-card limbus-title-card-equip">
     <div class="tc-header tce-header">${item.name}</div>
     <div class="tce-info-row">
       <div class="tce-info-left">
@@ -1492,7 +1953,7 @@ function _buildItemTitleCard(item) {
       <img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/Starlight.webp" class="tc-starlight-icon" alt="星芒">
       <span class="tc-stellar-cost">${stellarCost}</span>
     </div>
-  </div>`);
+  </div>`));
 }
 
 function _parseGridSize(str) {
@@ -1546,6 +2007,9 @@ function _activityEffectLabels() {
     { value: "triggerBuff",  label: "触发BUFF" },
     { value: "useSkill",     label: "使用技能" },
     { value: "diceTypeChg",  label: "骰子类型" },
+    { value: "extraDamage",  label: "追加伤害" },
+    { value: "relatedSkillConvert", label: "相关技能转换" },
+    { value: "fieldResource", label: "公用场地" },
   ];
 }
 
@@ -1630,6 +2094,7 @@ function _buildTriggerOpts(selected) {
     { label: "── 通用 ──",  values: ["回合开始时", "回合结束时", "受到伤害时"] },
     { label: "── 反应 ──",  values: ["反应"] },
     { label: "── 丢弃 ──",  values: ["丢弃时"] },
+    { label: "── 恐慌 ──",  values: ["恐慌触发时", "坚定触发时"] },
   ];
   return groups.map(g =>
     `<optgroup label="${g.label}">${g.values.map(v =>
@@ -1640,16 +2105,23 @@ function _buildTriggerOpts(selected) {
 
 /** 前置条件行 HTML */
 function _buildCondRow(cond, idx, cfg) {
-  const condType   = ["perN","baseAttr","useSkill","buffCompare"].includes(cond?.type) ? cond.type : "hasBuff";
+  const condType   = ["perN","baseAttr","useSkill","buffCompare","category","fieldResource"].includes(cond?.type) ? cond.type : "hasBuff";
   const isBuffSec  = condType === "hasBuff" || condType === "perN" || condType === "buffCompare";
   const isAttrSec  = condType === "baseAttr";
   const isSkillSec = condType === "useSkill";
+  const isCatSec   = condType === "category";
+  const isFieldSec = condType === "fieldResource";
   const isCompare  = condType === "buffCompare";
+  const selCats    = Array.isArray(cond?.categories) ? cond.categories : [];
   const stacksLbl  = condType === "perN" ? "每N层" : (isCompare ? "层数" : "层数≥");
 
   const stacksCmpOpts = [
     ["gt","＞"],["gte","≥"],["lt","＜"],["lte","≤"],["eq","＝"],
   ].map(([v,l]) => `<option value="${v}" ${(cond?.comparison ?? "eq") === v ? "selected":""}>${l}</option>`).join("");
+
+  const fieldCmpOpts = [
+    ["gt","＞"],["gte","≥"],["lt","＜"],["lte","≤"],["eq","＝"],
+  ].map(([v,l]) => `<option value="${v}" ${(cond?.comparison ?? "gte") === v ? "selected":""}>${l}</option>`).join("");
 
   const cmpDimOpts = [
     ["stacks","层数"],["intensity","强度"],
@@ -1678,9 +2150,14 @@ function _buildCondRow(cond, idx, cfg) {
           <option value="buffCompare" ${condType === "buffCompare" ? "selected" : ""}>比较值</option>
           <option value="baseAttr"    ${condType === "baseAttr"    ? "selected" : ""}>基础属性</option>
           <option value="useSkill"    ${condType === "useSkill"    ? "selected" : ""}>使用技能</option>
+          <option value="category"    ${condType === "category"    ? "selected" : ""}>使用分类</option>
+          <option value="fieldResource" ${condType === "fieldResource" ? "selected" : ""}>公用场地</option>
         </select>
-        <label>目标</label>
-        <select class="ae-sel cond-target">${_buildTargetOptions(cond?.target ?? "self")}</select>
+        <span class="ae-cond-target-sec" ${(isCatSec || isFieldSec) ? 'style="display:none"' : ""}>
+          <label>目标</label>
+          <select class="ae-sel cond-target">${_buildTargetOptions(cond?.target ?? "self")}</select>
+          ${_buildBgTagFields("cond", cond)}
+        </span>
         <span class="ae-cond-buff-sec" ${isBuffSec ? "" : 'style="display:none"'}>
           <label>BUFF</label>
           <input class="ae-input cond-buff" type="text" list="ae-buff-dl"
@@ -1695,7 +2172,7 @@ function _buildCondRow(cond, idx, cfg) {
             <select class="ae-sel cond-cmp-dim">${cmpDimOpts}</select>
             <select class="ae-sel cond-stacks-cmp">${stacksCmpOpts}</select>
           </span>
-          <input class="ae-input-sm cond-stacks" type="number" value="${cond?.stacks ?? 1}" min="0">
+          <input class="ae-input-sm cond-stacks" type="number" value="${cond?.stacks ?? 0}" min="0">
           <span class="ae-cond-pern-max" ${condType === "perN" ? "" : 'style="display:none"'}>
             <label>最大倍数</label>
             <input class="ae-input-sm cond-max-times" type="number" value="${cond?.maxTimes ?? 0}" min="0" placeholder="0=无限">
@@ -1711,10 +2188,27 @@ function _buildCondRow(cond, idx, cfg) {
         <span class="ae-cond-skill-sec" ${isSkillSec ? "" : 'style="display:none"'}>
           <label>技能UUID</label>
           <input class="ae-input cond-skill-uuid" type="text"
-                 value="${_esc(cond?.skillUuid ?? "")}" placeholder="Item.xxx…" style="width:130px;">
+                 value="${_esc(cond?.skillUuid ?? "")}" placeholder="Item.xxx…（精确匹配，优先）" style="width:130px;">
           <img class="ae-skill-preview" data-uuid-src="cond-skill-uuid"
                src="${_esc(cond?.skillUuid ? "icons/svg/item-bag.svg" : "")}"
                style="width:20px;height:20px;object-fit:cover;border-radius:3px;vertical-align:middle;${cond?.skillUuid ? "" : "display:none;"}">
+          <label>或 名称/标签</label>
+          <input class="ae-input cond-skill-name-tag" type="text"
+                 value="${_esc(cond?.skillNameOrTag ?? "")}" placeholder="技能名称 或 标签，任一满足即可" style="width:130px;">
+        </span>
+        <span class="ae-cond-category-sec" ${isCatSec ? "" : 'style="display:none"'}>
+          <label>分类（任一满足）</label>
+          <label class="ae-cond-cat-cb"><input type="checkbox" class="cond-category-cb" value="slash"  ${selCats.includes("slash")  ? "checked" : ""}> 斩击</label>
+          <label class="ae-cond-cat-cb"><input type="checkbox" class="cond-category-cb" value="blunt"  ${selCats.includes("blunt")  ? "checked" : ""}> 打击</label>
+          <label class="ae-cond-cat-cb"><input type="checkbox" class="cond-category-cb" value="pierce" ${selCats.includes("pierce") ? "checked" : ""}> 突刺</label>
+        </span>
+        <span class="ae-cond-field-sec" ${isFieldSec ? "" : 'style="display:none"'}>
+          <label>场地名字</label>
+          <input class="ae-input cond-field-name" type="text"
+                 value="${_esc(cond?.fieldName ?? "")}" placeholder="如：血宴" style="width:90px;">
+          <label>层数</label>
+          <select class="ae-sel cond-field-cmp">${fieldCmpOpts}</select>
+          <input class="ae-input-sm cond-field-stacks" type="number" value="${cond?.stacks ?? 0}" min="0">
         </span>
       </div>
     </div>`;
@@ -1729,7 +2223,35 @@ function _buildTargetOptions(selected) {
     ["allTeamOther",  "本队其他全部"],
     ["allEnemy",      "敌对全部"],
     ["allEnemyOther", "敌对其他全部"],
+    ["bgTag",         "背景标签"],
   ].map(([v, l]) => `<option value="${v}" ${selected === v ? "selected" : ""}>${l}</option>`).join("");
+}
+
+/**
+ * 「背景标签」目标的附加输入框（标签名字 + 数量）。
+ * prefix 区分挂在条件/消耗/效果哪个区块（cond / cost / eff），class 名带前缀以免互相冲突。
+ * 语义：本队中"背景带有该标签"的角色数量 ≥ 所填数量时，这些角色均视为合法目标；
+ * 数量不足则目标为空（效果不生效）。
+ */
+function _buildBgTagFields(prefix, obj) {
+  const isBgTag = (obj?.target ?? "self") === "bgTag";
+  return `
+    <span class="ae-${prefix}-bgtag-sec" ${isBgTag ? "" : 'style="display:none"'}>
+      <label>标签</label>
+      <input class="ae-input-sm ${prefix}-bgtag-name" type="text"
+             value="${_esc(obj?.targetTag ?? "")}" placeholder="如：剑契组" style="width:70px;">
+      <label>数量≥</label>
+      <input class="ae-input-sm ${prefix}-bgtag-count" type="number"
+             value="${obj?.targetTagCount ?? 1}" min="1" style="width:50px;">
+    </span>`;
+}
+
+/** 从行 DOM 读取「背景标签」目标的附加数据 */
+function _readBgTagMeta($r, prefix) {
+  return {
+    targetTag:      $r.find(`.${prefix}-bgtag-name`).val()?.trim() || "",
+    targetTagCount: Math.max(1, parseInt($r.find(`.${prefix}-bgtag-count`).val()) || 1),
+  };
 }
 
 /** 消耗行 HTML */
@@ -1759,6 +2281,7 @@ function _buildCostRow(cost, idx, cfg) {
   ].map(([v, l]) => `<option value="${v}" ${(cost?.discardMode ?? "level") === v ? "selected" : ""}>${l}</option>`).join("");
 
   const discardModeIsLevel = (cost?.discardMode ?? "level") === "level";
+  const isField = cost?.target === "field";
 
   return `
     <div class="ae-row ae-cost-row">
@@ -1770,8 +2293,18 @@ function _buildCostRow(cost, idx, cfg) {
         <label>类型</label>
         <select class="ae-sel cost-type">${typeOpts}</select>
         <label>目标</label>
-        <select class="ae-sel cost-target">${_buildTargetOptions(cost?.target ?? "self")}</select>
-        <span class="ae-cost-buff-sec" ${(isAttr || isDiscard) ? 'style="display:none"' : ""}>
+        <select class="ae-sel cost-target">${_buildTargetOptions(cost?.target ?? "self")}
+          <option value="field" ${isField ? "selected" : ""}>公用场地</option>
+        </select>
+        ${_buildBgTagFields("cost", cost)}
+        <span class="ae-cost-field-sec" ${isField ? "" : 'style="display:none"'}>
+          <label>场地名字</label>
+          <input class="ae-input cost-field-name" type="text"
+                 value="${_esc(cost?.fieldName ?? "")}" placeholder="如：血宴" style="width:90px;">
+          <label class="cost-stacks-label">${isPerStack ? "每N层" : "层数"}</label>
+          <input class="ae-input-sm cost-stacks" type="number" value="${cost?.stacks ?? 0}" min="0">
+        </span>
+        <span class="ae-cost-buff-sec" ${(isAttr || isDiscard || isField) ? 'style="display:none"' : ""}>
           <label>BUFF</label>
           <input class="ae-input cost-buff" type="text" list="ae-buff-dl"
                  placeholder="输入或选择BUFF…" autocomplete="off" style="width:100px;"
@@ -1779,7 +2312,7 @@ function _buildCostRow(cost, idx, cfg) {
           <label>强度</label>
           <input class="ae-input-sm cost-intensity" type="number" value="${cost?.intensity ?? 0}" min="0">
           <label class="cost-stacks-label">${isPerStack ? "每N层" : "层数"}</label>
-          <input class="ae-input-sm cost-stacks"    type="number" value="${cost?.stacks ?? 1}"    min="0">
+          <input class="ae-input-sm cost-stacks"    type="number" value="${cost?.stacks ?? 0}"    min="0">
           <span class="ae-cost-pern-max" ${isPerStack ? "" : 'style="display:none"'}>
             <label>最大倍数</label>
             <input class="ae-input-sm cost-max-times" type="number" value="${cost?.maxTimes ?? 0}" min="0" placeholder="0=无限">
@@ -1828,13 +2361,17 @@ function _buildEffectRow(eff, idx, cfg) {
   const isTriggerBuff  = type === "triggerBuff";
   const isUseSkill     = type === "useSkill";
   const isDiceTypeChg  = type === "diceTypeChg";
+  const isExtraDamage  = type === "extraDamage";
+  const isRelConvert   = type === "relatedSkillConvert";
+  const isFieldEff     = type === "fieldResource";
   const effOpts    = _activityEffectLabels()
     .map(e => `<option value="${e.value}" ${type === e.value ? "selected" : ""}>${e.label}</option>`).join("");
   const roundVal   = eff?.round ?? "本回合";
   const roundOpts  = _ROUND_OPTIONS
     .map(v => `<option value="${v}" ${roundVal === v ? "selected" : ""}>${v}</option>`).join("");
   const formulaVal = _esc(eff?.value ?? "");
-  const isValSec   = !isBuff && !isTriggerBuff && !isRandomBuff && !isUseSkill && !isDiceTypeChg;
+  const isValSec   = !isBuff && !isTriggerBuff && !isRandomBuff && !isUseSkill && !isDiceTypeChg && !isRelConvert && !isFieldEff;
+  const relMode    = eff?.relMode ?? "random";
   return `
     <div class="ae-row ae-eff-row">
       <div class="ae-row-hd">
@@ -1844,9 +2381,18 @@ function _buildEffectRow(eff, idx, cfg) {
       <div class="ae-row-fields">
         <label>类型</label>
         <select class="ae-sel ae-eff-type eff-type">${effOpts}</select>
-        <span class="ae-eff-target-sec" ${(isUseSkill || isDiceTypeChg) ? 'style="display:none"' : ""}>
+        <span class="ae-eff-target-sec" ${(isUseSkill || isDiceTypeChg || isRelConvert || isFieldEff) ? 'style="display:none"' : ""}>
           <label>目标</label>
           <select class="ae-sel eff-target">${_buildTargetOptions(eff?.target ?? "self")}</select>
+          ${_buildBgTagFields("eff", eff)}
+        </span>
+        <span class="ae-eff-field-sec" ${isFieldEff ? "" : 'style="display:none"'}>
+          <label>场地名字</label>
+          <input class="ae-input eff-field-name" type="text"
+                 value="${_esc(eff?.fieldName ?? "")}" placeholder="如：血宴" style="width:90px;">
+          <label>层数</label>
+          <input class="ae-input eff-field-stacks" type="text" placeholder="${_effValuePlaceholder("hpAdj")}"
+                 value="${_esc(eff?.value ?? "")}" style="width:110px;">
         </span>
         <span class="ae-eff-round-sec" ${isAddBuff ? "" : 'style="display:none"'}>
           <label>回合</label>
@@ -1918,6 +2464,35 @@ function _buildEffectRow(eff, idx, cfg) {
             <option value="unbreakable" ${(eff?.diceTypeVal ?? "normal") === "unbreakable" ? "selected" : ""}>不可摧毁</option>
           </select>
         </span>
+        <span class="ae-eff-extradmg-sec" ${isExtraDamage ? "" : 'style="display:none"'}>
+          <label>物理分类</label>
+          <select class="ae-sel eff-extradmg-category">
+            <option value="" ${!eff?.dmgCategory ? "selected" : ""}>（不计算物理抗性）</option>
+            <option value="slash"  ${eff?.dmgCategory === "slash"  ? "selected" : ""}>斩击</option>
+            <option value="blunt"  ${eff?.dmgCategory === "blunt"  ? "selected" : ""}>打击</option>
+            <option value="pierce" ${eff?.dmgCategory === "pierce" ? "selected" : ""}>突刺</option>
+          </select>
+          <label>罪孽类型</label>
+          <select class="ae-sel eff-extradmg-sin">
+            <option value="" ${!eff?.dmgSinType ? "selected" : ""}>（不计算罪孽抗性）</option>
+            ${["wrath","lust","sloth","gluttony","gloom","pride","envy"].map(s =>
+              `<option value="${s}" ${eff?.dmgSinType === s ? "selected" : ""}>${cfg.SIN_LABELS_ZH?.[s] ?? s}</option>`
+            ).join("")}
+          </select>
+        </span>
+        <span class="ae-eff-relconvert-sec" ${isRelConvert ? "" : 'style="display:none"'}>
+          <label>方式</label>
+          <select class="ae-sel eff-relconvert-mode">
+            <option value="random"   ${relMode === "random"   ? "selected" : ""}>随机（从相关池抽取）</option>
+            <option value="specific" ${relMode === "specific" ? "selected" : ""}>指定（按序号）</option>
+          </select>
+          <span class="ae-eff-relconvert-idx-sec" ${relMode === "specific" ? "" : 'style="display:none"'}>
+            <label>序号</label>
+            <input class="ae-input-sm eff-relconvert-idx" type="number" min="1"
+                   value="${eff?.relIndex ?? 1}" title="1=原本（自身），2起对应相关技能池顺序">
+          </span>
+          <span class="ae-eff-relconvert-hint">永久替换本技能在角色技能槽中的位置</span>
+        </span>
       </div>
     </div>`;
 }
@@ -1948,6 +2523,7 @@ function _setupAeDialog(html, cfg) {
     _bindDel(html);
     _bindCondCostBuff(html);
     _bindCondType(html);
+    _bindTargetBgTag(html);
   });
   html.find(".ae-add-cost").on("click", () => {
     const list = html.find(".ae-cost-list");
@@ -1956,6 +2532,7 @@ function _setupAeDialog(html, cfg) {
     _bindDel(html);
     _bindCondCostBuff(html);
     _bindCostType(html);
+    _bindTargetBgTag(html);
   });
   html.find(".ae-add-effect").on("click", () => {
     const list = html.find(".ae-effect-list");
@@ -1963,7 +2540,9 @@ function _setupAeDialog(html, cfg) {
     list.append(_buildEffectRow({}, idx, cfg));
     _bindDel(html);
     _bindEffType(html);
+    _bindRelConvertMode(html);
     _bindUseSkillSubtype(html);
+    _bindTargetBgTag(html);
   });
   html.on("click", ".ae-add-pool-buff", function () {
     const sec = $(this).closest(".ae-eff-random-sec");
@@ -1976,11 +2555,13 @@ function _setupAeDialog(html, cfg) {
 
   _bindDel(html);
   _bindEffType(html);
+  _bindRelConvertMode(html);
   _bindCondCostBuff(html);
   _bindCostType(html);
   _bindCondType(html);
   _bindSkillUuidPreview(html);
   _bindUseSkillSubtype(html);
+  _bindTargetBgTag(html);
 }
 
 /** UUID 输入框实时预览技能图标 */
@@ -2035,11 +2616,16 @@ function _bindCondType(html) {
     const isBuffSec  = type === "hasBuff" || type === "perN" || type === "buffCompare";
     const isAttrSec  = type === "baseAttr";
     const isSkillSec = type === "useSkill";
+    const isCatSec   = type === "category";
+    const isFieldSec = type === "fieldResource";
     const isCompare  = type === "buffCompare";
     row.find(".cond-stacks-label").text(type === "perN" ? "每N层" : (isCompare ? "层数" : "层数≥"));
     row.find(".ae-cond-buff-sec").toggle(isBuffSec);
     row.find(".ae-cond-attr-sec").toggle(isAttrSec);
     row.find(".ae-cond-skill-sec").toggle(isSkillSec);
+    row.find(".ae-cond-category-sec").toggle(isCatSec);
+    row.find(".ae-cond-field-sec").toggle(isFieldSec);
+    row.find(".ae-cond-target-sec").toggle(!isCatSec && !isFieldSec);
     row.find(".ae-cond-pern-max").toggle(type === "perN");
     row.find(".ae-cond-intensity-sec").toggle(!isCompare);
     row.find(".cond-stacks-label").toggle(!isCompare);
@@ -2048,22 +2634,38 @@ function _bindCondType(html) {
 }
 
 function _bindCostType(html) {
-  html.find(".cost-type").off("change").on("change", function () {
-    const row       = $(this).closest(".ae-cost-row");
-    const val       = $(this).val();
-    const isAttr    = val === "attribute";
-    const isDiscard = val === "discard";
-    const isPerStack = val === "perStack";
-    row.find(".ae-cost-buff-sec").toggle(!isAttr && !isDiscard);
+  const refreshRow = (row) => {
+    const val        = row.find(".cost-type").val();
+    const isField     = row.find(".cost-target").val() === "field";
+    const isAttr      = val === "attribute";
+    const isDiscard   = val === "discard";
+    const isPerStack  = val === "perStack";
+    row.find(".ae-cost-field-sec").toggle(isField);
+    row.find(".ae-cost-buff-sec").toggle(!isAttr && !isDiscard && !isField);
     row.find(".ae-cost-attr-sec").toggle(isAttr);
     row.find(".ae-cost-discard-sec").toggle(isDiscard);
     row.find(".cost-stacks-label").text(isPerStack ? "每N层" : "层数");
     row.find(".ae-cost-pern-max").toggle(isPerStack);
+  };
+  html.find(".cost-type").off("change").on("change", function () {
+    refreshRow($(this).closest(".ae-cost-row"));
+  });
+  html.find(".cost-target").off("change").on("change", function () {
+    refreshRow($(this).closest(".ae-cost-row"));
   });
   html.find(".cost-discard-mode").off("change").on("change", function () {
     const row     = $(this).closest(".ae-cost-row");
     const isLevel = $(this).val() === "level";
     row.find(".ae-cost-discard-level-sec").toggle(isLevel);
+  });
+}
+
+/** 目标下拉切换到「背景标签」时显示标签名字/数量输入框 */
+function _bindTargetBgTag(html) {
+  html.find(".cond-target, .cost-target, .eff-target").off("change.bgtag").on("change.bgtag", function () {
+    const sel    = $(this);
+    const prefix = sel.hasClass("cond-target") ? "cond" : sel.hasClass("cost-target") ? "cost" : "eff";
+    sel.closest(".ae-row-fields").find(`.ae-${prefix}-bgtag-sec`).toggle(sel.val() === "bgTag");
   });
 }
 
@@ -2095,15 +2697,29 @@ function _bindEffType(html) {
     const isTriggerBuff = type === "triggerBuff";
     const isUseSkill    = type === "useSkill";
     const isDiceTypeChg = type === "diceTypeChg";
-    row.find(".ae-eff-target-sec").toggle(!isUseSkill && !isDiceTypeChg);
+    const isExtraDamage = type === "extraDamage";
+    const isRelConvert  = type === "relatedSkillConvert";
+    const isFieldEff    = type === "fieldResource";
+    row.find(".ae-eff-target-sec").toggle(!isUseSkill && !isDiceTypeChg && !isRelConvert && !isFieldEff);
+    row.find(".ae-eff-field-sec").toggle(isFieldEff);
+    row.find(".eff-field-stacks").attr("placeholder", _effValuePlaceholder("hpAdj"));
     row.find(".ae-eff-round-sec").toggle(isAddBuff);
     row.find(".ae-eff-buff-sec").toggle(isBuff);
-    row.find(".ae-eff-val-sec").toggle(!isBuff && !isTriggerBuff && !isRandomBuff && !isUseSkill && !isDiceTypeChg);
+    row.find(".ae-eff-val-sec").toggle(!isBuff && !isTriggerBuff && !isRandomBuff && !isUseSkill && !isDiceTypeChg && !isRelConvert && !isFieldEff);
     row.find(".eff-value").attr("placeholder", _effValuePlaceholder(type));
     row.find(".ae-eff-trig-sec").toggle(isTriggerBuff);
     row.find(".ae-eff-random-sec").toggle(isRandomBuff);
     row.find(".ae-eff-useskill-sec").toggle(isUseSkill);
     row.find(".ae-eff-dicetypechg-sec").toggle(isDiceTypeChg);
+    row.find(".ae-eff-extradmg-sec").toggle(isExtraDamage);
+    row.find(".ae-eff-relconvert-sec").toggle(isRelConvert);
+  });
+}
+
+function _bindRelConvertMode(html) {
+  html.find(".eff-relconvert-mode").off("change").on("change", function () {
+    const row = $(this).closest(".ae-eff-row");
+    row.find(".ae-eff-relconvert-idx-sec").toggle($(this).val() === "specific");
   });
 }
 
@@ -2129,12 +2745,25 @@ function _readActivityForm(html, original) {
         attrType:   $r.find(".cond-attr-type").val() || "hp",
         comparison: $r.find(".cond-comparison").val() || "lt",
         attrValue:  $r.find(".cond-attr-value").val()?.trim() || "0",
+        ..._readBgTagMeta($r, "cond"),
       });
     } else if (condType === "useSkill") {
       preconditions.push({
-        type:      "useSkill",
-        target:    $r.find(".cond-target").val() || "self",
-        skillUuid: $r.find(".cond-skill-uuid").val()?.trim() || "",
+        type:           "useSkill",
+        target:         $r.find(".cond-target").val() || "self",
+        skillUuid:      $r.find(".cond-skill-uuid").val()?.trim() || "",
+        skillNameOrTag: $r.find(".cond-skill-name-tag").val()?.trim() || "",
+        ..._readBgTagMeta($r, "cond"),
+      });
+    } else if (condType === "category") {
+      const cats = $r.find(".cond-category-cb:checked").map((_, el) => el.value).get();
+      preconditions.push({ type: "category", categories: cats });
+    } else if (condType === "fieldResource") {
+      preconditions.push({
+        type:       "fieldResource",
+        fieldName:  $r.find(".cond-field-name").val()?.trim() || "",
+        comparison: $r.find(".cond-field-cmp").val() || "gte",
+        stacks:     parseInt($r.find(".cond-field-stacks").val()) || 0,
       });
     } else if (condType === "buffCompare") {
       preconditions.push({
@@ -2145,6 +2774,7 @@ function _readActivityForm(html, original) {
         compareDim: $r.find(".cond-cmp-dim").val() || "stacks",
         comparison: $r.find(".cond-stacks-cmp").val() || "eq",
         stacks:     parseInt($r.find(".cond-stacks").val()) || 0,
+        ..._readBgTagMeta($r, "cond"),
       });
     } else {
       const isPerN = condType === "perN";
@@ -2154,7 +2784,8 @@ function _readActivityForm(html, original) {
         buff:       resolveKey($r.find(".cond-buff").val()),
         buffCustom: "",
         intensity:  parseInt($r.find(".cond-intensity").val()) || 0,
-        stacks:     parseInt($r.find(".cond-stacks").val())    || 1,
+        stacks:     parseInt($r.find(".cond-stacks").val())    || 0,
+        ..._readBgTagMeta($r, "cond"),
         ...(isPerN ? { maxTimes: parseInt($r.find(".cond-max-times").val()) || 0 } : {}),
       });
     }
@@ -2171,6 +2802,7 @@ function _readActivityForm(html, original) {
         target,
         attrType: $r.find(".cost-attr-type").val()             || "hp",
         value:    parseInt($r.find(".cost-attr-value").val())  || 1,
+        ..._readBgTagMeta($r, "cost"),
       });
     } else if (type === "discard") {
       const discardMode = $r.find(".cost-discard-mode").val() || "level";
@@ -2179,6 +2811,14 @@ function _readActivityForm(html, original) {
         discardMode,
         ...(discardMode === "level" ? { discardLevel: parseInt($r.find(".cost-discard-level").val()) || 1 } : {}),
       });
+    } else if (target === "field") {
+      costs.push({
+        type,
+        target,
+        fieldName: $r.find(".cost-field-name").val()?.trim() || "",
+        stacks:    parseInt($r.find(".cost-stacks").val())   || 0,
+        ...(type === "perStack" ? { maxTimes: parseInt($r.find(".cost-max-times").val()) || 0 } : {}),
+      });
     } else {
       costs.push({
         type,
@@ -2186,7 +2826,8 @@ function _readActivityForm(html, original) {
         buff:       resolveKey($r.find(".cost-buff").val()),
         buffCustom: "",
         intensity:  parseInt($r.find(".cost-intensity").val()) || 0,
-        stacks:     parseInt($r.find(".cost-stacks").val())    || 1,
+        stacks:     parseInt($r.find(".cost-stacks").val())    || 0,
+        ..._readBgTagMeta($r, "cost"),
         ...(type === "perStack" ? { maxTimes: parseInt($r.find(".cost-max-times").val()) || 0 } : {}),
       });
     }
@@ -2218,6 +2859,7 @@ function _readActivityForm(html, original) {
         buffPool,
         buff: "", buffCustom: "", intensity: 0, stacks: 0,
         value: "", trigBuff: "", trigBuffCustom: "", trigStacks: 0,
+        ..._readBgTagMeta($r, "eff"),
       });
       return;
     }
@@ -2233,6 +2875,7 @@ function _readActivityForm(html, original) {
         skillUuid:  skillRef === "uuid" ? ($r.find(".eff-skill-uuid").val()?.trim() || "") : "",
         skillSlot:  skillRef === "equipped" ? ($r.find(".eff-skill-slot").val() || "basic") : "",
         skillLevel: skillRef === "equipped" ? (parseInt($r.find(".eff-skill-level").val()) || 1) : 1,
+        ..._readBgTagMeta($r, "eff"),
       });
       return;
     }
@@ -2243,6 +2886,24 @@ function _readActivityForm(html, original) {
       });
       return;
     }
+    if (type === "fieldResource") {
+      effects.push({
+        type,
+        fieldName: $r.find(".eff-field-name").val()?.trim() || "",
+        value:     $r.find(".eff-field-stacks").val()?.trim() || "",
+      });
+      return;
+    }
+    if (type === "relatedSkillConvert") {
+      const relMode = $r.find(".eff-relconvert-mode").val() || "random";
+      effects.push({
+        type,
+        relMode,
+        relIndex: relMode === "specific" ? Math.max(1, parseInt($r.find(".eff-relconvert-idx").val()) || 1) : 0,
+      });
+      return;
+    }
+    const isExtraDamage = type === "extraDamage";
     effects.push({
       type,
       target:         $r.find(".eff-target").val()    || "self",
@@ -2255,6 +2916,11 @@ function _readActivityForm(html, original) {
       trigBuff:       isTriggerBuff ? resolveKey($r.find(".eff-trig-buff").val()) : "",
       trigBuffCustom: "",
       trigStacks:     isTriggerBuff ? (parseInt($r.find(".eff-trig-stacks").val()) || 1) : 0,
+      ..._readBgTagMeta($r, "eff"),
+      ...(isExtraDamage ? {
+        dmgCategory: $r.find(".eff-extradmg-category").val() || "",
+        dmgSinType:  $r.find(".eff-extradmg-sin").val()      || "",
+      } : {}),
     });
   });
 

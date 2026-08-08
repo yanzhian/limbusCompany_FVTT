@@ -1,0 +1,76 @@
+{{!-- panic-sheet.hbs — 恐慌卡（士气低落/陷入恐慌的可更换效果配置） --}}
+<form class="limbuscompany item-sheet panic-sheet" autocomplete="off">
+
+  {{!-- ── 标题栏 ──────────────────────────────────────────────────── --}}
+  <div class="item-sheet-titlebar">
+    <span class="sheet-lock-icon {{#if isLocked}}locked{{else}}unlocked{{/if}}" title="{{#if isLocked}}点击解锁{{else}}点击锁定{{/if}}">
+      <i class="fas fa-{{#if isLocked}}lock{{else}}lock-open{{/if}}"></i>
+    </span>
+    <span class="sheet-type-label">{{typeLabel}}</span>
+  </div>
+
+  {{!-- ── 可滚动主体 ──────────────────────────────────────────────── --}}
+  <div class="equip-body">
+
+    {{!-- 顶部：图标 + 名字 --}}
+    <div class="equip-header">
+      <div class="equip-icon-col">
+        {{#if isEditable}}
+          <img src="{{item.img}}" class="item-sheet-icon" data-edit="img" title="更换图标" alt="icon">
+        {{else}}
+          <img src="{{item.img}}" class="item-sheet-icon" alt="icon">
+        {{/if}}
+      </div>
+      <div class="equip-info-col">
+        <div class="equip-name-row">
+          {{#if (and isEditable (not isLocked))}}
+            <input type="text" name="name" value="{{item.name}}" class="item-name-input"/>
+          {{else}}
+            <div class="item-name-display">{{item.name}}</div>
+          {{/if}}
+        </div>
+        <div class="equip-type-row">
+          <span class="equip-subtype-label">士气低落 / 陷入恐慌 效果配置</span>
+        </div>
+      </div>
+    </div>
+
+    {{!-- ── 标签 ────────────────────────────────────────────────────── --}}
+    <div class="item-tags-row">
+      <div class="tags-area">
+        {{#if (and isEditable (not isLocked))}}
+          <input type="text" name="system.tags" value="{{system.tags}}" class="tags-input" placeholder="标签1/标签2"/>
+        {{else}}
+          {{#each (split system.tags '/')}}
+            <span class="tag">{{trim this}}</span>
+          {{/each}}
+        {{/if}}
+      </div>
+    </div>
+
+    <div class="equip-divider"></div>
+
+    {{!-- ── 描述区 ──────────────────────────────────────────────────── --}}
+    <div class="item-desc-block">
+      {{#if (and isEditable (not isLocked))}}
+        {{editor system.description target="system.description" button=false editable=true engine="prosemirror"}}
+      {{else}}
+        <div class="item-desc-display">{{{linkify system.description}}}</div>
+      {{/if}}
+    </div>
+
+    <div class="equip-divider"></div>
+
+    {{!-- ── 效果触发编辑器（触发时机使用「恐慌触发时」） ────────────── --}}
+    {{> systems/limbusCompany_FVTT/templates/partials/activity-editor.hbs}}
+
+  </div>{{!-- /equip-body --}}
+
+  {{!-- ── 固定底部按钮栏 ─────────────────────────────────────────── --}}
+  <div class="item-sheet-footer">
+    <div class="footer-actions">
+      <button class="item-send-chat sheet-btn">发送聊天框</button>
+    </div>
+  </div>
+
+</form>

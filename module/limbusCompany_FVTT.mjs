@@ -18,6 +18,8 @@ import {
   MaterialData,
   ContainerData,
   SkillBookData,
+  PanicData,
+  BackgroundData,
 } from "./documents/item.mjs";
 import { LimbusActorSheet }   from "./sheets/actor-sheet.mjs";
 import { LimbusItemSheet }    from "./sheets/item-sheet.mjs";
@@ -27,7 +29,8 @@ import { LimbusLootSheet }    from "./sheets/loot-sheet.mjs";
 import { GMConsole }          from "./sheets/gm-console.mjs";
 import { SquadHUD }           from "./sheets/squad-hud.mjs";
 import { ClashManager }     from "./helpers/clash.mjs";
-import { CustomBuffRegistry, resolveBuffHandler } from "./helpers/custom-buffs.mjs";
+import { CustomBuffRegistry, resolveBuffHandler, FieldResourceRegistry } from "./helpers/custom-buffs.mjs";
+import { linkifyHtml } from "./helpers/linkify.mjs";
 import { SinResourceHUD }   from "./helpers/sin-resource-hud.mjs";
 import { QuickActionHUD }   from "./sheets/quick-action-hud.mjs";
 import { registerItemPiles } from "./helpers/item-piles.mjs";
@@ -94,7 +97,7 @@ Hooks.once("init", () => {
   game.socket.on("system.limbusCompany_FVTT", async (msg) => {
     await SinResourceHUD.handleSocketMsg(msg);
     await ClashManager.handleSocketMsg(msg);
-    await _handleMerchantSocketMsg(msg);
+    await LimbusMerchantSheet.handleSocketMsg(msg);
     await LimbusCampSheet.handleSocketMsg(msg);
     await LimbusLootSheet.handleSocketMsg(msg);
   });
@@ -122,6 +125,8 @@ Hooks.once("init", () => {
     material:   MaterialData,
     container:  ContainerData,
     skillbook:  SkillBookData,
+    panic:      PanicData,
+    background: BackgroundData,
   };
 
   // ── 注册 Actor Sheet ───────────────────────────────────────────────────
@@ -395,6 +400,17 @@ Hooks.on("updateActor", (actor) => {
   SquadHUD.onActorUpdate(actor);
 });
 
+/** 角色物品增删改 → 刷新打开中的营地卡（左栏角色背包面板） */
+const _refreshOpenCampSheets = (item) => {
+  if (item?.parent?.type !== "character") return;
+  for (const app of Object.values(ui.windows)) {
+    if (app instanceof LimbusCampSheet) app.render(false);
+  }
+};
+Hooks.on("createItem", _refreshOpenCampSheets);
+Hooks.on("deleteItem", _refreshOpenCampSheets);
+Hooks.on("updateItem", _refreshOpenCampSheets);
+
 /** Token 数据变化（非链接 Token）→ 也刷新 HUD */
 Hooks.on("updateToken", (token) => {
   const actor = token.actor;
@@ -413,15 +429,41 @@ Hooks.on("combatStart", (combat) => {
   for (const combatant of combat.combatants) {
     const actor = combatant.actor;
     if (!actor || actor.type !== "character") continue;
-    actor.longRest().then(() => {
+    actor.longRest().then(async () => {
       // longRest 已重置 HP/理智/AP/混乱阈值
       // 但战斗开始时不重置 HP，仅重置其他值
-      actor.update({
-        "system.sanity.value":    50,
-        "system.ap.value":        3,
-        "system.chaosThresholds": actor.system.getDefaultChaosThresholds?.() ?? [],
+      await actor.update({
+        "system.sanity.value":         50,
+        "system.ap.value":             3,
+        "system.chaosThresholds":      actor.system.getDefaultChaosThresholds?.() ?? [],
+        "system.panicCounters.fear":    0,
+        "system.panicCounters.resolve": 0,
       });
+      await actor.unsetFlag("limbusCompany_FVTT", "lowMoraleFiredEncounter");
     });
+  }
+
+  // ── 场地资源：遭遇战开始时，扫描全体角色背景 tags，命中则激活对应场地 ──
+  // 仅 GM 端执行一次，避免多客户端并发写入 world setting
+  if (game.user.isGM) {
+    (async () => {
+      const tagSet = new Set();
+      for (const combatant of combat.combatants) {
+        const actor  = combatant.actor;
+        const bgUuid = actor?.system?.background?.uuid;
+        if (!bgUuid) continue;
+        const bgItem = await fromUuid(bgUuid).catch(() => null);
+        for (const t of String(bgItem?.system?.tags ?? "").split("/")) {
+          const trimmed = t.trim();
+          if (trimmed) tagSet.add(trimmed);
+        }
+      }
+      for (const [name, def] of FieldResourceRegistry) {
+        if (def.triggerBackgroundTags?.some(t => tagSet.has(t))) {
+          await SinResourceHUD.ensureFieldResourceActive(name);
+        }
+      }
+    })();
   }
 });
 
@@ -433,6 +475,10 @@ Hooks.on("deleteCombat", async (combat) => {
     if (!actor) continue;
     await actor.unsetFlag("limbusCompany_FVTT", "encounterFireCounts");
     await actor.unsetFlag("limbusCompany_FVTT", "turnFireCounts");
+    await actor.unsetFlag("limbusCompany_FVTT", "lowMoraleFiredEncounter");
+    if (actor.type === "character") {
+      await actor.update({ "system.panicCounters.fear": 0, "system.panicCounters.resolve": 0 });
+    }
   }
 });
 
@@ -505,19 +551,30 @@ Hooks.on("updateCombat", async (combat, changed) => {
       });
     }
 
-    // 恐慌 BUFF 本回合首次激活：清空 AP 并公告
+    // 恐慌 BUFF 本回合首次激活：公告并触发恐慌卡效果
+    // （具体效果如清空 AP 由恐慌卡的「恐慌触发时」activities 配置）
     if (panicActivating) {
-      await actor.update({ "system.ap.value": 0 });
       await ChatMessage.create({
         speaker: ChatMessage.getSpeaker({ actor }),
         content: `<div class="limbuscompany chat-clash"><strong>${actor.name}</strong>【陷入恐慌】！无法使用基础及守备技能，E.G.O 不消耗理智但罪孽资源 ×1.5。</div>`,
       });
+      await actor.triggerPanicActivities?.("panic");
     }
     // 一轮结束进入下一轮：非恐慌角色补满行动点
     // （第 0→1 轮由 combatStart 钩子已处理，跳过）
     else if ((changed.round ?? 0) > 1) {
       await actor.update({ "system.ap.value": actor.system.ap.max ?? 3 });
     }
+
+
+    // 陷入恐慌：理智 ≤10 时，回合结束自动做一次坚定/恐慌鉴定
+    if ((actor.system.sanity?.value ?? 50) <= 10) {
+      await actor.performPanicCheck?.();
+    }
+
+    // 回合开始（本次 hook 同时代表"下一回合开始"）：
+    // 若恐慌/坚定计数存在已点亮的"3"，清空双方计数
+    await actor.clearPanicCountersIfTriggered?.();
 
     // 更新后重新读取 buffs（上面 update 已改变数据）
     const freshBuffs = actor.system.buffs ?? [];
@@ -534,6 +591,7 @@ Hooks.on("updateCombat", async (combat, changed) => {
       );
       await actor.update({ "system.hp.value": newHp });
       await actor.reduceBuffStacks?.("burn");
+      await ClashManager._tickFieldResources("burn", dmg, 1);
       if (actor.checkAndTriggerChaos) await actor.checkAndTriggerChaos(newHp, oldHp, { silent: true, source: "burn" });
       await ChatMessage.create({
         speaker: ChatMessage.getSpeaker({ actor }),
@@ -563,6 +621,20 @@ Hooks.on("updateCombat", async (combat, changed) => {
       const handler = resolveBuffHandler(buff);
       if (typeof handler?.onRoundEnd === "function") {
         await handler.onRoundEnd(actor, buff);
+      }
+    }
+
+    // ── 场地资源 onRoundStart 钩子：每回合开始对每个行动角色调用一次 ──────
+    for (const [fieldName, def] of FieldResourceRegistry) {
+      if (typeof def.onRoundStart !== "function") continue;
+      try {
+        await def.onRoundStart({
+          actor,
+          addBuff: (type, intensity, stacks, whenAdded) =>
+            ClashManager._addBuff(actor, type, intensity, stacks, whenAdded),
+        });
+      } catch (err) {
+        console.error(`场地资源【${fieldName}】onRoundStart 执行出错`, err);
       }
     }
 
@@ -742,6 +814,10 @@ async function _preloadTemplates() {
     "systems/limbusCompany_FVTT/templates/item/consumable-sheet.hbs",
     "systems/limbusCompany_FVTT/templates/item/container-sheet.hbs",
     "systems/limbusCompany_FVTT/templates/item/skillbook-sheet.hbs",
+    "systems/limbusCompany_FVTT/templates/item/panic-sheet.hbs",
+    "systems/limbusCompany_FVTT/templates/item/background-sheet.hbs",
+    "systems/limbusCompany_FVTT/templates/apps/background-wizard.hbs",
+    "systems/limbusCompany_FVTT/templates/apps/level-up-dialog.hbs",
     // Combat
     "systems/limbusCompany_FVTT/templates/combat/combat-hud.hbs",
     // Partials
@@ -787,28 +863,6 @@ function _localizeConfig() {
   }
 }
 
-/* ─── 商人购买 Socket 处理（GM 端执行库存扣减） ──────────────────────────── */
-
-/**
- * 处理来自玩家的商人购买 socket 消息。
- * 仅 GM 执行，负责更新 merchant actor 上对应 Item 的 stock。
- * @param {object} msg
- */
-async function _handleMerchantSocketMsg(msg) {
-  if (msg.type !== "merchantPurchase") return;
-  if (!game.user.isGM) return;
-
-  const merchant = game.actors.get(msg.merchantId);
-  const item     = merchant?.items.get(msg.itemId);
-  if (!item) return;
-
-  const currentStock = item.system.stock ?? -1;
-  if (currentStock === -1) return; // 无限库存，不处理
-
-  const newStock = Math.max(0, currentStock - 1);
-  await item.update({ "system.stock": newStock });
-}
-
 /* ─── Handlebars 辅助函数注册 ────────────────────────────────────────────── */
 
 Hooks.once("init", () => {
@@ -848,6 +902,19 @@ Hooks.once("init", () => {
   Handlebars.registerHelper("trim", (str) => {
     const s = str instanceof Handlebars.SafeString ? str.toString() : String(str ?? "");
     return s.trim();
+  });
+
+  /**
+   * 物品描述文本自动替换（三种记号互不冲突，各管各的）：
+   *   【XXX】 → BUFF 图标+名字的可悬停 chip（悬停显示 BUFF Title 卡）
+   *   "XXX"  → 物品引用的可悬停 chip（悬停按名字搜索世界物品/合集包，显示物品 Title 卡）
+   *   [XXX]  → 触发时机静态标签（按类别着色，不可悬停搜索）
+   * 核心逻辑在 helpers/linkify.mjs（item-sheet.mjs 构建 Title 卡时也复用同一份），
+   * 与 item-sheet.mjs 的 .desc-buff-chip / .desc-item-chip 悬停绑定配套使用。
+   */
+  Handlebars.registerHelper("linkify", (html) => {
+    const raw = html instanceof Handlebars.SafeString ? html.toString() : String(html ?? "");
+    return new Handlebars.SafeString(linkifyHtml(raw));
   });
 
   /** 判断值是否大于 */

@@ -111,13 +111,17 @@ export class SkillData extends foundry.abstract.TypeDataModel {
   static defineSchema() {
     const fields = foundry.data.fields;
 
-    // 相关技能结构
+    // 相关技能结构（v2：技能池，替代旧版单一 itemUuid + 冗余 trigger 字段。
+    // 触发改由④效果「相关技能转换」自身的 Activity trigger 决定，不再需要独立 trigger 字段）
     const relatedSkillSchema = new fields.SchemaField({
-      // 主技能：关联的已有技能 Item UUID
-      itemUuid:  new fields.StringField({ required: false, nullable: true, initial: null }),
-      // 触发条件
-      trigger:   new fields.StringField({ required: false, initial: "命中时" }),
-      // EGO 技能：恐慌时替换为侵蚀形态 UUID
+      // 相关技能池：可挂载多个技能 UUID，配合"相关技能转换"效果随机/指定切换
+      pool: new fields.ArrayField(
+        new fields.SchemaField({
+          itemUuid: new fields.StringField({ required: false, nullable: true, initial: null }),
+        }),
+        { required: true, initial: [] }
+      ),
+      // EGO 技能：恐慌时替换为侵蚀形态 UUID（脱离恐慌后恢复，与技能池无关，独立机制）
       erodeUuid: new fields.StringField({ required: false, nullable: true, initial: null }),
     });
 
@@ -398,6 +402,72 @@ export class SkillBookData extends foundry.abstract.TypeDataModel {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+//  PanicData — 恐慌卡数据模型（士气低落/陷入恐慌的可更换效果配置）
+// ═══════════════════════════════════════════════════════════════════════════
+
+export class PanicData extends foundry.abstract.TypeDataModel {
+  static defineSchema() {
+    const fields = foundry.data.fields;
+    return {
+      // 描述（显示在恐慌卡上）
+      description: new fields.HTMLField({ required: false, initial: "" }),
+      tags:        new fields.StringField({ required: false, initial: "" }),
+      // 效果触发器（使用触发时机「恐慌触发时」，槽位决定何时触发）
+      activities:  new fields.ArrayField(makeActivitySchema(), { required: true, initial: [] }),
+    };
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  BackgroundData — 背景物品数据模型
+//  （角色创建向导用：背景名称/简介 + 初始物品 + 按等级解锁的升级奖励物品）
+// ═══════════════════════════════════════════════════════════════════════════
+
+/** 物品引用条目：uuid 用于世界/合集包物品；itemData 为完整数据快照（拖入时缓存，防止源物品被删除后失效） */
+function makeItemRefSchema() {
+  const fields = foundry.data.fields;
+  return new fields.SchemaField({
+    id:       new fields.StringField({ required: true, initial: () => foundry.utils.randomID() }),
+    uuid:     new fields.StringField({ required: true, initial: "" }),
+    itemData: new fields.ObjectField({ required: false, nullable: true, initial: null }),
+  });
+}
+
+export class BackgroundData extends foundry.abstract.TypeDataModel {
+  static defineSchema() {
+    const fields = foundry.data.fields;
+
+    // 等级奖励条目：达到某等级时解锁的物品列表
+    const levelRewardSchema = new fields.SchemaField({
+      id:    new fields.StringField({ required: true, initial: () => foundry.utils.randomID() }),
+      level: new fields.NumberField({ required: true, integer: true, min: 1, initial: 5 }),
+      items: new fields.ArrayField(makeItemRefSchema(), { required: true, initial: [] }),
+    });
+
+    return {
+      // 副标题（显示在背景名称下方，如"收尾人"）
+      subtitle: new fields.StringField({ required: false, initial: "" }),
+
+      // 简介（富文本，支持图文）
+      description: new fields.HTMLField({ required: false, initial: "" }),
+
+      // 初始物品：创建角色时立即获得
+      startingItems: new fields.ArrayField(makeItemRefSchema(), { required: true, initial: [] }),
+
+      // 升级奖励：按等级解锁
+      levelRewards: new fields.ArrayField(levelRewardSchema, { required: true, initial: [] }),
+
+      // 合集包浏览器分类标签（如"事务所"/"协会"/"世界之翼"），供背景选择向导筛选
+      category: new fields.StringField({ required: false, initial: "" }),
+
+      // 势力/阵营标签（斜杠分隔，如"拉曼却/血魔"）：多个背景可共享同一标签，
+      // 供场地资源（FieldResourceRegistry）等按 tag 匹配的玩法逻辑使用
+      tags: new fields.StringField({ required: false, initial: "" }),
+    };
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 //  LimbusItem — Item 文档类
 // ═══════════════════════════════════════════════════════════════════════════
 
@@ -484,14 +554,16 @@ export class LimbusItem extends Item {
   // ─── 相关技能解析 ──────────────────────────────────────────────────────
 
   /**
-   * 异步获取相关技能的 Item 实例（通过 UUID）
-   * @returns {Promise<LimbusItem|null>}
+   * 获取相关技能池中所有已配置的 Item 实例（按池内顺序，跳过解析失败的条目）。
+   * @returns {Promise<LimbusItem[]>}
    */
-  async getRelatedSkillItem() {
-    if (this.type !== "skill") return null;
-    const uuid = this.system.relatedSkill?.itemUuid;
-    if (!uuid) return null;
-    return fromUuid(uuid).catch(() => null);
+  async getRelatedSkillPool() {
+    if (this.type !== "skill") return [];
+    const pool = this.system.relatedSkill?.pool ?? [];
+    const items = await Promise.all(
+      pool.map(p => (p?.itemUuid ? fromUuid(p.itemUuid).catch(() => null) : null))
+    );
+    return items.filter(Boolean);
   }
 
   /**
@@ -584,7 +656,7 @@ export class LimbusItem extends Item {
       metaHtml = `<div class="ic-item-meta skill-meta">${catImgTag}<span class="ic-dice">${formula}</span></div>`;
     } else {
       // 物品类：type label + category
-      const typeLabels = { equipment:"装备", consumable:"消耗品", material:"材料", container:"容器", skillbook:"技能书" };
+      const typeLabels = { equipment:"装备", consumable:"消耗品", material:"材料", container:"容器", skillbook:"技能书", panic:"恐慌", background:"背景" };
       const typeLabel  = typeLabels[this.type] ?? this.type;
       const catLabel   = sys.category ? ` · ${sys.category}` : "";
       metaHtml = `<div class="ic-item-meta">${typeLabel}${catLabel}</div>`;
@@ -597,6 +669,7 @@ export class LimbusItem extends Item {
         (this.type === "equipment"  ? sys.effect     : null) ??
         (this.type === "consumable" ? sys.effect : null) ??
         (this.type === "material"   ? sys.effect : null) ??
+        (this.type === "background" ? sys.description : null) ??
         "";
       if (!raw) return "";
       return `<div class="ic-desc">${raw}</div>`;

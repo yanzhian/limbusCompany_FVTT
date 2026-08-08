@@ -28,6 +28,23 @@
       </button>
     {{/if}}
 
+    {{!-- 场地资源：仅显示已激活的条目，位置紧邻七宗罪池 --}}
+    {{#if fieldEntries.length}}
+      <div class="field-hud-divider"></div>
+      {{#each fieldEntries}}
+        <div class="field-hud-entry" title="场地资源：{{name}}">
+          <img class="field-hud-icon" src="{{icon}}" alt="{{name}}">
+          {{#if ../isGM}}
+            <input class="field-hud-value-input" type="number"
+                   data-field="{{name}}" value="{{value}}" min="0">
+            <button class="field-hud-remove" data-field="{{name}}" title="移除该场地资源">×</button>
+          {{else}}
+            <span class="field-hud-value">{{value}}</span>
+          {{/if}}
+        </div>
+      {{/each}}
+    {{/if}}
+
   </div>{{!-- /sin-hud-bar --}}
 
 </div>

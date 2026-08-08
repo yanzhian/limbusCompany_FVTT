@@ -20,7 +20,7 @@ export class AttributeCheckDialog {
    * @param {string}      label     - 属性中文名（显示用）
    */
   static async show(actor, attr, attrVal, label) {
-    const defaultDifficulty = Math.min(Math.max(attrVal, 1), MAX_DIFFICULTY);
+    const defaultDifficulty = 3;
 
     // 当前难度（被硬币点击更新）
     let currentDifficulty = defaultDifficulty;
@@ -108,12 +108,12 @@ export class AttributeCheckDialog {
   static async _executeRoll(actor, label, attrVal, difficulty, bonus) {
     const totalCoins = Math.max(2, attrVal + bonus);
 
-    // 每枚硬币：Roll 1d2，结果 >= 2 = 正面（成功）
-    const formula = Array.from({ length: totalCoins }, () => "1d2").join("+");
+    // 每枚硬币：Roll 1d10，结果 < 属性值 = 正面（成功）
+    const formula = Array.from({ length: totalCoins }, () => "1d10").join("+");
     const roll    = new Roll(formula);
     await roll.evaluate();
 
-    // DiceSoNice：播放所有硬币的 3D 翻转动画，等待完成后再显示聊天结果
+    // DiceSoNice：播放 3D 动画，等待完成后再显示聊天结果
     if (game.dice3d) {
       await game.dice3d.showForRoll(roll, game.user, true, null, false);
     }
@@ -124,24 +124,16 @@ export class AttributeCheckDialog {
     for (const term of roll.terms) {
       if (!term.results) continue;
       for (const r of term.results) {
-        const isHeads = r.result >= 2;
+        const isHeads = r.result < attrVal;
         if (isHeads) headCount++;
         coinResults.push(isHeads);
       }
     }
 
-    // 判断结果类型
-    let resultText, resultClass;
-    if (headCount < difficulty) {
-      resultText  = "失败";
-      resultClass = "result-fail";
-    } else if (headCount === difficulty) {
-      resultText  = "完美成功";
-      resultClass = "result-perfect";
-    } else {
-      resultText  = "成功";
-      resultClass = "result-success";
-    }
+    // 判断结果（正面数 ≥ 难度即成功）
+    const success     = headCount >= difficulty;
+    const resultText  = success ? "成功" : "失败";
+    const resultClass = success ? "result-success" : "result-fail";
 
     // 构建结果硬币行 HTML
     const coinRowHtml = coinResults

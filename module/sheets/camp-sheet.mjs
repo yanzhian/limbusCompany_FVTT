@@ -1,8 +1,9 @@
 /**
  * camp-sheet.mjs — 营地角色卡 Sheet
  *
- * 双栏布局：
- *   左栏：仓库网格（7×7 默认，与容器网格完全相同的 cg-wrap 机制）
+ * 三栏布局：
+ *   左栏：当前玩家主控角色的背包网格（6×6 显示打包，拖拽存取仓库）
+ *   中栏：仓库网格（7×7 默认，与容器网格完全相同的 cg-wrap 机制）
  *   右栏：配方列表（制作 + GM 编辑）
  *
  * 权限区分：
@@ -10,6 +11,9 @@
  *   玩家 → 查看仓库、右键取出物品、查看可见配方、点击制作
  *         （玩家操作通过 socket 委托 GM 执行）
  */
+import { getBagItems, packBagGrid } from "../helpers/bag-grid.mjs";
+import { buildItemTitleCard, closeTitleCardUnlessLocked, toggleTitleCardLock } from "./item-sheet.mjs";
+
 export class LimbusCampSheet extends ActorSheet {
 
   /** @override */
@@ -20,6 +24,8 @@ export class LimbusCampSheet extends ActorSheet {
       width:     880,
       height:    580,
       resizable: true,
+      // 重渲染时保持这些容器的滚动位置（拖动仓库物品后不回顶）
+      scrollY:   [".camp-warehouse-grid-wrap", ".camp-char-grid-wrap", ".camp-recipe-list"],
     });
   }
 
@@ -40,6 +46,32 @@ export class LimbusCampSheet extends ActorSheet {
    * @type {Map<string, Promise<void>>}
    */
   static _opQueues = new Map();
+
+  /** 重渲染时同时保留水平滚动位置（Foundry scrollY 只处理垂直方向）。
+   *  注意：水平滚动发生在内层 .cg-wrap（overflow:auto + max-width:100%），
+   *  与负责垂直滚动的外层 grid-wrap 不是同一个元素。 */
+  static _SCROLL_X_SELECTORS = [
+    ".camp-cg", ".camp-char-cg",
+    ".camp-warehouse-grid-wrap", ".camp-char-grid-wrap", ".camp-recipe-list",
+  ];
+
+  /** 实时记录的各容器 scrollLeft（scroll 事件持续更新，渲染后恢复） */
+  _scrollXPos = {};
+
+  /** 渲染后恢复水平滚动位置并重新挂监听（由 activateListeners 调用） */
+  _restoreScrollX(html) {
+    for (const sel of LimbusCampSheet._SCROLL_X_SELECTORS) {
+      const el = html.find(sel)[0];
+      if (!el) continue;
+      const saved = this._scrollXPos[sel];
+      if (saved != null) {
+        el.scrollLeft = saved;
+        // 布局/图片加载完成前 scrollLeft 可能被钳制为 0，rAF 再补一次
+        requestAnimationFrame(() => { el.scrollLeft = saved; });
+      }
+      el.addEventListener("scroll", () => { this._scrollXPos[sel] = el.scrollLeft; }, { passive: true });
+    }
+  }
 
   /* ─── getData ────────────────────────────────────────────────────────── */
 
@@ -90,6 +122,25 @@ export class LimbusCampSheet extends ActorSheet {
         return { ...recipe, canCraft, ingDetails };
       });
 
+    // ── 左栏：当前玩家主控角色的背包网格 ─────────────────────────────────
+    // GM 通常拥有全部角色，回退查找只对玩家生效，避免 GM 显示任意角色
+    const myChar = game.user.character
+      ?? (game.user.isGM ? null : game.actors.find(a => a.type === "character" && a.isOwner));
+    if (myChar) {
+      const bagItems = getBagItems(myChar);
+      const { tiles, rows, cells, usedCells } = packBagGrid(bagItems, 6, 6);
+      ctx.myChar = {
+        id:    myChar.id,
+        name:  myChar.name,
+        img:   myChar.img,
+        tiles, rows, cells,
+        used:  usedCells,
+        max:   36,
+      };
+    } else {
+      ctx.myChar = null;
+    }
+
     return ctx;
   }
 
@@ -137,6 +188,7 @@ export class LimbusCampSheet extends ActorSheet {
         row:     p.y + 1,
         rotated: p.rotated ?? false,
         show,
+        isContainer: item.type === "container",
         item: { _id: item.id, name: item.name, img: item.img,
                 quantity: item.system?.quantity ?? 1 },
       });
@@ -217,6 +269,9 @@ export class LimbusCampSheet extends ActorSheet {
   activateListeners(html) {
     super.activateListeners(html);
 
+    // 恢复水平滚动位置（垂直由 defaultOptions.scrollY 处理）
+    this._restoreScrollX(html);
+
     // 编辑锁（GM 专用）
     html.find(".camp-lock-toggle").on("click", () => {
       this._editUnlocked = !this._editUnlocked;
@@ -236,18 +291,65 @@ export class LimbusCampSheet extends ActorSheet {
     // GM：仓库网格尺寸编辑（失焦/Enter 提交）
     html.find(".camp-grid-dim").on("change", this._onGridSizeChange.bind(this));
 
-    // 仓库网格：拖放
-    html.find(".cg-cell").on("dragover",   this._onCgCellDragOver.bind(this));
-    html.find(".cg-cell").on("dragleave",  this._onCgCellDragLeave.bind(this));
-    html.find(".cg-cell").on("drop",       this._onCgCellDrop.bind(this));
+    // 仓库网格：拖放（限定 .camp-cg 内，避免误绑左栏角色网格）
+    html.find(".camp-cg .cg-cell").on("dragover",   this._onCgCellDragOver.bind(this));
+    html.find(".camp-cg .cg-cell").on("dragleave",  this._onCgCellDragLeave.bind(this));
+    html.find(".camp-cg .cg-cell").on("drop",       this._onCgCellDrop.bind(this));
 
     // 仓库图块：拖拽开始
-    html.find(".cg-item-tile").on("dragstart", this._onCgTileDragStart.bind(this));
-    html.find(".cg-item-tile").on("mouseenter",  this._onCgTileHoverStart.bind(this));
-    html.find(".cg-item-tile").on("mouseleave",  this._onCgTileHoverEnd.bind(this));
+    html.find(".camp-cg .cg-item-tile").on("dragstart", this._onCgTileDragStart.bind(this));
+    html.find(".camp-cg .cg-item-tile").on("mouseenter",  this._onCgTileHoverStart.bind(this));
+    html.find(".camp-cg .cg-item-tile").on("mousedown", (ev) => {
+      if (ev.button !== 1) return;
+      ev.preventDefault();
+      toggleTitleCardLock(this._campTitleCard);
+    });
+    html.find(".camp-cg .cg-item-tile").on("mouseleave",  (ev) => this._onCgTileHoverEnd(ev));
 
     // 仓库图块：右键菜单
-    html.find(".cg-item-tile").on("contextmenu", this._onCgTileMenu.bind(this));
+    html.find(".camp-cg .cg-item-tile").on("contextmenu", this._onCgTileMenu.bind(this));
+
+    // 仓库图块：双击打开容器
+    html.find(".camp-cg .cg-item-tile").on("dblclick", this._onCgTileDblClick.bind(this));
+
+    // 仓库图块：作为拖放目标（拖到容器图块上 = 存入容器）
+    html.find(".camp-cg .cg-item-tile").on("dragover", (event) => {
+      event.preventDefault();
+      event.originalEvent.dataTransfer.dropEffect = "move";
+    });
+    html.find(".camp-cg .cg-item-tile").on("drop", this._onCgTileDropOnTile.bind(this));
+
+    // ── 左栏：角色背包网格 ──────────────────────────────────────────────
+    // 背包图块拖拽开始：标准 Item 拖拽数据（拖入仓库走既有 _onCgCellDrop 流程）
+    html.find(".camp-char-cg .cg-item-tile").on("dragstart", (event) => {
+      this._onCgTileHoverEnd(null, true); // 拖动开始即强制关闭 Title 卡（忽略锁定）
+      const uuid = event.currentTarget.dataset.itemUuid ?? "";
+      event.originalEvent.dataTransfer.setData("text/plain", JSON.stringify({ type: "Item", uuid }));
+      event.originalEvent.dataTransfer.effectAllowed = "move";
+    });
+    // 背包图块双击：打开物品卡
+    html.find(".camp-char-cg .cg-item-tile").on("dblclick", async (event) => {
+      const uuid = event.currentTarget.dataset.itemUuid ?? "";
+      const item = await fromUuid(uuid).catch(() => null);
+      item?.sheet?.render(true);
+    });
+    // 背包图块悬停：Title 卡
+    html.find(".camp-char-cg .cg-item-tile").on("mouseenter", this._onCgTileHoverStart.bind(this));
+    html.find(".camp-char-cg .cg-item-tile").on("mousedown", (ev) => {
+      if (ev.button !== 1) return;
+      ev.preventDefault();
+      toggleTitleCardLock(this._campTitleCard);
+    });
+    html.find(".camp-char-cg .cg-item-tile").on("mouseleave", (ev) => this._onCgTileHoverEnd(ev));
+    // 整个左栏作为"从仓库取出"的拖放目标
+    const charPanel = html.find(".camp-char-panel");
+    charPanel.on("dragover", (event) => {
+      event.preventDefault();
+      event.originalEvent.dataTransfer.dropEffect = "move";
+      charPanel.addClass("cg-drag-over");
+    });
+    charPanel.on("dragleave", () => charPanel.removeClass("cg-drag-over"));
+    charPanel.on("drop", this._onCharPanelDrop.bind(this));
 
     // 仓库图块：旋转（GM 解锁时显示）
     html.find(".cg-rotate-btn").on("click", this._onCgTileRotate.bind(this));
@@ -263,6 +365,27 @@ export class LimbusCampSheet extends ActorSheet {
     html.find(".camp-recipe-delete").on("click",    this._onDeleteRecipe.bind(this));
     html.find(".camp-recipe-hide").on("click",      this._onToggleRecipeHidden.bind(this));
     html.find(".camp-craft-btn:not([disabled])").on("click", this._onCraft.bind(this));
+  }
+
+  /* ─── 左栏角色面板：接收仓库图块拖放（= 取出到角色背包） ─────────────── */
+
+  async _onCharPanelDrop(event) {
+    event.preventDefault();
+    this.element.find(".camp-char-panel").removeClass("cg-drag-over");
+
+    let raw;
+    try { raw = JSON.parse(event.originalEvent.dataTransfer.getData("text/plain")); }
+    catch { return; }
+
+    // 只处理来自本营地仓库的图块
+    if (raw?.fromCampWarehouse?.campActorId !== this.actor.id) return;
+    const idx  = raw.fromCampWarehouse.placementIdx;
+    const item = await fromUuid(raw.uuid ?? "").catch(() => null);
+    if (!item) return;
+
+    // 全部数量取出（如需部分取出可用右键菜单）
+    const qty = item.system?.quantity ?? 1;
+    await this._executeItemTake(this.actor.id, raw.uuid, idx, qty);
   }
 
   /* ─── 网格尺寸编辑（GM） ─────────────────────────────────────────────── */
@@ -333,6 +456,20 @@ export class LimbusCampSheet extends ActorSheet {
     const sourceActor = dropped.parent;
 
     if (!game.user.isGM) {
+      // 玩家把本营地容器内的物品移回仓库（物品本就属于 camp actor）
+      if (raw.fromContainer && raw.fromContainer.actorId === this.actor.id) {
+        game.socket.emit("system.limbusCompany_FVTT", {
+          type:            "campContainerToWarehouse",
+          campActorId:     this.actor.id,
+          containerItemId: raw.fromContainer.containerId,
+          placementIdx:    raw.fromContainer.placementIdx,
+          itemUuid:        raw.uuid ?? "",
+          targetX, targetY,
+          userId: game.user.id,
+        });
+        return;
+      }
+
       // 玩家只能拖入自己背包中的物品，通过 socket 委托 GM 执行
       const myChar = game.user.character;
       if (!myChar || !sourceActor || sourceActor.id !== myChar.id) {
@@ -367,6 +504,10 @@ export class LimbusCampSheet extends ActorSheet {
       const itemData = dropped.toObject();
       const [newItem] = await this.actor.createEmbeddedDocuments("Item", [itemData]);
       storedUuid = newItem.uuid;
+      // 容器：迁移源角色身上的内容物到 camp actor
+      if (newItem.type === "container") {
+        await LimbusCampSheet._migrateContainerContents(this.actor, newItem, sourceActor.id);
+      }
       await dropped.delete();
     } else if (!sourceActor) {
       // 世界物品（无 actor）：复制数据
@@ -394,6 +535,7 @@ export class LimbusCampSheet extends ActorSheet {
   /* ─── 仓库图块拖拽开始 ───────────────────────────────────────────────── */
 
   _onCgTileDragStart(event) {
+    this._onCgTileHoverEnd(null, true); // 拖动开始即强制关闭 Title 卡（忽略锁定）
     const tile = event.currentTarget;
     const idx  = parseInt(tile.dataset.placementIdx ?? "-1");
     if (idx < 0) return;
@@ -416,14 +558,122 @@ export class LimbusCampSheet extends ActorSheet {
     event.originalEvent.dataTransfer.effectAllowed = "move";
   }
 
-  /* ─── 仓库图块 Hover（轮廓高亮） ────────────────────────────────────── */
+  /* ─── 仓库图块 Hover（轮廓高亮 + Title 卡） ─────────────────────────── */
 
-  _onCgTileHoverStart(event) {
-    $(event.currentTarget).addClass("cg-tile-hover");
+  async _onCgTileHoverStart(event) {
+    const tile = event.currentTarget;
+    $(tile).addClass("cg-tile-hover");
+
+    // 序号守卫：await 期间若已 hoverEnd/dragstart（序号推进），放弃追加，
+    // 避免拖动中出现无法关闭的孤儿 Title 卡
+    const seq = this._campHoverSeq = (this._campHoverSeq ?? 0) + 1;
+
+    const uuid = tile.dataset.itemUuid ?? "";
+    const item = await fromUuid(uuid).catch(() => null);
+    if (!item || seq !== this._campHoverSeq) return;
+
+    this._onCgTileHoverEnd(null, true);
+    this._campTitleCard = buildItemTitleCard(item);
+    if (!this._campTitleCard) return;
+
+    // 定位：营地卡右侧，不够则左侧
+    const rect  = this.element[0].getBoundingClientRect();
+    const cardW = 280, cardH = 500;
+    let left = rect.right + 8;
+    if (left + cardW > window.innerWidth - 8) left = rect.left - cardW - 8;
+    const top = Math.max(8, Math.min(rect.top, window.innerHeight - cardH - 8));
+
+    this._campTitleCard.css({ position: "fixed", left, top, zIndex: 99998 });
+    $("body").append(this._campTitleCard);
+    this._campTitleCard.on("mouseenter", () => clearTimeout(this._campCloseTimer));
+    this._campTitleCard.on("mouseleave", () => this._onCgTileHoverEnd(null));
   }
 
-  _onCgTileHoverEnd(event) {
-    $(event.currentTarget).removeClass("cg-tile-hover");
+  /**
+   * @param {jQuery.Event|null} event
+   * @param {boolean} [force=false]  true=立即强制关闭（忽略锁定）；
+   *   false=延迟 150ms 软关闭（锁定的卡片会被 closeTitleCardUnlessLocked 拦下）
+   */
+  _onCgTileHoverEnd(event, force = false) {
+    if (event?.currentTarget) $(event.currentTarget).removeClass("cg-tile-hover");
+    if (!force) {
+      clearTimeout(this._campCloseTimer);
+      this._campCloseTimer = setTimeout(() => this._onCgTileHoverEnd(null, true), 150);
+      return;
+    }
+    clearTimeout(this._campCloseTimer);
+    this._campHoverSeq = (this._campHoverSeq ?? 0) + 1; // 使进行中的 hoverStart 失效
+    closeTitleCardUnlessLocked(this._campTitleCard);
+    if (!this._campTitleCard?.data("tcLocked")) this._campTitleCard = null;
+  }
+
+  /* ─── 仓库图块双击：容器直接打开 ────────────────────────────────────── */
+
+  async _onCgTileDblClick(event) {
+    const uuid = event.currentTarget.dataset.itemUuid ?? "";
+    const item = await fromUuid(uuid).catch(() => null);
+    if (item?.type !== "container") return;
+    // 强制重新渲染（重读 contents），避免已打开的容器卡持有过期的
+    // 放置索引导致"此位置无法放置"误报
+    await item.sheet?.render(true, { focus: true });
+  }
+
+  /* ─── 拖放到仓库容器图块上：存入容器 ────────────────────────────────── */
+
+  async _onCgTileDropOnTile(event) {
+    const tileUuid  = event.currentTarget.dataset.itemUuid ?? "";
+    const container = await fromUuid(tileUuid).catch(() => null);
+    // 目标不是容器：不拦截，让事件继续走格子的 drop 逻辑
+    if (container?.type !== "container") return;
+
+    event.preventDefault();
+    event.stopPropagation();
+    this._onCgTileHoverEnd(null, true);
+
+    let raw;
+    try { raw = JSON.parse(event.originalEvent.dataTransfer.getData("text/plain")); }
+    catch { return; }
+    if (raw?.type !== "Item" || !raw.uuid) return;
+    if (raw.uuid === tileUuid) return;
+
+    const dragged = await fromUuid(raw.uuid).catch(() => null);
+    if (!dragged) return;
+    if (dragged.type === "container") {
+      ui.notifications.warn("容器不能存放容器。");
+      return;
+    }
+
+    const fromWarehouseIdx =
+      raw.fromCampWarehouse?.campActorId === this.actor.id
+        ? raw.fromCampWarehouse.placementIdx : null;
+
+    // 来自角色背包时校验归属
+    if (fromWarehouseIdx === null) {
+      const srcActor = dragged.parent;
+      if (!game.user.isGM) {
+        const myChar = game.user.character;
+        if (!myChar || !srcActor || srcActor.id !== myChar.id) {
+          ui.notifications.warn("只能存入自己背包中的物品。");
+          return;
+        }
+      }
+      if (!srcActor) return;
+    }
+
+    const payload = {
+      type:            "campStoreToContainer",
+      campActorId:     this.actor.id,
+      containerItemId: container.id,
+      itemUuid:        raw.uuid,
+      fromWarehouseIdx,
+      sourceActorId:   dragged.parent?.id ?? null,
+      userId:          game.user.id,
+    };
+    if (game.user.isGM) {
+      await LimbusCampSheet._gmExecuteStoreToContainer(payload);
+    } else {
+      game.socket.emit("system.limbusCompany_FVTT", payload);
+    }
   }
 
   /* ─── 仓库图块旋转（GM） ─────────────────────────────────────────────── */
@@ -851,13 +1101,27 @@ export class LimbusCampSheet extends ActorSheet {
     }
     await campActor.update({ "system.warehouseContents": newContents });
 
+    // 制作聊天卡（商人交易卡同款风格）
     const triggerUser = game.users.get(userId);
+    const triggerChar = triggerUser?.character;
     await ChatMessage.create({
-      content: `<div class="limbuscompany chat-camp">
-        ${triggerUser ? `<strong>${triggerUser.name}</strong> 在` : ""}营地【${campActor.name}】制作了
-        <img src="${recipe.outputImg}" width="16" height="16" style="vertical-align:middle">
-        <strong>${recipe.outputName} ×${recipe.outputQuantity}</strong>，已存入仓库！
-      </div>`,
+      content: `
+        <div class="limbus-merchant-purchase-card">
+          <div class="purchase-header">
+            <img src="${campActor.img}" class="purchase-merchant-img" alt="${campActor.name}">
+            <div class="purchase-title">
+              <span class="purchase-name">${triggerChar?.name ?? triggerUser?.name ?? "营地"}</span>
+              <span class="purchase-sub">在营地【${campActor.name}】制作，已存入仓库</span>
+            </div>
+          </div>
+          <div class="ic-gold-divider"></div>
+          <div class="purchase-item-row">
+            <img src="${recipe.outputImg}" class="purchase-item-icon" alt="${recipe.outputName}">
+            <span class="purchase-item-name">${recipe.outputName}${recipe.outputQuantity > 1 ? ` ×${recipe.outputQuantity}` : ""}</span>
+          </div>
+          <div class="ic-gold-divider"></div>
+        </div>`,
+      speaker: triggerChar ? ChatMessage.getSpeaker({ actor: triggerChar }) : undefined,
     });
   }
 
@@ -900,7 +1164,13 @@ export class LimbusCampSheet extends ActorSheet {
 
     // 创建物品到玩家角色
     if (itemData.system?.quantity !== undefined) itemData.system.quantity = qty;
-    await playerChar.createEmbeddedDocuments("Item", [itemData]);
+    const [newItem] = await playerChar.createEmbeddedDocuments("Item", [itemData]);
+
+    // 容器：把 camp actor 身上的内容物反向迁移到玩家角色（重写 contents uuid）
+    if (newItem?.type === "container") {
+      await LimbusCampSheet._migrateContainerContents(playerChar, newItem, campActorId);
+    }
+
     ui.notifications.info(`${item.name} ×${qty} 已移至 ${playerChar.name} 的背包。`);
   }
 
@@ -949,6 +1219,12 @@ export class LimbusCampSheet extends ActorSheet {
 
     // 在仓库创建物品
     const [newItem] = await campActor.createEmbeddedDocuments("Item", [data]);
+
+    // 容器：把角色身上的内容物一并迁移到 camp actor（重写 contents uuid）
+    if (newItem.type === "container") {
+      await LimbusCampSheet._migrateContainerContents(campActor, newItem, sourceActorId);
+    }
+
     cur.push({ uuid: newItem.uuid, x: place.x, y: place.y, w: place.w, h: place.h, rotated: place.rotated });
     await campActor.update({ "system.warehouseContents": cur });
 
@@ -1016,6 +1292,151 @@ export class LimbusCampSheet extends ActorSheet {
     await campActor.update({ "system.warehouseContents": contents });
   }
 
+  /* ─── 静态：GM 端执行存入容器 ─────────────────────────────────────── */
+
+  static async _gmExecuteStoreToContainer({ campActorId, containerItemId, itemUuid, fromWarehouseIdx, sourceActorId }) {
+    const campActor = game.actors.get(campActorId);
+    const container = campActor?.items.get(containerItemId);
+    if (!container || container.type !== "container") return;
+
+    const dragged = await fromUuid(itemUuid).catch(() => null);
+    if (!dragged || dragged.type === "container") return;
+
+    // 自动寻位（容器 gridSize 内首适应，支持旋转）
+    const gw       = container.system.gridSize?.width  ?? 3;
+    const gh       = container.system.gridSize?.height ?? 3;
+    const contents = foundry.utils.deepClone(container.system.contents ?? []);
+    const cap      = dragged.system?.capacity ?? { w: 1, h: 1 };
+    const iw = Math.max(1, cap.w ?? 1), ih = Math.max(1, cap.h ?? 1);
+
+    const canPlace = (x, y, w, h) => {
+      if (x < 0 || y < 0 || x + w > gw || y + h > gh) return false;
+      for (const p of contents) {
+        const pw = p.w ?? 1, ph = p.h ?? 1;
+        for (let dy = 0; dy < h; dy++)
+          for (let dx = 0; dx < w; dx++)
+            if (p.x <= x + dx && x + dx < p.x + pw &&
+                p.y <= y + dy && y + dy < p.y + ph) return false;
+      }
+      return true;
+    };
+    let place = null;
+    outer: for (let y = 0; y < gh; y++) {
+      for (let x = 0; x < gw; x++) {
+        if (canPlace(x, y, iw, ih))                { place = { x, y, w: iw, h: ih, rotated: false }; break outer; }
+        if (iw !== ih && canPlace(x, y, ih, iw))   { place = { x, y, w: ih, h: iw, rotated: true  }; break outer; }
+      }
+    }
+    if (!place) { ui.notifications.warn(`【${container.name}】空间不足，无法存入。`); return; }
+
+    let storedUuid = itemUuid;
+
+    if (fromWarehouseIdx !== null && fromWarehouseIdx !== undefined) {
+      // 来自仓库：移除仓库放置记录（物品仍属 camp actor，uuid 不变）
+      const wc = foundry.utils.deepClone(campActor.system.warehouseContents ?? []);
+      const p  = wc[fromWarehouseIdx];
+      if (!p || p.uuid !== itemUuid) return; // 防竞态：索引已变
+      wc.splice(fromWarehouseIdx, 1);
+      await campActor.update({ "system.warehouseContents": wc });
+    } else {
+      // 来自角色背包：复制到 camp actor 并删除原物品
+      if (!dragged.parent || dragged.parent.id !== sourceActorId) return;
+      const data = dragged.toObject();
+      delete data._id;
+      const [newItem] = await campActor.createEmbeddedDocuments("Item", [data]);
+      storedUuid = newItem.uuid;
+      await dragged.delete();
+    }
+
+    contents.push({ uuid: storedUuid, x: place.x, y: place.y, w: place.w, h: place.h, rotated: place.rotated });
+    await container.update({ "system.contents": contents });
+  }
+
+  /* ─── 静态：GM 端移除仓库放置记录并删除物品（物品已复制到别处） ────── */
+
+  static async _gmExecuteRemoveFromWarehouse({ campActorId, placementIdx, itemUuid }) {
+    const campActor = game.actors.get(campActorId);
+    if (!campActor) return;
+    const wc = foundry.utils.deepClone(campActor.system.warehouseContents ?? []);
+    const p  = wc[placementIdx];
+    if (!p || p.uuid !== itemUuid) return; // 防竞态：索引已变
+    wc.splice(placementIdx, 1);
+    await campActor.update({ "system.warehouseContents": wc });
+    const item = await fromUuid(itemUuid).catch(() => null);
+    if (item && item.parent?.id === campActorId) await item.delete();
+  }
+
+  /* ─── 静态：GM 端把营地容器内物品移回仓库 ──────────────────────────── */
+
+  static async _gmExecuteContainerToWarehouse({ campActorId, containerItemId, placementIdx, itemUuid, targetX, targetY }) {
+    const campActor = game.actors.get(campActorId);
+    const container = campActor?.items.get(containerItemId);
+    if (!container || container.type !== "container") return;
+
+    const contents = foundry.utils.deepClone(container.system.contents ?? []);
+    const cp = contents[placementIdx];
+    if (!cp || cp.uuid !== itemUuid) return; // 防竞态
+
+    const item = await fromUuid(itemUuid).catch(() => null);
+    if (!item || item.parent?.id !== campActorId) return;
+
+    // 仓库寻位（目标格优先，含旋转回退）
+    const sys  = campActor.system;
+    const cols = sys.warehouseSize?.width  ?? 7;
+    const rows = sys.warehouseSize?.height ?? 7;
+    const wc   = foundry.utils.deepClone(sys.warehouseContents ?? []);
+    const cap  = item.system?.capacity ?? { w: 1, h: 1 };
+    const iw = Math.max(1, cap.w ?? 1), ih = Math.max(1, cap.h ?? 1);
+    const canPlace = (x, y, w, h) => {
+      if (x < 0 || y < 0 || x + w > cols || y + h > rows) return false;
+      for (const p of wc) {
+        const pw = p.w ?? 1, ph = p.h ?? 1;
+        for (let dy = 0; dy < h; dy++)
+          for (let dx = 0; dx < w; dx++)
+            if (p.x <= x + dx && x + dx < p.x + pw &&
+                p.y <= y + dy && y + dy < p.y + ph) return false;
+      }
+      return true;
+    };
+    let place = canPlace(targetX ?? 0, targetY ?? 0, iw, ih)
+      ? { x: targetX, y: targetY, w: iw, h: ih, rotated: false } : null;
+    if (!place) {
+      outer: for (let y = 0; y < rows; y++) {
+        for (let x = 0; x < cols; x++) {
+          if (canPlace(x, y, iw, ih))              { place = { x, y, w: iw, h: ih, rotated: false }; break outer; }
+          if (iw !== ih && canPlace(x, y, ih, iw)) { place = { x, y, w: ih, h: iw, rotated: true  }; break outer; }
+        }
+      }
+    }
+    if (!place) { ui.notifications.warn("仓库空间不足，无法移出。"); return; }
+
+    contents.splice(placementIdx, 1);
+    await container.update({ "system.contents": contents });
+    wc.push({ uuid: itemUuid, x: place.x, y: place.y, w: place.w, h: place.h, rotated: place.rotated });
+    await campActor.update({ "system.warehouseContents": wc });
+  }
+
+  /* ─── 静态：角色容器存入仓库时，迁移容器内物品到 camp actor ────────── */
+
+  static async _migrateContainerContents(campActor, containerItem, sourceActorId) {
+    if (containerItem?.type !== "container") return;
+    const contents = foundry.utils.deepClone(containerItem.system.contents ?? []);
+    let changed = false;
+    for (const p of contents) {
+      if (!p?.uuid) continue;
+      const src = await fromUuid(p.uuid).catch(() => null);
+      // 只迁移仍挂在源角色身上的物品
+      if (!src || src.parent?.id !== sourceActorId) continue;
+      const data = src.toObject();
+      delete data._id;
+      const [newItem] = await campActor.createEmbeddedDocuments("Item", [data]);
+      p.uuid  = newItem.uuid;
+      changed = true;
+      await src.delete();
+    }
+    if (changed) await containerItem.update({ "system.contents": contents });
+  }
+
   /* ─── Socket 消息处理（操作序列化，防竞态） ──────────────────────── */
 
   static async handleSocketMsg(msg) {
@@ -1031,6 +1452,9 @@ export class LimbusCampSheet extends ActorSheet {
       else if (msg.type === "campDropItem")   await LimbusCampSheet._gmExecuteDropItem(msg);
       else if (msg.type === "campMoveItem")   await LimbusCampSheet._gmExecuteMoveItem(msg);
       else if (msg.type === "campRotateItem") await LimbusCampSheet._gmExecuteRotateItem(msg);
+      else if (msg.type === "campStoreToContainer")    await LimbusCampSheet._gmExecuteStoreToContainer(msg);
+      else if (msg.type === "campRemoveFromWarehouse") await LimbusCampSheet._gmExecuteRemoveFromWarehouse(msg);
+      else if (msg.type === "campContainerToWarehouse") await LimbusCampSheet._gmExecuteContainerToWarehouse(msg);
     }).finally(() => {
       if (LimbusCampSheet._opQueues.get(campActorId) === next)
         LimbusCampSheet._opQueues.delete(campActorId);

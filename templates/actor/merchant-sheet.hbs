@@ -15,8 +15,13 @@
         <span>{{actor.name}}</span>
       {{/if}}
     </h1>
-    {{!-- GM 编辑锁按钮 --}}
+    {{!-- GM 编辑锁按钮 + 显示隐藏切换 --}}
     {{#if isGM}}
+      <button type="button"
+              class="merchant-hidden-toggle {{#if showHidden}}active{{/if}}"
+              title="{{#if showHidden}}隐藏商品：显示中{{else}}隐藏商品：已过滤{{/if}}">
+        <i class="fas fa-eye{{#unless showHidden}}-slash{{/unless}}"></i>
+      </button>
       <button type="button"
               class="merchant-lock-toggle {{#unless editUnlocked}}locked{{/unless}}"
               title="{{#if editUnlocked}}点击锁定（禁止编辑）{{else}}点击解锁（允许编辑）{{/if}}">
@@ -62,13 +67,14 @@
         {{/if}}
       </div>
 
-      {{!-- 店铺描述 --}}
+      {{!-- 店铺描述（普通文本编辑） --}}
       <div class="merchant-desc-wrap">
         {{#if isGM}}
-          {{!-- 解锁时：富文本编辑器 --}}
-          <div class="merchant-editable-only" {{#unless editUnlocked}}style="display:none"{{/unless}}>
-            {{editor shopDesc target="system.shopDesc" button=false editable=true}}
-          </div>
+          {{!-- 解锁时：普通多行文本框 --}}
+          <textarea class="merchant-desc-edit merchant-editable-field merchant-editable-only"
+                    name="system.shopDesc"
+                    placeholder="店铺描述…"
+                    {{#unless editUnlocked}}style="display:none" disabled{{/unless}}>{{shopDesc}}</textarea>
           {{!-- 锁定时：只读文本 --}}
           <div class="merchant-desc-text merchant-locked-only"
                {{#if editUnlocked}}style="display:none"{{/if}}>{{{shopDesc}}}</div>
@@ -81,22 +87,6 @@
 
     {{!-- ───── 右栏：Tab 内容区 ───── --}}
     <div class="merchant-right">
-
-      {{!-- 搜索栏 --}}
-      <div class="merchant-search-bar">
-        <input type="text"
-               class="merchant-search"
-               placeholder="搜索物品…"
-               value="">
-        <i class="fas fa-search merchant-search-icon"></i>
-        {{#if isGM}}
-          <button type="button"
-                  class="merchant-hidden-toggle {{#if showHidden}}active{{/if}}"
-                  title="{{#if showHidden}}隐藏：显示中{{else}}隐藏：已过滤{{/if}}">
-            <i class="fas fa-lock{{#unless showHidden}}-open{{/unless}}"></i>
-          </button>
-        {{/if}}
-      </div>
 
       {{!-- Tab 内容 --}}
       <div class="merchant-tab-body">

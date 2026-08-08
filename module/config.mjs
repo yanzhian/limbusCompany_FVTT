@@ -167,6 +167,7 @@ LIMBUSCOMPANY.BUFF_TYPES = {
   charge:          "LIMBUSCOMPANY.Buff.Charge",
   chaos:           "LIMBUSCOMPANY.Buff.Chaos",
   panic:           "LIMBUSCOMPANY.Buff.Panic",
+  lowMorale:       "士气低落",
   // 自定义
   custom:          "LIMBUSCOMPANY.Buff.Custom",
   // 注册自定义 BUFF（与 custom-buffs.mjs 中的 type 对应）
@@ -179,9 +180,41 @@ LIMBUSCOMPANY.BUFF_TYPES = {
 LIMBUSCOMPANY.BUFF_GROUPS = {
   positive: ["strong", "endure", "swift", "guard", "clashPowerUp", "atkLevelUp", "defLevelUp"],
   negative: ["weak", "breach", "bind", "fragile", "clashPowerDown", "atkLevelDown", "defLevelDown"],
-  special:  ["burn", "bleed", "tremor", "rupture", "sinking", "breathing", "charge", "chaos", "panic"],
+  special:  ["burn", "bleed", "tremor", "rupture", "sinking", "breathing", "charge", "chaos", "panic", "lowMorale"],
   other:    ["custom"],
   custom:   ["defensiveStance", "butterfly", "piercingArrow"],
+};
+
+/**
+ * 标准 BUFF 的说明文字（供物品描述里的【BUFF】悬停 Title 卡展示）。
+ * 自定义注册 BUFF（custom-buffs.mjs）优先使用其自身的 description 字段，
+ * 这里只覆盖内置的标准/特殊 BUFF。
+ */
+LIMBUSCOMPANY.BUFF_DESCRIPTIONS = {
+  strong:         "拼点骰数：每层 +1 骰",
+  weak:           "拼点骰数：每层 -1 骰",
+  endure:         "作为防御方拼点时，骰数：每层 +1 骰",
+  breach:         "作为防御方拼点时，骰数：每层 -1 骰",
+  swift:          "速度骰结果：每层 +1",
+  bind:           "速度骰结果：每层 -1",
+  guard:          "拼点落败/直接承受伤害时：每层减少 1 点受到的伤害",
+  fragile:        "拼点落败/直接承受伤害时：每层增加 1 点受到的伤害",
+  clashPowerUp:   "拼点威力修正值：每层 +1",
+  clashPowerDown: "拼点威力修正值：每层 -1",
+  atkLevelUp:     "攻击等级：每层 +1",
+  atkLevelDown:   "攻击等级：每层 -1",
+  defLevelUp:     "防御等级：每层 +1",
+  defLevelDown:   "防御等级：每层 -1",
+  burn:           "[回合结束时]：减少 1 层【烧伤】层数，受到【烧伤】强度的固定伤害",
+  bleed:          "[攻击时]：减少 1 层【流血】层数，受到【流血】强度的固定伤害",
+  tremor:         "受到【震颤引爆】攻击时：减少 1 层【震颤】层数，所有混乱阈值永久前移【震颤】强度百分比（直到长休重置）",
+  rupture:        "[受到伤害时]：减少 1 层【破裂】层数，附加受到【破裂】强度的固定伤害",
+  sinking:        "[受到伤害时]：减少 1 层【沉沦】层数，为目标造成【沉沦】强度等级的理智伤害；\n如果理智因此跌至下限 5，额外受到【沉沦】强度等级的【忧郁】罪孽伤害",
+  breathing:      "[回合结束时]：减少 1 层【呼吸法】层数（无其他直接效果，供效果触发条件判定使用）",
+  charge:         "[回合结束时]：减少 1 层【充能】层数（最大 20 层，供效果触发条件判定使用）",
+  chaos:          "陷入混乱：拼点骰数 ×2.0（数值随触发阈值条数升级为 混乱+/混乱++，倍率相应提升），回合结束自动移除",
+  panic:          "陷入恐慌：无法使用基础及守备技能，E.G.O 不消耗理智但罪孽资源消耗 ×1.5，回合结束自动移除",
+  lowMorale:      "士气低落：理智 ≤30 时触发（一场遭遇战仅生效一次）",
 };
 
 /**
@@ -199,6 +232,7 @@ LIMBUSCOMPANY.TURN_END_BUFF_TYPES = new Set([
   "defLevelUp",    "defLevelDown",
   "chaos", "chaos_plus", "chaos_double_plus",
   "panic",
+  // 士气低落不再作为 BUFF 添加（不出现在状态栏），此处无需再列入清除名单
 ]);
 
 // ─── 技能类型 ─────────────────────────────────────────────────────────────────
@@ -253,7 +287,7 @@ LIMBUSCOMPANY.ACTIVITY_TRIGGERS = [
   "拼点时", "拼点成功", "拼点失败",
   "命中时", "暴击命中时",
   "回合开始时", "回合结束时", "受到伤害时",
-  "反应", "丢弃时",
+  "反应", "丢弃时", "恐慌触发时", "坚定触发时",
 ];
 
 // ─── 效果类型 ─────────────────────────────────────────────────────────────────
@@ -263,7 +297,8 @@ LIMBUSCOMPANY.ACTIVITY_EFFECTS = [
   "hpAdj", "sanityAdj",
   "atkAdj", "defAdj", "speedAdj",
   "diceAdj", "seismicBlast",
-  "relatedSkillConvert",
+  "relatedSkillConvert", "extraDamage",
+  "fieldResource",
 ];
 
 // ─── 骰子类型 ─────────────────────────────────────────────────────────────────
@@ -274,8 +309,3 @@ LIMBUSCOMPANY.DICE_TYPES = {
   severing:    "LIMBUSCOMPANY.DiceType.Severing",
 };
 
-// ─── 技能触发条件（relatedSkill.trigger） ─────────────────────────────────────
-
-LIMBUSCOMPANY.RELATED_SKILL_TRIGGERS = [
-  "命中时", "暴击命中时", "拼点成功", "拼点失败", "攻击时", "使用时",
-];

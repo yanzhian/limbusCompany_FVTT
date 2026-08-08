@@ -255,7 +255,7 @@
         {{#if (and isEditable (not isLocked))}}
           {{editor system.effectDesc target="system.effectDesc" button=false editable=true engine="prosemirror"}}
         {{else}}
-          <div class="item-desc-display">{{{system.effectDesc}}}</div>
+          <div class="item-desc-display">{{{linkify system.effectDesc}}}</div>
         {{/if}}
       </div>
 
@@ -269,65 +269,30 @@
 
     </div>{{!-- /skill-card-main --}}
 
-    {{!-- ══ 相关技能卡片（展开） ══════════════════════════════════════ --}}
+    {{!-- ══ 相关技能池（展开） ══════════════════════════════════════ --}}
     {{#if relatedExpanded}}
-      <div class="related-skill-divider"><span>相关技能</span></div>
+      <div class="related-skill-divider"><span>相关技能池</span></div>
 
-      {{#if relatedSkillItem}}
-        <div class="skill-card-related" style="border-color:#2A7A2A">
-          <div class="equip-header" style="padding:6px">
-            <div class="equip-icon-col">
-              <div class="skill-slot-octa skill-icon-big" style="border-color:#2A7A2A">
-                <img src="{{relatedSkillItem.img}}" class="skill-slot-img" alt="{{relatedSkillItem.name}}">
-              </div>
-            </div>
-            <div class="equip-info-col">
-              <div class="item-name-display" style="color:#4CAF50">{{relatedSkillItem.name}}</div>
-              <div class="skill-cat-dice-row">
-                {{#if relatedSkillItem.system.category}}
-                  <img src="{{lookup @root.config.CATEGORY_ICON_PATHS relatedSkillItem.system.category}}" class="category-icon" width="22" height="22" alt="{{relatedSkillItem.system.category}}">
-                {{/if}}
-                <span class="dice-formula-display">{{fmtDice relatedSkillItem.system.diceFormula}}</span>
-              </div>
-              {{#if (and isEditable (not isLocked))}}
-                <div class="skill-sin-row">
-                  <label>触发条件</label>
-                  <select name="system.relatedSkill.trigger" class="equip-subtype-sel">
-                    {{#each relatedTriggers}}
-                      <option value="{{this}}" {{#eq this ../../system.relatedSkill.trigger}}selected{{/eq}}>{{this}}</option>
-                    {{/each}}
-                  </select>
-                </div>
-                <div class="skill-sin-row">
-                  <label>技能UUID</label>
-                  <input type="text" name="system.relatedSkill.itemUuid" value="{{system.relatedSkill.itemUuid}}" placeholder="拖拽技能到此绑定" class="uuid-input"/>
-                </div>
-              {{else}}
-                <div class="skill-type-label">触发条件：{{system.relatedSkill.trigger}}</div>
-                <div class="item-desc-display">{{{relatedSkillItem.system.effectDesc}}}</div>
-              {{/if}}
-            </div>
-          </div>
-        </div>
-      {{else}}
-        {{#if (and isEditable (not isLocked))}}
-          <div class="skill-card-related related-empty" style="padding:8px">
-            <div class="skill-sin-row">
-              <label>绑定相关技能（UUID）</label>
-              <input type="text" name="system.relatedSkill.itemUuid" value="{{system.relatedSkill.itemUuid}}" placeholder="拖拽技能到此处或输入UUID" class="uuid-input"/>
-            </div>
-            <div class="skill-sin-row">
-              <label>触发条件</label>
-              <select name="system.relatedSkill.trigger" class="equip-subtype-sel">
-                {{#each relatedTriggers}}
-                  <option value="{{this}}">{{this}}</option>
-                {{/each}}
-              </select>
-            </div>
+      <div class="related-pool-list">
+        {{#each relatedSkillPool}}
+          <div class="related-pool-row {{#unless resolved}}related-pool-broken{{/unless}}" data-pool-idx="{{idx}}">
+            <span class="related-pool-no" title="④效果「相关技能转换」指定序号">{{poolNo}}</span>
+            <img src="{{img}}" class="related-pool-icon" alt="{{name}}">
+            <span class="related-pool-name">{{#if resolved}}{{name}}{{else}}（技能未找到）{{/if}}</span>
+            {{#if (and ../isEditable (not ../isLocked))}}
+              <button type="button" class="related-pool-remove" data-pool-idx="{{idx}}" title="移除">×</button>
+            {{/if}}
           </div>
         {{else}}
-          <div class="related-empty-tip">暂无相关技能，解锁编辑模式后可绑定</div>
-        {{/if}}
+          <div class="related-empty-tip">相关技能池为空</div>
+        {{/each}}
+      </div>
+
+      {{#if (and isEditable (not isLocked))}}
+        <div class="related-pool-dropzone" data-drop-type="Item">
+          <i class="fas fa-arrow-down"></i> 将技能拖到此处加入相关技能池
+        </div>
+        <p class="related-pool-hint">池内序号 2 起对应④效果「相关技能转换 · 指定」的选择编号（编号 1 固定代表本技能自身）。</p>
       {{/if}}
     {{/if}}{{!-- /relatedExpanded --}}
 

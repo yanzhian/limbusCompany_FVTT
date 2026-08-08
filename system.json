@@ -38,7 +38,9 @@
       "consumable": {},
       "material": {},
       "container": {},
-      "skillbook": {}
+      "skillbook": {},
+      "panic": {},
+      "background": {}
     }
   },
   "socket": true,

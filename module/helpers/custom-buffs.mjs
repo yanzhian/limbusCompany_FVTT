@@ -8,6 +8,8 @@
  *     label:         "显示名称",
  *     maxStacks:     4,          // 可选：最大层数上限（超出则截断）
  *     refreshOnGain: true,       // 可选：获得时刷新（不叠加层数，直接替换）
+ *     keepAtZero:    true,       // 可选：层数减至 0 时不自动清除（仍以 0 层留在状态栏，
+ *                                //       需手动 removeBuff 或其他效果移除）
  *     onRoundEnd(actor, buff) {},           // 回合结束时回调 → 返回 Promise
  *     modifySpeedRoll(actor, ctx) {},       // 速度骰结果修正 → 返回最终 total（Number）
  *     onClashWin(carrier, opponent) {},     // 拼点胜利时回调 → 返回 Promise
@@ -15,6 +17,12 @@
  *     modifyResistances(actor, buff, res) {}, // 修改物理抗性：res = { slash, blunt, pierce }（"xN.0" 字符串），
  *                                             // 可原地修改或返回部分覆盖对象（如 { slash: "x2.0" }）；
  *                                             // 陷入混乱的强制抗性优先级更高，混乱时不会调用此钩子
+ *     modifyIncomingDamage(actor, buff, ctx) {}, // 受到伤害结算前调用，ctx = { damage, attacker }；
+ *                                             // 返回 { damage?: number, hpLock?: number } 覆盖本次伤害/
+ *                                             // 生命值锁定（hpLock 非空时跳过护盾/破裂/沉沦/震颤结算，HP 直接钉死）
+ *     onHit(actor, buff, ctx) {},            // 自己任意技能/装备 [命中时] 结算后调用（异步），
+ *                                             // ctx = { item, category, target, addBuff(type,intensity,stacks,whenAdded),
+ *                                             //          getBuff(type), dealDamage(targetActor, category, rollFormula) }
  *   });
  *
  * 以上所有钩子均为可选。未提供的钩子不会被调用。
@@ -222,6 +230,87 @@ registerCustomBuff("butterfly", {
   },
 });
 
+/**
+ * 【百折不挠】
+ * - 最大值：1 层
+ * - 获得层数时刷新（替换），不叠加
+ * - 回合结束时层数减少 1，归零时移除
+ * - 本回合生命值锁定为 1，且受到伤害为 0
+ */
+registerCustomBuff("indomitable", {
+  label:         "百折不挠",
+  description:   "- 最大值：1 层\n- 获得层数时刷新（替换），不叠加\n- 回合结束时层数减少 1，归零时移除\n- 本回合生命值锁定为 1，且受到伤害为 0",
+  maxStacks:     1,
+  refreshOnGain: true,
+
+  /** 受到伤害前：伤害归零 + 生命值锁定为 1（跳过护盾/破裂/沉沦/震颤结算） */
+  modifyIncomingDamage(_actor, _buff, _ctx) {
+    return { damage: 0, hpLock: 1 };
+  },
+
+  async onRoundEnd(actor, buff) {
+    const buffs = foundry.utils.deepClone(actor.system?.buffs ?? []);
+    const idx   = buffs.findIndex(b => b.id === buff.id);
+    if (idx < 0) return;
+    const newStacks = (buffs[idx].stacks ?? 1) - 1;
+    if (newStacks <= 0) {
+      buffs.splice(idx, 1);
+    } else {
+      buffs[idx].stacks = newStacks;
+    }
+    await actor.update({ "system.buffs": buffs });
+  },
+});
+
+/**
+ * 【故土剑术】
+ * - 最大值：2 层
+ * - 获得层数时刷新（替换），不叠加
+ * - 回合结束时层数减少 1，归零时移除
+ * - 自己"斩击"分类的技能[命中时]：为自己添加 5 级【呼吸法】，
+ *   之后每有 5 级【呼吸法】强度，对目标造成 1D4 的斩击伤害（最多 2 次）
+ */
+registerCustomBuff("nativeSwordArt", {
+  label:         "故土剑术",
+  description:   "- 最大值：2 层\n- 获得层数时刷新（替换），不叠加\n- 回合结束时层数减少 1，归零时移除\n- 自己\"斩击\"类型的骰子[命中时]：为自己添加 5 级【呼吸法】，每有 5 级【呼吸法】对目标造成 1D4 的斩击伤害（最多2次）",
+  maxStacks:     2,
+  refreshOnGain: true,
+
+  async onRoundEnd(actor, buff) {
+    const buffs = foundry.utils.deepClone(actor.system?.buffs ?? []);
+    const idx   = buffs.findIndex(b => b.id === buff.id);
+    if (idx < 0) return;
+    const newStacks = (buffs[idx].stacks ?? 1) - 1;
+    if (newStacks <= 0) {
+      buffs.splice(idx, 1);
+    } else {
+      buffs[idx].stacks = newStacks;
+    }
+    await actor.update({ "system.buffs": buffs });
+  },
+
+  /**
+   * [命中时]（仅本次使用的技能分类为"斩击"才触发）：
+   * 为自己添加 5 级（强度5）呼吸法，随后按呼吸法当前强度，每 5 点对目标
+   * 造成 1D4 斩击伤害，最多 2 次（即呼吸法强度达到 10 时封顶）。
+   * ClashManager 内部方法不直接 import（避免与 clash.mjs 循环依赖），
+   * 所需操作全部通过 ctx 回调（addBuff/getBuff/dealDamage）下发。
+   */
+  async onHit(_actor, _buff, ctx) {
+    if ((ctx?.category ?? "") !== "slash") return;
+
+    await ctx.addBuff?.("breathing", 5, 1, "本回合");
+
+    const target = ctx?.target ?? null;
+    if (!target) return;
+    const breathing = ctx.getBuff?.("breathing");
+    const times = Math.min(2, Math.floor((breathing?.intensity ?? 0) / 5));
+    for (let i = 0; i < times; i++) {
+      await ctx.dealDamage?.(target, "slash", "1d4");
+    }
+  },
+});
+
 /* ─── 基础 BUFF 描述注册（仅 label + description，逻辑由 clash.mjs 内置处理）── */
 
 registerCustomBuff("tremor", {
@@ -331,4 +420,109 @@ registerCustomBuff("bloodFlame", {
     }
     await actor.update({ "system.buffs": buffs });
   },
+});
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   场地资源（FieldResourceRegistry）
+   ═══════════════════════════════════════════════════════════════════════════
+
+   与 CustomBuffRegistry 是姐妹关系但完全独立：场地资源是"全局公共计数器"，
+   不会写入任何角色的 system.buffs，因此天然无法作为 BUFF 施加给角色。
+
+   存储/同步：由 sin-resource-hud.mjs 负责（world-scope game.settings + socket
+   委托 GM 写入），本文件只维护"有哪些场地资源、它们各自的被动规则"这份定义表。
+   物品 Activity 编辑器里"消耗/效果"新增的【公用场地】选项，读写的就是这份
+   存储，与 CustomBuffRegistry 驱动的角色 BUFF 系统完全不共用数据。
+
+   用法：
+   registerFieldResource("场地名字", {
+     icon: "systems/limbusCompany_FVTT/assets/icons/Buff_icon/Custom_buffs/xxx.webp", // 可选，sin-hud 面板图标
+     maxStacks: 999,                 // 可选，默认无上限
+     triggerBackgroundTags: ["血魔"], // 遭遇战开始时，若在场任意角色背景 tags
+                                      // 命中列表中任一项，则激活该场地资源
+     roundStartTags: ["拉曼却", "血魔"], // 可选：onRoundStart 的角色匹配名单，
+                                      // 缺省时与 triggerBackgroundTags 相同
+     async onStatusTick(ctx) {
+       // ctx = { buffType, intensity, stacksConsumed, name, addStacks(delta) }
+       // 在【流血/烧伤/破裂/沉沦/震颤】造成跳动伤害后，由 ClashManager 广播调用
+     },
+     async onRoundStart(ctx) {
+       // ctx = { actor, addBuff(type, intensity, stacks, whenAdded) }
+       // 每轮"回合开始时"处理，对每个行动角色调用一次（GM 端触发）
+     },
+     async onConsumed(ctx) {
+       // ctx = { amount, addStacksTo(otherFieldName, delta) }
+       // 本场地资源被 Activity「消耗」类型成功扣除时调用（用于联动其他计数场地，
+       // 如"消耗XX总数"这类只增不减的统计型场地）
+     },
+   });
+*/
+
+/** @type {Map<string, object>} */
+export const FieldResourceRegistry = new Map();
+
+/**
+ * 注册一个场地资源定义（详见文件头本节用法说明）。
+ * @param {string} name    场地名字（同时作为存储 key 与 Activity 编辑器里输入的匹配串）
+ * @param {object} config  { icon, maxStacks, triggerBackgroundTags, roundStartTags, onStatusTick, onRoundStart, onConsumed }
+ */
+export function registerFieldResource(name, config = {}) {
+  FieldResourceRegistry.set(name, {
+    name,
+    icon:                   config.icon ?? "",
+    maxStacks:             config.maxStacks ?? Infinity,
+    triggerBackgroundTags: config.triggerBackgroundTags ?? [],
+    roundStartTags:        config.roundStartTags ?? config.triggerBackgroundTags ?? [],
+    onStatusTick:          typeof config.onStatusTick === "function" ? config.onStatusTick : null,
+    onRoundStart:          typeof config.onRoundStart === "function" ? config.onRoundStart : null,
+    onConsumed:            typeof config.onConsumed   === "function" ? config.onConsumed   : null,
+  });
+}
+
+/**
+ * 【血宴】场地资源
+ * - 最大值：999 层
+ * - 任意角色受到【流血】跳动伤害时：为血宴添加与该次流血强度相同的层数
+ * - 背景标签为【拉曼却】或【血魔】的角色，回合开始时：
+ *   获得 1 层 5 级（强度5）【流血】 + 3 层【攻击等级提升】
+ * - 每被 Activity 消耗一次，累加进【消耗血宴总数】
+ */
+registerFieldResource("血宴", {
+  icon:                   "systems/limbusCompany_FVTT/assets/icons/Buff_icon/Custom_buffs/血宴.webp",
+  maxStacks:             999,
+  triggerBackgroundTags: ["血魔"],
+  roundStartTags:        ["拉曼却", "血魔"],
+
+  async onStatusTick(ctx) {
+    if (ctx.buffType !== "bleed") return;
+    if (!(ctx.intensity > 0)) return;
+    await ctx.addStacks(ctx.intensity);
+  },
+
+  async onRoundStart(ctx) {
+    const bgUuid = ctx.actor?.system?.background?.uuid ?? "";
+    if (!bgUuid) return;
+    const bgItem = await fromUuid(bgUuid).catch(() => null);
+    const tags = String(bgItem?.system?.tags ?? "")
+      .split("/").map(t => t.trim()).filter(Boolean);
+    if (!tags.some(t => this.roundStartTags.includes(t))) return;
+    await ctx.addBuff("bleed",      5, 1, "本回合");
+    await ctx.addBuff("atkLevelUp", 0, 3, "本回合");
+  },
+
+  async onConsumed(ctx) {
+    if (!(ctx.amount > 0)) return;
+    await ctx.addStacksTo("消耗血宴总数", ctx.amount);
+  },
+});
+
+/**
+ * 【消耗血宴总数】场地资源
+ * - 纯统计型计数器：只在【血宴】被 Activity 消耗时累加，不会自然衰减/上限截断
+ * - 与【血宴】同批背景标签下随遭遇战一起激活（初始 0 层，方便一开场就能看到）
+ */
+registerFieldResource("消耗血宴总数", {
+  icon:                   "systems/limbusCompany_FVTT/assets/icons/Buff_icon/Custom_buffs/消耗血宴总数.webp",
+  maxStacks:             Infinity,
+  triggerBackgroundTags: ["血魔"],
 });

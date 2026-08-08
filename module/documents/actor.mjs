@@ -135,6 +135,18 @@ export class CharacterData extends foundry.abstract.TypeDataModel {
         ],
       }),
 
+      // ── 恐慌类型槽位（战斗 Tab 罪孽抗性下方，存嵌入恐慌卡的 itemId） ──
+      panicSlots: new fields.SchemaField({
+        lowMorale: new fields.StringField({ required: false, initial: "" }),
+        panic:     new fields.StringField({ required: false, initial: "" }),
+      }),
+
+      // ── 恐慌/坚定计数（陷入恐慌回合结束鉴定用，各 0-3） ────────────
+      panicCounters: new fields.SchemaField({
+        fear:    new fields.NumberField({ required: true, integer: true, min: 0, max: 3, initial: 0 }),
+        resolve: new fields.NumberField({ required: true, integer: true, min: 0, max: 3, initial: 0 }),
+      }),
+
       // ── 七宗罪资源（公共资源，暂存于角色数据） ───────────────────────
       sins: new fields.SchemaField({
         wrath:    new fields.NumberField({ required: true, integer: true, min: 0, initial: 0 }),
@@ -188,8 +200,13 @@ export class CharacterData extends foundry.abstract.TypeDataModel {
       // ── 背景信息（纯自由文本，不参与规则运算） ───────────────────────
       biography: new fields.HTMLField({ required: false, initial: "" }),
 
-      // ── 背景标签（如：背景-收尾人-7阶） ─────────────────────────────
+      // ── 背景标签（旧版自由文本，逐步由下方 background.uuid 结构化背景取代） ──
       backgroundTag: new fields.StringField({ required: false, initial: "" }),
+
+      // ── 背景（指向"背景"类型物品的 UUID，由创建向导写入） ──────────────
+      background: new fields.SchemaField({
+        uuid: new fields.StringField({ required: false, initial: "" }),
+      }),
 
       // ── 属性点（每 10 级 +1） ─────────────────────────────────────────
       attrPoints: new fields.NumberField({ required: true, integer: true, min: 0, initial: 0 }),
@@ -367,14 +384,26 @@ export class LootData extends foundry.abstract.TypeDataModel {
   static defineSchema() {
     const fields = foundry.data.fields;
 
-    // 放置记录（与营地仓库格式相同）
+    // 放置记录（与营地仓库格式相同 + 揭晓状态）
     const placementSchema = new fields.SchemaField({
-      uuid:    new fields.StringField({ required: true, initial: "" }),
-      x:       new fields.NumberField({ required: true, integer: true, min: 0, initial: 0 }),
-      y:       new fields.NumberField({ required: true, integer: true, min: 0, initial: 0 }),
-      w:       new fields.NumberField({ required: true, integer: true, min: 1, initial: 1 }),
-      h:       new fields.NumberField({ required: true, integer: true, min: 1, initial: 1 }),
-      rotated: new fields.BooleanField({ initial: false }),
+      uuid:     new fields.StringField({ required: true, initial: "" }),
+      x:        new fields.NumberField({ required: true, integer: true, min: 0, initial: 0 }),
+      y:        new fields.NumberField({ required: true, integer: true, min: 0, initial: 0 }),
+      w:        new fields.NumberField({ required: true, integer: true, min: 1, initial: 1 }),
+      h:        new fields.NumberField({ required: true, integer: true, min: 1, initial: 1 }),
+      rotated:  new fields.BooleanField({ initial: false }),
+      // 玩家双击揭晓前显示为剪影，且不可拾取
+      revealed: new fields.BooleanField({ initial: false }),
+    });
+
+    // 战利品清单条目（随机表条目：权重抽取用）
+    const lootTableEntrySchema = new fields.SchemaField({
+      id:       new fields.StringField({ required: true, initial: () => foundry.utils.randomID() }),
+      name:     new fields.StringField({ required: true, initial: "" }),
+      img:      new fields.StringField({ required: false, initial: "icons/svg/item-bag.svg" }),
+      weight:   new fields.NumberField({ required: true, integer: true, min: 0, initial: 1 }),
+      // 物品完整数据快照（补充战利品时据此创建）
+      itemData: new fields.ObjectField({ required: false, nullable: true, initial: null }),
     });
 
     return {
@@ -387,6 +416,8 @@ export class LootData extends foundry.abstract.TypeDataModel {
       lootContents: new fields.ArrayField(placementSchema, { required: true, initial: [] }),
       // 眼（货币）
       currency: new fields.NumberField({ required: true, integer: true, min: 0, initial: 0 }),
+      // 战利品清单（GM 补充战利品时的随机抽取表）
+      lootTable: new fields.ArrayField(lootTableEntrySchema, { required: true, initial: [] }),
     };
   }
 }
@@ -718,20 +749,16 @@ export class LimbusActor extends Actor {
   }
 
   /**
-   * 手动升级：当经验值大于当前升级阈值时可触发。
-   * 升级后：等级+1，经验清零，星芒上限更新，按规则掷 1D10 增加最大生命值。
+   * 计算升级预览（不修改数据），供升级对话框展示"原→现"数值与本级奖励物品。
+   * @returns {Promise<object|null>} 无法升级时返回 null
    */
-  async levelUpByXp() {
+  async getLevelUpPreview() {
     const xpTable = CONFIG.LIMBUSCOMPANY?.LEVEL_XP ?? [];
     const sys = this.system;
     const currentLevel = sys.level;
     const needed = xpTable[currentLevel] ?? null;
     const currentXp = sys.xp.value ?? 0;
-
-    if (needed === null || currentXp <= needed) {
-      ui.notifications?.warn?.("经验值未超过升级阈值，无法升级。");
-      return;
-    }
+    if (needed === null || currentXp <= needed) return null;
 
     const nextLevel = currentLevel + 1;
     const con = sys.attributes?.con ?? 1;
@@ -744,26 +771,64 @@ export class LimbusActor extends Actor {
     const nextStellarMax = 30 + nextLevel;
     const nextAttrPoints = (nextLevel % 10 === 0) ? ((sys.attrPoints ?? 0) + 1) : (sys.attrPoints ?? 0);
 
-    return this.update({
-      "system.level":             nextLevel,
+    // 背景升级奖励：匹配 nextLevel 的物品条目
+    const rewards = [];
+    const bgUuid = sys.background?.uuid ?? "";
+    if (bgUuid) {
+      const bg = await fromUuid(bgUuid).catch(() => null);
+      const entry = bg?.system?.levelRewards?.find(r => Number(r.level) === nextLevel);
+      for (const ref of entry?.items ?? []) {
+        const it = ref.uuid ? await fromUuid(ref.uuid).catch(() => null) : null;
+        rewards.push({
+          uuid: ref.uuid,
+          name: it?.name ?? ref.itemData?.name ?? "（未知物品）",
+          img:  it?.img  ?? ref.itemData?.img  ?? "icons/svg/item-bag.svg",
+        });
+      }
+    }
+
+    return {
+      currentLevel, nextLevel,
+      hpFrom: sys.hp.max, hpTo: nextHPMax, hpValueTo: nextHPValue,
+      stellarFrom: sys.stellarMotes.max, stellarTo: nextStellarMax,
+      attrPointsFrom: sys.attrPoints ?? 0, attrPointsTo: nextAttrPoints,
+      rewards,
+    };
+  }
+
+  /**
+   * 应用升级：等级+1，经验清零，生命/星芒上限更新，按背景等级奖励发放物品。
+   * @returns {Promise<object|null>} 升级预览数据（用于聊天记录展示），无法升级时返回 null
+   */
+  async levelUpByXp() {
+    const preview = await this.getLevelUpPreview();
+    if (!preview) {
+      ui.notifications?.warn?.("经验值未超过升级阈值，无法升级。");
+      return null;
+    }
+
+    await this.update({
+      "system.level":             preview.nextLevel,
       "system.xp.value":          0,
-      "system.attrPoints":        nextAttrPoints,
-      "system.stellarMotes.max":  nextStellarMax,
-      "system.hp.max":            nextHPMax,
-      "system.hp.value":          nextHPValue,
+      "system.attrPoints":        preview.attrPointsTo,
+      "system.stellarMotes.max":  preview.stellarTo,
+      "system.hp.max":            preview.hpTo,
+      "system.hp.value":          preview.hpValueTo,
     });
 
-    await Dialog.wait({
-      title: `升级到 Lv ${level}`,
-      content: `<div class="limbuscompany"><p>生命值成长掷骰结果：<strong>${gain}</strong>（1D10）</p><p>点击确认继续。</p></div>`,
-      buttons: {
-        ok: { label: "确认" },
-      },
-      default: "ok",
-      close: () => gain,
-    });
+    if (preview.rewards.length) {
+      const toCreate = [];
+      for (const r of preview.rewards) {
+        const src = r.uuid ? await fromUuid(r.uuid).catch(() => null) : null;
+        const data = src ? src.toObject() : null;
+        if (!data) continue;
+        delete data._id;
+        toCreate.push(data);
+      }
+      if (toCreate.length) await this.createEmbeddedDocuments("Item", toCreate);
+    }
 
-    return gain;
+    return preview;
   }
 
 
@@ -878,13 +943,21 @@ export class LimbusActor extends Actor {
    */
   async addBuff(buffData) {
     const buffs = [...(this.system.buffs ?? [])];
+    const type  = buffData.type ?? "custom";
+
+    // 基础特殊类 BUFF（烧伤/流血/破裂/震颤/沉沦/呼吸法；充能是例外，不算在内）：不存在"0层"或"0级"的这类 BUFF，
+    // 层数/强度为 0 时自动订正为 1；增益/减益与自定义 BUFF 不受此规则影响
+    const zeroDefault = ["burn", "bleed", "rupture", "tremor", "sinking", "breathing"].includes(type);
+    const rawIntensity = buffData.intensity ?? 1;
+    const rawStacks    = buffData.stacks    ?? 1;
+
     buffs.push({
       id:        foundry.utils.randomID(),
-      type:      buffData.type ?? "custom",
+      type,
       name:      buffData.name ?? "自定义",
       icon:      buffData.icon ?? "",
-      intensity: buffData.intensity ?? 1,
-      stacks:    buffData.stacks ?? 1,
+      intensity: (zeroDefault && !(rawIntensity > 0)) ? 1 : rawIntensity,
+      stacks:    (zeroDefault && !(rawStacks    > 0)) ? 1 : rawStacks,
       whenAdded: buffData.whenAdded ?? "本回合",
     });
     return this.update({ "system.buffs": buffs });
@@ -918,8 +991,10 @@ export class LimbusActor extends Actor {
     const idx   = buffs.findIndex(b => b.type === type);
     if (idx === -1) return;
     const next = Math.max(0, (buffs[idx].stacks ?? 1) - amount);
-    if (next <= 0) buffs.splice(idx, 1);
-    else           buffs[idx] = { ...buffs[idx], stacks: next };
+    // 自定义 BUFF 可选 keepAtZero：层数为 0 时不自动清除（仅归零，仍显示在状态栏）
+    const keepAtZero = resolveBuffHandler(buffs[idx])?.keepAtZero ?? false;
+    if (next <= 0 && !keepAtZero) buffs.splice(idx, 1);
+    else                          buffs[idx] = { ...buffs[idx], stacks: next };
     return this.update({ "system.buffs": buffs });
   }
 
@@ -941,21 +1016,142 @@ export class LimbusActor extends Actor {
   // ─── 理智检查（恐慌状态） ──────────────────────────────────────────────
 
   /**
-   * 设置理智值并检查恐慌状态（≤5 触发恐慌）
+   * 设置理智值并检查恐慌状态。
+   * ≤30：士气低落（一场遭遇战只触发一次效果，无需鉴定）。
+   * ≤10：由 updateCombat 回合结束钩子驱动坚定/恐慌鉴定（见 performPanicCheck）。
    * @param {number} value
    */
   async setSanity(value) {
     const clamped = Math.min(95, Math.max(5, value));
     await this.update({ "system.sanity.value": clamped });
 
-    // 理智降至5时，为角色添加「下回合」恐慌 BUFF（避免重复添加）
-    const alreadyHasPanic = (this.system.buffs ?? []).some(b => b.type === "panic");
-    if (clamped <= 5 && !alreadyHasPanic) {
-      await this.addBuff({ type: "panic", name: "陷入恐慌", intensity: 1, stacks: 1, whenAdded: "下回合" });
-      await ChatMessage.create({
-        content: `<div class="limbuscompany chat-clash"><strong>${this.name}</strong> 理智跌至 ${clamped}——下回合将【陷入恐慌】！</div>`,
-      });
+    // 士气低落：一场遭遇战只触发一次（无论跨阈值多少次），不重新鉴定。
+    // 士气低落不是 BUFF，不写入 system.buffs，也就不会出现在状态栏上——
+    // 只是理智≤30 时的一次性效果触发（恐慌卡 activities）+ 聊天提示。
+    if (clamped <= 30) {
+      const firedKey = "lowMoraleFiredEncounter";
+      const alreadyFired = this.getFlag("limbusCompany_FVTT", firedKey) ?? false;
+      if (!alreadyFired) {
+        await this.setFlag("limbusCompany_FVTT", firedKey, true);
+        await ChatMessage.create({
+          content: `<div class="limbuscompany chat-clash"><strong>${this.name}</strong> 理智跌至 ${clamped}——【士气低落】！</div>`,
+        });
+        await this.triggerPanicActivities("lowMorale", "恐慌触发时");
+      }
     }
+  }
+
+  /**
+   * 陷入恐慌鉴定（回合结束时，理智 ≤10 自动调用一次）：
+   * 投掷 1 枚 1d10，结果 ≤ 智力 → 坚定+1，否则 → 恐慌+1。
+   * 任一计数达到 3 时立即触发对应效果并重置理智（不清空计数——
+   * 计数清空交由 clearPanicCountersIfTriggered 在下一回合开始时执行）。
+   */
+  async performPanicCheck() {
+    const int = this.system.attributes?.int ?? 0;
+    const roll = new Roll("1d10");
+    await roll.evaluate();
+    const success = (roll.total ?? 0) <= int;
+
+    const side = success ? "resolve" : "fear";
+
+    // 预先算出计数 +1 后的数值用于卡片公示（与 addPanicCounter 的 clamp 逻辑一致），
+    // 实际写入仍交给 addPanicCounter，保证结果卡先于其可能触发的后续消息出现在聊天记录中。
+    const curFear    = this.system.panicCounters?.fear ?? 0;
+    const curResolve = this.system.panicCounters?.resolve ?? 0;
+    const nextFear    = side === "fear"    ? Math.min(3, curFear + 1)    : curFear;
+    const nextResolve = side === "resolve" ? Math.min(3, curResolve + 1) : curResolve;
+
+    const ownerUser  = game.users?.find(u => !u.isGM && u.character?.id === this.id);
+    const playerName = ownerUser?.name ?? game.user?.name ?? this.name;
+
+    await ChatMessage.create({
+      speaker: ChatMessage.getSpeaker({ actor: this }),
+      content: `
+        <div class="limbus-panic-check-card">
+          <div class="ic-header">
+            <img class="ic-actor-avatar" src="${this.img}" alt="${this.name}">
+            <div class="ic-actor-info">
+              <div class="ic-title">恐慌鉴定</div>
+              <div class="ic-player">${playerName}</div>
+            </div>
+          </div>
+          <div class="ic-blue-divider"></div>
+          <div class="panic-check-result-row">
+            <span class="panic-check-roll">1d10 = ${roll.total}（智力 ${int}）</span>
+            <span class="panic-check-arrow">→</span>
+            <span class="panic-check-outcome ${success ? "is-resolve" : "is-fear"}">${success ? "坚定" : "恐慌"} +1</span>
+          </div>
+          <div class="ic-blue-divider"></div>
+          <div class="panic-check-status-row">
+            <span class="panic-status-resolve">坚定 ${nextResolve}/3</span>
+            <span class="panic-status-fear">恐慌 ${nextFear}/3</span>
+          </div>
+        </div>`,
+    });
+    await this.addPanicCounter(side);
+  }
+
+  /**
+   * 恐慌/坚定计数 +1（不超过 3），达到 3 时立即触发对应效果。
+   * @param {"fear"|"resolve"} side
+   */
+  async addPanicCounter(side) {
+    const cur = this.system.panicCounters?.[side] ?? 0;
+    const next = Math.min(3, cur + 1);
+    await this.update({ [`system.panicCounters.${side}`]: next });
+    if (next >= 3) await this._resolvePanicOutcome(side);
+  }
+
+  /**
+   * 手动设置恐慌/坚定计数（拖动圆点）。设为 3 时立即触发对应效果。
+   * @param {"fear"|"resolve"} side
+   * @param {number} value  0-3
+   */
+  async setPanicCounter(side, value) {
+    const clamped = Math.max(0, Math.min(3, value));
+    await this.update({ [`system.panicCounters.${side}`]: clamped });
+    if (clamped >= 3) await this._resolvePanicOutcome(side);
+  }
+
+  /** 恐慌/坚定计数达到 3：触发对应效果 + 重置理智（30 恐慌 / 70 坚定）。 */
+  async _resolvePanicOutcome(side) {
+    const isFear = side === "fear";
+    await this.setSanity(isFear ? 30 : 70);
+    await ChatMessage.create({
+      content: `<div class="limbuscompany chat-clash">
+        <strong>${this.name}</strong> ${isFear ? "恐慌" : "坚定"}计数达到 3——
+        触发【${isFear ? "恐慌触发时" : "坚定触发时"}】，理智调整为 ${isFear ? 30 : 70}。
+      </div>`,
+    });
+    await this.triggerPanicActivities("panic", isFear ? "恐慌触发时" : "坚定触发时");
+  }
+
+  /** 回合开始时调用：若恐慌/坚定计数存在已点亮的「3」，清空双方计数。 */
+  async clearPanicCountersIfTriggered() {
+    const { fear = 0, resolve = 0 } = this.system.panicCounters ?? {};
+    if (fear >= 3 || resolve >= 3) {
+      await this.update({ "system.panicCounters.fear": 0, "system.panicCounters.resolve": 0 });
+    }
+  }
+
+  /**
+   * 触发恐慌槽位物品的指定 activities 触发时机。
+   * @param {"lowMorale"|"panic"} slot
+   * @param {string} triggerName  "恐慌触发时" | "坚定触发时"
+   */
+  async triggerPanicActivities(slot, triggerName = "恐慌触发时") {
+    const itemId = this.system.panicSlots?.[slot] ?? "";
+    const item   = itemId ? this.items.get(itemId) : null;
+    if (!item) return;
+    const { ClashManager } = await import("../helpers/clash.mjs");
+    const msgs = [];
+    await ClashManager._applyActivities(item, triggerName, {
+      owner: this, atkActor: this, defActor: null, _fireCounts: {}, _actMsgs: msgs,
+    });
+    await ClashManager._flushActMsgs(msgs, this, {
+      title: `${this.name}·${triggerName}`,
+    });
   }
 
   // ─── 辅助：获取已装备物品（从 actor.items） ────────────────────────────
@@ -990,6 +1186,51 @@ export class LimbusActor extends Actor {
       result[grade] = id ? this.items.get(id) : null;
     }
     return result;
+  }
+
+  /**
+   * 将技能槽位中的 oldItemId 永久替换为 newItemId（相关技能转换用）。
+   * 依次检查基础技能槽（数组）、守备技能槽（单值）、EGO 技能槽（按等级），
+   * 命中的每一处都会替换（理论上同一 id 只会出现在一处）。
+   * @param {string} oldItemId
+   * @param {string} newItemId
+   * @returns {Promise<boolean>} 是否找到并替换了槽位
+   */
+  async replaceSkillSlot(oldItemId, newItemId) {
+    if (!oldItemId || !newItemId || oldItemId === newItemId) return false;
+    const sys = this.system;
+    const updates = {};
+    let changed = false;
+
+    const basic = [...(sys.skills?.basic ?? [])];
+    const bIdx  = basic.indexOf(oldItemId);
+    if (bIdx >= 0) {
+      basic[bIdx] = newItemId;
+      updates["system.skills.basic"] = basic;
+      changed = true;
+    }
+
+    if (sys.skills?.defense === oldItemId) {
+      updates["system.skills.defense"] = newItemId;
+      changed = true;
+    }
+
+    const ego = { ...(sys.skills?.ego ?? {}) };
+    for (const grade of Object.keys(ego)) {
+      if (ego[grade] === oldItemId) {
+        ego[grade] = newItemId;
+        updates["system.skills.ego"] = ego;
+        changed = true;
+      }
+    }
+
+    if (changed) {
+      // 跨客户端执行时（如对方触发本方技能的转换效果），当前用户可能没有本
+      // Actor 的写权限，复用 ClashManager._safeDocUpdate 经 socket 委托 GM 执行
+      const { ClashManager } = await import("../helpers/clash.mjs");
+      await ClashManager._safeDocUpdate(this, updates);
+    }
+    return changed;
   }
 
   // ─── 先攻骰掷 ─────────────────────────────────────────────────────────

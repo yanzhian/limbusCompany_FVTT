@@ -14,10 +14,45 @@
     <span class="camp-title-label">营地</span>
   </div>
 
-  {{!-- ── 主体：仓库（左） + 配方（右） ──────────────────────────────────── --}}
+  {{!-- ── 主体：角色背包（左） + 仓库（中） + 配方（右） ─────────────────── --}}
   <div class="camp-body">
 
-    {{!-- ══ 左栏：仓库 ═══════════════════════════════════════════════════════ --}}
+    {{!-- ══ 左栏：我的角色背包 ═══════════════════════════════════════════════ --}}
+    {{#if myChar}}
+      <div class="camp-char-panel">
+        <div class="camp-panel-header">
+          <img src="{{myChar.img}}" class="camp-char-avatar" alt="{{myChar.name}}">
+          {{myChar.name}}
+          <span class="camp-warehouse-stats">{{myChar.used}} / {{myChar.max}} 格</span>
+        </div>
+        <div class="camp-char-grid-wrap">
+          <div class="cg-wrap camp-char-cg" style="--grid-cols:6; --grid-rows:{{myChar.rows}}">
+            {{#each myChar.cells}}
+              <div class="cg-cell {{#if occupied}}cg-occupied{{/if}}"
+                   style="grid-column:{{col}}; grid-row:{{row}}"
+                   data-x="{{x}}" data-y="{{y}}"></div>
+            {{/each}}
+            {{#each myChar.tiles}}
+              <div class="cg-item-tile"
+                   style="grid-column:{{col}} / span {{w}}; grid-row:{{row}} / span {{h}}"
+                   data-item-uuid="{{uuid}}"
+                   data-item-name="{{name}}"
+                   draggable="true"
+                   title="{{name}}（拖入仓库存放，双击查看）">
+                <img src="{{img}}" class="cg-tile-icon" alt="{{name}}">
+                <span class="cg-tile-name">{{name}}</span>
+                {{#if quantity}}<span class="cg-tile-qty">×{{quantity}}</span>{{/if}}
+              </div>
+            {{/each}}
+          </div>
+        </div>
+        <div class="camp-warehouse-drag-hint">
+          <i class="fas fa-exchange-alt"></i> 仓库物品拖到此处取出
+        </div>
+      </div>{{!-- /camp-char-panel --}}
+    {{/if}}
+
+    {{!-- ══ 中栏：仓库 ═══════════════════════════════════════════════════════ --}}
     <div class="camp-warehouse-panel">
 
       {{!-- 仓库顶部工具栏 --}}
@@ -56,7 +91,7 @@
 
           {{!-- 物品图块 --}}
           {{#each placedItems}}
-            <div class="cg-item-tile {{#unless show}}cg-hidden{{/unless}}"
+            <div class="cg-item-tile {{#if isContainer}}cg-tile-container{{/if}} {{#unless show}}cg-hidden{{/unless}}"
                  style="grid-column:{{col}} / span {{w}}; grid-row:{{row}} / span {{h}}"
                  data-placement-idx="{{idx}}"
                  data-item-uuid="{{uuid}}"
