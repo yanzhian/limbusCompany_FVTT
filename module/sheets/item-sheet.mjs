@@ -2172,7 +2172,7 @@ function _buildCondRow(cond, idx, cfg) {
             <select class="ae-sel cond-cmp-dim">${cmpDimOpts}</select>
             <select class="ae-sel cond-stacks-cmp">${stacksCmpOpts}</select>
           </span>
-          <input class="ae-input-sm cond-stacks" type="number" value="${cond?.stacks ?? 1}" min="0">
+          <input class="ae-input-sm cond-stacks" type="number" value="${cond?.stacks ?? 0}" min="0">
           <span class="ae-cond-pern-max" ${condType === "perN" ? "" : 'style="display:none"'}>
             <label>最大倍数</label>
             <input class="ae-input-sm cond-max-times" type="number" value="${cond?.maxTimes ?? 0}" min="0" placeholder="0=无限">
@@ -2302,7 +2302,7 @@ function _buildCostRow(cost, idx, cfg) {
           <input class="ae-input cost-field-name" type="text"
                  value="${_esc(cost?.fieldName ?? "")}" placeholder="如：血宴" style="width:90px;">
           <label class="cost-stacks-label">${isPerStack ? "每N层" : "层数"}</label>
-          <input class="ae-input-sm cost-stacks" type="number" value="${cost?.stacks ?? 1}" min="0">
+          <input class="ae-input-sm cost-stacks" type="number" value="${cost?.stacks ?? 0}" min="0">
         </span>
         <span class="ae-cost-buff-sec" ${(isAttr || isDiscard || isField) ? 'style="display:none"' : ""}>
           <label>BUFF</label>
@@ -2312,7 +2312,7 @@ function _buildCostRow(cost, idx, cfg) {
           <label>强度</label>
           <input class="ae-input-sm cost-intensity" type="number" value="${cost?.intensity ?? 0}" min="0">
           <label class="cost-stacks-label">${isPerStack ? "每N层" : "层数"}</label>
-          <input class="ae-input-sm cost-stacks"    type="number" value="${cost?.stacks ?? 1}"    min="0">
+          <input class="ae-input-sm cost-stacks"    type="number" value="${cost?.stacks ?? 0}"    min="0">
           <span class="ae-cost-pern-max" ${isPerStack ? "" : 'style="display:none"'}>
             <label>最大倍数</label>
             <input class="ae-input-sm cost-max-times" type="number" value="${cost?.maxTimes ?? 0}" min="0" placeholder="0=无限">
@@ -2784,7 +2784,7 @@ function _readActivityForm(html, original) {
         buff:       resolveKey($r.find(".cond-buff").val()),
         buffCustom: "",
         intensity:  parseInt($r.find(".cond-intensity").val()) || 0,
-        stacks:     parseInt($r.find(".cond-stacks").val())    || 1,
+        stacks:     parseInt($r.find(".cond-stacks").val())    || 0,
         ..._readBgTagMeta($r, "cond"),
         ...(isPerN ? { maxTimes: parseInt($r.find(".cond-max-times").val()) || 0 } : {}),
       });
@@ -2816,7 +2816,7 @@ function _readActivityForm(html, original) {
         type,
         target,
         fieldName: $r.find(".cost-field-name").val()?.trim() || "",
-        stacks:    parseInt($r.find(".cost-stacks").val())   || 1,
+        stacks:    parseInt($r.find(".cost-stacks").val())   || 0,
         ...(type === "perStack" ? { maxTimes: parseInt($r.find(".cost-max-times").val()) || 0 } : {}),
       });
     } else {
@@ -2826,7 +2826,7 @@ function _readActivityForm(html, original) {
         buff:       resolveKey($r.find(".cost-buff").val()),
         buffCustom: "",
         intensity:  parseInt($r.find(".cost-intensity").val()) || 0,
-        stacks:     parseInt($r.find(".cost-stacks").val())    || 1,
+        stacks:     parseInt($r.find(".cost-stacks").val())    || 0,
         ..._readBgTagMeta($r, "cost"),
         ...(type === "perStack" ? { maxTimes: parseInt($r.find(".cost-max-times").val()) || 0 } : {}),
       });
