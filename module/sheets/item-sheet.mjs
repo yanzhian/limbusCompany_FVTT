@@ -1704,17 +1704,21 @@ function _wireCardInteractivity(card) {
   if (!card?.length) return card;
   card.css("pointer-events", "auto");
 
-  card.on("mousedown", (ev) => {
-    if (ev.button !== 1) return; // 仅响应鼠标中键
-    ev.preventDefault();
-    if (card.data("tcLocked")) {
-      // 已锁定：再次中键 = 关闭卡片
-      closeTitleCard(card);
-    } else {
-      card.data("tcLocked", true);
-      card.addClass("tc-locked");
-    }
-  });
+  // BUFF Title 卡不支持鼠标中键锁定（仅普通悬停即用即走），但描述里若引用了
+  // 其他 BUFF/物品，卡内 chip 悬停仍要正常工作，所以只跳过锁定这一段逻辑
+  if (!card.hasClass("limbus-buff-title-card")) {
+    card.on("mousedown", (ev) => {
+      if (ev.button !== 1) return; // 仅响应鼠标中键
+      ev.preventDefault();
+      if (card.data("tcLocked")) {
+        // 已锁定：再次中键 = 关闭卡片
+        closeTitleCard(card);
+      } else {
+        card.data("tcLocked", true);
+        card.addClass("tc-locked");
+      }
+    });
+  }
 
   card.find(".desc-buff-chip").each((_i, chipEl) => {
     attachHoverableTitleCard(chipEl, () => buildBuffTitleCard(chipEl.dataset.buffName));
