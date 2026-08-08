@@ -13,7 +13,7 @@
  * merchantSell），按 merchantId 串行队列防并发超卖；库存/货币校验
  * 以 GM 端数据为准，客户端校验仅作友好提示。
  */
-import { buildItemTitleCard } from "./item-sheet.mjs";
+import { buildItemTitleCard, closeTitleCardUnlessLocked } from "./item-sheet.mjs";
 
 export class LimbusMerchantSheet extends ActorSheet {
 
@@ -207,7 +207,7 @@ export class LimbusMerchantSheet extends ActorSheet {
 
     // ── 悬停 Title 卡（货物行 & 卖出行） ──────────────────────────────────
     html.find(".merchant-item-row").on("mouseenter", this._onRowHoverStart.bind(this));
-    html.find(".merchant-item-row").on("mouseleave", this._onRowHoverEnd.bind(this));
+    html.find(".merchant-item-row").on("mouseleave", () => this._onRowHoverEnd());
 
     // ── 编辑锁（GM 专用）────────────────────────────────────────────────
     if (isGM) {
@@ -236,7 +236,7 @@ export class LimbusMerchantSheet extends ActorSheet {
     }
     if (!item) return;
 
-    this._onRowHoverEnd();
+    this._onRowHoverEnd(true);
     this._merchantTitleCard = buildItemTitleCard(item);
     if (!this._merchantTitleCard) return;
 
@@ -247,16 +247,28 @@ export class LimbusMerchantSheet extends ActorSheet {
     const top = Math.max(8, Math.min(rect.top, window.innerHeight - cardH - 8));
     this._merchantTitleCard.css({ position: "fixed", left, top, zIndex: 99998 });
     $("body").append(this._merchantTitleCard);
+    this._merchantTitleCard.on("mouseenter", () => clearTimeout(this._merchantCloseTimer));
+    this._merchantTitleCard.on("mouseleave", () => this._onRowHoverEnd());
   }
 
-  _onRowHoverEnd() {
-    this._merchantTitleCard?.remove();
-    this._merchantTitleCard = null;
+  /**
+   * @param {boolean} [force=false]  true=立即强制关闭（忽略锁定）；
+   *   false=延迟 150ms 软关闭（锁定的卡片会被 closeTitleCardUnlessLocked 拦下）
+   */
+  _onRowHoverEnd(force = false) {
+    if (!force) {
+      clearTimeout(this._merchantCloseTimer);
+      this._merchantCloseTimer = setTimeout(() => this._onRowHoverEnd(true), 150);
+      return;
+    }
+    clearTimeout(this._merchantCloseTimer);
+    closeTitleCardUnlessLocked(this._merchantTitleCard);
+    if (!this._merchantTitleCard?.data("tcLocked")) this._merchantTitleCard = null;
   }
 
   /** @override 关闭时清理悬浮卡 */
   async close(options) {
-    this._onRowHoverEnd();
+    this._onRowHoverEnd(true);
     return super.close(options);
   }
 

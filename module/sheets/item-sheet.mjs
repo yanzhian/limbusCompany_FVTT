@@ -14,8 +14,12 @@
 import { ClashManager } from "../helpers/clash.mjs";
 import { SKILLBOOK_MAX_SLOTS } from "../documents/item.mjs";
 import { CustomBuffRegistry, normalizeBuffType } from "../helpers/custom-buffs.mjs";
+import { linkifyHtml } from "../helpers/linkify.mjs";
 
 export class LimbusItemSheet extends ItemSheet {
+
+  /** 当前 sheet 绑定的所有 Title 卡 hover controller（activateListeners 时填充） */
+  _titleCardCtrls = [];
 
   /* ─── 默认选项 ──────────────────────────────────────────────────────────── */
 
@@ -441,8 +445,6 @@ export class LimbusItemSheet extends ItemSheet {
     html.find(".cg-cell").on("click",     this._onCgCellClick.bind(this));
     html.find(".cg-item-tile").on("dragstart",   this._onCgTileDragStart.bind(this));
     html.find(".cg-item-tile").on("contextmenu", this._onCgTileMenu.bind(this));
-    html.find(".cg-item-tile").on("mouseenter",  this._onCgTileHover.bind(this));
-    html.find(".cg-item-tile").on("mouseleave",  this._onCgTileHoverEnd.bind(this));
     html.find(".cg-rotate-btn").on("click",      this._onCgTileRotate.bind(this));
     // 解锁状态下，空格子显示 pointer 光标（提示可点击锁定）
     if (!this.isLocked && this.item.type === "container") {
@@ -454,27 +456,30 @@ export class LimbusItemSheet extends ItemSheet {
     html.find(".skillbook-dropzone").on("dragleave", this._onSkillBookDragLeave.bind(this));
     html.find(".skillbook-dropzone").on("drop",      this._onSkillBookDrop.bind(this));
     html.find(".skillbook-slot").on("contextmenu",   this._onSkillBookSlotMenu.bind(this));
-    html.find(".skillbook-slot").on("mouseenter",    this._onCgTileHover.bind(this));
-    html.find(".skillbook-slot").on("mouseleave",    this._onCgTileHoverEnd.bind(this));
 
     // ── 背景 ─────────────────────────────────────────────────────────────
     html.find(".bg-dropzone").on("dragover",  this._onSkillBookDragOver.bind(this));
     html.find(".bg-dropzone").on("dragleave", this._onSkillBookDragLeave.bind(this));
     html.find(".bg-dropzone").on("drop",      this._onBgItemDrop.bind(this));
     html.find(".bg-item-remove").on("click",  this._onBgItemRemove.bind(this));
-    html.find(".bg-item-chip").on("mouseenter", this._onCgTileHover.bind(this));
-    html.find(".bg-item-chip").on("mouseleave", this._onCgTileHoverEnd.bind(this));
     html.find(".bg-add-level").on("click",    this._onBgAddLevelReward.bind(this));
     html.find(".bg-level-remove").on("click", this._onBgRemoveLevelReward.bind(this));
     html.find(".bg-level-input").on("change", this._onBgLevelChange.bind(this));
     html.find(".bg-edit-rewards-btn").on("click", this._onToggleLock.bind(this));
     html.find(".skillbook-learn-btn").on("click",    this._onSkillBookLearn.bind(this));
 
-    // ── 描述文本内自动生成的 BUFF/物品悬停 chip（【】/[] linkify 产物）───────
-    html.on("mouseenter", ".desc-buff-chip", this._onDescBuffChipHover.bind(this));
-    html.on("mouseleave", ".desc-buff-chip", this._onCgTileHoverEnd.bind(this));
-    html.on("mouseenter", ".desc-item-chip", this._onDescItemChipHover.bind(this));
-    html.on("mouseleave", ".desc-item-chip", this._onCgTileHoverEnd.bind(this));
+    // ── 物品图块 / 描述文本内 BUFF/物品悬停 chip：统一 Title 卡绑定 ─────────
+    this._titleCardCtrls = [];
+    this._bindItemTitleCardHover(html, ".cg-item-tile, .skillbook-slot, .bg-item-chip");
+    html.find(".desc-buff-chip").each((_i, el) => {
+      this._titleCardCtrls.push(attachHoverableTitleCard(el, () => buildBuffTitleCard(el.dataset.buffName)));
+    });
+    html.find(".desc-item-chip").each((_i, el) => {
+      this._titleCardCtrls.push(attachHoverableTitleCard(el, async () => {
+        const item = await _findItemByName(el.dataset.itemName);
+        return item ? _buildItemTitleCard(item) : null;
+      }));
+    });
   }
 
 
@@ -577,7 +582,7 @@ export class LimbusItemSheet extends ItemSheet {
   /* ─── 关闭时清理 ───────────────────────────────────────────────────────── */
 
   async close(options = {}) {
-    this._onCgTileHoverEnd();
+    this._forceCloseAllTitleCards();
     return super.close(options);
   }
 
@@ -1365,7 +1370,7 @@ export class LimbusItemSheet extends ItemSheet {
   /* ─── 物品格：开始拖拽（内部重定位）────────────────────────────────────── */
 
   _onCgTileDragStart(event) {
-    this._onCgTileHoverEnd(); // 拖动开始即关闭 Title 卡
+    this._forceCloseAllTitleCards(); // 拖动开始即关闭 Title 卡
     const tile  = event.currentTarget;
     const idx   = parseInt(tile.dataset.placementIdx ?? 0);
     const uuid  = tile.dataset.itemUuid ?? "";
@@ -1426,78 +1431,29 @@ export class LimbusItemSheet extends ItemSheet {
     await this.item.update({ "system.lockedCells": lockedCells });
   }
 
-  /* ─── 物品图块：悬停 Title 卡 ───────────────────────────────────────────── */
+  /* ─── 物品图块 / 描述文本 chip：悬停 Title 卡 ────────────────────────────
+   * 统一走 attachHoverableTitleCard（含关闭延迟、鼠标中键锁定、卡片内嵌套
+   * chip 悬停）。每次 activateListeners 重新绑定时清空旧 controller 列表，
+   * 并在 close()/开始拖拽时统一强制关闭（忽略锁定，避免卡片残留）。
+   * ────────────────────────────────────────────────────────────────────── */
 
-  async _onCgTileHover(event) {
-    const tile = event.currentTarget;
-    const uuid = tile.dataset.itemUuid;
-    if (!uuid) return;
-
-    this._onCgTileHoverEnd();
-    // 序号守卫：await 期间若已 hoverEnd/dragstart，放弃追加（避免孤儿卡）
-    const seq = this._cgHoverSeq = (this._cgHoverSeq ?? 0) + 1;
-
-    const item = await fromUuid(uuid).catch(() => null);
-    if (!item || seq !== this._cgHoverSeq) return;
-
-    this._cgTitleCard = _buildItemTitleCard(item);
-    if (!this._cgTitleCard) return;
-
-    // 定位：在物品卡左侧，不够则右侧
-    const rect  = this.element[0].getBoundingClientRect();
-    const cardW = 280, cardH = 500;
-    let left = rect.left - cardW - 8;
-    if (left < 8) left = rect.right + 8;
-    const top = Math.max(8, Math.min(rect.top, window.innerHeight - cardH - 8));
-
-    this._cgTitleCard.css({ position: "fixed", left, top, zIndex: 99998 });
-    $("body").append(this._cgTitleCard);
+  /** 绑定 [selector → 悬停解析 Item] 的 Title 卡；controller 收进 this._titleCardCtrls 统一管理 */
+  _bindItemTitleCardHover(html, selector) {
+    html.find(selector).each((_i, el) => {
+      const ctrl = attachHoverableTitleCard(el, async () => {
+        const uuid = el.dataset.itemUuid;
+        if (!uuid) return null;
+        const item = await fromUuid(uuid).catch(() => null);
+        return item ? _buildItemTitleCard(item) : null;
+      });
+      this._titleCardCtrls.push(ctrl);
+    });
   }
 
-  _onCgTileHoverEnd() {
-    this._cgHoverSeq = (this._cgHoverSeq ?? 0) + 1; // 使进行中的 hoverStart 失效
-    this._cgTitleCard?.remove();
-    this._cgTitleCard = null;
-  }
-
-  /* ─── 描述文本 linkify chip：悬停 Title 卡 ──────────────────────────────── */
-
-  /** 定位规则与 _onCgTileHover 一致：贴在触发元素左侧，不够则右侧 */
-  _positionDescCard(card, anchorEl) {
-    const rect  = anchorEl.getBoundingClientRect();
-    const cardW = 280, cardH = 500;
-    let left = rect.left - cardW - 8;
-    if (left < 8) left = rect.right + 8;
-    const top = Math.max(8, Math.min(rect.top, window.innerHeight - cardH - 8));
-    card.css({ position: "fixed", left, top, zIndex: 99998 });
-  }
-
-  /** 【BUFF名字】chip 悬停：同步解析并展示 BUFF Title 卡 */
-  _onDescBuffChipHover(event) {
-    const name = event.currentTarget.dataset.buffName;
-    if (!name) return;
-    this._onCgTileHoverEnd();
-    this._cgTitleCard = buildBuffTitleCard(name);
-    this._positionDescCard(this._cgTitleCard, event.currentTarget);
-    $("body").append(this._cgTitleCard);
-  }
-
-  /** "物品名字" chip 悬停：按名字搜索世界物品/合集包，展示物品 Title 卡 */
-  async _onDescItemChipHover(event) {
-    const name = event.currentTarget.dataset.itemName;
-    if (!name) return;
-    const anchorEl = event.currentTarget;
-
-    this._onCgTileHoverEnd();
-    const seq = this._cgHoverSeq = (this._cgHoverSeq ?? 0) + 1;
-
-    const item = await _findItemByName(name);
-    if (!item || seq !== this._cgHoverSeq) return;
-
-    this._cgTitleCard = _buildItemTitleCard(item);
-    if (!this._cgTitleCard) return;
-    this._positionDescCard(this._cgTitleCard, anchorEl);
-    $("body").append(this._cgTitleCard);
+  /** 强制关闭当前 sheet 绑定的所有 Title 卡（忽略锁定），sheet 关闭/开始拖拽时调用 */
+  _forceCloseAllTitleCards() {
+    for (const ctrl of this._titleCardCtrls) ctrl.close();
+    this._titleCardCtrls = [];
   }
 
   /* ─── 物品格：右键菜单 ──────────────────────────────────────────────────── */
@@ -1696,16 +1652,124 @@ export function resolveBuffMeta(nameOrType) {
 export function buildBuffTitleCard(nameOrType) {
   const meta = resolveBuffMeta(nameOrType);
   const descHtml = meta.description
-    ? _esc(meta.description).replace(/\n/g, "<br>")
+    ? linkifyHtml(_esc(meta.description).replace(/\n/g, "<br>"))
     : "（暂无说明）";
-  return $(`<div class="limbus-title-card limbus-buff-title-card">
+  return _wireCardInteractivity($(`<div class="limbus-title-card limbus-buff-title-card">
     <div class="btc-header">
       <img class="btc-icon" src="${_esc(meta.icon)}" alt="${_esc(meta.label)}">
       <span class="btc-name">${_esc(meta.label)}</span>
     </div>
     <div class="btc-divider"></div>
     <div class="btc-desc">${descHtml}</div>
-  </div>`);
+  </div>`));
+}
+
+/* ─── Title 卡交互：鼠标中键锁定 + 卡片内 chip 悬停显示嵌套卡 ──────────────
+ * 所有由 buildItemTitleCard/buildBuffTitleCard 产出的卡片都自动带上这套交互，
+ * 调用方（actor-sheet.mjs 等各处 hover 绑定）无需额外处理，只需把原来
+ * "hoverEnd 时无条件 card?.remove()" 改成 closeTitleCardUnlessLocked(card)，
+ * 让锁定后的卡片不会因为离开触发源就被摘掉。
+ * ────────────────────────────────────────────────────────────────────── */
+
+/** hoverEnd 时用这个代替 `card?.remove()`：卡片被锁定时保留，其余情况照常移除 */
+export function closeTitleCardUnlessLocked(card) {
+  if (!card || card.data("tcLocked")) return;
+  card.remove();
+}
+
+/** 定位规则：贴在触发元素左侧，不够则右侧（与既有各处 hover 定位逻辑一致） */
+function _positionTitleCard(card, anchorEl) {
+  const rect  = anchorEl.getBoundingClientRect();
+  const cardW = 280, cardH = 500;
+  let left = rect.left - cardW - 8;
+  if (left < 8) left = rect.right + 8;
+  const top = Math.max(8, Math.min(rect.top, window.innerHeight - cardH - 8));
+  card.css({ position: "fixed", left, top, zIndex: 99998 });
+}
+
+/**
+ * 给任意 Title 卡挂上：
+ *   - 恒定 pointer-events:auto（不然鼠标中键点击等交互压根传不到卡片上）
+ *   - 鼠标中键点击卡片本体 → 锁定（加 .tc-locked，之后离开触发源不再自动关闭）
+ *   - 卡片描述文本 linkify 产生的 .desc-buff-chip/.desc-item-chip → 悬停展示嵌套卡
+ * @param {jQuery} card
+ * @returns {jQuery} 原样返回 card，方便链式调用
+ */
+function _wireCardInteractivity(card) {
+  if (!card?.length) return card;
+  card.css("pointer-events", "auto");
+
+  card.on("mousedown", (ev) => {
+    if (ev.button !== 1) return; // 仅响应鼠标中键
+    ev.preventDefault();
+    card.data("tcLocked", true);
+    card.addClass("tc-locked");
+  });
+
+  card.find(".desc-buff-chip").each((_i, chipEl) => {
+    attachHoverableTitleCard(chipEl, () => buildBuffTitleCard(chipEl.dataset.buffName));
+  });
+  card.find(".desc-item-chip").each((_i, chipEl) => {
+    attachHoverableTitleCard(chipEl, async () => {
+      const item = await _findItemByName(chipEl.dataset.itemName);
+      return item ? _buildItemTitleCard(item) : null;
+    });
+  });
+
+  return card;
+}
+
+/**
+ * 通用「悬停出 Title 卡」绑定：处理开合时机（关闭前留一小段延迟，让鼠标来得及
+ * 移到卡片上——否则贴着触发源摆放的卡片在鼠标离开触发源瞬间就被摘掉，永远够
+ * 不到，鼠标中键锁定也就无从谈起），并自动接入 _wireCardInteractivity（锁定 +
+ * 卡片内嵌套 chip 悬停，因此本函数天然支持递归嵌套）。
+ * @param {HTMLElement} anchorEl
+ * @param {() => (jQuery|null|Promise<jQuery|null>)} buildFn  构建卡片内容，可异步
+ * @returns {{ close: () => void }}
+ */
+export function attachHoverableTitleCard(anchorEl, buildFn) {
+  if (!anchorEl) return { close() {} };
+
+  let card = null;
+  let closeTimer = null;
+  let seq = 0;
+
+  const cancelClose = () => {
+    if (closeTimer) { clearTimeout(closeTimer); closeTimer = null; }
+  };
+  const doClose = () => {
+    if (card && !card.data("tcLocked")) { card.remove(); card = null; }
+  };
+  const scheduleClose = () => {
+    cancelClose();
+    closeTimer = setTimeout(doClose, 150);
+  };
+
+  const open = async () => {
+    cancelClose();
+    const mySeq = ++seq;
+    const built = await buildFn();
+    if (!built || mySeq !== seq) return;
+    card?.remove();
+    card = built; // _wireCardInteractivity 已经在 build 阶段挂好了
+    _positionTitleCard(card, anchorEl);
+    $("body").append(card);
+    card.on("mouseenter", cancelClose);
+    card.on("mouseleave", scheduleClose);
+  };
+
+  anchorEl.addEventListener("mouseenter", open);
+  anchorEl.addEventListener("mouseleave", scheduleClose);
+
+  return {
+    close() {
+      seq++;
+      cancelClose();
+      card?.remove();
+      card = null;
+    },
+  };
 }
 
 /**
@@ -1747,8 +1811,8 @@ function _buildItemTitleCard(item) {
     const tags = (Array.isArray(sys.tags) ? sys.tags : String(sys.tags ?? "").split("/"))
       .map(t => String(t).trim()).filter(Boolean);
     const weightCount = Number(sys.weight ?? 0);
-    const descText    = sys.effectDesc ?? sys.description ?? "";
-    return $(`<div class="limbus-title-card limbus-title-card-skill">
+    const descText    = linkifyHtml(sys.effectDesc ?? sys.description ?? "");
+    return _wireCardInteractivity($(`<div class="limbus-title-card limbus-title-card-skill">
       <div class="tc-header" style="background:${sinColor}">${item.name}</div>
       <div class="tc-row2">
         <img src="${_getCategoryIcon(sys.category)}" class="tc-cat-icon" alt="">
@@ -1763,7 +1827,7 @@ function _buildItemTitleCard(item) {
         <img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/Starlight.webp" class="tc-starlight-icon" alt="星芒">
         <span class="tc-stellar-cost">${stellarCost}</span>
       </div>
-    </div>`);
+    </div>`));
   }
 
   // 装备 / 消耗品 / 材料 / 容器
@@ -1771,7 +1835,7 @@ function _buildItemTitleCard(item) {
   const stellarCost  = sys.stellarCost ?? 0;
   const tags = (Array.isArray(sys.tags) ? sys.tags : String(sys.tags ?? "").split("/"))
     .map(t => String(t).trim()).filter(Boolean);
-  const descText     = sys.effect ?? sys.description ?? sys.effectDesc ?? "";
+  const descText     = linkifyHtml(sys.effect ?? sys.description ?? sys.effectDesc ?? "");
 
   if (item.type === "equipment") {
     const fmt = v => { const n = Number(v) || 0; return `${n > 0 ? "+" : ""}${n}`; };
@@ -1789,7 +1853,7 @@ function _buildItemTitleCard(item) {
       if (sys.subtype !== "upper") modRows.push(`<div class="modifier-row"><img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/Speed.webp" class="mod-icon" alt="SPD"><span class="mod-val">${fmt(sys.speedAdj)}</span></div>`);
     }
     const tagsHtml = tags.map(t => `<span class="tc-skill-tag">${t}</span>`).join("");
-    return $(`<div class="limbus-title-card limbus-title-card-equip">
+    return _wireCardInteractivity($(`<div class="limbus-title-card limbus-title-card-equip">
       <div class="tc-header tce-header">${item.name}</div>
       <div class="tce-info-row">
         <div class="tce-info-left">
@@ -1808,14 +1872,14 @@ function _buildItemTitleCard(item) {
         <img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/Starlight.webp" class="tc-starlight-icon" alt="星芒">
         <span class="tc-stellar-cost">${stellarCost}</span>
       </div>
-    </div>`);
+    </div>`));
   }
 
   // 消耗品 / 材料 / 容器 — 简单卡片
   const typeLabel = typeLabels[item.type] ?? item.type;
   const catLabel  = sys.category ? ` · ${sys.category}` : "";
   const tagsHtml  = tags.map(t => `<span class="tc-skill-tag">${t}</span>`).join("");
-  return $(`<div class="limbus-title-card limbus-title-card-equip">
+  return _wireCardInteractivity($(`<div class="limbus-title-card limbus-title-card-equip">
     <div class="tc-header tce-header">${item.name}</div>
     <div class="tce-info-row">
       <div class="tce-info-left">
@@ -1830,7 +1894,7 @@ function _buildItemTitleCard(item) {
       <img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/Starlight.webp" class="tc-starlight-icon" alt="星芒">
       <span class="tc-stellar-cost">${stellarCost}</span>
     </div>
-  </div>`);
+  </div>`));
 }
 
 function _parseGridSize(str) {

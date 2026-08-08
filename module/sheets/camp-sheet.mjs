@@ -12,7 +12,7 @@
  *         （玩家操作通过 socket 委托 GM 执行）
  */
 import { getBagItems, packBagGrid } from "../helpers/bag-grid.mjs";
-import { buildItemTitleCard } from "./item-sheet.mjs";
+import { buildItemTitleCard, closeTitleCardUnlessLocked } from "./item-sheet.mjs";
 
 export class LimbusCampSheet extends ActorSheet {
 
@@ -299,7 +299,7 @@ export class LimbusCampSheet extends ActorSheet {
     // 仓库图块：拖拽开始
     html.find(".camp-cg .cg-item-tile").on("dragstart", this._onCgTileDragStart.bind(this));
     html.find(".camp-cg .cg-item-tile").on("mouseenter",  this._onCgTileHoverStart.bind(this));
-    html.find(".camp-cg .cg-item-tile").on("mouseleave",  this._onCgTileHoverEnd.bind(this));
+    html.find(".camp-cg .cg-item-tile").on("mouseleave",  (ev) => this._onCgTileHoverEnd(ev));
 
     // 仓库图块：右键菜单
     html.find(".camp-cg .cg-item-tile").on("contextmenu", this._onCgTileMenu.bind(this));
@@ -317,7 +317,7 @@ export class LimbusCampSheet extends ActorSheet {
     // ── 左栏：角色背包网格 ──────────────────────────────────────────────
     // 背包图块拖拽开始：标准 Item 拖拽数据（拖入仓库走既有 _onCgCellDrop 流程）
     html.find(".camp-char-cg .cg-item-tile").on("dragstart", (event) => {
-      this._onCgTileHoverEnd(); // 拖动开始即关闭 Title 卡
+      this._onCgTileHoverEnd(null, true); // 拖动开始即强制关闭 Title 卡（忽略锁定）
       const uuid = event.currentTarget.dataset.itemUuid ?? "";
       event.originalEvent.dataTransfer.setData("text/plain", JSON.stringify({ type: "Item", uuid }));
       event.originalEvent.dataTransfer.effectAllowed = "move";
@@ -330,7 +330,7 @@ export class LimbusCampSheet extends ActorSheet {
     });
     // 背包图块悬停：Title 卡
     html.find(".camp-char-cg .cg-item-tile").on("mouseenter", this._onCgTileHoverStart.bind(this));
-    html.find(".camp-char-cg .cg-item-tile").on("mouseleave", this._onCgTileHoverEnd.bind(this));
+    html.find(".camp-char-cg .cg-item-tile").on("mouseleave", (ev) => this._onCgTileHoverEnd(ev));
     // 整个左栏作为"从仓库取出"的拖放目标
     const charPanel = html.find(".camp-char-panel");
     charPanel.on("dragover", (event) => {
@@ -525,7 +525,7 @@ export class LimbusCampSheet extends ActorSheet {
   /* ─── 仓库图块拖拽开始 ───────────────────────────────────────────────── */
 
   _onCgTileDragStart(event) {
-    this._onCgTileHoverEnd(); // 拖动开始即关闭 Title 卡
+    this._onCgTileHoverEnd(null, true); // 拖动开始即强制关闭 Title 卡（忽略锁定）
     const tile = event.currentTarget;
     const idx  = parseInt(tile.dataset.placementIdx ?? "-1");
     if (idx < 0) return;
@@ -562,7 +562,7 @@ export class LimbusCampSheet extends ActorSheet {
     const item = await fromUuid(uuid).catch(() => null);
     if (!item || seq !== this._campHoverSeq) return;
 
-    this._campTitleCard?.remove();
+    this._onCgTileHoverEnd(null, true);
     this._campTitleCard = buildItemTitleCard(item);
     if (!this._campTitleCard) return;
 
@@ -575,13 +575,26 @@ export class LimbusCampSheet extends ActorSheet {
 
     this._campTitleCard.css({ position: "fixed", left, top, zIndex: 99998 });
     $("body").append(this._campTitleCard);
+    this._campTitleCard.on("mouseenter", () => clearTimeout(this._campCloseTimer));
+    this._campTitleCard.on("mouseleave", () => this._onCgTileHoverEnd(null));
   }
 
-  _onCgTileHoverEnd(event) {
-    if (event) $(event.currentTarget).removeClass("cg-tile-hover");
+  /**
+   * @param {jQuery.Event|null} event
+   * @param {boolean} [force=false]  true=立即强制关闭（忽略锁定）；
+   *   false=延迟 150ms 软关闭（锁定的卡片会被 closeTitleCardUnlessLocked 拦下）
+   */
+  _onCgTileHoverEnd(event, force = false) {
+    if (event?.currentTarget) $(event.currentTarget).removeClass("cg-tile-hover");
+    if (!force) {
+      clearTimeout(this._campCloseTimer);
+      this._campCloseTimer = setTimeout(() => this._onCgTileHoverEnd(null, true), 150);
+      return;
+    }
+    clearTimeout(this._campCloseTimer);
     this._campHoverSeq = (this._campHoverSeq ?? 0) + 1; // 使进行中的 hoverStart 失效
-    this._campTitleCard?.remove();
-    this._campTitleCard = null;
+    closeTitleCardUnlessLocked(this._campTitleCard);
+    if (!this._campTitleCard?.data("tcLocked")) this._campTitleCard = null;
   }
 
   /* ─── 仓库图块双击：容器直接打开 ────────────────────────────────────── */
@@ -605,7 +618,7 @@ export class LimbusCampSheet extends ActorSheet {
 
     event.preventDefault();
     event.stopPropagation();
-    this._onCgTileHoverEnd();
+    this._onCgTileHoverEnd(null, true);
 
     let raw;
     try { raw = JSON.parse(event.originalEvent.dataTransfer.getData("text/plain")); }

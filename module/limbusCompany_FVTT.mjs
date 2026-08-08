@@ -30,6 +30,7 @@ import { GMConsole }          from "./sheets/gm-console.mjs";
 import { SquadHUD }           from "./sheets/squad-hud.mjs";
 import { ClashManager }     from "./helpers/clash.mjs";
 import { CustomBuffRegistry, resolveBuffHandler, FieldResourceRegistry } from "./helpers/custom-buffs.mjs";
+import { linkifyHtml } from "./helpers/linkify.mjs";
 import { SinResourceHUD }   from "./helpers/sin-resource-hud.mjs";
 import { QuickActionHUD }   from "./sheets/quick-action-hud.mjs";
 import { registerItemPiles } from "./helpers/item-piles.mjs";
@@ -913,69 +914,12 @@ Hooks.once("init", () => {
    *   【XXX】 → BUFF 图标+名字的可悬停 chip（悬停显示 BUFF Title 卡）
    *   "XXX"  → 物品引用的可悬停 chip（悬停按名字搜索世界物品/合集包，显示物品 Title 卡）
    *   [XXX]  → 触发时机静态标签（按类别着色，不可悬停搜索）
+   * 核心逻辑在 helpers/linkify.mjs（item-sheet.mjs 构建 Title 卡时也复用同一份），
    * 与 item-sheet.mjs 的 .desc-buff-chip / .desc-item-chip 悬停绑定配套使用。
-   *
-   * 用 DOM TreeWalker 只处理文本节点（而非对整段 HTML 字符串做正则替换），
-   * 避免匹配到标签属性里本来就存在的双引号（class="..."/style="..." 等），
-   * 那样会把属性值当成"物品名"误替换，破坏原有 HTML 结构。
    */
   Handlebars.registerHelper("linkify", (html) => {
     const raw = html instanceof Handlebars.SafeString ? html.toString() : String(html ?? "");
-    if (!raw.trim()) return new Handlebars.SafeString(raw);
-
-    const TRIGGER_COLORS = { "激活": "blue", "拼点成功": "orange", "拼点失败": "red" };
-    const triggerSet = new Set([...(CONFIG.LIMBUSCOMPANY?.ACTIVITY_TRIGGERS ?? []), "激活"]);
-    const pattern = /【([^【】]+)】|"([^"]+)"|\[([^\[\]]+)\]/g;
-
-    const container = document.createElement("div");
-    container.innerHTML = raw;
-
-    const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT, null);
-    const textNodes = [];
-    let n;
-    while ((n = walker.nextNode())) textNodes.push(n);
-
-    for (const textNode of textNodes) {
-      const text = textNode.nodeValue;
-      if (!/[【"\[]/.test(text)) continue; // 快速跳过不含任何目标符号的文本节点
-
-      const frag = document.createDocumentFragment();
-      let lastIndex = 0;
-      let m;
-      pattern.lastIndex = 0;
-      while ((m = pattern.exec(text))) {
-        if (m.index > lastIndex) frag.appendChild(document.createTextNode(text.slice(lastIndex, m.index)));
-
-        if (m[1] !== undefined) {
-          const span = document.createElement("span");
-          span.className = "desc-buff-chip";
-          span.dataset.buffName = m[1];
-          span.textContent = `【${m[1]}】`;
-          frag.appendChild(span);
-        } else if (m[2] !== undefined) {
-          const span = document.createElement("span");
-          span.className = "desc-item-chip";
-          span.dataset.itemName = m[2];
-          span.textContent = `"${m[2]}"`;
-          frag.appendChild(span);
-        } else {
-          const trimmed = m[3].trim();
-          if (triggerSet.has(trimmed)) {
-            const span = document.createElement("span");
-            span.className = `desc-trigger-chip trigger-${TRIGGER_COLORS[trimmed] ?? "green"}`;
-            span.textContent = `[${m[3]}]`;
-            frag.appendChild(span);
-          } else {
-            frag.appendChild(document.createTextNode(m[0])); // 未知方括号内容：原样保留
-          }
-        }
-        lastIndex = pattern.lastIndex;
-      }
-      if (lastIndex < text.length) frag.appendChild(document.createTextNode(text.slice(lastIndex)));
-      textNode.parentNode.replaceChild(frag, textNode);
-    }
-
-    return new Handlebars.SafeString(container.innerHTML);
+    return new Handlebars.SafeString(linkifyHtml(raw));
   });
 
   /** 判断值是否大于 */

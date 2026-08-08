@@ -4365,6 +4365,11 @@ body.game .limbuscompany.app img {
   display: flex;
   flex-direction: column;
 }
+/* 鼠标中键点击锁定：高亮描边提示"已锁定，移出卡片本体才会关闭" */
+.limbus-title-card.tc-locked {
+  border-color: var(--gold-active, #C58C4E);
+  box-shadow: 0 0 0 1px var(--gold-active, #C58C4E), 0 8px 32px rgba(0,0,0,.85);
+}
 .tc-header {
   padding: 6px 10px; font-size: .9rem; font-weight: bold; color: #fff;
 }

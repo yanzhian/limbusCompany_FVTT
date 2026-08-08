@@ -12,7 +12,7 @@
  * socket 消息类型：lootTakeItem / lootTakeCurrency / lootSplitCurrency /
  *                lootMoveItem / lootRevealItem
  */
-import { buildItemTitleCard } from "./item-sheet.mjs";
+import { buildItemTitleCard, closeTitleCardUnlessLocked } from "./item-sheet.mjs";
 
 export class LimbusLootSheet extends ActorSheet {
 
@@ -278,7 +278,7 @@ export class LimbusLootSheet extends ActorSheet {
 
     // ── 图块悬停 Title 卡（未揭晓的玩家视角不显示，避免剧透） ────────────
     html.find(".cg-item-tile").on("mouseenter", this._onTileHoverStart.bind(this));
-    html.find(".cg-item-tile").on("mouseleave", this._onTileHoverEnd.bind(this));
+    html.find(".cg-item-tile").on("mouseleave", () => this._onTileHoverEnd());
 
     if (isGM) {
       this._activateGMListeners(html);
@@ -299,7 +299,7 @@ export class LimbusLootSheet extends ActorSheet {
     const item = await fromUuid(uuid).catch(() => null);
     if (!item || seq !== this._lootHoverSeq) return;
 
-    this._lootTitleCard?.remove();
+    this._onTileHoverEnd(true);
     this._lootTitleCard = buildItemTitleCard(item);
     if (!this._lootTitleCard) return;
 
@@ -310,12 +310,24 @@ export class LimbusLootSheet extends ActorSheet {
     const top = Math.max(8, Math.min(rect.top, window.innerHeight - cardH - 8));
     this._lootTitleCard.css({ position: "fixed", left, top, zIndex: 99998 });
     $("body").append(this._lootTitleCard);
+    this._lootTitleCard.on("mouseenter", () => clearTimeout(this._lootCloseTimer));
+    this._lootTitleCard.on("mouseleave", () => this._onTileHoverEnd());
   }
 
-  _onTileHoverEnd() {
+  /**
+   * @param {boolean} [force=false]  true=立即强制关闭（忽略锁定）；
+   *   false=延迟 150ms 软关闭（锁定的卡片会被 closeTitleCardUnlessLocked 拦下）
+   */
+  _onTileHoverEnd(force = false) {
+    if (!force) {
+      clearTimeout(this._lootCloseTimer);
+      this._lootCloseTimer = setTimeout(() => this._onTileHoverEnd(true), 150);
+      return;
+    }
+    clearTimeout(this._lootCloseTimer);
     this._lootHoverSeq = (this._lootHoverSeq ?? 0) + 1;
-    this._lootTitleCard?.remove();
-    this._lootTitleCard = null;
+    closeTitleCardUnlessLocked(this._lootTitleCard);
+    if (!this._lootTitleCard?.data("tcLocked")) this._lootTitleCard = null;
   }
 
   /* ─── 图块双击：揭晓 / 拾取 ──────────────────────────────────────────── */
@@ -573,7 +585,7 @@ export class LimbusLootSheet extends ActorSheet {
   }
 
   _onTileDragStart(event) {
-    this._onTileHoverEnd(); // 拖动开始即关闭 Title 卡
+    this._onTileHoverEnd(true); // 拖动开始即强制关闭 Title 卡（忽略锁定）
     const tile     = event.currentTarget;
     const idx      = parseInt(tile.dataset.placementIdx ?? -1);
     if (idx < 0) return;

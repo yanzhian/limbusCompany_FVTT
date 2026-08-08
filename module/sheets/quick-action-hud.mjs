@@ -13,6 +13,7 @@
 
 import { ClashManager } from "../helpers/clash.mjs";
 import { CustomBuffRegistry } from "../helpers/custom-buffs.mjs";
+import { closeTitleCardUnlessLocked } from "./item-sheet.mjs";
 
 /* ─── 常量 ────────────────────────────────────────────────────────────────── */
 
@@ -300,7 +301,7 @@ export class QuickActionHUD extends Application {
   }
 
   async close(options = {}) {
-    this._onHudItemHoverEnd();
+    this._onHudItemHoverEnd(true);
     return super.close(options);
   }
 
@@ -572,7 +573,7 @@ export class QuickActionHUD extends Application {
     const sheet  = this._actor.sheet;
     if (!sheet?._buildTitleCard) return;
 
-    this._onHudItemHoverEnd();
+    this._onHudItemHoverEnd(true);
     this._hudTitleCard = sheet._buildTitleCard(item);
 
     // HUD 尺寸较小，优先显示在 HUD 左侧；空间不足则显示在右侧
@@ -586,6 +587,8 @@ export class QuickActionHUD extends Application {
 
     this._hudTitleCard.css({ position: "fixed", left, top, zIndex: 99999 });
     $("body").append(this._hudTitleCard);
+    this._hudTitleCard.on("mouseenter", () => clearTimeout(this._hudTitleCardCloseTimer));
+    this._hudTitleCard.on("mouseleave", () => this._onHudItemHoverEnd());
 
     // 允许鼠标在图标上滚动时滚动描述区
     this._hudTitleCardWheelEl = el;
@@ -598,14 +601,24 @@ export class QuickActionHUD extends Application {
     el.addEventListener("wheel", this._hudTitleCardWheelHandler, { passive: false });
   }
 
-  _onHudItemHoverEnd() {
+  /**
+   * @param {boolean} [force=false]  true=立即强制关闭（忽略锁定）；
+   *   false=延迟 150ms 软关闭（锁定的卡片会被 closeTitleCardUnlessLocked 拦下）
+   */
+  _onHudItemHoverEnd(force = false) {
+    if (!force) {
+      clearTimeout(this._hudTitleCardCloseTimer);
+      this._hudTitleCardCloseTimer = setTimeout(() => this._onHudItemHoverEnd(true), 150);
+      return;
+    }
+    clearTimeout(this._hudTitleCardCloseTimer);
     if (this._hudTitleCardWheelEl && this._hudTitleCardWheelHandler) {
       this._hudTitleCardWheelEl.removeEventListener("wheel", this._hudTitleCardWheelHandler);
     }
     this._hudTitleCardWheelEl = null;
     this._hudTitleCardWheelHandler = null;
-    this._hudTitleCard?.remove();
-    this._hudTitleCard = null;
+    closeTitleCardUnlessLocked(this._hudTitleCard);
+    if (!this._hudTitleCard?.data("tcLocked")) this._hudTitleCard = null;
   }
 
   /**

@@ -13,6 +13,7 @@
 import { ClashManager } from "../helpers/clash.mjs";
 import { CustomBuffRegistry, resolveBuffHandler, normalizeBuffType } from "../helpers/custom-buffs.mjs";
 import { getBagItems, packBagGrid } from "../helpers/bag-grid.mjs";
+import { buildItemTitleCard, closeTitleCardUnlessLocked } from "./item-sheet.mjs";
 
 /**
  * 以 actorId 为 key 的模块级战斗袋状态 Map。
@@ -514,11 +515,11 @@ export class LimbusActorSheet extends ActorSheet {
 
     // 悬停 Title 卡片
     html.find(".item-icon[data-item-id]").on("mouseenter", this._onItemHover.bind(this));
-    html.find(".item-icon[data-item-id]").on("mouseleave", this._onItemHoverEnd.bind(this));
+    html.find(".item-icon[data-item-id]").on("mouseleave", () => this._onItemHoverEnd());
     html.find(".equip-slot[data-item-id]").on("mouseenter", this._onItemHover.bind(this));
-    html.find(".equip-slot[data-item-id]").on("mouseleave", this._onItemHoverEnd.bind(this));
+    html.find(".equip-slot[data-item-id]").on("mouseleave", () => this._onItemHoverEnd());
     html.find(".skill-slot-wrap[data-item-id]").on("mouseenter", this._onItemHover.bind(this));
-    html.find(".skill-slot-wrap[data-item-id]").on("mouseleave", this._onItemHoverEnd.bind(this));
+    html.find(".skill-slot-wrap[data-item-id]").on("mouseleave", () => this._onItemHoverEnd());
 
     // Tab 切换时跟踪当前 tab ID（跨重渲染保持状态）
     html.find(".sheet-tabs .item[data-tab]").on("click", (ev) => {
@@ -629,7 +630,7 @@ export class LimbusActorSheet extends ActorSheet {
     });
     // 网格视图图块：拖拽（标准 Item 数据，可拖入营地仓库等）+ 双击打开
     html.find(".bag-cg .cg-item-tile").on("dragstart", (event) => {
-      this._onItemHoverEnd(); // 拖动开始即关闭 Title 卡
+      this._onItemHoverEnd(true); // 拖动开始即强制关闭 Title 卡（忽略锁定）
       const uuid = event.currentTarget.dataset.itemUuid ?? "";
       event.originalEvent.dataTransfer.setData("text/plain", JSON.stringify({ type: "Item", uuid }));
       event.originalEvent.dataTransfer.effectAllowed = "move";
@@ -642,7 +643,7 @@ export class LimbusActorSheet extends ActorSheet {
     html.find(".bag-cg .cg-item-tile").on("mouseenter", (event) => {
       const item = this.actor.items.get(event.currentTarget.dataset.itemId ?? "");
       if (!item) return;
-      this._onItemHoverEnd();
+      this._onItemHoverEnd(true);
       this._titleCard = this._buildTitleCard(item);
       if (!this._titleCard) return;
       const rect  = this.element[0].getBoundingClientRect();
@@ -652,6 +653,7 @@ export class LimbusActorSheet extends ActorSheet {
       const top = Math.max(8, Math.min(rect.top, window.innerHeight - cardH - 8));
       this._titleCard.css({ position: "fixed", left, top, zIndex: 99998 });
       $("body").append(this._titleCard);
+      this._finalizeTitleCard();
     });
     html.find(".bag-cg .cg-item-tile").on("mouseleave", () => this._onItemHoverEnd());
     // 网格视图：拖到容器图块上 = 自动寻位存入容器
@@ -2095,8 +2097,8 @@ export class LimbusActorSheet extends ActorSheet {
     const item   = this.actor.items.get(itemId);
     if (!item) return;
 
-    // 防止重复生成
-    this._onItemHoverEnd();
+    // 防止重复生成（强制关闭：这里是"打开新卡片前清场"，不是普通移出）
+    this._onItemHoverEnd(true);
     this._titleCard = this._buildTitleCard(item);
 
     const rect     = this.element[0].getBoundingClientRect();
@@ -2107,8 +2109,10 @@ export class LimbusActorSheet extends ActorSheet {
 
     this._titleCard.css({ position: "fixed", left, top, zIndex: 99998 });
     $("body").append(this._titleCard);
+    this._finalizeTitleCard();
 
-    // 允许在悬停期间通过滚轮滚动 Title 卡描述区（卡片本身 pointer-events: none）
+    // 允许在悬停期间通过滚轮滚动 Title 卡描述区（卡片现为 pointer-events: auto，
+    // 但轮子事件仍从槽位元素转发，避免鼠标必须精确停在描述区才能滚动）
     this._titleCardWheelEl = el;
     this._titleCardWheelHandler = (ev) => {
       if (!this._titleCard?.length) return;
@@ -2124,14 +2128,35 @@ export class LimbusActorSheet extends ActorSheet {
     el.addEventListener("wheel", this._titleCardWheelHandler, { passive: false });
   }
 
-  _onItemHoverEnd() {
+  /**
+   * 卡片本体挂上"鼠标进入取消关闭 / 鼠标离开重新排队关闭"，让用户有机会把鼠标
+   * 移到卡片上（含按下鼠标中键锁定）；锁定状态下软关闭会被 closeTitleCardUnlessLocked 拦下。
+   */
+  _finalizeTitleCard() {
+    if (!this._titleCard?.length) return;
+    this._titleCard.on("mouseenter", () => clearTimeout(this._titleCardCloseTimer));
+    this._titleCard.on("mouseleave", () => this._onItemHoverEnd());
+  }
+
+  /**
+   * @param {boolean} [force=false]  true=立即强制关闭（忽略锁定，用于拖拽开始/
+   *   即将打开新卡片等清场场景）；false=按 150ms 延迟软关闭（给鼠标时间移到卡片
+   *   上，锁定的卡片不会被摘掉）
+   */
+  _onItemHoverEnd(force = false) {
+    if (!force) {
+      clearTimeout(this._titleCardCloseTimer);
+      this._titleCardCloseTimer = setTimeout(() => this._onItemHoverEnd(true), 150);
+      return;
+    }
+    clearTimeout(this._titleCardCloseTimer);
     if (this._titleCardWheelEl && this._titleCardWheelHandler) {
       this._titleCardWheelEl.removeEventListener("wheel", this._titleCardWheelHandler);
     }
     this._titleCardWheelEl = null;
     this._titleCardWheelHandler = null;
-    this._titleCard?.remove();
-    this._titleCard = null;
+    closeTitleCardUnlessLocked(this._titleCard);
+    if (!this._titleCard?.data("tcLocked")) this._titleCard = null;
   }
 
   /** 恐慌槽位：拖入恐慌卡（世界/目录物品复制嵌入，本角色物品直接引用） */
@@ -2247,7 +2272,7 @@ export class LimbusActorSheet extends ActorSheet {
     const item   = this.actor.items.get(itemId);
     if (!item) return;
 
-    this._onItemHoverEnd();
+    this._onItemHoverEnd(true);
     this._titleCard = this._buildTitleCard(item);
 
     // 卡片显示在角色卡左侧；若角色卡左侧空间不足则显示在右侧
@@ -2260,6 +2285,7 @@ export class LimbusActorSheet extends ActorSheet {
 
     this._titleCard.css({ position: "fixed", left, top, zIndex: 99998 });
     $("body").append(this._titleCard);
+    this._finalizeTitleCard();
 
     // 允许鼠标在槽位上滚动时滚动描述区
     this._titleCardWheelEl = el;
@@ -2272,98 +2298,12 @@ export class LimbusActorSheet extends ActorSheet {
     el.addEventListener("wheel", this._titleCardWheelHandler, { passive: false });
   }
 
+  /**
+   * 复用 item-sheet.mjs 的共享 Title 卡构建（描述文本 linkify、鼠标中键锁定、
+   * 卡内 chip 悬停出嵌套卡都在那边统一实现，这里不再维护第二份重复实现）。
+   */
   _buildTitleCard(item) {
-    const sys = item.system;
-    const cfg = CONFIG.LIMBUSCOMPANY;
-    const sinColor = cfg.SIN_COLORS?.[sys.sinType] ?? "#5F3E21";
-
-    if (item.type === "skill") {
-      const stellarCost  = item.getStellarCost?.() ?? 0;
-      const tags = (Array.isArray(sys.tags) ? sys.tags : (sys.tags ?? "").split("/"))
-        .map(t => String(t).trim()).filter(Boolean);
-      const weightCount  = Number(sys.weight ?? 0);
-      const descText     = sys.effectDesc ?? sys.description ?? "";
-
-      return $(`<div class="limbus-title-card limbus-title-card-skill">
-        <div class="tc-header" style="background:${sinColor}">${item.name}</div>
-        <div class="tc-row2">
-          <img src="${_getCategoryIcon(sys.category)}" class="tc-cat-icon" alt="">
-          <span class="tc-formula">${(sys.diceFormula ?? "").toUpperCase()}</span>
-          <span class="tc-tags">${tags.map(t => `<span class="tc-skill-tag">${t}</span>`).join("")}</span>
-        </div>
-        ${weightCount > 0 ? `<div class="tc-weight"><span class="tc-weight-label">加重值</span>${Array.from({length: weightCount}, () => '<span class="tc-weight-sq"></span>').join("")}</div>` : ""}
-        <div class="tc-gold-divider-skill"></div>
-        <div class="tc-desc">${descText}</div>
-        <div class="tc-gold-divider-skill"></div>
-        <div class="tc-footer">
-          <img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/Starlight.webp" class="tc-starlight-icon" alt="星芒">
-          <span class="tc-stellar-cost">${stellarCost}</span>
-        </div>
-      </div>`);
-    }
-
-    // Equipment / other
-    const formatSigned = (value = 0) => {
-      const num = Number(value) || 0;
-      return `${num > 0 ? "+" : ""}${num}`;
-    };
-
-    const modifierRows = [];
-    if (sys.subtype === "upper") {
-      modifierRows.push(`<div class="modifier-row">
-        <img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/slash.webp" class="mod-icon" alt="斩"><span class="resist-display">${sys.resistanceAdj?.slash ?? "1.0"}</span>
-        <img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/blunt.webp" class="mod-icon" alt="打"><span class="resist-display">${sys.resistanceAdj?.blunt ?? "1.0"}</span>
-        <img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/pierce.webp" class="mod-icon" alt="突"><span class="resist-display">${sys.resistanceAdj?.pierce ?? "1.0"}</span>
-      </div>`);
-      modifierRows.push(`<div class="modifier-row">
-        <img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/Defense_Level.webp" class="mod-icon" alt="DEF"><span class="mod-val">${formatSigned(sys.defAdj)}</span>
-      </div>`);
-    } else {
-      if (sys.subtype !== "lower") {
-        modifierRows.push(`<div class="modifier-row">
-          <img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/Offense_Level.webp" class="mod-icon" alt="ATK"><span class="mod-val">${formatSigned(sys.atkAdj)}</span>
-        </div>`);
-      }
-      modifierRows.push(`<div class="modifier-row">
-        <img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/Defense_Level.webp" class="mod-icon" alt="DEF"><span class="mod-val">${formatSigned(sys.defAdj)}</span>
-      </div>`);
-      if (sys.subtype !== "upper") {
-        modifierRows.push(`<div class="modifier-row">
-          <img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/Speed.webp" class="mod-icon" alt="SPD"><span class="mod-val">${formatSigned(sys.speedAdj)}</span>
-        </div>`);
-      }
-    }
-
-    const tags = (Array.isArray(sys.tags) ? sys.tags : String(sys.tags ?? "").split("/"))
-      .map(t => String(t).trim()).filter(Boolean);
-    const tagsHtml    = tags.map(t => `<span class="tc-skill-tag">${t}</span>`).join("");
-    const descText    = sys.effect ?? sys.description ?? "";
-    const stellarCost = sys.stellarCost ?? 0;
-
-    return $(`<div class="limbus-title-card limbus-title-card-equip">
-      <div class="tc-header tce-header">${item.name}</div>
-
-      <div class="tce-info-row">
-        <div class="tce-info-left">
-          <div class="tce-subrow">
-            <span class="tce-subtype">${_subtypeLabel(sys.subtype ?? item.type)}</span>
-            ${sys.category ? `<span class="tce-category">${sys.category}</span>` : ""}
-          </div>
-          ${modifierRows.length ? `<div class="tce-modifiers">${modifierRows.join("")}</div>` : ""}
-          ${tagsHtml ? `<div class="tce-tags">${tagsHtml}</div>` : ""}
-        </div>
-      </div>
-
-      <div class="tc-gold-divider-skill"></div>
-      <div class="tc-desc tce-desc">${descText}</div>
-      <div class="tc-gold-divider-skill"></div>
-
-      <div class="tc-footer tce-footer">
-        <span class="tce-hint">鼠标中间用来编辑/查看</span>
-        <img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/Starlight.webp" class="tc-starlight-icon" alt="星芒">
-        <span class="tc-stellar-cost">${stellarCost}</span>
-      </div>
-    </div>`);
+    return buildItemTitleCard(item);
   }
 }
 
@@ -2425,11 +2365,3 @@ function _buffIconPath(type, name = "") {
   return customName ? `${base}Custom_buffs/${customName}.webp` : "";
 }
 
-function _getCategoryIcon(category) {
-  return CONFIG.LIMBUSCOMPANY?.CATEGORY_ICON_PATHS?.[category] ?? "";
-}
-
-function _subtypeLabel(subtype) {
-  return { weapon:"武器", upper:"上装", lower:"下装", accessory:"饰品",
-           consumable:"消耗品", material:"材料", container:"容器" }[subtype] ?? subtype;
-}
