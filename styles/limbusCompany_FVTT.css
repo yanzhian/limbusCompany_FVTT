@@ -8077,7 +8077,6 @@ input.item-piles-quantity {
 .bgw-list-icon { width: 32px; height: 32px; object-fit: cover; border-radius: 2px; flex-shrink: 0; }
 .bgw-list-info { display: flex; flex-direction: column; overflow: hidden; }
 .bgw-list-name { font-size: 14px; color: #C9B79C; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.bgw-list-cat { font-size: 11px; color: #8a7a6a; }
 .bgw-empty { text-align: center; color: #6a5a48; padding: 20px 0; font-size: 13px; }
 
 /* ── 合集包浏览器（左：搜索+合集筛选 / 右：结果表） ── */
