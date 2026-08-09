@@ -6,7 +6,6 @@
  * 特性：
  *   - 🔒/🔓 编辑锁（runtime状态，不持久化）
  *   - 效果触发编辑器（Activity editor，折叠/展开）
- *   - 技能：相关技能展开（[+] 展开）
  *   - 装备：链接方向切换（黑/白）
  *   - 容器：自定义网格
  */
@@ -57,10 +56,6 @@ export class LimbusItemSheet extends ItemSheet {
 
   get activitiesExpanded() { return this._activitiesExpanded ?? false; }
 
-  /* ─── 相关技能展开状态（技能类型专用） ──────────────────────────────────── */
-
-  get relatedExpanded() { return this._relatedExpanded ?? false; }
-
   /* ─── 数据准备 ──────────────────────────────────────────────────────────── */
 
   async getData() {
@@ -74,7 +69,6 @@ export class LimbusItemSheet extends ItemSheet {
     context.isLocked  = this.isLocked;
     context.isEditable = this.isEditable;
     context.activitiesExpanded = this.activitiesExpanded;
-    context.relatedExpanded    = this.relatedExpanded;
 
     // ── 活动列表 ─────────────────────────────────────────────────────────
     context.activities = sys.activities ?? [];
@@ -88,20 +82,6 @@ export class LimbusItemSheet extends ItemSheet {
       context.isEgo         = sys.type === "ego";
       context.isCounterType = sys.type === "defense" &&
         (sys.category === "counter" || sys.category === "clashCounter");
-
-      // 相关技能池解析（v2：数组，配合④效果「相关技能转换」使用）
-      const relPool = sys.relatedSkill?.pool ?? [];
-      context.relatedSkillPool = await Promise.all(relPool.map(async (p, i) => {
-        const relItem = p?.itemUuid ? await fromUuid(p.itemUuid).catch(() => null) : null;
-        return {
-          idx:      i,
-          poolNo:   i + 2, // 选择器编号：1=原本(自身)，2起对应池内顺序
-          itemUuid: p?.itemUuid ?? "",
-          name:     relItem?.name ?? "",
-          img:      relItem?.img  ?? "",
-          resolved: !!relItem,
-        };
-      }));
 
       // EGO 消耗行
       // 注意：schema 字段名为 sinCost[].sinType 和 egoResistanceAdj[].{sinType,multiplier}
@@ -380,18 +360,6 @@ export class LimbusItemSheet extends ItemSheet {
     html.find(".activity-add-btn").on("click",    this._onActivityAdd.bind(this));
     html.find(".activity-edit-btn").on("click",   this._onActivityEdit.bind(this));
     html.find(".activity-delete-btn").on("click", this._onActivityDelete.bind(this));
-
-    // ── 相关技能 [+] ─────────────────────────────────────────────────────
-    html.find(".related-skill-toggle").on("click", this._onRelatedToggle.bind(this));
-
-    // ── 相关技能池：拖入添加 / 移除 ──────────────────────────────────────
-    html.find(".related-pool-dropzone").on("dragover", (e) => {
-      e.preventDefault();
-      $(e.currentTarget).addClass("cg-drag-over");
-    });
-    html.find(".related-pool-dropzone").on("dragleave", (e) => $(e.currentTarget).removeClass("cg-drag-over"));
-    html.find(".related-pool-dropzone").on("drop", this._onRelatedPoolDrop.bind(this));
-    html.find(".related-pool-remove").on("click", this._onRelatedPoolRemove.bind(this));
 
     if (!this.isEditable) return;
 
@@ -864,44 +832,6 @@ export class LimbusItemSheet extends ItemSheet {
         render: (html) => { _setupAeDialog(html, cfg); },
       }, { width: 560, classes: ["dialog", "ae-dialog", "limbuscompany"] }).render(true);
     });
-  }
-
-  /* ─── 相关技能展开 ──────────────────────────────────────────────────────── */
-
-  _onRelatedToggle(event) {
-    this._relatedExpanded = !this.relatedExpanded;
-    this.render(false);
-  }
-
-  /** 拖入技能 → 加入相关技能池（不可拖入自身；技能类型物品之外的忽略） */
-  async _onRelatedPoolDrop(event) {
-    event.preventDefault();
-    $(event.currentTarget).removeClass("cg-drag-over");
-
-    let raw;
-    try { raw = JSON.parse(event.originalEvent.dataTransfer.getData("text/plain")); }
-    catch { return; }
-    const dropped = await Item.fromDropData(raw).catch(() => null);
-    if (!dropped || dropped.type !== "skill") {
-      ui.notifications.warn("只能将「技能」类型物品拖入相关技能池。");
-      return;
-    }
-    if (dropped.uuid === this.item.uuid) {
-      ui.notifications.warn("不能将技能自身加入相关技能池。");
-      return;
-    }
-    const pool = foundry.utils.deepClone(this.item.system.relatedSkill?.pool ?? []);
-    pool.push({ itemUuid: dropped.uuid });
-    await this.item.update({ "system.relatedSkill.pool": pool });
-  }
-
-  /** 从相关技能池移除指定索引条目 */
-  async _onRelatedPoolRemove(event) {
-    const idx = parseInt(event.currentTarget.dataset.poolIdx ?? "-1");
-    if (idx < 0) return;
-    const pool = foundry.utils.deepClone(this.item.system.relatedSkill?.pool ?? []);
-    pool.splice(idx, 1);
-    await this.item.update({ "system.relatedSkill.pool": pool });
   }
 
   /* ─── 修正行 ────────────────────────────────────────────────────────────── */
@@ -2423,7 +2353,6 @@ function _buildEffectRow(eff, idx, cfg) {
     .map(v => `<option value="${v}" ${roundVal === v ? "selected" : ""}>${v}</option>`).join("");
   const formulaVal = _esc(eff?.value ?? "");
   const isValSec   = !isBuff && !isTriggerBuff && !isRandomBuff && !isUseSkill && !isDiceTypeChg && !isRelConvert && !isFieldEff;
-  const relMode    = eff?.relMode ?? "random";
   return `
     <div class="ae-row ae-eff-row">
       <div class="ae-row-hd">
@@ -2538,22 +2467,10 @@ function _buildEffectRow(eff, idx, cfg) {
           </select>
         </span>
         <span class="ae-eff-relconvert-sec" ${isRelConvert ? "" : 'style="display:none"'}>
-          <label>方式</label>
-          <select class="ae-sel eff-relconvert-mode">
-            <option value="random"   ${relMode === "random"   ? "selected" : ""}>随机（从相关池抽取）</option>
-            <option value="specific" ${relMode === "specific" ? "selected" : ""}>指定（按序号）</option>
-            <option value="byName"   ${relMode === "byName"   ? "selected" : ""}>技能名字（背包检索）</option>
-          </select>
-          <span class="ae-eff-relconvert-idx-sec" ${relMode === "specific" ? "" : 'style="display:none"'}>
-            <label>序号</label>
-            <input class="ae-input-sm eff-relconvert-idx" type="number" min="1"
-                   value="${eff?.relIndex ?? 1}" title="1=原本（自身），2起对应相关技能池顺序">
-          </span>
-          <span class="ae-eff-relconvert-name-sec" ${relMode === "byName" ? "" : 'style="display:none"'}>
-            <input class="ae-input eff-relconvert-name" type="text" list="ae-owned-skill-dl"
-                   value="${_esc(eff?.relSkillName ?? "")}" placeholder="技能名字（在背包/技能列表中检索）" style="width:130px;" autocomplete="off">
-          </span>
-          <span class="ae-eff-relconvert-hint">永久替换本技能在角色技能槽中的位置${relMode === "byName" ? "（无需预先配置相关技能池，也不受UUID变化影响）" : ""}</span>
+          <label>技能名字</label>
+          <input class="ae-input eff-relconvert-name" type="text" list="ae-owned-skill-dl"
+                 value="${_esc(eff?.relSkillName ?? "")}" placeholder="技能名字（在背包/技能列表中检索）" style="width:130px;" autocomplete="off">
+          <span class="ae-eff-relconvert-hint">永久替换本技能在角色技能槽中的位置（在背包/技能列表按名字检索目标技能）</span>
         </span>
       </div>
     </div>`;
@@ -2602,7 +2519,6 @@ function _setupAeDialog(html, cfg) {
     list.append(_buildEffectRow({}, idx, cfg));
     _bindDel(html);
     _bindEffType(html);
-    _bindRelConvertMode(html);
     _bindUseSkillSubtype(html);
     _bindTargetBgTag(html);
   });
@@ -2617,7 +2533,6 @@ function _setupAeDialog(html, cfg) {
 
   _bindDel(html);
   _bindEffType(html);
-  _bindRelConvertMode(html);
   _bindCondCostBuff(html);
   _bindCostType(html);
   _bindCondType(html);
@@ -2799,15 +2714,6 @@ function _bindEffType(html) {
     row.find(".ae-eff-dicetypechg-sec").toggle(isDiceTypeChg);
     row.find(".ae-eff-extradmg-sec").toggle(isExtraDamage);
     row.find(".ae-eff-relconvert-sec").toggle(isRelConvert);
-  });
-}
-
-function _bindRelConvertMode(html) {
-  html.find(".eff-relconvert-mode").off("change").on("change", function () {
-    const row  = $(this).closest(".ae-eff-row");
-    const mode = $(this).val();
-    row.find(".ae-eff-relconvert-idx-sec").toggle(mode === "specific");
-    row.find(".ae-eff-relconvert-name-sec").toggle(mode === "byName");
   });
 }
 
@@ -2996,12 +2902,10 @@ function _readActivityForm(html, original) {
       return;
     }
     if (type === "relatedSkillConvert") {
-      const relMode = $r.find(".eff-relconvert-mode").val() || "random";
       effects.push({
         type,
-        relMode,
-        relIndex:     relMode === "specific" ? Math.max(1, parseInt($r.find(".eff-relconvert-idx").val()) || 1) : 0,
-        relSkillName: relMode === "byName"   ? ($r.find(".eff-relconvert-name").val()?.trim() || "") : "",
+        relMode:      "byName",
+        relSkillName: $r.find(".eff-relconvert-name").val()?.trim() || "",
       });
       return;
     }

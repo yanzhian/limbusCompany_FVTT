@@ -7,9 +7,6 @@
       <i class="fas fa-{{#if isLocked}}lock{{else}}lock-open{{/if}}"></i>
     </span>
     <span class="sheet-type-label">技能</span>
-    <button type="button" class="related-skill-toggle" title="展开/折叠相关技能">
-      {{#if relatedExpanded}}▲ 相关{{else}}＋ 相关{{/if}}
-    </button>
   </div>
 
   {{!-- ── 可滚动主体 ──────────────────────────────────────────────── --}}
@@ -268,33 +265,6 @@
       {{/if}}
 
     </div>{{!-- /skill-card-main --}}
-
-    {{!-- ══ 相关技能池（展开） ══════════════════════════════════════ --}}
-    {{#if relatedExpanded}}
-      <div class="related-skill-divider"><span>相关技能池</span></div>
-
-      <div class="related-pool-list">
-        {{#each relatedSkillPool}}
-          <div class="related-pool-row {{#unless resolved}}related-pool-broken{{/unless}}" data-pool-idx="{{idx}}">
-            <span class="related-pool-no" title="④效果「相关技能转换」指定序号">{{poolNo}}</span>
-            <img src="{{img}}" class="related-pool-icon" alt="{{name}}">
-            <span class="related-pool-name">{{#if resolved}}{{name}}{{else}}（技能未找到）{{/if}}</span>
-            {{#if (and ../isEditable (not ../isLocked))}}
-              <button type="button" class="related-pool-remove" data-pool-idx="{{idx}}" title="移除">×</button>
-            {{/if}}
-          </div>
-        {{else}}
-          <div class="related-empty-tip">相关技能池为空</div>
-        {{/each}}
-      </div>
-
-      {{#if (and isEditable (not isLocked))}}
-        <div class="related-pool-dropzone" data-drop-type="Item">
-          <i class="fas fa-arrow-down"></i> 将技能拖到此处加入相关技能池
-        </div>
-        <p class="related-pool-hint">池内序号 2 起对应④效果「相关技能转换 · 指定」的选择编号（编号 1 固定代表本技能自身）。</p>
-      {{/if}}
-    {{/if}}{{!-- /relatedExpanded --}}
 
   </div>{{!-- /equip-body --}}
 

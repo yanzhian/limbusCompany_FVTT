@@ -1059,66 +1059,22 @@ export class ClashManager {
             break;
           }
           case "relatedSkillConvert": {
-            // 相关技能转换：将"本骰"（item）永久替换为另一个技能
-            // - random/specific：走 item.system.relatedSkill.pool（UUID 池，需要在物品上预先配置）
-            // - byName：直接在角色背包/技能列表按名字检索已拥有的技能，无需配置池、不需要
-            //   互相"套娃"嵌套 UUID、也不受合集包提取后 UUID 变化影响（比照【使用技能】效果的名字检索）
+            // 相关技能转换：将"本骰"（item）永久替换为角色背包/技能列表中按名字检索到的技能。
+            // 旧版"随机/指定序号"（走 item.system.relatedSkill.pool 这个 UUID 池，需要互相
+            // 套娃预先配置）已移除，改为直接按名字检索已拥有的技能，无需任何预配置，
+            // 也不受合集包提取后 UUID 变化的影响。
             const relOwner = item?.parent ?? owner;
             if (!relOwner || !item) { descStr = "相关技能转换：找不到所属角色"; break; }
 
-            if ((eff.relMode ?? "random") === "byName") {
-              const name = (eff.relSkillName ?? "").trim();
-              if (!name) { descStr = "相关技能转换：未配置技能名字"; break; }
-              const newItem = (relOwner.items ?? []).find(it => it.type === "skill" && it.name === name && it.id !== item.id);
-              if (!newItem) { descStr = `相关技能转换：背包中找不到技能【${name}】`; break; }
-              const replaced = await relOwner.replaceSkillSlot?.(item.id, newItem.id);
-              if (replaced) relOwner.sheet?._replaceCombatBagSkill?.(item.id, newItem.id);
-              descStr = replaced
-                ? `【${item.name}】永久转换为【${newItem.name}】`
-                : `相关技能转换：未找到【${item.name}】所在的技能槽位`;
-              break;
-            }
-
-            const pool = item.system?.relatedSkill?.pool ?? [];
-
-            let targetUuid = null;
-            if ((eff.relMode ?? "random") === "specific") {
-              const idxSel = Math.max(1, Math.round(Number(eff.relIndex ?? 1)));
-              if (idxSel === 1) { descStr = `【${item.name}】维持原本形态`; break; }
-              const entry = pool[idxSel - 2];
-              if (!entry?.itemUuid) { descStr = `相关技能转换：序号 ${idxSel} 无对应技能`; break; }
-              targetUuid = entry.itemUuid;
-            } else {
-              const validPool = pool.filter(p => p?.itemUuid);
-              if (!validPool.length) { descStr = `相关技能转换：【${item.name}】相关技能池为空`; break; }
-              targetUuid = validPool[Math.floor(Math.random() * validPool.length)].itemUuid;
-            }
-
-            const srcItem = await fromUuid(targetUuid).catch(() => null);
-            if (!srcItem) { descStr = "相关技能转换：找不到目标技能"; break; }
-
-            try {
-              // 复用已存在的相关技能副本（按来源 UUID 标记），避免重复转换时反复创建
-              let newItem = relOwner.items.find(
-                i => i.getFlag?.("limbusCompany_FVTT", "relatedSourceUuid") === targetUuid
-              );
-              if (!newItem) {
-                const data = srcItem.toObject();
-                delete data._id;
-                foundry.utils.setProperty(data, "flags.limbusCompany_FVTT.relatedSourceUuid", targetUuid);
-                const [created] = await relOwner.createEmbeddedDocuments("Item", [data]);
-                newItem = created;
-              }
-
-              const replaced = await relOwner.replaceSkillSlot?.(item.id, newItem.id);
-              if (replaced) relOwner.sheet?._replaceCombatBagSkill?.(item.id, newItem.id);
-              descStr = replaced
-                ? `【${item.name}】永久转换为【${newItem.name}】`
-                : `相关技能转换：未找到【${item.name}】所在的技能槽位`;
-            } catch (err) {
-              console.error("ClashManager: relatedSkillConvert 执行失败", err);
-              descStr = "相关技能转换：执行出错（可能缺少权限），请检查控制台";
-            }
+            const name = (eff.relSkillName ?? "").trim();
+            if (!name) { descStr = "相关技能转换：未配置技能名字"; break; }
+            const newItem = (relOwner.items ?? []).find(it => it.type === "skill" && it.name === name && it.id !== item.id);
+            if (!newItem) { descStr = `相关技能转换：背包中找不到技能【${name}】`; break; }
+            const replaced = await relOwner.replaceSkillSlot?.(item.id, newItem.id);
+            if (replaced) relOwner.sheet?._replaceCombatBagSkill?.(item.id, newItem.id);
+            descStr = replaced
+              ? `【${item.name}】永久转换为【${newItem.name}】`
+              : `相关技能转换：未找到【${item.name}】所在的技能槽位`;
             break;
           }
           case "useSkill": {
