@@ -2195,6 +2195,7 @@ function _buildTargetOptions(selected) {
     ["allEnemy",      "敌对全部"],
     ["allEnemyOther", "敌对其他全部"],
     ["bgTag",         "背景标签"],
+    ["bgTagOther",    "背景标签(其他)"],
   ].map(([v, l]) => `<option value="${v}" ${selected === v ? "selected" : ""}>${l}</option>`).join("");
 }
 
@@ -2202,10 +2203,11 @@ function _buildTargetOptions(selected) {
  * 「背景标签」目标的附加输入框（标签名字 + 数量）。
  * prefix 区分挂在条件/消耗/效果哪个区块（cond / cost / eff），class 名带前缀以免互相冲突。
  * 语义：本队中"背景带有该标签"的角色数量 ≥ 所填数量时，这些角色均视为合法目标；
- * 数量不足则目标为空（效果不生效）。
+ * 数量不足则目标为空（效果不生效）。"背景标签(其他)"与"本队其他全部"同理，
+ * 会先排除拥有者自己（自己不受益，数量门槛也按排除自己后的人数判定）。
  */
 function _buildBgTagFields(prefix, obj) {
-  const isBgTag = (obj?.target ?? "self") === "bgTag";
+  const isBgTag = (obj?.target ?? "self") === "bgTag" || (obj?.target ?? "self") === "bgTagOther";
   return `
     <span class="ae-${prefix}-bgtag-sec" ${isBgTag ? "" : 'style="display:none"'}>
       <label>标签</label>
@@ -2666,7 +2668,8 @@ function _bindTargetBgTag(html) {
   html.find(".cond-target, .cost-target, .eff-target").off("change.bgtag").on("change.bgtag", function () {
     const sel    = $(this);
     const prefix = sel.hasClass("cond-target") ? "cond" : sel.hasClass("cost-target") ? "cost" : "eff";
-    sel.closest(".ae-row-fields").find(`.ae-${prefix}-bgtag-sec`).toggle(sel.val() === "bgTag");
+    const val = sel.val();
+    sel.closest(".ae-row-fields").find(`.ae-${prefix}-bgtag-sec`).toggle(val === "bgTag" || val === "bgTagOther");
   });
 }
 

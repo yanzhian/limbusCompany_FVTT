@@ -433,13 +433,19 @@ export class ClashManager {
     const foeIds   = inTeam1 ? team2Ids : inTeam2 ? team1Ids : [];
     const toActors = ids => ids.map(id => game.actors.get(id)).filter(Boolean);
 
-    if (targetType === "bgTag") {
+    if (targetType === "bgTag" || targetType === "bgTagOther") {
       // 背景标签：本队中"背景带有该标签"的角色数量 ≥ targetTagCount 时，
       // 这些角色均视为合法目标；数量不足则视为无目标（效果不生效）。
+      // "bgTagOther" 与 "allTeamOther" 同理：先排除拥有者自己（自己不受益），
+      // "数量≥N"这个门槛也是排除自己之后、剩下的其他带标签队友数量来判定——
+      // 如"为其他背景标签为X的友方（至少2个）恢复…"，指的是"除自己外还有
+      // ≥2 个带该标签的队友"。
       const tagName = (meta?.targetTag ?? "").trim();
       const minCount = Math.max(1, meta?.targetTagCount ?? 1);
       if (!tagName) return [];
-      const candidates = toActors(myIds.length ? myIds : (ownerId ? [ownerId] : []));
+      const poolIds = myIds.length ? myIds : (ownerId ? [ownerId] : []);
+      const filteredIds = targetType === "bgTagOther" ? poolIds.filter(id => id !== ownerId) : poolIds;
+      const candidates = toActors(filteredIds);
       const matched = [];
       for (const actor of candidates) {
         const tags = await ClashManager._getBackgroundTags(actor);
