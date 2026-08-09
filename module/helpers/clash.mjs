@@ -1028,8 +1028,10 @@ export class ClashManager {
             break;
           }
           case "extraDamage": {
-            // 追加伤害：按选定物理分类/罪孽类型乘抗性，直接造成 HP 伤害
-            // （不经过拼点/骰数结算流程，perStackMultiplier 支持"每N层"等前置放大）
+            // 追加伤害：按选定物理分类/罪孽类型乘抗性算出最终伤害数值，
+            // 跳过的只是"第一次伤害"（拼点/骰数结算流程本身，不会二次拼点），
+            // 但仍需走完整的承受结算管线（护盾吸收/混乱阈值判定/自定义BUFF承伤
+            // 钩子如【百折不挠】等），因此改为调用 _applyAndSendTake 而非直接扣HP。
             const rawVal = await ClashManager._evalValue(eff.value);
             const scaled = _scaleVal(rawVal, "relative"); // 始终按倍数缩放（无绝对值语义）
             const physMult = eff.dmgCategory
@@ -1039,13 +1041,12 @@ export class ClashManager {
               ? ClashManager._parseResistance(effTgt.system?.egoResistances?.[eff.dmgSinType] ?? "x1.0")
               : 1.0;
             const dmg = Math.max(0, Math.round(scaled * physMult * sinMult));
-            if (dmg > 0) {
-              const curHp = effTgt.system?.hp?.value ?? 0;
-              await ClashManager._safeDocUpdate(effTgt, { "system.hp.value": Math.max(0, curHp - dmg) });
-            }
             const catLabel = eff.dmgCategory ? `【${ClashManager._catLabel(eff.dmgCategory)}】` : "";
             const sinLabel = eff.dmgSinType   ? `【${ClashManager._sinLabel(eff.dmgSinType)}】`   : "";
-            descStr = `对【${effTgt.name}】造成 ${dmg} 点${catLabel}${sinLabel}追加伤害`;
+            descStr = `对【${effTgt.name}】造成 ${dmg} 点${catLabel}${sinLabel}追加伤害（结算详情见承受结算消息）`;
+            if (dmg > 0) {
+              await ClashManager._applyAndSendTake(effTgt, dmg, { attacker: owner });
+            }
             break;
           }
           case "diceTypeChg": {
