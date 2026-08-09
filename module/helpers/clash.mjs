@@ -553,11 +553,17 @@ export class ClashManager {
         }
 
         if (pre.type === "perN") {
-          // 每：层数 ≥ N（N = pre.stacks）才满足，倍数 = floor(当前层数 / N)，可选上限 maxTimes
-          const n = Math.max(1, pre.stacks ?? 1);
-          if (!buff || (buff.stacks ?? 0) < n) { precondFail = true; break; }
-          if ((pre.intensity ?? 0) > 0 && (buff.intensity ?? 0) < pre.intensity) { precondFail = true; break; }
-          let times = Math.floor((buff.stacks ?? 0) / n);
+          // 每：维度可选"层数"（默认，向下兼容旧数据）或"强度"——
+          // 如"目标每有 8 级【烧伤】"实际指的是强度而非层数，需按强度计算倍数。
+          // 维度≥ N（N = pre.stacks）才满足，倍数 = floor(当前值 / N)，可选上限 maxTimes。
+          const dim  = pre.perNDim === "intensity" ? "intensity" : "stacks";
+          const n    = Math.max(1, pre.stacks ?? 1);
+          if (!buff) { precondFail = true; break; }
+          const haveVal = dim === "intensity" ? (buff.intensity ?? 0) : (buff.stacks ?? 0);
+          if (haveVal < n) { precondFail = true; break; }
+          // 维度为"层数"时，"强度≥"仍作为额外的最低阈值门槛；维度为"强度"时该字段隐藏不生效。
+          if (dim === "stacks" && (pre.intensity ?? 0) > 0 && (buff.intensity ?? 0) < pre.intensity) { precondFail = true; break; }
+          let times = Math.floor(haveVal / n);
           if ((pre.maxTimes ?? 0) > 0) times = Math.min(times, pre.maxTimes);
           precondMultiplier *= times;
         } else {
@@ -3618,8 +3624,10 @@ export class ClashManager {
       const buffs = targetActor.system?.buffs ?? [];
       const found = buffs.find(b => b.type === pre.buff || b.name === pre.buff);
       if (!found) return false;
+      const dim = pre.perNDim === "intensity" ? "intensity" : "stacks";
+      const haveVal = dim === "intensity" ? (found.intensity ?? 0) : (found.stacks ?? 0);
       const n = pre.stacks ?? 1;
-      return n > 0 && ((found.stacks ?? 0) % n === 0);
+      return n > 0 && (haveVal % n === 0);
     }
 
     if (type === "buffCompare") {

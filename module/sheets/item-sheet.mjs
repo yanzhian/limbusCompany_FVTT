@@ -2130,8 +2130,10 @@ function _buildCondRow(cond, idx, cfg) {
   const isFieldSec = condType === "fieldResource";
   const isLevelSec = condType === "level";
   const isCompare  = condType === "buffCompare";
+  const isPerN     = condType === "perN";
+  const perNDim    = cond?.perNDim === "intensity" ? "intensity" : "stacks";
   const selCats    = Array.isArray(cond?.categories) ? cond.categories : [];
-  const stacksLbl  = condType === "perN" ? "每N层" : (isCompare ? "层数" : "层数≥");
+  const stacksLbl  = isPerN ? (perNDim === "intensity" ? "每N级" : "每N层") : (isCompare ? "层数" : "层数≥");
 
   const levelCmpOpts = [
     ["gt","＞"],["gte","≥"],["lt","＜"],["lte","≤"],["eq","＝"],
@@ -2148,6 +2150,9 @@ function _buildCondRow(cond, idx, cfg) {
   const cmpDimOpts = [
     ["stacks","层数"],["intensity","强度"],
   ].map(([v,l]) => `<option value="${v}" ${(cond?.compareDim ?? "stacks") === v ? "selected":""}>${l}</option>`).join("");
+  const perNDimOpts = [
+    ["stacks","层数"],["intensity","强度"],
+  ].map(([v,l]) => `<option value="${v}" ${perNDim === v ? "selected":""}>${l}</option>`).join("");
   const buffLabel  = _keyToLabel(cond?.buff ?? "", cond?.buffCustom ?? "");
 
   const attrTypeOpts = [
@@ -2186,9 +2191,13 @@ function _buildCondRow(cond, idx, cfg) {
           <input class="ae-input cond-buff" type="text" list="ae-buff-dl"
                  placeholder="输入或选择BUFF…" autocomplete="off" style="width:100px;"
                  value="${_esc(buffLabel)}">
-          <span class="ae-cond-intensity-sec" ${isCompare ? 'style="display:none"' : ""}>
+          <span class="ae-cond-intensity-sec" ${(isCompare || (isPerN && perNDim === "intensity")) ? 'style="display:none"' : ""}>
             <label>强度≥</label>
             <input class="ae-input-sm cond-intensity" type="number" value="${cond?.intensity ?? 0}" min="0">
+          </span>
+          <span class="ae-cond-pern-dim-sec" ${isPerN ? "" : 'style="display:none"'}>
+            <label>维度</label>
+            <select class="ae-sel cond-pern-dim">${perNDimOpts}</select>
           </span>
           <label class="cond-stacks-label" ${isCompare ? 'style="display:none"' : ""}>${stacksLbl}</label>
           <span class="ae-cond-cmp-sec" ${isCompare ? "" : 'style="display:none"'}>
@@ -2196,7 +2205,7 @@ function _buildCondRow(cond, idx, cfg) {
             <select class="ae-sel cond-stacks-cmp">${stacksCmpOpts}</select>
           </span>
           <input class="ae-input-sm cond-stacks" type="number" value="${cond?.stacks ?? 0}" min="0">
-          <span class="ae-cond-pern-max" ${condType === "perN" ? "" : 'style="display:none"'}>
+          <span class="ae-cond-pern-max" ${isPerN ? "" : 'style="display:none"'}>
             <label>最大倍数</label>
             <input class="ae-input-sm cond-max-times" type="number" value="${cond?.maxTimes ?? 0}" min="0" placeholder="0=无限">
           </span>
@@ -2660,7 +2669,9 @@ function _bindCondType(html) {
     const isFieldSec = type === "fieldResource";
     const isLevelSec = type === "level";
     const isCompare  = type === "buffCompare";
-    row.find(".cond-stacks-label").text(type === "perN" ? "每N层" : (isCompare ? "层数" : "层数≥"));
+    const isPerN     = type === "perN";
+    const perNDim    = row.find(".cond-pern-dim").val() === "intensity" ? "intensity" : "stacks";
+    row.find(".cond-stacks-label").text(isPerN ? (perNDim === "intensity" ? "每N级" : "每N层") : (isCompare ? "层数" : "层数≥"));
     row.find(".ae-cond-buff-sec").toggle(isBuffSec);
     row.find(".ae-cond-attr-sec").toggle(isAttrSec);
     row.find(".ae-cond-skill-sec").toggle(isSkillSec);
@@ -2668,10 +2679,19 @@ function _bindCondType(html) {
     row.find(".ae-cond-field-sec").toggle(isFieldSec);
     row.find(".ae-cond-level-sec").toggle(isLevelSec);
     row.find(".ae-cond-target-sec").toggle(!isCatSec && !isFieldSec && !isLevelSec);
-    row.find(".ae-cond-pern-max").toggle(type === "perN");
-    row.find(".ae-cond-intensity-sec").toggle(!isCompare);
+    row.find(".ae-cond-pern-max").toggle(isPerN);
+    row.find(".ae-cond-pern-dim-sec").toggle(isPerN);
+    row.find(".ae-cond-intensity-sec").toggle(!isCompare && !(isPerN && perNDim === "intensity"));
     row.find(".cond-stacks-label").toggle(!isCompare);
     row.find(".ae-cond-cmp-sec").toggle(isCompare);
+  });
+  html.find(".cond-pern-dim").off("change").on("change", function () {
+    const row   = $(this).closest(".ae-cond-row");
+    const type  = row.find(".cond-type").val();
+    if (type !== "perN") return;
+    const perNDim = $(this).val() === "intensity" ? "intensity" : "stacks";
+    row.find(".cond-stacks-label").text(perNDim === "intensity" ? "每N级" : "每N层");
+    row.find(".ae-cond-intensity-sec").toggle(perNDim !== "intensity");
   });
 }
 
@@ -2834,7 +2854,10 @@ function _readActivityForm(html, original) {
         intensity:  parseInt($r.find(".cond-intensity").val()) || 0,
         stacks:     parseInt($r.find(".cond-stacks").val())    || 0,
         ..._readBgTagMeta($r, "cond"),
-        ...(isPerN ? { maxTimes: parseInt($r.find(".cond-max-times").val()) || 0 } : {}),
+        ...(isPerN ? {
+          maxTimes: parseInt($r.find(".cond-max-times").val()) || 0,
+          perNDim:  $r.find(".cond-pern-dim").val() === "intensity" ? "intensity" : "stacks",
+        } : {}),
       });
     }
   });
