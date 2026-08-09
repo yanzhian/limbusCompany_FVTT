@@ -2301,6 +2301,10 @@ function _buildCostRow(cost, idx, cfg) {
   const isAttr     = selType === "attribute";
   const isDiscard  = selType === "discard";
   const isPerStack = selType === "perStack";
+  const costPerNDim = cost?.perNDim === "intensity" ? "intensity" : "stacks";
+  const costPerNDimOpts = [
+    ["stacks","层数"],["intensity","强度"],
+  ].map(([v,l]) => `<option value="${v}" ${costPerNDim === v ? "selected":""}>${l}</option>`).join("");
   const typeOpts = [
     ["perStack",  "每"],
     ["forced",    "强制消耗"],
@@ -2354,7 +2358,11 @@ function _buildCostRow(cost, idx, cfg) {
             <label>强度</label>
             <input class="ae-input-sm cost-intensity" type="number" value="${cost?.intensity ?? 0}" min="0">
           </span>
-          <label class="cost-stacks-label">${isPerStack ? "每N层" : "层数"}</label>
+          <span class="ae-cost-pern-dim-sec" ${isPerStack ? "" : 'style="display:none"'}>
+            <label>维度</label>
+            <select class="ae-sel cost-pern-dim">${costPerNDimOpts}</select>
+          </span>
+          <label class="cost-stacks-label">${isPerStack ? (costPerNDim === "intensity" ? "每N级" : "每N层") : "层数"}</label>
           <input class="ae-input-sm cost-stacks"    type="number" value="${cost?.stacks ?? 0}"    min="0">
           <span class="ae-cost-pern-max" ${isPerStack ? "" : 'style="display:none"'}>
             <label>最大倍数</label>
@@ -2703,12 +2711,14 @@ function _bindCostType(html) {
     const isAttr      = val === "attribute";
     const isDiscard   = val === "discard";
     const isPerStack  = val === "perStack";
+    const perNDim     = row.find(".cost-pern-dim").val() === "intensity" ? "intensity" : "stacks";
     row.find(".ae-cost-field-sec").toggle(isField);
     row.find(".ae-cost-buff-sec").toggle(!isAttr && !isDiscard && !isField);
     row.find(".ae-cost-attr-sec").toggle(isAttr);
     row.find(".ae-cost-discard-sec").toggle(isDiscard);
-    row.find(".cost-stacks-label").text(isPerStack ? "每N层" : "层数");
+    row.find(".cost-stacks-label").text(isPerStack ? (perNDim === "intensity" ? "每N级" : "每N层") : "层数");
     row.find(".ae-cost-pern-max").toggle(isPerStack);
+    row.find(".ae-cost-pern-dim-sec").toggle(isPerStack);
     row.find(".ae-cost-intensity-sec").toggle(!isPerStack);
   };
   html.find(".cost-type").off("change").on("change", function () {
@@ -2716,6 +2726,12 @@ function _bindCostType(html) {
   });
   html.find(".cost-target").off("change").on("change", function () {
     refreshRow($(this).closest(".ae-cost-row"));
+  });
+  html.find(".cost-pern-dim").off("change").on("change", function () {
+    const row  = $(this).closest(".ae-cost-row");
+    if (row.find(".cost-type").val() !== "perStack") return;
+    const dim = $(this).val() === "intensity" ? "intensity" : "stacks";
+    row.find(".cost-stacks-label").text(dim === "intensity" ? "每N级" : "每N层");
   });
   html.find(".cost-discard-mode").off("change").on("change", function () {
     const row     = $(this).closest(".ae-cost-row");
@@ -2901,7 +2917,10 @@ function _readActivityForm(html, original) {
         intensity:  type === "perStack" ? 0 : (parseInt($r.find(".cost-intensity").val()) || 0),
         stacks:     parseInt($r.find(".cost-stacks").val())    || 0,
         ..._readBgTagMeta($r, "cost"),
-        ...(type === "perStack" ? { maxTimes: parseInt($r.find(".cost-max-times").val()) || 0 } : {}),
+        ...(type === "perStack" ? {
+          maxTimes: parseInt($r.find(".cost-max-times").val()) || 0,
+          perNDim:  $r.find(".cost-pern-dim").val() === "intensity" ? "intensity" : "stacks",
+        } : {}),
       });
     }
   });

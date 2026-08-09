@@ -218,6 +218,27 @@ export class ClashManager {
     return ClashManager._safeDocUpdate(actor, { "system.buffs": buffs });
   }
 
+  /**
+   * 减少 BUFF 强度（如"每消耗4级【呼吸法】"），强度和层数都归零才自动移除。
+   * 优先调用 actor.reduceBuffIntensity（如已定义），否则直接写 system.buffs。
+   */
+  static async _reduceBuffIntensity(actor, type, amount = 1) {
+    if (!actor) return;
+    if (typeof actor.reduceBuffIntensity === "function") {
+      return actor.reduceBuffIntensity(type, amount);
+    }
+    // 兜底：直接操作 buffs 数组
+    const buffs = [...(actor.system?.buffs ?? [])];
+    const idx   = buffs.findIndex(b => b.type === type);
+    if (idx === -1) return;
+    const next   = Math.max(0, (buffs[idx].intensity ?? 0) - amount);
+    const stacks = buffs[idx].stacks ?? 0;
+    const keepAtZero = resolveBuffHandler(buffs[idx])?.keepAtZero ?? false;
+    if (next <= 0 && stacks <= 0 && !keepAtZero) buffs.splice(idx, 1);
+    else                                         buffs[idx] = { ...buffs[idx], intensity: next };
+    return ClashManager._safeDocUpdate(actor, { "system.buffs": buffs });
+  }
+
   /** 将 BUFF 类型键转换为中文显示名称。 */
   /** 返回 actor 装备格中所有已装入的物品（slot0–slot8）。 */
   static _getEquippedItems(actor) {
@@ -624,13 +645,15 @@ export class ClashManager {
           const have = SinResourceHUD.getFieldResourceStacks(cost.fieldName);
           if (have < Math.max(1, cost.stacks ?? 1)) { forcedFail = true; break; }
         } else if (cost.buff && (cost.type === "forced" || cost.type === "perStack")) {
-          // 强制消耗 / 每：层数不足（每N层的 N）则跳过整条 Activity
+          // 强制消耗 / 每：数值不足（每N的 N，维度可选层数/强度）则跳过整条 Activity
           const costBuffType = cost.buff === "custom" ? (cost.buffCustom || "custom") : cost.buff;
+          const costDim = cost.type === "perStack" && cost.perNDim === "intensity" ? "intensity" : "stacks";
           const costTgts = await ClashManager._resolveTargets(cost.target ?? "self", owner, other, cost);
           if (costTgts.length === 0) { forcedFail = true; break; }
           for (const tgt of costTgts) {
             const existing = ClashManager._getBuff(tgt, costBuffType);
-            if ((existing?.stacks ?? 0) < Math.max(1, cost.stacks ?? 1)) { forcedFail = true; break; }
+            const haveVal  = costDim === "intensity" ? (existing?.intensity ?? 0) : (existing?.stacks ?? 0);
+            if (haveVal < Math.max(1, cost.stacks ?? 1)) { forcedFail = true; break; }
           }
         }
         if (forcedFail) break;
@@ -683,16 +706,22 @@ export class ClashManager {
           const costBuffType = cost.buff === "custom" ? (cost.buffCustom || "custom") : cost.buff;
           const costTgts = await ClashManager._resolveTargets(cost.target ?? "self", owner, other, cost);
           if (cost.type === "perStack") {
-            // 每：与前置条件的"每"一致——每 N 层为 1 倍，倍数 = floor(层数/N)，
-            // 可选最大倍数上限（maxTimes，0=无限），只消耗 倍数×N 层
+            // 每：与前置条件的"每"一致——维度可选层数（默认，向下兼容旧数据）或强度，
+            // 每 N 为 1 倍，倍数 = floor(数值/N)，可选最大倍数上限（maxTimes，0=无限），
+            // 只消耗 倍数×N（如"每消耗4级【呼吸法】"应选强度维度）
             const tgt = costTgts[0];
             if (tgt) {
+              const dim      = cost.perNDim === "intensity" ? "intensity" : "stacks";
               const existing = ClashManager._getBuff(tgt, costBuffType);
-              const have     = existing?.stacks ?? 0;
+              const have     = dim === "intensity" ? (existing?.intensity ?? 0) : (existing?.stacks ?? 0);
               const n        = Math.max(1, cost.stacks ?? 1);
               let   times    = Math.floor(have / n);
               if ((cost.maxTimes ?? 0) > 0) times = Math.min(times, cost.maxTimes);
-              await ClashManager._reduceBuffStacks(tgt, costBuffType, times * n);
+              if (dim === "intensity") {
+                await ClashManager._reduceBuffIntensity(tgt, costBuffType, times * n);
+              } else {
+                await ClashManager._reduceBuffStacks(tgt, costBuffType, times * n);
+              }
               perStackMultiplier = times;
             }
           } else if (cost.type !== "none") {

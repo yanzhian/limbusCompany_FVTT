@@ -998,6 +998,25 @@ export class LimbusActor extends Actor {
     return this.update({ "system.buffs": buffs });
   }
 
+  /**
+   * 减少指定类型 BUFF 的强度（如"每消耗4级【呼吸法】"这类按强度消耗）。
+   * 与 reduceBuffStacks 不同：强度归零不会自动移除 BUFF（层数仍可能 >0），
+   * 只有强度和层数都归零时才移除。
+   * @param {string} type   BUFF type 键
+   * @param {number} amount 减少量，默认 1
+   */
+  async reduceBuffIntensity(type, amount = 1) {
+    const buffs = [...(this.system.buffs ?? [])];
+    const idx   = buffs.findIndex(b => b.type === type);
+    if (idx === -1) return;
+    const next   = Math.max(0, (buffs[idx].intensity ?? 0) - amount);
+    const stacks = buffs[idx].stacks ?? 0;
+    const keepAtZero = resolveBuffHandler(buffs[idx])?.keepAtZero ?? false;
+    if (next <= 0 && stacks <= 0 && !keepAtZero) buffs.splice(idx, 1);
+    else                                         buffs[idx] = { ...buffs[idx], intensity: next };
+    return this.update({ "system.buffs": buffs });
+  }
+
   // ─── 震颤引爆 ──────────────────────────────────────────────────────────
 
   /**
