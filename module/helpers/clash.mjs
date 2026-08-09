@@ -556,13 +556,12 @@ export class ClashManager {
           // 每：维度可选"层数"（默认，向下兼容旧数据）或"强度"——
           // 如"目标每有 8 级【烧伤】"实际指的是强度而非层数，需按强度计算倍数。
           // 维度≥ N（N = pre.stacks）才满足，倍数 = floor(当前值 / N)，可选上限 maxTimes。
+          // 注：不再额外检查"强度≥"门槛——"每"只关心倍数怎么算，不需要"拥有"式的额外强度阈值。
           const dim  = pre.perNDim === "intensity" ? "intensity" : "stacks";
           const n    = Math.max(1, pre.stacks ?? 1);
           if (!buff) { precondFail = true; break; }
           const haveVal = dim === "intensity" ? (buff.intensity ?? 0) : (buff.stacks ?? 0);
           if (haveVal < n) { precondFail = true; break; }
-          // "强度≥"始终作为额外的最低阈值门槛，与维度选择无关；不需要时留 0（不生效）即可。
-          if ((pre.intensity ?? 0) > 0 && (buff.intensity ?? 0) < pre.intensity) { precondFail = true; break; }
           let times = Math.floor(haveVal / n);
           if ((pre.maxTimes ?? 0) > 0) times = Math.min(times, pre.maxTimes);
           precondMultiplier *= times;

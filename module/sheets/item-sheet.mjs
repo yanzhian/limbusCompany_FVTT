@@ -2191,7 +2191,7 @@ function _buildCondRow(cond, idx, cfg) {
           <input class="ae-input cond-buff" type="text" list="ae-buff-dl"
                  placeholder="输入或选择BUFF…" autocomplete="off" style="width:100px;"
                  value="${_esc(buffLabel)}">
-          <span class="ae-cond-intensity-sec" ${isCompare ? 'style="display:none"' : ""}>
+          <span class="ae-cond-intensity-sec" ${(isCompare || isPerN) ? 'style="display:none"' : ""}>
             <label>强度≥</label>
             <input class="ae-input-sm cond-intensity" type="number" value="${cond?.intensity ?? 0}" min="0">
           </span>
@@ -2681,7 +2681,7 @@ function _bindCondType(html) {
     row.find(".ae-cond-target-sec").toggle(!isCatSec && !isFieldSec && !isLevelSec);
     row.find(".ae-cond-pern-max").toggle(isPerN);
     row.find(".ae-cond-pern-dim-sec").toggle(isPerN);
-    row.find(".ae-cond-intensity-sec").toggle(!isCompare);
+    row.find(".ae-cond-intensity-sec").toggle(!isCompare && !isPerN);
     row.find(".cond-stacks-label").toggle(!isCompare);
     row.find(".ae-cond-cmp-sec").toggle(isCompare);
   });
@@ -2850,7 +2850,7 @@ function _readActivityForm(html, original) {
         target:     $r.find(".cond-target").val()  || "self",
         buff:       resolveKey($r.find(".cond-buff").val()),
         buffCustom: "",
-        intensity:  parseInt($r.find(".cond-intensity").val()) || 0,
+        intensity:  isPerN ? 0 : (parseInt($r.find(".cond-intensity").val()) || 0),
         stacks:     parseInt($r.find(".cond-stacks").val())    || 0,
         ..._readBgTagMeta($r, "cond"),
         ...(isPerN ? {
