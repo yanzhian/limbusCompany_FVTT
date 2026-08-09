@@ -1086,6 +1086,12 @@ export class ClashManager {
                 descStr = `未找到已装备的${lbl}`;
                 break;
               }
+            } else if (eff.skillRef === "name") {
+              // 按名字在角色背包/技能列表中检索：比 UUID 更稳定（合集包提取后 UUID 会变，名字不变）
+              const name = (eff.skillName ?? "").trim();
+              if (!name) { descStr = "useSkill：未配置技能名字"; break; }
+              skillItem = (owner?.items ?? []).find(it => it.type === "skill" && it.name === name) ?? null;
+              if (!skillItem) { descStr = `useSkill：背包中找不到技能【${name}】`; break; }
             } else {
               const uuid = eff.skillUuid ?? "";
               if (!uuid) { descStr = "useSkill：未配置技能UUID"; break; }
@@ -3793,6 +3799,15 @@ export class ClashManager {
         if (!skillItem) {
           const label = slot === "defense" ? "守备技能" : `Lv.${level} 基础技能`;
           ui.notifications.warn(`反应：未找到已装备的${label}`);
+          return;
+        }
+      } else if (eff?.skillRef === "name") {
+        // 按名字在角色背包/技能列表中检索：比 UUID 更稳定（合集包提取后 UUID 会变，名字不变）
+        const name = (eff.skillName ?? "").trim();
+        if (!name) return;
+        skillItem = (actor.items ?? []).find(it => it.type === "skill" && it.name === name) ?? null;
+        if (!skillItem) {
+          ui.notifications.warn(`反应：背包中找不到技能【${name}】`);
           return;
         }
       } else {

@@ -770,6 +770,7 @@ export class LimbusItemSheet extends ItemSheet {
     const content = `
       ${_buildBuffDatalistHtml("ae-buff-dl", cfg)}
       ${_buildTriggerBuffDatalistHtml("ae-trig-buff-dl", cfg)}
+      ${_buildOwnedSkillDatalistHtml("ae-owned-skill-dl", this.item.parent)}
       <div class="ae-v2 limbuscompany">
         <div class="ae-title-bar">效果触发编辑器</div>
         <div class="ae-gold-line"></div>
@@ -2064,6 +2065,22 @@ function _buildTriggerBuffDatalistHtml(id, cfg) {
   return `<datalist id="${id}">${opts}</datalist>`;
 }
 
+/**
+ * 生成"背包/技能列表检索"用的 datalist：列出 actor 当前拥有的全部技能物品名字（去重）。
+ * actor 为空（如世界/合集包中独立的物品，未挂在任何角色身上）时返回空 datalist，
+ * 不影响功能——用户仍可手动输入名字，只是没有自动补全建议。
+ */
+function _buildOwnedSkillDatalistHtml(id, actor) {
+  const names = new Set(
+    (actor?.items ?? [])
+      .filter(it => it.type === "skill")
+      .map(it => it.name)
+      .filter(Boolean)
+  );
+  const opts = [...names].map(n => `<option value="${_esc(n)}">`).join("");
+  return `<datalist id="${id}">${opts}</datalist>`;
+}
+
 function _buffLabelMap() {
   const base = {
     strong:"强壮", weak:"虚弱", endure:"忍耐", breach:"破绽",
@@ -2452,8 +2469,9 @@ function _buildEffectRow(eff, idx, cfg) {
           <select class="ae-sel eff-skill-ref">
             <option value="uuid"     ${(eff?.skillRef ?? "uuid") === "uuid"     ? "selected" : ""}>UUID</option>
             <option value="equipped" ${(eff?.skillRef ?? "uuid") === "equipped" ? "selected" : ""}>已装备</option>
+            <option value="name"     ${(eff?.skillRef ?? "uuid") === "name"     ? "selected" : ""}>技能名字</option>
           </select>
-          <span class="eff-useskill-uuid-sec" ${(eff?.skillRef ?? "uuid") !== "equipped" ? "" : 'style="display:none"'}>
+          <span class="eff-useskill-uuid-sec" ${(eff?.skillRef ?? "uuid") === "uuid" ? "" : 'style="display:none"'}>
             <input class="ae-input eff-skill-uuid" type="text"
                    value="${_esc(eff?.skillUuid ?? "")}" placeholder="Item.xxx…" style="width:120px;">
             <img class="ae-skill-preview" data-uuid-src="eff-skill-uuid"
@@ -2470,6 +2488,10 @@ function _buildEffectRow(eff, idx, cfg) {
               <input class="ae-input-sm eff-skill-level" type="number" min="1" max="6"
                      value="${eff?.skillLevel ?? 1}" style="width:42px;">
             </span>
+          </span>
+          <span class="eff-useskill-name-sec" ${(eff?.skillRef ?? "uuid") === "name" ? "" : 'style="display:none"'}>
+            <input class="ae-input eff-skill-name" type="text" list="ae-owned-skill-dl"
+                   value="${_esc(eff?.skillName ?? "")}" placeholder="技能名字（在背包/技能列表中检索）" style="width:130px;" autocomplete="off">
           </span>
         </span>
         <span class="ae-eff-dicetypechg-sec" ${isDiceTypeChg ? "" : 'style="display:none"'}>
@@ -2611,10 +2633,13 @@ function _bindCondCostBuff(_html) {
 /** useSkill 效果：来源模式切换 & 技能槽选择联动 */
 function _bindUseSkillSubtype(html) {
   html.find(".eff-skill-ref").off("change").on("change", function () {
-    const sec  = $(this).closest(".ae-eff-useskill-sec");
-    const isEq = $(this).val() === "equipped";
-    sec.find(".eff-useskill-uuid-sec").toggle(!isEq);
+    const sec    = $(this).closest(".ae-eff-useskill-sec");
+    const val    = $(this).val();
+    const isEq   = val === "equipped";
+    const isName = val === "name";
+    sec.find(".eff-useskill-uuid-sec").toggle(val === "uuid");
     sec.find(".eff-useskill-equipped-sec").toggle(isEq);
+    sec.find(".eff-useskill-name-sec").toggle(isName);
   });
   html.find(".eff-skill-slot").off("change").on("change", function () {
     const sec      = $(this).closest(".ae-eff-useskill-sec");
@@ -2898,6 +2923,7 @@ function _readActivityForm(html, original) {
         skillUuid:  skillRef === "uuid" ? ($r.find(".eff-skill-uuid").val()?.trim() || "") : "",
         skillSlot:  skillRef === "equipped" ? ($r.find(".eff-skill-slot").val() || "basic") : "",
         skillLevel: skillRef === "equipped" ? (parseInt($r.find(".eff-skill-level").val()) || 1) : 1,
+        skillName:  skillRef === "name" ? ($r.find(".eff-skill-name").val()?.trim() || "") : "",
         ..._readBgTagMeta($r, "eff"),
       });
       return;
