@@ -2317,7 +2317,7 @@ function _buildCostRow(cost, idx, cfg) {
           <input class="ae-input cost-field-name" type="text"
                  value="${_esc(cost?.fieldName ?? "")}" placeholder="如：血宴" style="width:90px;">
           <label class="cost-stacks-label">${isPerStack ? "每N层" : "层数"}</label>
-          <input class="ae-input-sm cost-stacks" type="number" value="${cost?.stacks ?? 0}" min="0">
+          <input class="ae-input-sm cost-field-stacks" type="number" value="${cost?.stacks ?? 0}" min="0">
         </span>
         <span class="ae-cost-buff-sec" ${(isAttr || isDiscard || isField) ? 'style="display:none"' : ""}>
           <label>BUFF</label>
@@ -2839,7 +2839,7 @@ function _readActivityForm(html, original) {
         type,
         target,
         fieldName: $r.find(".cost-field-name").val()?.trim() || "",
-        stacks:    parseInt($r.find(".cost-stacks").val())   || 0,
+        stacks:    parseInt($r.find(".cost-field-stacks").val()) || 0,
         ...(type === "perStack" ? { maxTimes: parseInt($r.find(".cost-max-times").val()) || 0 } : {}),
       });
     } else {
