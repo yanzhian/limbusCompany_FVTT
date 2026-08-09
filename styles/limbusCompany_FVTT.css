@@ -4249,7 +4249,7 @@ body.game .limbuscompany.app img {
 .limbuscompany .related-pool-icon { width: 24px; height: 24px; object-fit: cover; border-radius: 3px; flex-shrink: 0; }
 .limbuscompany .related-pool-name { flex: 1; font-size: .78rem; color: var(--text-main); }
 .limbuscompany .related-pool-remove {
-  background: none; border: none; color: var(--text-dim); cursor: pointer; font-size: .85rem; line-height: 1;
+  background: none; border: none; color: var(--text-dim); cursor: pointer; font-size: .85rem; line-height: 1;max-width: 60px;
 }
 .limbuscompany .related-pool-remove:hover { color: var(--red-danger); }
 .limbuscompany .related-pool-dropzone {
