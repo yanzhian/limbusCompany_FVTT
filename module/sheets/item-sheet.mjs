@@ -2281,9 +2281,10 @@ function _buildBgTagFields(prefix, obj) {
       <label>标签</label>
       <input class="ae-input-sm ${prefix}-bgtag-name" type="text"
              value="${_esc(obj?.targetTag ?? "")}" placeholder="如：剑契组" style="width:70px;">
-      <label>数量≥</label>
+      <label title="是「至少要有N人在场才触发」的门槛，不是「最多N人生效」的上限——只想不限人数就填1">在场至少≥</label>
       <input class="ae-input-sm ${prefix}-bgtag-count" type="number"
-             value="${obj?.targetTagCount ?? 1}" min="1" style="width:50px;">
+             value="${obj?.targetTagCount ?? 1}" min="1" style="width:50px;"
+             title="是「至少要有N人在场才触发」的门槛，不是「最多N人生效」的上限——只想不限人数就填1">
     </span>`;
 }
 
