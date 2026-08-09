@@ -192,6 +192,14 @@ export class BackgroundWizard extends Application {
       this.selectedBgUuid = ev.currentTarget.dataset.bgUuid;
       this.render();
     });
+    // 点击图标：打开对应背景物品卡预览，不触发所在行的选中逻辑
+    html.find(".bgw-list-item[data-bg-uuid] .bgw-list-icon").on("click", async (ev) => {
+      ev.stopPropagation();
+      const uuid = ev.currentTarget.closest("[data-bg-uuid]")?.dataset.bgUuid;
+      if (!uuid) return;
+      const item = await fromUuid(uuid).catch(() => null);
+      item?.sheet?.render(true);
+    });
     html.find(".bgw-cat-check[data-category]").on("click", (ev) => {
       const cat = ev.currentTarget.dataset.category;
       if (this.bgCategoryFilter.has(cat)) this.bgCategoryFilter.delete(cat);

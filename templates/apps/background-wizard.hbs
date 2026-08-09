@@ -40,7 +40,7 @@
           {{#each bgList}}
             <div class="bgw-list-item {{#if (eq uuid ../selectedBgUuid)}}selected{{/if}}"
                  data-bg-uuid="{{uuid}}" title="{{name}}">
-              <img src="{{img}}" class="bgw-list-icon" alt="{{name}}">
+              <img src="{{img}}" class="bgw-list-icon" alt="{{name}}" title="点击查看【{{name}}】详情">
               <div class="bgw-list-info">
                 <div class="bgw-list-name">{{name}}</div>
                 <div class="bg-subtitle-label">{{subtitle}}</div>

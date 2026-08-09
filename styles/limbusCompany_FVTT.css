@@ -8074,7 +8074,8 @@ input.item-piles-quantity {
 }
 .bgw-list-item:hover { border-color: #5a3f22; }
 .bgw-list-item.selected { border-color: var(--gold-active, #C58C4E); background: #3B2412; }
-.bgw-list-icon { width: 32px; height: 32px; object-fit: cover; border-radius: 2px; flex-shrink: 0; }
+.bgw-list-icon { width: 32px; height: 32px; object-fit: cover; border-radius: 2px; flex-shrink: 0; cursor: pointer; }
+.bgw-list-icon:hover { outline: 1px solid var(--gold-active, #C58C4E); }
 .bgw-list-info { display: flex; flex-direction: column; overflow: hidden; }
 .bgw-list-name { font-size: 14px; color: #C9B79C; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .bgw-empty { text-align: center; color: #6a5a48; padding: 20px 0; font-size: 13px; }
