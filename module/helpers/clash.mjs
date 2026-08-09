@@ -561,8 +561,8 @@ export class ClashManager {
           if (!buff) { precondFail = true; break; }
           const haveVal = dim === "intensity" ? (buff.intensity ?? 0) : (buff.stacks ?? 0);
           if (haveVal < n) { precondFail = true; break; }
-          // 维度为"层数"时，"强度≥"仍作为额外的最低阈值门槛；维度为"强度"时该字段隐藏不生效。
-          if (dim === "stacks" && (pre.intensity ?? 0) > 0 && (buff.intensity ?? 0) < pre.intensity) { precondFail = true; break; }
+          // "强度≥"始终作为额外的最低阈值门槛，与维度选择无关；不需要时留 0（不生效）即可。
+          if ((pre.intensity ?? 0) > 0 && (buff.intensity ?? 0) < pre.intensity) { precondFail = true; break; }
           let times = Math.floor(haveVal / n);
           if ((pre.maxTimes ?? 0) > 0) times = Math.min(times, pre.maxTimes);
           precondMultiplier *= times;

@@ -2191,7 +2191,7 @@ function _buildCondRow(cond, idx, cfg) {
           <input class="ae-input cond-buff" type="text" list="ae-buff-dl"
                  placeholder="输入或选择BUFF…" autocomplete="off" style="width:100px;"
                  value="${_esc(buffLabel)}">
-          <span class="ae-cond-intensity-sec" ${(isCompare || (isPerN && perNDim === "intensity")) ? 'style="display:none"' : ""}>
+          <span class="ae-cond-intensity-sec" ${isCompare ? 'style="display:none"' : ""}>
             <label>强度≥</label>
             <input class="ae-input-sm cond-intensity" type="number" value="${cond?.intensity ?? 0}" min="0">
           </span>
@@ -2681,7 +2681,7 @@ function _bindCondType(html) {
     row.find(".ae-cond-target-sec").toggle(!isCatSec && !isFieldSec && !isLevelSec);
     row.find(".ae-cond-pern-max").toggle(isPerN);
     row.find(".ae-cond-pern-dim-sec").toggle(isPerN);
-    row.find(".ae-cond-intensity-sec").toggle(!isCompare && !(isPerN && perNDim === "intensity"));
+    row.find(".ae-cond-intensity-sec").toggle(!isCompare);
     row.find(".cond-stacks-label").toggle(!isCompare);
     row.find(".ae-cond-cmp-sec").toggle(isCompare);
   });
@@ -2691,7 +2691,6 @@ function _bindCondType(html) {
     if (type !== "perN") return;
     const perNDim = $(this).val() === "intensity" ? "intensity" : "stacks";
     row.find(".cond-stacks-label").text(perNDim === "intensity" ? "每N级" : "每N层");
-    row.find(".ae-cond-intensity-sec").toggle(perNDim !== "intensity");
   });
 }
 
