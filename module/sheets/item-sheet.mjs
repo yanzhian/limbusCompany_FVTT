@@ -2350,8 +2350,10 @@ function _buildCostRow(cost, idx, cfg) {
           <input class="ae-input cost-buff" type="text" list="ae-buff-dl"
                  placeholder="输入或选择BUFF…" autocomplete="off" style="width:100px;"
                  value="${_esc(_keyToLabel(cost?.buff ?? "", cost?.buffCustom ?? ""))}">
-          <label>强度</label>
-          <input class="ae-input-sm cost-intensity" type="number" value="${cost?.intensity ?? 0}" min="0">
+          <span class="ae-cost-intensity-sec" ${isPerStack ? 'style="display:none"' : ""}>
+            <label>强度</label>
+            <input class="ae-input-sm cost-intensity" type="number" value="${cost?.intensity ?? 0}" min="0">
+          </span>
           <label class="cost-stacks-label">${isPerStack ? "每N层" : "层数"}</label>
           <input class="ae-input-sm cost-stacks"    type="number" value="${cost?.stacks ?? 0}"    min="0">
           <span class="ae-cost-pern-max" ${isPerStack ? "" : 'style="display:none"'}>
@@ -2707,6 +2709,7 @@ function _bindCostType(html) {
     row.find(".ae-cost-discard-sec").toggle(isDiscard);
     row.find(".cost-stacks-label").text(isPerStack ? "每N层" : "层数");
     row.find(".ae-cost-pern-max").toggle(isPerStack);
+    row.find(".ae-cost-intensity-sec").toggle(!isPerStack);
   };
   html.find(".cost-type").off("change").on("change", function () {
     refreshRow($(this).closest(".ae-cost-row"));
@@ -2895,7 +2898,7 @@ function _readActivityForm(html, original) {
         target,
         buff:       resolveKey($r.find(".cost-buff").val()),
         buffCustom: "",
-        intensity:  parseInt($r.find(".cost-intensity").val()) || 0,
+        intensity:  type === "perStack" ? 0 : (parseInt($r.find(".cost-intensity").val()) || 0),
         stacks:     parseInt($r.find(".cost-stacks").val())    || 0,
         ..._readBgTagMeta($r, "cost"),
         ...(type === "perStack" ? { maxTimes: parseInt($r.find(".cost-max-times").val()) || 0 } : {}),
