@@ -422,6 +422,26 @@ registerCustomBuff("bloodFlame", {
   },
 });
 
+/**
+ * 【怨恨纹身】
+ * - 最大值：15 层
+ */
+registerCustomBuff("resentmentTattoo", {
+  label:       "怨恨纹身",
+  description: "- 最大值：15 层",
+  maxStacks:   15,
+});
+
+/**
+ * 【复仇账簿】
+ * - 最大值：20 层
+ */
+registerCustomBuff("vengeanceLedger", {
+  label:       "复仇账簿",
+  description: "- 最大值：20 层",
+  maxStacks:   20,
+});
+
 /* ═══════════════════════════════════════════════════════════════════════════
    场地资源（FieldResourceRegistry）
    ═══════════════════════════════════════════════════════════════════════════
