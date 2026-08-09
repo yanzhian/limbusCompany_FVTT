@@ -2542,13 +2542,18 @@ function _buildEffectRow(eff, idx, cfg) {
           <select class="ae-sel eff-relconvert-mode">
             <option value="random"   ${relMode === "random"   ? "selected" : ""}>随机（从相关池抽取）</option>
             <option value="specific" ${relMode === "specific" ? "selected" : ""}>指定（按序号）</option>
+            <option value="byName"   ${relMode === "byName"   ? "selected" : ""}>技能名字（背包检索）</option>
           </select>
           <span class="ae-eff-relconvert-idx-sec" ${relMode === "specific" ? "" : 'style="display:none"'}>
             <label>序号</label>
             <input class="ae-input-sm eff-relconvert-idx" type="number" min="1"
                    value="${eff?.relIndex ?? 1}" title="1=原本（自身），2起对应相关技能池顺序">
           </span>
-          <span class="ae-eff-relconvert-hint">永久替换本技能在角色技能槽中的位置</span>
+          <span class="ae-eff-relconvert-name-sec" ${relMode === "byName" ? "" : 'style="display:none"'}>
+            <input class="ae-input eff-relconvert-name" type="text" list="ae-owned-skill-dl"
+                   value="${_esc(eff?.relSkillName ?? "")}" placeholder="技能名字（在背包/技能列表中检索）" style="width:130px;" autocomplete="off">
+          </span>
+          <span class="ae-eff-relconvert-hint">永久替换本技能在角色技能槽中的位置${relMode === "byName" ? "（无需预先配置相关技能池，也不受UUID变化影响）" : ""}</span>
         </span>
       </div>
     </div>`;
@@ -2799,8 +2804,10 @@ function _bindEffType(html) {
 
 function _bindRelConvertMode(html) {
   html.find(".eff-relconvert-mode").off("change").on("change", function () {
-    const row = $(this).closest(".ae-eff-row");
-    row.find(".ae-eff-relconvert-idx-sec").toggle($(this).val() === "specific");
+    const row  = $(this).closest(".ae-eff-row");
+    const mode = $(this).val();
+    row.find(".ae-eff-relconvert-idx-sec").toggle(mode === "specific");
+    row.find(".ae-eff-relconvert-name-sec").toggle(mode === "byName");
   });
 }
 
@@ -2993,7 +3000,8 @@ function _readActivityForm(html, original) {
       effects.push({
         type,
         relMode,
-        relIndex: relMode === "specific" ? Math.max(1, parseInt($r.find(".eff-relconvert-idx").val()) || 1) : 0,
+        relIndex:     relMode === "specific" ? Math.max(1, parseInt($r.find(".eff-relconvert-idx").val()) || 1) : 0,
+        relSkillName: relMode === "byName"   ? ($r.find(".eff-relconvert-name").val()?.trim() || "") : "",
       });
       return;
     }

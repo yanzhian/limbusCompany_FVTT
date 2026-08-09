@@ -1059,10 +1059,26 @@ export class ClashManager {
             break;
           }
           case "relatedSkillConvert": {
-            // 相关技能转换：将"本骰"（item）永久替换为相关技能池中的技能（随机或指定序号）
-            // 序号约定：1=原本（自身，no-op），2起对应池内顺序（pool[序号-2]）
+            // 相关技能转换：将"本骰"（item）永久替换为另一个技能
+            // - random/specific：走 item.system.relatedSkill.pool（UUID 池，需要在物品上预先配置）
+            // - byName：直接在角色背包/技能列表按名字检索已拥有的技能，无需配置池、不需要
+            //   互相"套娃"嵌套 UUID、也不受合集包提取后 UUID 变化影响（比照【使用技能】效果的名字检索）
             const relOwner = item?.parent ?? owner;
             if (!relOwner || !item) { descStr = "相关技能转换：找不到所属角色"; break; }
+
+            if ((eff.relMode ?? "random") === "byName") {
+              const name = (eff.relSkillName ?? "").trim();
+              if (!name) { descStr = "相关技能转换：未配置技能名字"; break; }
+              const newItem = (relOwner.items ?? []).find(it => it.type === "skill" && it.name === name && it.id !== item.id);
+              if (!newItem) { descStr = `相关技能转换：背包中找不到技能【${name}】`; break; }
+              const replaced = await relOwner.replaceSkillSlot?.(item.id, newItem.id);
+              if (replaced) relOwner.sheet?._replaceCombatBagSkill?.(item.id, newItem.id);
+              descStr = replaced
+                ? `【${item.name}】永久转换为【${newItem.name}】`
+                : `相关技能转换：未找到【${item.name}】所在的技能槽位`;
+              break;
+            }
+
             const pool = item.system?.relatedSkill?.pool ?? [];
 
             let targetUuid = null;
@@ -1095,6 +1111,7 @@ export class ClashManager {
               }
 
               const replaced = await relOwner.replaceSkillSlot?.(item.id, newItem.id);
+              if (replaced) relOwner.sheet?._replaceCombatBagSkill?.(item.id, newItem.id);
               descStr = replaced
                 ? `【${item.name}】永久转换为【${newItem.name}】`
                 : `相关技能转换：未找到【${item.name}】所在的技能槽位`;

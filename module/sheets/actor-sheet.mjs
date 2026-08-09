@@ -1444,6 +1444,29 @@ export class LimbusActorSheet extends ActorSheet {
     this._renderCombatSlots(this.element);
   }
 
+  /**
+   * 相关技能转换后，把 6-bag 状态里所有引用旧技能 ID 的位置原地换成新技能 ID
+   * （equipped/slots/pool 三个数组逐一替换，位置/顺序保持不变，不重新洗牌）。
+   * 6-bag 状态是本客户端本地的临时抽卡进度（不持久化到角色数据），只有当前
+   * 正在查看该角色卡的客户端才需要同步；未打开该角色卡或尚未开始抽卡时静默跳过。
+   * @param {string} oldId
+   * @param {string} newId
+   */
+  _replaceCombatBagSkill(oldId, newId) {
+    const state = this._combatBagState;
+    if (!state || !oldId || !newId || oldId === newId) return;
+
+    let changed = false;
+    for (const key of ["equipped", "slots", "pool"]) {
+      const arr = state[key];
+      if (!Array.isArray(arr)) continue;
+      for (let i = 0; i < arr.length; i++) {
+        if (arr[i] === oldId) { arr[i] = newId; changed = true; }
+      }
+    }
+    if (changed) this._renderCombatSlots(this.element);
+  }
+
   _syncCombatSlots(html) {
     if (!this._combatBagState) {
       // 初始化 6-bag：从已装备的基础技能随机打乱，分配到0-5槽
