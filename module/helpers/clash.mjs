@@ -156,6 +156,11 @@ export class ClashManager {
   static async _tickFieldResources(buffType, intensity, stacksConsumed = 1) {
     for (const [name, def] of FieldResourceRegistry) {
       if (typeof def.onStatusTick !== "function") continue;
+      // 只有已激活的场地资源才响应自动跳动事件——避免"血宴"这类靠背景标签
+      // （triggerBackgroundTags，在 combatStart 时判定是否有对应背景在场）才
+      // 出现的场地资源，因为任何角色触发一次流血/烧伤等跳动伤害就被无条件
+      // 唤醒。显式的 Activity 效果「公用场地」仍可正常直接激活/操作，不受影响。
+      if (!SinResourceHUD.isFieldResourceActive(name)) continue;
       try {
         await def.onStatusTick({
           buffType, intensity, stacksConsumed, name,

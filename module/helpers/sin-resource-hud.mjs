@@ -340,7 +340,11 @@ export class SinResourceHUD extends Application {
   }
 
   /**
-   * 增减场地资源层数（按注册的 maxStacks 截断，下限 0）。若尚未激活则视为从 0 开始。
+   * 增减场地资源层数（按注册的 maxStacks 截断，下限 0）。若尚未激活则视为从 0 开始
+   * 并隐式激活——供 Activity 效果「公用场地」这类明确指名操作场地资源的场景使用，
+   * 这里的"添加"是有意为之的动作，不应被静默拦截。
+   * （自动触发型 onStatusTick 是否需要"已激活"前提，由调用方 _tickFieldResources
+   * 自行判断，见 clash.mjs，不在本方法内处理——避免这里管得太宽，误伤明确调用。）
    * @param {string} name
    * @param {number} delta  正数增加，负数减少
    */
@@ -350,6 +354,11 @@ export class SinResourceHUD extends Application {
     const cur    = fields[name] ?? 0;
     const next   = Math.max(0, Math.min(max, cur + Number(delta || 0)));
     await _setFieldResources({ [name]: next });
+  }
+
+  /** 场地资源是否已激活（存在于当前存储中，即便层数为0） */
+  static isFieldResourceActive(name) {
+    return Object.prototype.hasOwnProperty.call(_getFieldResources(), name);
   }
 
   /**
