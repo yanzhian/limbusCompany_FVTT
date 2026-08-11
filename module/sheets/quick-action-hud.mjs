@@ -58,6 +58,15 @@ function _buffIconPath(type, name = "") {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
+   中央七边形血环几何常量
+   角度以正上方为 0°、顺时针增加（与 CSS conic-gradient / rotate 一致）。
+   起点 180° = 底部尖角，顺时针铺 310°，右下留 50° 缺口（由理智球盖住）。
+   扣血时红色从右下终点逆时针缩回底部尖角。混乱阈值刻度线共用这套映射。
+═══════════════════════════════════════════════════════════════════════════ */
+const QA_ARC_FROM = 180;
+const QA_ARC_LEN  = 310;
+
+/* ═══════════════════════════════════════════════════════════════════════════
    QuickActionHUD Application
 ═══════════════════════════════════════════════════════════════════════════ */
 
@@ -286,11 +295,29 @@ export class QuickActionHUD extends Application {
       };
     });
 
+    // ── 中央七边形：生命值血环 / 混乱阈值刻度 ────────────────────────────
+    // 血环几何：起点 180°（底部尖角），顺时针铺 310°，右下留 50° 缺口（被理智球盖住）
+    const hpValue = sys.hp?.value ?? 0;
+    const hpMax   = Math.max(1, sys.hp?.max ?? 1);
+    const hpPct   = Math.max(0, Math.min(1, hpValue / hpMax));
+
+    // 混乱阈值白线：与血环同一套映射，落在"血量掉到该百分比时红色会退到的位置"
+    const chaosLines = (sys.chaosThresholds ?? []).map(t => ({
+      percent:   t.percent ?? 0,
+      triggered: !!t.triggered,
+      angle:     QA_ARC_FROM + QA_ARC_LEN * ((t.percent ?? 0) / 100),
+    }));
+
     return {
       actorImg:       actor.img  ?? "icons/svg/mystery-man.svg",
       actorName:      actor.name ?? "",
       apCoins,
-      hpValue:        sys.hp?.value     ?? 0,
+      hpValue,
+      hpMax,
+      hpPct:          hpPct.toFixed(4),
+      chaosLines,
+      panicFear:      sys.panicCounters?.fear    ?? 0,
+      panicResolve:   sys.panicCounters?.resolve ?? 0,
       sanValue:       sys.sanity?.value ?? 50,
       buffSlots,
       equipmentItems,
@@ -403,8 +430,11 @@ export class QuickActionHUD extends Application {
     html.find(".qa-buff-slot--empty").on("click", () => this._showAddBuffDialog());
     html.find(".qa-buff-slot--filled").on("click", () => this._openCombatTab());
 
-    // ── HP / 理智球点击：打开角色卡 ──────────────────────────────────────
-    html.find(".qa-hp-ball, .qa-san-ball").on("click", () => this._actor?.sheet?.render(true));
+    // ── 七边形 HP / 理智数字点击：打开角色卡 ─────────────────────────────
+    html.find(".qa-hex-hp, .qa-hex-san").on("click", () => this._actor?.sheet?.render(true));
+
+    // ── 恐惧鉴定：点击打开角色卡战斗页（恐慌计数在那里可手动调整） ───────
+    html.find(".qa-panic-check").on("click", () => this._openCombatTab());
 
     // ── 装备激活 ──────────────────────────────────────────────────────────
     html.find(".qa-equip-activate").on("click", async (e) => {
