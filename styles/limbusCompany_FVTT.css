@@ -5902,9 +5902,12 @@ body.game .limbuscompany.app img {
   --arc-len:  310deg;
   --hp-red:   #B43822;
 
+  /* 整块尺寸：内部所有数值均按此等比换算，改这一个数即可整体缩放 */
+  --hex-size: 100px;
+
   position:    relative;
-  width:       200px;
-  height:      200px;
+  width:       var(--hex-size);
+  height:      var(--hex-size);
   flex-shrink: 0;
 }
 
@@ -5951,7 +5954,7 @@ body.game .limbuscompany.app img {
 /* 已触发的阈值：变暗，与未触发区分 */
 .qa-chaos-line--fired { background: #7A7A7A; opacity: .55; }
 
-/* 顶层：内缩 24px 的七边形（半径 100→76），裁切头像 */
+/* 顶层：内缩 12% 的七边形（半径比 100→76，对应 200px 时环宽 24px），裁切头像 */
 .qa-hex-avatar {
   position:  absolute;
   inset:     0;
@@ -5970,12 +5973,12 @@ body.game .limbuscompany.app img {
   cursor:     pointer;
 }
 
-/* 生命值数字（左下角，压在七边形边缘上） */
+/* 生命值数字（左下角，压在七边形边缘上）—— 比例基于 200px 原稿换算 */
 .qa-hex-hp {
   position:    absolute;
-  left:        -6px;
-  bottom:      -2px;
-  font-size:   30px;
+  left:        calc(var(--hex-size) * -0.03);
+  bottom:      calc(var(--hex-size) * -0.01);
+  font-size:   calc(var(--hex-size) * 0.15);
   font-weight: bold;
   color:       var(--hp-red);
   line-height: 1;
@@ -5987,17 +5990,18 @@ body.game .limbuscompany.app img {
 /* 理智值（右下圆，正好盖住血环右下 50° 缺口） */
 .qa-hex-san {
   position:        absolute;
-  right:           30px;
-  bottom:          -8px;
-  width:           52px;
-  height:          52px;
+  right:           calc(var(--hex-size) * 0.15);
+  bottom:          calc(var(--hex-size) * -0.04);
+  width:           calc(var(--hex-size) * 0.26);
+  height:          calc(var(--hex-size) * 0.26);
   border-radius:   50%;
   background:      #4A90C4;
   border:          2px solid #2E6A96;
+  box-sizing:      border-box;
   display:         flex;
   align-items:     center;
   justify-content: center;
-  font-size:       22px;
+  font-size:       calc(var(--hex-size) * 0.11);
   font-weight:     bold;
   color:           #0C1E2C;
   cursor:          pointer;
