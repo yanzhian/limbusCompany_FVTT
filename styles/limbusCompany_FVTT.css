@@ -5712,6 +5712,11 @@ body.game .limbuscompany.app img {
   overflow-y:       auto;
 }
 /* 左侧按钮组：面板左对齐 */
+/* 左组改为纵向堆叠：消耗品 / 装备 / 恐惧鉴定 */
+.qa-btn-group--left {
+  flex-direction: column;
+  align-items:    stretch;
+}
 .qa-btn-group--left  .qa-panel { left:  0; }
 /* 右侧按钮组：面板右对齐 */
 .qa-btn-group--right .qa-panel { right: 0; }
@@ -5884,57 +5889,158 @@ body.game .limbuscompany.app img {
 .qa-btn:hover      { background: #2A2520; border-color: #C9A84C; }
 .qa-btn--active    { background: #3A2510; border-color: #E5BA25; color: #E5BA25; }
 
-/* ── 头像包装 ─────────────────────────────────────────────── */
-.qa-avatar-wrap { position: relative; }
+/* ══════════════════════════════════════════════════════════════
+   中央：角色状态七边形（生命值血环 / 头像 / 理智值 / 混乱阈值）
+   血环几何：起点 180°（底部尖角），顺时针铺 310°，右下留 50° 缺口
+   （缺口由理智球盖住）。扣血时红色从右下终点逆时针缩回底部尖角。
+   角度常量与 quick-action-hud.mjs 的 QA_ARC_FROM / QA_ARC_LEN 一致，
+   两边改动需同步。
+   ══════════════════════════════════════════════════════════════ */
+.qa-hex-block {
+  --hp:       1;          /* 0~1，由模板 inline style 写入 */
+  --arc-from: 180deg;
+  --arc-len:  310deg;
+  --hp-red:   #B43822;
 
-.qa-avatar {
-  width:         90px;
-  height:        90px;
-  border-radius: 50%;
-  object-fit:    cover;
-  border:        2px solid #C9A84C;
-  display:       block;
-  cursor:        pointer;
-  transition:    border-color 0.15s;
+  position:    relative;
+  width:       200px;
+  height:      200px;
+  flex-shrink: 0;
 }
-.qa-avatar:hover { border-color: #E5BA25; }
 
-/* ── 底部行 ───────────────────────────────────────────────── */
+/* 尖朝下七边形（外层，半径 100） */
+.qa-hex-shape {
+  position:  absolute;
+  inset:     0;
+  clip-path: polygon(
+    71.7% 5.0%, 98.7% 38.9%, 89.1% 81.2%, 50% 100%,
+    10.9% 81.2%, 1.3% 38.9%, 28.3% 5.0%
+  );
+  pointer-events: none;
+}
+
+/* 底层：黑色（血扣掉后露出的底色） */
+.qa-hex-black { background: #000; }
+
+/* 中层：红色血环，conic 遮罩控制露出多少 */
+.qa-hex-red {
+  background: var(--hp-red);
+  -webkit-mask-image: conic-gradient(from var(--arc-from),
+      #000 0deg,
+      #000 calc(var(--arc-len) * var(--hp)),
+      transparent calc(var(--arc-len) * var(--hp)),
+      transparent 360deg);
+  mask-image: conic-gradient(from var(--arc-from),
+      #000 0deg,
+      #000 calc(var(--arc-len) * var(--hp)),
+      transparent calc(var(--arc-len) * var(--hp)),
+      transparent 360deg);
+}
+
+/* 混乱阈值刻度线：中心 → 边缘的白线（超出部分被七边形裁掉） */
+.qa-chaos-line {
+  position:         absolute;
+  left:             calc(50% - 1px);
+  top:              0;
+  width:            2px;
+  height:           50%;
+  background:       #FFFFFF;
+  transform-origin: 50% 100%;   /* 旋转轴 = 七边形中心 */
+  box-shadow:       0 0 3px rgba(0,0,0,.8);
+}
+/* 已触发的阈值：变暗，与未触发区分 */
+.qa-chaos-line--fired { background: #7A7A7A; opacity: .55; }
+
+/* 顶层：内缩 24px 的七边形（半径 100→76），裁切头像 */
+.qa-hex-avatar {
+  position:  absolute;
+  inset:     0;
+  clip-path: polygon(
+    66.49% 15.76%, 87.05% 41.54%, 79.71% 73.69%, 50% 88%,
+    20.29% 73.69%, 12.95% 41.54%, 33.51% 15.76%
+  );
+  overflow:   hidden;
+  background: #111;
+}
+.qa-avatar {
+  width:      100%;
+  height:     100%;
+  object-fit: cover;
+  display:    block;
+  cursor:     pointer;
+}
+
+/* 生命值数字（左下角，压在七边形边缘上） */
+.qa-hex-hp {
+  position:    absolute;
+  left:        -6px;
+  bottom:      -2px;
+  font-size:   30px;
+  font-weight: bold;
+  color:       var(--hp-red);
+  line-height: 1;
+  cursor:      pointer;
+  z-index:     5;
+  text-shadow: 1px 1px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000;
+}
+
+/* 理智值（右下圆，正好盖住血环右下 50° 缺口） */
+.qa-hex-san {
+  position:        absolute;
+  right:           30px;
+  bottom:          -8px;
+  width:           52px;
+  height:          52px;
+  border-radius:   50%;
+  background:      #4A90C4;
+  border:          2px solid #2E6A96;
+  display:         flex;
+  align-items:     center;
+  justify-content: center;
+  font-size:       22px;
+  font-weight:     bold;
+  color:           #0C1E2C;
+  cursor:          pointer;
+  z-index:         5;
+  transition:      filter .15s;
+}
+.qa-hex-san:hover { filter: brightness(1.12); }
+
+/* ── 恐惧鉴定（左侧：坚定次数 / 恐慌次数）───────────────────── */
+.qa-panic-check {
+  display:       flex;
+  gap:           6px;
+  margin-top:    2px;
+  padding:       4px 6px;
+  background:    #1A1714;
+  border:        1px solid #4A4038;
+  border-radius: 3px;
+  cursor:        pointer;
+  transition:    border-color .15s;
+}
+.qa-panic-check:hover { border-color: #C9A84C; }
+
+.qa-panic-item {
+  display:     flex;
+  align-items: center;
+  gap:         2px;
+}
+.qa-panic-item img { width: 20px; height: 20px; display: block; }
+
+.qa-panic-num {
+  font-size:   15px;
+  font-weight: bold;
+  line-height: 1;
+}
+.qa-panic-resolve .qa-panic-num { color: #5DADE2; }
+.qa-panic-fear    .qa-panic-num { color: #E74C3C; }
+
+/* ── 底部行（BUFF 状态栏）─────────────────────────────────── */
 .qa-bottom-row {
   display:     flex;
   align-items: center;
   gap:         6px;
   margin-top:  2px;
-}
-
-/* ── HP / 理智 球 ──────────────────────────────────────────── */
-.qa-hp-ball,
-.qa-san-ball {
-  width:           32px;
-  height:          32px;
-  border-radius:   50%;
-  background:      #201E1B;
-  display:         flex;
-  align-items:     center;
-  justify-content: center;
-  cursor:          pointer;
-  flex-shrink:     0;
-  border:          2px solid;
-  transition:      filter 0.15s;
-}
-.qa-hp-ball:hover,
-.qa-san-ball:hover { filter: brightness(1.15); }
-
-.qa-hp-ball  { border-color: #B43822; box-shadow: 0 0 5px rgba(180,56,34,.4); }
-.qa-san-ball { border-color: #4F7A9C; box-shadow: 0 0 5px rgba(79,122,156,.4); }
-
-.qa-ball-value {
-  font-size:   24px;
-  font-weight: bold;
-  color:       #ECE4D6;
-  line-height: 1;
-  /* 数字较大时自动缩放，保证不超出球体 */
-  transform-origin: center;
 }
 
 /* ── BUFF 状态栏 ───────────────────────────────────────────── */
