@@ -5903,7 +5903,7 @@ body.game .limbuscompany.app img {
   --hp-red:   #B43822;
 
   /* 整块尺寸：内部所有数值均按此等比换算，改这一个数即可整体缩放 */
-  --hex-size: 100px;
+  --hex-size: 125px;
 
   position:    relative;
   width:       var(--hex-size);
@@ -5976,9 +5976,9 @@ body.game .limbuscompany.app img {
 /* 生命值数字（左下角，压在七边形边缘上）—— 比例基于 200px 原稿换算 */
 .qa-hex-hp {
   position:    absolute;
-  left:        calc(var(--hex-size) * -0.03);
+  left:        calc(var(--hex-size) * 0.07);
   bottom:      calc(var(--hex-size) * -0.01);
-  font-size:   calc(var(--hex-size) * 0.15);
+  font-size:   calc(var(--hex-size) * 0.25);
   font-weight: bold;
   color:       var(--hp-red);
   line-height: 1;
