@@ -686,6 +686,9 @@ export class QuickActionHUD extends Application {
         t.x >= tk.x && t.x <= tk.x + tk.w && t.y >= tk.y && t.y <= tk.y + tk.h) ?? null;
     };
 
+    /** 自己不能作为自己发起的对抗的目标（否则会发出一张没人能响应的对抗卡） */
+    const isSelfToken = (tk) => !!tk && tk.actor?.id === this._actor?.id;
+
     /** token 中心（画布坐标）→ 屏幕坐标，用于把箭头吸附到目标中心 */
     const tokenScreenCenter = (tk) => {
       const c = tk.center ?? { x: tk.x + tk.w / 2, y: tk.y + tk.h / 2 };
@@ -720,8 +723,9 @@ export class QuickActionHUD extends Application {
             el.addClass("qa-skill-slot--aiming");
             this._createAimOverlay();
           }
+          // 悬停自己时不吸附（视同空地），避免误以为可以指定自己
           const tk = tokenAt(e.clientX, e.clientY);
-          const tc = tk ? tokenScreenCenter(tk) : null;
+          const tc = (tk && !isSelfToken(tk)) ? tokenScreenCenter(tk) : null;
           if (tc) this._updateAimOverlay(aiming.sx, aiming.sy, tc.x, tc.y, true);
           else    this._updateAimOverlay(aiming.sx, aiming.sy, e.clientX, e.clientY, false);
         })
@@ -733,8 +737,12 @@ export class QuickActionHUD extends Application {
             return;
           }
           const tk = tokenAt(e.clientX, e.clientY);
-          const targetActorId = tk?.actor?.id ?? "";
           endAim();
+          if (isSelfToken(tk)) {
+            ui.notifications.warn("不能对自己发起对抗，已取消本次指定");
+            return;
+          }
+          const targetActorId = tk?.actor?.id ?? "";
           if (!targetActorId) {
             ui.notifications.warn("未指向任何 Token，已取消本次指定");
             return;
@@ -849,6 +857,11 @@ export class QuickActionHUD extends Application {
     // 只有激活槽（0/1）可以发起对抗，准备槽（2）不可用
     if (slotIndex > 1) {
       ui.notifications.warn("只有激活槽中的技能可以发起对抗");
+      return;
+    }
+    // 兜底：指定目标不能是发起者自己（否则发出的对抗卡没有任何角色能响应）
+    if (targetActorId && targetActorId === actor.id) {
+      ui.notifications.warn("不能对自己发起对抗");
       return;
     }
     if ((actor.system.ap?.value ?? 0) <= 0) {
