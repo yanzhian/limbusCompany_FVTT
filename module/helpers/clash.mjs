@@ -3928,6 +3928,27 @@ export class ClashManager {
       return;
     }
 
+    // 玩家委托 GM 推进战斗轮次（Combat 文档玩家无写权限）
+    // 由快捷 HUD 的"下个回合"按钮发起；GM 侧再次校验确实轮到该玩家控制的角色，
+    // 防止其他客户端伪造消息抢跳回合。
+    if (msg.type === "gmNextTurn") {
+      if (!game.user.isGM) return;
+      const combat = msg.combatId ? game.combats.get(msg.combatId) : game.combat;
+      if (!combat?.started) return;
+      const sender = msg.userId ? game.users.get(msg.userId) : null;
+      const cur    = combat.combatant?.actor;
+      if (!sender || !cur?.testUserPermission?.(sender, "OWNER")) {
+        console.warn("[ClashManager] gmNextTurn: 发起者并非当前行动角色的拥有者，已忽略");
+        return;
+      }
+      try {
+        await combat.nextTurn();
+      } catch (err) {
+        console.error("[ClashManager] gmNextTurn 失败:", err);
+      }
+      return;
+    }
+
     // 玩家委托GM执行物品 [使用时] Activity（群体目标需GM权限更新其他Actor）
     if (msg.type === "activityActivate") {
       if (!game.user.isGM) return;

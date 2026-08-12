@@ -5802,6 +5802,27 @@ body.game .limbuscompany.app img {
 .qa-refresh-btn:hover   { border-color: #C9A84C; filter: brightness(1.2); }
 .qa-refresh-btn.qa-spin { transform: rotate(360deg); }
 
+/* ── "下个回合"按钮（行动值右侧）───────────────────────────── */
+.qa-next-turn-btn {
+  margin-left:   8px;
+  flex-shrink:   0;
+  padding:       5px 12px;
+  background:    #E8C9A2;
+  border:        1px solid #FFFFFF;
+  border-radius: 4px;
+  color:         #2A1B0C;
+  font-size:     13px;
+  font-weight:   bold;
+  white-space:   nowrap;
+  cursor:        pointer;
+  transition:    filter .15s, border-color .15s;
+}
+.qa-next-turn-btn:hover { filter: brightness(1.1); border-color: #C9A84C; }
+
+/* GM 在非本角色回合时也可见：降低存在感，与"轮到自己"时区分 */
+.qa-next-turn-btn--gm { opacity: .72; }
+.qa-next-turn-btn--gm:hover { opacity: 1; }
+
 /* ── AP 硬币行（含刷新按钮，整行左对齐）─────────────────────── */
 .qa-ap-row {
   display:         flex;

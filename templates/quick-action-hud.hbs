@@ -133,6 +133,14 @@
                    width="28" height="28" alt="AP" draggable="false">
             </div>
           {{/each}}
+
+          {{!-- 下一回合：遭遇战进行中且轮到本角色时显示；GM 全程可见 --}}
+          {{#if showNextTurn}}
+            <button class="qa-next-turn-btn {{#unless isMyTurn}}qa-next-turn-btn--gm{{/unless}}"
+                    title="{{#if isMyTurn}}结束本回合，轮到下一位{{else}}（GM）推进到下一回合{{/if}}">
+              下个回合
+            </button>
+          {{/if}}
         </div>
 
       </div>

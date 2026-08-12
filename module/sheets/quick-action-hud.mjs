@@ -161,6 +161,12 @@ export class QuickActionHUD extends Application {
     if (hud._actor.id === actor.id) hud.render(false);
   }
 
+  /** 战斗轮次/回合变化 → 重渲染，让"下个回合"按钮及时出现或消失 */
+  static onCombatChange() {
+    const hud = QuickActionHUD.instance;
+    if (hud?._actor) hud.render(false);
+  }
+
   /* ─── 隐藏 HUD ──────────────────────────────────────────────────────────── */
 
   _hide() {
@@ -293,10 +299,20 @@ export class QuickActionHUD extends Application {
       angle:     QA_ARC_FROM + QA_ARC_LEN * ((t.percent ?? 0) / 100),
     }));
 
+    // ── "下一回合"按钮显示条件 ───────────────────────────────────────────
+    // 玩家：必须处于已开始的遭遇战中、且当前正轮到本角色行动；
+    // GM：只要遭遇战进行中就一直显示（GM 同时控制多个角色，不受"轮到谁"限制）。
+    const combat       = game.combat;
+    const inCombat     = !!combat?.started;
+    const isMyTurn     = inCombat && combat.combatant?.actor?.id === actor.id;
+    const showNextTurn = inCombat && (game.user.isGM || isMyTurn);
+
     return {
       actorImg:       actor.img  ?? "icons/svg/mystery-man.svg",
       actorName:      actor.name ?? "",
       apCoins,
+      showNextTurn,
+      isMyTurn,
       hpValue,
       hpMax,
       hpPct:          hpPct.toFixed(4),
@@ -414,6 +430,9 @@ export class QuickActionHUD extends Application {
 
     // ── 基础技能格：点击发起对抗 / 长按拖到 token 指定目标 ───────────────
     this._bindSkillSlots(html);
+
+    // ── 下一回合：推进战斗轮次 ──────────────────────────────────────────
+    html.find(".qa-next-turn-btn").on("click", () => this._nextTurn());
 
     // ── 刷新：同步角色卡战斗页基础技能（未激活则代替执行"激活"）─────────
     html.find(".qa-refresh-btn").on("click", async (e) => {
@@ -715,6 +734,36 @@ export class QuickActionHUD extends Application {
       if (idx > slotIndex) $(el).addClass("qa-skill-slot--shifting");
     });
     setTimeout(() => this.render(false), 430);
+  }
+
+  /**
+   * 推进到下一回合。
+   * GM 直接调用 combat.nextTurn()；玩家没有修改 Combat 文档的权限，
+   * 通过既有的 system.limbusCompany_FVTT socket 通道委托 GM 执行
+   * （与 ClashManager._safeDocUpdate 的委托思路一致）。
+   */
+  async _nextTurn() {
+    const combat = game.combat;
+    if (!combat?.started) {
+      ui.notifications.warn("当前没有进行中的遭遇战");
+      return;
+    }
+
+    if (game.user.isGM) {
+      await combat.nextTurn();
+      return;
+    }
+
+    // 玩家：仅允许在轮到自己控制的角色时结束回合
+    if (combat.combatant?.actor?.id !== this._actor?.id) {
+      ui.notifications.warn("现在不是你的回合");
+      return;
+    }
+    game.socket.emit("system.limbusCompany_FVTT", {
+      type:     "gmNextTurn",
+      combatId: combat.id,
+      userId:   game.user.id,
+    });
   }
 
   /**
