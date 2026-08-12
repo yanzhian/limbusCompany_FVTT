@@ -92,7 +92,9 @@
       <div class="qa-hex-hp" title="生命值 {{hpValue}} / {{hpMax}}">{{hpValue}}</div>
 
       {{!-- 理智值（右下圆） --}}
-      <div class="qa-hex-san" title="理智值 {{sanValue}}">{{sanValue}}</div>
+      {{!-- 底色随理智值渐变：高=蓝、中=灰、低=红（见 _sanityColors） --}}
+      <div class="qa-hex-san" title="理智值 {{sanValue}}"
+           style="background:{{sanColor}};border-color:{{sanBorder}};">{{sanValue}}</div>
 
     </div>{{!-- /qa-hex-block --}}
 
