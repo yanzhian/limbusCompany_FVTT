@@ -1613,6 +1613,14 @@ export function closeTitleCard(card) {
   card?.remove();
 }
 
+/**
+ * Title 卡基准层级。嵌套卡（从卡内 chip 悬停弹出的下一层）会在父卡基础上 +1，
+ * 保证"从 A 卡里点开的 B 卡"永远盖在 A 卡上面，而不是被压在后面。
+ * 仅作为"触发源不在任何卡片内"时的兜底基准；各调用方（角色卡/HUD/商店卡等）
+ * 若自行设置了 z-index，嵌套卡会读取其实际值再 +1，因此不需要统一改成本常量。
+ */
+const TITLE_CARD_Z = 99990;
+
 /** 定位规则：贴在触发元素左侧，不够则右侧（与既有各处 hover 定位逻辑一致） */
 function _positionTitleCard(card, anchorEl) {
   const rect  = anchorEl.getBoundingClientRect();
@@ -1620,7 +1628,11 @@ function _positionTitleCard(card, anchorEl) {
   let left = rect.left - cardW - 8;
   if (left < 8) left = rect.right + 8;
   const top = Math.max(8, Math.min(rect.top, window.innerHeight - cardH - 8));
-  card.css({ position: "fixed", left, top, zIndex: 99998 });
+
+  // 若触发源本身就在某张 Title 卡内部（chip → 嵌套卡），层级取父卡 +1
+  const parentCard = anchorEl.closest?.(".limbus-title-card");
+  const parentZ    = parentCard ? (parseInt(parentCard.style.zIndex) || TITLE_CARD_Z) : TITLE_CARD_Z;
+  card.css({ position: "fixed", left, top, zIndex: parentZ + 1 });
 }
 
 /**

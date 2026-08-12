@@ -590,6 +590,8 @@ export class QuickActionHUD extends Application {
     if (left < 8) left = rect.right + 8;
     const top    = Math.max(8, Math.min(rect.top, window.innerHeight - cardH - 8));
 
+    // 卡内 chip 弹出的嵌套卡会自动取"本卡 z-index + 1"，从而盖在本卡上面
+    // （见 item-sheet.mjs 的 _positionTitleCard）
     this._hudTitleCard.css({ position: "fixed", left, top, zIndex: 99999 });
     $("body").append(this._hudTitleCard);
     this._hudTitleCard.on("mouseenter", () => clearTimeout(this._hudTitleCardCloseTimer));
