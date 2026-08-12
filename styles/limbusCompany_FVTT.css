@@ -5682,7 +5682,7 @@ body.game .limbuscompany.app img {
 .qa-skill-row {
   /* 整格大小 / 边框中空区内缩比例（技能图多大）/ 相邻格重叠量 */
   --skill-size:    100px;
-  --art-inset:     15%;
+  --art-inset:     24%;
   --skill-overlap: 22px;
 
   display:     flex;
