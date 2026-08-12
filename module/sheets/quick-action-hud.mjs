@@ -66,6 +66,22 @@ function _buffIconPath(type, name = "") {
 const QA_ARC_FROM = 180;
 const QA_ARC_LEN  = 310;
 
+/* 技能图标：assets/icons/Skill/{罪孽首字母大写}_lv{等级}.webp */
+const SKILL_ICON_BASE = "systems/limbusCompany_FVTT/assets/icons/Skill/";
+const SIN_ICON_NAME = {
+  wrath: "Wrath", lust: "Lust", sloth: "Sloth", gluttony: "Gluttony",
+  gloom: "Gloom", pride: "Pride", envy: "Envy",
+};
+/** 按罪孽+等级取技能图标；EGO 用专属图标，取不到则回退通用图 */
+function _skillIcon(item) {
+  if (!item) return "";
+  const sys = item.system ?? {};
+  if (sys.type === "ego") return `${SKILL_ICON_BASE}E.G.O.webp`;
+  const sin = SIN_ICON_NAME[sys.sinType];
+  const lv  = Math.max(1, Math.min(3, sys.level ?? 1));
+  return sin ? `${SKILL_ICON_BASE}${sin}_lv${lv}.webp` : `${SKILL_ICON_BASE}Normalsin.webp`;
+}
+
 /* ═══════════════════════════════════════════════════════════════════════════
    QuickActionHUD Application
 ═══════════════════════════════════════════════════════════════════════════ */
@@ -278,8 +294,10 @@ export class QuickActionHUD extends Application {
       return {
         slotIndex: i,
         item,
+        icon:      _skillIcon(item),
         sinColor:  item ? (cfg.SIN_COLORS?.[item.system?.sinType] ?? "#C9A84C") : "#443322",
-        isActive:  i < 2,   // 0,1 = 激活中（金色边框），2 = 预备（红色边框）
+        isActive:  i < 2,   // 0,1 = 激活可用；2 = 准备（半透明，下一个补上来的）
+        isPending: i === 2,
       };
     });
 
@@ -426,6 +444,17 @@ export class QuickActionHUD extends Application {
         .on("mouseup.qahud",   onMouseUp);
     });
 
+    // ── 基础技能格：点击发起对抗 / 长按拖到 token 指定目标 ───────────────
+    this._bindSkillSlots(html);
+
+    // ── 刷新：同步角色卡战斗页基础技能（未激活则代替执行"激活"）─────────
+    html.find(".qa-refresh-btn").on("click", async (e) => {
+      const btn = $(e.currentTarget);
+      btn.addClass("qa-spin");
+      setTimeout(() => btn.removeClass("qa-spin"), 340);
+      await this._refreshCombatBag();
+    });
+
     // ── 状态栏：空格 → 添加 BUFF；有 BUFF 格 → 打开角色卡战斗页 ─────────
     html.find(".qa-buff-slot--empty").on("click", () => this._showAddBuffDialog());
     html.find(".qa-buff-slot--filled").on("click", () => this._openCombatTab());
@@ -452,43 +481,6 @@ export class QuickActionHUD extends Application {
       const item   = this._actor?.items.get(itemId);
       if (!item) return;
       await this._activateItem(item);
-    });
-
-    // ── 基础技能槽点击 → 发起对抗（与角色卡战斗Tab 逻辑一致） ────────────
-    html.find(".qa-basic-skill-slot[data-item-id]").on("click", async (e) => {
-      const itemId    = e.currentTarget.dataset.itemId;
-      const slotIndex = parseInt(e.currentTarget.dataset.slotIndex ?? "-1");
-      if (!itemId || !this._actor) return;
-      const item = this._actor.items.get(itemId);
-      if (!item) return;
-
-      // 只有激活槽（0, 1）可以发起对抗，预备槽（2）不可点击
-      if (slotIndex > 1) {
-        ui.notifications.warn("只有激活槽中的技能可以发起对抗");
-        return;
-      }
-
-      if ((this._actor.system.ap?.value ?? 0) <= 0) {
-        ui.notifications.warn("行动值不足，无法发起对抗");
-        return;
-      }
-
-      // 确保战斗袋已初始化
-      this._ensureBagState();
-
-      // 记录 sheet 是否已渲染（用于判断是否需要手动推进袋）
-      const sheetRendered = !!(this._actor.sheet?.rendered && this._actor.sheet?.element?.length);
-
-      // 传入真实 slotIndex，ClashManager 会调用 sheet._animateCombatSkillUse(slotIndex)
-      await ClashManager.showInitiateDialog(this._actor, item, slotIndex);
-
-      // 若 sheet 未渲染（_animateCombatSkillUse 提前 return），手动推进袋状态
-      if (!sheetRendered) {
-        this._advanceBagStateManually(slotIndex);
-      }
-
-      // 在袋状态更新后重渲 HUD（有动画时等 400ms，无动画时稍微延迟）
-      setTimeout(() => this.render(false), sheetRendered ? 420 : 60);
     });
 
     // ── EGO 技能槽点击 → 发起对抗 ────────────────────────────────────────
@@ -552,7 +544,7 @@ export class QuickActionHUD extends Application {
 
     // ── 技能 / 物品悬浮 Title 卡（与角色卡一致） ──────────────────────────
     const hoverTargets = [
-      ".qa-basic-skill-slot[data-item-id]",
+      ".qa-skill-slot[data-item-id]",
       ".qa-ego-skill-slot[data-item-id]",
       ".qa-panel-item[data-item-id]",
     ].join(", ");
@@ -700,6 +692,145 @@ export class QuickActionHUD extends Application {
     const nextId = state.pool.shift() ?? null;
     state.slots.push(nextId);
     // state 是 Map 中对象的引用，直接 mutate 即已生效，无需重新 set
+  }
+
+  /* ─── 基础技能格：点击发起对抗 / 长按拖到 token 指定目标 ───────────────── */
+
+  /**
+   * 绑定三个基础技能格的交互：
+   * - 单击            → 发起对抗（不指定目标）
+   * - 长按 300ms 后拖拽 → 拖到画布 token 上松开，指定该角色为唯一可响应目标
+   * 两条路径最终都走 ClashManager.showInitiateDialog（弹"发起对抗"确认框，
+   * 可填加值修正），确认后才真正打出；取消则技能保留、不消耗行动值。
+   */
+  _bindSkillSlots(html) {
+    const LONG_PRESS_MS = 300;
+    let pressTimer = null, dragging = null, ghost = null;
+
+    const clearDrag = () => {
+      if (dragging) dragging.el.removeClass("qa-skill-slot--dragging");
+      ghost?.remove();
+      ghost = null; dragging = null;
+      $(document).off("mousemove.qaSkillDrag mouseup.qaSkillDrag");
+    };
+
+    /** 屏幕坐标 → 画布 token */
+    const tokenAt = (clientX, clientY) => {
+      if (!canvas?.ready) return null;
+      const t = canvas.canvasCoordinatesFromClient?.({ x: clientX, y: clientY })
+        ?? canvas.clientCoordinatesToCanvas?.({ x: clientX, y: clientY });
+      if (!t) return null;
+      return canvas.tokens?.placeables?.find(tk =>
+        t.x >= tk.x && t.x <= tk.x + tk.w && t.y >= tk.y && t.y <= tk.y + tk.h) ?? null;
+    };
+
+    html.find(".qa-skill-slot--ready").on("mousedown", (ev) => {
+      if (ev.button !== 0) return;
+      ev.preventDefault();
+      ev.stopPropagation();
+
+      const el        = $(ev.currentTarget);
+      const itemId    = el.data("itemId");
+      const slotIndex = Number(el.data("slotIndex"));
+      if (!itemId) return;
+
+      pressTimer = setTimeout(() => {
+        pressTimer = null;
+        dragging = { el, itemId, slotIndex };
+        el.addClass("qa-skill-slot--dragging");
+        ghost = $(`<div class="qa-skill-drag-ghost">${el.html()}</div>`)
+          .css({ left: ev.clientX - 22, top: ev.clientY - 22 })
+          .appendTo(document.body);
+        ui.notifications.info("拖到目标 Token 上松开：指定该角色为唯一可对抗目标");
+      }, LONG_PRESS_MS);
+
+      $(document)
+        .on("mousemove.qaSkillDrag", (e) => {
+          if (!dragging || !ghost) return;
+          ghost.css({ left: e.clientX - 22, top: e.clientY - 22 });
+        })
+        .on("mouseup.qaSkillDrag", async (e) => {
+          // 未到长按阈值 → 视为单击，不指定目标
+          if (pressTimer) {
+            clearTimeout(pressTimer); pressTimer = null;
+            clearDrag();
+            await this._castSkill(itemId, slotIndex, "");
+            return;
+          }
+          if (!dragging) { clearDrag(); return; }
+          const tk = tokenAt(e.clientX, e.clientY);
+          const targetActorId = tk?.actor?.id ?? "";
+          clearDrag();
+          if (!targetActorId) {
+            ui.notifications.warn("未拖到任何 Token 上，已取消本次指定");
+            return;
+          }
+          await this._castSkill(itemId, slotIndex, targetActorId);
+        });
+    });
+  }
+
+  /**
+   * 打出一个基础技能：弹发起对抗确认框，确认后播"飞走 + 补位"动画。
+   * showInitiateDialog 内部已负责扣 AP / 推进 6-bag（slotIndex >= 0），
+   * 这里只负责 HUD 侧的动画表现，动画结束后重渲染取最新状态。
+   */
+  async _castSkill(itemId, slotIndex, targetActorId = "") {
+    const actor = this._actor;
+    const item  = actor?.items.get(itemId);
+    if (!actor || !item) return;
+
+    // 只有激活槽（0/1）可以发起对抗，准备槽（2）不可用
+    if (slotIndex > 1) {
+      ui.notifications.warn("只有激活槽中的技能可以发起对抗");
+      return;
+    }
+    if ((actor.system.ap?.value ?? 0) <= 0) {
+      ui.notifications.warn(`${actor.name} 行动值不足，无法发起对抗`);
+      return;
+    }
+
+    // 确保战斗袋已初始化
+    this._ensureBagState();
+    // 记录角色卡是否已渲染：未渲染时 _animateCombatSkillUse 会提前 return，需手动推进袋
+    const sheetRendered = !!(actor.sheet?.rendered && actor.sheet?.element?.length);
+
+    const ok = await ClashManager.showInitiateDialog(actor, item, slotIndex, targetActorId);
+    if (!ok) return;   // 取消：技能保留在槽位，不播动画、不推进袋
+
+    if (!sheetRendered) this._advanceBagStateManually(slotIndex);
+
+    // 打出格向上飞走；它右侧的格子左移补位，左侧的保持不动
+    const row = this.element?.find(".qa-skill-row");
+    row?.find(`.qa-skill-slot[data-slot-index="${slotIndex}"]`).addClass("qa-skill-slot--casting");
+    row?.find(".qa-skill-slot").each((_, el) => {
+      const idx = Number(el.dataset.slotIndex);
+      if (idx > slotIndex) $(el).addClass("qa-skill-slot--shifting");
+    });
+    setTimeout(() => this.render(false), 430);
+  }
+
+  /**
+   * 刷新：与角色卡战斗页的 6-bag 同步。
+   * 角色卡尚未激活战斗槽时，代替执行一次"激活"（初始化 6-bag）。
+   */
+  async _refreshCombatBag() {
+    const sheet = this._actor?.sheet;
+    if (!sheet) return;
+
+    if (!sheet._combatBagState) {
+      // 未激活 → 代替执行"激活"：初始化 6-bag（不依赖角色卡是否已渲染）
+      this._ensureBagState();
+      if (!sheet._combatBagState) {
+        ui.notifications.warn("没有已装备的基础技能，无法激活战斗槽");
+        return;
+      }
+      ui.notifications.info("已激活战斗槽（6-bag）");
+    }
+
+    // 角色卡开着时同步刷新它的槽位显示，两边保持一致
+    if (sheet.rendered && sheet.element?.length) sheet._renderCombatSlots?.(sheet.element);
+    this.render(false);
   }
 
   /** 打开角色卡并切换到战斗 Tab */

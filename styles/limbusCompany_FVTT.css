@@ -5662,6 +5662,112 @@ body.game .limbuscompany.app img {
   pointer-events:  auto;
 }
 
+/* ══════════════════════════════════════════════════════════════
+   右侧块：上=基础技能，下=行动值，右=刷新
+   ══════════════════════════════════════════════════════════════ */
+.qa-right-block {
+  display:     flex;
+  align-items: center;
+  gap:         8px;
+  align-self:  flex-end;
+}
+.qa-right-col {
+  display:        flex;
+  flex-direction: column;
+  gap:            6px;
+}
+
+/* ── 基础技能三格 ─────────────────────────────────────────── */
+.qa-skill-row {
+  display:     flex;
+  align-items: center;
+  gap:         5px;
+  height:      48px;
+}
+
+/* 单个技能格：八边形 */
+.qa-skill-slot {
+  position:        relative;
+  width:           44px;
+  height:          44px;
+  flex-shrink:     0;
+  cursor:          pointer;
+  background:      #0E0C0A;
+  display:         flex;
+  align-items:     center;
+  justify-content: center;
+  transition:      transform .12s;
+  clip-path: polygon(30% 0%, 70% 0%, 100% 30%, 100% 70%,
+                     70% 100%, 30% 100%, 0% 70%, 0% 30%);
+}
+.qa-skill-slot img {
+  width:  100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+  pointer-events: none;
+}
+.qa-skill-slot--ready:hover { transform: translateY(-3px); }
+
+/* 准备格（半透明，不可直接使用）/ 空格 */
+.qa-skill-slot--pending { opacity: .42; cursor: default; }
+.qa-skill-slot--empty   { background: #1A1714; opacity: .35; cursor: default; }
+
+/* 打出：向上飞走并淡出 */
+@keyframes qa-skill-cast {
+  0%   { transform: translateY(0)     scale(1);    opacity: 1; }
+  35%  { transform: translateY(-10px) scale(1.12); opacity: 1; }
+  100% { transform: translateY(-56px) scale(.75);  opacity: 0; }
+}
+.qa-skill-slot--casting {
+  animation: qa-skill-cast .42s cubic-bezier(.32,.72,.4,1) forwards;
+  pointer-events: none;
+}
+
+/* 补位：右侧新技能滑入 / 被打出格右侧的技能左移
+   （被打出格左侧的技能不加这些类，保持原地不动） */
+@keyframes qa-skill-slide-in {
+  0%   { transform: translateX(24px); opacity: 0; }
+  100% { transform: translateX(0);    opacity: 1; }
+}
+.qa-skill-slot--entering { animation: qa-skill-slide-in .3s ease-out backwards; }
+
+@keyframes qa-skill-shift {
+  0%   { transform: translateX(24px); }
+  100% { transform: translateX(0); }
+}
+.qa-skill-slot--shifting { animation: qa-skill-shift .3s ease-out backwards; }
+
+/* 拖拽中的原格 + 跟随鼠标的幽灵图标 */
+.qa-skill-slot--dragging { opacity: .5; transform: scale(.9); }
+.qa-skill-drag-ghost {
+  position:       fixed;
+  z-index:        9999;
+  pointer-events: none;
+  opacity:        .85;
+  width:          44px;
+  height:         44px;
+}
+.qa-skill-drag-ghost img { width: 100%; height: 100%; object-fit: contain; }
+
+/* ── 刷新按钮 ─────────────────────────────────────────────── */
+.qa-refresh-btn {
+  width:           38px;
+  height:          38px;
+  flex-shrink:     0;
+  background:      #221E19;
+  border:          1px solid #4A4038;
+  border-radius:   4px;
+  cursor:          pointer;
+  display:         flex;
+  align-items:     center;
+  justify-content: center;
+  padding:         0;
+  transition:      background .15s, border-color .15s, transform .32s;
+}
+.qa-refresh-btn:hover      { background: #2F2820; border-color: #C9A84C; }
+.qa-refresh-btn.qa-spin    { transform: rotate(360deg); }
+
 /* ── AP 硬币行 ────────────────────────────────────────────── */
 .qa-ap-row {
   display:         flex;
@@ -5812,7 +5918,6 @@ body.game .limbuscompany.app img {
   padding:   4px 0;
 }
 
-.qa-basic-skill-slot,
 .qa-ego-skill-slot {
   width:           52px;
   height:          52px;
@@ -5828,10 +5933,8 @@ body.game .limbuscompany.app img {
   flex-shrink:     0;
   transition:      filter 0.15s;
 }
-.qa-basic-skill-slot:hover,
 .qa-ego-skill-slot:hover     { filter: brightness(1.2); }
 
-.qa-basic-skill-slot img,
 .qa-ego-skill-slot img {
   width:      100%;
   height:     100%;

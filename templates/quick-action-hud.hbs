@@ -1,18 +1,7 @@
 {{!-- quick-action-hud.hbs — 快捷操作 HUD --}}
 <div id="limbus-quick-action-hud" class="limbus-qa-hud">
 
-  {{!-- AP 硬币行 --}}
-  <div class="qa-ap-row">
-    {{#each apCoins}}
-      <div class="qa-ap-coin {{#if active}}qa-ap-coin--active{{else}}qa-ap-coin--inactive{{/if}}"
-           data-index="{{index}}" title="行动点 {{index}}">
-        <img src="{{#if active}}systems/limbusCompany_FVTT/assets/icons/Base_icon/硬币_正面.webp{{else}}systems/limbusCompany_FVTT/assets/icons/Base_icon/硬币_反面.webp{{/if}}"
-             width="36" height="36" alt="AP" draggable="false">
-      </div>
-    {{/each}}
-  </div>
-
-  {{!-- 中间行：[消耗品↑][装备↑] | [头像] | [基础↑][E.G.O↑] --}}
+  {{!-- 中间行：[消耗品/装备/恐惧鉴定] | [状态七边形] | [基础技能/行动值 + 刷新] --}}
   <div class="qa-mid-row">
 
     {{!-- 左侧按钮组（消耗品 / 装备），面板在按钮上方展开 --}}
@@ -107,32 +96,48 @@
 
     </div>{{!-- /qa-hex-block --}}
 
-    {{!-- 右侧按钮组（基础技能 / E.G.O），面板在按钮上方展开 --}}
-    <div class="qa-btn-group qa-btn-group--right">
+    {{!-- ══ 右侧：上=基础技能，下=行动值，右=刷新 ══ --}}
+    <div class="qa-right-block">
+      <div class="qa-right-col">
 
-      {{!-- 基础技能面板（初始隐藏） --}}
-      <div class="qa-panel" data-panel="basic" style="display:none">
-        <div class="qa-panel-title">基础技能</div>
-        <div class="qa-panel-divider"></div>
-        <div class="qa-panel-body">
-          <div class="qa-skills-grid">
-            {{#each basicSkills}}
-              <div class="qa-basic-skill-slot
-                           {{#if item}}qa-skill-slot--filled{{else}}qa-skill-slot--empty{{/if}}
-                           {{#if isActive}}qa-skill-active{{else}}qa-skill-pending{{/if}}"
-                   data-item-id="{{#if item}}{{item.id}}{{/if}}"
-                   data-slot-index="{{slotIndex}}"
-                   style="border-color:{{sinColor}}"
-                   title="{{#if item}}{{item.name}}{{#unless isActive}}（预备）{{/unless}}{{else}}（空）{{/if}}">
-                {{#if item}}
-                  <img src="{{item.img}}" alt="{{item.name}}" draggable="false">
-                {{/if}}
-              </div>
-            {{/each}}
-          </div>
+        {{!-- 上：基础技能三格（点击=发起对抗；长按拖到 token=指定目标） --}}
+        <div class="qa-skill-row">
+          {{#each basicSkills}}
+            <div class="qa-skill-slot
+                         {{#if item}}{{#if isPending}}qa-skill-slot--pending{{else}}qa-skill-slot--ready{{/if}}
+                         {{else}}qa-skill-slot--empty{{/if}}"
+                 data-item-id="{{#if item}}{{item.id}}{{/if}}"
+                 data-slot-index="{{slotIndex}}"
+                 title="{{#if item}}{{item.name}}{{#if isPending}}（准备）{{else}}　点击发起对抗／长按拖到 token 指定目标{{/if}}{{else}}（空）{{/if}}">
+              {{#if item}}
+                <img src="{{icon}}" alt="{{item.name}}" draggable="false">
+              {{/if}}
+            </div>
+          {{/each}}
         </div>
-        <div class="qa-panel-divider"></div>
+
+        {{!-- 下：行动值 --}}
+        <div class="qa-ap-row">
+          {{#each apCoins}}
+            <div class="qa-ap-coin {{#if active}}qa-ap-coin--active{{else}}qa-ap-coin--inactive{{/if}}"
+                 data-index="{{index}}" title="行动点 {{index}}">
+              <img src="{{#if active}}systems/limbusCompany_FVTT/assets/icons/Base_icon/硬币_正面.webp{{else}}systems/limbusCompany_FVTT/assets/icons/Base_icon/硬币_反面.webp{{/if}}"
+                   width="28" height="28" alt="AP" draggable="false">
+            </div>
+          {{/each}}
+        </div>
+
       </div>
+
+      {{!-- 刷新：同步角色卡战斗页的基础技能（未激活则代替执行"激活"） --}}
+      <button class="qa-refresh-btn" title="刷新：同步角色卡战斗页的基础技能（未激活则代替激活）">
+        <img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/重置.webp"
+             width="24" height="24" alt="刷新" draggable="false">
+      </button>
+    </div>
+
+    {{!-- 右侧按钮组（E.G.O 技能弹出面板） --}}
+    <div class="qa-btn-group qa-btn-group--right">
 
       {{!-- E.G.O 技能面板（初始隐藏） --}}
       <div class="qa-panel" data-panel="ego" style="display:none">
@@ -166,7 +171,6 @@
       </div>
 
       {{!-- 右侧按钮 --}}
-      <button class="qa-btn" data-panel="basic">基础</button>
       <button class="qa-btn" data-panel="ego">E.G.O</button>
     </div>
 

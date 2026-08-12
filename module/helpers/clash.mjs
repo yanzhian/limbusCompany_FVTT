@@ -1362,7 +1362,14 @@ export class ClashManager {
 
   /* ─── 阶段一：发起对抗弹窗 ────────────────────────────────────────────── */
 
-  static async showInitiateDialog(actor, item, slotIndex = -1) {
+  /**
+   * @param {Actor}  actor
+   * @param {Item}   item
+   * @param {number} [slotIndex=-1]      >=0 从战斗槽触发（推进6-bag+扣AP）；-2 只扣AP
+   * @param {string} [targetActorId=""]  指定目标角色 ID（HUD 拖拽到 token 时传入）；
+   *                                     非空时只有该角色能对抗/承受
+   */
+  static async showInitiateDialog(actor, item, slotIndex = -1, targetActorId = "") {
     const sys      = item.system ?? {};
     const formula  = sys.diceFormula ?? "1d4";
     const catIcon  = ClashManager._catIcon(sys.category);
@@ -1476,7 +1483,7 @@ export class ClashManager {
 
               const roll = new Roll(full);
               await roll.evaluate();
-              await ClashManager._sendInitiateMsg(actor, item, roll, full, slotIndex);
+              await ClashManager._sendInitiateMsg(actor, item, roll, full, slotIndex, targetActorId);
 
               // EGO 技能使用后，将 egoResistanceAdj 应用到角色的罪孽抗性
               if (isEgo) {
@@ -1508,15 +1515,19 @@ export class ClashManager {
 
   /* ─── 阶段二：发起对抗聊天框 ──────────────────────────────────────────── */
 
-  static async _sendInitiateMsg(actor, item, roll, formula, slotIndex) {
+  static async _sendInitiateMsg(actor, item, roll, formula, slotIndex, targetActorId = "") {
     const sys        = item.system ?? {};
     const effectDesc = ClashManager._effectDesc(item);
+    const targetName = targetActorId ? (game.actors.get(targetActorId)?.name ?? "") : "";
 
     const content = `
       <div class="limbus-clash-card" data-clash-type="initiate">
         ${ClashManager._chatHeader(actor, "发起对抗")}
         ${ClashManager._goldDivider()}
         ${ClashManager._skillRow(item)}
+        ${targetName ? `<div style="font-size:.78rem;color:#B43822;margin-top:6px;">
+          ⊘ 已指定目标：<strong>${targetName}</strong>（其他角色无法对抗/承受）
+        </div>` : ""}
         <div class="clash-action-row" style="display:flex;gap:8px;margin-top:8px;margin-bottom:4px;">
           <button class="clash-btn-clash"
                   style="width:50px;height:30px;background:#5F3E22;color:#E8C9A2;
@@ -1549,6 +1560,7 @@ export class ClashManager {
           weight:      sys.weight   ?? 1,
           effectDesc,
           slotIndex,
+          targetActorId,
         },
       },
     });
@@ -1592,6 +1604,13 @@ export class ClashManager {
     // 发起方自己不能作为防守方响应自己的对抗
     if (defActor.id === initFlags.attackerId) {
       ui.notifications.warn("发起对抗的角色不能对自己的发起进行对抗");
+      return;
+    }
+
+    // 指定目标：发起时若拖拽到某个 token 上，则只有该角色能响应
+    if (initFlags.targetActorId && defActor.id !== initFlags.targetActorId) {
+      const tgtName = game.actors.get(initFlags.targetActorId)?.name ?? "指定目标";
+      ui.notifications.warn(`本次对抗已指定目标【${tgtName}】，其他角色无法对抗`);
       return;
     }
 
@@ -2604,6 +2623,13 @@ export class ClashManager {
     // 发起方不能承受自己发起的攻击
     if (selActor.id === initFlags.attackerId) {
       ui.notifications.warn("发起对抗的角色不能承受自己的攻击，请由目标玩家操作");
+      return;
+    }
+
+    // 指定目标：发起时若拖拽到某个 token 上，则只有该角色能承受
+    if (initFlags.targetActorId && selActor.id !== initFlags.targetActorId) {
+      const tgtName = game.actors.get(initFlags.targetActorId)?.name ?? "指定目标";
+      ui.notifications.warn(`本次对抗已指定目标【${tgtName}】，其他角色无法承受`);
       return;
     }
 
