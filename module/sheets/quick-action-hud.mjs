@@ -7,7 +7,7 @@
  * 提供快捷访问：
  *   - 行动值（AP）硬币（点击切换）
  *   - 角色头像（单击折叠面板，双击打开角色卡，拖动移动 HUD）
- *   - 消耗品 / 装备 / 基础技能 / EGO技能 展开面板
+ *   - 消耗品 / 装备 展开面板；基础技能三格（点击/拖拽发起对抗）
  *   - HP 球 / 状态栏 / 理智球
  */
 
@@ -69,6 +69,11 @@ const QA_ARC_LEN  = 310;
 /* 拖拽幽灵图标居中偏移量（= .qa-skill-drag-ghost 尺寸的一半，改 CSS 时同步） */
 const QA_GHOST_HALF = 50;
 
+/* BUFF 状态栏：默认格数 / 每行上限（每行上限需与 CSS 的
+   .qa-status-bar max-width 计算保持一致） */
+const QA_BUFF_DEFAULT = 8;
+const QA_BUFF_PER_ROW = 16;
+
 /* 技能边框图：assets/icons/Skill/{罪孽首字母大写}_lv{等级}.webp
    注意这是中空的七边形【边框】，不是技能图本身——技能自身的图用
    item.img，边框叠在其上层（见模板 .qa-skill-art / .qa-skill-frame）。 */
@@ -99,7 +104,7 @@ export class QuickActionHUD extends Application {
   /** 当前追踪的角色（选中 token 绑定的 actor） */
   _actor = null;
 
-  /** 当前展开的面板集合（"consumable" | "equipment" | "basic" | "ego"） */
+  /** 当前展开的面板集合（"consumable" | "equipment"） */
   _openPanels = new Set();
 
   /* ─── 默认选项 ─────────────────────────────────────────────────────────── */
@@ -212,44 +217,6 @@ export class QuickActionHUD extends Application {
       html.find(`.qa-panel[data-panel="${p}"]`).css("display", "flex");
       html.find(`.qa-btn[data-panel="${p}"]`).addClass("qa-btn--active");
     });
-    this._syncEgoRelatedHud(html);
-  }
-
-  /** 恢复 EGO 相关技能切换按钮状态，恐慌时自动激活侵蚀形态 */
-  _syncEgoRelatedHud(html) {
-    if (!this._actor) return;
-    if (!this._egoRelatedHudMode) this._egoRelatedHudMode = {};
-
-    const sys      = this._actor.system;
-    const cfg      = CONFIG.LIMBUSCOMPANY ?? {};
-    const hasPanic = (sys.buffs ?? []).some(b => b.type === "panic" && b.whenAdded !== "下回合");
-
-    // 恐慌时自动激活有侵蚀形态的 EGO 槽
-    if (hasPanic) {
-      for (const grade of (cfg.EGO_GRADES ?? [])) {
-        const itemId  = sys.skills?.ego?.[grade];
-        if (!itemId) continue;
-        const egoItem = this._actor.items.get(itemId);
-        if (egoItem?.system?.relatedSkill?.erodeUuid) {
-          this._egoRelatedHudMode[itemId] = true;
-        }
-      }
-    }
-
-    // 将状态应用到 DOM
-    for (const [itemId, isRelated] of Object.entries(this._egoRelatedHudMode)) {
-      if (!isRelated) continue;
-      const $btn  = html.find(`.qa-ego-related-toggle[data-item-id="${itemId}"]`);
-      const $slot = html.find(`.qa-ego-skill-slot[data-item-id="${itemId}"] img`);
-      $btn.addClass("related-active");
-      const mainItem = this._actor.items.get(itemId);
-      if (!mainItem) continue;
-      const uuid = (hasPanic && mainItem.system?.relatedSkill?.erodeUuid)
-        ? mainItem.system.relatedSkill.erodeUuid
-        : mainItem.system?.relatedSkill?.itemUuid;
-      const relItem = uuid && typeof fromUuidSync !== "undefined" ? fromUuidSync(uuid) : null;
-      if (relItem) $slot.attr("src", relItem.img ?? "");
-    }
   }
 
   /* ─── 数据准备 ───────────────────────────────────────────────────────────── */
@@ -269,8 +236,11 @@ export class QuickActionHUD extends Application {
 
     // 状态 BUFF：仅显示本回合有效的（排除"下回合"）
     const activeBuffs = (sys.buffs ?? []).filter(b => b.whenAdded !== "下回合");
-    // 补齐至 8 的整数倍，最少 8 格
-    const slotCount = Math.max(8, Math.ceil(activeBuffs.length / 8) * 8);
+    // 槽位数量：默认 8 格；超过 8 个后先向右补满整行（16 格），
+    // 装满 16 格才继续向下换行（每行 16 格，由 CSS 的 max-width 控制换行位置）
+    const slotCount = activeBuffs.length <= QA_BUFF_DEFAULT
+      ? QA_BUFF_DEFAULT
+      : Math.ceil(activeBuffs.length / QA_BUFF_PER_ROW) * QA_BUFF_PER_ROW;
     const buffSlots = Array.from({ length: slotCount }, (_, i) => {
       const buff = activeBuffs[i] ?? null;
       const handler = buff ? CustomBuffRegistry.get(buff.type) : null;
@@ -306,18 +276,6 @@ export class QuickActionHUD extends Application {
       };
     });
 
-    // EGO 技能
-    const egoSkills = (cfg.EGO_GRADES ?? []).map(grade => {
-      const itemId = sys.skills?.ego?.[grade] ?? null;
-      const item   = itemId ? actor.items.get(itemId) : null;
-      return {
-        grade,
-        item,
-        sinColor:   item ? (cfg.SIN_COLORS?.[item.system?.sinType] ?? "#443322") : "#443322",
-        hasRelated: !!(item?.system?.relatedSkill?.itemUuid),
-      };
-    });
-
     // ── 中央七边形：生命值血环 / 混乱阈值刻度 ────────────────────────────
     // 血环几何：起点 180°（底部尖角），顺时针铺 310°，右下留 50° 缺口（被理智球盖住）
     const hpValue = sys.hp?.value ?? 0;
@@ -346,7 +304,6 @@ export class QuickActionHUD extends Application {
       equipmentItems,
       consumableItems,
       basicSkills,
-      egoSkills,
     };
   }
 
@@ -488,69 +445,9 @@ export class QuickActionHUD extends Application {
       await this._activateItem(item);
     });
 
-    // ── EGO 技能槽点击 → 发起对抗 ────────────────────────────────────────
-    html.find(".qa-ego-skill-slot[data-item-id]").on("click", async (e) => {
-      const itemId = e.currentTarget.dataset.itemId;
-      if (!itemId || !this._actor) return;
-      let item = this._actor.items.get(itemId);
-      if (!item) return;
-
-      // 若处于相关技能模式，使用相关技能（恐慌时用侵蚀形态）
-      if (this._egoRelatedHudMode?.[itemId]) {
-        const hasPanic = (this._actor.system.buffs ?? []).some(
-          b => b.type === "panic" && b.whenAdded !== "下回合"
-        );
-        const uuid = (hasPanic && item.system?.relatedSkill?.erodeUuid)
-          ? item.system.relatedSkill.erodeUuid
-          : item.system?.relatedSkill?.itemUuid;
-        if (uuid) {
-          const relItem = typeof fromUuidSync !== "undefined" ? fromUuidSync(uuid) : null;
-          if (relItem) item = relItem;
-        }
-      }
-      await ClashManager.showInitiateDialog(this._actor, item, -2);
-    });
-
-    // ── EGO 相关技能切换按钮 ────────────────────────────────────────────
-    html.find(".qa-ego-related-toggle").on("click", (e) => {
-      e.stopPropagation();
-      const itemId = e.currentTarget.dataset.itemId;
-      if (!itemId || !this._actor) return;
-      if (!this._egoRelatedHudMode) this._egoRelatedHudMode = {};
-
-      const isNowRelated = !this._egoRelatedHudMode[itemId];
-      this._egoRelatedHudMode[itemId] = isNowRelated;
-      $(e.currentTarget).toggleClass("related-active", isNowRelated);
-
-      // 同步到角色卡 sheet 状态
-      const sheet = this._actor.sheet;
-      if (sheet) {
-        if (!sheet._egoRelatedMode) sheet._egoRelatedMode = {};
-        sheet._egoRelatedMode[itemId] = isNowRelated;
-      }
-
-      // 更新 EGO 槽图片
-      const mainItem = this._actor.items.get(itemId);
-      if (!mainItem) return;
-      const hasPanic = (this._actor.system.buffs ?? []).some(
-        b => b.type === "panic" && b.whenAdded !== "下回合"
-      );
-      const $slot = html.find(`.qa-ego-skill-slot[data-item-id="${itemId}"] img`);
-      if (isNowRelated) {
-        const uuid = (hasPanic && mainItem.system?.relatedSkill?.erodeUuid)
-          ? mainItem.system.relatedSkill.erodeUuid
-          : mainItem.system?.relatedSkill?.itemUuid;
-        const relItem = uuid && typeof fromUuidSync !== "undefined" ? fromUuidSync(uuid) : null;
-        if (relItem) $slot.attr("src", relItem.img ?? "");
-      } else {
-        $slot.attr("src", mainItem.img ?? "");
-      }
-    });
-
     // ── 技能 / 物品悬浮 Title 卡（与角色卡一致） ──────────────────────────
     const hoverTargets = [
       ".qa-skill-slot[data-item-id]",
-      ".qa-ego-skill-slot[data-item-id]",
       ".qa-panel-item[data-item-id]",
     ].join(", ");
 

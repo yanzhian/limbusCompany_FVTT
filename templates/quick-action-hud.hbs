@@ -118,8 +118,14 @@
           {{/each}}
         </div>
 
-        {{!-- 下：行动值 + 刷新（同一排） --}}
+        {{!-- 下：刷新 + 行动值（同一排，刷新在左） --}}
         <div class="qa-ap-row">
+          {{!-- 刷新：同步角色卡战斗页的基础技能（未激活则代替执行"激活"） --}}
+          <button class="qa-refresh-btn" title="刷新：同步角色卡战斗页的基础技能（未激活则代替激活）">
+            <img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/重置.webp"
+                 width="22" height="22" alt="刷新" draggable="false">
+          </button>
+
           {{#each apCoins}}
             <div class="qa-ap-coin {{#if active}}qa-ap-coin--active{{else}}qa-ap-coin--inactive{{/if}}"
                  data-index="{{index}}" title="行动点 {{index}}">
@@ -127,53 +133,9 @@
                    width="28" height="28" alt="AP" draggable="false">
             </div>
           {{/each}}
-
-          {{!-- 刷新：同步角色卡战斗页的基础技能（未激活则代替执行"激活"） --}}
-          <button class="qa-refresh-btn" title="刷新：同步角色卡战斗页的基础技能（未激活则代替激活）">
-            <img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/重置.webp"
-                 width="22" height="22" alt="刷新" draggable="false">
-          </button>
         </div>
 
       </div>
-    </div>
-
-    {{!-- 右侧按钮组（E.G.O 技能弹出面板） --}}
-    <div class="qa-btn-group qa-btn-group--right">
-
-      {{!-- E.G.O 技能面板（初始隐藏） --}}
-      <div class="qa-panel" data-panel="ego" style="display:none">
-        <div class="qa-panel-title">E.G.O技能</div>
-        <div class="qa-panel-divider"></div>
-        <div class="qa-panel-body">
-          <div class="qa-skills-grid">
-            {{#each egoSkills}}
-              <div class="qa-ego-skill-wrap">
-                <div class="qa-ego-skill-slot
-                             {{#if item}}qa-skill-slot--filled{{else}}qa-skill-slot--empty{{/if}}"
-                     data-item-id="{{#if item}}{{item.id}}{{/if}}"
-                     data-grade="{{grade}}"
-                     style="border-color:{{sinColor}}"
-                     title="{{#if item}}{{item.name}}（{{grade}}）{{else}}{{grade}}（空）{{/if}}">
-                  {{#if item}}
-                    <img src="{{item.img}}" alt="{{item.name}}" draggable="false">
-                  {{/if}}
-                  <span class="qa-ego-grade">{{grade}}</span>
-                </div>
-                {{#if hasRelated}}
-                  <button class="qa-ego-related-toggle combat-skill-related-toggle"
-                          data-item-id="{{item.id}}"
-                          title="切换相关技能">↺</button>
-                {{/if}}
-              </div>
-            {{/each}}
-          </div>
-        </div>
-        <div class="qa-panel-divider"></div>
-      </div>
-
-      {{!-- 右侧按钮 --}}
-      <button class="qa-btn" data-panel="ego">E.G.O</button>
     </div>
 
   </div>{{!-- .qa-mid-row --}}

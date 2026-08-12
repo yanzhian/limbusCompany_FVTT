@@ -5656,7 +5656,8 @@ body.game .limbuscompany.app img {
   z-index:         100;
   display:         flex;
   flex-direction:  column;
-  align-items:     center;
+  /* 左对齐：底部 BUFF 栏与上方内容左边缘对齐（原为 center，BUFF 栏会居中偏移） */
+  align-items:     flex-start;
   gap:             4px;
   user-select:     none;
   pointer-events:  auto;
@@ -5782,24 +5783,24 @@ body.game .limbuscompany.app img {
 }
 .qa-skill-drag-ghost img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
 
-/* ── 刷新按钮（与行动值同排）───────────────────────────────── */
+/* ── 刷新按钮（行动值左侧，无背景 + 白色描边）───────────────── */
 .qa-refresh-btn {
   width:           30px;
   height:          30px;
-  margin-left:     6px;
+  margin-right:    6px;
   flex-shrink:     0;
-  background:      #221E19;
-  border:          1px solid #4A4038;
+  background:      transparent;
+  border:          1px solid #FFFFFF;
   border-radius:   4px;
   cursor:          pointer;
   display:         flex;
   align-items:     center;
   justify-content: center;
   padding:         0;
-  transition:      background .15s, border-color .15s, transform .32s;
+  transition:      border-color .15s, filter .15s, transform .32s;
 }
-.qa-refresh-btn:hover      { background: #2F2820; border-color: #C9A84C; }
-.qa-refresh-btn.qa-spin    { transform: rotate(360deg); }
+.qa-refresh-btn:hover   { border-color: #C9A84C; filter: brightness(1.2); }
+.qa-refresh-btn.qa-spin { transform: rotate(360deg); }
 
 /* ── AP 硬币行（含刷新按钮）───────────────────────────────── */
 .qa-ap-row {
@@ -6186,12 +6187,20 @@ body.game .limbuscompany.app img {
 }
 
 /* ── BUFF 状态栏 ───────────────────────────────────────────── */
+/* BUFF 状态栏：左对齐；默认 8 格，新增的向右扩展，
+   每行最多 16 格（由 max-width 决定换行位置），装满才向下换行。
+   每行格数需与 quick-action-hud.mjs 的 QA_BUFF_PER_ROW 保持一致。 */
 .qa-status-bar {
-  display:   flex;
-  flex-wrap: wrap;
-  gap:       2px;
-  flex:      1;
-  max-width: 300px; /* 8格 × (24+2) px */
+  --buff-slot:    34px;   /* 32px 内容 + 1px 边框 ×2 */
+  --buff-gap:     2px;
+  --buff-per-row: 16;
+
+  display:         flex;
+  flex-wrap:       wrap;
+  justify-content: flex-start;
+  align-content:   flex-start;
+  gap:             var(--buff-gap);
+  max-width: calc(var(--buff-per-row) * (var(--buff-slot) + var(--buff-gap)) - var(--buff-gap));
 }
 
 .qa-buff-slot {
