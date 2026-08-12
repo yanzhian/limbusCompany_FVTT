@@ -115,6 +115,32 @@ function _sanityColors(value) {
   return { bg: _hex(rgb), border: _hex(rgb.map(ch => ch * 0.62)) };
 }
 
+/* ═══════════════════════════════════════════════════════════════════════════
+   EGO 环绕布局
+   七边形有 7 条边，底部两条已被生命值（左下）与理智值（右下）占用，
+   剩下 5 条正好对应 5 个 EGO 等级。下面是这 5 条边中点相对中心的方向角
+   （度，0°=正右、顺时针为正、y 轴向下，与 CSS 坐标系一致）：
+     ZAYIN 左下 / TET 左上 / HE 正上 / WAW 右上 / ALEPH 右下
+   QA_EGO_RADIUS 为槽位中心到七边形中心的距离，按 --hex-size 的百分比计。
+═══════════════════════════════════════════════════════════════════════════ */
+const QA_EGO_ANGLES = {
+  ZAYIN: 167.14,
+  TET:   218.57,
+  HE:    270,
+  WAW:   321.43,
+  ALEPH:  12.86,
+};
+const QA_EGO_RADIUS = 82;   // % of --hex-size
+
+/** 计算某个 EGO 等级槽位在七边形容器内的百分比坐标（配合 translate(-50%,-50%)） */
+function _egoSlotPos(grade) {
+  const rad = (QA_EGO_ANGLES[grade] ?? 270) * Math.PI / 180;
+  return {
+    x: (50 + QA_EGO_RADIUS * Math.cos(rad)).toFixed(2),
+    y: (50 + QA_EGO_RADIUS * Math.sin(rad)).toFixed(2),
+  };
+}
+
 /** 按罪孽+等级取技能图标；EGO 用专属图标，取不到则回退通用图 */
 function _skillIcon(item) {
   if (!item) return "";
@@ -181,7 +207,10 @@ export class QuickActionHUD extends Application {
 
     const sameActor = hud._actor?.id === actor.id;
     hud._actor = actor;
-    if (!sameActor) hud._openPanels.clear();
+    if (!sameActor) {
+      hud._openPanels.clear();
+      hud._egoMode = false;   // 换角色时退出 EGO 模式，避免状态带到下一个角色
+    }
     hud.render(true);
   }
 
@@ -332,6 +361,15 @@ export class QuickActionHUD extends Application {
       angle:     QA_ARC_FROM + QA_ARC_LEN * ((t.percent ?? 0) / 100),
     }));
 
+    // ── EGO 模式：环绕七边形显示 5 个等级（空槽不显示）────────────────────
+    const egoSlots = (cfg.EGO_GRADES ?? []).map(grade => {
+      const itemId = sys.skills?.ego?.[grade] ?? null;
+      const item   = itemId ? actor.items.get(itemId) : null;
+      if (!item) return null;                       // 该等级为空 → 不显示
+      const pos = _egoSlotPos(grade);
+      return { grade, item, x: pos.x, y: pos.y };
+    }).filter(Boolean);
+
     // 理智值：数值越低越偏红，越高越偏蓝（见 _sanityColors 锚点）
     const sanValue  = sys.sanity?.value ?? 50;
     const sanColors = _sanityColors(sanValue);
@@ -359,6 +397,9 @@ export class QuickActionHUD extends Application {
       sanValue:       sanValue,
       sanColor:       sanColors.bg,
       sanBorder:      sanColors.border,
+      egoMode:        !!this._egoMode,
+      egoSlots,
+      egoFrame:       `${SKILL_ICON_BASE}E.G.O.webp`,
       buffSlots,
       equipmentItems,
       consumableItems,
@@ -418,12 +459,16 @@ export class QuickActionHUD extends Application {
       _clickTimer = setTimeout(() => {
         _clickTimer = null;
         if (this._dragging) return;   // 拖动后不触发单击
-        // 有面板开着 → 全部关闭；全关着 → 不做操作
+        // 先收起已展开的面板；面板全关时才切换 EGO 模式，
+        // 避免"关面板"和"进 EGO"两个动作被同一次点击一起触发
         if (this._openPanels.size > 0) {
           this._openPanels.clear();
           html.find(".qa-panel").hide();
           html.find(".qa-btn[data-panel]").removeClass("qa-btn--active");
+          return;
         }
+        this._egoMode = !this._egoMode;
+        this.render(false);
       }, 220);
     });
 
@@ -513,6 +558,7 @@ export class QuickActionHUD extends Application {
     // ── 技能 / 物品悬浮 Title 卡（与角色卡一致） ──────────────────────────
     const hoverTargets = [
       ".qa-skill-slot[data-item-id]",
+      ".qa-ego-slot[data-item-id]",
       ".qa-panel-item[data-item-id]",
     ].join(", ");
 
@@ -701,14 +747,17 @@ export class QuickActionHUD extends Application {
       return m ? { x: c.x * m.a + m.tx, y: c.y * m.d + m.ty } : null;
     };
 
-    html.find(".qa-skill-slot--ready").on("mousedown", (ev) => {
+    // 基础技能格与 EGO 环绕槽共用同一套"点击发起 / 拖拽指定目标"交互。
+    // 区别只在 slotIndex：基础技能传战斗槽下标（会推进 6-bag），
+    // EGO 传 -2（不属于 6-bag，只扣行动值）。
+    html.find(".qa-skill-slot--ready, .qa-ego-slot").on("mousedown", (ev) => {
       if (ev.button !== 0) return;
       ev.preventDefault();
       ev.stopPropagation();
 
       const el        = $(ev.currentTarget);
       const itemId    = el.data("itemId");
-      const slotIndex = Number(el.data("slotIndex"));
+      const slotIndex = el.hasClass("qa-ego-slot") ? -2 : Number(el.data("slotIndex"));
       if (!itemId) return;
 
       const startX = ev.clientX, startY = ev.clientY;
@@ -856,7 +905,8 @@ export class QuickActionHUD extends Application {
     const item  = actor?.items.get(itemId);
     if (!actor || !item) return;
 
-    // 只有激活槽（0/1）可以发起对抗，准备槽（2）不可用
+    // 基础技能只有激活槽（0/1）可用，准备槽（2）不可用；
+    // slotIndex 为负表示不来自 6-bag（-2 = EGO 等非战斗槽来源），不受此限制
     if (slotIndex > 1) {
       ui.notifications.warn("只有激活槽中的技能可以发起对抗");
       return;
@@ -884,13 +934,18 @@ export class QuickActionHUD extends Application {
     // _advanceBagStateManually，否则角色卡关闭时会推进两次，技能跳着走、
     // 看起来像被打乱。
 
-    // 打出格向上飞走；它右侧的格子左移补位，左侧的保持不动
-    const row = this.element?.find(".qa-skill-row");
-    row?.find(`.qa-skill-slot[data-slot-index="${slotIndex}"]`).addClass("qa-skill-slot--casting");
-    row?.find(".qa-skill-slot").each((_, el) => {
-      const idx = Number(el.dataset.slotIndex);
-      if (idx > slotIndex) $(el).addClass("qa-skill-slot--shifting");
-    });
+    if (slotIndex < 0) {
+      // 非战斗槽来源（EGO 等）：不属于 6-bag，没有补位概念，只播一次打出反馈
+      this.element?.find(`.qa-ego-slot[data-item-id="${itemId}"]`).addClass("qa-skill-slot--casting");
+    } else {
+      // 打出格向上飞走；它右侧的格子左移补位，左侧的保持不动
+      const row = this.element?.find(".qa-skill-row");
+      row?.find(`.qa-skill-slot[data-slot-index="${slotIndex}"]`).addClass("qa-skill-slot--casting");
+      row?.find(".qa-skill-slot").each((_, el) => {
+        const idx = Number(el.dataset.slotIndex);
+        if (idx > slotIndex) $(el).addClass("qa-skill-slot--shifting");
+      });
+    }
     setTimeout(() => this.render(false), 430);
   }
 

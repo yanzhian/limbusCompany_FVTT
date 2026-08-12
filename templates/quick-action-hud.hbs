@@ -1,10 +1,11 @@
 {{!-- quick-action-hud.hbs — 快捷操作 HUD --}}
-<div id="limbus-quick-action-hud" class="limbus-qa-hud">
+<div id="limbus-quick-action-hud" class="limbus-qa-hud {{#if egoMode}}qa-hud--ego{{/if}}">
 
   {{!-- 中间行：[消耗品/装备/恐惧鉴定] | [状态七边形] | [基础技能/行动值 + 刷新] --}}
   <div class="qa-mid-row">
 
-    {{!-- 左侧按钮组（消耗品 / 装备），面板在按钮上方展开 --}}
+    {{!-- 左侧按钮组（消耗品 / 装备 / 恐惧鉴定）；EGO 模式下隐藏 --}}
+    {{#unless egoMode}}
     <div class="qa-btn-group qa-btn-group--left">
 
       {{!-- 消耗品面板（初始隐藏） --}}
@@ -62,9 +63,10 @@
         </div>
       </div>
     </div>
+    {{/unless}}
 
     {{!-- ══ 中央：角色状态七边形（生命值血环 / 头像 / 理智值 / 混乱阈值）══ --}}
-    {{!-- 单击折叠面板 / 双击打开角色卡 / 拖动移动 HUD（沿用 .qa-avatar 交互） --}}
+    {{!-- 单击头像切换 EGO 模式 / 双击打开角色卡 / 拖动移动 HUD --}}
     <div class="qa-hex-block" style="--hp: {{hpPct}};">
 
       {{!-- 底层：黑色七边形（血扣掉后露出的底色） --}}
@@ -85,7 +87,7 @@
       {{!-- 顶层：内缩 24px 的七边形，裁切头像 --}}
       <div class="qa-hex-avatar">
         <img class="qa-avatar" src="{{actorImg}}" alt="{{actorName}}"
-             title="{{actorName}}（双击打开角色卡 / 拖动移动）" draggable="false">
+             title="{{actorName}}（单击切换 E.G.O / 双击打开角色卡 / 拖动移动）" draggable="false">
       </div>
 
       {{!-- 生命值数字（左下） --}}
@@ -96,9 +98,26 @@
       <div class="qa-hex-san" title="理智值 {{sanValue}}"
            style="background:{{sanColor}};border-color:{{sanBorder}};">{{sanValue}}</div>
 
+      {{!-- EGO 环绕槽：占用七边形除左下(生命值)/右下(理智值)外的 5 条边；
+            空等级不渲染。点击/拖拽释放，交互与基础技能一致 --}}
+      {{#if egoMode}}
+        {{#each egoSlots}}
+          <div class="qa-ego-slot"
+               style="left:{{x}}%; top:{{y}}%;"
+               data-item-id="{{item.id}}"
+               data-grade="{{grade}}"
+               title="{{item.name}}（{{grade}}）　点击发起对抗／拖到 token 指定目标">
+            <img class="qa-skill-art"   src="{{item.img}}"  alt="{{item.name}}" draggable="false">
+            <img class="qa-skill-frame" src="{{../egoFrame}}" alt="" draggable="false">
+            <span class="qa-ego-grade">{{grade}}</span>
+          </div>
+        {{/each}}
+      {{/if}}
+
     </div>{{!-- /qa-hex-block --}}
 
-    {{!-- ══ 右侧：上=基础技能，下=行动值，右=刷新 ══ --}}
+    {{!-- ══ 右侧：上=基础技能，下=行动值，右=刷新；EGO 模式下隐藏 ══ --}}
+    {{#unless egoMode}}
     <div class="qa-right-block">
       <div class="qa-right-col">
 
@@ -147,6 +166,7 @@
 
       </div>
     </div>
+    {{/unless}}
 
   </div>{{!-- .qa-mid-row --}}
 

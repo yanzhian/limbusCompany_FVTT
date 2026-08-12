@@ -5771,6 +5771,48 @@ body.game .limbuscompany.app img {
 }
 .qa-skill-slot--shifting { animation: qa-skill-shift .3s ease-out backwards; }
 
+/* ══════════════════════════════════════════════════════════════
+   E.G.O 模式：单击头像切换。左右两块隐藏，5 个 EGO 等级环绕七边形
+   （底部两条边已被生命值/理智值占用，剩余 5 条正好对应 5 个等级）。
+   槽位坐标由 JS 按边中点方向角算出（见 QA_EGO_ANGLES / QA_EGO_RADIUS），
+   以百分比写入 inline style，故此处只管样式不管定位。
+   ══════════════════════════════════════════════════════════════ */
+/* EGO 模式下七边形四周要放下环绕槽，预留外扩空间避免与 BUFF 栏重叠 */
+.qa-hud--ego .qa-hex-block { margin: 62px 74px 40px; }
+
+.qa-ego-slot {
+  --ego-size: 62px;
+  position:   absolute;
+  width:      var(--ego-size);
+  height:     var(--ego-size);
+  transform:  translate(-50%, -50%);   /* inline 的 left/top 是槽位中心 */
+  cursor:     pointer;
+  transition: transform .12s, filter .12s;
+  z-index:    6;
+}
+.qa-ego-slot:hover {
+  transform: translate(-50%, -50%) scale(1.08);
+  filter:    brightness(1.15);
+  z-index:   10;
+}
+/* 内部图层复用基础技能格的两层结构（技能图 + 边框） */
+.qa-ego-slot .qa-skill-art   { --art-inset: 15%; }
+
+/* 等级名（ZAYIN / TET / HE / WAW / ALEPH） */
+.qa-ego-grade {
+  position:    absolute;
+  left:        50%;
+  top:         100%;
+  transform:   translateX(-50%);
+  margin-top:  2px;
+  font-size:   12px;
+  font-weight: bold;
+  color:       #E8C9A2;
+  white-space: nowrap;
+  pointer-events: none;
+  text-shadow: 1px 1px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000;
+}
+
 /* 瞄准中的源技能格：上浮并压暗，把视线让给箭头 */
 .qa-skill-row .qa-skill-slot--aiming {
   transform: translateY(-10px);
