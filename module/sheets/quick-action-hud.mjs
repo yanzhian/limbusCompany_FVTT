@@ -86,6 +86,35 @@ const SIN_ICON_NAME = {
   wrath: "Wrath", lust: "Lust", sloth: "Sloth", gluttony: "Gluttony",
   gloom: "Gloom", pride: "Pride", envy: "Envy",
 };
+/* 理智值配色：按数值在三个锚点之间线性插值
+   95 = #4F7A9C（蓝，清醒）／50 = #6A6A6A（灰，中间）／5 = #BF2B2A（红，濒临恐慌） */
+const SANITY_STOPS = [
+  { v:  5, c: [0xBF, 0x2B, 0x2A] },
+  { v: 50, c: [0x6A, 0x6A, 0x6A] },
+  { v: 95, c: [0x4F, 0x7A, 0x9C] },
+];
+const _hex = ([r, g, b]) =>
+  "#" + [r, g, b].map(n => Math.round(Math.max(0, Math.min(255, n))).toString(16).padStart(2, "0")).join("");
+
+/**
+ * 理智值 → 圆底色 / 描边色。
+ * @param {number} value 理智值（超出 5–95 会被夹取到端点色）
+ * @returns {{ bg: string, border: string }} 描边取底色的 0.62 倍亮度
+ */
+function _sanityColors(value) {
+  const v = Math.max(SANITY_STOPS[0].v, Math.min(SANITY_STOPS[2].v, Number(value) || 0));
+  let rgb = SANITY_STOPS[2].c;
+  for (let i = 0; i < SANITY_STOPS.length - 1; i++) {
+    const a = SANITY_STOPS[i], b = SANITY_STOPS[i + 1];
+    if (v >= a.v && v <= b.v) {
+      const t = (v - a.v) / (b.v - a.v);
+      rgb = a.c.map((ch, k) => ch + (b.c[k] - ch) * t);
+      break;
+    }
+  }
+  return { bg: _hex(rgb), border: _hex(rgb.map(ch => ch * 0.62)) };
+}
+
 /** 按罪孽+等级取技能图标；EGO 用专属图标，取不到则回退通用图 */
 function _skillIcon(item) {
   if (!item) return "";
@@ -303,6 +332,10 @@ export class QuickActionHUD extends Application {
       angle:     QA_ARC_FROM + QA_ARC_LEN * ((t.percent ?? 0) / 100),
     }));
 
+    // 理智值：数值越低越偏红，越高越偏蓝（见 _sanityColors 锚点）
+    const sanValue  = sys.sanity?.value ?? 50;
+    const sanColors = _sanityColors(sanValue);
+
     // ── "下一回合"按钮显示条件 ───────────────────────────────────────────
     // 玩家：必须处于已开始的遭遇战中、且当前正轮到本角色行动；
     // GM：只要遭遇战进行中就一直显示（GM 同时控制多个角色，不受"轮到谁"限制）。
@@ -323,7 +356,9 @@ export class QuickActionHUD extends Application {
       chaosLines,
       panicFear:      sys.panicCounters?.fear    ?? 0,
       panicResolve:   sys.panicCounters?.resolve ?? 0,
-      sanValue:       sys.sanity?.value ?? 50,
+      sanValue:       sanValue,
+      sanColor:       sanColors.bg,
+      sanBorder:      sanColors.border,
       buffSlots,
       equipmentItems,
       consumableItems,
