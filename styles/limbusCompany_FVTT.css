@@ -5954,13 +5954,13 @@ body.game .limbuscompany.app img {
 /* 已触发的阈值：变暗，与未触发区分 */
 .qa-chaos-line--fired { background: #7A7A7A; opacity: .55; }
 
-/* 顶层：内缩 12% 的七边形（半径比 100→76，对应 200px 时环宽 24px），裁切头像 */
+/* 顶层：内缩 14% 的七边形（半径比 100→72，对应 200px 时环宽 28px），裁切头像 */
 .qa-hex-avatar {
   position:  absolute;
   inset:     0;
   clip-path: polygon(
-    66.49% 15.76%, 87.05% 41.54%, 79.71% 73.69%, 50% 88%,
-    20.29% 73.69%, 12.95% 41.54%, 33.51% 15.76%
+    65.62% 17.57%, 85.10% 41.99%, 78.15% 72.44%, 50% 86%,
+    21.85% 72.44%, 14.90% 41.99%, 34.38% 17.57%
   );
   overflow:   hidden;
   background: #111;
@@ -6003,7 +6003,8 @@ body.game .limbuscompany.app img {
   justify-content: center;
   font-size:       calc(var(--hex-size) * 0.11);
   font-weight:     bold;
-  color:           #0C1E2C;
+  color:           #FFFFFF;
+  text-shadow:     1px 1px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000;
   cursor:          pointer;
   z-index:         5;
   transition:      filter .15s;
