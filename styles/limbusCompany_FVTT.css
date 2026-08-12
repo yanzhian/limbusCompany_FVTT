@@ -5777,8 +5777,13 @@ body.game .limbuscompany.app img {
    槽位坐标由 JS 按边中点方向角算出（见 QA_EGO_ANGLES / QA_EGO_RADIUS），
    以百分比写入 inline style，故此处只管样式不管定位。
    ══════════════════════════════════════════════════════════════ */
-/* EGO 模式下七边形四周要放下环绕槽，预留外扩空间避免与 BUFF 栏重叠 */
-.qa-hud--ego .qa-hex-block { margin: 62px 74px 40px; }
+/* EGO 模式：左右两块只隐藏、不移除（visibility 保留占位），
+   这样切换模式时中央七边形与底部 BUFF 栏的位置完全不变。
+   EGO 槽是绝对定位、不参与布局，正好铺在左右两块空出来的视觉区域上。 */
+.qa-hud--ego .qa-btn-group--left,
+.qa-hud--ego .qa-right-block {
+  visibility: hidden;
+}
 
 .qa-ego-slot {
   --ego-size: 62px;
@@ -5798,14 +5803,15 @@ body.game .limbuscompany.app img {
 /* 内部图层复用基础技能格的两层结构（技能图 + 边框） */
 .qa-ego-slot .qa-skill-art   { --art-inset: 15%; }
 
-/* 等级名（ZAYIN / TET / HE / WAW / ALEPH） */
+/* 等级名（ZAYIN / TET / HE / WAW / ALEPH）
+   压在槽位底部内侧而非外侧：下方两个槽（ZAYIN/ALEPH）的标签若放在槽外，
+   会越过七边形底边压到 BUFF 栏上。 */
 .qa-ego-grade {
   position:    absolute;
   left:        50%;
-  top:         100%;
+  bottom:      -2px;
   transform:   translateX(-50%);
-  margin-top:  2px;
-  font-size:   12px;
+  font-size:   11px;
   font-weight: bold;
   color:       #E8C9A2;
   white-space: nowrap;
