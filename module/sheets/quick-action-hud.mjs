@@ -66,7 +66,12 @@ function _buffIconPath(type, name = "") {
 const QA_ARC_FROM = 180;
 const QA_ARC_LEN  = 310;
 
-/* 技能图标：assets/icons/Skill/{罪孽首字母大写}_lv{等级}.webp */
+/* 拖拽幽灵图标居中偏移量（= .qa-skill-drag-ghost 尺寸的一半，改 CSS 时同步） */
+const QA_GHOST_HALF = 37;
+
+/* 技能边框图：assets/icons/Skill/{罪孽首字母大写}_lv{等级}.webp
+   注意这是中空的七边形【边框】，不是技能图本身——技能自身的图用
+   item.img，边框叠在其上层（见模板 .qa-skill-art / .qa-skill-frame）。 */
 const SKILL_ICON_BASE = "systems/limbusCompany_FVTT/assets/icons/Skill/";
 const SIN_ICON_NAME = {
   wrath: "Wrath", lust: "Lust", sloth: "Sloth", gluttony: "Gluttony",
@@ -739,7 +744,7 @@ export class QuickActionHUD extends Application {
         dragging = { el, itemId, slotIndex };
         el.addClass("qa-skill-slot--dragging");
         ghost = $(`<div class="qa-skill-drag-ghost">${el.html()}</div>`)
-          .css({ left: ev.clientX - 22, top: ev.clientY - 22 })
+          .css({ left: ev.clientX - QA_GHOST_HALF, top: ev.clientY - QA_GHOST_HALF })
           .appendTo(document.body);
         ui.notifications.info("拖到目标 Token 上松开：指定该角色为唯一可对抗目标");
       }, LONG_PRESS_MS);
@@ -747,7 +752,7 @@ export class QuickActionHUD extends Application {
       $(document)
         .on("mousemove.qaSkillDrag", (e) => {
           if (!dragging || !ghost) return;
-          ghost.css({ left: e.clientX - 22, top: e.clientY - 22 });
+          ghost.css({ left: e.clientX - QA_GHOST_HALF, top: e.clientY - QA_GHOST_HALF });
         })
         .on("mouseup.qaSkillDrag", async (e) => {
           // 未到长按阈值 → 视为单击，不指定目标

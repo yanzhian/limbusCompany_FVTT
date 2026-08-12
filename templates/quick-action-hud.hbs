@@ -110,13 +110,15 @@
                  data-slot-index="{{slotIndex}}"
                  title="{{#if item}}{{item.name}}{{#if isPending}}（准备）{{else}}　点击发起对抗／长按拖到 token 指定目标{{/if}}{{else}}（空）{{/if}}">
               {{#if item}}
-                <img src="{{icon}}" alt="{{item.name}}" draggable="false">
+                {{!-- 底层：技能自身的图；顶层：罪孽+等级的空心边框 --}}
+                <img class="qa-skill-art"   src="{{item.img}}" alt="{{item.name}}" draggable="false">
+                <img class="qa-skill-frame" src="{{icon}}"     alt="" draggable="false">
               {{/if}}
             </div>
           {{/each}}
         </div>
 
-        {{!-- 下：行动值 --}}
+        {{!-- 下：行动值 + 刷新（同一排） --}}
         <div class="qa-ap-row">
           {{#each apCoins}}
             <div class="qa-ap-coin {{#if active}}qa-ap-coin--active{{else}}qa-ap-coin--inactive{{/if}}"
@@ -125,15 +127,15 @@
                    width="28" height="28" alt="AP" draggable="false">
             </div>
           {{/each}}
+
+          {{!-- 刷新：同步角色卡战斗页的基础技能（未激活则代替执行"激活"） --}}
+          <button class="qa-refresh-btn" title="刷新：同步角色卡战斗页的基础技能（未激活则代替激活）">
+            <img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/重置.webp"
+                 width="22" height="22" alt="刷新" draggable="false">
+          </button>
         </div>
 
       </div>
-
-      {{!-- 刷新：同步角色卡战斗页的基础技能（未激活则代替执行"激活"） --}}
-      <button class="qa-refresh-btn" title="刷新：同步角色卡战斗页的基础技能（未激活则代替激活）">
-        <img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/重置.webp"
-             width="24" height="24" alt="刷新" draggable="false">
-      </button>
     </div>
 
     {{!-- 右侧按钮组（E.G.O 技能弹出面板） --}}

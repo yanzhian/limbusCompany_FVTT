@@ -5681,37 +5681,55 @@ body.game .limbuscompany.app img {
 .qa-skill-row {
   display:     flex;
   align-items: center;
-  gap:         5px;
-  height:      48px;
+  gap:         2px;
 }
 
-/* 单个技能格：八边形 */
+/* 单个技能格：技能图垫底 + 罪孽/等级空心边框盖在上面
+   （{罪孽}_lv{N}.webp 是中空的七边形边框，不是技能图本身） */
 .qa-skill-slot {
-  position:        relative;
-  width:           44px;
-  height:          44px;
-  flex-shrink:     0;
-  cursor:          pointer;
-  background:      #0E0C0A;
-  display:         flex;
-  align-items:     center;
-  justify-content: center;
-  transition:      transform .12s;
-  clip-path: polygon(30% 0%, 70% 0%, 100% 30%, 100% 70%,
-                     70% 100%, 30% 100%, 0% 70%, 0% 30%);
+  --skill-size: 74px;
+  /* 边框图中空区域相对整图的内缩比例，用于把技能图塞进框内 */
+  --art-inset:  17%;
+
+  position:    relative;
+  width:       var(--skill-size);
+  height:      var(--skill-size);
+  flex-shrink: 0;
+  cursor:      pointer;
+  transition:  transform .12s;
 }
-.qa-skill-slot img {
-  width:  100%;
-  height: 100%;
+
+/* 底层：技能自身的图，裁成尖朝下七边形，塞进边框中空区域 */
+.qa-skill-art {
+  position:   absolute;
+  inset:      var(--art-inset);
+  width:      auto;
+  height:     auto;
+  object-fit: cover;
+  display:    block;
+  pointer-events: none;
+  clip-path: polygon(
+    71.7% 5.0%, 98.7% 38.9%, 89.1% 81.2%, 50% 100%,
+    10.9% 81.2%, 1.3% 38.9%, 28.3% 5.0%
+  );
+}
+
+/* 顶层：罪孽 + 等级边框 */
+.qa-skill-frame {
+  position:   absolute;
+  inset:      0;
+  width:      100%;
+  height:     100%;
   object-fit: contain;
-  display: block;
+  display:    block;
   pointer-events: none;
 }
+
 .qa-skill-slot--ready:hover { transform: translateY(-3px); }
 
 /* 准备格（半透明，不可直接使用）/ 空格 */
 .qa-skill-slot--pending { opacity: .42; cursor: default; }
-.qa-skill-slot--empty   { background: #1A1714; opacity: .35; cursor: default; }
+.qa-skill-slot--empty   { cursor: default; }
 
 /* 打出：向上飞走并淡出 */
 @keyframes qa-skill-cast {
@@ -5745,15 +5763,16 @@ body.game .limbuscompany.app img {
   z-index:        9999;
   pointer-events: none;
   opacity:        .85;
-  width:          44px;
-  height:         44px;
+  width:          74px;
+  height:         74px;
 }
-.qa-skill-drag-ghost img { width: 100%; height: 100%; object-fit: contain; }
+.qa-skill-drag-ghost img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
 
-/* ── 刷新按钮 ─────────────────────────────────────────────── */
+/* ── 刷新按钮（与行动值同排）───────────────────────────────── */
 .qa-refresh-btn {
-  width:           38px;
-  height:          38px;
+  width:           30px;
+  height:          30px;
+  margin-left:     6px;
   flex-shrink:     0;
   background:      #221E19;
   border:          1px solid #4A4038;
@@ -5768,9 +5787,10 @@ body.game .limbuscompany.app img {
 .qa-refresh-btn:hover      { background: #2F2820; border-color: #C9A84C; }
 .qa-refresh-btn.qa-spin    { transform: rotate(360deg); }
 
-/* ── AP 硬币行 ────────────────────────────────────────────── */
+/* ── AP 硬币行（含刷新按钮）───────────────────────────────── */
 .qa-ap-row {
   display:         flex;
+  align-items:     center;
   gap:             4px;
   justify-content: center;
 }
