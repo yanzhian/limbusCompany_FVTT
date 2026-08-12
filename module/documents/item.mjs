@@ -111,17 +111,17 @@ export class SkillData extends foundry.abstract.TypeDataModel {
   static defineSchema() {
     const fields = foundry.data.fields;
 
-    // 相关技能结构（v2：技能池，替代旧版单一 itemUuid + 冗余 trigger 字段。
-    // 触发改由④效果「相关技能转换」自身的 Activity trigger 决定，不再需要独立 trigger 字段）
     const relatedSkillSchema = new fields.SchemaField({
-      // 相关技能池：可挂载多个技能 UUID，配合"相关技能转换"效果随机/指定切换
+      // 已废弃：旧版"相关技能池"（UUID 数组），配合④效果「相关技能转换 · 随机/指定」使用。
+      // 已被"技能名字（背包检索）"方式取代（不再需要预先配置池，也不受 UUID 变化影响），
+      // 相关 UI/读写逻辑已移除，字段本身保留仅为兼容旧存档，不再新增/编辑。
       pool: new fields.ArrayField(
         new fields.SchemaField({
           itemUuid: new fields.StringField({ required: false, nullable: true, initial: null }),
         }),
         { required: true, initial: [] }
       ),
-      // EGO 技能：恐慌时替换为侵蚀形态 UUID（脱离恐慌后恢复，与技能池无关，独立机制）
+      // EGO 技能：恐慌时替换为侵蚀形态 UUID（脱离恐慌后恢复，与技能池无关，独立机制，正常使用中）
       erodeUuid: new fields.StringField({ required: false, nullable: true, initial: null }),
     });
 
@@ -552,19 +552,9 @@ export class LimbusItem extends Item {
   }
 
   // ─── 相关技能解析 ──────────────────────────────────────────────────────
-
-  /**
-   * 获取相关技能池中所有已配置的 Item 实例（按池内顺序，跳过解析失败的条目）。
-   * @returns {Promise<LimbusItem[]>}
-   */
-  async getRelatedSkillPool() {
-    if (this.type !== "skill") return [];
-    const pool = this.system.relatedSkill?.pool ?? [];
-    const items = await Promise.all(
-      pool.map(p => (p?.itemUuid ? fromUuid(p.itemUuid).catch(() => null) : null))
-    );
-    return items.filter(Boolean);
-  }
+  // 注：旧版"相关技能池"（system.relatedSkill.pool，配合④效果「相关技能
+  // 转换 · 随机/指定」使用）已被"技能名字（背包检索）"方式取代并移除相关
+  // UI/逻辑，schema 字段本身保留（避免 world 需要重启），仅不再读写。
 
   /**
    * 获取侵蚀形态技能 Item 实例（EGO 专用，恐慌时使用）

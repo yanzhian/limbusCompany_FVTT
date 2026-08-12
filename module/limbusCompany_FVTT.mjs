@@ -420,6 +420,12 @@ Hooks.on("updateToken", (token) => {
   }
 });
 
+/** 战斗轮次/回合变化 → 刷新 HUD，让"下个回合"按钮及时出现或消失 */
+const _refreshHudOnCombat = () => QuickActionHUD.onCombatChange();
+Hooks.on("updateCombat",  _refreshHudOnCombat);
+Hooks.on("deleteCombat",  _refreshHudOnCombat);
+Hooks.on("createCombat",  _refreshHudOnCombat);
+
 /* ─── 战斗钩子 ───────────────────────────────────────────────────────────── */
 
 /**

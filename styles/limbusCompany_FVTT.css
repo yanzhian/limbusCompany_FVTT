@@ -4249,7 +4249,7 @@ body.game .limbuscompany.app img {
 .limbuscompany .related-pool-icon { width: 24px; height: 24px; object-fit: cover; border-radius: 3px; flex-shrink: 0; }
 .limbuscompany .related-pool-name { flex: 1; font-size: .78rem; color: var(--text-main); }
 .limbuscompany .related-pool-remove {
-  background: none; border: none; color: var(--text-dim); cursor: pointer; font-size: .85rem; line-height: 1;
+  background: none; border: none; color: var(--text-dim); cursor: pointer; font-size: .85rem; line-height: 1;max-width: 60px;
 }
 .limbuscompany .related-pool-remove:hover { color: var(--red-danger); }
 .limbuscompany .related-pool-dropzone {
@@ -5656,17 +5656,185 @@ body.game .limbuscompany.app img {
   z-index:         100;
   display:         flex;
   flex-direction:  column;
-  align-items:     center;
+  /* 左对齐：底部 BUFF 栏与上方内容左边缘对齐（原为 center，BUFF 栏会居中偏移） */
+  align-items:     flex-start;
   gap:             4px;
   user-select:     none;
   pointer-events:  auto;
 }
 
-/* ── AP 硬币行 ────────────────────────────────────────────── */
+/* ══════════════════════════════════════════════════════════════
+   右侧块：上=基础技能，下=行动值，右=刷新
+   ══════════════════════════════════════════════════════════════ */
+.qa-right-block {
+  display:     flex;
+  align-items: center;
+  gap:         8px;
+  align-self:  flex-end;
+}
+.qa-right-col {
+  display:        flex;
+  flex-direction: column;
+  gap:            6px;
+}
+
+/* ── 基础技能三格 ─────────────────────────────────────────── */
+.qa-skill-row {
+  /* 整格大小 / 边框中空区内缩比例（技能图多大）/ 相邻格重叠量 */
+  --skill-size:    100px;
+  --art-inset:     15%;
+  --skill-overlap: 22px;
+
+  display:     flex;
+  align-items: center;
+}
+
+/* 七边形边框左右两侧本身是透明的，格子并排会留出大片空白、整行显得过宽。
+   让相邻格互相重叠（负 margin），既压缩整行宽度，也更接近原作技能牌叠放的观感。
+   左侧格叠在右侧格之上，"准备"格自然被压在最后面。 */
+.qa-skill-slot + .qa-skill-slot {
+  margin-left: calc(var(--skill-overlap) * -1);
+}
+.qa-skill-row .qa-skill-slot:nth-child(1) { z-index: 3; }
+.qa-skill-row .qa-skill-slot:nth-child(2) { z-index: 2; }
+.qa-skill-row .qa-skill-slot:nth-child(3) { z-index: 1; }
+
+/* 单个技能格：技能图垫底 + 罪孽/等级空心边框盖在上面
+   （{罪孽}_lv{N}.webp 是中空的七边形边框，不是技能图本身） */
+.qa-skill-slot {
+  position:    relative;
+  width:       var(--skill-size);
+  height:      var(--skill-size);
+  flex-shrink: 0;
+  cursor:      pointer;
+  transition:  transform .12s;
+}
+
+/* 底层：技能自身的图，裁成尖朝下七边形，塞进边框中空区域。
+   必须显式给出宽高：绝对定位的 <img> 在 width/height 为 auto 时会按图片
+   自身的原始像素尺寸渲染（inset 的右/下约束被忽略），导致 40px 的小图正常、
+   400px 的大图直接撑爆格子。用 calc 算出宽高后，渲染尺寸与原图分辨率无关。 */
+.qa-skill-art {
+  position:   absolute;
+  inset:      var(--art-inset);
+  width:      calc(100% - var(--art-inset) * 2);
+  height:     calc(100% - var(--art-inset) * 2);
+  object-fit: cover;
+  display:    block;
+  pointer-events: none;
+  clip-path: polygon(
+    71.7% 5.0%, 98.7% 38.9%, 89.1% 81.2%, 50% 100%,
+    10.9% 81.2%, 1.3% 38.9%, 28.3% 5.0%
+  );
+}
+
+/* 顶层：罪孽 + 等级边框 */
+.qa-skill-frame {
+  position:   absolute;
+  inset:      0;
+  width:      100%;
+  height:     100%;
+  object-fit: contain;
+  display:    block;
+  pointer-events: none;
+}
+
+/* 悬停时抬起并提到最上层，避免被右侧格子压住一角 */
+.qa-skill-row .qa-skill-slot--ready:hover { transform: translateY(-3px); z-index: 9; }
+
+/* 准备格（半透明，不可直接使用）/ 空格 */
+.qa-skill-slot--pending { opacity: .42; cursor: default; }
+.qa-skill-slot--empty   { cursor: default; }
+
+/* 打出：向上飞走并淡出 */
+@keyframes qa-skill-cast {
+  0%   { transform: translateY(0)     scale(1);    opacity: 1; }
+  35%  { transform: translateY(-10px) scale(1.12); opacity: 1; }
+  100% { transform: translateY(-56px) scale(.75);  opacity: 0; }
+}
+.qa-skill-slot--casting {
+  animation: qa-skill-cast .42s cubic-bezier(.32,.72,.4,1) forwards;
+  pointer-events: none;
+}
+
+/* 补位：右侧新技能滑入 / 被打出格右侧的技能左移
+   （被打出格左侧的技能不加这些类，保持原地不动） */
+@keyframes qa-skill-slide-in {
+  0%   { transform: translateX(24px); opacity: 0; }
+  100% { transform: translateX(0);    opacity: 1; }
+}
+.qa-skill-slot--entering { animation: qa-skill-slide-in .3s ease-out backwards; }
+
+@keyframes qa-skill-shift {
+  0%   { transform: translateX(24px); }
+  100% { transform: translateX(0); }
+}
+.qa-skill-slot--shifting { animation: qa-skill-shift .3s ease-out backwards; }
+
+/* 瞄准中的源技能格：上浮并压暗，把视线让给箭头 */
+.qa-skill-row .qa-skill-slot--aiming {
+  transform: translateY(-10px);
+  opacity:   .55;
+  z-index:   9;
+}
+
+/* 拖拽瞄准箭头的全屏 SVG 覆盖层：不拦截鼠标，避免挡住画布交互 */
+.qa-aim-overlay {
+  position:       fixed;
+  left:           0;
+  top:            0;
+  width:          100vw;
+  height:         100vh;
+  pointer-events: none;
+  z-index:        9998;
+}
+
+/* ── 刷新按钮（行动值左侧，浅色底 + 白色描边）───────────────── */
+.qa-refresh-btn {
+  width:           30px;
+  height:          30px;
+  margin-right:    6px;
+  flex-shrink:     0;
+  background:      #E8C9A2;
+  border:          1px solid #FFFFFF;
+  border-radius:   4px;
+  cursor:          pointer;
+  display:         flex;
+  align-items:     center;
+  justify-content: center;
+  padding:         0;
+  transition:      border-color .15s, filter .15s, transform .32s;
+}
+.qa-refresh-btn:hover   { border-color: #C9A84C; filter: brightness(1.2); }
+.qa-refresh-btn.qa-spin { transform: rotate(360deg); }
+
+/* ── "下个回合"按钮（行动值右侧）───────────────────────────── */
+.qa-next-turn-btn {
+  margin-left:   8px;
+  flex-shrink:   0;
+  padding:       5px 12px;
+  background:    #E8C9A2;
+  border:        1px solid #FFFFFF;
+  border-radius: 4px;
+  color:         #2A1B0C;
+  font-size:     13px;
+  font-weight:   bold;
+  white-space:   nowrap;
+  cursor:        pointer;
+  transition:    filter .15s, border-color .15s;
+}
+.qa-next-turn-btn:hover { filter: brightness(1.1); border-color: #C9A84C; }
+
+/* GM 在非本角色回合时也可见：降低存在感，与"轮到自己"时区分 */
+.qa-next-turn-btn--gm { opacity: .72; }
+.qa-next-turn-btn--gm:hover { opacity: 1; }
+
+/* ── AP 硬币行（含刷新按钮，整行左对齐）─────────────────────── */
 .qa-ap-row {
   display:         flex;
+  align-items:     center;
   gap:             4px;
-  justify-content: center;
+  justify-content: flex-start;
 }
 
 .qa-ap-coin {
@@ -5712,6 +5880,11 @@ body.game .limbuscompany.app img {
   overflow-y:       auto;
 }
 /* 左侧按钮组：面板左对齐 */
+/* 左组改为纵向堆叠：消耗品 / 装备 / 恐惧鉴定 */
+.qa-btn-group--left {
+  flex-direction: column;
+  align-items:    stretch;
+}
 .qa-btn-group--left  .qa-panel { left:  0; }
 /* 右侧按钮组：面板右对齐 */
 .qa-btn-group--right .qa-panel { right: 0; }
@@ -5807,7 +5980,6 @@ body.game .limbuscompany.app img {
   padding:   4px 0;
 }
 
-.qa-basic-skill-slot,
 .qa-ego-skill-slot {
   width:           52px;
   height:          52px;
@@ -5823,10 +5995,8 @@ body.game .limbuscompany.app img {
   flex-shrink:     0;
   transition:      filter 0.15s;
 }
-.qa-basic-skill-slot:hover,
 .qa-ego-skill-slot:hover     { filter: brightness(1.2); }
 
-.qa-basic-skill-slot img,
 .qa-ego-skill-slot img {
   width:      100%;
   height:     100%;
@@ -5884,22 +6054,158 @@ body.game .limbuscompany.app img {
 .qa-btn:hover      { background: #2A2520; border-color: #C9A84C; }
 .qa-btn--active    { background: #3A2510; border-color: #E5BA25; color: #E5BA25; }
 
-/* ── 头像包装 ─────────────────────────────────────────────── */
-.qa-avatar-wrap { position: relative; }
+/* ══════════════════════════════════════════════════════════════
+   中央：角色状态七边形（生命值血环 / 头像 / 理智值 / 混乱阈值）
+   血环几何：起点 180°（底部尖角），顺时针铺 310°，右下留 50° 缺口
+   （缺口由理智球盖住）。扣血时红色从右下终点逆时针缩回底部尖角。
+   角度常量与 quick-action-hud.mjs 的 QA_ARC_FROM / QA_ARC_LEN 一致，
+   两边改动需同步。
+   ══════════════════════════════════════════════════════════════ */
+.qa-hex-block {
+  --hp:       1;          /* 0~1，由模板 inline style 写入 */
+  --arc-from: 180deg;
+  --arc-len:  310deg;
+  --hp-red:   #B43822;
 
-.qa-avatar {
-  width:         90px;
-  height:        90px;
-  border-radius: 50%;
-  object-fit:    cover;
-  border:        2px solid #C9A84C;
-  display:       block;
-  cursor:        pointer;
-  transition:    border-color 0.15s;
+  /* 整块尺寸：内部所有数值均按此等比换算，改这一个数即可整体缩放 */
+  --hex-size: 125px;
+
+  position:    relative;
+  width:       var(--hex-size);
+  height:      var(--hex-size);
+  flex-shrink: 0;
 }
-.qa-avatar:hover { border-color: #E5BA25; }
 
-/* ── 底部行 ───────────────────────────────────────────────── */
+/* 尖朝下七边形（外层，半径 100） */
+.qa-hex-shape {
+  position:  absolute;
+  inset:     0;
+  clip-path: polygon(
+    71.7% 5.0%, 98.7% 38.9%, 89.1% 81.2%, 50% 100%,
+    10.9% 81.2%, 1.3% 38.9%, 28.3% 5.0%
+  );
+  pointer-events: none;
+}
+
+/* 底层：黑色（血扣掉后露出的底色） */
+.qa-hex-black { background: #000; }
+
+/* 中层：红色血环，conic 遮罩控制露出多少 */
+.qa-hex-red {
+  background: var(--hp-red);
+  -webkit-mask-image: conic-gradient(from var(--arc-from),
+      #000 0deg,
+      #000 calc(var(--arc-len) * var(--hp)),
+      transparent calc(var(--arc-len) * var(--hp)),
+      transparent 360deg);
+  mask-image: conic-gradient(from var(--arc-from),
+      #000 0deg,
+      #000 calc(var(--arc-len) * var(--hp)),
+      transparent calc(var(--arc-len) * var(--hp)),
+      transparent 360deg);
+}
+
+/* 混乱阈值刻度线：中心 → 边缘的白线（超出部分被七边形裁掉） */
+.qa-chaos-line {
+  position:         absolute;
+  left:             calc(50% - 1px);
+  top:              0;
+  width:            2px;
+  height:           50%;
+  background:       #FFFFFF;
+  transform-origin: 50% 100%;   /* 旋转轴 = 七边形中心 */
+  box-shadow:       0 0 3px rgba(0,0,0,.8);
+}
+/* 已触发的阈值：变暗，与未触发区分 */
+.qa-chaos-line--fired { background: #7A7A7A; opacity: .55; }
+
+/* 顶层：内缩 14% 的七边形（半径比 100→72，对应 200px 时环宽 28px），裁切头像 */
+.qa-hex-avatar {
+  position:  absolute;
+  inset:     0;
+  clip-path: polygon(
+    65.62% 17.57%, 85.10% 41.99%, 78.15% 72.44%, 50% 86%,
+    21.85% 72.44%, 14.90% 41.99%, 34.38% 17.57%
+  );
+  overflow:   hidden;
+  background: #111;
+}
+.qa-avatar {
+  width:      100%;
+  height:     100%;
+  object-fit: cover;
+  display:    block;
+  cursor:     pointer;
+}
+
+/* 生命值数字（左下角，压在七边形边缘上）—— 比例基于 200px 原稿换算 */
+.qa-hex-hp {
+  position:    absolute;
+  left:        calc(var(--hex-size) * 0.07);
+  bottom:      calc(var(--hex-size) * -0.01);
+  font-size:   calc(var(--hex-size) * 0.25);
+  font-weight: bold;
+  color:       var(--hp-red);
+  line-height: 1;
+  cursor:      pointer;
+  z-index:     5;
+  text-shadow: 1px 1px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000;
+}
+
+/* 理智值（右下圆，正好盖住血环右下 50° 缺口） */
+.qa-hex-san {
+  position:        absolute;
+  right:           calc(var(--hex-size) * 0.15);
+  bottom:          calc(var(--hex-size) * -0.04);
+  width:           calc(var(--hex-size) * 0.26);
+  height:          calc(var(--hex-size) * 0.26);
+  border-radius:   50%;
+  background:      #4A90C4;
+  border:          2px solid #2E6A96;
+  box-sizing:      border-box;
+  display:         flex;
+  align-items:     center;
+  justify-content: center;
+  font-size:       calc(var(--hex-size) * 0.11);
+  font-weight:     bold;
+  color:           #FFFFFF;
+  text-shadow:     1px 1px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000;
+  cursor:          pointer;
+  z-index:         5;
+  transition:      filter .15s;
+}
+.qa-hex-san:hover { filter: brightness(1.12); }
+
+/* ── 恐惧鉴定（左侧：坚定次数 / 恐慌次数）───────────────────── */
+.qa-panic-check {
+  display:       flex;
+  gap:           6px;
+  margin-top:    2px;
+  padding:       4px 6px;
+  background:    #1A1714;
+  border:        1px solid #4A4038;
+  border-radius: 3px;
+  cursor:        pointer;
+  transition:    border-color .15s;
+}
+.qa-panic-check:hover { border-color: #C9A84C; }
+
+.qa-panic-item {
+  display:     flex;
+  align-items: center;
+  gap:         2px;
+}
+.qa-panic-item img { width: 20px; height: 20px; display: block; }
+
+.qa-panic-num {
+  font-size:   15px;
+  font-weight: bold;
+  line-height: 1;
+}
+.qa-panic-resolve .qa-panic-num { color: #5DADE2; }
+.qa-panic-fear    .qa-panic-num { color: #E74C3C; }
+
+/* ── 底部行（BUFF 状态栏）─────────────────────────────────── */
 .qa-bottom-row {
   display:     flex;
   align-items: center;
@@ -5907,43 +6213,21 @@ body.game .limbuscompany.app img {
   margin-top:  2px;
 }
 
-/* ── HP / 理智 球 ──────────────────────────────────────────── */
-.qa-hp-ball,
-.qa-san-ball {
-  width:           32px;
-  height:          32px;
-  border-radius:   50%;
-  background:      #201E1B;
-  display:         flex;
-  align-items:     center;
-  justify-content: center;
-  cursor:          pointer;
-  flex-shrink:     0;
-  border:          2px solid;
-  transition:      filter 0.15s;
-}
-.qa-hp-ball:hover,
-.qa-san-ball:hover { filter: brightness(1.15); }
-
-.qa-hp-ball  { border-color: #B43822; box-shadow: 0 0 5px rgba(180,56,34,.4); }
-.qa-san-ball { border-color: #4F7A9C; box-shadow: 0 0 5px rgba(79,122,156,.4); }
-
-.qa-ball-value {
-  font-size:   24px;
-  font-weight: bold;
-  color:       #ECE4D6;
-  line-height: 1;
-  /* 数字较大时自动缩放，保证不超出球体 */
-  transform-origin: center;
-}
-
 /* ── BUFF 状态栏 ───────────────────────────────────────────── */
+/* BUFF 状态栏：左对齐；默认 8 格，新增的向右扩展，
+   每行最多 16 格（由 max-width 决定换行位置），装满才向下换行。
+   每行格数需与 quick-action-hud.mjs 的 QA_BUFF_PER_ROW 保持一致。 */
 .qa-status-bar {
-  display:   flex;
-  flex-wrap: wrap;
-  gap:       2px;
-  flex:      1;
-  max-width: 300px; /* 8格 × (24+2) px */
+  --buff-slot:    34px;   /* 32px 内容 + 1px 边框 ×2 */
+  --buff-gap:     2px;
+  --buff-per-row: 16;
+
+  display:         flex;
+  flex-wrap:       wrap;
+  justify-content: flex-start;
+  align-content:   flex-start;
+  gap:             var(--buff-gap);
+  max-width: calc(var(--buff-per-row) * (var(--buff-slot) + var(--buff-gap)) - var(--buff-gap));
 }
 
 .qa-buff-slot {
@@ -8074,10 +8358,10 @@ input.item-piles-quantity {
 }
 .bgw-list-item:hover { border-color: #5a3f22; }
 .bgw-list-item.selected { border-color: var(--gold-active, #C58C4E); background: #3B2412; }
-.bgw-list-icon { width: 32px; height: 32px; object-fit: cover; border-radius: 2px; flex-shrink: 0; }
+.bgw-list-icon { width: 32px; height: 32px; object-fit: cover; border-radius: 2px; flex-shrink: 0; cursor: pointer; }
+.bgw-list-icon:hover { outline: 1px solid var(--gold-active, #C58C4E); }
 .bgw-list-info { display: flex; flex-direction: column; overflow: hidden; }
 .bgw-list-name { font-size: 14px; color: #C9B79C; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.bgw-list-cat { font-size: 11px; color: #8a7a6a; }
 .bgw-empty { text-align: center; color: #6a5a48; padding: 20px 0; font-size: 13px; }
 
 /* ── 合集包浏览器（左：搜索+合集筛选 / 右：结果表） ── */

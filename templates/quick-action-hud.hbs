@@ -1,18 +1,7 @@
 {{!-- quick-action-hud.hbs — 快捷操作 HUD --}}
 <div id="limbus-quick-action-hud" class="limbus-qa-hud">
 
-  {{!-- AP 硬币行 --}}
-  <div class="qa-ap-row">
-    {{#each apCoins}}
-      <div class="qa-ap-coin {{#if active}}qa-ap-coin--active{{else}}qa-ap-coin--inactive{{/if}}"
-           data-index="{{index}}" title="行动点 {{index}}">
-        <img src="{{#if active}}systems/limbusCompany_FVTT/assets/icons/Base_icon/硬币_正面.webp{{else}}systems/limbusCompany_FVTT/assets/icons/Base_icon/硬币_反面.webp{{/if}}"
-             width="36" height="36" alt="AP" draggable="false">
-      </div>
-    {{/each}}
-  </div>
-
-  {{!-- 中间行：[消耗品↑][装备↑] | [头像] | [基础↑][E.G.O↑] --}}
+  {{!-- 中间行：[消耗品/装备/恐惧鉴定] | [状态七边形] | [基础技能/行动值 + 刷新] --}}
   <div class="qa-mid-row">
 
     {{!-- 左侧按钮组（消耗品 / 装备），面板在按钮上方展开 --}}
@@ -58,93 +47,119 @@
       {{!-- 左侧按钮 --}}
       <button class="qa-btn" data-panel="consumable">消耗品</button>
       <button class="qa-btn" data-panel="equipment">装备</button>
+
+      {{!-- 恐惧鉴定：坚定次数 / 恐慌次数 --}}
+      <div class="qa-panic-check" title="恐惧鉴定：坚定 {{panicResolve}}/3　恐慌 {{panicFear}}/3">
+        <div class="qa-panic-item qa-panic-resolve">
+          <img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/坚定次数.webp"
+               alt="坚定次数" draggable="false">
+          <span class="qa-panic-num">{{panicResolve}}</span>
+        </div>
+        <div class="qa-panic-item qa-panic-fear">
+          <img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/恐慌次数.webp"
+               alt="恐慌次数" draggable="false">
+          <span class="qa-panic-num">{{panicFear}}</span>
+        </div>
+      </div>
     </div>
 
-    {{!-- 角色头像（单击折叠面板 / 双击打开角色卡 / 拖动移动 HUD） --}}
-    <div class="qa-avatar-wrap">
-      <img class="qa-avatar" src="{{actorImg}}" alt="{{actorName}}" title="{{actorName}}" draggable="false">
-    </div>
+    {{!-- ══ 中央：角色状态七边形（生命值血环 / 头像 / 理智值 / 混乱阈值）══ --}}
+    {{!-- 单击折叠面板 / 双击打开角色卡 / 拖动移动 HUD（沿用 .qa-avatar 交互） --}}
+    <div class="qa-hex-block" style="--hp: {{hpPct}};">
 
-    {{!-- 右侧按钮组（基础技能 / E.G.O），面板在按钮上方展开 --}}
-    <div class="qa-btn-group qa-btn-group--right">
+      {{!-- 底层：黑色七边形（血扣掉后露出的底色） --}}
+      <div class="qa-hex-shape qa-hex-black"></div>
 
-      {{!-- 基础技能面板（初始隐藏） --}}
-      <div class="qa-panel" data-panel="basic" style="display:none">
-        <div class="qa-panel-title">基础技能</div>
-        <div class="qa-panel-divider"></div>
-        <div class="qa-panel-body">
-          <div class="qa-skills-grid">
-            {{#each basicSkills}}
-              <div class="qa-basic-skill-slot
-                           {{#if item}}qa-skill-slot--filled{{else}}qa-skill-slot--empty{{/if}}
-                           {{#if isActive}}qa-skill-active{{else}}qa-skill-pending{{/if}}"
-                   data-item-id="{{#if item}}{{item.id}}{{/if}}"
-                   data-slot-index="{{slotIndex}}"
-                   style="border-color:{{sinColor}}"
-                   title="{{#if item}}{{item.name}}{{#unless isActive}}（预备）{{/unless}}{{else}}（空）{{/if}}">
-                {{#if item}}
-                  <img src="{{item.img}}" alt="{{item.name}}" draggable="false">
-                {{/if}}
-              </div>
-            {{/each}}
-          </div>
-        </div>
-        <div class="qa-panel-divider"></div>
+      {{!-- 中层：红色血环（conic 遮罩控制露出多少） --}}
+      <div class="qa-hex-shape qa-hex-red"></div>
+
+      {{!-- 混乱阈值刻度线：中心 → 边缘的白线 --}}
+      <div class="qa-hex-shape qa-hex-chaos">
+        {{#each chaosLines}}
+          <div class="qa-chaos-line {{#if triggered}}qa-chaos-line--fired{{/if}}"
+               style="transform: rotate({{angle}}deg);"
+               title="混乱阈值 {{percent}}%{{#if triggered}}（已触发）{{/if}}"></div>
+        {{/each}}
       </div>
 
-      {{!-- E.G.O 技能面板（初始隐藏） --}}
-      <div class="qa-panel" data-panel="ego" style="display:none">
-        <div class="qa-panel-title">E.G.O技能</div>
-        <div class="qa-panel-divider"></div>
-        <div class="qa-panel-body">
-          <div class="qa-skills-grid">
-            {{#each egoSkills}}
-              <div class="qa-ego-skill-wrap">
-                <div class="qa-ego-skill-slot
-                             {{#if item}}qa-skill-slot--filled{{else}}qa-skill-slot--empty{{/if}}"
-                     data-item-id="{{#if item}}{{item.id}}{{/if}}"
-                     data-grade="{{grade}}"
-                     style="border-color:{{sinColor}}"
-                     title="{{#if item}}{{item.name}}（{{grade}}）{{else}}{{grade}}（空）{{/if}}">
-                  {{#if item}}
-                    <img src="{{item.img}}" alt="{{item.name}}" draggable="false">
-                  {{/if}}
-                  <span class="qa-ego-grade">{{grade}}</span>
-                </div>
-                {{#if hasRelated}}
-                  <button class="qa-ego-related-toggle combat-skill-related-toggle"
-                          data-item-id="{{item.id}}"
-                          title="切换相关技能">↺</button>
-                {{/if}}
-              </div>
-            {{/each}}
-          </div>
-        </div>
-        <div class="qa-panel-divider"></div>
+      {{!-- 顶层：内缩 24px 的七边形，裁切头像 --}}
+      <div class="qa-hex-avatar">
+        <img class="qa-avatar" src="{{actorImg}}" alt="{{actorName}}"
+             title="{{actorName}}（双击打开角色卡 / 拖动移动）" draggable="false">
       </div>
 
-      {{!-- 右侧按钮 --}}
-      <button class="qa-btn" data-panel="basic">基础</button>
-      <button class="qa-btn" data-panel="ego">E.G.O</button>
+      {{!-- 生命值数字（左下） --}}
+      <div class="qa-hex-hp" title="生命值 {{hpValue}} / {{hpMax}}">{{hpValue}}</div>
+
+      {{!-- 理智值（右下圆） --}}
+      <div class="qa-hex-san" title="理智值 {{sanValue}}">{{sanValue}}</div>
+
+    </div>{{!-- /qa-hex-block --}}
+
+    {{!-- ══ 右侧：上=基础技能，下=行动值，右=刷新 ══ --}}
+    <div class="qa-right-block">
+      <div class="qa-right-col">
+
+        {{!-- 上：基础技能三格（点击=发起对抗；长按拖到 token=指定目标） --}}
+        <div class="qa-skill-row">
+          {{#each basicSkills}}
+            <div class="qa-skill-slot
+                         {{#if item}}{{#if isPending}}qa-skill-slot--pending{{else}}qa-skill-slot--ready{{/if}}
+                         {{else}}qa-skill-slot--empty{{/if}}"
+                 data-item-id="{{#if item}}{{item.id}}{{/if}}"
+                 data-slot-index="{{slotIndex}}"
+                 title="{{#if item}}{{item.name}}{{#if isPending}}（准备）{{else}}　点击发起对抗／长按拖到 token 指定目标{{/if}}{{else}}（空）{{/if}}">
+              {{#if item}}
+                {{!-- 底层：技能自身的图；顶层：罪孽+等级的空心边框 --}}
+                <img class="qa-skill-art"   src="{{item.img}}" alt="{{item.name}}" draggable="false">
+                <img class="qa-skill-frame" src="{{icon}}"     alt="" draggable="false">
+              {{/if}}
+            </div>
+          {{/each}}
+        </div>
+
+        {{!-- 下：刷新 + 行动值（同一排，刷新在左） --}}
+        <div class="qa-ap-row">
+          {{!-- 刷新：同步角色卡战斗页的基础技能（未激活则代替执行"激活"） --}}
+          <button class="qa-refresh-btn" title="刷新：同步角色卡战斗页的基础技能（未激活则代替激活）">
+            <img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/重置.webp"
+                 width="22" height="22" alt="刷新" draggable="false">
+          </button>
+
+          {{#each apCoins}}
+            <div class="qa-ap-coin {{#if active}}qa-ap-coin--active{{else}}qa-ap-coin--inactive{{/if}}"
+                 data-index="{{index}}" title="行动点 {{index}}">
+              <img src="{{#if active}}systems/limbusCompany_FVTT/assets/icons/Base_icon/硬币_正面.webp{{else}}systems/limbusCompany_FVTT/assets/icons/Base_icon/硬币_反面.webp{{/if}}"
+                   width="28" height="28" alt="AP" draggable="false">
+            </div>
+          {{/each}}
+
+          {{!-- 下一回合：遭遇战进行中且轮到本角色时显示；GM 全程可见 --}}
+          {{#if showNextTurn}}
+            <button class="qa-next-turn-btn {{#unless isMyTurn}}qa-next-turn-btn--gm{{/unless}}"
+                    title="{{#if isMyTurn}}结束本回合，轮到下一位{{else}}（GM）推进到下一回合{{/if}}">
+              下个回合
+            </button>
+          {{/if}}
+        </div>
+
+      </div>
     </div>
 
   </div>{{!-- .qa-mid-row --}}
 
-  {{!-- 底部行：HP球 | 状态栏 | 理智球 --}}
+  {{!-- 底部行：BUFF 状态栏（HP/理智已并入中央七边形） --}}
   <div class="qa-bottom-row">
-
-    {{!-- 生命值球 --}}
-    <div class="qa-hp-ball" title="生命值 {{hpValue}}">
-      <span class="qa-ball-value">{{hpValue}}</span>
-    </div>
 
     {{!-- BUFF 状态栏 --}}
     <div class="qa-status-bar">
       {{#each buffSlots}}
         {{#if buff}}
+          {{!-- data-buff-name 供悬浮 Title 卡取用（buildBuffTitleCard）；
+                不再写 title 属性，避免与 Title 卡重复弹两层提示 --}}
           <div class="qa-buff-slot qa-buff-slot--filled"
                data-buff-id="{{buff.id}}"
-               title="{{buff.name}}  强度:{{buff.intensity}}  层数:{{buff.stacks}}{{#if description}}&#13;&#13;{{description}}{{/if}}">
+               data-buff-name="{{buff.name}}">
             {{#if icon}}<img class="qa-buff-icon" src="{{icon}}" alt="{{buff.name}}">{{/if}}
             <span class="qa-buff-intensity">{{buff.intensity}}</span>
             <span class="qa-buff-stacks">{{buff.stacks}}</span>
@@ -153,11 +168,6 @@
           <div class="qa-buff-slot qa-buff-slot--empty" title="点击添加状态BUFF"></div>
         {{/if}}
       {{/each}}
-    </div>
-
-    {{!-- 理智球 --}}
-    <div class="qa-san-ball" title="理智值 {{sanValue}}">
-      <span class="qa-ball-value">{{sanValue}}</span>
     </div>
 
   </div>{{!-- .qa-bottom-row --}}

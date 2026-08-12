@@ -70,32 +70,32 @@ export class BackgroundWizard extends Application {
    * 优先使用所在文件夹名称（世界物品的 Folder / 合集包的 Folder），
    * 没有文件夹时退回 system.category 字段，都没有则归为「未分类」。
    * @param {string} type   物品类型（如 "background" / "panic"）
-   * @returns {Promise<Array<{uuid,name,img,category}>>} 未经搜索/筛选过滤的全量列表
+   * @returns {Promise<Array<{uuid,name,img,category,subtitle}>>} 未经搜索/筛选过滤的全量列表
    */
   async _gatherAll(type) {
     const out  = [];
     const seen = new Set();
 
-    const pushItem = (uuid, name, img, category) => {
+    const pushItem = (uuid, name, img, category, subtitle) => {
       if (seen.has(uuid)) return;
       seen.add(uuid);
-      out.push({ uuid, name, img, category: category || "未分类" });
+      out.push({ uuid, name, img, category: category || "未分类", subtitle: subtitle || "" });
     };
 
     for (const item of game.items) {
       if (item.type !== type) continue;
       const category = item.folder?.name || item.system?.category || "";
-      pushItem(item.uuid, item.name, item.img, category);
+      pushItem(item.uuid, item.name, item.img, category, item.system?.subtitle ?? "");
     }
 
     for (const pack of game.packs) {
       if (pack.documentName !== "Item") continue;
-      const index = await pack.getIndex({ fields: ["type", "system.category", "img", "folder"] });
+      const index = await pack.getIndex({ fields: ["type", "system.category", "system.subtitle", "img", "folder"] });
       for (const entry of index) {
         if (entry.type !== type) continue;
         const folder = entry.folder ? pack.folders.get(entry.folder) : null;
         const category = folder?.name || entry.system?.category || "";
-        pushItem(entry.uuid, entry.name, entry.img, category);
+        pushItem(entry.uuid, entry.name, entry.img, category, entry.system?.subtitle ?? "");
       }
     }
 
@@ -191,6 +191,14 @@ export class BackgroundWizard extends Application {
     html.find(".bgw-list-item[data-bg-uuid]").on("click", (ev) => {
       this.selectedBgUuid = ev.currentTarget.dataset.bgUuid;
       this.render();
+    });
+    // 点击图标：打开对应背景物品卡预览，不触发所在行的选中逻辑
+    html.find(".bgw-list-item[data-bg-uuid] .bgw-list-icon").on("click", async (ev) => {
+      ev.stopPropagation();
+      const uuid = ev.currentTarget.closest("[data-bg-uuid]")?.dataset.bgUuid;
+      if (!uuid) return;
+      const item = await fromUuid(uuid).catch(() => null);
+      item?.sheet?.render(true);
     });
     html.find(".bgw-cat-check[data-category]").on("click", (ev) => {
       const cat = ev.currentTarget.dataset.category;

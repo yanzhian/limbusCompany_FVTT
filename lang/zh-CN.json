@@ -191,7 +191,6 @@
       "Clear6Bag":        "清除",
       "ResetAP":          "重置",
       "ClearAP":          "清零",
-      "SwitchRelated":    "切换相关技能",
       "InChaos":          "陷入混乱",
       "InPanic":          "陷入恐慌",
       "ChaosThreshold":   "混乱阈值触发",
@@ -247,7 +246,8 @@
       "consumable":{ "label": "消耗品","plural": "消耗品" },
       "material":  { "label": "材料",  "plural": "材料" },
       "container": { "label": "容器",  "plural": "容器" },
-      "skillbook": { "label": "技能书","plural": "技能书" }
+      "skillbook": { "label": "技能书","plural": "技能书" },
+      "background": { "label": "背景", "plural": "背景" }
     }
   }
 }

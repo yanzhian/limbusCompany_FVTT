@@ -156,6 +156,11 @@ export class ClashManager {
   static async _tickFieldResources(buffType, intensity, stacksConsumed = 1) {
     for (const [name, def] of FieldResourceRegistry) {
       if (typeof def.onStatusTick !== "function") continue;
+      // 只有已激活的场地资源才响应自动跳动事件——避免"血宴"这类靠背景标签
+      // （triggerBackgroundTags，在 combatStart 时判定是否有对应背景在场）才
+      // 出现的场地资源，因为任何角色触发一次流血/烧伤等跳动伤害就被无条件
+      // 唤醒。显式的 Activity 效果「公用场地」仍可正常直接激活/操作，不受影响。
+      if (!SinResourceHUD.isFieldResourceActive(name)) continue;
       try {
         await def.onStatusTick({
           buffType, intensity, stacksConsumed, name,
@@ -215,6 +220,27 @@ export class ClashManager {
     const keepAtZero = resolveBuffHandler(buffs[idx])?.keepAtZero ?? false;
     if (next <= 0 && !keepAtZero) buffs.splice(idx, 1);
     else                          buffs[idx] = { ...buffs[idx], stacks: next };
+    return ClashManager._safeDocUpdate(actor, { "system.buffs": buffs });
+  }
+
+  /**
+   * 减少 BUFF 强度（如"每消耗4级【呼吸法】"），强度和层数都归零才自动移除。
+   * 优先调用 actor.reduceBuffIntensity（如已定义），否则直接写 system.buffs。
+   */
+  static async _reduceBuffIntensity(actor, type, amount = 1) {
+    if (!actor) return;
+    if (typeof actor.reduceBuffIntensity === "function") {
+      return actor.reduceBuffIntensity(type, amount);
+    }
+    // 兜底：直接操作 buffs 数组
+    const buffs = [...(actor.system?.buffs ?? [])];
+    const idx   = buffs.findIndex(b => b.type === type);
+    if (idx === -1) return;
+    const next   = Math.max(0, (buffs[idx].intensity ?? 0) - amount);
+    const stacks = buffs[idx].stacks ?? 0;
+    const keepAtZero = resolveBuffHandler(buffs[idx])?.keepAtZero ?? false;
+    if (next <= 0 && stacks <= 0 && !keepAtZero) buffs.splice(idx, 1);
+    else                                         buffs[idx] = { ...buffs[idx], intensity: next };
     return ClashManager._safeDocUpdate(actor, { "system.buffs": buffs });
   }
 
@@ -412,13 +438,19 @@ export class ClashManager {
     const foeIds   = inTeam1 ? team2Ids : inTeam2 ? team1Ids : [];
     const toActors = ids => ids.map(id => game.actors.get(id)).filter(Boolean);
 
-    if (targetType === "bgTag") {
+    if (targetType === "bgTag" || targetType === "bgTagOther") {
       // 背景标签：本队中"背景带有该标签"的角色数量 ≥ targetTagCount 时，
       // 这些角色均视为合法目标；数量不足则视为无目标（效果不生效）。
+      // "bgTagOther" 与 "allTeamOther" 同理：先排除拥有者自己（自己不受益），
+      // "数量≥N"这个门槛也是排除自己之后、剩下的其他带标签队友数量来判定——
+      // 如"为其他背景标签为X的友方（至少2个）恢复…"，指的是"除自己外还有
+      // ≥2 个带该标签的队友"。
       const tagName = (meta?.targetTag ?? "").trim();
       const minCount = Math.max(1, meta?.targetTagCount ?? 1);
       if (!tagName) return [];
-      const candidates = toActors(myIds.length ? myIds : (ownerId ? [ownerId] : []));
+      const poolIds = myIds.length ? myIds : (ownerId ? [ownerId] : []);
+      const filteredIds = targetType === "bgTagOther" ? poolIds.filter(id => id !== ownerId) : poolIds;
+      const candidates = toActors(filteredIds);
       const matched = [];
       for (const actor of candidates) {
         const tags = await ClashManager._getBackgroundTags(actor);
@@ -512,6 +544,15 @@ export class ClashManager {
           continue;
         }
 
+        // ── level 类型：检查"本次由 owner 实际使用的技能"的等级（1/2/3）──
+        // 与 category/useSkill 同理，优先取 ctx._currentItemId 指向的实际使用技能。
+        if (pre.type === "level") {
+          const actingItem = (owner?.items?.get?.(ctx._currentItemId ?? "")) ?? item;
+          const lvl = actingItem?.system?.level ?? 0;
+          if (!ClashManager._cmp(lvl, pre.comparison ?? "eq", pre.level ?? 1)) { precondFail = true; break; }
+          continue;
+        }
+
         // ── baseAttr 类型：检查角色属性值 ──────────────────────────────
         if (pre.type === "baseAttr") {
           const precTgt = (pre.target ?? "self") === "self" ? owner : other;
@@ -544,11 +585,16 @@ export class ClashManager {
         }
 
         if (pre.type === "perN") {
-          // 每：层数 ≥ N（N = pre.stacks）才满足，倍数 = floor(当前层数 / N)，可选上限 maxTimes
-          const n = Math.max(1, pre.stacks ?? 1);
-          if (!buff || (buff.stacks ?? 0) < n) { precondFail = true; break; }
-          if ((pre.intensity ?? 0) > 0 && (buff.intensity ?? 0) < pre.intensity) { precondFail = true; break; }
-          let times = Math.floor((buff.stacks ?? 0) / n);
+          // 每：维度可选"层数"（默认，向下兼容旧数据）或"强度"——
+          // 如"目标每有 8 级【烧伤】"实际指的是强度而非层数，需按强度计算倍数。
+          // 维度≥ N（N = pre.stacks）才满足，倍数 = floor(当前值 / N)，可选上限 maxTimes。
+          // 注：不再额外检查"强度≥"门槛——"每"只关心倍数怎么算，不需要"拥有"式的额外强度阈值。
+          const dim  = pre.perNDim === "intensity" ? "intensity" : "stacks";
+          const n    = Math.max(1, pre.stacks ?? 1);
+          if (!buff) { precondFail = true; break; }
+          const haveVal = dim === "intensity" ? (buff.intensity ?? 0) : (buff.stacks ?? 0);
+          if (haveVal < n) { precondFail = true; break; }
+          let times = Math.floor(haveVal / n);
           if ((pre.maxTimes ?? 0) > 0) times = Math.min(times, pre.maxTimes);
           precondMultiplier *= times;
         } else {
@@ -610,13 +656,15 @@ export class ClashManager {
           const have = SinResourceHUD.getFieldResourceStacks(cost.fieldName);
           if (have < Math.max(1, cost.stacks ?? 1)) { forcedFail = true; break; }
         } else if (cost.buff && (cost.type === "forced" || cost.type === "perStack")) {
-          // 强制消耗 / 每：层数不足（每N层的 N）则跳过整条 Activity
+          // 强制消耗 / 每：数值不足（每N的 N，维度可选层数/强度）则跳过整条 Activity
           const costBuffType = cost.buff === "custom" ? (cost.buffCustom || "custom") : cost.buff;
+          const costDim = cost.type === "perStack" && cost.perNDim === "intensity" ? "intensity" : "stacks";
           const costTgts = await ClashManager._resolveTargets(cost.target ?? "self", owner, other, cost);
           if (costTgts.length === 0) { forcedFail = true; break; }
           for (const tgt of costTgts) {
             const existing = ClashManager._getBuff(tgt, costBuffType);
-            if ((existing?.stacks ?? 0) < Math.max(1, cost.stacks ?? 1)) { forcedFail = true; break; }
+            const haveVal  = costDim === "intensity" ? (existing?.intensity ?? 0) : (existing?.stacks ?? 0);
+            if (haveVal < Math.max(1, cost.stacks ?? 1)) { forcedFail = true; break; }
           }
         }
         if (forcedFail) break;
@@ -669,16 +717,22 @@ export class ClashManager {
           const costBuffType = cost.buff === "custom" ? (cost.buffCustom || "custom") : cost.buff;
           const costTgts = await ClashManager._resolveTargets(cost.target ?? "self", owner, other, cost);
           if (cost.type === "perStack") {
-            // 每：与前置条件的"每"一致——每 N 层为 1 倍，倍数 = floor(层数/N)，
-            // 可选最大倍数上限（maxTimes，0=无限），只消耗 倍数×N 层
+            // 每：与前置条件的"每"一致——维度可选层数（默认，向下兼容旧数据）或强度，
+            // 每 N 为 1 倍，倍数 = floor(数值/N)，可选最大倍数上限（maxTimes，0=无限），
+            // 只消耗 倍数×N（如"每消耗4级【呼吸法】"应选强度维度）
             const tgt = costTgts[0];
             if (tgt) {
+              const dim      = cost.perNDim === "intensity" ? "intensity" : "stacks";
               const existing = ClashManager._getBuff(tgt, costBuffType);
-              const have     = existing?.stacks ?? 0;
+              const have     = dim === "intensity" ? (existing?.intensity ?? 0) : (existing?.stacks ?? 0);
               const n        = Math.max(1, cost.stacks ?? 1);
               let   times    = Math.floor(have / n);
               if ((cost.maxTimes ?? 0) > 0) times = Math.min(times, cost.maxTimes);
-              await ClashManager._reduceBuffStacks(tgt, costBuffType, times * n);
+              if (dim === "intensity") {
+                await ClashManager._reduceBuffIntensity(tgt, costBuffType, times * n);
+              } else {
+                await ClashManager._reduceBuffStacks(tgt, costBuffType, times * n);
+              }
               perStackMultiplier = times;
             }
           } else if (cost.type !== "none") {
@@ -985,8 +1039,10 @@ export class ClashManager {
             break;
           }
           case "extraDamage": {
-            // 追加伤害：按选定物理分类/罪孽类型乘抗性，直接造成 HP 伤害
-            // （不经过拼点/骰数结算流程，perStackMultiplier 支持"每N层"等前置放大）
+            // 追加伤害：按选定物理分类/罪孽类型乘抗性算出最终伤害数值，
+            // 跳过的只是"第一次伤害"（拼点/骰数结算流程本身，不会二次拼点），
+            // 但仍需走完整的承受结算管线（护盾吸收/混乱阈值判定/自定义BUFF承伤
+            // 钩子如【百折不挠】等），因此改为调用 _applyAndSendTake 而非直接扣HP。
             const rawVal = await ClashManager._evalValue(eff.value);
             const scaled = _scaleVal(rawVal, "relative"); // 始终按倍数缩放（无绝对值语义）
             const physMult = eff.dmgCategory
@@ -996,13 +1052,12 @@ export class ClashManager {
               ? ClashManager._parseResistance(effTgt.system?.egoResistances?.[eff.dmgSinType] ?? "x1.0")
               : 1.0;
             const dmg = Math.max(0, Math.round(scaled * physMult * sinMult));
-            if (dmg > 0) {
-              const curHp = effTgt.system?.hp?.value ?? 0;
-              await ClashManager._safeDocUpdate(effTgt, { "system.hp.value": Math.max(0, curHp - dmg) });
-            }
             const catLabel = eff.dmgCategory ? `【${ClashManager._catLabel(eff.dmgCategory)}】` : "";
             const sinLabel = eff.dmgSinType   ? `【${ClashManager._sinLabel(eff.dmgSinType)}】`   : "";
-            descStr = `对【${effTgt.name}】造成 ${dmg} 点${catLabel}${sinLabel}追加伤害`;
+            descStr = `对【${effTgt.name}】造成 ${dmg} 点${catLabel}${sinLabel}追加伤害（结算详情见承受结算消息）`;
+            if (dmg > 0) {
+              await ClashManager._applyAndSendTake(effTgt, dmg, { attacker: owner, takeLabel: "追加伤害-承受" });
+            }
             break;
           }
           case "diceTypeChg": {
@@ -1015,49 +1070,22 @@ export class ClashManager {
             break;
           }
           case "relatedSkillConvert": {
-            // 相关技能转换：将"本骰"（item）永久替换为相关技能池中的技能（随机或指定序号）
-            // 序号约定：1=原本（自身，no-op），2起对应池内顺序（pool[序号-2]）
+            // 相关技能转换：将"本骰"（item）永久替换为角色背包/技能列表中按名字检索到的技能。
+            // 旧版"随机/指定序号"（走 item.system.relatedSkill.pool 这个 UUID 池，需要互相
+            // 套娃预先配置）已移除，改为直接按名字检索已拥有的技能，无需任何预配置，
+            // 也不受合集包提取后 UUID 变化的影响。
             const relOwner = item?.parent ?? owner;
             if (!relOwner || !item) { descStr = "相关技能转换：找不到所属角色"; break; }
-            const pool = item.system?.relatedSkill?.pool ?? [];
 
-            let targetUuid = null;
-            if ((eff.relMode ?? "random") === "specific") {
-              const idxSel = Math.max(1, Math.round(Number(eff.relIndex ?? 1)));
-              if (idxSel === 1) { descStr = `【${item.name}】维持原本形态`; break; }
-              const entry = pool[idxSel - 2];
-              if (!entry?.itemUuid) { descStr = `相关技能转换：序号 ${idxSel} 无对应技能`; break; }
-              targetUuid = entry.itemUuid;
-            } else {
-              const validPool = pool.filter(p => p?.itemUuid);
-              if (!validPool.length) { descStr = `相关技能转换：【${item.name}】相关技能池为空`; break; }
-              targetUuid = validPool[Math.floor(Math.random() * validPool.length)].itemUuid;
-            }
-
-            const srcItem = await fromUuid(targetUuid).catch(() => null);
-            if (!srcItem) { descStr = "相关技能转换：找不到目标技能"; break; }
-
-            try {
-              // 复用已存在的相关技能副本（按来源 UUID 标记），避免重复转换时反复创建
-              let newItem = relOwner.items.find(
-                i => i.getFlag?.("limbusCompany_FVTT", "relatedSourceUuid") === targetUuid
-              );
-              if (!newItem) {
-                const data = srcItem.toObject();
-                delete data._id;
-                foundry.utils.setProperty(data, "flags.limbusCompany_FVTT.relatedSourceUuid", targetUuid);
-                const [created] = await relOwner.createEmbeddedDocuments("Item", [data]);
-                newItem = created;
-              }
-
-              const replaced = await relOwner.replaceSkillSlot?.(item.id, newItem.id);
-              descStr = replaced
-                ? `【${item.name}】永久转换为【${newItem.name}】`
-                : `相关技能转换：未找到【${item.name}】所在的技能槽位`;
-            } catch (err) {
-              console.error("ClashManager: relatedSkillConvert 执行失败", err);
-              descStr = "相关技能转换：执行出错（可能缺少权限），请检查控制台";
-            }
+            const name = (eff.relSkillName ?? "").trim();
+            if (!name) { descStr = "相关技能转换：未配置技能名字"; break; }
+            const newItem = (relOwner.items ?? []).find(it => it.type === "skill" && it.name === name && it.id !== item.id);
+            if (!newItem) { descStr = `相关技能转换：背包中找不到技能【${name}】`; break; }
+            const replaced = await relOwner.replaceSkillSlot?.(item.id, newItem.id);
+            if (replaced) relOwner.sheet?._replaceCombatBagSkill?.(item.id, newItem.id);
+            descStr = replaced
+              ? `【${item.name}】永久转换为【${newItem.name}】`
+              : `相关技能转换：未找到【${item.name}】所在的技能槽位`;
             break;
           }
           case "useSkill": {
@@ -1077,6 +1105,12 @@ export class ClashManager {
                 descStr = `未找到已装备的${lbl}`;
                 break;
               }
+            } else if (eff.skillRef === "name") {
+              // 按名字在角色背包/技能列表中检索：比 UUID 更稳定（合集包提取后 UUID 会变，名字不变）
+              const name = (eff.skillName ?? "").trim();
+              if (!name) { descStr = "useSkill：未配置技能名字"; break; }
+              skillItem = (owner?.items ?? []).find(it => it.type === "skill" && it.name === name) ?? null;
+              if (!skillItem) { descStr = `useSkill：背包中找不到技能【${name}】`; break; }
             } else {
               const uuid = eff.skillUuid ?? "";
               if (!uuid) { descStr = "useSkill：未配置技能UUID"; break; }
@@ -1328,7 +1362,14 @@ export class ClashManager {
 
   /* ─── 阶段一：发起对抗弹窗 ────────────────────────────────────────────── */
 
-  static async showInitiateDialog(actor, item, slotIndex = -1) {
+  /**
+   * @param {Actor}  actor
+   * @param {Item}   item
+   * @param {number} [slotIndex=-1]      >=0 从战斗槽触发（推进6-bag+扣AP）；-2 只扣AP
+   * @param {string} [targetActorId=""]  指定目标角色 ID（HUD 拖拽到 token 时传入）；
+   *                                     非空时只有该角色能对抗/承受
+   */
+  static async showInitiateDialog(actor, item, slotIndex = -1, targetActorId = "") {
     const sys      = item.system ?? {};
     const formula  = sys.diceFormula ?? "1d4";
     const catIcon  = ClashManager._catIcon(sys.category);
@@ -1442,7 +1483,7 @@ export class ClashManager {
 
               const roll = new Roll(full);
               await roll.evaluate();
-              await ClashManager._sendInitiateMsg(actor, item, roll, full, slotIndex);
+              await ClashManager._sendInitiateMsg(actor, item, roll, full, slotIndex, targetActorId);
 
               // EGO 技能使用后，将 egoResistanceAdj 应用到角色的罪孽抗性
               if (isEgo) {
@@ -1474,15 +1515,19 @@ export class ClashManager {
 
   /* ─── 阶段二：发起对抗聊天框 ──────────────────────────────────────────── */
 
-  static async _sendInitiateMsg(actor, item, roll, formula, slotIndex) {
+  static async _sendInitiateMsg(actor, item, roll, formula, slotIndex, targetActorId = "") {
     const sys        = item.system ?? {};
     const effectDesc = ClashManager._effectDesc(item);
+    const targetName = targetActorId ? (game.actors.get(targetActorId)?.name ?? "") : "";
 
     const content = `
       <div class="limbus-clash-card" data-clash-type="initiate">
         ${ClashManager._chatHeader(actor, "发起对抗")}
         ${ClashManager._goldDivider()}
         ${ClashManager._skillRow(item)}
+        ${targetName ? `<div style="font-size:.78rem;color:#B43822;margin-top:6px;">
+          ⊘ 已指定目标：<strong>${targetName}</strong>（其他角色无法对抗/承受）
+        </div>` : ""}
         <div class="clash-action-row" style="display:flex;gap:8px;margin-top:8px;margin-bottom:4px;">
           <button class="clash-btn-clash"
                   style="width:50px;height:30px;background:#5F3E22;color:#E8C9A2;
@@ -1515,6 +1560,7 @@ export class ClashManager {
           weight:      sys.weight   ?? 1,
           effectDesc,
           slotIndex,
+          targetActorId,
         },
       },
     });
@@ -1558,6 +1604,13 @@ export class ClashManager {
     // 发起方自己不能作为防守方响应自己的对抗
     if (defActor.id === initFlags.attackerId) {
       ui.notifications.warn("发起对抗的角色不能对自己的发起进行对抗");
+      return;
+    }
+
+    // 指定目标：发起时若拖拽到某个 token 上，则只有该角色能响应
+    if (initFlags.targetActorId && defActor.id !== initFlags.targetActorId) {
+      const tgtName = game.actors.get(initFlags.targetActorId)?.name ?? "指定目标";
+      ui.notifications.warn(`本次对抗已指定目标【${tgtName}】，其他角色无法对抗`);
       return;
     }
 
@@ -2573,6 +2626,13 @@ export class ClashManager {
       return;
     }
 
+    // 指定目标：发起时若拖拽到某个 token 上，则只有该角色能承受
+    if (initFlags.targetActorId && selActor.id !== initFlags.targetActorId) {
+      const tgtName = game.actors.get(initFlags.targetActorId)?.name ?? "指定目标";
+      ui.notifications.warn(`本次对抗已指定目标【${tgtName}】，其他角色无法承受`);
+      return;
+    }
+
     const atkActor  = game.actors.get(initFlags.attackerId);
     const defActor  = selActor;
     // DiceSoNice: 承受时先播攻击方骰子动画
@@ -3023,7 +3083,7 @@ export class ClashManager {
    * @param {object} [opts]
    * @param {boolean} [opts.isSeismic=false]  是否为【震颤引爆】类型攻击
    */
-  static async _applyAndSendTake(actor, damage, { isSeismic = false, calcNotes = [], attacker = null, hookMsgs = null } = {}) {
+  static async _applyAndSendTake(actor, damage, { isSeismic = false, calcNotes = [], attacker = null, hookMsgs = null, takeLabel = "承受" } = {}) {
     const sys   = actor.system;
     const maxHp = sys.hp?.max ?? 1;
 
@@ -3147,11 +3207,11 @@ export class ClashManager {
     // （生命值锁定时 sinkingGloomDmg 恒为 0，finalHp 与 newHp 一致，仍钉死为 hpLockValue）
     const finalHp = Math.max(0, newHp - sinkingGloomDmg);
     await ClashManager._sendTakeMsg(actor, damage, oldHp, finalHp, maxHp, chaosTriggered,
-      { ruptureDmg, sanityDmg, sinkingGloomDmg, tremorTriggered, chaosName, calcNotes });
+      { ruptureDmg, sanityDmg, sinkingGloomDmg, tremorTriggered, chaosName, calcNotes, takeLabel });
   }
 
   static async _sendTakeMsg(actor, damage, oldHp, newHp, maxHp, chaosTriggered,
-      { ruptureDmg = 0, sanityDmg = 0, sinkingGloomDmg = 0, tremorTriggered = false, chaosName = "陷入混乱", calcNotes = [] } = {}) {
+      { ruptureDmg = 0, sanityDmg = 0, sinkingGloomDmg = 0, tremorTriggered = false, chaosName = "陷入混乱", calcNotes = [], takeLabel = "承受" } = {}) {
     const hpPct    = Math.max(0, Math.round((newHp / maxHp) * 100));
     const totalDmg = damage + ruptureDmg + sinkingGloomDmg;
     const extraLines = [];
@@ -3164,7 +3224,7 @@ export class ClashManager {
       <div class="limbus-clash-card limbus-take-card"
            style="background:linear-gradient(180deg,#2D0509 0%,#1A0305 100%);"
            data-clash-type="take">
-        ${ClashManager._chatHeader(actor, "承受")}
+        ${ClashManager._chatHeader(actor, takeLabel)}
         ${ClashManager._goldDivider()}
         ${calcNotes.length > 0 ? `
         <div style="margin:6px 0 4px;padding:5px 7px;background:rgba(0,0,0,.25);border-radius:3px;">
@@ -3603,8 +3663,10 @@ export class ClashManager {
       const buffs = targetActor.system?.buffs ?? [];
       const found = buffs.find(b => b.type === pre.buff || b.name === pre.buff);
       if (!found) return false;
+      const dim = pre.perNDim === "intensity" ? "intensity" : "stacks";
+      const haveVal = dim === "intensity" ? (found.intensity ?? 0) : (found.stacks ?? 0);
       const n = pre.stacks ?? 1;
-      return n > 0 && ((found.stacks ?? 0) % n === 0);
+      return n > 0 && (haveVal % n === 0);
     }
 
     if (type === "buffCompare") {
@@ -3649,6 +3711,14 @@ export class ClashManager {
       const skillItem = await fromUuid(lastSkillUuid).catch(() => null);
       if (!skillItem) return false;
       return cats.includes(skillItem.system?.category);
+    }
+
+    if (type === "level") {
+      // 使用等级：检查本次对抗使用的技能（lastSkillUuid）等级是否满足比较条件
+      if (!lastSkillUuid) return false;
+      const skillItem = await fromUuid(lastSkillUuid).catch(() => null);
+      if (!skillItem) return false;
+      return ClashManager._cmp(skillItem.system?.level ?? 0, pre.comparison ?? "eq", pre.level ?? 1);
     }
 
     return false;
@@ -3778,6 +3848,15 @@ export class ClashManager {
           ui.notifications.warn(`反应：未找到已装备的${label}`);
           return;
         }
+      } else if (eff?.skillRef === "name") {
+        // 按名字在角色背包/技能列表中检索：比 UUID 更稳定（合集包提取后 UUID 会变，名字不变）
+        const name = (eff.skillName ?? "").trim();
+        if (!name) return;
+        skillItem = (actor.items ?? []).find(it => it.type === "skill" && it.name === name) ?? null;
+        if (!skillItem) {
+          ui.notifications.warn(`反应：背包中找不到技能【${name}】`);
+          return;
+        }
       } else {
         const skillUuid = eff?.skillUuid ?? "";
         if (!skillUuid) return;
@@ -3845,6 +3924,27 @@ export class ClashManager {
         if (doc) await doc.update(msg.data);
       } catch (err) {
         console.error("[ClashManager] gmDocUpdate 失败:", err);
+      }
+      return;
+    }
+
+    // 玩家委托 GM 推进战斗轮次（Combat 文档玩家无写权限）
+    // 由快捷 HUD 的"下个回合"按钮发起；GM 侧再次校验确实轮到该玩家控制的角色，
+    // 防止其他客户端伪造消息抢跳回合。
+    if (msg.type === "gmNextTurn") {
+      if (!game.user.isGM) return;
+      const combat = msg.combatId ? game.combats.get(msg.combatId) : game.combat;
+      if (!combat?.started) return;
+      const sender = msg.userId ? game.users.get(msg.userId) : null;
+      const cur    = combat.combatant?.actor;
+      if (!sender || !cur?.testUserPermission?.(sender, "OWNER")) {
+        console.warn("[ClashManager] gmNextTurn: 发起者并非当前行动角色的拥有者，已忽略");
+        return;
+      }
+      try {
+        await combat.nextTurn();
+      } catch (err) {
+        console.error("[ClashManager] gmNextTurn 失败:", err);
       }
       return;
     }
