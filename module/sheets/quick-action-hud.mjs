@@ -679,25 +679,10 @@ export class QuickActionHUD extends Application {
     };
   }
 
-  /**
-   * 手动推进战斗袋（当角色卡 sheet 未渲染、_animateCombatSkillUse 提前返回时调用）。
-   * 逻辑与 actor-sheet._drawNextFromPool + slots.splice/push 一致。
-   */
-  _advanceBagStateManually(slotIndex) {
-    const state = this._actor?.sheet?._combatBagState;
-    if (!state) return;
-
-    // 移除已使用的槽
-    state.slots.splice(slotIndex, 1);
-
-    // 从 pool 取下一张；pool 耗尽则重洗
-    if (!state.pool.length) {
-      state.pool = [...(state.equipped ?? [])].sort(() => Math.random() - 0.5);
-    }
-    const nextId = state.pool.shift() ?? null;
-    state.slots.push(nextId);
-    // state 是 Map 中对象的引用，直接 mutate 即已生效，无需重新 set
-  }
+  // 注：原 _advanceBagStateManually() 已移除。
+  // 战斗袋的推进统一由 actor-sheet._animateCombatSkillUse() 负责——它内部
+  // 已区分角色卡开着（播完动画再推进）与关着（直接推进）两种情况。HUD 侧
+  // 再补一次会导致关闭角色卡时重复推进，技能跳着走。
 
   /* ─── 基础技能格：点击发起对抗 / 长按拖到 token 指定目标 ───────────────── */
 
@@ -795,15 +780,18 @@ export class QuickActionHUD extends Application {
       return;
     }
 
-    // 确保战斗袋已初始化
+    // 确保战斗袋已初始化（状态存在模块级 Map 中，按 actorId 索引，
+    // 关闭角色卡也不会丢失）
     this._ensureBagState();
-    // 记录角色卡是否已渲染：未渲染时 _animateCombatSkillUse 会提前 return，需手动推进袋
-    const sheetRendered = !!(actor.sheet?.rendered && actor.sheet?.element?.length);
 
     const ok = await ClashManager.showInitiateDialog(actor, item, slotIndex, targetActorId);
     if (!ok) return;   // 取消：技能保留在槽位，不播动画、不推进袋
 
-    if (!sheetRendered) this._advanceBagStateManually(slotIndex);
+    // 注意：战斗袋的推进完全交给 clash.mjs → sheet._animateCombatSkillUse()，
+    // 它内部已分别处理"角色卡开着"（播动画后推进）与"角色卡关着"
+    // （!this.element.length 时直接推进）两种情况。这里不能再补一次
+    // _advanceBagStateManually，否则角色卡关闭时会推进两次，技能跳着走、
+    // 看起来像被打乱。
 
     // 打出格向上飞走；它右侧的格子左移补位，左侧的保持不动
     const row = this.element?.find(".qa-skill-row");
