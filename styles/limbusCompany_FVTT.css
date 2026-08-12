@@ -5679,18 +5679,28 @@ body.game .limbuscompany.app img {
 
 /* ── 基础技能三格 ─────────────────────────────────────────── */
 .qa-skill-row {
+  /* 整格大小 / 边框中空区内缩比例（技能图多大）/ 相邻格重叠量 */
+  --skill-size:    100px;
+  --art-inset:     15%;
+  --skill-overlap: 22px;
+
   display:     flex;
   align-items: center;
-  gap:         2px;
 }
+
+/* 七边形边框左右两侧本身是透明的，格子并排会留出大片空白、整行显得过宽。
+   让相邻格互相重叠（负 margin），既压缩整行宽度，也更接近原作技能牌叠放的观感。
+   左侧格叠在右侧格之上，"准备"格自然被压在最后面。 */
+.qa-skill-slot + .qa-skill-slot {
+  margin-left: calc(var(--skill-overlap) * -1);
+}
+.qa-skill-row .qa-skill-slot:nth-child(1) { z-index: 3; }
+.qa-skill-row .qa-skill-slot:nth-child(2) { z-index: 2; }
+.qa-skill-row .qa-skill-slot:nth-child(3) { z-index: 1; }
 
 /* 单个技能格：技能图垫底 + 罪孽/等级空心边框盖在上面
    （{罪孽}_lv{N}.webp 是中空的七边形边框，不是技能图本身） */
 .qa-skill-slot {
-  --skill-size: 74px;
-  /* 边框图中空区域相对整图的内缩比例，用于把技能图塞进框内 */
-  --art-inset:  17%;
-
   position:    relative;
   width:       var(--skill-size);
   height:      var(--skill-size);
@@ -5725,7 +5735,8 @@ body.game .limbuscompany.app img {
   pointer-events: none;
 }
 
-.qa-skill-slot--ready:hover { transform: translateY(-3px); }
+/* 悬停时抬起并提到最上层，避免被右侧格子压住一角 */
+.qa-skill-row .qa-skill-slot--ready:hover { transform: translateY(-3px); z-index: 9; }
 
 /* 准备格（半透明，不可直接使用）/ 空格 */
 .qa-skill-slot--pending { opacity: .42; cursor: default; }
@@ -5763,8 +5774,8 @@ body.game .limbuscompany.app img {
   z-index:        9999;
   pointer-events: none;
   opacity:        .85;
-  width:          74px;
-  height:         74px;
+  width:          100px;
+  height:         100px;
 }
 .qa-skill-drag-ghost img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
 

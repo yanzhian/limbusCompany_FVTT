@@ -67,7 +67,7 @@ const QA_ARC_FROM = 180;
 const QA_ARC_LEN  = 310;
 
 /* 拖拽幽灵图标居中偏移量（= .qa-skill-drag-ghost 尺寸的一半，改 CSS 时同步） */
-const QA_GHOST_HALF = 37;
+const QA_GHOST_HALF = 50;
 
 /* 技能边框图：assets/icons/Skill/{罪孽首字母大写}_lv{等级}.webp
    注意这是中空的七边形【边框】，不是技能图本身——技能自身的图用
