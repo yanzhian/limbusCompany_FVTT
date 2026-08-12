@@ -99,9 +99,10 @@
            style="background:{{sanColor}};border-color:{{sanBorder}};">{{sanValue}}</div>
 
       {{!-- EGO 环绕槽：占用七边形除左下(生命值)/右下(理智值)外的 5 条边；
-            空等级不渲染。点击/拖拽释放，交互与基础技能一致 --}}
-      {{#if egoMode}}
-        {{#each egoSlots}}
+            空等级不渲染。点击/拖拽释放，交互与基础技能一致。
+            始终渲染、由 CSS 控制淡入淡出（切换模式时才有过渡动画，
+            也避免每次切换都重渲整个 HUD） --}}
+      {{#each egoSlots}}
           <div class="qa-ego-slot"
                style="left:{{x}}%; top:{{y}}%;"
                data-item-id="{{item.id}}"
@@ -111,8 +112,7 @@
             <img class="qa-skill-frame" src="{{../egoFrame}}" alt="" draggable="false">
             <span class="qa-ego-grade">{{grade}}</span>
           </div>
-        {{/each}}
-      {{/if}}
+      {{/each}}
 
     </div>{{!-- /qa-hex-block --}}
 

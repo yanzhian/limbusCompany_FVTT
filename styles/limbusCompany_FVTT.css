@@ -5779,12 +5779,24 @@ body.game .limbuscompany.app img {
    ══════════════════════════════════════════════════════════════ */
 /* EGO 模式：左右两块只隐藏、不移除（visibility 保留占位），
    这样切换模式时中央七边形与底部 BUFF 栏的位置完全不变。
-   EGO 槽是绝对定位、不参与布局，正好铺在左右两块空出来的视觉区域上。 */
+   EGO 槽是绝对定位、不参与布局，正好铺在左右两块空出来的视觉区域上。
+   两套元素都常驻 DOM，切换时只改 opacity/visibility，因此有淡入淡出过渡。
+   visibility 用 0.22s 的 transition 而非直接切换，是为了让它在淡出结束后
+   才真正生效——否则元素会立刻不可点、看不到渐隐过程。 */
+.qa-btn-group--left,
+.qa-right-block {
+  transition: opacity .22s ease, visibility .22s;
+}
+
+/* 基础面板：EGO 模式下淡出 */
 .qa-hud--ego .qa-btn-group--left,
 .qa-hud--ego .qa-right-block {
+  opacity:    0;
   visibility: hidden;
 }
 
+/* EGO 槽：默认隐藏，进入 EGO 模式才淡入
+   （transition 里必须一并声明 opacity/visibility，否则会覆盖掉淡入淡出） */
 .qa-ego-slot {
   --ego-size: 62px;
   position:   absolute;
@@ -5792,8 +5804,14 @@ body.game .limbuscompany.app img {
   height:     var(--ego-size);
   transform:  translate(-50%, -50%);   /* inline 的 left/top 是槽位中心 */
   cursor:     pointer;
-  transition: transform .12s, filter .12s;
   z-index:    6;
+  opacity:    0;
+  visibility: hidden;
+  transition: transform .12s, filter .12s, opacity .22s ease, visibility .22s;
+}
+.qa-hud--ego .qa-ego-slot {
+  opacity:    1;
+  visibility: visible;
 }
 .qa-ego-slot:hover {
   transform: translate(-50%, -50%) scale(1.08);

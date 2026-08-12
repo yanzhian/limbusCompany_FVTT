@@ -451,7 +451,7 @@ export class QuickActionHUD extends Application {
     });
 
     // ── 头像交互 ─────────────────────────────────────────────────────────
-    // 单击折叠所有已开面板；双击打开角色卡；拖动移动 HUD
+    // 单击折叠所有已开面板；双击切换 E.G.O / 基础面板；拖动移动 HUD
     let _clickTimer = null;
 
     html.find(".qa-avatar").on("click", (e) => {
@@ -459,23 +459,22 @@ export class QuickActionHUD extends Application {
       _clickTimer = setTimeout(() => {
         _clickTimer = null;
         if (this._dragging) return;   // 拖动后不触发单击
-        // 先收起已展开的面板；面板全关时才切换 EGO 模式，
-        // 避免"关面板"和"进 EGO"两个动作被同一次点击一起触发
         if (this._openPanels.size > 0) {
           this._openPanels.clear();
           html.find(".qa-panel").hide();
           html.find(".qa-btn[data-panel]").removeClass("qa-btn--active");
-          return;
         }
-        this._egoMode = !this._egoMode;
-        this.render(false);
       }, 220);
     });
 
+    // 双击：在 E.G.O 与 基础技能面板之间切换。
+    // 只切换根节点上的 class、不重新渲染——两套元素都常驻 DOM，
+    // 这样 CSS 的 opacity 过渡才能真正播放出淡入淡出。
     html.find(".qa-avatar").on("dblclick", () => {
       clearTimeout(_clickTimer);
       _clickTimer = null;
-      this._actor?.sheet?.render(true);
+      this._egoMode = !this._egoMode;
+      this.element?.toggleClass("qa-hud--ego", this._egoMode);
     });
 
     // ── 拖动（按住头像拖动整个 HUD） ──────────────────────────────────────
