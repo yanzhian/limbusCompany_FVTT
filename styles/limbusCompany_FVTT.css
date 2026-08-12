@@ -5709,12 +5709,15 @@ body.game .limbuscompany.app img {
   transition:  transform .12s;
 }
 
-/* 底层：技能自身的图，裁成尖朝下七边形，塞进边框中空区域 */
+/* 底层：技能自身的图，裁成尖朝下七边形，塞进边框中空区域。
+   必须显式给出宽高：绝对定位的 <img> 在 width/height 为 auto 时会按图片
+   自身的原始像素尺寸渲染（inset 的右/下约束被忽略），导致 40px 的小图正常、
+   400px 的大图直接撑爆格子。用 calc 算出宽高后，渲染尺寸与原图分辨率无关。 */
 .qa-skill-art {
   position:   absolute;
   inset:      var(--art-inset);
-  width:      auto;
-  height:     auto;
+  width:      calc(100% - var(--art-inset) * 2);
+  height:     calc(100% - var(--art-inset) * 2);
   object-fit: cover;
   display:    block;
   pointer-events: none;
