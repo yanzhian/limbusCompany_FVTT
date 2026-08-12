@@ -5771,17 +5771,23 @@ body.game .limbuscompany.app img {
 }
 .qa-skill-slot--shifting { animation: qa-skill-shift .3s ease-out backwards; }
 
-/* 拖拽中的原格 + 跟随鼠标的幽灵图标 */
-.qa-skill-slot--dragging { opacity: .5; transform: scale(.9); }
-.qa-skill-drag-ghost {
-  position:       fixed;
-  z-index:        9999;
-  pointer-events: none;
-  opacity:        .85;
-  width:          100px;
-  height:         100px;
+/* 瞄准中的源技能格：上浮并压暗，把视线让给箭头 */
+.qa-skill-row .qa-skill-slot--aiming {
+  transform: translateY(-10px);
+  opacity:   .55;
+  z-index:   9;
 }
-.qa-skill-drag-ghost img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
+
+/* 拖拽瞄准箭头的全屏 SVG 覆盖层：不拦截鼠标，避免挡住画布交互 */
+.qa-aim-overlay {
+  position:       fixed;
+  left:           0;
+  top:            0;
+  width:          100vw;
+  height:         100vh;
+  pointer-events: none;
+  z-index:        9998;
+}
 
 /* ── 刷新按钮（行动值左侧，浅色底 + 白色描边）───────────────── */
 .qa-refresh-btn {

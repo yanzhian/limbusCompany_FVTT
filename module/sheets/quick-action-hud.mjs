@@ -67,8 +67,11 @@ function _buffIconPath(type, name = "") {
 const QA_ARC_FROM = 180;
 const QA_ARC_LEN  = 310;
 
-/* 拖拽幽灵图标居中偏移量（= .qa-skill-drag-ghost 尺寸的一半，改 CSS 时同步） */
-const QA_GHOST_HALF = 50;
+/* 拖拽瞄准（杀戮尖塔式弧线箭头）：
+   位移超过阈值才从"点击"切换为"瞄准"；颜色为红色，吸附到目标时更亮。 */
+const QA_AIM_THRESHOLD  = 6;
+const QA_AIM_COLOR      = "#B43822";
+const QA_AIM_COLOR_SNAP = "#E5443A";
 
 /* BUFF 状态栏：默认格数 / 每行上限（每行上限需与 CSS 的
    .qa-status-bar max-width 计算保持一致） */
@@ -170,9 +173,10 @@ export class QuickActionHUD extends Application {
   /* ─── 隐藏 HUD ──────────────────────────────────────────────────────────── */
 
   _hide() {
-    // 关闭前先摘掉 BUFF 悬浮卡，避免 HUD 消失后卡片残留在屏幕上
+    // 关闭前先摘掉 BUFF 悬浮卡与瞄准箭头，避免 HUD 消失后残留在屏幕上
     this._buffCardCtrls?.forEach(c => c.close?.());
     this._buffCardCtrls = [];
+    this._destroyAimOverlay();
     $(`#${this.id}`).remove();
     this._element = null;
     this._actor   = null;
@@ -331,6 +335,7 @@ export class QuickActionHUD extends Application {
     this._onHudItemHoverEnd(true);
     this._buffCardCtrls?.forEach(c => c.close?.());
     this._buffCardCtrls = [];
+    this._destroyAimOverlay();
     return super.close(options);
   }
 
@@ -627,17 +632,16 @@ export class QuickActionHUD extends Application {
    * 可填加值修正），确认后才真正打出；取消则技能保留、不消耗行动值。
    */
   _bindSkillSlots(html) {
-    const LONG_PRESS_MS = 300;
-    let pressTimer = null, dragging = null, ghost = null;
+    let aiming = null;   // { el, itemId, slotIndex, sx, sy }
 
-    const clearDrag = () => {
-      if (dragging) dragging.el.removeClass("qa-skill-slot--dragging");
-      ghost?.remove();
-      ghost = null; dragging = null;
+    const endAim = () => {
+      aiming?.el.removeClass("qa-skill-slot--aiming");
+      this._destroyAimOverlay();
+      aiming = null;
       $(document).off("mousemove.qaSkillDrag mouseup.qaSkillDrag");
     };
 
-    /** 屏幕坐标 → 画布 token */
+    /** 屏幕坐标 → 画布 token（命中测试） */
     const tokenAt = (clientX, clientY) => {
       if (!canvas?.ready) return null;
       const t = canvas.canvasCoordinatesFromClient?.({ x: clientX, y: clientY })
@@ -645,6 +649,16 @@ export class QuickActionHUD extends Application {
       if (!t) return null;
       return canvas.tokens?.placeables?.find(tk =>
         t.x >= tk.x && t.x <= tk.x + tk.w && t.y >= tk.y && t.y <= tk.y + tk.h) ?? null;
+    };
+
+    /** token 中心（画布坐标）→ 屏幕坐标，用于把箭头吸附到目标中心 */
+    const tokenScreenCenter = (tk) => {
+      const c = tk.center ?? { x: tk.x + tk.w / 2, y: tk.y + tk.h / 2 };
+      const p = canvas.clientCoordinatesFromCanvas?.(c);
+      if (p) return p;
+      // 回退：直接用舞台变换矩阵换算
+      const m = canvas.stage?.worldTransform;
+      return m ? { x: c.x * m.a + m.tx, y: c.y * m.d + m.ty } : null;
     };
 
     html.find(".qa-skill-slot--ready").on("mousedown", (ev) => {
@@ -657,40 +671,134 @@ export class QuickActionHUD extends Application {
       const slotIndex = Number(el.data("slotIndex"));
       if (!itemId) return;
 
-      pressTimer = setTimeout(() => {
-        pressTimer = null;
-        dragging = { el, itemId, slotIndex };
-        el.addClass("qa-skill-slot--dragging");
-        ghost = $(`<div class="qa-skill-drag-ghost">${el.html()}</div>`)
-          .css({ left: ev.clientX - QA_GHOST_HALF, top: ev.clientY - QA_GHOST_HALF })
-          .appendTo(document.body);
-        ui.notifications.info("拖到目标 Token 上松开：指定该角色为唯一可对抗目标");
-      }, LONG_PRESS_MS);
+      const startX = ev.clientX, startY = ev.clientY;
+      const rect   = el[0].getBoundingClientRect();
+      const srcX   = rect.left + rect.width  / 2;
+      const srcY   = rect.top  + rect.height / 2;
 
       $(document)
         .on("mousemove.qaSkillDrag", (e) => {
-          if (!dragging || !ghost) return;
-          ghost.css({ left: e.clientX - QA_GHOST_HALF, top: e.clientY - QA_GHOST_HALF });
+          // 位移超过阈值才进入瞄准模式（未超过则仍视为点击）
+          if (!aiming) {
+            if (Math.hypot(e.clientX - startX, e.clientY - startY) < QA_AIM_THRESHOLD) return;
+            aiming = { el, itemId, slotIndex, sx: srcX, sy: srcY };
+            el.addClass("qa-skill-slot--aiming");
+            this._createAimOverlay();
+          }
+          const tk = tokenAt(e.clientX, e.clientY);
+          const tc = tk ? tokenScreenCenter(tk) : null;
+          if (tc) this._updateAimOverlay(aiming.sx, aiming.sy, tc.x, tc.y, true);
+          else    this._updateAimOverlay(aiming.sx, aiming.sy, e.clientX, e.clientY, false);
         })
         .on("mouseup.qaSkillDrag", async (e) => {
-          // 未到长按阈值 → 视为单击，不指定目标
-          if (pressTimer) {
-            clearTimeout(pressTimer); pressTimer = null;
-            clearDrag();
+          // 未进入瞄准模式 → 视为单击，不指定目标
+          if (!aiming) {
+            endAim();
             await this._castSkill(itemId, slotIndex, "");
             return;
           }
-          if (!dragging) { clearDrag(); return; }
           const tk = tokenAt(e.clientX, e.clientY);
           const targetActorId = tk?.actor?.id ?? "";
-          clearDrag();
+          endAim();
           if (!targetActorId) {
-            ui.notifications.warn("未拖到任何 Token 上，已取消本次指定");
+            ui.notifications.warn("未指向任何 Token，已取消本次指定");
             return;
           }
           await this._castSkill(itemId, slotIndex, targetActorId);
         });
     });
+  }
+
+  /* ─── 拖拽瞄准箭头（杀戮尖塔式弧线 + 分段圆点 + 目标瞄准环）───────────── */
+
+  /** 创建全屏 SVG 覆盖层（pointer-events:none，不拦截画布交互） */
+  _createAimOverlay() {
+    this._destroyAimOverlay();
+    const NS  = "http://www.w3.org/2000/svg";
+    const svg = document.createElementNS(NS, "svg");
+    svg.setAttribute("class", "qa-aim-overlay");
+
+    const ring = document.createElementNS(NS, "circle");   // 目标瞄准环
+    ring.setAttribute("fill", "none");
+    ring.setAttribute("stroke-width", "3");
+    ring.style.display = "none";
+
+    const dots = document.createElementNS(NS, "g");        // 分段圆点（曲线本体）
+    const head = document.createElementNS(NS, "polygon");  // 箭头
+
+    svg.append(ring, dots, head);
+    document.body.appendChild(svg);
+    this._aim = { svg, ring, dots, head, NS };
+  }
+
+  _destroyAimOverlay() {
+    this._aim?.svg?.remove();
+    this._aim = null;
+  }
+
+  /**
+   * 更新瞄准箭头。
+   * 曲线为二次贝塞尔：起点=技能格中心，终点=光标/目标中心，
+   * 控制点抬到两端上方形成外凸弧线（距离越远弧度越大，封顶 220px）。
+   * 沿曲线排布由细到粗的圆点，模拟杀戮尖塔的锥形指向效果。
+   */
+  _updateAimOverlay(sx, sy, ex, ey, snapped) {
+    const aim = this._aim;
+    if (!aim) return;
+    const { NS, dots, head, ring } = aim;
+
+    const color = snapped ? QA_AIM_COLOR_SNAP : QA_AIM_COLOR;
+    const p0 = { x: sx, y: sy };
+    const p2 = { x: ex, y: ey };
+    const dist = Math.hypot(ex - sx, ey - sy);
+    const p1 = { x: (sx + ex) / 2, y: Math.min(sy, ey) - Math.min(220, 60 + dist * 0.32) };
+
+    const bez  = (t) => ({
+      x: (1-t)*(1-t)*p0.x + 2*(1-t)*t*p1.x + t*t*p2.x,
+      y: (1-t)*(1-t)*p0.y + 2*(1-t)*t*p1.y + t*t*p2.y,
+    });
+    const bezD = (t) => ({
+      x: 2*(1-t)*(p1.x-p0.x) + 2*t*(p2.x-p1.x),
+      y: 2*(1-t)*(p1.y-p0.y) + 2*t*(p2.y-p1.y),
+    });
+
+    // 末端留出箭头长度，避免圆点戳穿箭头
+    const tEnd = 0.90;
+    const N = 16;
+    dots.textContent = "";
+    for (let i = 0; i <= N; i++) {
+      const k = i / N;
+      const p = bez(k * tEnd);
+      const c = document.createElementNS(NS, "circle");
+      c.setAttribute("cx", p.x);
+      c.setAttribute("cy", p.y);
+      c.setAttribute("r", 2.5 + 5.5 * k);          // 由细到粗
+      c.setAttribute("fill", color);
+      c.setAttribute("opacity", 0.35 + 0.65 * k);
+      dots.appendChild(c);
+    }
+
+    // 箭头：位于曲线末端，朝向该点切线方向
+    const tip = bez(1);
+    const d   = bezD(1);
+    const ang = Math.atan2(d.y, d.x);
+    const L = snapped ? 30 : 24, W = snapped ? 20 : 16;
+    const pt = (dx, dy) =>
+      `${tip.x + dx*Math.cos(ang) - dy*Math.sin(ang)},${tip.y + dx*Math.sin(ang) + dy*Math.cos(ang)}`;
+    head.setAttribute("points", `${pt(0,0)} ${pt(-L, W/2)} ${pt(-L*0.72, 0)} ${pt(-L,-W/2)}`);
+    head.setAttribute("fill", color);
+
+    // 吸附到目标时显示瞄准环
+    if (snapped) {
+      ring.style.display = "";
+      ring.setAttribute("cx", ex);
+      ring.setAttribute("cy", ey);
+      ring.setAttribute("r", 52);
+      ring.setAttribute("stroke", color);
+      ring.setAttribute("opacity", ".9");
+    } else {
+      ring.style.display = "none";
+    }
   }
 
   /**
