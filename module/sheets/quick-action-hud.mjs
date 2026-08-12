@@ -13,7 +13,8 @@
 
 import { ClashManager } from "../helpers/clash.mjs";
 import { CustomBuffRegistry } from "../helpers/custom-buffs.mjs";
-import { closeTitleCardUnlessLocked, toggleTitleCardLock } from "./item-sheet.mjs";
+import { closeTitleCardUnlessLocked, toggleTitleCardLock,
+         attachHoverableTitleCard, buildBuffTitleCard } from "./item-sheet.mjs";
 
 /* ─── 常量 ────────────────────────────────────────────────────────────────── */
 
@@ -163,6 +164,9 @@ export class QuickActionHUD extends Application {
   /* ─── 隐藏 HUD ──────────────────────────────────────────────────────────── */
 
   _hide() {
+    // 关闭前先摘掉 BUFF 悬浮卡，避免 HUD 消失后卡片残留在屏幕上
+    this._buffCardCtrls?.forEach(c => c.close?.());
+    this._buffCardCtrls = [];
     $(`#${this.id}`).remove();
     this._element = null;
     this._actor   = null;
@@ -309,6 +313,8 @@ export class QuickActionHUD extends Application {
 
   async close(options = {}) {
     this._onHudItemHoverEnd(true);
+    this._buffCardCtrls?.forEach(c => c.close?.());
+    this._buffCardCtrls = [];
     return super.close(options);
   }
 
@@ -459,6 +465,17 @@ export class QuickActionHUD extends Application {
         ev.preventDefault();
         toggleTitleCardLock(this._hudTitleCard);
       });
+
+    // ── BUFF 格悬浮 Title 卡（复用物品卡/角色卡同一套 BUFF 卡片）───────────
+    // attachHoverableTitleCard 自带中键锁定与卡内 chip 嵌套卡逻辑，
+    // 返回的 controller 需在重渲染/关闭时清理，避免卡片残留。
+    this._buffCardCtrls?.forEach(c => c.close?.());
+    this._buffCardCtrls = [];
+    html.find(".qa-buff-slot--filled[data-buff-name]").each((_, el) => {
+      this._buffCardCtrls.push(
+        attachHoverableTitleCard(el, () => buildBuffTitleCard(el.dataset.buffName))
+      );
+    });
   }
 
   /* ─── 内部辅助 ───────────────────────────────────────────────────────────── */

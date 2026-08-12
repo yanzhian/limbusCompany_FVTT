@@ -147,9 +147,11 @@
     <div class="qa-status-bar">
       {{#each buffSlots}}
         {{#if buff}}
+          {{!-- data-buff-name 供悬浮 Title 卡取用（buildBuffTitleCard）；
+                不再写 title 属性，避免与 Title 卡重复弹两层提示 --}}
           <div class="qa-buff-slot qa-buff-slot--filled"
                data-buff-id="{{buff.id}}"
-               title="{{buff.name}}  强度:{{buff.intensity}}  层数:{{buff.stacks}}{{#if description}}&#13;&#13;{{description}}{{/if}}">
+               data-buff-name="{{buff.name}}">
             {{#if icon}}<img class="qa-buff-icon" src="{{icon}}" alt="{{buff.name}}">{{/if}}
             <span class="qa-buff-intensity">{{buff.intensity}}</span>
             <span class="qa-buff-stacks">{{buff.stacks}}</span>

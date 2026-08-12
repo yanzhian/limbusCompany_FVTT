@@ -5783,13 +5783,13 @@ body.game .limbuscompany.app img {
 }
 .qa-skill-drag-ghost img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
 
-/* ── 刷新按钮（行动值左侧，无背景 + 白色描边）───────────────── */
+/* ── 刷新按钮（行动值左侧，浅色底 + 白色描边）───────────────── */
 .qa-refresh-btn {
   width:           30px;
   height:          30px;
   margin-right:    6px;
   flex-shrink:     0;
-  background:      transparent;
+  background:      #E8C9A2;
   border:          1px solid #FFFFFF;
   border-radius:   4px;
   cursor:          pointer;
@@ -5802,12 +5802,12 @@ body.game .limbuscompany.app img {
 .qa-refresh-btn:hover   { border-color: #C9A84C; filter: brightness(1.2); }
 .qa-refresh-btn.qa-spin { transform: rotate(360deg); }
 
-/* ── AP 硬币行（含刷新按钮）───────────────────────────────── */
+/* ── AP 硬币行（含刷新按钮，整行左对齐）─────────────────────── */
 .qa-ap-row {
   display:         flex;
   align-items:     center;
   gap:             4px;
-  justify-content: center;
+  justify-content: flex-start;
 }
 
 .qa-ap-coin {
