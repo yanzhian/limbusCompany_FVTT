@@ -6,7 +6,7 @@
  *   - LimbusActor    : Actor 文档类（封装游戏逻辑方法）
  */
 
-import { CustomBuffRegistry, resolveBuffHandler } from "../helpers/custom-buffs.mjs";
+import { CustomBuffRegistry, resolveBuffHandler, isTremorFamilyType, TREMOR_DEPENDENT_TYPES } from "../helpers/custom-buffs.mjs";
 
 // ═══════════════════════════════════════════════════════════════════════════
 //  CharacterData — TypeDataModel（角色数据模型）
@@ -950,6 +950,13 @@ export class LimbusActor extends Actor {
     const zeroDefault = ["burn", "bleed", "rupture", "tremor", "sinking", "breathing"].includes(type);
     const rawIntensity = buffData.intensity ?? 1;
     let   rawStacks    = buffData.stacks    ?? 1;
+
+    // 【振幅转换】【振幅纠缠】依附于震颤存在：没有任何震颤族时无法施加
+    if (TREMOR_DEPENDENT_TYPES.includes(type)
+        && !(this.system.buffs ?? []).some(b => isTremorFamilyType(b.type) && (b.stacks ?? 0) > 0)) {
+      ui.notifications?.warn(`【${buffData.name ?? type}】只能在目标拥有【震颤】或【特殊震颤】时添加。`);
+      return;
+    }
 
     // maxGainPerRound：本回合累计可获得的层数上限。额度用尽后，本轮内无论通过
     // 技能、装备还是手动添加都不再获得层数（与 ClashManager._addBuff 共用同一份

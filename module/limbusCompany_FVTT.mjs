@@ -665,6 +665,9 @@ Hooks.on("updateCombat", async (combat, changed) => {
       }
     }
 
+    // ── 震颤族全部消失时，连带移除【振幅转换】【振幅纠缠】 ────────────────
+    await ClashManager._cleanupTremorDependents(actor);
+
     // ── 自定义 BUFF onRoundStart 钩子 ────────────────────────────────────
     // 在 onRoundEnd 之后重新取快照：回合结束时被移除的 BUFF 不应再吃回合开始效果
     for (const buff of [...(actor.system?.buffs ?? [])]) {

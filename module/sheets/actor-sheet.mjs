@@ -2055,14 +2055,16 @@ export class LimbusActorSheet extends ActorSheet {
 
       // ── 震颤：混乱阈值前移强度值，层数 -1 ───────────────────────────────
       case "tremor": {
-        await actor.triggerSeismicBlast(intensity);
-        await actor.reduceBuffStacks("tremor");
-        await ChatMessage.create({
-          speaker: ChatMessage.getSpeaker({ actor }),
-          content: `<div class="limbuscompany chat-clash">
-            <strong>${actor.name}</strong>【震颤】引爆：混乱阈值前移 <strong>${intensity}%</strong>。
-          </div>`,
-        });
+        // 统一走 ClashManager.seismicBlast，特殊震颤/振幅纠缠的规则一并生效
+        const { blasts, msgs: blastMsgs } = await ClashManager.seismicBlast(actor, 1);
+        if (blasts > 0) {
+          await ChatMessage.create({
+            speaker: ChatMessage.getSpeaker({ actor }),
+            content: `<div class="limbuscompany chat-clash">
+              <strong>${actor.name}</strong>【震颤】引爆：<br>${blastMsgs.join("<br>")}
+            </div>`,
+          });
+        }
         break;
       }
 

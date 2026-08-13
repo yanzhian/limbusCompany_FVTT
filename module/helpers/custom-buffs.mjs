@@ -93,6 +93,34 @@ export function normalizeBuffType(type, name = "") {
   return type;
 }
 
+/* ─── 震颤族（普通震颤 + 特殊震颤） ─────────────────────────────────────── */
+
+/**
+ * 「特殊震颤」是一类会被【震颤引爆】当作震颤对待的 BUFF：同样有层数/强度，
+ * 引爆时同样消耗 1 层、把目标混乱阈值前移自身强度，区别是可以再挂一段额外效果。
+ * 注册方式：registerCustomBuff("xxx", { specialTremor: true, onSeismicBlast(...) })
+ *
+ *   onSeismicBlast(target, buff, ctx) → 返回一行说明文本（可选）
+ *     ctx = { attacker, dealDamage(targetActor, category, formula, sinType), getBuff(type) }
+ */
+export const TREMOR_BASE_TYPE = "tremor";
+
+/** 该 type 是否属于震颤族（普通震颤或任一特殊震颤） */
+export function isTremorFamilyType(type) {
+  if (type === TREMOR_BASE_TYPE) return true;
+  return CustomBuffRegistry.get(type)?.specialTremor === true;
+}
+
+/** 全部已注册的特殊震颤 type */
+export function specialTremorTypes() {
+  return [...CustomBuffRegistry.entries()]
+    .filter(([, h]) => h?.specialTremor === true)
+    .map(([t]) => t);
+}
+
+/** 依附于震颤存在的 BUFF：震颤族全部消失时，它们也一并消失 */
+export const TREMOR_DEPENDENT_TYPES = ["amplitudeConvert", "amplitudeEntangle"];
+
 /* ─── 内置自定义 BUFF ───────────────────────────────────────────────────── */
 
 /**
@@ -144,39 +172,16 @@ registerCustomBuff("defensiveStance", {
    */
   async onClashWin(carrier, opponent) {
     if (!opponent) return;
-    const buffs    = opponent.system?.buffs ?? [];
-    const tremor   = buffs.find(b => b.type === "tremor" && (b.stacks ?? 0) > 0);
-    if (!tremor) return;
-
-    const intensity = tremor.intensity ?? 1;
-    const thresholds = foundry.utils.deepClone(opponent.system?.chaosThresholds ?? []);
-    let shifted = false;
-    for (let i = 0; i < thresholds.length; i++) {
-      thresholds[i] = { ...thresholds[i], percent: (thresholds[i].percent ?? 0) + intensity };
-      shifted = true;
-    }
-    if (shifted) {
-      await opponent.update({ "system.chaosThresholds": thresholds });
-    }
-
-    // 消耗 1 层震颤
-    if (typeof opponent.reduceBuffStacks === "function") {
-      await opponent.reduceBuffStacks("tremor");
-    } else {
-      const nb  = foundry.utils.deepClone(opponent.system?.buffs ?? []);
-      const tidx = nb.findIndex(b => b.type === "tremor");
-      if (tidx >= 0) {
-        nb[tidx].stacks = Math.max(0, (nb[tidx].stacks ?? 1) - 1);
-        if (nb[tidx].stacks <= 0) nb.splice(tidx, 1);
-        await opponent.update({ "system.buffs": nb });
-      }
-    }
+    // 统一走 ClashManager.seismicBlast：特殊震颤 / 振幅纠缠的规则一并生效
+    const { ClashManager } = await import("./clash.mjs");
+    const { blasts, msgs } = await ClashManager.seismicBlast(opponent, 1, { attacker: carrier });
+    if (blasts <= 0) return;
 
     await ChatMessage.create({
       speaker: ChatMessage.getSpeaker({ actor: carrier }),
       content: `<div class="limbuscompany chat-clash">
-        <strong>${carrier.name}</strong>【防御姿态】触发：对 <strong>${opponent.name}</strong> 震颤引爆！
-        混乱阈值各前移 <strong>${intensity}%</strong>。
+        <strong>${carrier.name}</strong>【防御姿态】触发：对 <strong>${opponent.name}</strong> 震颤引爆！<br>
+        ${msgs.join("<br>")}
       </div>`,
     });
   },
@@ -634,6 +639,60 @@ registerCustomBuff("greetTheDawn", {
     if (newStacks <= 0) buffs.splice(idx, 1);
     else                buffs[idx].stacks = newStacks;
     await actor.update({ "system.buffs": buffs });
+  },
+});
+
+/* ─── 振幅系 & 特殊震颤 ─────────────────────────────────────────────────── */
+
+/**
+ * 【振幅转换】
+ * - 持有期间，新施加的【特殊震颤】不会另起一个，而是把目标身上现有的震颤族
+ *   （普通震颤 + 已转换过的特殊震颤）整体改写为新类型，强度与层数原样保留。
+ * - 不消耗层数，持续生效；因此持有期间震颤族始终只有一种。
+ * - 目标身上震颤族全部消失时，本效果一并消失。
+ */
+registerCustomBuff("amplitudeConvert", {
+  label:       "振幅转换",
+  description: "- 只能在目标拥有【震颤】或【特殊震颤】时添加\n"
+    + "- 持有期间，施加【特殊震颤】时改为把现有震颤转换为该类型，强度与层数不变\n"
+    + "- 转换不消耗层数，持有期间震颤族只会存在一种\n"
+    + "- 目标失去全部震颤时，本效果消失",
+});
+
+/**
+ * 【振幅纠缠】
+ * - 持有期间，特殊震颤与普通震颤并列存在（不再互相转换）。
+ * - 每次【震颤引爆】内，基础的阈值前移只结算 1 次，各特殊震颤的额外效果也各只结算 1 次。
+ * - 目标身上震颤族全部消失时，本效果一并消失。
+ */
+registerCustomBuff("amplitudeEntangle", {
+  label:       "振幅纠缠",
+  description: "- 只能在目标拥有【震颤】或【特殊震颤】时添加\n"
+    + "- 持有期间，【特殊震颤】与【震颤】并列存在，不再互相转换\n"
+    + "- 每次【震颤引爆】内，只触发 1 次原本【震颤】的效果与各【特殊震颤】的额外效果\n"
+    + "- 目标失去全部震颤时，本效果消失",
+});
+
+/**
+ * 【震颤-灼热】——特殊震颤
+ * - 会受到【震颤引爆】效果（消耗 1 层、混乱阈值前移本效果强度）
+ * - 额外效果：受到引爆时，承受 (本效果强度 + 自身【烧伤】强度) / 2 点【暴怒】伤害
+ *   （自身没有烧伤时即为 本效果强度 / 2，向下取整）
+ */
+registerCustomBuff("tremorHeat", {
+  label:         "震颤-灼热",
+  specialTremor: true,
+  description:   "·特殊震颤（会受到【震颤引爆】效果）\n"
+    + "·额外效果 受到【震颤引爆】时：受到（自身的震颤强度与烧伤强度之和 ÷ 2）点【暴怒】伤害",
+
+  async onSeismicBlast(target, buff, ctx) {
+    const tremorInt = buff.intensity ?? 0;
+    const burnInt   = ctx.getBuff?.("burn")?.intensity ?? 0;
+    const amount    = Math.floor((tremorInt + burnInt) / 2);
+    if (amount <= 0) return;
+    const dealt = await ctx.dealDamage?.(target, "", `${amount}`, "wrath");
+    return `【震颤-灼热】额外效果：(震颤强度 ${tremorInt} + 烧伤强度 ${burnInt}) ÷ 2 = `
+      + `<strong>${amount}</strong> → 造成 <strong>${dealt ?? 0}</strong> 点【暴怒】伤害。`;
   },
 });
 

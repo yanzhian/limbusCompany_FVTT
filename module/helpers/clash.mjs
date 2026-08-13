@@ -4,7 +4,10 @@
  */
 
 import { SinResourceHUD } from "./sin-resource-hud.mjs";
-import { CustomBuffRegistry, resolveBuffHandler, FieldResourceRegistry } from "./custom-buffs.mjs";
+import {
+  CustomBuffRegistry, resolveBuffHandler, FieldResourceRegistry,
+  isTremorFamilyType, TREMOR_BASE_TYPE, TREMOR_DEPENDENT_TYPES,
+} from "./custom-buffs.mjs";
 
 export class ClashManager {
 
@@ -395,6 +398,23 @@ export class ClashManager {
       if (!(intensity > 0)) intensity = 1;
     }
 
+    // 【振幅转换】【振幅纠缠】依附于震颤存在：目标没有任何震颤族时无法施加
+    if (TREMOR_DEPENDENT_TYPES.includes(type)
+        && ClashManager._tremorFamilyBuffs(actor).length === 0) {
+      return;
+    }
+
+    // 【振幅转换】：持有期间施加【特殊震颤】时，不新增，而是把现有震颤族整体
+    // 改写为该类型（强度/层数不变）。持有【振幅纠缠】时并列存在，不做转换。
+    if (isTremorFamilyType(type) && type !== TREMOR_BASE_TYPE) {
+      const cur = actor.system?.buffs ?? [];
+      const hasConvert   = cur.some(b => b.type === "amplitudeConvert");
+      const hasEntangle  = cur.some(b => b.type === "amplitudeEntangle");
+      if (hasConvert && !hasEntangle) {
+        if (await ClashManager._convertTremorFamily(actor, type)) return;
+      }
+    }
+
     const buffs = foundry.utils.deepClone(actor.system?.buffs ?? []);
 
     // 查询自定义 BUFF 处理器（maxStacks / refreshOnGain）
@@ -484,6 +504,143 @@ export class ClashManager {
   static applyHpFloor(oldHp, newHp, floor = 0) {
     if (!(floor > 0)) return Math.max(0, newHp);
     return Math.max(0, Math.max(newHp, Math.min(oldHp, floor)));
+  }
+
+  /* ─── 震颤族 / 震颤引爆 ─────────────────────────────────────────────── */
+
+  /** 取角色身上全部还有层数的震颤族 BUFF（普通震颤 + 特殊震颤） */
+  static _tremorFamilyBuffs(actor) {
+    return (actor?.system?.buffs ?? []).filter(
+      b => isTremorFamilyType(b.type) && (b.stacks ?? 0) > 0 && b.whenAdded !== "下回合"
+    );
+  }
+
+  /**
+   * 【振幅转换】：把角色身上现有的震颤族整体改写为 newType，强度与层数原样保留。
+   * 已有多条时合并为一条（层数与强度分别取和），保证转换后震颤族只剩一种。
+   * @returns {boolean} 是否发生了转换
+   */
+  static async _convertTremorFamily(actor, newType) {
+    const buffs  = foundry.utils.deepClone(actor?.system?.buffs ?? []);
+    const idxs   = buffs.map((b, i) => (isTremorFamilyType(b.type) && b.whenAdded !== "下回合") ? i : -1)
+                        .filter(i => i >= 0);
+    if (idxs.length === 0) return false;
+
+    let stacks = 0, intensity = 0;
+    for (const i of idxs) {
+      stacks    += buffs[i].stacks    ?? 0;
+      intensity += buffs[i].intensity ?? 0;
+    }
+    // 从后往前删，避免下标错位
+    for (const i of [...idxs].reverse()) buffs.splice(i, 1);
+
+    const iconBase = "systems/limbusCompany_FVTT/assets/icons/Buff_icon/";
+    const label    = ClashManager._buffLabel(newType);
+    buffs.push({
+      id:        foundry.utils.randomID(),
+      type:      newType,
+      name:      label,
+      icon:      `${iconBase}Custom_buffs/${label}.webp`,
+      intensity,
+      stacks,
+      whenAdded: "本回合",
+    });
+    await ClashManager._safeDocUpdate(actor, { "system.buffs": buffs });
+    return true;
+  }
+
+  /**
+   * 震颤族全部消失时，连带移除依附其存在的 BUFF（【振幅转换】【振幅纠缠】）。
+   * 每次引爆结束、以及回合结算后调用。
+   */
+  static async _cleanupTremorDependents(actor) {
+    if (!actor) return;
+    if (ClashManager._tremorFamilyBuffs(actor).length > 0) return;
+    const buffs = actor.system?.buffs ?? [];
+    if (!buffs.some(b => TREMOR_DEPENDENT_TYPES.includes(b.type))) return;
+    await ClashManager._safeDocUpdate(actor, {
+      "system.buffs": buffs.filter(b => !TREMOR_DEPENDENT_TYPES.includes(b.type)),
+    });
+  }
+
+  /**
+   * 【震颤引爆】统一入口——原先散落在 ④效果、承受结算、角色卡、【防御姿态】里的
+   * 四份实现全部收敛到这里。
+   *
+   * 每次引爆：震颤族每条各消耗 1 层，并把目标全部混乱阈值前移该条的强度；
+   * 特殊震颤再额外跑一次自己的 onSeismicBlast。
+   * 目标持有【振幅纠缠】时，本次引爆内基础的阈值前移只结算 1 次（取强度最高的一条），
+   * 每种特殊震颤的额外效果也各只结算 1 次。
+   *
+   * @param {Actor}  target
+   * @param {number} times    引爆次数
+   * @param {object} opts     { attacker }
+   * @returns {{ blasts: number, msgs: string[] }}
+   */
+  static async seismicBlast(target, times = 1, { attacker = null } = {}) {
+    const msgs = [];
+    if (!target) return { blasts: 0, msgs };
+
+    const entangled = (target.system?.buffs ?? []).some(b => b.type === "amplitudeEntangle");
+    let blasts = 0;
+
+    for (let n = 0; n < Math.max(1, Math.round(times)); n++) {
+      // 每轮都重新读取：上一轮已经改过层数
+      const family = ClashManager._tremorFamilyBuffs(game.actors.get(target.id) ?? target);
+      if (family.length === 0) break;
+
+      // ── 基础效果：混乱阈值前移 ──
+      // 纠缠：只结算 1 次，取强度最高的一条；否则每条各结算一次
+      const shiftList = entangled
+        ? [family.reduce((a, b) => ((b.intensity ?? 0) > (a.intensity ?? 0) ? b : a))]
+        : family;
+      let shifted = 0;
+      for (const tb of shiftList) shifted += tb.intensity ?? 0;
+      if (shifted > 0) {
+        await (target.triggerSeismicBlast
+          ? target.triggerSeismicBlast(shifted)
+          : ClashManager._safeDocUpdate(target, {
+              "system.chaosThresholds": (target.system?.chaosThresholds ?? []).map(t => ({
+                percent:   Math.min(100, t.percent + shifted),
+                triggered: t.triggered,
+              })),
+            }));
+      }
+
+      // ── 特殊震颤的额外效果 ──
+      for (const tb of family) {
+        const handler = resolveBuffHandler(tb);
+        if (typeof handler?.onSeismicBlast !== "function") continue;
+        const line = await handler.onSeismicBlast(target, tb, {
+          attacker,
+          getBuff:    (type) => ClashManager._getBuff(target, type),
+          dealDamage: async (tgtActor, category, formula, sinType = "") => {
+            if (!tgtActor) return 0;
+            const roll = new Roll(String(formula));
+            await roll.evaluate();
+            const physMult = category
+              ? ClashManager._parseResistance(ClashManager._getEffectiveResistances(tgtActor)[category] ?? "x1.0")
+              : 1.0;
+            const sinMult = sinType
+              ? ClashManager._parseResistance(tgtActor.system?.egoResistances?.[sinType] ?? "x1.0")
+              : 1.0;
+            const dmg = Math.max(0, Math.round(roll.total * physMult * sinMult));
+            await ClashManager._applyAndSendTake(tgtActor, dmg, { attacker, takeLabel: "震颤引爆-承受" });
+            return dmg;
+          },
+        });
+        if (typeof line === "string" && line) msgs.push(line);
+      }
+
+      // ── 消耗层数：震颤族每条各 -1 ──
+      for (const tb of family) await ClashManager._reduceBuffStacks(target, tb.type, 1);
+      await ClashManager._tickFieldResources(TREMOR_BASE_TYPE, shifted, 1);
+      blasts++;
+      msgs.push(`震颤引爆：混乱阈值前移 <strong>${shifted}%</strong>。`);
+    }
+
+    if (blasts > 0) await ClashManager._cleanupTremorDependents(target);
+    return { blasts, msgs };
   }
 
   /** 移除角色所有指定类型的 BUFF。 */
@@ -1062,37 +1219,14 @@ export class ClashManager {
             break;
           }
           case "seismicBlast": {
-            // 对目标触发【震颤引爆】N次（N = eff.value）
-            // 每次引爆：消耗目标1层【震颤】，所有混乱阈值前移【震颤强度】%
+            // 对目标触发【震颤引爆】N 次（N = eff.value），具体规则见 ClashManager.seismicBlast
             const blastCount = Math.max(1, Math.round(Number(eff.value ?? 1)));
-            const tremorBuff = ClashManager._getBuff(effTgt, "tremor");
-            if (!tremorBuff || (tremorBuff.stacks ?? 0) <= 0) {
-              descStr = `【${effTgt.name}】无【震颤】状态，震颤引爆未触发`;
-              break;
-            }
-            const tremorIntensity = tremorBuff.intensity ?? 1;
-            let actualBlasts = 0;
-            for (let bi = 0; bi < blastCount; bi++) {
-              const currentTremor = ClashManager._getBuff(
-                game.actors.get(effTgt.id) ?? effTgt, "tremor"
-              );
-              if (!currentTremor || (currentTremor.stacks ?? 0) <= 0) break;
-              await (effTgt.triggerSeismicBlast
-                ? effTgt.triggerSeismicBlast(tremorIntensity)
-                : (async () => {
-                    const tList = (effTgt.system?.chaosThresholds ?? []).map(t => ({
-                      percent:   Math.min(100, t.percent + tremorIntensity),
-                      triggered: t.triggered,
-                    }));
-                    await ClashManager._safeDocUpdate(effTgt, { "system.chaosThresholds": tList });
-                  })()
-              );
-              await ClashManager._reduceBuffStacks(effTgt, "tremor", 1);
-              actualBlasts++;
-            }
-            descStr = actualBlasts > 0
-              ? `【${effTgt.name}】震颤引爆 ×${actualBlasts}，混乱阈值各前移 ${tremorIntensity}%`
-              : `【${effTgt.name}】震颤引爆未触发（震颤层数不足）`;
+            const { blasts, msgs: blastMsgs } =
+              await ClashManager.seismicBlast(effTgt, blastCount, { attacker: owner });
+            for (const line of blastMsgs) msgs.push(line);
+            descStr = blasts > 0
+              ? `【${effTgt.name}】震颤引爆 ×${blasts}`
+              : `【${effTgt.name}】无【震颤】状态，震颤引爆未触发`;
             break;
           }
           case "randomBuff": {
@@ -3295,13 +3429,8 @@ export class ClashManager {
 
       // 【震颤】：受到震颤引爆攻击时，混乱阈值前移强度值，层数-1
       if (isSeismic) {
-        const tremorBuff = ClashManager._getBuff(actor, "tremor");
-        if (tremorBuff && tremorBuff.stacks > 0) {
-          await actor.triggerSeismicBlast?.(tremorBuff.intensity ?? 0);
-          await ClashManager._reduceBuffStacks(actor, "tremor");
-          await ClashManager._tickFieldResources("tremor", tremorBuff.intensity ?? 0, 1);
-          tremorTriggered = true;
-        }
+        const { blasts } = await ClashManager.seismicBlast(actor, 1, { attacker });
+        tremorTriggered = blasts > 0;
       }
     }
 
