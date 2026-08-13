@@ -17,7 +17,14 @@
  *                                             // 因此回合结束时被移除的 BUFF 不会再触发）；
  *                                             // 返回字符串则并入「回合开始时」折叠汇总消息
  *     modifySpeedRoll(actor, ctx) {},       // 速度骰结果修正 → 返回最终 total（Number）
- *     onClashWin(carrier, opponent) {},     // 拼点胜利时回调 → 返回 Promise
+ *     onClashWin(carrier, opponent, buff) {},  // 拼点胜利时回调 → 返回 Promise
+ *     onClashLose(carrier, winner, buff) {},   // 拼点失败时回调（与 onClashWin 对称）
+ *     onBuffGained(actor, buff, ctx) {},    // 该角色获得任意 BUFF 后调用（不只是自己这条），
+ *                                             // ctx = { type, intensity, stacks }
+ *     onBuffLost(actor, buff, ctx) {},      // 该角色失去/减少任意 BUFF 后调用，
+ *                                             // ctx = { type, amount, stacks, removed }
+ *     modifyDiceRoll(actor, buff, ctx) {},  // 拼点骰/防守骰结果修正 → 返回数字或 { total, note }；
+ *                                             // ctx = { roll, total, item, isDefense }
  *     beforeChaos(actor, buff, ctx) {},     // 混乱触发前检查 → 返回 { immune: bool }；
  *                                             // ctx = { source }，source 为伤害来源（"burn"/"bleed"/…）
  *     modifyResistances(actor, buff, res) {}, // 修改物理抗性：res = { slash, blunt, pierce }（"xN.0" 字符串），
@@ -30,6 +37,9 @@
  *                                             //   damage  覆盖本次伤害
  *                                             //   hpLock  生命值锁定（跳过护盾/破裂/沉沦/震颤，HP 直接钉死；仅对抗路径）
  *                                             //   hpFloor 本次伤害不得把 HP 压到该值以下（仅跳动伤害路径）
+ *     modifyOutgoingDamage(actor, buff, ctx) {}, // 自己打出伤害前调用（与 modifyIncomingDamage 对称），
+ *                                             // ctx = { damage, target, category, sinType, item }；
+ *                                             // 返回 { damage?, note? }
  *     onHit(actor, buff, ctx) {},            // 自己任意技能/装备 [命中时] 结算后调用（异步），
  *                                             // ctx = { item, category, target,
  *                                             //          addBuff(type,intensity,stacks,whenAdded),
@@ -648,6 +658,27 @@ registerCustomBuff("greetTheDawn", {
 /* ─── 振幅系 & 特殊震颤 ─────────────────────────────────────────────────── */
 
 /**
+ * 两个振幅 BUFF 共用的事件响应：
+ * - 震颤族有任何增减 → 【振幅纠缠】下把各特殊震颤同步到【震颤】的层数/强度
+ * - 震颤族被打空     → 自己（【振幅转换】/【振幅纠缠】）一并消失
+ * 这两件事原先硬编码在 ClashManager._addBuff 里，现在改为挂在
+ * onBuffGained / onBuffLost 事件上，任何加减 BUFF 的路径都能覆盖到。
+ */
+const AMPLITUDE_EVENTS = {
+  async onBuffGained(actor, _buff, ctx) {
+    if (!isTremorFamilyType(ctx?.type ?? "")) return;
+    const { ClashManager } = await import("./clash.mjs");
+    await ClashManager._syncTremorFamily(actor);
+  },
+  async onBuffLost(actor, _buff, ctx) {
+    if (!isTremorFamilyType(ctx?.type ?? "")) return;
+    const { ClashManager } = await import("./clash.mjs");
+    await ClashManager._syncTremorFamily(actor);
+    await ClashManager._cleanupTremorDependents(actor);
+  },
+};
+
+/**
  * 【振幅转换】
  * - 持有期间，新施加的【特殊震颤】不会另起一个，而是把目标身上现有的震颤族
  *   （普通震颤 + 已转换过的特殊震颤）整体改写为新类型，强度与层数原样保留。
@@ -655,6 +686,7 @@ registerCustomBuff("greetTheDawn", {
  * - 目标身上震颤族全部消失时，本效果一并消失。
  */
 registerCustomBuff("amplitudeConvert", {
+  ...AMPLITUDE_EVENTS,
   label:       "振幅转换",
   description: "- 只能在目标拥有【震颤】或【特殊震颤】时添加\n"
     + "- 持有期间，施加【特殊震颤】时改为把现有震颤转换为该类型，强度与层数不变\n"
@@ -671,6 +703,7 @@ registerCustomBuff("amplitudeConvert", {
  * - 目标身上震颤族全部消失时，本效果一并消失。
  */
 registerCustomBuff("amplitudeEntangle", {
+  ...AMPLITUDE_EVENTS,
   label:       "振幅纠缠",
   description: "- 只能在目标拥有【震颤】或【特殊震颤】时添加\n"
     + "- 持有期间，【特殊震颤】与【震颤】并列存在，不再互相转换\n"

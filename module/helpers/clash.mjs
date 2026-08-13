@@ -264,8 +264,17 @@ export class ClashManager {
    */
   static async _reduceBuffStacks(actor, type, amount = 1) {
     if (!actor) return;
+    const before = ClashManager._getBuff(actor, type);
+    const notify = async () => {
+      const after = ClashManager._getBuff(actor, type);
+      await ClashManager._dispatchBuffChange(actor, "onBuffLost", {
+        type, amount, stacks: after?.stacks ?? 0, removed: !after,
+      });
+    };
     if (typeof actor.reduceBuffStacks === "function") {
-      return actor.reduceBuffStacks(type, amount);
+      const r = await actor.reduceBuffStacks(type, amount);
+      if (before) await notify();
+      return r;
     }
     // 兜底：直接操作 buffs 数组
     const buffs = [...(actor.system?.buffs ?? [])];
@@ -275,7 +284,8 @@ export class ClashManager {
     const keepAtZero = resolveBuffHandler(buffs[idx])?.keepAtZero ?? false;
     if (next <= 0 && !keepAtZero) buffs.splice(idx, 1);
     else                          buffs[idx] = { ...buffs[idx], stacks: next };
-    return ClashManager._safeDocUpdate(actor, { "system.buffs": buffs });
+    await ClashManager._safeDocUpdate(actor, { "system.buffs": buffs });
+    await notify();
   }
 
   /**
@@ -354,7 +364,7 @@ export class ClashManager {
               ? ClashManager._parseResistance(targetActor.system?.egoResistances?.[sinType] ?? "x1.0")
               : 1.0;
             const dmg = Math.max(0, Math.round(roll.total * physMult * sinMult));
-            await ClashManager._applyAndSendTake(targetActor, dmg, { attacker: owner });
+            await ClashManager._applyAndSendTake(targetActor, dmg, { attacker: owner, category, sinType });
             return dmg;
           },
         });
@@ -404,7 +414,7 @@ export class ClashManager {
       // 两者互斥：施加其中一个时移除另一个
       const other = TREMOR_DEPENDENT_TYPES.find(t => t !== type);
       if ((actor.system?.buffs ?? []).some(b => b.type === other)) {
-        await ClashManager._removeBuff(actor, other);
+        await ClashManager._removeBuff(actor, other, { _internal: true });
       }
     }
 
@@ -474,9 +484,7 @@ export class ClashManager {
       });
     }
     await ClashManager._safeDocUpdate(actor, { "system.buffs": buffs, ...(gainFlagUpdate ?? {}) });
-
-    // 震颤族有增减时，【振幅纠缠】下把各特殊震颤同步到【震颤】的层数/强度
-    if (isTremorFamilyType(type)) await ClashManager._syncTremorFamily(actor);
+    await ClashManager._dispatchBuffChange(actor, "onBuffGained", { type, intensity, stacks });
   }
 
   /**
@@ -599,6 +607,62 @@ export class ClashManager {
   }
 
   /**
+   * 【获得/失去 BUFF】事件派发。
+   * 角色身上**所有**注册 BUFF 的 onBuffGained / onBuffLost 都会收到通知
+   * （不只是变化的那个），因此可以写"每当获得【烧伤】时…"这类联动。
+   *
+   *   onBuffGained(actor, buff, ctx) / onBuffLost(actor, buff, ctx)
+   *   ctx = { type, intensity, stacks, removed }   // buff 是持有钩子的那一条
+   *
+   * _internal=true 的调用（同步/连带清理等系统自身发起的变动）不再派发，避免递归。
+   */
+  static async _dispatchBuffChange(actor, event, ctx) {
+    if (!actor || ctx?._internal) return;
+    for (const buff of foundry.utils.deepClone(actor.system?.buffs ?? [])) {
+      const handler = resolveBuffHandler(buff);
+      const fn = handler?.[event];
+      if (typeof fn !== "function") continue;
+      try {
+        await fn(actor, buff, ctx);
+      } catch (err) {
+        console.error(`ClashManager: BUFF【${buff.name ?? buff.type}】${event} 执行出错`, err);
+      }
+    }
+  }
+
+  /**
+   * 【骰子结果修正】自定义 BUFF 钩子。
+   * 与 modifySpeedRoll（只管速度骰）互补，这里管的是拼点骰/防守骰的最终点数。
+   *
+   *   modifyDiceRoll(actor, buff, ctx) → 返回数字（新的总点数）或 { total, note }
+   *   ctx = { roll, total, item, isDefense }
+   *
+   * 注意：为了让下游（聊天卡、initFlags.rollTotal、公式重投比对）全部拿到同一个值，
+   * 这里直接改写 Roll 实例内部的 _total —— Foundry 的 roll.total 就是它的 getter。
+   * 骰面本身不变，因此 DiceSoNice 的动画不受影响。
+   *
+   * @returns {{ total: number, notes: string[] }}
+   */
+  static applyDiceRollMods(actor, roll, { item = null, isDefense = false } = {}) {
+    const notes = [];
+    if (!actor || !roll) return { total: roll?.total ?? 0, notes };
+    let total = roll.total ?? 0;
+    for (const buff of foundry.utils.deepClone(actor.system?.buffs ?? [])) {
+      const handler = resolveBuffHandler(buff);
+      if (typeof handler?.modifyDiceRoll !== "function") continue;
+      const result = handler.modifyDiceRoll(actor, buff, { roll, total, item, isDefense });
+      if (typeof result === "number") total = result;
+      else if (result && typeof result === "object") {
+        if (typeof result.total === "number") total = result.total;
+        if (result.note) notes.push(result.note);
+      }
+    }
+    total = Math.max(0, Math.round(total));
+    if (total !== roll.total) roll._total = total;
+    return { total, notes };
+  }
+
+  /**
    * 【震颤】回合结束衰减：层数 -1。
    * 与引爆同样只扣「主承担者」（优先普通【震颤】）那一条，其余特殊震颤由
    * _syncTremorFamily 跟随；归零后连带清掉【振幅转换】【振幅纠缠】。
@@ -682,7 +746,7 @@ export class ClashManager {
               ? ClashManager._parseResistance(tgtActor.system?.egoResistances?.[sinType] ?? "x1.0")
               : 1.0;
             const dmg = Math.max(0, Math.round(roll.total * physMult * sinMult));
-            await ClashManager._applyAndSendTake(tgtActor, dmg, { attacker, takeLabel: "震颤引爆-承受" });
+            await ClashManager._applyAndSendTake(tgtActor, dmg, { attacker, takeLabel: "震颤引爆-承受", category, sinType });
             return dmg;
           },
         });
@@ -701,13 +765,19 @@ export class ClashManager {
   }
 
   /** 移除角色所有指定类型的 BUFF。 */
-  static async _removeBuff(actor, type) {
+  static async _removeBuff(actor, type, { _internal = false } = {}) {
     if (!actor || !type) return;
+    const had = (actor.system?.buffs ?? []).some(b => b.type === type);
     if (typeof actor.removeBuffsByType === "function" && actor.canUserModify?.(game.user, "update")) {
-      return actor.removeBuffsByType(type);
+      await actor.removeBuffsByType(type);
+    } else {
+      const buffs = (actor.system?.buffs ?? []).filter(b => b.type !== type);
+      await ClashManager._safeDocUpdate(actor, { "system.buffs": buffs });
     }
-    const buffs = (actor.system?.buffs ?? []).filter(b => b.type !== type);
-    await ClashManager._safeDocUpdate(actor, { "system.buffs": buffs });
+    if (had) {
+      await ClashManager._dispatchBuffChange(actor, "onBuffLost",
+        { type, stacks: 0, removed: true, _internal });
+    }
   }
 
   /**
@@ -1393,7 +1463,8 @@ export class ClashManager {
             const sinLabel = eff.dmgSinType   ? `【${ClashManager._sinLabel(eff.dmgSinType)}】`   : "";
             descStr = `对【${effTgt.name}】造成 ${dmg} 点${catLabel}${sinLabel}追加伤害（结算详情见承受结算消息）`;
             if (dmg > 0) {
-              await ClashManager._applyAndSendTake(effTgt, dmg, { attacker: owner, takeLabel: "追加伤害-承受" });
+              await ClashManager._applyAndSendTake(effTgt, dmg, { attacker: owner, takeLabel: "追加伤害-承受",
+                category: eff.dmgCategory ?? "", sinType: eff.dmgSinType ?? "", item });
             }
             break;
           }
@@ -1813,6 +1884,7 @@ export class ClashManager {
 
               const roll = new Roll(full);
               await roll.evaluate();
+              ClashManager.applyDiceRollMods(actor, roll, { item, isDefense: false });
               await ClashManager._sendInitiateMsg(actor, item, roll, full, slotIndex, targetActorId);
 
               // EGO 技能使用后，将 egoResistanceAdj 应用到角色的罪孽抗性
@@ -2177,6 +2249,7 @@ export class ClashManager {
               const full     = bonus !== 0 ? `${formula}${bonus >= 0 ? "+" : ""}${bonus}` : formula;
               const roll     = new Roll(full);
               await roll.evaluate();
+              ClashManager.applyDiceRollMods(defActor, roll, { item: defItem, isDefense: true });
               // DiceSoNice: 攻守双方骰子同时入场，各自使用自己的骰子皮肤
               {
                 const atkActorD = game.actors.get(initFlags.attackerId);
@@ -2466,10 +2539,17 @@ export class ClashManager {
       const winner = atkWins ? atkActor : defActor;
       const loser  = atkWins ? defActor : atkActor;
       if (winner && loser) {
-        for (const buff of (winner.system?.buffs ?? [])) {
+        for (const buff of [...(winner.system?.buffs ?? [])]) {
           const handler = resolveBuffHandler(buff);
           if (typeof handler?.onClashWin === "function") {
-            await handler.onClashWin(winner, loser);
+            await handler.onClashWin(winner, loser, buff);
+          }
+        }
+        // 败者侧的 onClashLose（与 onClashWin 对称）
+        for (const buff of [...(loser.system?.buffs ?? [])]) {
+          const handler = resolveBuffHandler(buff);
+          if (typeof handler?.onClashLose === "function") {
+            await handler.onClashLose(loser, winner, buff);
           }
         }
       }
@@ -3121,7 +3201,7 @@ export class ClashManager {
     }
 
     const _buffHookMsgs2 = [];
-    await ClashManager._applyAndSendTake(baseActor, finalDamage, { calcNotes, attacker: atkActor, hookMsgs: _buffHookMsgs2 });
+    await ClashManager._applyAndSendTake(baseActor, finalDamage, { calcNotes, attacker: atkActor, hookMsgs: _buffHookMsgs2, category, sinType, item: atkItem2 });
     if (_buffHookMsgs2.length) {
       _actMsgs2.push({ trigger: "受到伤害时", itemName: baseActor.name, msgs: _buffHookMsgs2 });
     }
@@ -3288,7 +3368,8 @@ export class ClashManager {
     }
 
     const _buffHookMsgsCl = [];
-    await ClashManager._applyAndSendTake(defActor, finalDamage, { calcNotes, attacker: atkActor, hookMsgs: _buffHookMsgsCl });
+    await ClashManager._applyAndSendTake(defActor, finalDamage, { calcNotes, attacker: atkActor, hookMsgs: _buffHookMsgsCl, category, sinType,
+      item: atkActor?.items?.get(flags.itemId ?? "") ?? null });
     if (_buffHookMsgsCl.length) {
       _actMsgs2.push({ trigger: "受到伤害时", itemName: defActor.name, msgs: _buffHookMsgsCl });
     }
@@ -3429,9 +3510,24 @@ export class ClashManager {
    * @param {object} [opts]
    * @param {boolean} [opts.isSeismic=false]  是否为【震颤引爆】类型攻击
    */
-  static async _applyAndSendTake(actor, damage, { isSeismic = false, calcNotes = [], attacker = null, hookMsgs = null, takeLabel = "承受" } = {}) {
+  static async _applyAndSendTake(actor, damage, { isSeismic = false, calcNotes = [], attacker = null, hookMsgs = null, takeLabel = "承受", category = "", sinType = "", item = null } = {}) {
     const sys   = actor.system;
     const maxHp = sys.hp?.max ?? 1;
+
+    // ── 出手前：攻击方自定义 BUFF 的伤害修正钩子（与下方进入侧对称）──────
+    // 返回 { damage?: number, note?: string } 覆盖本次打出的伤害。
+    if (attacker) {
+      for (const buff of foundry.utils.deepClone(attacker.system?.buffs ?? [])) {
+        const handler = resolveBuffHandler(buff);
+        if (typeof handler?.modifyOutgoingDamage !== "function") continue;
+        const result = handler.modifyOutgoingDamage(attacker, buff, {
+          damage, target: actor, category, sinType, item,
+        });
+        if (!result || typeof result !== "object") continue;
+        if (typeof result.damage === "number") damage = Math.max(0, result.damage);
+        if (result.note) calcNotes.push(result.note);
+      }
+    }
 
     // ── 受到伤害前：自定义 BUFF 伤害覆盖钩子（如【百折不挠】：伤害归零 + 生命值锁定）──
     // hpLockValue 非 null 时，本次结算跳过护盾/破裂/沉沦/震颤，HP 直接钉死为该值。
