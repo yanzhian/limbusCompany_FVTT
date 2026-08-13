@@ -13,6 +13,9 @@
  *     keepAtZero:    true,       // 可选：层数减至 0 时不自动清除（仍以 0 层留在状态栏，
  *                                //       需手动 removeBuff 或其他效果移除）
  *     onRoundEnd(actor, buff) {},           // 回合结束时回调 → 返回 Promise
+ *     onRoundStart(actor, buff) {},         // 回合开始时回调（在同一轮的 onRoundEnd 之后执行，
+ *                                             // 因此回合结束时被移除的 BUFF 不会再触发）；
+ *                                             // 返回字符串则并入「回合开始时」折叠汇总消息
  *     modifySpeedRoll(actor, ctx) {},       // 速度骰结果修正 → 返回最终 total（Number）
  *     onClashWin(carrier, opponent) {},     // 拼点胜利时回调 → 返回 Promise
  *     beforeChaos(actor, buff, ctx) {},     // 混乱触发前检查 → 返回 { immune: bool }；
@@ -31,7 +34,10 @@
  *                                             // ctx = { item, category, target,
  *                                             //          addBuff(type,intensity,stacks,whenAdded),
  *                                             //          addBuffTo(targetActor,type,intensity,stacks,whenAdded),
- *                                             //          getBuff(type), dealDamage(targetActor, category, rollFormula) }
+ *                                             //          getBuff(type),
+ *                                             //          dealDamage(targetActor, category, rollFormula, sinType) }
+ *                                             // dealDamage 的 category（物理分类）与 sinType（罪孽）均可留空，
+ *                                             // 分别按物理抗性 / 罪孽抗性结算
  *                                             // 返回字符串则并入本次结算的 ⚡ 活动消息
  *   });
  *
@@ -582,6 +588,69 @@ registerCustomBuff("dawnFire", {
       + `<strong>${addIntensity}</strong> 级${addStacks > 0 ? ` <strong>${addStacks}</strong> 层` : ""}【烧伤】。`;
   },
 });
+
+/**
+ * 【迎接黎明】
+ * - 最大值：3 层
+ * - [回合开始时]：为你添加 2 层【攻击等级提升】；若"背景"为"黎明事务所"，额外 1 层【强壮】
+ * - [命中时]：为目标添加 1 层 1 级【烧伤】，额外造成 1D12 的暴怒伤害
+ * - [回合结束时]：本效果层数减少 1 层
+ */
+registerCustomBuff("greetTheDawn", {
+  label:       "迎接黎明",
+  description: "- 最大值：3 层\n"
+    + "- [回合开始时]：为你添加 2 层【攻击等级提升】，若你的背景为「黎明事务所」额外添加 1 层【强壮】\n"
+    + "- [命中时]：为目标添加 1 层 1 级【烧伤】，额外造成 1D12 的暴怒伤害\n"
+    + "- [回合结束时]：本效果层数减少 1 层",
+  maxStacks:   3,
+
+  async onRoundStart(actor, _buff) {
+    const { ClashManager } = await import("./clash.mjs");
+    await ClashManager._addBuff(actor, "atkLevelUp", 0, 2, "本回合");
+
+    const isDawnOffice = await _hasBackgroundNamed(actor, "黎明事务所");
+    if (isDawnOffice) await ClashManager._addBuff(actor, "strong", 0, 1, "本回合");
+
+    return `获得 <strong>2</strong> 层【攻击等级提升】`
+      + (isDawnOffice ? `，背景「黎明事务所」额外获得 <strong>1</strong> 层【强壮】` : "")
+      + "。";
+  },
+
+  async onHit(_actor, _buff, ctx) {
+    const target = ctx?.target;
+    if (!target) return;
+    await ctx.addBuffTo?.(target, "burn", 1, 1, "本回合");
+    const dmg = await ctx.dealDamage?.(target, "", "1d12", "wrath");
+    return `为 <strong>${target.name}</strong> 添加 1 层 1 级【烧伤】，`
+      + `并造成 <strong>${dmg ?? 0}</strong> 点【暴怒】伤害。`;
+  },
+
+  /** 回合结束：层数 -1，归零时移除 */
+  async onRoundEnd(actor, buff) {
+    const buffs = foundry.utils.deepClone(actor.system?.buffs ?? []);
+    const idx   = buffs.findIndex(b => b.id === buff.id);
+    if (idx < 0) return;
+    const newStacks = (buffs[idx].stacks ?? 1) - 1;
+    if (newStacks <= 0) buffs.splice(idx, 1);
+    else                buffs[idx].stacks = newStacks;
+    await actor.update({ "system.buffs": buffs });
+  },
+});
+
+/**
+ * 判断角色的「背景」是否为指定名称。
+ * 优先解析结构化背景（system.background.uuid 指向的背景物品），
+ * 回退到旧版自由文本背景标签 system.backgroundTag。
+ */
+async function _hasBackgroundNamed(actor, name) {
+  const uuid = actor?.system?.background?.uuid ?? "";
+  if (uuid) {
+    const bg = await fromUuid(uuid).catch(() => null);
+    if (bg?.name === name) return true;
+  }
+  const tag = String(actor?.system?.backgroundTag ?? "");
+  return tag.split(/[\/,，、\s]+/).map(t => t.trim()).includes(name);
+}
 
 /* ═══════════════════════════════════════════════════════════════════════════
    场地资源（FieldResourceRegistry）

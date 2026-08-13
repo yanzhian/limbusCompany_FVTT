@@ -665,6 +665,17 @@ Hooks.on("updateCombat", async (combat, changed) => {
       }
     }
 
+    // ── 自定义 BUFF onRoundStart 钩子 ────────────────────────────────────
+    // 在 onRoundEnd 之后重新取快照：回合结束时被移除的 BUFF 不应再吃回合开始效果
+    for (const buff of [...(actor.system?.buffs ?? [])]) {
+      const handler = resolveBuffHandler(buff);
+      if (typeof handler?.onRoundStart !== "function") continue;
+      const msg = await handler.onRoundStart(actor, buff);
+      if (typeof msg === "string" && msg) {
+        startMsgs.push({ trigger: "回合开始时", itemName: handler.label ?? buff.name ?? buff.type, msgs: [msg] });
+      }
+    }
+
     // ── Activity 触发：[回合结束时] 与 [回合开始时] ─────────────────────
     // 收集到全体共享的桶，循环结束后统一发折叠汇总消息（避免刷屏）
     const sys       = actor.system ?? {};

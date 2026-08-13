@@ -338,13 +338,19 @@ export class ClashManager {
           addBuffTo: (targetActor, type, intensity, stacks, whenAdded) =>
             ClashManager._addBuff(targetActor, type, intensity, stacks, whenAdded),
           getBuff:  (type) => ClashManager._getBuff(owner, type),
-          dealDamage: async (targetActor, category, formula) => {
+          // category：物理分类（slash/blunt/pierce）或空；sinType：罪孽类型或空。
+          // 两者可同时给出，分别按物理抗性与罪孽抗性结算。
+          dealDamage: async (targetActor, category, formula, sinType = "") => {
             if (!targetActor) return 0;
             const roll = new Roll(formula);
             await roll.evaluate();
-            const resStr = ClashManager._getEffectiveResistances(targetActor)[category] ?? "x1.0";
-            const mult   = ClashManager._parseResistance(resStr);
-            const dmg    = Math.max(0, Math.round(roll.total * mult));
+            const physMult = category
+              ? ClashManager._parseResistance(ClashManager._getEffectiveResistances(targetActor)[category] ?? "x1.0")
+              : 1.0;
+            const sinMult = sinType
+              ? ClashManager._parseResistance(targetActor.system?.egoResistances?.[sinType] ?? "x1.0")
+              : 1.0;
+            const dmg = Math.max(0, Math.round(roll.total * physMult * sinMult));
             await ClashManager._applyAndSendTake(targetActor, dmg, { attacker: owner });
             return dmg;
           },
