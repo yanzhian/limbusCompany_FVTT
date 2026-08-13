@@ -2076,12 +2076,13 @@ function _buildTriggerOpts(selected) {
 
 /** 前置条件行 HTML */
 function _buildCondRow(cond, idx, cfg) {
-  const condType   = ["perN","baseAttr","useSkill","buffCompare","category","fieldResource","level"].includes(cond?.type) ? cond.type : "hasBuff";
+  const condType   = ["perN","baseAttr","useSkill","buffCompare","category","fieldResource","sinResource","level"].includes(cond?.type) ? cond.type : "hasBuff";
   const isBuffSec  = condType === "hasBuff" || condType === "perN" || condType === "buffCompare";
   const isAttrSec  = condType === "baseAttr";
   const isSkillSec = condType === "useSkill";
   const isCatSec   = condType === "category";
   const isFieldSec = condType === "fieldResource";
+  const isSinSec   = condType === "sinResource";
   const isLevelSec = condType === "level";
   const isCompare  = condType === "buffCompare";
   const isPerN     = condType === "perN";
@@ -2134,8 +2135,9 @@ function _buildCondRow(cond, idx, cfg) {
           <option value="category"    ${condType === "category"    ? "selected" : ""}>使用分类</option>
           <option value="level"       ${condType === "level"       ? "selected" : ""}>使用等级</option>
           <option value="fieldResource" ${condType === "fieldResource" ? "selected" : ""}>公用场地</option>
+          <option value="sinResource"   ${condType === "sinResource"   ? "selected" : ""}>罪孽资源</option>
         </select>
-        <span class="ae-cond-target-sec" ${(isCatSec || isFieldSec || isLevelSec) ? 'style="display:none"' : ""}>
+        <span class="ae-cond-target-sec" ${(isCatSec || isFieldSec || isSinSec || isLevelSec) ? 'style="display:none"' : ""}>
           <label>目标</label>
           <select class="ae-sel cond-target">${_buildTargetOptions(cond?.target ?? "self")}</select>
           ${_buildBgTagFields("cond", cond)}
@@ -2205,8 +2207,24 @@ function _buildCondRow(cond, idx, cfg) {
           <select class="ae-sel cond-field-cmp">${fieldCmpOpts}</select>
           <input class="ae-input-sm cond-field-stacks" type="number" value="${cond?.stacks ?? 0}" min="0">
         </span>
+        <!-- 罪孽资源：读取全局七宗罪池当前点数（只读，不消耗） -->
+        <span class="ae-cond-sin-sec" ${isSinSec ? "" : 'style="display:none"'}>
+          <label>罪孽</label>
+          <select class="ae-sel cond-sin-type">${_buildSinOptions(cond?.sinType ?? "wrath")}</select>
+          <label>点数</label>
+          <select class="ae-sel cond-sin-cmp">${fieldCmpOpts}</select>
+          <input class="ae-input-sm cond-sin-value" type="number" value="${cond?.value ?? 0}" min="0">
+        </span>
       </div>
     </div>`;
+}
+
+/** 罪孽资源下拉选项 HTML（七宗罪，与全局罪孽池一一对应） */
+function _buildSinOptions(selected) {
+  const cfg = CONFIG.LIMBUSCOMPANY ?? {};
+  return (cfg.SINS ?? ["wrath","lust","sloth","gluttony","gloom","pride","envy"])
+    .map(s => `<option value="${s}" ${selected === s ? "selected" : ""}>${cfg.SIN_LABELS_ZH?.[s] ?? s}</option>`)
+    .join("");
 }
 
 /** 目标下拉选项 HTML（含队伍群体目标） */
@@ -2284,6 +2302,7 @@ function _buildCostRow(cost, idx, cfg) {
 
   const discardModeIsLevel = (cost?.discardMode ?? "level") === "level";
   const isField = cost?.target === "field";
+  const isSin   = cost?.target === "sin";
 
   return `
     <div class="ae-row ae-cost-row">
@@ -2297,6 +2316,7 @@ function _buildCostRow(cost, idx, cfg) {
         <label>目标</label>
         <select class="ae-sel cost-target">${_buildTargetOptions(cost?.target ?? "self")}
           <option value="field" ${isField ? "selected" : ""}>公用场地</option>
+          <option value="sin"   ${isSin   ? "selected" : ""}>罪孽资源</option>
         </select>
         ${_buildBgTagFields("cost", cost)}
         <span class="ae-cost-field-sec" ${isField ? "" : 'style="display:none"'}>
@@ -2306,7 +2326,18 @@ function _buildCostRow(cost, idx, cfg) {
           <label class="cost-stacks-label">${isPerStack ? "每N层" : "层数"}</label>
           <input class="ae-input-sm cost-field-stacks" type="number" value="${cost?.stacks ?? 0}" min="0">
         </span>
-        <span class="ae-cost-buff-sec" ${(isAttr || isDiscard || isField) ? 'style="display:none"' : ""}>
+        <!-- 罪孽资源：扣除全局七宗罪池的点数；【每】类型时为"每消耗 N 点"，可限制最大倍数 -->
+        <span class="ae-cost-sin-sec" ${isSin ? "" : 'style="display:none"'}>
+          <label>罪孽</label>
+          <select class="ae-sel cost-sin-type">${_buildSinOptions(cost?.sinType ?? "wrath")}</select>
+          <label class="cost-sin-label">${isPerStack ? "每N点" : "点数"}</label>
+          <input class="ae-input-sm cost-sin-value" type="number" value="${cost?.value ?? 0}" min="0">
+          <span class="ae-cost-sin-max" ${isPerStack ? "" : 'style="display:none"'}>
+            <label>最大倍数</label>
+            <input class="ae-input-sm cost-sin-max-times" type="number" value="${cost?.maxTimes ?? 0}" min="0" placeholder="0=无限">
+          </span>
+        </span>
+        <span class="ae-cost-buff-sec" ${(isAttr || isDiscard || isField || isSin) ? 'style="display:none"' : ""}>
           <label>BUFF</label>
           <input class="ae-input cost-buff" type="text" list="ae-buff-dl"
                  placeholder="输入或选择BUFF…" autocomplete="off" style="width:100px;"
@@ -2624,6 +2655,7 @@ function _bindCondType(html) {
     const isSkillSec = type === "useSkill";
     const isCatSec   = type === "category";
     const isFieldSec = type === "fieldResource";
+    const isSinSec   = type === "sinResource";
     const isLevelSec = type === "level";
     const isCompare  = type === "buffCompare";
     const isPerN     = type === "perN";
@@ -2634,8 +2666,9 @@ function _bindCondType(html) {
     row.find(".ae-cond-skill-sec").toggle(isSkillSec);
     row.find(".ae-cond-category-sec").toggle(isCatSec);
     row.find(".ae-cond-field-sec").toggle(isFieldSec);
+    row.find(".ae-cond-sin-sec").toggle(isSinSec);
     row.find(".ae-cond-level-sec").toggle(isLevelSec);
-    row.find(".ae-cond-target-sec").toggle(!isCatSec && !isFieldSec && !isLevelSec);
+    row.find(".ae-cond-target-sec").toggle(!isCatSec && !isFieldSec && !isSinSec && !isLevelSec);
     row.find(".ae-cond-pern-max").toggle(isPerN);
     row.find(".ae-cond-pern-dim-sec").toggle(isPerN);
     row.find(".ae-cond-intensity-sec").toggle(!isCompare && !isPerN);
@@ -2654,13 +2687,18 @@ function _bindCondType(html) {
 function _bindCostType(html) {
   const refreshRow = (row) => {
     const val        = row.find(".cost-type").val();
-    const isField     = row.find(".cost-target").val() === "field";
+    const tgt         = row.find(".cost-target").val();
+    const isField     = tgt === "field";
+    const isSin       = tgt === "sin";
     const isAttr      = val === "attribute";
     const isDiscard   = val === "discard";
     const isPerStack  = val === "perStack";
     const perNDim     = row.find(".cost-pern-dim").val() === "intensity" ? "intensity" : "stacks";
     row.find(".ae-cost-field-sec").toggle(isField);
-    row.find(".ae-cost-buff-sec").toggle(!isAttr && !isDiscard && !isField);
+    row.find(".ae-cost-sin-sec").toggle(isSin);
+    row.find(".ae-cost-sin-max").toggle(isSin && isPerStack);
+    row.find(".cost-sin-label").text(isPerStack ? "每N点" : "点数");
+    row.find(".ae-cost-buff-sec").toggle(!isAttr && !isDiscard && !isField && !isSin);
     row.find(".ae-cost-attr-sec").toggle(isAttr);
     row.find(".ae-cost-discard-sec").toggle(isDiscard);
     row.find(".cost-stacks-label").text(isPerStack ? (perNDim === "intensity" ? "每N级" : "每N层") : "层数");
@@ -2792,6 +2830,13 @@ function _readActivityForm(html, original) {
         comparison: $r.find(".cond-field-cmp").val() || "gte",
         stacks:     parseInt($r.find(".cond-field-stacks").val()) || 0,
       });
+    } else if (condType === "sinResource") {
+      preconditions.push({
+        type:       "sinResource",
+        sinType:    $r.find(".cond-sin-type").val() || "wrath",
+        comparison: $r.find(".cond-sin-cmp").val()  || "gte",
+        value:      parseInt($r.find(".cond-sin-value").val()) || 0,
+      });
     } else if (condType === "buffCompare") {
       preconditions.push({
         type:       "buffCompare",
@@ -2848,6 +2893,14 @@ function _readActivityForm(html, original) {
         fieldName: $r.find(".cost-field-name").val()?.trim() || "",
         stacks:    parseInt($r.find(".cost-field-stacks").val()) || 0,
         ...(type === "perStack" ? { maxTimes: parseInt($r.find(".cost-max-times").val()) || 0 } : {}),
+      });
+    } else if (target === "sin") {
+      costs.push({
+        type,
+        target,
+        sinType: $r.find(".cost-sin-type").val() || "wrath",
+        value:   parseInt($r.find(".cost-sin-value").val()) || 0,
+        ...(type === "perStack" ? { maxTimes: parseInt($r.find(".cost-sin-max-times").val()) || 0 } : {}),
       });
     } else {
       costs.push({

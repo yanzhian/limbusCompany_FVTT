@@ -326,6 +326,16 @@ export class SinResourceHUD extends Application {
     return _getSins();
   }
 
+  /**
+   * 获取单个罪孽资源的当前点数（供 Activity 前置条件/消耗使用）
+   * @param {string} sinType
+   * @returns {number}
+   */
+  static getSinValue(sinType) {
+    if (!sinType) return 0;
+    return _getSins()[sinType] ?? 0;
+  }
+
   /* ─── 场地资源公共 API ──────────────────────────────────────────────────── */
 
   /**

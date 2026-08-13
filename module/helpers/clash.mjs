@@ -623,6 +623,14 @@ export class ClashManager {
           continue;
         }
 
+        // ── sinResource 类型：检查全局罪孽池当前点数（只读，不消耗）────
+        if (pre.type === "sinResource") {
+          if (!pre.sinType) { precondFail = true; break; }
+          const have = SinResourceHUD.getSinValue(pre.sinType);
+          if (!ClashManager._cmp(have, pre.comparison ?? "gte", pre.value ?? 0)) { precondFail = true; break; }
+          continue;
+        }
+
         if (!pre.buff) continue;
         const preBuffType = pre.buff === "custom" ? (pre.buffCustom || "custom") : pre.buff;
         const precTgt = pre.target === "self" ? owner : other;
@@ -707,6 +715,11 @@ export class ClashManager {
           if (!cost.fieldName) { forcedFail = true; break; }
           const have = SinResourceHUD.getFieldResourceStacks(cost.fieldName);
           if (have < Math.max(1, cost.stacks ?? 1)) { forcedFail = true; break; }
+        } else if (cost.target === "sin" && (cost.type === "forced" || cost.type === "perStack")) {
+          // 罪孽资源：点数不足（每N点的 N）则跳过整条 Activity
+          if (!cost.sinType) { forcedFail = true; break; }
+          const have = SinResourceHUD.getSinValue(cost.sinType);
+          if (have < Math.max(1, cost.value ?? 1)) { forcedFail = true; break; }
         } else if (cost.buff && (cost.type === "forced" || cost.type === "perStack")) {
           // 强制消耗 / 每：数值不足（每N的 N，维度可选层数/强度）则跳过整条 Activity
           const costBuffType = cost.buff === "custom" ? (cost.buffCustom || "custom") : cost.buff;
@@ -803,6 +816,22 @@ export class ClashManager {
             perStackMultiplier = times;
           } else if (cost.type !== "none") {
             await SinResourceHUD.consumeFieldResourceStacks(cost.fieldName, cost.stacks ?? 1);
+          }
+        } else if (cost.target === "sin" && cost.sinType) {
+          // 罪孽资源：每 / 强制消耗 / 可选消耗（可选消耗不足时直接跳过，不报错）
+          const consume = async (amount) => {
+            if (amount > 0) await SinResourceHUD.consumeSins([{ sinType: cost.sinType, amount }]);
+          };
+          if (cost.type === "perStack") {
+            const have  = SinResourceHUD.getSinValue(cost.sinType);
+            const n     = Math.max(1, cost.value ?? 1);
+            let   times = Math.floor(have / n);
+            if ((cost.maxTimes ?? 0) > 0) times = Math.min(times, cost.maxTimes);
+            await consume(times * n);
+            perStackMultiplier = times;
+          } else if (cost.type !== "none") {
+            const need = cost.value ?? 1;
+            if (SinResourceHUD.getSinValue(cost.sinType) >= need) await consume(need);
           }
         }
       }
