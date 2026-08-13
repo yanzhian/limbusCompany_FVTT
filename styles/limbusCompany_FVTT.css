@@ -5879,8 +5879,14 @@ body.game .limbuscompany.app img {
   filter:    brightness(1.15);
   z-index:   10;
 }
-/* 内部图层复用基础技能格的两层结构（技能图 + 边框） */
-.qa-ego-slot .qa-skill-art   { --art-inset: 15%; }
+/* 内部图层复用基础技能格的两层结构（技能图 + 边框）。
+   但 EGO 边框 E.G.O.webp 是圆环、不是七边形，内图需改为圆形裁切，
+   否则会沿用 .qa-skill-art 默认的七边形 clip-path 而与圆环对不上。 */
+.qa-ego-slot .qa-skill-art {
+  --art-inset:   15%;
+  clip-path:     none;
+  border-radius: 50%;
+}
 
 /* 等级名（ZAYIN / TET / HE / WAW / ALEPH）
    压在槽位底部内侧而非外侧：下方两个槽（ZAYIN/ALEPH）的标签若放在槽外，
