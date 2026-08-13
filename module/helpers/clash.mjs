@@ -91,6 +91,34 @@ export class ClashManager {
    * @param {Item|null} item
    * @returns {string} 图片路径；item 为空时返回空串
    */
+  /**
+   * 找出某个角色对应的「骰主」用户——DiceSoNice 以该用户的骰子皮肤渲染，
+   * 这样对抗时能一眼分清哪堆骰子是谁的。
+   * 优先：把该角色设为「所选角色」的玩家 → 拥有该角色 OWNER 权限的玩家 → 当前用户。
+   */
+  static _diceUserFor(actor) {
+    if (!actor) return game.user;
+    const users  = game.users?.contents ?? [];
+    const byChar = users.find(u => !u.isGM && u.character?.id === actor.id);
+    if (byChar) return byChar;
+    const owner  = users.find(u => !u.isGM && actor.testUserPermission?.(u, "OWNER"));
+    return owner ?? game.user;
+  }
+
+  /**
+   * 同时播放多组骰子动画，各自使用其拥有者的 DSN 皮肤。
+   * @param {{roll: Roll, actor: Actor}[]} entries
+   */
+  static async _showDice(entries = []) {
+    if (!game.dice3d) return;
+    const jobs = entries
+      .filter(e => e?.roll)
+      .map(e => game.dice3d
+        .showForRoll(e.roll, ClashManager._diceUserFor(e.actor), true, null, false)
+        .catch(() => {}));
+    if (jobs.length) await Promise.all(jobs);
+  }
+
   static _skillFrameIcon(item) {
     if (!item) return "";
     const base = "systems/limbusCompany_FVTT/assets/icons/Skill/";
@@ -1871,11 +1899,15 @@ export class ClashManager {
               const full     = bonus !== 0 ? `${formula}${bonus >= 0 ? "+" : ""}${bonus}` : formula;
               const roll     = new Roll(full);
               await roll.evaluate();
-              // DiceSoNice: A 先骰 → B 再骰，顺序播放动画
-              if (game.dice3d && initFlags.rollData) {
-                const atkRoll = Roll.fromJSON(JSON.stringify(initFlags.rollData));
-                await game.dice3d.showForRoll(atkRoll, game.user, true, null, false);
-                await game.dice3d.showForRoll(roll,    game.user, true, null, false);
+              // DiceSoNice: 攻守双方骰子同时入场，各自使用自己的骰子皮肤
+              {
+                const atkActorD = game.actors.get(initFlags.attackerId);
+                const atkRoll   = initFlags.rollData
+                  ? Roll.fromJSON(JSON.stringify(initFlags.rollData)) : null;
+                await ClashManager._showDice([
+                  { roll: atkRoll, actor: atkActorD },
+                  { roll,          actor: defActor  },
+                ]);
               }
               await ClashManager._sendResponseAndResolve(
                 defActor, defItem, roll, full, initMsgId, initFlags, slotIdx
@@ -2012,6 +2044,8 @@ export class ClashManager {
 
     // ── [攻击时/拼点时] 可能修改骰子公式（diceAdj/diceFacesAdj/baseValue）──
     // 若公式与发起时不同，重新投骰，保留手动加值部分
+    // 公式重投的骰子同样要有 DSN 动画，且攻守两边重投时一起入场
+    const _rerollShow = [];
     let atkFinalTotal   = initFlags.rollTotal;
     let atkFinalFormula = initFlags.formula;
     const newAtkBase = atkItem?.system?.diceFormula ?? atkBaseFormulaOrig;
@@ -2022,6 +2056,7 @@ export class ClashManager {
       await rerollAtk.evaluate();
       atkFinalTotal   = rerollAtk.total;
       atkFinalFormula = newAtkFull;
+      _rerollShow.push({ roll: rerollAtk, actor: atkActor });
       _actMsgs.push({ trigger: "公式重投", itemName: atkItem?.name ?? "攻击方", msgs: [`公式变化（${atkBaseFormulaOrig} → ${newAtkBase}），重新投骰：${rerollAtk.result} = <b>${rerollAtk.total}</b>`] });
     }
 
@@ -2035,8 +2070,12 @@ export class ClashManager {
       await rerollDef.evaluate();
       defFinalTotal   = rerollDef.total;
       defFinalFormula = newDefFull;
+      _rerollShow.push({ roll: rerollDef, actor: defActor });
       _actMsgs.push({ trigger: "公式重投", itemName: defItem?.name ?? "防守方", msgs: [`公式变化（${defBaseFormulaOrig} → ${newDefBase}），重新投骰：${rerollDef.result} = <b>${rerollDef.total}</b>`] });
     }
+
+    // 重投的骰子动画：与首次投骰一致（同时入场 + 各自皮肤）
+    await ClashManager._showDice(_rerollShow);
 
     // 汇总 [攻击时/拼点时] 后所有可能被修改的攻击方字段，统一覆盖 initFlags
     // 目前覆盖字段：rollTotal / formula（骰子公式变化重投）、weight（weightAdj 修改加重值）
@@ -2661,10 +2700,12 @@ export class ClashManager {
 
     const atkActor  = game.actors.get(initFlags.attackerId);
     const defActor  = selActor;
-    // DiceSoNice: 承受时先播攻击方骰子动画
-    if (game.dice3d && initFlags.rollData) {
-      const atkRoll = Roll.fromJSON(JSON.stringify(initFlags.rollData));
-      await game.dice3d.showForRoll(atkRoll, game.user, true, null, false);
+    // DiceSoNice: 承受时先播攻击方骰子动画（使用攻击方自己的皮肤）
+    if (initFlags.rollData) {
+      await ClashManager._showDice([{
+        roll:  Roll.fromJSON(JSON.stringify(initFlags.rollData)),
+        actor: atkActor,
+      }]);
     }
     const rollTotal = initFlags.rollTotal ?? 0;
     const category  = initFlags.category ?? "";
@@ -2707,6 +2748,7 @@ export class ClashManager {
         const rerollAtk  = new Roll(newAtkFull);
         await rerollAtk.evaluate();
         finalRollTotal = rerollAtk.total;
+        await ClashManager._showDice([{ roll: rerollAtk, actor: atkActor }]);
         _actMsgs2.push({
           trigger:  "公式重投",
           itemName: atkItem2?.name ?? "攻击方",
