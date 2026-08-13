@@ -1670,46 +1670,28 @@ export class ClashManager {
     // ─── slot HTML 工厂 ───
     // slotIdx: 对应 bagState.slots 的下标（-1 = 守备/EGO，不属于 6-bag）
     const octaSlotHtml = (item, extraClass = "", slotIdx = -1, disabled = false) => {
-      if (!item) {
-        return `<div class="clash-pick-slot clash-pick-empty" style="width:52px;height:52px;"></div>`;
-      }
+      if (!item) return `<div class="clash-pick-slot clash-pick-empty"></div>`;
       const sin = ClashManager._sinColor(item.system?.sinType);
-      if (disabled) {
-        return `
-          <div class="clash-pick-slot clash-pick-disabled" data-item-id="${item.id}" data-slot-index="${slotIdx}"
-               title="${item.name}（恐慌中无法使用）"
-               style="position:relative;width:52px;height:52px;cursor:not-allowed;flex-shrink:0;
-                      opacity:0.35;filter:grayscale(1);">
-            <img src="${item.img}"
-                 style="width:52px;height:52px;object-fit:cover;border:2px solid ${sin};"
-                 alt="${item.name}">
-          </div>`;
-      }
+      const cls = disabled ? "clash-pick-slot clash-pick-disabled" : `clash-pick-slot ${extraClass}`;
+      const tip = disabled ? `${item.name}（恐慌中无法使用）` : item.name;
       // 旧版"相关技能"单槽临时切换按钮已废弃（改由④效果「相关技能转换」
       // 永久替换技能槽位实现，见 relatedSkillConvert case）
       return `
-        <div class="clash-pick-slot ${extraClass}" data-item-id="${item.id}" data-slot-index="${slotIdx}" title="${item.name}"
-             style="position:relative;width:52px;height:52px;cursor:pointer;flex-shrink:0;">
-          <img src="${item.img}"
-               style="width:52px;height:52px;object-fit:cover;border:2px solid ${sin};"
-               alt="${item.name}">
+        <div class="${cls}" data-item-id="${item.id}" data-slot-index="${slotIdx}" title="${tip}">
+          <img src="${item.img}" style="border-color:${sin};" alt="${item.name}">
         </div>`;
     };
 
+    /** EGO 圆形槽（含等级名）；仅在该等级已配置技能时调用 */
     const circleSlotHtml = (item, grade = "") => {
-      const sin = item ? ClashManager._sinColor(item.system?.sinType) : "#3A2A18";
-      const opacity = item ? "1" : "0.3";
+      const sin = ClashManager._sinColor(item.system?.sinType);
       return `
-        <div style="display:flex;flex-direction:column;align-items:center;gap:3px;">
-          ${item
-            ? `<div class="clash-pick-slot" data-item-id="${item.id}" data-slot-index="-1" title="${item.name}"
-                    style="width:52px;height:52px;border-radius:50%;overflow:hidden;
-                           border:2px solid ${sin};cursor:pointer;flex-shrink:0;">
-                 <img src="${item.img}" style="width:100%;height:100%;object-fit:cover;" alt="${item.name}">
-               </div>`
-            : `<div style="width:52px;height:52px;border-radius:50%;border:2px solid #3A2A18;opacity:.3;"></div>`
-          }
-          ${grade ? `<span style="font-size:9px;color:${item ? "#9A8462" : "#4A3A28"};">${grade}</span>` : ""}
+        <div class="clash-pick-ego">
+          <div class="clash-pick-slot clash-pick-ego-slot" data-item-id="${item.id}"
+               data-slot-index="-1" title="${item.name}（${grade}）">
+            <img src="${item.img}" style="border-color:${sin};" alt="${item.name}">
+          </div>
+          ${grade ? `<span class="clash-pick-ego-grade">${grade}</span>` : ""}
         </div>`;
     };
 
@@ -1719,33 +1701,35 @@ export class ClashManager {
          </div>`
       : "";
 
+    // 顶部：两个已激活技能 + 守备技能，上下各一条金色渐变分割线
     const topRow = `
       ${panicNotice}
-      <div style="display:flex;gap:16px;justify-content:center;padding:10px 0 28px;">
+      ${ClashManager._goldDivider()}
+      <div class="clash-pick-row">
         ${octaSlotHtml(active0, "clash-pick-active", 0, panicMode)}
         ${octaSlotHtml(active1, "clash-pick-active", 1, panicMode)}
         ${octaSlotHtml(defItem, "", -1, panicMode)}
-      </div>`;
+      </div>
+      ${ClashManager._goldDivider()}`;
 
-    const expandedHtml = `
+    // 展开区：6-bag 剩余技能 + EGO 技能，统一按固定 3 列排布。
+    // EGO 空等级不渲染（与快捷 HUD 的处理一致）。
+    const expandedSlots = [
+      ...restItems.map((it, j) => octaSlotHtml(it, "", 2 + j, panicMode)),
+      ...egoEntries.filter(e => e.item).map(e => circleSlotHtml(e.item, e.grade)),
+    ];
+    const expandedHtml = expandedSlots.length ? `
       <div class="clash-pick-expanded" style="display:none;">
-        ${ClashManager._goldDivider()}
-        <div style="display:flex;flex-wrap:wrap;gap:16px;justify-content:center;padding:8px 0 16px;">
-          ${restItems.map((it, j) => octaSlotHtml(it, "", 2 + j, panicMode)).join("")}
-        </div>
-        ${egoEntries.some(e => e.item) ? `
-          <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;padding:4px 0 8px;">
-            ${egoEntries.map(e => circleSlotHtml(e.item, e.grade)).join("")}
-          </div>` : ""}
-      </div>`;
+        <div class="clash-pick-grid">${expandedSlots.join("")}</div>
+      </div>` : "";
 
     const content = `
-      <div class="limbuscompany clash-pick-dialog" style="min-width:260px;">
+      <div class="limbuscompany clash-pick-dialog">
         ${topRow}
-        <div style="text-align:center;margin-bottom:6px;">
-          <button class="clash-pick-expand-btn"
-                  style="background:none;border:none;color:#C9A84C;font-size:1.3rem;cursor:pointer;">▼</button>
-        </div>
+        ${expandedSlots.length ? `
+          <div class="clash-pick-expand-wrap">
+            <button class="clash-pick-expand-btn" title="展开更多技能">▼</button>
+          </div>` : ""}
         ${expandedHtml}
       </div>`;
 
@@ -1760,6 +1744,8 @@ export class ClashManager {
           const open = $exp.is(":visible");
           $exp.toggle(!open);
           $(e.currentTarget).text(open ? "▼" : "▲");
+          // 展开/折叠后让弹窗高度重新自适应内容，否则会留白或被截断
+          dlg.setPosition({ height: "auto" });
         });
 
         // 恐慌时禁用槽点击提示
