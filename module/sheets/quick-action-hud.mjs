@@ -80,7 +80,7 @@ const QA_BUFF_PER_ROW = 16;
 
 /* 技能边框图（中空边框，非技能图本身；技能自身的图用 item.img 垫底，
    边框叠在其上层——见模板 .qa-skill-art / .qa-skill-frame）。
-   取图逻辑与拼点选择器共用 ClashManager._skillFrameIcon，不再各写一份。 */
+   取图逻辑放在 ClashManager._skillFrameIcon（罪孽→文件名映射集中一处）。 */
 const SKILL_ICON_BASE = "systems/limbusCompany_FVTT/assets/icons/Skill/";
 /* 理智值配色：按数值在三个锚点之间线性插值
    95 = #4F7A9C（蓝，清醒）／50 = #6A6A6A（灰，中间）／5 = #BF2B2A（红，濒临恐慌） */
