@@ -7,22 +7,32 @@
  *   registerCustomBuff("myBuff", {
  *     label:         "显示名称",
  *     maxStacks:     4,          // 可选：最大层数上限（超出则截断）
+ *     maxGainPerRound: 20,       // 可选：本回合累计可获得的层数上限（与 maxStacks 无关；
+ *                                //       计数记在 actor flag buffRoundGain 上，每轮结束清空）
  *     refreshOnGain: true,       // 可选：获得时刷新（不叠加层数，直接替换）
  *     keepAtZero:    true,       // 可选：层数减至 0 时不自动清除（仍以 0 层留在状态栏，
  *                                //       需手动 removeBuff 或其他效果移除）
  *     onRoundEnd(actor, buff) {},           // 回合结束时回调 → 返回 Promise
  *     modifySpeedRoll(actor, ctx) {},       // 速度骰结果修正 → 返回最终 total（Number）
  *     onClashWin(carrier, opponent) {},     // 拼点胜利时回调 → 返回 Promise
- *     beforeChaos(actor, buff) {},          // 混乱触发前检查 → 返回 { immune: bool }
+ *     beforeChaos(actor, buff, ctx) {},     // 混乱触发前检查 → 返回 { immune: bool }；
+ *                                             // ctx = { source }，source 为伤害来源（"burn"/"bleed"/…）
  *     modifyResistances(actor, buff, res) {}, // 修改物理抗性：res = { slash, blunt, pierce }（"xN.0" 字符串），
  *                                             // 可原地修改或返回部分覆盖对象（如 { slash: "x2.0" }）；
  *                                             // 陷入混乱的强制抗性优先级更高，混乱时不会调用此钩子
- *     modifyIncomingDamage(actor, buff, ctx) {}, // 受到伤害结算前调用，ctx = { damage, attacker }；
- *                                             // 返回 { damage?: number, hpLock?: number } 覆盖本次伤害/
- *                                             // 生命值锁定（hpLock 非空时跳过护盾/破裂/沉沦/震颤结算，HP 直接钉死）
+ *     modifyIncomingDamage(actor, buff, ctx) {}, // 受到伤害结算前调用，
+ *                                             // ctx = { damage, attacker, source }；
+ *                                             // source："clash"=对抗伤害，"burn"/"bleed"/"rupture"=跳动伤害
+ *                                             // 返回 { damage?, hpLock?, hpFloor?, note? }：
+ *                                             //   damage  覆盖本次伤害
+ *                                             //   hpLock  生命值锁定（跳过护盾/破裂/沉沦/震颤，HP 直接钉死；仅对抗路径）
+ *                                             //   hpFloor 本次伤害不得把 HP 压到该值以下（仅跳动伤害路径）
  *     onHit(actor, buff, ctx) {},            // 自己任意技能/装备 [命中时] 结算后调用（异步），
- *                                             // ctx = { item, category, target, addBuff(type,intensity,stacks,whenAdded),
+ *                                             // ctx = { item, category, target,
+ *                                             //          addBuff(type,intensity,stacks,whenAdded),
+ *                                             //          addBuffTo(targetActor,type,intensity,stacks,whenAdded),
  *                                             //          getBuff(type), dealDamage(targetActor, category, rollFormula) }
+ *                                             // 返回字符串则并入本次结算的 ⚡ 活动消息
  *   });
  *
  * 以上所有钩子均为可选。未提供的钩子不会被调用。
@@ -440,6 +450,137 @@ registerCustomBuff("vengeanceLedger", {
   label:       "复仇账簿",
   description: "- 最大值：20 层",
   maxStacks:   20,
+});
+
+/* ─── 【炎蝶之棺】/【黎明之火】——共用被动 + 各自主动 ───────────────────── */
+
+/**
+ * 两者共用的被动部分：
+ * - 最大 30 层，每回合最多获得 20 层
+ * - 不会因【烧伤】伤害陷入混乱
+ * - 【烧伤】伤害不会使自身生命值降至 1 点以下
+ * - 自身受到的【烧伤】伤害 -50%（向下取整）
+ */
+const FLAME_SHARED = {
+  maxStacks:        30,
+  maxGainPerRound:  20,
+
+  /** 免疫【烧伤】造成的混乱触发 */
+  beforeChaos(_actor, _buff, ctx) {
+    if (ctx?.source === "burn") return { immune: true };
+  },
+
+  /** 烧伤伤害减半（向下取整），且不会把生命值压到 1 点以下 */
+  modifyIncomingDamage(_actor, _buff, ctx) {
+    if (ctx?.source !== "burn") return;
+    return { damage: Math.floor((ctx.damage ?? 0) / 2), hpFloor: 1 };
+  },
+};
+
+const FLAME_SHARED_DESC =
+  "- 最大值：30 层\n"
+  + "- 每回合最多获得 20 层\n"
+  + "- 自身不会因【烧伤】伤害陷入混乱，或使生命值降至 1 点以下\n"
+  + "- 自身受到的【烧伤】伤害 -50%（向下取整）";
+
+/**
+ * 【炎蝶之棺】
+ * [回合结束时]：获得本层数一半的【烧伤】强度；
+ *               若本层数为 30 层，则改为直接设为 2 层 5 级【烧伤】。
+ */
+registerCustomBuff("flameButterflyCoffin", {
+  ...FLAME_SHARED,
+  label:       "炎蝶之棺",
+  description: `${FLAME_SHARED_DESC}\n[回合结束时]：获得本层数一半的【烧伤】强度\n- 若本层数为 30 层，则改为 2 层 5 级【烧伤】`,
+
+  async onRoundEnd(actor, buff) {
+    const stacks = buff.stacks ?? 0;
+    if (stacks <= 0) return;
+
+    const buffs = foundry.utils.deepClone(actor.system?.buffs ?? []);
+    const bi    = buffs.findIndex(b => b.type === "burn" && (b.whenAdded ?? "本回合") !== "下回合");
+    let   note;
+
+    if (stacks >= 30) {
+      // 满层：直接改写为 2 层 5 级【烧伤】（是"修改为"，不是叠加）
+      if (bi >= 0) {
+        buffs[bi].stacks    = 2;
+        buffs[bi].intensity = 5;
+      } else {
+        buffs.push({
+          id: foundry.utils.randomID(), type: "burn", name: "烧伤",
+          icon: "systems/limbusCompany_FVTT/assets/icons/Buff_icon/烧伤.webp",
+          intensity: 5, stacks: 2, whenAdded: "本回合",
+        });
+      }
+      note = "满 30 层：【烧伤】修改为 <strong>2</strong> 层 <strong>5</strong> 级";
+    } else {
+      const gain = Math.floor(stacks / 2);
+      if (gain <= 0) return;
+      if (bi >= 0) {
+        buffs[bi].intensity = (buffs[bi].intensity ?? 0) + gain;
+        if (!(buffs[bi].stacks > 0)) buffs[bi].stacks = 1;
+      } else {
+        buffs.push({
+          id: foundry.utils.randomID(), type: "burn", name: "烧伤",
+          icon: "systems/limbusCompany_FVTT/assets/icons/Buff_icon/烧伤.webp",
+          intensity: gain, stacks: 1, whenAdded: "本回合",
+        });
+      }
+      note = `获得 <strong>${gain}</strong> 级【烧伤】强度（本层数 ${stacks} 的一半）`;
+    }
+
+    await actor.update({ "system.buffs": buffs });
+    await ChatMessage.create({
+      speaker: ChatMessage.getSpeaker({ actor }),
+      content: `<div class="limbuscompany chat-clash"><strong>${actor.name}</strong>【炎蝶之棺】：${note}。</div>`,
+    });
+  },
+});
+
+/**
+ * 【黎明之火】
+ * [命中时]：不低于 10 层 → 为目标添加 2 级【烧伤】
+ * [命中时]：不低于 20 层 → 为目标添加 1 层【烧伤】
+ * （两条各自独立判定，20 层及以上时两条同时生效）
+ */
+registerCustomBuff("dawnFire", {
+  ...FLAME_SHARED,
+  label:       "黎明之火",
+  description: `${FLAME_SHARED_DESC}\n[命中时]：若不低于 10 层，为目标添加 2 级【烧伤】\n[命中时]：若不低于 20 层，为目标添加 1 层【烧伤】`,
+
+  async onHit(actor, buff, ctx) {
+    const target = ctx?.target;
+    if (!target) return;
+    const stacks = buff.stacks ?? 0;
+    if (stacks < 10) return;
+
+    // 强度 2 / 层数 0：只加强度不加层；20 层起再补 1 层
+    const addIntensity = 2;
+    const addStacks    = stacks >= 20 ? 1 : 0;
+
+    // 不能直接用 addBuffTo：烧伤属于"层数为 0 自动订正为 1"的基础 BUFF，
+    // 10~19 层这档只该加强度、不该加层，所以在快照上手动处理
+    // （目标原本没有烧伤时才建 1 层，否则 0 层的烧伤不会发作）。
+    const buffs = foundry.utils.deepClone(target.system?.buffs ?? []);
+    const bi    = buffs.findIndex(b => b.type === "burn" && (b.whenAdded ?? "本回合") !== "下回合");
+    if (bi >= 0) {
+      buffs[bi].intensity = (buffs[bi].intensity ?? 0) + addIntensity;
+      buffs[bi].stacks    = Math.max(1, (buffs[bi].stacks ?? 0) + addStacks);
+    } else {
+      buffs.push({
+        id: foundry.utils.randomID(), type: "burn", name: "烧伤",
+        icon: "systems/limbusCompany_FVTT/assets/icons/Buff_icon/烧伤.webp",
+        intensity: addIntensity, stacks: Math.max(1, addStacks), whenAdded: "本回合",
+      });
+    }
+    // clash.mjs 静态 import 了本文件，反向只能动态 import，避免循环依赖
+    const { ClashManager } = await import("./clash.mjs");
+    await ClashManager._safeDocUpdate(target, { "system.buffs": buffs });
+
+    return `【黎明之火】（${stacks} 层）：为 <strong>${target.name}</strong> 添加 `
+      + `<strong>${addIntensity}</strong> 级${addStacks > 0 ? ` <strong>${addStacks}</strong> 层` : ""}【烧伤】。`;
+  },
 });
 
 /* ═══════════════════════════════════════════════════════════════════════════

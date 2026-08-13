@@ -329,11 +329,14 @@ export class ClashManager {
       for (const buff of foundry.utils.deepClone(owner.system?.buffs ?? [])) {
         const handler = resolveBuffHandler(buff);
         if (typeof handler?.onHit !== "function") continue;
-        await handler.onHit(owner, buff, {
+        const hitMsg = await handler.onHit(owner, buff, {
           item,
           category: item?.system?.category ?? "",
           target:   ctx.other ?? null,
           addBuff:  (type, intensity, stacks, whenAdded) => ClashManager._addBuff(owner, type, intensity, stacks, whenAdded),
+          // 给指定角色（通常是命中目标）加 BUFF，走 _safeDocUpdate 以支持跨所有权写入
+          addBuffTo: (targetActor, type, intensity, stacks, whenAdded) =>
+            ClashManager._addBuff(targetActor, type, intensity, stacks, whenAdded),
           getBuff:  (type) => ClashManager._getBuff(owner, type),
           dealDamage: async (targetActor, category, formula) => {
             if (!targetActor) return 0;
@@ -346,6 +349,12 @@ export class ClashManager {
             return dmg;
           },
         });
+        // 钩子返回的文本并入本次结算的活动消息
+        if (typeof hitMsg === "string" && hitMsg) {
+          (ctx._actMsgs ??= []).push({
+            trigger: "命中时", itemName: handler.label ?? buff.name ?? buff.type, msgs: [hitMsg],
+          });
+        }
       }
     }
   }
@@ -387,6 +396,22 @@ export class ClashManager {
     const maxStacks     = customHandler?.maxStacks ?? Infinity;
     const refreshOnGain = customHandler?.refreshOnGain ?? false;
 
+    // maxGainPerRound：本回合累计可获得的层数上限（与 maxStacks 无关，后者是同时存在的上限）。
+    // 已获得量记在 actor flag 上，每轮结束时清空。
+    const maxGainPerRound = customHandler?.maxGainPerRound ?? Infinity;
+    let   gainFlagUpdate  = null;
+    if (Number.isFinite(maxGainPerRound) && stacks > 0) {
+      const gainMap = foundry.utils.deepClone(
+        actor.getFlag?.("limbusCompany_FVTT", "buffRoundGain") ?? {}
+      );
+      const gained  = gainMap[type] ?? 0;
+      const allowed = Math.max(0, maxGainPerRound - gained);
+      if (allowed <= 0) return;              // 本回合该 BUFF 的获得额度已用尽
+      stacks = Math.min(stacks, allowed);
+      gainMap[type]  = gained + stacks;
+      gainFlagUpdate = { "flags.limbusCompany_FVTT.buffRoundGain": gainMap };
+    }
+
     // 按 type + whenAdded 精确匹配，防止本/下回合同类 BUFF 错误合并
     const idx   = buffs.findIndex(b => b.type === type && (b.whenAdded ?? "本回合") === whenAdded);
     if (idx >= 0) {
@@ -418,7 +443,41 @@ export class ClashManager {
         whenAdded,
       });
     }
-    await ClashManager._safeDocUpdate(actor, { "system.buffs": buffs });
+    await ClashManager._safeDocUpdate(actor, { "system.buffs": buffs, ...(gainFlagUpdate ?? {}) });
+  }
+
+  /**
+   * 跳动伤害（烧伤/流血/破裂等非对抗路径）的伤害修正钩子。
+   * 与 _applyAndSendTake 里的 modifyIncomingDamage 是同一个钩子，只是这里没有攻击者，
+   * 并且带上 source 供 BUFF 区分伤害来源。
+   * @param {Actor}  actor
+   * @param {number} damage
+   * @param {string} source "burn" | "bleed" | "rupture" | …
+   * @returns {{ damage: number, hpFloor: number, notes: string[] }}
+   *          hpFloor：本次伤害不得把 HP 压到该值以下（0 = 无下限保护）
+   */
+  static applyTickDamageMods(actor, damage, source) {
+    let dmg = damage, hpFloor = 0;
+    const notes = [];
+    for (const buff of foundry.utils.deepClone(actor?.system?.buffs ?? [])) {
+      const handler = resolveBuffHandler(buff);
+      if (typeof handler?.modifyIncomingDamage !== "function") continue;
+      const result = handler.modifyIncomingDamage(actor, buff, { damage: dmg, attacker: null, source });
+      if (!result || typeof result !== "object") continue;
+      if (typeof result.damage  === "number") dmg     = result.damage;
+      if (typeof result.hpFloor === "number") hpFloor = Math.max(hpFloor, result.hpFloor);
+      if (result.note) notes.push(result.note);
+    }
+    return { damage: Math.max(0, dmg), hpFloor, notes };
+  }
+
+  /**
+   * 套用跳动伤害的生命值下限保护：伤害不得把 HP 压到 floor 以下，
+   * 但若 HP 本就低于 floor 也不会被"治疗"回去。
+   */
+  static applyHpFloor(oldHp, newHp, floor = 0) {
+    if (!(floor > 0)) return Math.max(0, newHp);
+    return Math.max(0, Math.max(newHp, Math.min(oldHp, floor)));
   }
 
   /** 移除角色所有指定类型的 BUFF。 */
@@ -1303,9 +1362,10 @@ export class ClashManager {
     const buff = ClashManager._getBuff(actor, "bleed");
     if (!buff || buff.stacks <= 0) return 0;
 
-    const dmg   = buff.intensity ?? 0;
+    const _bleedMods = ClashManager.applyTickDamageMods(actor, buff.intensity ?? 0, "bleed");
+    const dmg   = _bleedMods.damage;
     const oldHp = actor.system.hp?.value ?? 0;
-    const newHp = Math.max(0, oldHp - dmg);
+    const newHp = ClashManager.applyHpFloor(oldHp, oldHp - dmg, _bleedMods.hpFloor);
 
     const maxHpForBleed      = actor.system.hp?.max ?? 1;
     const _BC_TYPES          = ["chaos", "chaos_plus", "chaos_double_plus"];
@@ -3182,7 +3242,7 @@ export class ClashManager {
     for (const buff of foundry.utils.deepClone(actor.system?.buffs ?? [])) {
       const handler = resolveBuffHandler(buff);
       if (typeof handler?.modifyIncomingDamage !== "function") continue;
-      const result = handler.modifyIncomingDamage(actor, buff, { damage, attacker });
+      const result = handler.modifyIncomingDamage(actor, buff, { damage, attacker, source: "clash" });
       if (result && typeof result === "object") {
         if (typeof result.damage === "number") damage = result.damage;
         if (typeof result.hpLock === "number")  hpLockValue = result.hpLock;

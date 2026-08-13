@@ -2009,8 +2009,11 @@ export class LimbusActorSheet extends ActorSheet {
       case "bleed":
       case "rupture":
       case "burn": {
+        // 自定义 BUFF 可修正跳动伤害 / 设定生命值下限
+        const tickMods = ClashManager.applyTickDamageMods(actor, intensity, buff.type);
+        const tickDmg  = tickMods.damage;
         const oldHp = actor.system.hp?.value ?? 0;
-        const newHp = Math.max(0, oldHp - intensity);
+        const newHp = ClashManager.applyHpFloor(oldHp, oldHp - tickDmg, tickMods.hpFloor);
         const maxHpBuff       = actor.system.hp?.max ?? 1;
         const _SH_TYPES       = ["chaos", "chaos_plus", "chaos_double_plus"];
         const _SH_NAMES       = ["陷入混乱", "陷入混乱+", "陷入混乱++"];
@@ -2023,11 +2026,11 @@ export class LimbusActorSheet extends ActorSheet {
         const buffChaosName   = _SH_NAMES[shNewLevel - 1] ?? "陷入混乱";
         await actor.update({ "system.hp.value": newHp });
         await actor.reduceBuffStacks(buff.type);
-        if (actor.checkAndTriggerChaos) await actor.checkAndTriggerChaos(newHp, oldHp, { silent: true });
+        if (actor.checkAndTriggerChaos) await actor.checkAndTriggerChaos(newHp, oldHp, { silent: true, source: buff.type });
         await ChatMessage.create({
           speaker: ChatMessage.getSpeaker({ actor }),
           content: `<div class="limbuscompany chat-clash">
-            <strong>${actor.name}</strong>【${buff.name}】触发：受到 <strong>${intensity}</strong> 点固定伤害。
+            <strong>${actor.name}</strong>【${buff.name}】触发：受到 <strong>${tickDmg}</strong> 点固定伤害。
             （HP ${oldHp} → ${newHp}）${buffChaosCount > 0 ? `　<span style='color:#E84444;font-weight:bold;'>——【${buffChaosName}】！</span>` : ""}
           </div>`,
         });

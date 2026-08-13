@@ -486,6 +486,8 @@ Hooks.on("deleteCombat", async (combat) => {
     if (!actor) continue;
     await actor.unsetFlag("limbusCompany_FVTT", "encounterFireCounts");
     await actor.unsetFlag("limbusCompany_FVTT", "turnFireCounts");
+    // 每回合 BUFF 获得额度（maxGainPerRound）重置
+    await actor.unsetFlag("limbusCompany_FVTT", "buffRoundGain");
     await actor.unsetFlag("limbusCompany_FVTT", "lowMoraleFiredEncounter");
     if (actor.type === "character") {
       await actor.update({ "system.panicCounters.fear": 0, "system.panicCounters.resolve": 0 });
@@ -605,9 +607,11 @@ Hooks.on("updateCombat", async (combat, changed) => {
     // 【燃烧】：受到强度点固定伤害，层数-1
     const burnBuff = freshBuffs.find(b => b.type === "burn");
     if (burnBuff && burnBuff.stacks > 0) {
-      const dmg   = burnBuff.intensity ?? 0;
+      // 自定义 BUFF 可修正烧伤伤害 / 设定生命值下限（如【炎蝶之棺】【黎明之火】）
+      const burnMods = ClashManager.applyTickDamageMods(actor, burnBuff.intensity ?? 0, "burn");
+      const dmg   = burnMods.damage;
       const oldHp = actor.system.hp?.value ?? 0;
-      const newHp = Math.max(0, oldHp - dmg);
+      const newHp = ClashManager.applyHpFloor(oldHp, oldHp - dmg, burnMods.hpFloor);
       const maxHpForBurn = actor.system.hp?.max ?? 1;
       const chaosTriggeredByBurn = (actor.system.chaosThresholds ?? []).some(
         t => !t.triggered && newHp <= maxHpForBurn * t.percent / 100
