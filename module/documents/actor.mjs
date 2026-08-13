@@ -951,11 +951,16 @@ export class LimbusActor extends Actor {
     const rawIntensity = buffData.intensity ?? 1;
     let   rawStacks    = buffData.stacks    ?? 1;
 
-    // 【振幅转换】【振幅纠缠】依附于震颤存在：没有任何震颤族时无法施加
-    if (TREMOR_DEPENDENT_TYPES.includes(type)
-        && !(this.system.buffs ?? []).some(b => isTremorFamilyType(b.type) && (b.stacks ?? 0) > 0)) {
-      ui.notifications?.warn(`【${buffData.name ?? type}】只能在目标拥有【震颤】或【特殊震颤】时添加。`);
-      return;
+    // 【振幅转换】【振幅纠缠】依附于震颤存在：没有任何震颤族时无法施加；且两者互斥
+    if (TREMOR_DEPENDENT_TYPES.includes(type)) {
+      if (!(this.system.buffs ?? []).some(b => isTremorFamilyType(b.type) && (b.stacks ?? 0) > 0)) {
+        ui.notifications?.warn(`【${buffData.name ?? type}】只能在目标拥有【震颤】或【特殊震颤】时添加。`);
+        return;
+      }
+      const other = TREMOR_DEPENDENT_TYPES.find(t => t !== type);
+      if (buffs.some(b => b.type === other)) {
+        for (let i = buffs.length - 1; i >= 0; i--) if (buffs[i].type === other) buffs.splice(i, 1);
+      }
     }
 
     // maxGainPerRound：本回合累计可获得的层数上限。额度用尽后，本轮内无论通过

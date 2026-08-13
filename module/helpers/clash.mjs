@@ -399,9 +399,13 @@ export class ClashManager {
     }
 
     // 【振幅转换】【振幅纠缠】依附于震颤存在：目标没有任何震颤族时无法施加
-    if (TREMOR_DEPENDENT_TYPES.includes(type)
-        && ClashManager._tremorFamilyBuffs(actor).length === 0) {
-      return;
+    if (TREMOR_DEPENDENT_TYPES.includes(type)) {
+      if (ClashManager._tremorFamilyBuffs(actor).length === 0) return;
+      // 两者互斥：施加其中一个时移除另一个
+      const other = TREMOR_DEPENDENT_TYPES.find(t => t !== type);
+      if ((actor.system?.buffs ?? []).some(b => b.type === other)) {
+        await ClashManager._removeBuff(actor, other);
+      }
     }
 
     // 【振幅转换】：持有期间施加【特殊震颤】时，不新增，而是把现有震颤族整体
@@ -592,6 +596,24 @@ export class ClashManager {
       }
     }
     if (changed) await ClashManager._safeDocUpdate(actor, { "system.buffs": buffs });
+  }
+
+  /**
+   * 【震颤】回合结束衰减：层数 -1。
+   * 与引爆同样只扣「主承担者」（优先普通【震颤】）那一条，其余特殊震颤由
+   * _syncTremorFamily 跟随；归零后连带清掉【振幅转换】【振幅纠缠】。
+   * @returns {number} 衰减后主承担者剩余层数；无震颤时返回 -1
+   */
+  static async decayTremorFamily(actor) {
+    const family = ClashManager._tremorFamilyBuffs(actor);
+    if (family.length === 0) return -1;
+    const primary = family.find(b => b.type === TREMOR_BASE_TYPE)
+      ?? family.reduce((a, b) => ((b.intensity ?? 0) > (a.intensity ?? 0) ? b : a));
+
+    await ClashManager._reduceBuffStacks(actor, primary.type, 1);
+    await ClashManager._syncTremorFamily(actor);
+    await ClashManager._cleanupTremorDependents(actor);
+    return Math.max(0, (primary.stacks ?? 1) - 1);
   }
 
   /**

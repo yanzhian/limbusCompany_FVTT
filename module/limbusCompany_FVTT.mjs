@@ -665,6 +665,15 @@ Hooks.on("updateCombat", async (combat, changed) => {
       }
     }
 
+    // ── 【震颤】回合结束衰减：层数 -1（特殊震颤由同步跟随，归零则一并消失）──
+    const tremorLeft = await ClashManager.decayTremorFamily(actor);
+    if (tremorLeft === 0) {
+      endMsgs.push({
+        trigger: "回合结束时", itemName: "震颤",
+        msgs: [`<strong>${actor.name}</strong> 的【震颤】已消散。`],
+      });
+    }
+
     // ── 震颤族全部消失时，连带移除【振幅转换】【振幅纠缠】 ────────────────
     await ClashManager._cleanupTremorDependents(actor);
 
