@@ -470,6 +470,9 @@ export class ClashManager {
       });
     }
     await ClashManager._safeDocUpdate(actor, { "system.buffs": buffs, ...(gainFlagUpdate ?? {}) });
+
+    // 震颤族有增减时，【振幅纠缠】下把各特殊震颤同步到【震颤】的层数/强度
+    if (isTremorFamilyType(type)) await ClashManager._syncTremorFamily(actor);
   }
 
   /**
@@ -564,13 +567,44 @@ export class ClashManager {
   }
 
   /**
+   * 【振幅纠缠】下的同步：所有【特殊震颤】的层数与强度跟随普通【震颤】。
+   * 任何一次震颤族的增减之后调用；普通【震颤】不存在时不做任何事。
+   */
+  static async _syncTremorFamily(actor) {
+    if (!actor) return;
+    const cur = actor.system?.buffs ?? [];
+    if (!cur.some(b => b.type === "amplitudeEntangle")) return;
+
+    const base = cur.find(b => b.type === TREMOR_BASE_TYPE && b.whenAdded !== "下回合");
+    if (!base) return;
+
+    const buffs = foundry.utils.deepClone(cur);
+    let changed = false;
+    for (let i = buffs.length - 1; i >= 0; i--) {
+      const b = buffs[i];
+      if (b.type === TREMOR_BASE_TYPE || !isTremorFamilyType(b.type)) continue;
+      if (b.whenAdded === "下回合") continue;
+      if ((base.stacks ?? 0) <= 0) { buffs.splice(i, 1); changed = true; continue; }
+      if (b.stacks !== base.stacks || b.intensity !== base.intensity) {
+        b.stacks    = base.stacks;
+        b.intensity = base.intensity;
+        changed = true;
+      }
+    }
+    if (changed) await ClashManager._safeDocUpdate(actor, { "system.buffs": buffs });
+  }
+
+  /**
    * 【震颤引爆】统一入口——原先散落在 ④效果、承受结算、角色卡、【防御姿态】里的
    * 四份实现全部收敛到这里。
    *
-   * 每次引爆：震颤族每条各消耗 1 层，并把目标全部混乱阈值前移该条的强度；
-   * 特殊震颤再额外跑一次自己的 onSeismicBlast。
-   * 目标持有【振幅纠缠】时，本次引爆内基础的阈值前移只结算 1 次（取强度最高的一条），
-   * 每种特殊震颤的额外效果也各只结算 1 次。
+   * 规则：
+   * - 基础效果（混乱阈值前移「震颤强度」% + 消耗 1 层）每次引爆只结算一次，
+   *   由普通【震颤】负责；没有普通【震颤】时（如【振幅转换】把它改写成了特殊震颤），
+   *   由当前这条震颤族顶替。
+   * - 每条【特殊震颤】再各跑一次自己的 onSeismicBlast 额外效果。
+   * - 【振幅纠缠】下特殊震颤的层数/强度同步于【震颤】，因此只需消耗【震颤】的层数，
+   *   随后 _syncTremorFamily 会把其余几条一并压到相同数值（归零则一起消失）。
    *
    * @param {Actor}  target
    * @param {number} times    引爆次数
@@ -580,22 +614,20 @@ export class ClashManager {
   static async seismicBlast(target, times = 1, { attacker = null } = {}) {
     const msgs = [];
     if (!target) return { blasts: 0, msgs };
-
-    const entangled = (target.system?.buffs ?? []).some(b => b.type === "amplitudeEntangle");
     let blasts = 0;
 
     for (let n = 0; n < Math.max(1, Math.round(times)); n++) {
       // 每轮都重新读取：上一轮已经改过层数
-      const family = ClashManager._tremorFamilyBuffs(game.actors.get(target.id) ?? target);
+      const actor  = game.actors.get(target.id) ?? target;
+      const family = ClashManager._tremorFamilyBuffs(actor);
       if (family.length === 0) break;
 
-      // ── 基础效果：混乱阈值前移 ──
-      // 纠缠：只结算 1 次，取强度最高的一条；否则每条各结算一次
-      const shiftList = entangled
-        ? [family.reduce((a, b) => ((b.intensity ?? 0) > (a.intensity ?? 0) ? b : a))]
-        : family;
-      let shifted = 0;
-      for (const tb of shiftList) shifted += tb.intensity ?? 0;
+      // 基础效果的承担者：优先普通【震颤】，否则取强度最高的一条
+      const primary = family.find(b => b.type === TREMOR_BASE_TYPE)
+        ?? family.reduce((a, b) => ((b.intensity ?? 0) > (a.intensity ?? 0) ? b : a));
+
+      // ── 基础效果：混乱阈值前移（每次引爆仅一次）──
+      const shifted = primary.intensity ?? 0;
       if (shifted > 0) {
         await (target.triggerSeismicBlast
           ? target.triggerSeismicBlast(shifted)
@@ -606,14 +638,17 @@ export class ClashManager {
               })),
             }));
       }
+      msgs.push(`【${ClashManager._buffLabel(primary.type)}】引爆：混乱阈值前移 <strong>${shifted}%</strong>。`);
 
-      // ── 特殊震颤的额外效果 ──
+      // ── 各【特殊震颤】的额外效果 ──
       for (const tb of family) {
         const handler = resolveBuffHandler(tb);
         if (typeof handler?.onSeismicBlast !== "function") continue;
         const line = await handler.onSeismicBlast(target, tb, {
           attacker,
           getBuff:    (type) => ClashManager._getBuff(target, type),
+          addBuff:    (type, intensity, stacks, whenAdded) =>
+            ClashManager._addBuff(target, type, intensity, stacks, whenAdded),
           dealDamage: async (tgtActor, category, formula, sinType = "") => {
             if (!tgtActor) return 0;
             const roll = new Roll(String(formula));
@@ -632,11 +667,11 @@ export class ClashManager {
         if (typeof line === "string" && line) msgs.push(line);
       }
 
-      // ── 消耗层数：震颤族每条各 -1 ──
-      for (const tb of family) await ClashManager._reduceBuffStacks(target, tb.type, 1);
+      // ── 消耗层数：只扣基础承担者那一条，其余由同步跟随 ──
+      await ClashManager._reduceBuffStacks(target, primary.type, 1);
+      await ClashManager._syncTremorFamily(target);
       await ClashManager._tickFieldResources(TREMOR_BASE_TYPE, shifted, 1);
       blasts++;
-      msgs.push(`震颤引爆：混乱阈值前移 <strong>${shifted}%</strong>。`);
     }
 
     if (blasts > 0) await ClashManager._cleanupTremorDependents(target);

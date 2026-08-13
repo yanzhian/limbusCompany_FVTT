@@ -100,8 +100,11 @@ export function normalizeBuffType(type, name = "") {
  * 引爆时同样消耗 1 层、把目标混乱阈值前移自身强度，区别是可以再挂一段额外效果。
  * 注册方式：registerCustomBuff("xxx", { specialTremor: true, onSeismicBlast(...) })
  *
- *   onSeismicBlast(target, buff, ctx) → 返回一行说明文本（可选）
- *     ctx = { attacker, dealDamage(targetActor, category, formula, sinType), getBuff(type) }
+ *   onSeismicBlast(target, buff, ctx) → 返回一行说明文本（可选），并入引爆消息
+ *     ctx = { attacker,
+ *             getBuff(type),                                     // 读 target 身上的 BUFF
+ *             addBuff(type, intensity, stacks, whenAdded),       // 给 target 加 BUFF
+ *             dealDamage(targetActor, category, formula, sinType) }
  */
 export const TREMOR_BASE_TYPE = "tremor";
 
@@ -661,15 +664,18 @@ registerCustomBuff("amplitudeConvert", {
 
 /**
  * 【振幅纠缠】
- * - 持有期间，特殊震颤与普通震颤并列存在（不再互相转换）。
- * - 每次【震颤引爆】内，基础的阈值前移只结算 1 次，各特殊震颤的额外效果也各只结算 1 次。
+ * - 持有期间，特殊震颤与普通震颤并列存在（不再互相转换），
+ *   且各特殊震颤的层数与强度始终同步于普通【震颤】。
+ * - 每次【震颤引爆】只结算 1 次【震颤】的基础效果（阈值前移 + 扣 1 层），
+ *   随后各【特殊震颤】各跑一次自己的额外效果。
  * - 目标身上震颤族全部消失时，本效果一并消失。
  */
 registerCustomBuff("amplitudeEntangle", {
   label:       "振幅纠缠",
   description: "- 只能在目标拥有【震颤】或【特殊震颤】时添加\n"
     + "- 持有期间，【特殊震颤】与【震颤】并列存在，不再互相转换\n"
-    + "- 每次【震颤引爆】内，只触发 1 次原本【震颤】的效果与各【特殊震颤】的额外效果\n"
+    + "- 各【特殊震颤】的层数与强度同步于【震颤】\n"
+    + "- 受到【震颤引爆】时，只触发 1 次【震颤】的基础效果，随后触发各【特殊震颤】的额外效果\n"
     + "- 目标失去全部震颤时，本效果消失",
 });
 
@@ -693,6 +699,46 @@ registerCustomBuff("tremorHeat", {
     const dealt = await ctx.dealDamage?.(target, "", `${amount}`, "wrath");
     return `【震颤-灼热】额外效果：(震颤强度 ${tremorInt} + 烧伤强度 ${burnInt}) ÷ 2 = `
       + `<strong>${amount}</strong> → 造成 <strong>${dealt ?? 0}</strong> 点【暴怒】伤害。`;
+  },
+});
+
+/**
+ * 【震颤-回响】——特殊震颤
+ * - 会受到【震颤引爆】效果
+ * - 额外效果：受到引爆时，承受「自身震颤强度」点【怠惰】伤害
+ */
+registerCustomBuff("tremorEcho", {
+  label:         "震颤-回响",
+  specialTremor: true,
+  description:   "·特殊震颤（会受到【震颤引爆】效果）\n"
+    + "·额外效果 受到【震颤引爆】时：受到自身震颤强度点【怠惰】伤害",
+
+  async onSeismicBlast(target, buff, ctx) {
+    const amount = buff.intensity ?? 0;
+    if (amount <= 0) return;
+    const dealt = await ctx.dealDamage?.(target, "", `${amount}`, "sloth");
+    return `【震颤-回响】额外效果：震颤强度 <strong>${amount}</strong> → `
+      + `造成 <strong>${dealt ?? 0}</strong> 点【怠惰】伤害。`;
+  },
+});
+
+/**
+ * 【震颤-崩坏】——特殊震颤
+ * - 会受到【震颤引爆】效果
+ * - 额外效果：受到引爆时，每带有 4 级震颤强度，防御等级减少 1 级
+ */
+registerCustomBuff("tremorCollapse", {
+  label:         "震颤-崩坏",
+  specialTremor: true,
+  description:   "·特殊震颤（会受到【震颤引爆】效果）\n"
+    + "·额外效果 受到【震颤引爆】时：每带有 4 级震颤强度，防御等级减少 1 级",
+
+  async onSeismicBlast(_target, buff, ctx) {
+    const levels = Math.floor((buff.intensity ?? 0) / 4);
+    if (levels <= 0) return;
+    await ctx.addBuff?.("defLevelDown", 0, levels, "本回合");
+    return `【震颤-崩坏】额外效果：震颤强度 ${buff.intensity ?? 0} ÷ 4 → `
+      + `获得 <strong>${levels}</strong> 层【防御等级降低】。`;
   },
 });
 
