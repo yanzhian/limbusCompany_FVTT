@@ -34,6 +34,7 @@ import { linkifyHtml } from "./helpers/linkify.mjs";
 import { SinResourceHUD }   from "./helpers/sin-resource-hud.mjs";
 import { QuickActionHUD }   from "./sheets/quick-action-hud.mjs";
 import { registerItemPiles } from "./helpers/item-piles.mjs";
+import { ChaosTokenLabel }   from "./helpers/chaos-token-label.mjs";
 
 /* ─── Item Piles 联动注册 ─────────────────────────────────────────────────── */
 
@@ -211,6 +212,10 @@ Hooks.once("ready", () => {
 
   // 创建快捷操作 HUD 单例（选中 Token 时自动渲染）
   QuickActionHUD.create();
+
+  // 【陷入混乱】token 悬浮字样
+  ChaosTokenLabel.init();
+  ChaosTokenLabel.refresh();
 
   // ── 过滤 ui.notifications 弹出的聊天清理竞态红色警告 ──────────────────
   // ui.notifications 在 ready 之后才可用，因此在此处 patch
@@ -508,7 +513,9 @@ Hooks.on("updateCombat", async (combat, changed) => {
   if (_processedRoundKey.get(dedupKey)) return;
   _processedRoundKey.set(dedupKey, true);
 
-  const TURN_END = CONFIG.LIMBUSCOMPANY?.TURN_END_BUFF_TYPES ?? new Set();
+  const TURN_END     = CONFIG.LIMBUSCOMPANY?.TURN_END_BUFF_TYPES ?? new Set();
+  const CHAOS_TYPES  = CONFIG.LIMBUSCOMPANY?.CHAOS_TYPES ?? ["chaos", "chaos_plus", "chaos_double_plus"];
+  const CHAOS_EXTEND = CONFIG.LIMBUSCOMPANY?.CHAOS_EXTEND_TAG ?? "延续回合";
 
   // 全体角色的回合开始/结束 Activity 消息各汇总为一条折叠消息
   const endMsgs   = [];
@@ -529,10 +536,20 @@ Hooks.on("updateCombat", async (combat, changed) => {
     const panicActivating = buffs.some(b => b.type === "panic" && b.whenAdded === "下回合");
 
     // Step 1: 移除本回合结束即清除的 BUFF
-    const afterRemove = buffs.filter(b => !(TURN_END.has(b.type) && b.whenAdded !== "下回合"));
+    // 【陷入混乱】例外：持续「本回合 + 下回合」，本轮结束时不移除，
+    // 而是打上 CHAOS_EXTEND 标记（仍视为已生效），下一轮结束才真正移除。
+    const afterRemove = buffs.filter(b => {
+      if (CHAOS_TYPES.includes(b.type)) return b.whenAdded !== CHAOS_EXTEND;
+      return !(TURN_END.has(b.type) && b.whenAdded !== "下回合");
+    });
 
-    // Step 2: 将下回合 BUFF 晋升为本回合
-    const promoted = afterRemove.map(b => b.whenAdded === "下回合" ? { ...b, whenAdded: "本回合" } : b);
+    // Step 2: 将下回合 BUFF 晋升为本回合；混乱则由本回合转入延续回合
+    const promoted = afterRemove.map(b => {
+      if (CHAOS_TYPES.includes(b.type) && b.whenAdded !== "下回合") {
+        return { ...b, whenAdded: CHAOS_EXTEND };
+      }
+      return b.whenAdded === "下回合" ? { ...b, whenAdded: "本回合" } : b;
+    });
 
     // Step 3: 合并同类型 BUFF（intensity 与 stacks 相加，保留先出现者的 id/name/icon）
     const mergedMap = new Map();

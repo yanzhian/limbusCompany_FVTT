@@ -8652,3 +8652,45 @@ input.item-piles-quantity {
 .desc-trigger-chip.trigger-green  { color: #7FBF7F; }
 .desc-trigger-chip.trigger-orange { color: #E0A050; }
 .desc-trigger-chip.trigger-red    { color: #E84444; }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   【陷入混乱】token 悬浮字样
+   容器挂在 Foundry 的 #hud 层里，位置用画布坐标写，平移/缩放由 #hud 自身的
+   transform 跟随，所以这里只负责样式。
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+#limbus-chaos-labels {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;   /* 不挡 token 点击 */
+  z-index: 1;
+}
+
+#limbus-chaos-labels .limbus-chaos-label {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  white-space: nowrap;
+  pointer-events: none;
+  user-select: none;
+
+  font-family: "Noto Sans SC", "Microsoft YaHei", sans-serif;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  line-height: 1;
+  color: #FFFFFF;
+
+  /* 深色描边 + 橙红外发光，模拟原作混乱字样 */
+  -webkit-text-stroke: 0.12em #2A0D05;
+  paint-order: stroke fill;
+  text-shadow:
+      0 0 0.18em #FF6A1E,
+      0 0 0.42em #C2360C,
+      0 0.06em 0.12em rgba(0, 0, 0, .85);
+
+  animation: limbus-chaos-label-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes limbus-chaos-label-pulse {
+  0%, 100% { opacity: 1;    transform: translate(-50%, -50%) scale(1); }
+  50%      { opacity: .88;  transform: translate(-50%, -50%) scale(1.04); }
+}
