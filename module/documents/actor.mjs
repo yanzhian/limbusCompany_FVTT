@@ -949,7 +949,28 @@ export class LimbusActor extends Actor {
     // 层数/强度为 0 时自动订正为 1；增益/减益与自定义 BUFF 不受此规则影响
     const zeroDefault = ["burn", "bleed", "rupture", "tremor", "sinking", "breathing"].includes(type);
     const rawIntensity = buffData.intensity ?? 1;
-    const rawStacks    = buffData.stacks    ?? 1;
+    let   rawStacks    = buffData.stacks    ?? 1;
+
+    // maxGainPerRound：本回合累计可获得的层数上限。额度用尽后，本轮内无论通过
+    // 技能、装备还是手动添加都不再获得层数（与 ClashManager._addBuff 共用同一份
+    // flag 计数，每轮结束清空）。
+    const handler = resolveBuffHandler({ type, name: buffData.name ?? "" });
+    const maxGain = handler?.maxGainPerRound ?? Infinity;
+    let   gainFlagUpdate = null;
+    if (Number.isFinite(maxGain) && rawStacks > 0) {
+      const gainMap = foundry.utils.deepClone(
+        this.getFlag("limbusCompany_FVTT", "buffRoundGain") ?? {}
+      );
+      const gained  = gainMap[type] ?? 0;
+      const allowed = Math.max(0, maxGain - gained);
+      if (allowed <= 0) {
+        ui.notifications?.info(`【${handler.label ?? type}】本回合已达获得上限（${maxGain} 层）。`);
+        return;
+      }
+      rawStacks      = Math.min(rawStacks, allowed);
+      gainMap[type]  = gained + rawStacks;
+      gainFlagUpdate = { "flags.limbusCompany_FVTT.buffRoundGain": gainMap };
+    }
 
     buffs.push({
       id:        foundry.utils.randomID(),
@@ -960,7 +981,7 @@ export class LimbusActor extends Actor {
       stacks:    (zeroDefault && !(rawStacks    > 0)) ? 1 : rawStacks,
       whenAdded: buffData.whenAdded ?? "本回合",
     });
-    return this.update({ "system.buffs": buffs });
+    return this.update({ "system.buffs": buffs, ...(gainFlagUpdate ?? {}) });
   }
 
   /**
