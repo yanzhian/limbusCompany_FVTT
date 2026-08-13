@@ -1629,10 +1629,22 @@ function _positionTitleCard(card, anchorEl) {
   if (left < 8) left = rect.right + 8;
   const top = Math.max(8, Math.min(rect.top, window.innerHeight - cardH - 8));
 
-  // 若触发源本身就在某张 Title 卡内部（chip → 嵌套卡），层级取父卡 +1
+  // 层级：
+  // 1) 触发源在某张 Title 卡内部（chip → 嵌套卡）→ 取父卡 +1，保证盖在父卡上；
+  // 2) 触发源在某个 Foundry 窗口内（对话框/角色卡等）→ 取该窗口 z-index +1，
+  //    否则卡片会被窗口盖住（Foundry 的窗口 z-index 每次聚焦都会自增，
+  //    可能超过我们的固定基准值，不能只靠常量）。
+  let z;
   const parentCard = anchorEl.closest?.(".limbus-title-card");
-  const parentZ    = parentCard ? (parseInt(parentCard.style.zIndex) || TITLE_CARD_Z) : TITLE_CARD_Z;
-  card.css({ position: "fixed", left, top, zIndex: parentZ + 1 });
+  if (parentCard) {
+    z = (parseInt(parentCard.style.zIndex) || TITLE_CARD_Z) + 1;
+  } else {
+    z = TITLE_CARD_Z;
+    const appEl = anchorEl.closest?.(".app, .window-app, .application");
+    const appZ  = appEl ? parseInt(window.getComputedStyle(appEl).zIndex) : NaN;
+    if (!isNaN(appZ)) z = Math.max(z, appZ + 1);
+  }
+  card.css({ position: "fixed", left, top, zIndex: z });
 }
 
 /**

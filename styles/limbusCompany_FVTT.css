@@ -5064,7 +5064,7 @@ body.game .limbuscompany.app img {
          → 展开按钮（白色）→ 展开区（6-bag 剩余技能 + EGO，固定 3 列）
    ══════════════════════════════════════════════════════════════ */
 .limbuscompany .clash-pick-dialog {
-  --pick-slot: 52px;
+  --pick-slot: 74px;
   font-family: var(--font-main);
   color:       var(--text-main);
   padding:     4px 2px;
@@ -5082,8 +5082,8 @@ body.game .limbuscompany.app img {
 /* 展开区：固定 3 列，基础技能与 EGO 统一排布 */
 .clash-pick-grid {
   display:               grid;
-  grid-template-columns: repeat(3, var(--pick-slot, 52px));
-  gap:                   14px 16px;
+  grid-template-columns: repeat(3, var(--pick-slot, 74px));
+  gap:                   14px 18px;
   justify-content:       center;
   justify-items:         center;
   padding:               12px 0 8px;
@@ -5094,8 +5094,8 @@ body.game .limbuscompany.app img {
 .clash-pick-slot {
   --art-inset:   15%;
   position:      relative;
-  width:         var(--pick-slot, 52px);
-  height:        var(--pick-slot, 52px);
+  width:         var(--pick-slot, 74px);
+  height:        var(--pick-slot, 74px);
   flex-shrink:   0;
   cursor:        pointer;
   transition:    filter .15s, box-shadow .15s;

@@ -1801,7 +1801,7 @@ export class ClashManager {
         dlg._pickCardCtrls?.forEach(c => c.close?.());
         dlg._pickCardCtrls = [];
       },
-    }, { width: 320 });
+    }, { width: 360 });   // 容纳展开区 3 列 × --pick-slot(74px) + 间距
 
     dlg.render(true);
   }
