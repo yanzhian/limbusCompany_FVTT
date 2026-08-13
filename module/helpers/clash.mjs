@@ -8,6 +8,12 @@ import { CustomBuffRegistry, resolveBuffHandler, FieldResourceRegistry } from ".
 
 export class ClashManager {
 
+  /** 罪孽 → 技能边框图文件名前缀（见 _skillFrameIcon） */
+  static SIN_FRAME_NAME = {
+    wrath: "Wrath", lust: "Lust", sloth: "Sloth", gluttony: "Gluttony",
+    gloom: "Gloom", pride: "Pride", envy: "Envy",
+  };
+
   /**
    * 基础特殊类 BUFF：不存在"0层"或"0级"的这类 BUFF，_addBuff 会把传入的
    * 0 层数/0 强度自动订正为 1（见 _addBuff 内的判定）。
@@ -75,6 +81,24 @@ export class ClashManager {
 
   static _sinLabel(sinType) {
     return CONFIG.LIMBUSCOMPANY?.SIN_LABELS_ZH?.[sinType] ?? sinType ?? "";
+  }
+
+  /**
+   * 技能边框图路径：assets/icons/Skill/{罪孽首字母大写}_lv{等级}.webp。
+   * 注意这些是【中空边框】而非技能图本身——技能自身的图用 item.img 垫在底层，
+   * 边框叠在其上（基础技能为七边形框，EGO 为圆环框 E.G.O.webp）。
+   * 快捷 HUD 与拼点选择器共用此函数，避免两处各写一份映射。
+   * @param {Item|null} item
+   * @returns {string} 图片路径；item 为空时返回空串
+   */
+  static _skillFrameIcon(item) {
+    if (!item) return "";
+    const base = "systems/limbusCompany_FVTT/assets/icons/Skill/";
+    const sys  = item.system ?? {};
+    if (sys.type === "ego") return `${base}E.G.O.webp`;
+    const sinName = ClashManager.SIN_FRAME_NAME[sys.sinType];
+    const lv      = Math.max(1, Math.min(3, sys.level ?? 1));
+    return sinName ? `${base}${sinName}_lv${lv}.webp` : `${base}Normalsin.webp`;
   }
 
   static _sinColor(sinType) {
@@ -1669,31 +1693,28 @@ export class ClashManager {
 
     // ─── slot HTML 工厂 ───
     // slotIdx: 对应 bagState.slots 的下标（-1 = 守备/EGO，不属于 6-bag）
+    // 技能格统一为两层：底层 item.img（技能自身的图），顶层罪孽+等级边框。
+    // 悬停 Title 卡由 render 阶段统一挂载，这里不再写 title 原生提示，
+    // 避免与 Title 卡重复弹两层。
     const octaSlotHtml = (item, extraClass = "", slotIdx = -1, disabled = false) => {
       if (!item) return `<div class="clash-pick-slot clash-pick-empty"></div>`;
-      const sin = ClashManager._sinColor(item.system?.sinType);
       const cls = disabled ? "clash-pick-slot clash-pick-disabled" : `clash-pick-slot ${extraClass}`;
-      const tip = disabled ? `${item.name}（恐慌中无法使用）` : item.name;
-      // 旧版"相关技能"单槽临时切换按钮已废弃（改由④效果「相关技能转换」
-      // 永久替换技能槽位实现，见 relatedSkillConvert case）
       return `
-        <div class="${cls}" data-item-id="${item.id}" data-slot-index="${slotIdx}" title="${tip}">
-          <img src="${item.img}" style="border-color:${sin};" alt="${item.name}">
+        <div class="${cls}" data-item-id="${item.id}" data-slot-index="${slotIdx}">
+          <img class="clash-pick-art"   src="${item.img}" alt="${item.name}">
+          <img class="clash-pick-frame" src="${ClashManager._skillFrameIcon(item)}" alt="">
         </div>`;
     };
 
     /** EGO 圆形槽（含等级名）；仅在该等级已配置技能时调用 */
-    const circleSlotHtml = (item, grade = "") => {
-      const sin = ClashManager._sinColor(item.system?.sinType);
-      return `
-        <div class="clash-pick-ego">
-          <div class="clash-pick-slot clash-pick-ego-slot" data-item-id="${item.id}"
-               data-slot-index="-1" title="${item.name}（${grade}）">
-            <img src="${item.img}" style="border-color:${sin};" alt="${item.name}">
-          </div>
-          ${grade ? `<span class="clash-pick-ego-grade">${grade}</span>` : ""}
-        </div>`;
-    };
+    const circleSlotHtml = (item, grade = "") => `
+      <div class="clash-pick-ego">
+        <div class="clash-pick-slot clash-pick-ego-slot" data-item-id="${item.id}" data-slot-index="-1">
+          <img class="clash-pick-art"   src="${item.img}" alt="${item.name}">
+          <img class="clash-pick-frame" src="${ClashManager._skillFrameIcon(item)}" alt="">
+        </div>
+        ${grade ? `<span class="clash-pick-ego-grade">${grade}</span>` : ""}
+      </div>`;
 
     const panicNotice = panicMode
       ? `<div style="font-size:.75rem;color:#E8A444;text-align:center;padding:4px 0 6px;font-style:italic;">
@@ -1738,6 +1759,18 @@ export class ClashManager {
       content,
       buttons: {},
       render: (dlgHtml) => {
+        // 悬停显示技能 Title 卡（与角色卡/快捷 HUD 同一套卡片）。
+        // item-sheet.mjs 静态 import 了本文件，这里改用动态 import 规避循环依赖；
+        // 卡片 controller 记录在 dlg 上，关闭弹窗时统一销毁，避免残留。
+        import("../sheets/item-sheet.mjs").then(({ attachHoverableTitleCard, buildItemTitleCard }) => {
+          dlg._pickCardCtrls = [];
+          dlgHtml.find(".clash-pick-slot[data-item-id]").each((_i, el) => {
+            const it = actor.items.get(el.dataset.itemId);
+            if (!it) return;
+            dlg._pickCardCtrls.push(attachHoverableTitleCard(el, () => buildItemTitleCard(it)));
+          });
+        }).catch(err => console.error("ClashManager: 挂载技能 Title 卡失败", err));
+
         // 展开/折叠
         dlgHtml.find(".clash-pick-expand-btn").on("click", (e) => {
           const $exp = dlgHtml.find(".clash-pick-expanded");
@@ -1762,6 +1795,11 @@ export class ClashManager {
           dlg.close();
           onPick(item, slotIdx);
         });
+      },
+      close: () => {
+        // 关闭弹窗时摘掉挂在 body 上的 Title 卡，避免残留在屏幕上
+        dlg._pickCardCtrls?.forEach(c => c.close?.());
+        dlg._pickCardCtrls = [];
       },
     }, { width: 320 });
 

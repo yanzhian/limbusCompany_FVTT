@@ -5089,27 +5089,48 @@ body.game .limbuscompany.app img {
   padding:               12px 0 8px;
 }
 
-/* 技能格（八边形/方形通用） */
+/* 技能格：两层结构——底层技能图 + 顶层罪孽/EGO 边框
+   （与快捷 HUD 的 .qa-skill-art / .qa-skill-frame 同一套做法） */
 .clash-pick-slot {
+  --art-inset:   15%;
   position:      relative;
   width:         var(--pick-slot, 52px);
   height:        var(--pick-slot, 52px);
   flex-shrink:   0;
-  border-radius: 2px;
   cursor:        pointer;
   transition:    filter .15s, box-shadow .15s;
 }
-.clash-pick-slot img {
-  width:        100%;
-  height:       100%;
-  object-fit:   cover;
-  border:       2px solid var(--border-gold, #C9A84C);   /* 实际颜色由内联的罪孽色覆盖 */
-  box-sizing:   border-box;
-  display:      block;
+
+/* 底层：技能自身的图，按边框中空区内缩后塞进框内，裁成尖朝下七边形。
+   必须显式给出宽高：绝对定位的 img 在 auto 时会按原图像素渲染，
+   大图会撑爆格子（与 HUD 同一个坑）。 */
+.clash-pick-art {
+  position:   absolute;
+  inset:      var(--art-inset);
+  width:      calc(100% - var(--art-inset) * 2);
+  height:     calc(100% - var(--art-inset) * 2);
+  object-fit: cover;
+  display:    block;
+  clip-path: polygon(
+    71.7% 5.0%, 98.7% 38.9%, 89.1% 81.2%, 50% 100%,
+    10.9% 81.2%, 1.3% 38.9%, 28.3% 5.0%
+  );
 }
+
+/* 顶层：罪孽 + 等级边框（EGO 为圆环框） */
+.clash-pick-frame {
+  position:   absolute;
+  inset:      0;
+  width:      100%;
+  height:     100%;
+  object-fit: contain;
+  display:    block;
+}
+
 .clash-pick-slot:not(.clash-pick-empty):not(.clash-pick-disabled):hover {
   filter:     brightness(1.3);
   box-shadow: 0 0 6px 2px rgba(201,168,76,.6);
+  border-radius: 4px;
 }
 
 /* 恐慌中不可用的技能格 */
@@ -5133,11 +5154,11 @@ body.game .limbuscompany.app img {
   align-items:    center;
   gap:            3px;
 }
-.clash-pick-ego-slot,
-.clash-pick-ego-slot img {
+/* EGO 边框是圆环，内图相应改为圆形裁切（而非七边形） */
+.clash-pick-ego-slot .clash-pick-art {
+  clip-path:     none;
   border-radius: 50%;
 }
-.clash-pick-ego-slot { overflow: hidden; }
 .clash-pick-ego-grade {
   font-size: 9px;
   color:     #9A8462;

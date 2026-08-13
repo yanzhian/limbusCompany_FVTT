@@ -78,14 +78,10 @@ const QA_AIM_COLOR_SNAP = "#E5443A";
 const QA_BUFF_DEFAULT = 8;
 const QA_BUFF_PER_ROW = 16;
 
-/* 技能边框图：assets/icons/Skill/{罪孽首字母大写}_lv{等级}.webp
-   注意这是中空的七边形【边框】，不是技能图本身——技能自身的图用
-   item.img，边框叠在其上层（见模板 .qa-skill-art / .qa-skill-frame）。 */
+/* 技能边框图（中空边框，非技能图本身；技能自身的图用 item.img 垫底，
+   边框叠在其上层——见模板 .qa-skill-art / .qa-skill-frame）。
+   取图逻辑与拼点选择器共用 ClashManager._skillFrameIcon，不再各写一份。 */
 const SKILL_ICON_BASE = "systems/limbusCompany_FVTT/assets/icons/Skill/";
-const SIN_ICON_NAME = {
-  wrath: "Wrath", lust: "Lust", sloth: "Sloth", gluttony: "Gluttony",
-  gloom: "Gloom", pride: "Pride", envy: "Envy",
-};
 /* 理智值配色：按数值在三个锚点之间线性插值
    95 = #4F7A9C（蓝，清醒）／50 = #6A6A6A（灰，中间）／5 = #BF2B2A（红，濒临恐慌） */
 const SANITY_STOPS = [
@@ -141,15 +137,8 @@ function _egoSlotPos(grade) {
   };
 }
 
-/** 按罪孽+等级取技能图标；EGO 用专属图标，取不到则回退通用图 */
-function _skillIcon(item) {
-  if (!item) return "";
-  const sys = item.system ?? {};
-  if (sys.type === "ego") return `${SKILL_ICON_BASE}E.G.O.webp`;
-  const sin = SIN_ICON_NAME[sys.sinType];
-  const lv  = Math.max(1, Math.min(3, sys.level ?? 1));
-  return sin ? `${SKILL_ICON_BASE}${sin}_lv${lv}.webp` : `${SKILL_ICON_BASE}Normalsin.webp`;
-}
+/** 按罪孽+等级取技能边框图（EGO 用圆环框），委托给 ClashManager 的共用实现 */
+const _skillIcon = (item) => ClashManager._skillFrameIcon(item);
 
 /* ═══════════════════════════════════════════════════════════════════════════
    QuickActionHUD Application
