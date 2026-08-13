@@ -1170,47 +1170,39 @@ export class ClashManager {
             break;
           }
           case "useSkill": {
+            // 由效果的【目标】来使用技能（target=自己时即 owner 本身）
+            const useTgt  = effTgt ?? owner;
             let skillItem = null;
-            if (eff.skillRef === "equipped") {
-              const slot  = eff.skillSlot ?? "basic";
-              const level = Math.max(1, parseInt(eff.skillLevel) || 1);
-              if (slot === "defense") {
-                const defId = owner?.system?.skills?.defense;
-                skillItem = defId ? owner?.items?.get(defId) : null;
-              } else {
-                const basicSlots = owner?.system?.skills?.basic ?? [];
-                skillItem = basicSlots[level - 1] ? owner?.items?.get(basicSlots[level - 1]) : null;
-              }
-              if (!skillItem) {
-                const lbl = slot === "defense" ? "守备技能" : `Lv.${level} 基础技能`;
-                descStr = `未找到已装备的${lbl}`;
-                break;
-              }
-            } else if (eff.skillRef === "name") {
+            if (eff.skillRef === "name") {
               // 按名字在角色背包/技能列表中检索：比 UUID 更稳定（合集包提取后 UUID 会变，名字不变）
               const name = (eff.skillName ?? "").trim();
               if (!name) { descStr = "useSkill：未配置技能名字"; break; }
-              skillItem = (owner?.items ?? []).find(it => it.type === "skill" && it.name === name) ?? null;
+              skillItem = (useTgt?.items ?? []).find(it => it.type === "skill" && it.name === name) ?? null;
               if (!skillItem) { descStr = `useSkill：背包中找不到技能【${name}】`; break; }
             } else {
-              const uuid = eff.skillUuid ?? "";
-              if (!uuid) { descStr = "useSkill：未配置技能UUID"; break; }
-              skillItem = await fromUuid(uuid).catch(() => null);
-              if (!skillItem) { descStr = `useSkill：找不到技能 ${uuid}`; break; }
+              // 标签+等级：在目标的技能列表中按 tags / level 检索
+              const tag = (eff.skillTag ?? "").trim();
+              const lv  = parseInt(eff.skillLevel) || 0;
+              if (!tag) { descStr = "useSkill：未配置技能标签"; break; }
+              skillItem = ClashManager._findSkillByTagLevel(useTgt, tag, lv);
+              if (!skillItem) {
+                descStr = `useSkill：背包中找不到标签为【${tag}】${lv > 0 ? ` Lv.${lv}` : ""}的技能`;
+                break;
+              }
             }
             // 守备技能 → 触发其[使用时] Activities
             if (skillItem.system?.type === "defense") {
               await ClashManager._applyActivities(skillItem, "使用时", {
-                owner, atkActor: ctx.atkActor, defActor: ctx.defActor,
+                owner: useTgt, atkActor: ctx.atkActor, defActor: ctx.defActor,
                 _fireCounts: {}, _actMsgs: ctx._actMsgs ?? [],
               });
-              descStr = `触发【${skillItem.name}】[使用时]`;
+              descStr = `【${useTgt?.name ?? ""}】触发【${skillItem.name}】[使用时]`;
             } else {
               // 非守备技能 → 弹出对抗发起窗口（仅限有 AP 的场景，AP 不足则跳过）
-              const curAP = owner?.system?.ap?.value ?? 0;
-              if (owner && curAP <= 0) await ClashManager._safeDocUpdate(owner, { "system.ap.value": 1 });
-              await ClashManager.showInitiateDialog(owner, skillItem, -2);
-              descStr = `发起对抗：【${skillItem.name}】`;
+              const curAP = useTgt?.system?.ap?.value ?? 0;
+              if (useTgt && curAP <= 0) await ClashManager._safeDocUpdate(useTgt, { "system.ap.value": 1 });
+              await ClashManager.showInitiateDialog(useTgt, skillItem, -2);
+              descStr = `【${useTgt?.name ?? ""}】发起对抗：【${skillItem.name}】`;
             }
             break;
           }
@@ -3834,10 +3826,33 @@ export class ClashManager {
       const val = pre.skillNameOrTag.trim();
       if (!val) return false;
       if (skillItem.name === val) return true;
-      const tags = String(skillItem.system?.tags ?? "").split("/").map(t => t.trim()).filter(Boolean);
-      return tags.includes(val);
+      return ClashManager._itemTags(skillItem).includes(val);
     }
     return false;
+  }
+
+  /** 读取技能物品的标签数组（system.tags 兼容数组与"标签1/标签2"字符串两种存法） */
+  static _itemTags(item) {
+    const raw = item?.system?.tags;
+    const arr = Array.isArray(raw) ? raw : String(raw ?? "").split("/");
+    return arr.map(t => String(t).trim()).filter(Boolean);
+  }
+
+  /**
+   * 在角色的技能列表中按 [标签] + [等级] 检索技能。
+   * @param {Actor}  actor
+   * @param {string} tag   技能标签（skill-tags，system.tags）
+   * @param {number} level 技能等级（skill-level-badge，system.level）；0 = 不限
+   * @returns {Item|null}  命中的第一个技能
+   */
+  static _findSkillByTagLevel(actor, tag, level = 0) {
+    const key = String(tag ?? "").trim();
+    if (!actor || !key) return null;
+    return (actor.items ?? []).find(it =>
+      it.type === "skill" &&
+      ClashManager._itemTags(it).includes(key) &&
+      (!(level > 0) || (it.system?.level ?? 0) === level)
+    ) ?? null;
   }
 
   /** 获取角色属性当前值（hp/sanity/ap） */
@@ -3928,24 +3943,7 @@ export class ClashManager {
     const type = eff?.type ?? "";
     if (type === "useSkill") {
       let skillItem = null;
-      if (eff?.skillRef === "equipped") {
-        // 从拥有者已装备技能中查找
-        const slot  = eff.skillSlot ?? "basic";
-        const level = Math.max(1, parseInt(eff.skillLevel) || 1);
-        if (slot === "defense") {
-          const defId = actor.system?.skills?.defense;
-          skillItem = defId ? actor.items.get(defId) : null;
-        } else {
-          const basicSlots = actor.system?.skills?.basic ?? [];
-          const slotId = basicSlots[level - 1];
-          skillItem = slotId ? actor.items.get(slotId) : null;
-        }
-        if (!skillItem) {
-          const label = slot === "defense" ? "守备技能" : `Lv.${level} 基础技能`;
-          ui.notifications.warn(`反应：未找到已装备的${label}`);
-          return;
-        }
-      } else if (eff?.skillRef === "name") {
+      if (eff?.skillRef === "name") {
         // 按名字在角色背包/技能列表中检索：比 UUID 更稳定（合集包提取后 UUID 会变，名字不变）
         const name = (eff.skillName ?? "").trim();
         if (!name) return;
@@ -3955,11 +3953,13 @@ export class ClashManager {
           return;
         }
       } else {
-        const skillUuid = eff?.skillUuid ?? "";
-        if (!skillUuid) return;
-        skillItem = await fromUuid(skillUuid).catch(() => null);
+        // 标签+等级
+        const tag = (eff?.skillTag ?? "").trim();
+        const lv  = parseInt(eff?.skillLevel) || 0;
+        if (!tag) return;
+        skillItem = ClashManager._findSkillByTagLevel(actor, tag, lv);
         if (!skillItem) {
-          ui.notifications.warn(`反应：找不到技能 ${skillUuid}`);
+          ui.notifications.warn(`反应：背包中找不到标签为【${tag}】${lv > 0 ? ` Lv.${lv}` : ""}的技能`);
           return;
         }
       }
