@@ -53,6 +53,28 @@ export class ChaosTokenLabel {
     return level > 0 ? (names[level - 1] ?? "陷入混乱") : "";
   }
 
+  /**
+   * 把「陷入混乱」拆成单字，奇偶交错上下错开（陷、混偏上；入、乱偏下），
+   * 末尾的 + 号作为上标不参与错位。整体的逆时针倾斜由 .limbus-chaos-inner 负责。
+   */
+  static _buildChars(name) {
+    const inner = document.createElement("span");
+    inner.className = "limbus-chaos-inner";
+    let charIdx = 0;
+    for (const ch of name) {
+      const span = document.createElement("span");
+      if (ch === "+") {
+        span.className = "limbus-chaos-plus";
+      } else {
+        span.className = `limbus-chaos-char limbus-chaos-char--${charIdx % 2 === 0 ? "up" : "down"}`;
+        charIdx++;
+      }
+      span.textContent = ch;
+      inner.appendChild(span);
+    }
+    return inner;
+  }
+
   /** 重绘全部标签 */
   static refresh() {
     const layer = this._getLayer();
@@ -67,7 +89,7 @@ export class ChaosTokenLabel {
 
       const el = document.createElement("div");
       el.className = "limbus-chaos-label";
-      el.textContent = name;
+      el.appendChild(ChaosTokenLabel._buildChars(name));
       // 画布坐标定位；字号随 token 大小走，缩放由 #hud 的 transform 负责
       el.style.left     = `${token.x + token.w / 2}px`;
       el.style.top      = `${token.y + token.h / 2}px`;

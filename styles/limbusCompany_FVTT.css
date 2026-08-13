@@ -8686,11 +8686,30 @@ input.item-piles-quantity {
       0 0 0.18em #FF6A1E,
       0 0 0.42em #C2360C,
       0 0.06em 0.12em rgba(0, 0, 0, .85);
+}
 
+/* 整体逆时针倾斜 10°，呼吸动画也放在这一层，避免和外层的居中位移打架 */
+#limbus-chaos-labels .limbus-chaos-inner {
+  display: inline-block;
+  transform: rotate(-10deg);
   animation: limbus-chaos-label-pulse 1.6s ease-in-out infinite;
 }
 
+/* 单字上下错开：陷、混偏上，入、乱偏下 */
+#limbus-chaos-labels .limbus-chaos-char {
+  display: inline-block;
+}
+#limbus-chaos-labels .limbus-chaos-char--up   { transform: translateY(-0.10em); }
+#limbus-chaos-labels .limbus-chaos-char--down { transform: translateY( 0.10em); }
+
+/* 等级后缀 + 作为上标，不参与错位 */
+#limbus-chaos-labels .limbus-chaos-plus {
+  display: inline-block;
+  font-size: 0.7em;
+  vertical-align: super;
+}
+
 @keyframes limbus-chaos-label-pulse {
-  0%, 100% { opacity: 1;    transform: translate(-50%, -50%) scale(1); }
-  50%      { opacity: .88;  transform: translate(-50%, -50%) scale(1.04); }
+  0%, 100% { transform: rotate(-10deg) scale(1);    opacity: 1;   }
+  50%      { transform: rotate(-10deg) scale(1.04); opacity: .88; }
 }
