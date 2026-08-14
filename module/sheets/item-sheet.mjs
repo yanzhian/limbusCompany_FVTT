@@ -739,6 +739,7 @@ export class LimbusItemSheet extends ItemSheet {
       ${_buildBuffDatalistHtml("ae-buff-dl", cfg)}
       ${_buildTriggerBuffDatalistHtml("ae-trig-buff-dl", cfg)}
       ${_buildOwnedSkillDatalistHtml("ae-owned-skill-dl", this.item.parent)}
+      ${_buildSpecialTremorDatalistHtml("ae-sp-tremor-dl")}
       <div class="ae-v2 limbuscompany">
         <div class="ae-title-bar">效果触发编辑器</div>
         <div class="ae-gold-line"></div>
@@ -2226,14 +2227,30 @@ function _isAmplitudeBuff(key) {
   return _AMPLITUDE_BUFF_TYPES.includes(key);
 }
 
-/** 特殊震颤下拉选项（数据源为 CustomBuffRegistry 中标了 specialTremor 的注册项） */
-function _buildSpecialTremorOptions(selected) {
-  const opts = [`<option value="" ${!selected ? "selected" : ""}>（不附带）</option>`];
-  for (const [type, handler] of CustomBuffRegistry.entries()) {
-    if (handler?.specialTremor !== true) continue;
-    opts.push(`<option value="${type}" ${selected === type ? "selected" : ""}>${handler.label ?? type}</option>`);
+/** 特殊震颤的 datalist（数据源为 CustomBuffRegistry 中标了 specialTremor 的注册项） */
+function _buildSpecialTremorDatalistHtml(id) {
+  const opts = [...CustomBuffRegistry.entries()]
+    .filter(([, h]) => h?.specialTremor === true)
+    .map(([type, h]) => `<option value="${_esc(h.label ?? type)}">`)
+    .join("");
+  return `<datalist id="${id}">${opts}</datalist>`;
+}
+
+/** 存储的特殊震颤 type → 显示用标签（未注册的原样返回，便于排查填错） */
+function _specialTremorLabel(type) {
+  if (!type) return "";
+  return CustomBuffRegistry.get(type)?.label ?? type;
+}
+
+/** 显示用标签 → 特殊震颤 type；无法匹配时返回原文本 */
+function _specialTremorKey(label) {
+  const val = String(label ?? "").trim();
+  if (!val) return "";
+  if (CustomBuffRegistry.get(val)?.specialTremor === true) return val; // 直接填了 type
+  for (const [type, h] of CustomBuffRegistry.entries()) {
+    if (h?.specialTremor === true && h.label === val) return type;
   }
-  return opts.join("");
+  return val;
 }
 
 /** 罪孽资源下拉选项 HTML（七宗罪，与全局罪孽池一一对应） */
@@ -2467,7 +2484,9 @@ function _buildEffectRow(eff, idx, cfg) {
           <!-- 选中【振幅转换】/【振幅纠缠】时出现：随之一并施加的【特殊震颤】 -->
           <span class="ae-eff-amp-tremor-sec" ${_isAmplitudeBuff(eff?.buff) ? "" : 'style="display:none"'}>
             <label>特殊震颤</label>
-            <select class="ae-sel eff-amp-tremor">${_buildSpecialTremorOptions(eff?.ampTremor ?? "")}</select>
+            <input class="ae-input eff-amp-tremor" type="text" list="ae-sp-tremor-dl"
+                   placeholder="如：震颤-灼热（留空则不附带）" autocomplete="off" style="width:130px;"
+                   value="${_esc(_specialTremorLabel(eff?.ampTremor ?? ""))}">
           </span>
         </span>
         <span class="ae-eff-val-sec" ${isValSec ? "" : 'style="display:none"'}>
@@ -3022,7 +3041,7 @@ function _readActivityForm(html, original) {
       buffCustom:     "",
       intensity:      isBuff        ? (parseInt($r.find(".eff-intensity").val()) || 0) : 0,
       stacks:         isBuff        ? (parseInt($r.find(".eff-stacks").val())    || 0) : 0,
-      ampTremor:      isBuff        ? ($r.find(".eff-amp-tremor").val() || "")      : "",
+      ampTremor:      isBuff        ? _specialTremorKey($r.find(".eff-amp-tremor").val()) : "",
       value:          (!isBuff && !isTriggerBuff) ? ($r.find(".eff-value").val()?.trim() || "") : "",
       trigBuff:       isTriggerBuff ? resolveKey($r.find(".eff-trig-buff").val()) : "",
       trigBuffCustom: "",
