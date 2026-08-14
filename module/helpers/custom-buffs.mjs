@@ -7,22 +7,48 @@
  *   registerCustomBuff("myBuff", {
  *     label:         "显示名称",
  *     maxStacks:     4,          // 可选：最大层数上限（超出则截断）
+ *     maxGainPerRound: 20,       // 可选：本回合累计可获得的层数上限（与 maxStacks 无关；
+ *                                //       计数记在 actor flag buffRoundGain 上，每轮结束清空）
  *     refreshOnGain: true,       // 可选：获得时刷新（不叠加层数，直接替换）
  *     keepAtZero:    true,       // 可选：层数减至 0 时不自动清除（仍以 0 层留在状态栏，
  *                                //       需手动 removeBuff 或其他效果移除）
  *     onRoundEnd(actor, buff) {},           // 回合结束时回调 → 返回 Promise
+ *     onRoundStart(actor, buff) {},         // 回合开始时回调（在同一轮的 onRoundEnd 之后执行，
+ *                                             // 因此回合结束时被移除的 BUFF 不会再触发）；
+ *                                             // 返回字符串则并入「回合开始时」折叠汇总消息
  *     modifySpeedRoll(actor, ctx) {},       // 速度骰结果修正 → 返回最终 total（Number）
- *     onClashWin(carrier, opponent) {},     // 拼点胜利时回调 → 返回 Promise
- *     beforeChaos(actor, buff) {},          // 混乱触发前检查 → 返回 { immune: bool }
+ *     onClashWin(carrier, opponent, buff) {},  // 拼点胜利时回调 → 返回 Promise
+ *     onClashLose(carrier, winner, buff) {},   // 拼点失败时回调（与 onClashWin 对称）
+ *     onBuffGained(actor, buff, ctx) {},    // 该角色获得任意 BUFF 后调用（不只是自己这条），
+ *                                             // ctx = { type, intensity, stacks }
+ *     onBuffLost(actor, buff, ctx) {},      // 该角色失去/减少任意 BUFF 后调用，
+ *                                             // ctx = { type, amount, stacks, removed }
+ *     modifyDiceRoll(actor, buff, ctx) {},  // 拼点骰/防守骰结果修正 → 返回数字或 { total, note }；
+ *                                             // ctx = { roll, total, item, isDefense }
+ *     beforeChaos(actor, buff, ctx) {},     // 混乱触发前检查 → 返回 { immune: bool }；
+ *                                             // ctx = { source }，source 为伤害来源（"burn"/"bleed"/…）
  *     modifyResistances(actor, buff, res) {}, // 修改物理抗性：res = { slash, blunt, pierce }（"xN.0" 字符串），
  *                                             // 可原地修改或返回部分覆盖对象（如 { slash: "x2.0" }）；
  *                                             // 陷入混乱的强制抗性优先级更高，混乱时不会调用此钩子
- *     modifyIncomingDamage(actor, buff, ctx) {}, // 受到伤害结算前调用，ctx = { damage, attacker }；
- *                                             // 返回 { damage?: number, hpLock?: number } 覆盖本次伤害/
- *                                             // 生命值锁定（hpLock 非空时跳过护盾/破裂/沉沦/震颤结算，HP 直接钉死）
+ *     modifyIncomingDamage(actor, buff, ctx) {}, // 受到伤害结算前调用，
+ *                                             // ctx = { damage, attacker, source }；
+ *                                             // source："clash"=对抗伤害，"burn"/"bleed"/"rupture"=跳动伤害
+ *                                             // 返回 { damage?, hpLock?, hpFloor?, note? }：
+ *                                             //   damage  覆盖本次伤害
+ *                                             //   hpLock  生命值锁定（跳过护盾/破裂/沉沦/震颤，HP 直接钉死；仅对抗路径）
+ *                                             //   hpFloor 本次伤害不得把 HP 压到该值以下（仅跳动伤害路径）
+ *     modifyOutgoingDamage(actor, buff, ctx) {}, // 自己打出伤害前调用（与 modifyIncomingDamage 对称），
+ *                                             // ctx = { damage, target, category, sinType, item }；
+ *                                             // 返回 { damage?, note? }
  *     onHit(actor, buff, ctx) {},            // 自己任意技能/装备 [命中时] 结算后调用（异步），
- *                                             // ctx = { item, category, target, addBuff(type,intensity,stacks,whenAdded),
- *                                             //          getBuff(type), dealDamage(targetActor, category, rollFormula) }
+ *                                             // ctx = { item, category, target,
+ *                                             //          addBuff(type,intensity,stacks,whenAdded),
+ *                                             //          addBuffTo(targetActor,type,intensity,stacks,whenAdded),
+ *                                             //          getBuff(type),
+ *                                             //          dealDamage(targetActor, category, rollFormula, sinType) }
+ *                                             // dealDamage 的 category（物理分类）与 sinType（罪孽）均可留空，
+ *                                             // 分别按物理抗性 / 罪孽抗性结算
+ *                                             // 返回字符串则并入本次结算的 ⚡ 活动消息
  *   });
  *
  * 以上所有钩子均为可选。未提供的钩子不会被调用。
@@ -77,6 +103,37 @@ export function normalizeBuffType(type, name = "") {
   return type;
 }
 
+/* ─── 震颤族（普通震颤 + 特殊震颤） ─────────────────────────────────────── */
+
+/**
+ * 「特殊震颤」是一类会被【震颤引爆】当作震颤对待的 BUFF：同样有层数/强度，
+ * 引爆时同样消耗 1 层、把目标混乱阈值前移自身强度，区别是可以再挂一段额外效果。
+ * 注册方式：registerCustomBuff("xxx", { specialTremor: true, onSeismicBlast(...) })
+ *
+ *   onSeismicBlast(target, buff, ctx) → 返回一行说明文本（可选），并入引爆消息
+ *     ctx = { attacker,
+ *             getBuff(type),                                     // 读 target 身上的 BUFF
+ *             addBuff(type, intensity, stacks, whenAdded),       // 给 target 加 BUFF
+ *             dealDamage(targetActor, category, formula, sinType) }
+ */
+export const TREMOR_BASE_TYPE = "tremor";
+
+/** 该 type 是否属于震颤族（普通震颤或任一特殊震颤） */
+export function isTremorFamilyType(type) {
+  if (type === TREMOR_BASE_TYPE) return true;
+  return CustomBuffRegistry.get(type)?.specialTremor === true;
+}
+
+/** 全部已注册的特殊震颤 type */
+export function specialTremorTypes() {
+  return [...CustomBuffRegistry.entries()]
+    .filter(([, h]) => h?.specialTremor === true)
+    .map(([t]) => t);
+}
+
+/** 依附于震颤存在的 BUFF：震颤族全部消失时，它们也一并消失 */
+export const TREMOR_DEPENDENT_TYPES = ["amplitudeConvert", "amplitudeEntangle"];
+
 /* ─── 内置自定义 BUFF ───────────────────────────────────────────────────── */
 
 /**
@@ -128,39 +185,16 @@ registerCustomBuff("defensiveStance", {
    */
   async onClashWin(carrier, opponent) {
     if (!opponent) return;
-    const buffs    = opponent.system?.buffs ?? [];
-    const tremor   = buffs.find(b => b.type === "tremor" && (b.stacks ?? 0) > 0);
-    if (!tremor) return;
-
-    const intensity = tremor.intensity ?? 1;
-    const thresholds = foundry.utils.deepClone(opponent.system?.chaosThresholds ?? []);
-    let shifted = false;
-    for (let i = 0; i < thresholds.length; i++) {
-      thresholds[i] = { ...thresholds[i], percent: (thresholds[i].percent ?? 0) + intensity };
-      shifted = true;
-    }
-    if (shifted) {
-      await opponent.update({ "system.chaosThresholds": thresholds });
-    }
-
-    // 消耗 1 层震颤
-    if (typeof opponent.reduceBuffStacks === "function") {
-      await opponent.reduceBuffStacks("tremor");
-    } else {
-      const nb  = foundry.utils.deepClone(opponent.system?.buffs ?? []);
-      const tidx = nb.findIndex(b => b.type === "tremor");
-      if (tidx >= 0) {
-        nb[tidx].stacks = Math.max(0, (nb[tidx].stacks ?? 1) - 1);
-        if (nb[tidx].stacks <= 0) nb.splice(tidx, 1);
-        await opponent.update({ "system.buffs": nb });
-      }
-    }
+    // 统一走 ClashManager.seismicBlast：特殊震颤 / 振幅纠缠的规则一并生效
+    const { ClashManager } = await import("./clash.mjs");
+    const { blasts, msgs } = await ClashManager.seismicBlast(opponent, 1, { attacker: carrier });
+    if (blasts <= 0) return;
 
     await ChatMessage.create({
       speaker: ChatMessage.getSpeaker({ actor: carrier }),
       content: `<div class="limbuscompany chat-clash">
-        <strong>${carrier.name}</strong>【防御姿态】触发：对 <strong>${opponent.name}</strong> 震颤引爆！
-        混乱阈值各前移 <strong>${intensity}%</strong>。
+        <strong>${carrier.name}</strong>【防御姿态】触发：对 <strong>${opponent.name}</strong> 震颤引爆！<br>
+        ${msgs.join("<br>")}
       </div>`,
     });
   },
@@ -441,6 +475,321 @@ registerCustomBuff("vengeanceLedger", {
   description: "- 最大值：20 层",
   maxStacks:   20,
 });
+
+/* ─── 【炎蝶之棺】/【黎明之火】——共用被动 + 各自主动 ───────────────────── */
+
+/**
+ * 两者共用的被动部分：
+ * - 最大 30 层，每回合最多获得 20 层
+ * - 不会因【烧伤】伤害陷入混乱
+ * - 【烧伤】伤害不会使自身生命值降至 1 点以下
+ * - 自身受到的【烧伤】伤害 -50%（向下取整）
+ */
+const FLAME_SHARED = {
+  maxStacks:        30,
+  maxGainPerRound:  20,
+
+  /** 免疫【烧伤】造成的混乱触发 */
+  beforeChaos(_actor, _buff, ctx) {
+    if (ctx?.source === "burn") return { immune: true };
+  },
+
+  /** 烧伤伤害减半（向下取整），且不会把生命值压到 1 点以下 */
+  modifyIncomingDamage(_actor, _buff, ctx) {
+    if (ctx?.source !== "burn") return;
+    return { damage: Math.floor((ctx.damage ?? 0) / 2), hpFloor: 1 };
+  },
+};
+
+const FLAME_SHARED_DESC =
+  "- 最大值：30 层\n"
+  + "- 每回合最多获得 20 层\n"
+  + "- 自身不会因【烧伤】伤害陷入混乱，或使生命值降至 1 点以下\n"
+  + "- 自身受到的【烧伤】伤害 -50%（向下取整）";
+
+/**
+ * 【炎蝶之棺】
+ * [回合结束时]：获得本层数一半的【烧伤】强度；
+ *               若本层数为 30 层，则改为直接设为 2 层 5 级【烧伤】。
+ */
+registerCustomBuff("flameButterflyCoffin", {
+  ...FLAME_SHARED,
+  label:       "炎蝶之棺",
+  description: `${FLAME_SHARED_DESC}\n[回合结束时]：获得本层数一半的【烧伤】强度\n- 若本层数为 30 层，则改为 2 层 5 级【烧伤】`,
+
+  async onRoundEnd(actor, buff) {
+    const stacks = buff.stacks ?? 0;
+    if (stacks <= 0) return;
+
+    const buffs = foundry.utils.deepClone(actor.system?.buffs ?? []);
+    const bi    = buffs.findIndex(b => b.type === "burn" && (b.whenAdded ?? "本回合") !== "下回合");
+    let   note;
+
+    if (stacks >= 30) {
+      // 满层：直接改写为 2 层 5 级【烧伤】（是"修改为"，不是叠加）
+      if (bi >= 0) {
+        buffs[bi].stacks    = 2;
+        buffs[bi].intensity = 5;
+      } else {
+        buffs.push({
+          id: foundry.utils.randomID(), type: "burn", name: "烧伤",
+          icon: "systems/limbusCompany_FVTT/assets/icons/Buff_icon/烧伤.webp",
+          intensity: 5, stacks: 2, whenAdded: "本回合",
+        });
+      }
+      note = "满 30 层：【烧伤】修改为 <strong>2</strong> 层 <strong>5</strong> 级";
+    } else {
+      const gain = Math.floor(stacks / 2);
+      if (gain <= 0) return;
+      if (bi >= 0) {
+        buffs[bi].intensity = (buffs[bi].intensity ?? 0) + gain;
+        if (!(buffs[bi].stacks > 0)) buffs[bi].stacks = 1;
+      } else {
+        buffs.push({
+          id: foundry.utils.randomID(), type: "burn", name: "烧伤",
+          icon: "systems/limbusCompany_FVTT/assets/icons/Buff_icon/烧伤.webp",
+          intensity: gain, stacks: 1, whenAdded: "本回合",
+        });
+      }
+      note = `获得 <strong>${gain}</strong> 级【烧伤】强度（本层数 ${stacks} 的一半）`;
+    }
+
+    await actor.update({ "system.buffs": buffs });
+    await ChatMessage.create({
+      speaker: ChatMessage.getSpeaker({ actor }),
+      content: `<div class="limbuscompany chat-clash"><strong>${actor.name}</strong>【炎蝶之棺】：${note}。</div>`,
+    });
+  },
+});
+
+/**
+ * 【黎明之火】
+ * [命中时]：不低于 10 层 → 为目标添加 2 级【烧伤】
+ * [命中时]：不低于 20 层 → 为目标添加 1 层【烧伤】
+ * （两条各自独立判定，20 层及以上时两条同时生效）
+ */
+registerCustomBuff("dawnFire", {
+  ...FLAME_SHARED,
+  label:       "黎明之火",
+  description: `${FLAME_SHARED_DESC}\n[命中时]：若不低于 10 层，为目标添加 2 级【烧伤】\n[命中时]：若不低于 20 层，为目标添加 1 层【烧伤】`,
+
+  async onHit(actor, buff, ctx) {
+    const target = ctx?.target;
+    if (!target) return;
+    const stacks = buff.stacks ?? 0;
+    if (stacks < 10) return;
+
+    // 强度 2 / 层数 0：只加强度不加层；20 层起再补 1 层
+    const addIntensity = 2;
+    const addStacks    = stacks >= 20 ? 1 : 0;
+
+    // 不能直接用 addBuffTo：烧伤属于"层数为 0 自动订正为 1"的基础 BUFF，
+    // 10~19 层这档只该加强度、不该加层，所以在快照上手动处理
+    // （目标原本没有烧伤时才建 1 层，否则 0 层的烧伤不会发作）。
+    const buffs = foundry.utils.deepClone(target.system?.buffs ?? []);
+    const bi    = buffs.findIndex(b => b.type === "burn" && (b.whenAdded ?? "本回合") !== "下回合");
+    if (bi >= 0) {
+      buffs[bi].intensity = (buffs[bi].intensity ?? 0) + addIntensity;
+      buffs[bi].stacks    = Math.max(1, (buffs[bi].stacks ?? 0) + addStacks);
+    } else {
+      buffs.push({
+        id: foundry.utils.randomID(), type: "burn", name: "烧伤",
+        icon: "systems/limbusCompany_FVTT/assets/icons/Buff_icon/烧伤.webp",
+        intensity: addIntensity, stacks: Math.max(1, addStacks), whenAdded: "本回合",
+      });
+    }
+    // clash.mjs 静态 import 了本文件，反向只能动态 import，避免循环依赖
+    const { ClashManager } = await import("./clash.mjs");
+    await ClashManager._safeDocUpdate(target, { "system.buffs": buffs });
+
+    return `【黎明之火】（${stacks} 层）：为 <strong>${target.name}</strong> 添加 `
+      + `<strong>${addIntensity}</strong> 级${addStacks > 0 ? ` <strong>${addStacks}</strong> 层` : ""}【烧伤】。`;
+  },
+});
+
+/**
+ * 【迎接黎明】
+ * - 最大值：3 层
+ * - [回合开始时]：为你添加 2 层【攻击等级提升】；若"背景"为"黎明事务所"，额外 1 层【强壮】
+ * - [命中时]：为目标添加 1 层 1 级【烧伤】，额外造成 1D12 的暴怒伤害
+ * - [回合结束时]：本效果层数减少 1 层
+ */
+registerCustomBuff("greetTheDawn", {
+  label:       "迎接黎明",
+  description: "- 最大值：3 层\n"
+    + "- [回合开始时]：为你添加 2 层【攻击等级提升】，若你的背景为「黎明事务所」额外添加 1 层【强壮】\n"
+    + "- [命中时]：为目标添加 1 层 1 级【烧伤】，额外造成 1D12 的暴怒伤害\n"
+    + "- [回合结束时]：本效果层数减少 1 层",
+  maxStacks:   3,
+
+  async onRoundStart(actor, _buff) {
+    const { ClashManager } = await import("./clash.mjs");
+    await ClashManager._addBuff(actor, "atkLevelUp", 0, 2, "本回合");
+
+    const isDawnOffice = await _hasBackgroundNamed(actor, "黎明事务所");
+    if (isDawnOffice) await ClashManager._addBuff(actor, "strong", 0, 1, "本回合");
+
+    return `获得 <strong>2</strong> 层【攻击等级提升】`
+      + (isDawnOffice ? `，背景「黎明事务所」额外获得 <strong>1</strong> 层【强壮】` : "")
+      + "。";
+  },
+
+  async onHit(_actor, _buff, ctx) {
+    const target = ctx?.target;
+    if (!target) return;
+    await ctx.addBuffTo?.(target, "burn", 1, 1, "本回合");
+    const dmg = await ctx.dealDamage?.(target, "", "1d12", "wrath");
+    return `为 <strong>${target.name}</strong> 添加 1 层 1 级【烧伤】，`
+      + `并造成 <strong>${dmg ?? 0}</strong> 点【暴怒】伤害。`;
+  },
+
+  /** 回合结束：层数 -1，归零时移除 */
+  async onRoundEnd(actor, buff) {
+    const buffs = foundry.utils.deepClone(actor.system?.buffs ?? []);
+    const idx   = buffs.findIndex(b => b.id === buff.id);
+    if (idx < 0) return;
+    const newStacks = (buffs[idx].stacks ?? 1) - 1;
+    if (newStacks <= 0) buffs.splice(idx, 1);
+    else                buffs[idx].stacks = newStacks;
+    await actor.update({ "system.buffs": buffs });
+  },
+});
+
+/* ─── 振幅系 & 特殊震颤 ─────────────────────────────────────────────────── */
+
+/**
+ * 两个振幅 BUFF 共用的事件响应：
+ * - 震颤族有任何增减 → 【振幅纠缠】下把各特殊震颤同步到【震颤】的层数/强度
+ * - 震颤族被打空     → 自己（【振幅转换】/【振幅纠缠】）一并消失
+ * 这两件事原先硬编码在 ClashManager._addBuff 里，现在改为挂在
+ * onBuffGained / onBuffLost 事件上，任何加减 BUFF 的路径都能覆盖到。
+ */
+const AMPLITUDE_EVENTS = {
+  async onBuffGained(actor, _buff, ctx) {
+    if (!isTremorFamilyType(ctx?.type ?? "")) return;
+    const { ClashManager } = await import("./clash.mjs");
+    await ClashManager._syncTremorFamily(actor);
+  },
+  async onBuffLost(actor, _buff, ctx) {
+    if (!isTremorFamilyType(ctx?.type ?? "")) return;
+    const { ClashManager } = await import("./clash.mjs");
+    await ClashManager._syncTremorFamily(actor);
+    await ClashManager._cleanupTremorDependents(actor);
+  },
+};
+
+/**
+ * 【振幅转换】
+ * - 持有期间，任何震颤族的施加都并入现有的那一种（层数、强度分别求和），
+ *   施加特殊震颤则整体转为该类型，施加普通【震颤】则被现有的特殊震颤吸收。
+ * - 不消耗层数，持续生效；因此持有期间震颤族始终只有一种。
+ * - 目标身上震颤族全部消失时，本效果一并消失。
+ */
+registerCustomBuff("amplitudeConvert", {
+  ...AMPLITUDE_EVENTS,
+  label:       "振幅转换",
+  description: "- 只能在目标拥有【震颤】或【特殊震颤】时添加\n"
+    + "- 持有期间，施加任何震颤都并入现有的那一种：施加【特殊震颤】则转换为该类型，\n"
+    + "  施加普通【震颤】则被现有的特殊震颤吸收；层数与强度分别相加\n"
+    + "- 转换不消耗层数，持有期间震颤族只会存在一种\n"
+    + "- 目标失去全部震颤时，本效果消失",
+});
+
+/**
+ * 【振幅纠缠】
+ * - 持有期间，特殊震颤与普通震颤并列存在（不再互相转换），
+ *   且各特殊震颤的层数与强度始终同步于普通【震颤】。
+ * - 每次【震颤引爆】只结算 1 次【震颤】的基础效果（阈值前移 + 扣 1 层），
+ *   随后各【特殊震颤】各跑一次自己的额外效果。
+ * - 目标身上震颤族全部消失时，本效果一并消失。
+ */
+registerCustomBuff("amplitudeEntangle", {
+  ...AMPLITUDE_EVENTS,
+  label:       "振幅纠缠",
+  description: "- 只能在目标拥有【震颤】或【特殊震颤】时添加\n"
+    + "- 持有期间，【特殊震颤】与【震颤】并列存在，不再互相转换\n"
+    + "- 各【特殊震颤】的层数与强度同步于【震颤】\n"
+    + "- 受到【震颤引爆】时，只触发 1 次【震颤】的基础效果，随后触发各【特殊震颤】的额外效果\n"
+    + "- 目标失去全部震颤时，本效果消失",
+});
+
+/**
+ * 【震颤-灼热】——特殊震颤
+ * - 会受到【震颤引爆】效果（消耗 1 层、混乱阈值前移本效果强度）
+ * - 额外效果：受到引爆时，承受 (本效果强度 + 自身【烧伤】强度) / 2 点【暴怒】伤害
+ *   （自身没有烧伤时即为 本效果强度 / 2，向下取整）
+ */
+registerCustomBuff("tremorHeat", {
+  label:         "震颤-灼热",
+  specialTremor: true,
+  description:   "·特殊震颤（会受到【震颤引爆】效果）\n"
+    + "·额外效果 受到【震颤引爆】时：受到（自身的震颤强度与烧伤强度之和 ÷ 2）点【暴怒】伤害",
+
+  async onSeismicBlast(target, buff, ctx) {
+    const tremorInt = buff.intensity ?? 0;
+    const burnInt   = ctx.getBuff?.("burn")?.intensity ?? 0;
+    const amount    = Math.floor((tremorInt + burnInt) / 2);
+    if (amount <= 0) return;
+    const dealt = await ctx.dealDamage?.(target, "", `${amount}`, "wrath");
+    return `【震颤-灼热】额外效果：(震颤强度 ${tremorInt} + 烧伤强度 ${burnInt}) ÷ 2 = `
+      + `<strong>${amount}</strong> → 造成 <strong>${dealt ?? 0}</strong> 点【暴怒】伤害。`;
+  },
+});
+
+/**
+ * 【震颤-回响】——特殊震颤
+ * - 会受到【震颤引爆】效果
+ * - 额外效果：受到引爆时，承受「自身震颤强度」点【怠惰】伤害
+ */
+registerCustomBuff("tremorEcho", {
+  label:         "震颤-回响",
+  specialTremor: true,
+  description:   "·特殊震颤（会受到【震颤引爆】效果）\n"
+    + "·额外效果 受到【震颤引爆】时：受到自身震颤强度点【怠惰】伤害",
+
+  async onSeismicBlast(target, buff, ctx) {
+    const amount = buff.intensity ?? 0;
+    if (amount <= 0) return;
+    const dealt = await ctx.dealDamage?.(target, "", `${amount}`, "sloth");
+    return `【震颤-回响】额外效果：震颤强度 <strong>${amount}</strong> → `
+      + `造成 <strong>${dealt ?? 0}</strong> 点【怠惰】伤害。`;
+  },
+});
+
+/**
+ * 【震颤-崩坏】——特殊震颤
+ * - 会受到【震颤引爆】效果
+ * - 额外效果：受到引爆时，每带有 4 级震颤强度，防御等级减少 1 级
+ */
+registerCustomBuff("tremorCollapse", {
+  label:         "震颤-崩坏",
+  specialTremor: true,
+  description:   "·特殊震颤（会受到【震颤引爆】效果）\n"
+    + "·额外效果 受到【震颤引爆】时：每带有 4 级震颤强度，防御等级减少 1 级",
+
+  async onSeismicBlast(_target, buff, ctx) {
+    const levels = Math.floor((buff.intensity ?? 0) / 4);
+    if (levels <= 0) return;
+    await ctx.addBuff?.("defLevelDown", 0, levels, "本回合");
+    return `【震颤-崩坏】额外效果：震颤强度 ${buff.intensity ?? 0} ÷ 4 → `
+      + `获得 <strong>${levels}</strong> 层【防御等级降低】。`;
+  },
+});
+
+/**
+ * 判断角色的「背景」是否为指定名称。
+ * 优先解析结构化背景（system.background.uuid 指向的背景物品），
+ * 回退到旧版自由文本背景标签 system.backgroundTag。
+ */
+async function _hasBackgroundNamed(actor, name) {
+  const uuid = actor?.system?.background?.uuid ?? "";
+  if (uuid) {
+    const bg = await fromUuid(uuid).catch(() => null);
+    if (bg?.name === name) return true;
+  }
+  const tag = String(actor?.system?.backgroundTag ?? "");
+  return tag.split(/[\/,，、\s]+/).map(t => t.trim()).includes(name);
+}
 
 /* ═══════════════════════════════════════════════════════════════════════════
    场地资源（FieldResourceRegistry）

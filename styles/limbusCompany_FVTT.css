@@ -5058,40 +5058,101 @@ body.game .limbuscompany.app img {
   border-color: #8B1A1A;
 }
 
-/* ── 技能选择器弹窗内容区 ── */
+/* ══════════════════════════════════════════════════════════════
+   「拼点对抗」技能选择器弹窗
+   结构：金色分割线 → 两个已激活技能 + 守备技能 → 金色分割线
+         → 展开按钮（白色）→ 展开区（6-bag 剩余技能 + EGO，固定 3 列）
+   ══════════════════════════════════════════════════════════════ */
 .limbuscompany .clash-pick-dialog {
+  --pick-slot: 74px;
   font-family: var(--font-main);
-  color: var(--text-main);
-  padding: 4px 2px;
+  color:       var(--text-main);
+  padding:     4px 2px;
+  min-width:   260px;
 }
 
-/* 技能格默认边框 */
+/* 顶部一行：两个已激活技能 + 守备技能 */
+.clash-pick-row {
+  display:         flex;
+  gap:             16px;
+  justify-content: center;
+  padding:         12px 0;
+}
+
+/* 展开区：固定 3 列，基础技能与 EGO 统一排布 */
+.clash-pick-grid {
+  display:               grid;
+  grid-template-columns: repeat(3, var(--pick-slot, 74px));
+  gap:                   14px 18px;
+  justify-content:       center;
+  justify-items:         center;
+  padding:               12px 0 8px;
+}
+
+/* 技能格：方形图 + 罪孽色描边 */
 .clash-pick-slot {
+  position:      relative;
+  width:         var(--pick-slot, 74px);
+  height:        var(--pick-slot, 74px);
+  flex-shrink:   0;
   border-radius: 2px;
-  transition: filter .15s, box-shadow .15s;
+  cursor:        pointer;
+  transition:    filter .15s, box-shadow .15s;
+}
+.clash-pick-slot img {
+  width:      100%;
+  height:     100%;
+  object-fit: cover;
+  display:    block;
+  box-sizing: border-box;
+  border:     2px solid var(--border-gold, #C9A84C);   /* 实际颜色由内联的罪孽色覆盖 */
 }
 
-.clash-pick-slot:not(.clash-pick-empty):hover {
-  filter: brightness(1.3);
+.clash-pick-slot:not(.clash-pick-empty):not(.clash-pick-disabled):hover {
+  filter:     brightness(1.3);
   box-shadow: 0 0 6px 2px rgba(201,168,76,.6);
+  border-radius: 4px;
+}
+
+/* 恐慌中不可用的技能格 */
+.clash-pick-disabled {
+  cursor:  not-allowed;
+  opacity: .35;
+  filter:  grayscale(1);
 }
 
 /* 空格 */
 .clash-pick-empty {
   background: rgba(255,255,255,.04);
-  border: 2px dashed rgba(201,168,76,.3);
-  /* clip-path: polygon(25% 0%,75% 0%,100% 25%,100% 75%,75% 100%,25% 100%,0% 75%,0% 25%); */
-  cursor: default !important;
+  border:     2px dashed rgba(201,168,76,.3);
+  cursor:     default !important;
 }
 
-/* 相关技能切换按钮（选择器内） */
-.clash-pick-rel {
-  transition: color .15s, border-color .15s;
+/* EGO 圆形槽 + 等级名（空等级不渲染，与快捷 HUD 一致） */
+.clash-pick-ego {
+  display:        flex;
+  flex-direction: column;
+  align-items:    center;
+  gap:            3px;
 }
-.clash-pick-rel.rel-active {
-  color: #6EE06E !important;
-  border-color: #6EE06E !important;
+.clash-pick-ego-grade {
+  font-size: 9px;
+  color:     #9A8462;
 }
+
+/* 展开按钮：白色 */
+.clash-pick-expand-wrap { text-align: center; margin: 2px 0 4px; }
+.clash-pick-expand-btn {
+  background:  none;
+  border:      none;
+  color:       #FFFFFF;
+  font-size:   1.3rem;
+  line-height: 1;
+  cursor:      pointer;
+  padding:     2px 10px;
+  transition:  color .15s, transform .15s;
+}
+.clash-pick-expand-btn:hover { color: #C9A84C; transform: translateY(1px); }
 
 /* ── Dialog 按钮尺寸（override foundry default） ── */
 .dialog .dialog-button.clash,
@@ -5682,7 +5743,7 @@ body.game .limbuscompany.app img {
 .qa-skill-row {
   /* 整格大小 / 边框中空区内缩比例（技能图多大）/ 相邻格重叠量 */
   --skill-size:    100px;
-  --art-inset:     15%;
+  --art-inset:     24%;
   --skill-overlap: 22px;
 
   display:     flex;
@@ -5770,6 +5831,78 @@ body.game .limbuscompany.app img {
   100% { transform: translateX(0); }
 }
 .qa-skill-slot--shifting { animation: qa-skill-shift .3s ease-out backwards; }
+
+/* ══════════════════════════════════════════════════════════════
+   E.G.O 模式：单击头像切换。左右两块隐藏，5 个 EGO 等级环绕七边形
+   （底部两条边已被生命值/理智值占用，剩余 5 条正好对应 5 个等级）。
+   槽位坐标由 JS 按边中点方向角算出（见 QA_EGO_ANGLES / QA_EGO_RADIUS），
+   以百分比写入 inline style，故此处只管样式不管定位。
+   ══════════════════════════════════════════════════════════════ */
+/* EGO 模式：左右两块只隐藏、不移除（visibility 保留占位），
+   这样切换模式时中央七边形与底部 BUFF 栏的位置完全不变。
+   EGO 槽是绝对定位、不参与布局，正好铺在左右两块空出来的视觉区域上。
+   两套元素都常驻 DOM，切换时只改 opacity/visibility，因此有淡入淡出过渡。
+   visibility 用 0.22s 的 transition 而非直接切换，是为了让它在淡出结束后
+   才真正生效——否则元素会立刻不可点、看不到渐隐过程。 */
+.qa-btn-group--left,
+.qa-right-block {
+  transition: opacity .22s ease, visibility .22s;
+}
+
+/* 基础面板：EGO 模式下淡出 */
+.qa-hud--ego .qa-btn-group--left,
+.qa-hud--ego .qa-right-block {
+  opacity:    0;
+  visibility: hidden;
+}
+
+/* EGO 槽：默认隐藏，进入 EGO 模式才淡入
+   （transition 里必须一并声明 opacity/visibility，否则会覆盖掉淡入淡出） */
+.qa-ego-slot {
+  --ego-size: 62px;
+  position:   absolute;
+  width:      var(--ego-size);
+  height:     var(--ego-size);
+  transform:  translate(-50%, -50%);   /* inline 的 left/top 是槽位中心 */
+  cursor:     pointer;
+  z-index:    6;
+  opacity:    0;
+  visibility: hidden;
+  transition: transform .12s, filter .12s, opacity .22s ease, visibility .22s;
+}
+.qa-hud--ego .qa-ego-slot {
+  opacity:    1;
+  visibility: visible;
+}
+.qa-ego-slot:hover {
+  transform: translate(-50%, -50%) scale(1.08);
+  filter:    brightness(1.15);
+  z-index:   10;
+}
+/* 内部图层复用基础技能格的两层结构（技能图 + 边框）。
+   但 EGO 边框 E.G.O.webp 是圆环、不是七边形，内图需改为圆形裁切，
+   否则会沿用 .qa-skill-art 默认的七边形 clip-path 而与圆环对不上。 */
+.qa-ego-slot .qa-skill-art {
+  --art-inset:   15%;
+  clip-path:     none;
+  border-radius: 50%;
+}
+
+/* 等级名（ZAYIN / TET / HE / WAW / ALEPH）
+   压在槽位底部内侧而非外侧：下方两个槽（ZAYIN/ALEPH）的标签若放在槽外，
+   会越过七边形底边压到 BUFF 栏上。 */
+.qa-ego-grade {
+  position:    absolute;
+  left:        50%;
+  bottom:      -2px;
+  transform:   translateX(-50%);
+  font-size:   11px;
+  font-weight: bold;
+  color:       #E8C9A2;
+  white-space: nowrap;
+  pointer-events: none;
+  text-shadow: 1px 1px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000;
+}
 
 /* 瞄准中的源技能格：上浮并压暗，把视线让给箭头 */
 .qa-skill-row .qa-skill-slot--aiming {
@@ -6160,8 +6293,9 @@ body.game .limbuscompany.app img {
   width:           calc(var(--hex-size) * 0.26);
   height:          calc(var(--hex-size) * 0.26);
   border-radius:   50%;
-  background:      #4A90C4;
-  border:          2px solid #2E6A96;
+  /* 底色/描边由模板按理智值内联写入（见 _sanityColors），此处仅作兜底 */
+  background:      #6A6A6A;
+  border:          2px solid #414141;
   box-sizing:      border-box;
   display:         flex;
   align-items:     center;
@@ -8518,3 +8652,64 @@ input.item-piles-quantity {
 .desc-trigger-chip.trigger-green  { color: #7FBF7F; }
 .desc-trigger-chip.trigger-orange { color: #E0A050; }
 .desc-trigger-chip.trigger-red    { color: #E84444; }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   【陷入混乱】token 悬浮字样
+   容器挂在 Foundry 的 #hud 层里，位置用画布坐标写，平移/缩放由 #hud 自身的
+   transform 跟随，所以这里只负责样式。
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+#limbus-chaos-labels {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;   /* 不挡 token 点击 */
+  z-index: 1;
+}
+
+#limbus-chaos-labels .limbus-chaos-label {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  white-space: nowrap;
+  pointer-events: none;
+  user-select: none;
+
+  font-family: "Noto Sans SC", "Microsoft YaHei", sans-serif;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  line-height: 1;
+  color: #FFFFFF;
+
+  /* 深色描边 + 橙红外发光，模拟原作混乱字样 */
+  -webkit-text-stroke: 0.12em #2A0D05;
+  paint-order: stroke fill;
+  text-shadow:
+      0 0 0.18em #FF6A1E,
+      0 0 0.42em #C2360C,
+      0 0.06em 0.12em rgba(0, 0, 0, .85);
+}
+
+/* 整体逆时针倾斜 10°，呼吸动画也放在这一层，避免和外层的居中位移打架 */
+#limbus-chaos-labels .limbus-chaos-inner {
+  display: inline-block;
+  transform: rotate(-10deg);
+  animation: limbus-chaos-label-pulse 1.6s ease-in-out infinite;
+}
+
+/* 单字上下错开：陷、混偏上，入、乱偏下 */
+#limbus-chaos-labels .limbus-chaos-char {
+  display: inline-block;
+}
+#limbus-chaos-labels .limbus-chaos-char--up   { transform: translateY(-0.10em); }
+#limbus-chaos-labels .limbus-chaos-char--down { transform: translateY( 0.10em); }
+
+/* 等级后缀 + 作为上标，不参与错位 */
+#limbus-chaos-labels .limbus-chaos-plus {
+  display: inline-block;
+  font-size: 0.7em;
+  vertical-align: super;
+}
+
+@keyframes limbus-chaos-label-pulse {
+  0%, 100% { transform: rotate(-10deg) scale(1);    opacity: 1;   }
+  50%      { transform: rotate(-10deg) scale(1.04); opacity: .88; }
+}

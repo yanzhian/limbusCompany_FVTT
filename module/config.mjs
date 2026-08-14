@@ -237,6 +237,19 @@ LIMBUSCOMPANY.TURN_END_BUFF_TYPES = new Set([
 
 // ─── 技能类型 ─────────────────────────────────────────────────────────────────
 
+/**
+ * 陷入混乱的三个等级（由低到高）与其显示名。
+ */
+LIMBUSCOMPANY.CHAOS_TYPES = ["chaos", "chaos_plus", "chaos_double_plus"];
+LIMBUSCOMPANY.CHAOS_NAMES = ["陷入混乱", "陷入混乱+", "陷入混乱++"];
+
+/**
+ * 陷入混乱持续「本回合 + 下回合」：本轮结束时不移除，而是把 whenAdded 改成
+ * 这个标记（各处判定生效与否用的都是 `whenAdded !== "下回合"`，所以仍算生效中），
+ * 下一轮结束时再真正移除。
+ */
+LIMBUSCOMPANY.CHAOS_EXTEND_TAG = "延续回合";
+
 LIMBUSCOMPANY.SKILL_TYPES = {
   basic:   "LIMBUSCOMPANY.SkillType.Basic",
   defense: "LIMBUSCOMPANY.SkillType.Defense",

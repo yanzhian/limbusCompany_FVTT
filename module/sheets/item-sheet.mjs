@@ -739,6 +739,7 @@ export class LimbusItemSheet extends ItemSheet {
       ${_buildBuffDatalistHtml("ae-buff-dl", cfg)}
       ${_buildTriggerBuffDatalistHtml("ae-trig-buff-dl", cfg)}
       ${_buildOwnedSkillDatalistHtml("ae-owned-skill-dl", this.item.parent)}
+      ${_buildSpecialTremorDatalistHtml("ae-sp-tremor-dl")}
       <div class="ae-v2 limbuscompany">
         <div class="ae-title-bar">效果触发编辑器</div>
         <div class="ae-gold-line"></div>
@@ -1613,6 +1614,14 @@ export function closeTitleCard(card) {
   card?.remove();
 }
 
+/**
+ * Title 卡基准层级。嵌套卡（从卡内 chip 悬停弹出的下一层）会在父卡基础上 +1，
+ * 保证"从 A 卡里点开的 B 卡"永远盖在 A 卡上面，而不是被压在后面。
+ * 仅作为"触发源不在任何卡片内"时的兜底基准；各调用方（角色卡/HUD/商店卡等）
+ * 若自行设置了 z-index，嵌套卡会读取其实际值再 +1，因此不需要统一改成本常量。
+ */
+const TITLE_CARD_Z = 99990;
+
 /** 定位规则：贴在触发元素左侧，不够则右侧（与既有各处 hover 定位逻辑一致） */
 function _positionTitleCard(card, anchorEl) {
   const rect  = anchorEl.getBoundingClientRect();
@@ -1620,7 +1629,23 @@ function _positionTitleCard(card, anchorEl) {
   let left = rect.left - cardW - 8;
   if (left < 8) left = rect.right + 8;
   const top = Math.max(8, Math.min(rect.top, window.innerHeight - cardH - 8));
-  card.css({ position: "fixed", left, top, zIndex: 99998 });
+
+  // 层级：
+  // 1) 触发源在某张 Title 卡内部（chip → 嵌套卡）→ 取父卡 +1，保证盖在父卡上；
+  // 2) 触发源在某个 Foundry 窗口内（对话框/角色卡等）→ 取该窗口 z-index +1，
+  //    否则卡片会被窗口盖住（Foundry 的窗口 z-index 每次聚焦都会自增，
+  //    可能超过我们的固定基准值，不能只靠常量）。
+  let z;
+  const parentCard = anchorEl.closest?.(".limbus-title-card");
+  if (parentCard) {
+    z = (parseInt(parentCard.style.zIndex) || TITLE_CARD_Z) + 1;
+  } else {
+    z = TITLE_CARD_Z;
+    const appEl = anchorEl.closest?.(".app, .window-app, .application");
+    const appZ  = appEl ? parseInt(window.getComputedStyle(appEl).zIndex) : NaN;
+    if (!isNaN(appZ)) z = Math.max(z, appZ + 1);
+  }
+  card.css({ position: "fixed", left, top, zIndex: z });
 }
 
 /**
@@ -2052,12 +2077,13 @@ function _buildTriggerOpts(selected) {
 
 /** 前置条件行 HTML */
 function _buildCondRow(cond, idx, cfg) {
-  const condType   = ["perN","baseAttr","useSkill","buffCompare","category","fieldResource","level"].includes(cond?.type) ? cond.type : "hasBuff";
+  const condType   = ["perN","baseAttr","useSkill","buffCompare","category","fieldResource","sinResource","level"].includes(cond?.type) ? cond.type : "hasBuff";
   const isBuffSec  = condType === "hasBuff" || condType === "perN" || condType === "buffCompare";
   const isAttrSec  = condType === "baseAttr";
   const isSkillSec = condType === "useSkill";
   const isCatSec   = condType === "category";
   const isFieldSec = condType === "fieldResource";
+  const isSinSec   = condType === "sinResource";
   const isLevelSec = condType === "level";
   const isCompare  = condType === "buffCompare";
   const isPerN     = condType === "perN";
@@ -2110,8 +2136,9 @@ function _buildCondRow(cond, idx, cfg) {
           <option value="category"    ${condType === "category"    ? "selected" : ""}>使用分类</option>
           <option value="level"       ${condType === "level"       ? "selected" : ""}>使用等级</option>
           <option value="fieldResource" ${condType === "fieldResource" ? "selected" : ""}>公用场地</option>
+          <option value="sinResource"   ${condType === "sinResource"   ? "selected" : ""}>罪孽资源</option>
         </select>
-        <span class="ae-cond-target-sec" ${(isCatSec || isFieldSec || isLevelSec) ? 'style="display:none"' : ""}>
+        <span class="ae-cond-target-sec" ${(isCatSec || isFieldSec || isSinSec || isLevelSec) ? 'style="display:none"' : ""}>
           <label>目标</label>
           <select class="ae-sel cond-target">${_buildTargetOptions(cond?.target ?? "self")}</select>
           ${_buildBgTagFields("cond", cond)}
@@ -2181,8 +2208,57 @@ function _buildCondRow(cond, idx, cfg) {
           <select class="ae-sel cond-field-cmp">${fieldCmpOpts}</select>
           <input class="ae-input-sm cond-field-stacks" type="number" value="${cond?.stacks ?? 0}" min="0">
         </span>
+        <!-- 罪孽资源：读取全局七宗罪池当前点数（只读，不消耗） -->
+        <span class="ae-cond-sin-sec" ${isSinSec ? "" : 'style="display:none"'}>
+          <label>罪孽</label>
+          <select class="ae-sel cond-sin-type">${_buildSinOptions(cond?.sinType ?? "wrath")}</select>
+          <label>点数</label>
+          <select class="ae-sel cond-sin-cmp">${fieldCmpOpts}</select>
+          <input class="ae-input-sm cond-sin-value" type="number" value="${cond?.value ?? 0}" min="0">
+        </span>
       </div>
     </div>`;
+}
+
+/** 【振幅转换】【振幅纠缠】——这两个 BUFF 会额外要求指定一个随行的【特殊震颤】 */
+const _AMPLITUDE_BUFF_TYPES = ["amplitudeConvert", "amplitudeEntangle"];
+
+function _isAmplitudeBuff(key) {
+  return _AMPLITUDE_BUFF_TYPES.includes(key);
+}
+
+/** 特殊震颤的 datalist（数据源为 CustomBuffRegistry 中标了 specialTremor 的注册项） */
+function _buildSpecialTremorDatalistHtml(id) {
+  const opts = [...CustomBuffRegistry.entries()]
+    .filter(([, h]) => h?.specialTremor === true)
+    .map(([type, h]) => `<option value="${_esc(h.label ?? type)}">`)
+    .join("");
+  return `<datalist id="${id}">${opts}</datalist>`;
+}
+
+/** 存储的特殊震颤 type → 显示用标签（未注册的原样返回，便于排查填错） */
+function _specialTremorLabel(type) {
+  if (!type) return "";
+  return CustomBuffRegistry.get(type)?.label ?? type;
+}
+
+/** 显示用标签 → 特殊震颤 type；无法匹配时返回原文本 */
+function _specialTremorKey(label) {
+  const val = String(label ?? "").trim();
+  if (!val) return "";
+  if (CustomBuffRegistry.get(val)?.specialTremor === true) return val; // 直接填了 type
+  for (const [type, h] of CustomBuffRegistry.entries()) {
+    if (h?.specialTremor === true && h.label === val) return type;
+  }
+  return val;
+}
+
+/** 罪孽资源下拉选项 HTML（七宗罪，与全局罪孽池一一对应） */
+function _buildSinOptions(selected) {
+  const cfg = CONFIG.LIMBUSCOMPANY ?? {};
+  return (cfg.SINS ?? ["wrath","lust","sloth","gluttony","gloom","pride","envy"])
+    .map(s => `<option value="${s}" ${selected === s ? "selected" : ""}>${cfg.SIN_LABELS_ZH?.[s] ?? s}</option>`)
+    .join("");
 }
 
 /** 目标下拉选项 HTML（含队伍群体目标） */
@@ -2260,6 +2336,7 @@ function _buildCostRow(cost, idx, cfg) {
 
   const discardModeIsLevel = (cost?.discardMode ?? "level") === "level";
   const isField = cost?.target === "field";
+  const isSin   = cost?.target === "sin";
 
   return `
     <div class="ae-row ae-cost-row">
@@ -2273,6 +2350,7 @@ function _buildCostRow(cost, idx, cfg) {
         <label>目标</label>
         <select class="ae-sel cost-target">${_buildTargetOptions(cost?.target ?? "self")}
           <option value="field" ${isField ? "selected" : ""}>公用场地</option>
+          <option value="sin"   ${isSin   ? "selected" : ""}>罪孽资源</option>
         </select>
         ${_buildBgTagFields("cost", cost)}
         <span class="ae-cost-field-sec" ${isField ? "" : 'style="display:none"'}>
@@ -2282,7 +2360,18 @@ function _buildCostRow(cost, idx, cfg) {
           <label class="cost-stacks-label">${isPerStack ? "每N层" : "层数"}</label>
           <input class="ae-input-sm cost-field-stacks" type="number" value="${cost?.stacks ?? 0}" min="0">
         </span>
-        <span class="ae-cost-buff-sec" ${(isAttr || isDiscard || isField) ? 'style="display:none"' : ""}>
+        <!-- 罪孽资源：扣除全局七宗罪池的点数；【每】类型时为"每消耗 N 点"，可限制最大倍数 -->
+        <span class="ae-cost-sin-sec" ${isSin ? "" : 'style="display:none"'}>
+          <label>罪孽</label>
+          <select class="ae-sel cost-sin-type">${_buildSinOptions(cost?.sinType ?? "wrath")}</select>
+          <label class="cost-sin-label">${isPerStack ? "每N点" : "点数"}</label>
+          <input class="ae-input-sm cost-sin-value" type="number" value="${cost?.value ?? 0}" min="0">
+          <span class="ae-cost-sin-max" ${isPerStack ? "" : 'style="display:none"'}>
+            <label>最大倍数</label>
+            <input class="ae-input-sm cost-sin-max-times" type="number" value="${cost?.maxTimes ?? 0}" min="0" placeholder="0=无限">
+          </span>
+        </span>
+        <span class="ae-cost-buff-sec" ${(isAttr || isDiscard || isField || isSin) ? 'style="display:none"' : ""}>
           <label>BUFF</label>
           <input class="ae-input cost-buff" type="text" list="ae-buff-dl"
                  placeholder="输入或选择BUFF…" autocomplete="off" style="width:100px;"
@@ -2344,6 +2433,8 @@ function _buildEffectRow(eff, idx, cfg) {
   const isRandomBuff   = type === "randomBuff";
   const isTriggerBuff  = type === "triggerBuff";
   const isUseSkill     = type === "useSkill";
+  // 来源只保留 [标签+等级] 与 [技能名字]；旧数据的 uuid / equipped 一律回落为标签模式
+  const useSkillRef    = eff?.skillRef === "name" ? "name" : "tag";
   const isDiceTypeChg  = type === "diceTypeChg";
   const isExtraDamage  = type === "extraDamage";
   const isRelConvert   = type === "relatedSkillConvert";
@@ -2390,6 +2481,13 @@ function _buildEffectRow(eff, idx, cfg) {
           <input class="ae-input-sm eff-intensity" type="number" value="${eff?.intensity ?? 0}" min="0">
           <label>层数</label>
           <input class="ae-input-sm eff-stacks" type="number" value="${eff?.stacks ?? 0}" min="0">
+          <!-- 选中【振幅转换】/【振幅纠缠】时出现：随之一并施加的【特殊震颤】 -->
+          <span class="ae-eff-amp-tremor-sec" ${_isAmplitudeBuff(eff?.buff) ? "" : 'style="display:none"'}>
+            <label>特殊震颤</label>
+            <input class="ae-input eff-amp-tremor" type="text" list="ae-sp-tremor-dl"
+                   placeholder="如：震颤-灼热（留空则不附带）" autocomplete="off" style="width:130px;"
+                   value="${_esc(_specialTremorLabel(eff?.ampTremor ?? ""))}">
+          </span>
         </span>
         <span class="ae-eff-val-sec" ${isValSec ? "" : 'style="display:none"'}>
           <label>相关数值</label>
@@ -2418,29 +2516,24 @@ function _buildEffectRow(eff, idx, cfg) {
         <span class="ae-eff-useskill-sec" ${isUseSkill ? "" : 'style="display:none"'}>
           <label>来源</label>
           <select class="ae-sel eff-skill-ref">
-            <option value="uuid"     ${(eff?.skillRef ?? "uuid") === "uuid"     ? "selected" : ""}>UUID</option>
-            <option value="equipped" ${(eff?.skillRef ?? "uuid") === "equipped" ? "selected" : ""}>已装备</option>
-            <option value="name"     ${(eff?.skillRef ?? "uuid") === "name"     ? "selected" : ""}>技能名字</option>
+            <option value="tag"  ${useSkillRef === "tag"  ? "selected" : ""}>标签+等级</option>
+            <option value="name" ${useSkillRef === "name" ? "selected" : ""}>技能名字</option>
           </select>
-          <span class="eff-useskill-uuid-sec" ${(eff?.skillRef ?? "uuid") === "uuid" ? "" : 'style="display:none"'}>
-            <input class="ae-input eff-skill-uuid" type="text"
-                   value="${_esc(eff?.skillUuid ?? "")}" placeholder="Item.xxx…" style="width:120px;">
-            <img class="ae-skill-preview" data-uuid-src="eff-skill-uuid"
-                 src="${_esc(eff?.skillUuid ? "icons/svg/item-bag.svg" : "")}"
-                 style="width:20px;height:20px;object-fit:cover;border-radius:3px;vertical-align:middle;${eff?.skillUuid ? "" : "display:none;"}">
-          </span>
-          <span class="eff-useskill-equipped-sec" ${(eff?.skillRef ?? "uuid") === "equipped" ? "" : 'style="display:none"'}>
-            <select class="ae-sel eff-skill-slot">
-              <option value="basic"   ${(eff?.skillSlot ?? "basic") === "basic"   ? "selected" : ""}>基础技能</option>
-              <option value="defense" ${(eff?.skillSlot ?? "basic") === "defense" ? "selected" : ""}>守备技能</option>
+          <!-- 标签+等级：在目标的技能列表中按 [标签]（system.tags，斜杠分隔）
+               和 [Lv.等级]（system.level）检索，比 UUID 稳定、比"已装备"灵活 -->
+          <span class="eff-useskill-tag-sec" ${useSkillRef === "tag" ? "" : 'style="display:none"'}>
+            <label>标签</label>
+            <input class="ae-input eff-skill-tag" type="text"
+                   value="${_esc(eff?.skillTag ?? "")}" placeholder="如：黑兽" style="width:100px;">
+            <label>Lv.</label>
+            <select class="ae-sel eff-skill-level">
+              <option value="0" ${(eff?.skillLevel ?? 0) === 0 ? "selected" : ""}>不限</option>
+              <option value="1" ${(eff?.skillLevel ?? 0) === 1 ? "selected" : ""}>Lv.1</option>
+              <option value="2" ${(eff?.skillLevel ?? 0) === 2 ? "selected" : ""}>Lv.2</option>
+              <option value="3" ${(eff?.skillLevel ?? 0) === 3 ? "selected" : ""}>Lv.3</option>
             </select>
-            <span class="eff-useskill-level-sec" ${(eff?.skillSlot ?? "basic") !== "defense" ? "" : 'style="display:none"'}>
-              <label>Lv.</label>
-              <input class="ae-input-sm eff-skill-level" type="number" min="1" max="6"
-                     value="${eff?.skillLevel ?? 1}" style="width:42px;">
-            </span>
           </span>
-          <span class="eff-useskill-name-sec" ${(eff?.skillRef ?? "uuid") === "name" ? "" : 'style="display:none"'}>
+          <span class="eff-useskill-name-sec" ${useSkillRef === "name" ? "" : 'style="display:none"'}>
             <input class="ae-input eff-skill-name" type="text" list="ae-owned-skill-dl"
                    value="${_esc(eff?.skillName ?? "")}" placeholder="技能名字（在背包/技能列表中检索）" style="width:130px;" autocomplete="off">
           </span>
@@ -2521,6 +2614,7 @@ function _setupAeDialog(html, cfg) {
     list.append(_buildEffectRow({}, idx, cfg));
     _bindDel(html);
     _bindEffType(html);
+    _bindEffBuffAmplitude(html);
     _bindUseSkillSubtype(html);
     _bindTargetBgTag(html);
   });
@@ -2536,6 +2630,7 @@ function _setupAeDialog(html, cfg) {
   _bindDel(html);
   _bindEffType(html);
   _bindCondCostBuff(html);
+  _bindEffBuffAmplitude(html);
   _bindCostType(html);
   _bindCondType(html);
   _bindSkillUuidPreview(html);
@@ -2572,21 +2667,25 @@ function _bindCondCostBuff(_html) {
   // no-op: BUFF 字段改用文本输入，无需监听 select 变化
 }
 
+/** ④效果的 BUFF 输入：选中【振幅转换】/【振幅纠缠】时显示随行【特殊震颤】下拉 */
+function _bindEffBuffAmplitude(html) {
+  const refresh = (input) => {
+    const row = $(input).closest(".ae-eff-row");
+    const key = _buffLabelToKey(CONFIG.LIMBUSCOMPANY ?? {})[String($(input).val() ?? "").trim()];
+    row.find(".ae-eff-amp-tremor-sec").toggle(_isAmplitudeBuff(key));
+  };
+  html.find(".eff-buff").off("input.amp change.amp").on("input.amp change.amp", function () {
+    refresh(this);
+  });
+}
+
 /** useSkill 效果：来源模式切换 & 技能槽选择联动 */
 function _bindUseSkillSubtype(html) {
   html.find(".eff-skill-ref").off("change").on("change", function () {
     const sec    = $(this).closest(".ae-eff-useskill-sec");
-    const val    = $(this).val();
-    const isEq   = val === "equipped";
-    const isName = val === "name";
-    sec.find(".eff-useskill-uuid-sec").toggle(val === "uuid");
-    sec.find(".eff-useskill-equipped-sec").toggle(isEq);
+    const isName = $(this).val() === "name";
+    sec.find(".eff-useskill-tag-sec").toggle(!isName);
     sec.find(".eff-useskill-name-sec").toggle(isName);
-  });
-  html.find(".eff-skill-slot").off("change").on("change", function () {
-    const sec      = $(this).closest(".ae-eff-useskill-sec");
-    const isDef    = $(this).val() === "defense";
-    sec.find(".eff-useskill-level-sec").toggle(!isDef);
   });
 }
 
@@ -2600,6 +2699,7 @@ function _bindCondType(html) {
     const isSkillSec = type === "useSkill";
     const isCatSec   = type === "category";
     const isFieldSec = type === "fieldResource";
+    const isSinSec   = type === "sinResource";
     const isLevelSec = type === "level";
     const isCompare  = type === "buffCompare";
     const isPerN     = type === "perN";
@@ -2610,8 +2710,9 @@ function _bindCondType(html) {
     row.find(".ae-cond-skill-sec").toggle(isSkillSec);
     row.find(".ae-cond-category-sec").toggle(isCatSec);
     row.find(".ae-cond-field-sec").toggle(isFieldSec);
+    row.find(".ae-cond-sin-sec").toggle(isSinSec);
     row.find(".ae-cond-level-sec").toggle(isLevelSec);
-    row.find(".ae-cond-target-sec").toggle(!isCatSec && !isFieldSec && !isLevelSec);
+    row.find(".ae-cond-target-sec").toggle(!isCatSec && !isFieldSec && !isSinSec && !isLevelSec);
     row.find(".ae-cond-pern-max").toggle(isPerN);
     row.find(".ae-cond-pern-dim-sec").toggle(isPerN);
     row.find(".ae-cond-intensity-sec").toggle(!isCompare && !isPerN);
@@ -2630,13 +2731,18 @@ function _bindCondType(html) {
 function _bindCostType(html) {
   const refreshRow = (row) => {
     const val        = row.find(".cost-type").val();
-    const isField     = row.find(".cost-target").val() === "field";
+    const tgt         = row.find(".cost-target").val();
+    const isField     = tgt === "field";
+    const isSin       = tgt === "sin";
     const isAttr      = val === "attribute";
     const isDiscard   = val === "discard";
     const isPerStack  = val === "perStack";
     const perNDim     = row.find(".cost-pern-dim").val() === "intensity" ? "intensity" : "stacks";
     row.find(".ae-cost-field-sec").toggle(isField);
-    row.find(".ae-cost-buff-sec").toggle(!isAttr && !isDiscard && !isField);
+    row.find(".ae-cost-sin-sec").toggle(isSin);
+    row.find(".ae-cost-sin-max").toggle(isSin && isPerStack);
+    row.find(".cost-sin-label").text(isPerStack ? "每N点" : "点数");
+    row.find(".ae-cost-buff-sec").toggle(!isAttr && !isDiscard && !isField && !isSin);
     row.find(".ae-cost-attr-sec").toggle(isAttr);
     row.find(".ae-cost-discard-sec").toggle(isDiscard);
     row.find(".cost-stacks-label").text(isPerStack ? (perNDim === "intensity" ? "每N级" : "每N层") : "层数");
@@ -2768,6 +2874,13 @@ function _readActivityForm(html, original) {
         comparison: $r.find(".cond-field-cmp").val() || "gte",
         stacks:     parseInt($r.find(".cond-field-stacks").val()) || 0,
       });
+    } else if (condType === "sinResource") {
+      preconditions.push({
+        type:       "sinResource",
+        sinType:    $r.find(".cond-sin-type").val() || "wrath",
+        comparison: $r.find(".cond-sin-cmp").val()  || "gte",
+        value:      parseInt($r.find(".cond-sin-value").val()) || 0,
+      });
     } else if (condType === "buffCompare") {
       preconditions.push({
         type:       "buffCompare",
@@ -2825,6 +2938,14 @@ function _readActivityForm(html, original) {
         stacks:    parseInt($r.find(".cost-field-stacks").val()) || 0,
         ...(type === "perStack" ? { maxTimes: parseInt($r.find(".cost-max-times").val()) || 0 } : {}),
       });
+    } else if (target === "sin") {
+      costs.push({
+        type,
+        target,
+        sinType: $r.find(".cost-sin-type").val() || "wrath",
+        value:   parseInt($r.find(".cost-sin-value").val()) || 0,
+        ...(type === "perStack" ? { maxTimes: parseInt($r.find(".cost-sin-max-times").val()) || 0 } : {}),
+      });
     } else {
       costs.push({
         type,
@@ -2876,14 +2997,13 @@ function _readActivityForm(html, original) {
     const isUseSkill    = type === "useSkill";
     const isDiceTypeChg = type === "diceTypeChg";
     if (isUseSkill) {
-      const skillRef = $r.find(".eff-skill-ref").val() || "uuid";
+      const skillRef = $r.find(".eff-skill-ref").val() === "name" ? "name" : "tag";
       effects.push({
         type,
         target:     $r.find(".eff-target").val() || "self",
         skillRef,
-        skillUuid:  skillRef === "uuid" ? ($r.find(".eff-skill-uuid").val()?.trim() || "") : "",
-        skillSlot:  skillRef === "equipped" ? ($r.find(".eff-skill-slot").val() || "basic") : "",
-        skillLevel: skillRef === "equipped" ? (parseInt($r.find(".eff-skill-level").val()) || 1) : 1,
+        skillTag:   skillRef === "tag"  ? ($r.find(".eff-skill-tag").val()?.trim()  || "") : "",
+        skillLevel: skillRef === "tag"  ? (parseInt($r.find(".eff-skill-level").val()) || 0) : 0,
         skillName:  skillRef === "name" ? ($r.find(".eff-skill-name").val()?.trim() || "") : "",
         ..._readBgTagMeta($r, "eff"),
       });
@@ -2921,6 +3041,7 @@ function _readActivityForm(html, original) {
       buffCustom:     "",
       intensity:      isBuff        ? (parseInt($r.find(".eff-intensity").val()) || 0) : 0,
       stacks:         isBuff        ? (parseInt($r.find(".eff-stacks").val())    || 0) : 0,
+      ampTremor:      isBuff        ? _specialTremorKey($r.find(".eff-amp-tremor").val()) : "",
       value:          (!isBuff && !isTriggerBuff) ? ($r.find(".eff-value").val()?.trim() || "") : "",
       trigBuff:       isTriggerBuff ? resolveKey($r.find(".eff-trig-buff").val()) : "",
       trigBuffCustom: "",

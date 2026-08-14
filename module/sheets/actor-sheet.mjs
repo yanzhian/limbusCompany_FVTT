@@ -1961,8 +1961,8 @@ export class LimbusActorSheet extends ActorSheet {
           </select>
         </div>
         <div class="form-group inline-row">
-          <label>强度</label><input type="number" name="intensity" value="1" min="0" style="width:60px"/>
-          <label style="margin-left:8px">层数</label><input type="number" name="stacks" value="1" min="0" style="width:60px"/>
+          <label>强度</label><input type="number" name="intensity" value="0" min="0" style="width:60px"/>
+          <label style="margin-left:8px">层数</label><input type="number" name="stacks" value="0" min="0" style="width:60px"/>
         </div>
       </div>`;
 
@@ -1975,8 +1975,8 @@ export class LimbusActorSheet extends ActorSheet {
           callback: async (html) => {
             const inputName = html.find("[name='buffName']").val().trim();
             const whenAdded = html.find("[name='whenAdded']").val();
-            const intensity = parseInt(html.find("[name='intensity']").val()) || 1;
-            const stacks    = parseInt(html.find("[name='stacks']").val())    || 1;
+            const intensity = parseInt(html.find("[name='intensity']").val()) || 0;
+            const stacks    = parseInt(html.find("[name='stacks']").val())    || 0;
 
             // 通过中文名反查 typeKey；匹配不到则视为纯自定义文本
             let type = labelToKey[inputName] ?? normalizeBuffType("custom", inputName);
@@ -2009,8 +2009,11 @@ export class LimbusActorSheet extends ActorSheet {
       case "bleed":
       case "rupture":
       case "burn": {
+        // 自定义 BUFF 可修正跳动伤害 / 设定生命值下限
+        const tickMods = ClashManager.applyTickDamageMods(actor, intensity, buff.type);
+        const tickDmg  = tickMods.damage;
         const oldHp = actor.system.hp?.value ?? 0;
-        const newHp = Math.max(0, oldHp - intensity);
+        const newHp = ClashManager.applyHpFloor(oldHp, oldHp - tickDmg, tickMods.hpFloor);
         const maxHpBuff       = actor.system.hp?.max ?? 1;
         const _SH_TYPES       = ["chaos", "chaos_plus", "chaos_double_plus"];
         const _SH_NAMES       = ["陷入混乱", "陷入混乱+", "陷入混乱++"];
@@ -2023,11 +2026,11 @@ export class LimbusActorSheet extends ActorSheet {
         const buffChaosName   = _SH_NAMES[shNewLevel - 1] ?? "陷入混乱";
         await actor.update({ "system.hp.value": newHp });
         await actor.reduceBuffStacks(buff.type);
-        if (actor.checkAndTriggerChaos) await actor.checkAndTriggerChaos(newHp, oldHp, { silent: true });
+        if (actor.checkAndTriggerChaos) await actor.checkAndTriggerChaos(newHp, oldHp, { silent: true, source: buff.type });
         await ChatMessage.create({
           speaker: ChatMessage.getSpeaker({ actor }),
           content: `<div class="limbuscompany chat-clash">
-            <strong>${actor.name}</strong>【${buff.name}】触发：受到 <strong>${intensity}</strong> 点固定伤害。
+            <strong>${actor.name}</strong>【${buff.name}】触发：受到 <strong>${tickDmg}</strong> 点固定伤害。
             （HP ${oldHp} → ${newHp}）${buffChaosCount > 0 ? `　<span style='color:#E84444;font-weight:bold;'>——【${buffChaosName}】！</span>` : ""}
           </div>`,
         });
@@ -2052,14 +2055,16 @@ export class LimbusActorSheet extends ActorSheet {
 
       // ── 震颤：混乱阈值前移强度值，层数 -1 ───────────────────────────────
       case "tremor": {
-        await actor.triggerSeismicBlast(intensity);
-        await actor.reduceBuffStacks("tremor");
-        await ChatMessage.create({
-          speaker: ChatMessage.getSpeaker({ actor }),
-          content: `<div class="limbuscompany chat-clash">
-            <strong>${actor.name}</strong>【震颤】引爆：混乱阈值前移 <strong>${intensity}%</strong>。
-          </div>`,
-        });
+        // 统一走 ClashManager.seismicBlast，特殊震颤/振幅纠缠的规则一并生效
+        const { blasts, msgs: blastMsgs } = await ClashManager.seismicBlast(actor, 1);
+        if (blasts > 0) {
+          await ChatMessage.create({
+            speaker: ChatMessage.getSpeaker({ actor }),
+            content: `<div class="limbuscompany chat-clash">
+              <strong>${actor.name}</strong>【震颤】引爆：<br>${blastMsgs.join("<br>")}
+            </div>`,
+          });
+        }
         break;
       }
 
