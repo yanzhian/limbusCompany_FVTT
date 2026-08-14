@@ -418,14 +418,23 @@ export class ClashManager {
       }
     }
 
-    // 【振幅转换】：持有期间施加【特殊震颤】时，不新增，而是把现有震颤族整体
-    // 改写为该类型（强度/层数不变）。持有【振幅纠缠】时并列存在，不做转换。
-    if (isTremorFamilyType(type) && type !== TREMOR_BASE_TYPE) {
+    // 【振幅转换】：持有期间，任何震颤族的施加都并入当前那一种，而不是新起一条
+    // ——保证震颤族始终只存在一种。合并口径与多条转换一致：层数、强度分别求和。
+    // 合并后的类型：施加的是【特殊震颤】则转为该类型；施加的是普通【震颤】则
+    // 保持现有类型（即普通震颤被现有的特殊震颤吸收）。
+    // 持有【振幅纠缠】时并列存在，不做转换。
+    if (isTremorFamilyType(type)) {
       const cur = actor.system?.buffs ?? [];
-      const hasConvert   = cur.some(b => b.type === "amplitudeConvert");
-      const hasEntangle  = cur.some(b => b.type === "amplitudeEntangle");
+      const hasConvert  = cur.some(b => b.type === "amplitudeConvert");
+      const hasEntangle = cur.some(b => b.type === "amplitudeEntangle");
       if (hasConvert && !hasEntangle) {
-        if (await ClashManager._convertTremorFamily(actor, type)) return;
+        const family  = ClashManager._tremorFamilyBuffs(actor);
+        const existing = family.find(b => b.type !== TREMOR_BASE_TYPE) ?? family[0];
+        const newType  = type !== TREMOR_BASE_TYPE ? type : existing?.type;
+        if (newType && await ClashManager._convertTremorFamily(actor, newType, { stacks, intensity })) {
+          await ClashManager._dispatchBuffChange(actor, "onBuffGained", { type: newType, intensity, stacks });
+          return;
+        }
       }
     }
 
@@ -535,13 +544,14 @@ export class ClashManager {
    * 已有多条时合并为一条（层数与强度分别取和），保证转换后震颤族只剩一种。
    * @returns {boolean} 是否发生了转换
    */
-  static async _convertTremorFamily(actor, newType) {
+  static async _convertTremorFamily(actor, newType, extra = { stacks: 0, intensity: 0 }) {
     const buffs  = foundry.utils.deepClone(actor?.system?.buffs ?? []);
     const idxs   = buffs.map((b, i) => (isTremorFamilyType(b.type) && b.whenAdded !== "下回合") ? i : -1)
                         .filter(i => i >= 0);
     if (idxs.length === 0) return false;
 
-    let stacks = 0, intensity = 0;
+    // 本次新施加的那一份也并进来（层数与强度分别求和）
+    let stacks = extra?.stacks ?? 0, intensity = extra?.intensity ?? 0;
     for (const i of idxs) {
       stacks    += buffs[i].stacks    ?? 0;
       intensity += buffs[i].intensity ?? 0;
