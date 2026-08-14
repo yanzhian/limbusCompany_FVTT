@@ -2219,6 +2219,23 @@ function _buildCondRow(cond, idx, cfg) {
     </div>`;
 }
 
+/** 【振幅转换】【振幅纠缠】——这两个 BUFF 会额外要求指定一个随行的【特殊震颤】 */
+const _AMPLITUDE_BUFF_TYPES = ["amplitudeConvert", "amplitudeEntangle"];
+
+function _isAmplitudeBuff(key) {
+  return _AMPLITUDE_BUFF_TYPES.includes(key);
+}
+
+/** 特殊震颤下拉选项（数据源为 CustomBuffRegistry 中标了 specialTremor 的注册项） */
+function _buildSpecialTremorOptions(selected) {
+  const opts = [`<option value="" ${!selected ? "selected" : ""}>（不附带）</option>`];
+  for (const [type, handler] of CustomBuffRegistry.entries()) {
+    if (handler?.specialTremor !== true) continue;
+    opts.push(`<option value="${type}" ${selected === type ? "selected" : ""}>${handler.label ?? type}</option>`);
+  }
+  return opts.join("");
+}
+
 /** 罪孽资源下拉选项 HTML（七宗罪，与全局罪孽池一一对应） */
 function _buildSinOptions(selected) {
   const cfg = CONFIG.LIMBUSCOMPANY ?? {};
@@ -2447,6 +2464,11 @@ function _buildEffectRow(eff, idx, cfg) {
           <input class="ae-input-sm eff-intensity" type="number" value="${eff?.intensity ?? 0}" min="0">
           <label>层数</label>
           <input class="ae-input-sm eff-stacks" type="number" value="${eff?.stacks ?? 0}" min="0">
+          <!-- 选中【振幅转换】/【振幅纠缠】时出现：随之一并施加的【特殊震颤】 -->
+          <span class="ae-eff-amp-tremor-sec" ${_isAmplitudeBuff(eff?.buff) ? "" : 'style="display:none"'}>
+            <label>特殊震颤</label>
+            <select class="ae-sel eff-amp-tremor">${_buildSpecialTremorOptions(eff?.ampTremor ?? "")}</select>
+          </span>
         </span>
         <span class="ae-eff-val-sec" ${isValSec ? "" : 'style="display:none"'}>
           <label>相关数值</label>
@@ -2573,6 +2595,7 @@ function _setupAeDialog(html, cfg) {
     list.append(_buildEffectRow({}, idx, cfg));
     _bindDel(html);
     _bindEffType(html);
+    _bindEffBuffAmplitude(html);
     _bindUseSkillSubtype(html);
     _bindTargetBgTag(html);
   });
@@ -2588,6 +2611,7 @@ function _setupAeDialog(html, cfg) {
   _bindDel(html);
   _bindEffType(html);
   _bindCondCostBuff(html);
+  _bindEffBuffAmplitude(html);
   _bindCostType(html);
   _bindCondType(html);
   _bindSkillUuidPreview(html);
@@ -2622,6 +2646,18 @@ function _bindSkillUuidPreview(html) {
 
 function _bindCondCostBuff(_html) {
   // no-op: BUFF 字段改用文本输入，无需监听 select 变化
+}
+
+/** ④效果的 BUFF 输入：选中【振幅转换】/【振幅纠缠】时显示随行【特殊震颤】下拉 */
+function _bindEffBuffAmplitude(html) {
+  const refresh = (input) => {
+    const row = $(input).closest(".ae-eff-row");
+    const key = _buffLabelToKey(CONFIG.LIMBUSCOMPANY ?? {})[String($(input).val() ?? "").trim()];
+    row.find(".ae-eff-amp-tremor-sec").toggle(_isAmplitudeBuff(key));
+  };
+  html.find(".eff-buff").off("input.amp change.amp").on("input.amp change.amp", function () {
+    refresh(this);
+  });
 }
 
 /** useSkill 效果：来源模式切换 & 技能槽选择联动 */
@@ -2986,6 +3022,7 @@ function _readActivityForm(html, original) {
       buffCustom:     "",
       intensity:      isBuff        ? (parseInt($r.find(".eff-intensity").val()) || 0) : 0,
       stacks:         isBuff        ? (parseInt($r.find(".eff-stacks").val())    || 0) : 0,
+      ampTremor:      isBuff        ? ($r.find(".eff-amp-tremor").val() || "")      : "",
       value:          (!isBuff && !isTriggerBuff) ? ($r.find(".eff-value").val()?.trim() || "") : "",
       trigBuff:       isTriggerBuff ? resolveKey($r.find(".eff-trig-buff").val()) : "",
       trigBuffCustom: "",

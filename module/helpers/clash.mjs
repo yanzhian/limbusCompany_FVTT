@@ -1229,6 +1229,15 @@ export class ClashManager {
             }
             const roundLabel = round === "本回合" ? "" : `（${round}）`;
             descStr = `为【${effTgt.name}】添加 ${stacks} 层 ${buffType}（强度 ${intensity}）${roundLabel}`;
+
+            // 【振幅转换】【振幅纠缠】可在编辑器里附带一个【特殊震颤】，
+            // 一并施加（顺序：先振幅后震颤，这样转换/并列规则立刻生效）
+            if (TREMOR_DEPENDENT_TYPES.includes(buffType) && eff.ampTremor) {
+              // 传 0 层 0 级：转换态下等于纯粹改写类型（现有震颤的层数强度不变），
+              // 并列（纠缠）态下新建的这条会由 _syncTremorFamily 同步到【震颤】的数值
+              await ClashManager._addBuff(effTgt, eff.ampTremor, 0, 0, round);
+              descStr += `，并施加【${ClashManager._buffLabel(eff.ampTremor)}】`;
+            }
             break;
           }
           case "removeBuff":
