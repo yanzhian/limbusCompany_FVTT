@@ -944,29 +944,32 @@ export class LimbusActor extends Actor {
   async addBuff(buffData) {
     const buffs = [...(this.system.buffs ?? [])];
     const type  = buffData.type ?? "custom";
+    const name  = buffData.name ?? "自定义";
 
     // 基础特殊类 BUFF（烧伤/流血/破裂/震颤/沉沦/呼吸法；充能是例外，不算在内）：不存在"0层"或"0级"的这类 BUFF，
     // 层数/强度为 0 时自动订正为 1；增益/减益与自定义 BUFF 不受此规则影响
     const zeroDefault = ["burn", "bleed", "rupture", "tremor", "sinking", "breathing"].includes(type);
-    const rawIntensity = buffData.intensity ?? 1;
-    let   rawStacks    = buffData.stacks    ?? 1;
+    let rawIntensity = buffData.intensity ?? 0;
+    let rawStacks    = buffData.stacks    ?? 0;
+    if (zeroDefault) {
+      if (!(rawIntensity > 0)) rawIntensity = 1;
+      if (!(rawStacks    > 0)) rawStacks    = 1;
+    }
 
     // 【振幅转换】【振幅纠缠】依附于震颤存在：没有任何震颤族时无法施加；且两者互斥
     if (TREMOR_DEPENDENT_TYPES.includes(type)) {
       if (!(this.system.buffs ?? []).some(b => isTremorFamilyType(b.type) && (b.stacks ?? 0) > 0)) {
-        ui.notifications?.warn(`【${buffData.name ?? type}】只能在目标拥有【震颤】或【特殊震颤】时添加。`);
+        ui.notifications?.warn(`【${name}】只能在目标拥有【震颤】或【特殊震颤】时添加。`);
         return;
       }
       const other = TREMOR_DEPENDENT_TYPES.find(t => t !== type);
-      if (buffs.some(b => b.type === other)) {
-        for (let i = buffs.length - 1; i >= 0; i--) if (buffs[i].type === other) buffs.splice(i, 1);
-      }
+      for (let i = buffs.length - 1; i >= 0; i--) if (buffs[i].type === other) buffs.splice(i, 1);
     }
 
     // maxGainPerRound：本回合累计可获得的层数上限。额度用尽后，本轮内无论通过
     // 技能、装备还是手动添加都不再获得层数（与 ClashManager._addBuff 共用同一份
     // flag 计数，每轮结束清空）。
-    const handler = resolveBuffHandler({ type, name: buffData.name ?? "" });
+    const handler = resolveBuffHandler({ type, name });
     const maxGain = handler?.maxGainPerRound ?? Infinity;
     let   gainFlagUpdate = null;
     if (Number.isFinite(maxGain) && rawStacks > 0) {
@@ -984,16 +987,60 @@ export class LimbusActor extends Actor {
       gainFlagUpdate = { "flags.limbusCompany_FVTT.buffRoundGain": gainMap };
     }
 
-    buffs.push({
-      id:        foundry.utils.randomID(),
-      type,
-      name:      buffData.name ?? "自定义",
-      icon:      buffData.icon ?? "",
-      intensity: (zeroDefault && !(rawIntensity > 0)) ? 1 : rawIntensity,
-      stacks:    (zeroDefault && !(rawStacks    > 0)) ? 1 : rawStacks,
-      whenAdded: buffData.whenAdded ?? "本回合",
-    });
-    return this.update({ "system.buffs": buffs, ...(gainFlagUpdate ?? {}) });
+    const { ClashManager } = await import("../helpers/clash.mjs");
+
+    // 【振幅转换】：持有期间任何震颤族的施加都并入现有的那一种（与 _addBuff 同规则）
+    if (isTremorFamilyType(type)) {
+      const cur = this.system.buffs ?? [];
+      if (cur.some(b => b.type === "amplitudeConvert")
+          && !cur.some(b => b.type === "amplitudeEntangle")) {
+        const family   = ClashManager._tremorFamilyBuffs(this);
+        const existing = family.find(b => b.type !== "tremor") ?? family[0];
+        const newType  = type !== "tremor" ? type : existing?.type;
+        if (newType && await ClashManager._convertTremorFamily(
+              this, newType, { stacks: rawStacks, intensity: rawIntensity })) {
+          await ClashManager._dispatchBuffChange(this, "onBuffGained",
+            { type: newType, intensity: rawIntensity, stacks: rawStacks });
+          return;
+        }
+      }
+    }
+
+    // 已有同类型（且同回合、自定义 BUFF 还需同名）则叠加，否则新增
+    // ——与 ClashManager._addBuff 保持一致，避免同一个 BUFF 在状态栏里裂成多条
+    const maxStacks     = handler?.maxStacks ?? Infinity;
+    const refreshOnGain = handler?.refreshOnGain ?? false;
+    const whenAdded     = buffData.whenAdded ?? "本回合";
+    const idx = buffs.findIndex(b =>
+      b.type === type
+      && (b.whenAdded ?? "本回合") === whenAdded
+      && (type !== "custom" || b.name === name));
+
+    if (idx >= 0) {
+      if (refreshOnGain) {
+        buffs[idx] = { ...buffs[idx], stacks: Math.min(rawStacks, maxStacks), intensity: rawIntensity };
+      } else {
+        buffs[idx] = {
+          ...buffs[idx],
+          stacks:    Math.min((buffs[idx].stacks ?? 0) + rawStacks, maxStacks),
+          intensity: (buffs[idx].intensity ?? 0) + rawIntensity,
+        };
+      }
+    } else {
+      buffs.push({
+        id:        foundry.utils.randomID(),
+        type,
+        name,
+        icon:      buffData.icon ?? "",
+        intensity: rawIntensity,
+        stacks:    Math.min(rawStacks, maxStacks),
+        whenAdded,
+      });
+    }
+
+    await this.update({ "system.buffs": buffs, ...(gainFlagUpdate ?? {}) });
+    await ClashManager._dispatchBuffChange(this, "onBuffGained",
+      { type, intensity: rawIntensity, stacks: rawStacks });
   }
 
   /**

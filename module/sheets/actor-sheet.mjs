@@ -1961,8 +1961,8 @@ export class LimbusActorSheet extends ActorSheet {
           </select>
         </div>
         <div class="form-group inline-row">
-          <label>强度</label><input type="number" name="intensity" value="1" min="0" style="width:60px"/>
-          <label style="margin-left:8px">层数</label><input type="number" name="stacks" value="1" min="0" style="width:60px"/>
+          <label>强度</label><input type="number" name="intensity" value="0" min="0" style="width:60px"/>
+          <label style="margin-left:8px">层数</label><input type="number" name="stacks" value="0" min="0" style="width:60px"/>
         </div>
       </div>`;
 
@@ -1975,8 +1975,8 @@ export class LimbusActorSheet extends ActorSheet {
           callback: async (html) => {
             const inputName = html.find("[name='buffName']").val().trim();
             const whenAdded = html.find("[name='whenAdded']").val();
-            const intensity = parseInt(html.find("[name='intensity']").val()) || 1;
-            const stacks    = parseInt(html.find("[name='stacks']").val())    || 1;
+            const intensity = parseInt(html.find("[name='intensity']").val()) || 0;
+            const stacks    = parseInt(html.find("[name='stacks']").val())    || 0;
 
             // 通过中文名反查 typeKey；匹配不到则视为纯自定义文本
             let type = labelToKey[inputName] ?? normalizeBuffType("custom", inputName);
