@@ -724,6 +724,22 @@ export class LimbusActorSheet extends ActorSheet {
 
   /* ─── 拖放处理 ──────────────────────────────────────────────────────────── */
 
+  /**
+   * 把拖拽残影换成物品图标本身。
+   * 不设的话浏览器会把被拖元素**整个盒子**截图当残影——技能槽/装备槽外面裹着
+   * skill-slot-wrap → skill-slot-octa → 边框图好几层，拖出来就是一坨带边框的方块。
+   * @param {DragEvent} event
+   * @param {HTMLElement} el 被拖的槽位元素
+   */
+  _setIconDragImage(event, el) {
+    const img = el?.querySelector?.("img.skill-slot-img, img.equip-slot-img, img");
+    if (!img || !event.dataTransfer?.setDragImage) return;
+    const rect = img.getBoundingClientRect();
+    try {
+      event.dataTransfer.setDragImage(img, rect.width / 2, rect.height / 2);
+    } catch (err) { /* 个别浏览器对 clip-path 元素会抛错，忽略即可 */ }
+  }
+
   _onDragStart(event) {
     const dragEl = event.currentTarget;
 
@@ -734,6 +750,7 @@ export class LimbusActorSheet extends ActorSheet {
       const slotIndex = Number(equipSlotEl.dataset.slot);
       const item = this.actor.items.get(itemId);
       if (!item) return;
+      this._setIconDragImage(event, equipSlotEl);
       event.dataTransfer.setData("text/plain", JSON.stringify({
         type: "Item",
         uuid: item.uuid,
@@ -750,6 +767,7 @@ export class LimbusActorSheet extends ActorSheet {
       const slotIndex = parseInt(skillSlotEl.dataset.slotIndex ?? "-1");
       const item      = this.actor.items.get(itemId);
       if (!item) return;
+      this._setIconDragImage(event, skillSlotEl);
       event.dataTransfer.setData("text/plain", JSON.stringify({
         type:              "Item",
         uuid:              item.uuid,
