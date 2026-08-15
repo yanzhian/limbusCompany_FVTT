@@ -182,7 +182,7 @@
           <div class="ego-cost-block">
             {{#each sinCosts}}
               <div class="ego-cost-item">
-                {{#if ../isEditable}}
+                {{#if (and ../isEditable (not ../isLocked))}}
                   <select name="system.sinCost.{{@index}}.sinType" class="sin-cost-sel">
                     {{#each @root.config.SINS}}
                       <option value="{{this}}" {{#if (eq this ../sinType)}}selected{{/if}}>{{lookup @root.config.SIN_LABELS_ZH this}}</option>
@@ -218,7 +218,7 @@
           <div class="ego-resist-block">
             {{#each egoResChanges}}
               <div class="ego-resist-item">
-                {{#if ../isEditable}}
+                {{#if (and ../isEditable (not ../isLocked))}}
                   <select name="system.egoResistanceAdj.{{@index}}.sinType" class="sin-cost-sel">
                     {{#each @root.config.SINS}}
                       <option value="{{this}}" {{#if (eq this ../sinType)}}selected{{/if}}>{{lookup @root.config.SIN_LABELS_ZH this}}</option>
@@ -231,7 +231,8 @@
                   </select>
                   <button type="button" class="res-change-remove-btn" data-idx="{{@index}}">×</button>
                 {{else}}
-                  <span>{{sinType}}×{{multiplier}}</span>
+                  <img src="{{lookup @root.config.SIN_ICON_PATHS sinType}}" width="16" height="16" alt="{{sinType}}">
+                  <span>{{multiplier}}</span>
                 {{/if}}
               </div>
             {{/each}}
