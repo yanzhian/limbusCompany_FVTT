@@ -35,6 +35,7 @@ import { SinResourceHUD }   from "./helpers/sin-resource-hud.mjs";
 import { QuickActionHUD }   from "./sheets/quick-action-hud.mjs";
 import { registerItemPiles } from "./helpers/item-piles.mjs";
 import { ChaosTokenLabel }   from "./helpers/chaos-token-label.mjs";
+import { ClashTotalFX }     from "./helpers/clash-total-fx.mjs";
 
 /* ─── Item Piles 联动注册 ─────────────────────────────────────────────────── */
 
@@ -98,6 +99,7 @@ Hooks.once("init", () => {
   game.socket.on("system.limbusCompany_FVTT", async (msg) => {
     await SinResourceHUD.handleSocketMsg(msg);
     await ClashManager.handleSocketMsg(msg);
+    await ClashTotalFX.handleSocketMsg(msg);
     await LimbusMerchantSheet.handleSocketMsg(msg);
     await LimbusCampSheet.handleSocketMsg(msg);
     await LimbusLootSheet.handleSocketMsg(msg);

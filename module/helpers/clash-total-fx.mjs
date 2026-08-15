@@ -19,6 +19,57 @@ export class ClashTotalFX {
 
   static _root = null;
 
+  /** 系统 socket 频道（与 ClashManager 共用同一条） */
+  static SOCKET = "system.limbusCompany_FVTT";
+
+  /** 远端播放时，各方"骰子已落定"的等待句柄 */
+  static _remoteSignals = null;
+
+  static _emit(payload) {
+    try { game.socket?.emit?.(this.SOCKET, payload); } catch (err) { /* 单机或断线时忽略 */ }
+  }
+
+  static _deferred() {
+    let resolve;
+    const promise = new Promise(r => { resolve = r; });
+    return { promise, resolve };
+  }
+
+  /**
+   * 远端消息处理（由主入口的 socket 总分发调用）。
+   * 发起演出的那台机器只负责广播"开始"与"某方骰子落定"，
+   * 其余客户端据此播放同一套演出，定格时机与本地保持一致。
+   */
+  static async handleSocketMsg(msg) {
+    if (msg?.type === "clashFxStart") {
+      const signals = { atk: this._deferred(), def: this._deferred() };
+      this._remoteSignals = signals;
+      const common = { atkParts: msg.atkParts ?? [], defParts: msg.defParts ?? [], broadcast: false };
+      if (msg.mode === "reroll") {
+        const sides = msg.rerollSides ?? [];
+        await this.playReroll({
+          ...common, rerollSides: sides,
+          startDice: () => sides.map(side => signals[side].promise),
+        });
+      } else {
+        await this.play({ ...common, startDice: () => [signals.atk.promise, signals.def.promise] });
+      }
+      this._remoteSignals = null;
+      return;
+    }
+    if (msg?.type === "clashFxSettle") {
+      this._remoteSignals?.[msg.side]?.resolve();
+    }
+  }
+
+  /** 本地等待各方骰子动画，同时把"已落定"广播出去，让远端同步定格 */
+  static _wrapSignals(signals, sides, broadcast) {
+    return signals.map((p, i) => Promise.resolve(p).then(
+      () => { if (broadcast) this._emit({ type: "clashFxSettle", side: sides[i] }); },
+      () => { if (broadcast) this._emit({ type: "clashFxSettle", side: sides[i] }); },
+    ));
+  }
+
   /* ─── DOM ─────────────────────────────────────────────────────────────── */
 
   static _ensureRoot() {
@@ -176,15 +227,19 @@ export class ClashTotalFX {
    * @param {Function} opts.startDice  黑条切入后调用，需返回 [攻方Promise, 守方Promise]
    *                                   （即两边 DiceSoNice 动画各自的完成信号）
    */
-  static async play({ atkParts = [], defParts = [], startDice = null } = {}) {
+  static async play({ atkParts = [], defParts = [], startDice = null, broadcast = true } = {}) {
     if (!this._enabled()) { await startDice?.(); return; }
 
     const sides = ["atk", "def"];
+    // 先让其他客户端把黑条切进来，双方同步开演
+    if (broadcast) this._emit({ type: "clashFxStart", mode: "play", atkParts, defParts });
+
     this._reset(sides);
     await this._bandsIn(sides);
 
     // 黑条就位后才开骰——骰子动画与数字滚动同时进行
-    const [atkSignal, defSignal] = (await startDice?.()) ?? [];
+    const raw = (await startDice?.()) ?? [];
+    const [atkSignal, defSignal] = this._wrapSignals(raw, sides, broadcast);
 
     await Promise.all([
       this._rollUntil(this._band("atk").querySelector(".lcfx-num"), atkParts[0]?.value ?? 0, atkSignal),
@@ -213,12 +268,16 @@ export class ClashTotalFX {
    * @param {string[]} opts.rerollSides  实际发生重投的一方或双方，如 ["atk"]
    * @param {Function} opts.startDice    返回与 rerollSides 等长的 Promise 数组
    */
-  static async playReroll({ atkParts = [], defParts = [], rerollSides = [], startDice = null } = {}) {
+  static async playReroll({ atkParts = [], defParts = [], rerollSides = [], startDice = null, broadcast = true } = {}) {
     if (!rerollSides.length) return;
     if (!this._enabled()) { await startDice?.(); return; }
 
     const sides = ["atk", "def"];
     const partsOf = (side) => (side === "atk" ? atkParts : defParts);
+
+    if (broadcast) {
+      this._emit({ type: "clashFxStart", mode: "reroll", atkParts, defParts, rerollSides });
+    }
 
     this._reset(sides);
     for (const side of rerollSides) {
@@ -226,7 +285,7 @@ export class ClashTotalFX {
     }
     await this._bandsIn(sides);
 
-    const signals = (await startDice?.()) ?? [];
+    const signals = this._wrapSignals((await startDice?.()) ?? [], rerollSides, broadcast);
 
     await Promise.all(sides.map(side => {
       const numEl = this._band(side).querySelector(".lcfx-num");
