@@ -2498,54 +2498,59 @@ export class ClashManager {
     // 若公式与发起时不同，重新投骰，保留手动加值部分
     // 公式重投的骰子同样要有 DSN 动画，且攻守两边重投时一起入场
     const _rerollShow = [];
+    // 手动加值部分（"+3" 之类）与基础公式：重投与演出都要用
+    const atkBonusPart  = String(initFlags.formula ?? "").slice(String(atkBaseFormulaOrig ?? "").length);
+    const atkBonusVal   = parseInt(atkBonusPart) || 0;
+    const defBonusPart0 = String(defFormula ?? "").slice(String(defBaseFormulaOrig ?? "").length);
+    const defBonusVal   = parseInt(defBonusPart0) || 0;
+
     let atkFinalTotal   = initFlags.rollTotal;
     let atkFinalFormula = initFlags.formula;
+    let atkFinalBase    = atkBaseFormulaOrig;
     const newAtkBase = atkItem?.system?.diceFormula ?? atkBaseFormulaOrig;
     if (newAtkBase !== atkBaseFormulaOrig) {
-      const bonusPart  = initFlags.formula.slice(atkBaseFormulaOrig.length); // 手动加值部分，如 "+3" 或 ""
-      const newAtkFull = newAtkBase + bonusPart;
+      const newAtkFull = newAtkBase + atkBonusPart;
       const rerollAtk  = new Roll(newAtkFull);
       await rerollAtk.evaluate();
       atkFinalTotal   = rerollAtk.total;
       atkFinalFormula = newAtkFull;
-      _rerollShow.push({
-        roll: rerollAtk, actor: atkActor, side: "atk",
-        bonus: (parseInt(bonusPart) || 0), baseFormula: newAtkBase,
-        category: initFlags.category ?? "",
-      });
+      atkFinalBase    = newAtkBase;
+      _rerollShow.push({ roll: rerollAtk, actor: atkActor, side: "atk" });
       _actMsgs.push({ trigger: "公式重投", itemName: atkItem?.name ?? "攻击方", msgs: [`公式变化（${atkBaseFormulaOrig} → ${newAtkBase}），重新投骰：${rerollAtk.result} = <b>${rerollAtk.total}</b>`] });
     }
 
     let defFinalTotal   = defRoll.total;
     let defFinalFormula = defFormula;
+    let defFinalBase    = defBaseFormulaOrig;
     const newDefBase = defItem?.system?.diceFormula ?? defBaseFormulaOrig;
     if (newDefBase !== defBaseFormulaOrig) {
-      const defBonusPart = defFormula.slice(defBaseFormulaOrig.length); // 手动加值部分
-      const newDefFull   = newDefBase + defBonusPart;
+      const newDefFull = newDefBase + defBonusPart0;
       const rerollDef    = new Roll(newDefFull);
       await rerollDef.evaluate();
       defFinalTotal   = rerollDef.total;
       defFinalFormula = newDefFull;
-      _rerollShow.push({
-        roll: rerollDef, actor: defActor, side: "def",
-        bonus: (parseInt(defBonusPart) || 0), baseFormula: newDefBase,
-        category: defItem?.system?.category ?? "",
-      });
+      defFinalBase    = newDefBase;
+      _rerollShow.push({ roll: rerollDef, actor: defActor, side: "def" });
       _actMsgs.push({ trigger: "公式重投", itemName: defItem?.name ?? "防守方", msgs: [`公式变化（${defBaseFormulaOrig} → ${newDefBase}），重新投骰：${rerollDef.result} = <b>${rerollDef.total}</b>`] });
     }
 
-    // 重投的骰子动画：套用同一套 TOTAL 演出，带【公式重投】标记
+    // 重投的演出：两条黑条都在场——只有真正重投的那方带【公式重投】标记并重滚，
+    // 另一方保留原点数一同显示，重新分出胜负
     if (_rerollShow.length) {
       await ClashTotalFX.playReroll({
-        entries: _rerollShow.map(e => ({
-          side:  e.side,
-          parts: ClashManager._buildTotalParts({
-            actor: e.actor, opponent: e.side === "atk" ? defActor : atkActor,
-            rollTotal: e.roll?.total ?? 0, bonus: e.bonus ?? 0,
-            baseFormula: e.baseFormula ?? "", category: e.category ?? "",
-            isDefender: e.side === "def",
-          }),
-        })),
+        rerollSides: _rerollShow.map(e => e.side),
+        atkParts: ClashManager._buildTotalParts({
+          actor: atkActor, opponent: defActor,
+          rollTotal: atkFinalTotal ?? 0, bonus: atkBonusVal,
+          baseFormula: atkFinalBase ?? "", category: initFlags.category ?? "",
+          isDefender: false,
+        }),
+        defParts: ClashManager._buildTotalParts({
+          actor: defActor, opponent: atkActor,
+          rollTotal: defFinalTotal ?? 0, bonus: defBonusVal,
+          baseFormula: defFinalBase ?? "", category: defItem?.system?.category ?? "",
+          isDefender: true,
+        }),
         startDice: () => ClashManager._showDiceEach(_rerollShow),
       });
     }

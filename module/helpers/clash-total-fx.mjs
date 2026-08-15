@@ -204,28 +204,49 @@ export class ClashTotalFX {
   }
 
   /**
-   * 公式重投的演出：只对发生重投的那一/两方再来一次，带【公式重投】标记。
+   * 公式重投的演出：两条黑条都在场，只有实际重投的那一方带【公式重投】标记并重滚，
+   * 另一方保留原有点数直接显示，最后重新分出胜负——这样玩家能看清重投前后的对比。
+   *
    * @param {object}   opts
-   * @param {object[]} opts.entries    [{ side: "atk"|"def", parts: [...] }]
-   * @param {Function} opts.startDice  返回与 entries 等长的 Promise 数组
+   * @param {object[]} opts.atkParts     进攻方分段（重投方为重投后的值）
+   * @param {object[]} opts.defParts     防守方分段
+   * @param {string[]} opts.rerollSides  实际发生重投的一方或双方，如 ["atk"]
+   * @param {Function} opts.startDice    返回与 rerollSides 等长的 Promise 数组
    */
-  static async playReroll({ entries = [], startDice = null } = {}) {
-    if (!entries.length) return;
+  static async playReroll({ atkParts = [], defParts = [], rerollSides = [], startDice = null } = {}) {
+    if (!rerollSides.length) return;
     if (!this._enabled()) { await startDice?.(); return; }
 
-    const sides = entries.map(e => e.side);
+    const sides = ["atk", "def"];
+    const partsOf = (side) => (side === "atk" ? atkParts : defParts);
+
     this._reset(sides);
-    for (const side of sides) this._band(side).querySelector(".lcfx-reroll").classList.add("show");
+    for (const side of rerollSides) {
+      this._band(side).querySelector(".lcfx-reroll").classList.add("show");
+    }
     await this._bandsIn(sides);
 
     const signals = (await startDice?.()) ?? [];
-    await Promise.all(entries.map((e, i) =>
-      this._rollUntil(this._band(e.side).querySelector(".lcfx-num"), e.parts[0]?.value ?? 0, signals[i])
-    ));
+
+    await Promise.all(sides.map(side => {
+      const numEl = this._band(side).querySelector(".lcfx-num");
+      const dice  = partsOf(side)[0]?.value ?? 0;
+      const idx   = rerollSides.indexOf(side);
+      // 重投方：滚到自己的骰子动画播完；未重投方：沿用原点数，直接显示
+      if (idx >= 0) return this._rollUntil(numEl, dice, signals[idx]);
+      numEl.textContent = dice;
+      return Promise.resolve();
+    }));
 
     await this._sleep(260);
-    await Promise.all(entries.map(e => this._revealParts(e.side, e.parts)));
-    await this._sleep(900);
+    const [atkTotal, defTotal] = await Promise.all([
+      this._revealParts("atk", atkParts),
+      this._revealParts("def", defParts),
+    ]);
+
+    await this._sleep(240);
+    this._judge(atkTotal, defTotal);
+    await this._sleep(1000);
     await this._bandsOut(sides);
   }
 }
