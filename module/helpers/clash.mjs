@@ -1724,7 +1724,7 @@ export class ClashManager {
     const bleedCurrentLevel  = bleedExistingType ? (_BC_TYPES.indexOf(bleedExistingType) + 1) : 0;
     const bleedNewLevel      = Math.min(3, bleedCurrentLevel + bleedChaosCount);
     const bleedChaosName     = _BC_NAMES[bleedNewLevel - 1] ?? "陷入混乱";
-    await actor.update({ "system.hp.value": newHp });
+    await ClashManager._safeDocUpdate(actor, { "system.hp.value": newHp });
     await ClashManager._reduceBuffStacks(actor, "bleed");
     await ClashManager._tickFieldResources("bleed", dmg, 1);
     if (actor.checkAndTriggerChaos) await actor.checkAndTriggerChaos(newHp, oldHp, { silent: true });
@@ -2059,12 +2059,12 @@ export class ClashManager {
         sheet._animateCombatSkillUse?.(slotIndex);
         setTimeout(async () => {
           const ap = actor.system.ap?.value ?? 0;
-          if (ap > 0) await actor.update({ "system.ap.value": ap - 1 });
+          if (ap > 0) await ClashManager._safeDocUpdate(actor, { "system.ap.value": ap - 1 });
         }, 700);
       }
     } else if (slotIndex === -2) {
       const ap = actor.system.ap?.value ?? 0;
-      if (ap > 0) await actor.update({ "system.ap.value": ap - 1 });
+      if (ap > 0) await ClashManager._safeDocUpdate(actor, { "system.ap.value": ap - 1 });
     }
   }
 
@@ -3044,7 +3044,7 @@ export class ClashManager {
       if (!sinType || !VALID.includes(multiplier)) continue;
       update[`system.egoResistances.${sinType}`] = multiplier;
     }
-    if (Object.keys(update).length) await actor.update(update);
+    if (Object.keys(update).length) await ClashManager._safeDocUpdate(actor, update);
   }
 
   /* ─── 再次骰掷（平局时重新计算） ─────────────────────────────────────── */
@@ -3730,8 +3730,9 @@ export class ClashManager {
     const newChaosLevel      = Math.min(3, currentChaosLevel + chaosCount);
     const chaosName          = _CHAOS_NAMES[newChaosLevel - 1] ?? "陷入混乱";
 
-    // 更新 HP
-    await actor.update({ "system.hp.value": newHp });
+    // 更新 HP —— 承受方可能不属于当前玩家（如攻击方客户端结算反击伤害），
+    // 必须走 _safeDocUpdate 由 GM 代理，否则会抛 lacks permission
+    await ClashManager._safeDocUpdate(actor, { "system.hp.value": newHp });
 
     // 沉沦：更新理智值（setSanity 内部会检查恐慌状态）；
     // 若理智因此跌至下限 5，额外造成【沉沦】强度等级的【忧郁】罪孽伤害（按目标忧郁抗性结算）
@@ -4448,7 +4449,7 @@ export class ClashManager {
       }
       // 非守备技能：发起对抗（反应触发，不消耗行动值：临时置 AP 为足够大再还原）
       const curAP = actor.system?.ap?.value ?? 0;
-      if (curAP <= 0) await actor.update({ "system.ap.value": 1 });
+      if (curAP <= 0) await ClashManager._safeDocUpdate(actor, { "system.ap.value": 1 });
       await ClashManager.showInitiateDialog(actor, skillItem, -2);
       return;
     }

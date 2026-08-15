@@ -919,7 +919,7 @@ export class LimbusActor extends Actor {
       whenAdded: "本回合",
     });
 
-    await this.update({
+    await this._safeUpdateSelf({
       "system.chaosThresholds": thresholds,
       "system.ap.value":        0,
       "system.buffs":           newBuffs,
@@ -936,6 +936,16 @@ export class LimbusActor extends Actor {
   }
 
   // ─── BUFF 管理 ─────────────────────────────────────────────────────────
+
+  /**
+   * 安全写入自身：战斗流程里经常由"对方的客户端"来改本角色（承受伤害、被加 BUFF、
+   * 混乱阈值前移等），此时当前玩家没有本角色的更新权限。统一走
+   * ClashManager._safeDocUpdate，由它在无权限时通过 socket 委托 GM 执行。
+   */
+  async _safeUpdateSelf(data) {
+    const { ClashManager } = await import("../helpers/clash.mjs");
+    return ClashManager._safeDocUpdate(this, data);
+  }
 
   /**
    * 添加 BUFF
@@ -1038,7 +1048,7 @@ export class LimbusActor extends Actor {
       });
     }
 
-    await this.update({ "system.buffs": buffs, ...(gainFlagUpdate ?? {}) });
+    await this._safeUpdateSelf({ "system.buffs": buffs, ...(gainFlagUpdate ?? {}) });
     await ClashManager._dispatchBuffChange(this, "onBuffGained",
       { type, intensity: rawIntensity, stacks: rawStacks });
   }
@@ -1049,7 +1059,7 @@ export class LimbusActor extends Actor {
    */
   async removeBuff(buffId) {
     const buffs = (this.system.buffs ?? []).filter(b => b.id !== buffId);
-    return this.update({ "system.buffs": buffs });
+    return this._safeUpdateSelf({ "system.buffs": buffs });
   }
 
   /**
@@ -1058,7 +1068,7 @@ export class LimbusActor extends Actor {
    */
   async removeBuffsByType(type) {
     const buffs = (this.system.buffs ?? []).filter(b => b.type !== type);
-    return this.update({ "system.buffs": buffs });
+    return this._safeUpdateSelf({ "system.buffs": buffs });
   }
 
   /**
@@ -1075,7 +1085,7 @@ export class LimbusActor extends Actor {
     const keepAtZero = resolveBuffHandler(buffs[idx])?.keepAtZero ?? false;
     if (next <= 0 && !keepAtZero) buffs.splice(idx, 1);
     else                          buffs[idx] = { ...buffs[idx], stacks: next };
-    return this.update({ "system.buffs": buffs });
+    return this._safeUpdateSelf({ "system.buffs": buffs });
   }
 
   /**
@@ -1094,7 +1104,7 @@ export class LimbusActor extends Actor {
     const keepAtZero = resolveBuffHandler(buffs[idx])?.keepAtZero ?? false;
     if (next <= 0 && stacks <= 0 && !keepAtZero) buffs.splice(idx, 1);
     else                                         buffs[idx] = { ...buffs[idx], intensity: next };
-    return this.update({ "system.buffs": buffs });
+    return this._safeUpdateSelf({ "system.buffs": buffs });
   }
 
   // ─── 震颤引爆 ──────────────────────────────────────────────────────────
@@ -1109,7 +1119,7 @@ export class LimbusActor extends Actor {
         percent:   Math.min(100, t.percent + intensity),
         triggered: t.triggered,
       }));
-    return this.update({ "system.chaosThresholds": thresholds });
+    return this._safeUpdateSelf({ "system.chaosThresholds": thresholds });
   }
 
   // ─── 理智检查（恐慌状态） ──────────────────────────────────────────────
@@ -1122,7 +1132,7 @@ export class LimbusActor extends Actor {
    */
   async setSanity(value) {
     const clamped = Math.min(95, Math.max(5, value));
-    await this.update({ "system.sanity.value": clamped });
+    await this._safeUpdateSelf({ "system.sanity.value": clamped });
 
     // 士气低落：一场遭遇战只触发一次（无论跨阈值多少次），不重新鉴定。
     // 士气低落不是 BUFF，不写入 system.buffs，也就不会出现在状态栏上——
@@ -1198,7 +1208,7 @@ export class LimbusActor extends Actor {
   async addPanicCounter(side) {
     const cur = this.system.panicCounters?.[side] ?? 0;
     const next = Math.min(3, cur + 1);
-    await this.update({ [`system.panicCounters.${side}`]: next });
+    await this._safeUpdateSelf({ [`system.panicCounters.${side}`]: next });
     if (next >= 3) await this._resolvePanicOutcome(side);
   }
 
@@ -1209,7 +1219,7 @@ export class LimbusActor extends Actor {
    */
   async setPanicCounter(side, value) {
     const clamped = Math.max(0, Math.min(3, value));
-    await this.update({ [`system.panicCounters.${side}`]: clamped });
+    await this._safeUpdateSelf({ [`system.panicCounters.${side}`]: clamped });
     if (clamped >= 3) await this._resolvePanicOutcome(side);
   }
 
@@ -1230,7 +1240,7 @@ export class LimbusActor extends Actor {
   async clearPanicCountersIfTriggered() {
     const { fear = 0, resolve = 0 } = this.system.panicCounters ?? {};
     if (fear >= 3 || resolve >= 3) {
-      await this.update({ "system.panicCounters.fear": 0, "system.panicCounters.resolve": 0 });
+      await this._safeUpdateSelf({ "system.panicCounters.fear": 0, "system.panicCounters.resolve": 0 });
     }
   }
 
