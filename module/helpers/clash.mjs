@@ -4,6 +4,7 @@
  */
 
 import { SinResourceHUD } from "./sin-resource-hud.mjs";
+import { ClashTotalFX }   from "./clash-total-fx.mjs";
 import {
   CustomBuffRegistry, resolveBuffHandler, FieldResourceRegistry,
   isTremorFamilyType, TREMOR_BASE_TYPE, TREMOR_DEPENDENT_TYPES,
@@ -120,6 +121,65 @@ export class ClashManager {
         .showForRoll(e.roll, ClashManager._diceUserFor(e.actor), true, null, false)
         .catch(() => {}));
     if (jobs.length) await Promise.all(jobs);
+  }
+
+  /**
+   * 组装 TOTAL 演出用的分段。第一项是骰值（骰子动画停下时定格的数），
+   * 其余依次为手动加值与各 BUFF 修正，累加结果与 _computeResolution 的
+   * 有效骰数完全一致（atkTotal + diceMod + lvBonus / defTotal + diceMod + pwrMod + lvBonus）。
+   *
+   * @param {object} o
+   * @param {Actor}  o.actor      本方角色
+   * @param {Actor}  o.opponent   对方角色（算等级差）
+   * @param {number} o.rollTotal  掷骰总点数（含手动加值）
+   * @param {number} o.bonus      手动加值
+   * @param {string} o.baseFormula 骰子公式（作为骰值那条的名字，如 "3D6"）
+   * @param {string} o.category   本次使用技能的分类
+   * @param {boolean} o.isDefender 是否为防守方
+   * @returns {{name:string, value:number}[]}
+   */
+  static _buildTotalParts({ actor, opponent, rollTotal = 0, bonus = 0, baseFormula = "", category = "", isDefender = false }) {
+    const gs = (a, t) => ClashManager._getBuffVal(a, t).stacks;
+    const parts = [{ name: baseFormula || "骰值", value: (rollTotal ?? 0) - (bonus ?? 0) }];
+    if (bonus) parts.push({ name: "加值", value: bonus });
+    if (!actor) return parts;
+
+    const ALL_DEF_CATS = new Set(["dodge", "block", "counter", "clashBlock", "clashCounter"]);
+    const DEF_LEVEL_CATS = new Set(["dodge", "block", "clashBlock"]);
+    const isDefCat = isDefender && ALL_DEF_CATS.has(category);
+
+    // 骰数类 BUFF：守备技能看忍耐/破绽，其余看强壮/虚弱
+    const push = (label, v) => { if (v) parts.push({ name: label, value: v }); };
+    if (isDefCat) {
+      push("忍耐", gs(actor, "endure"));
+      push("破绽", -gs(actor, "breach"));
+    } else {
+      push("强壮", gs(actor, "strong"));
+      push("虚弱", -gs(actor, "weak"));
+    }
+    push("拼点威力", gs(actor, "clashPowerUp") - gs(actor, "clashPowerDown"));
+
+    // 等级差：每 3 级 +1，仅高的一方获得
+    if (opponent) {
+      const myLv = (isDefender && DEF_LEVEL_CATS.has(category))
+        ? ClashManager._effDefLv(actor) : ClashManager._effAtkLv(actor);
+      const oppCat = isDefender ? "" : category;
+      const oppLv  = (!isDefender && DEF_LEVEL_CATS.has(oppCat))
+        ? ClashManager._effDefLv(opponent) : ClashManager._effAtkLv(opponent);
+      push("等级差", Math.floor(Math.max(0, myLv - oppLv) / 3));
+    }
+    return parts;
+  }
+
+  /**
+   * 与 _showDice 相同，但不等待——返回每一项各自的 Promise，
+   * 供 TOTAL 演出把"数字定格"对齐到各自骰子动画结束的那一刻。
+   */
+  static _showDiceEach(entries = []) {
+    if (!game.dice3d) return entries.map(() => Promise.resolve());
+    return entries.map(e => e?.roll
+      ? game.dice3d.showForRoll(e.roll, ClashManager._diceUserFor(e.actor), true, null, false).catch(() => {})
+      : Promise.resolve());
   }
 
   static _skillFrameIcon(item) {
@@ -2269,15 +2329,37 @@ export class ClashManager {
               const roll     = new Roll(full);
               await roll.evaluate();
               ClashManager.applyDiceRollMods(defActor, roll, { item: defItem, isDefense: true });
-              // DiceSoNice: 攻守双方骰子同时入场，各自使用自己的骰子皮肤
+
+              // ── TOTAL 演出 + DiceSoNice ────────────────────────────────
+              // 黑条先切入，就位后才开骰；双方骰子同时入场、各用各的皮肤，
+              // 数字滚到各自骰子落定时定格，再分段揭示加值与 BUFF。
               {
                 const atkActorD = game.actors.get(initFlags.attackerId);
                 const atkRoll   = initFlags.rollData
                   ? Roll.fromJSON(JSON.stringify(initFlags.rollData)) : null;
-                await ClashManager._showDice([
-                  { roll: atkRoll, actor: atkActorD },
-                  { roll,          actor: defActor  },
-                ]);
+                // 攻击方的手动加值：完整公式相对基础公式多出来的那一截（如 "+3"）
+                const atkBase   = initFlags.baseFormula ?? initFlags.formula ?? "";
+                const atkBonus  = parseInt(String(initFlags.formula ?? "").slice(atkBase.length)) || 0;
+
+                const atkParts = ClashManager._buildTotalParts({
+                  actor: atkActorD, opponent: defActor,
+                  rollTotal: initFlags.rollTotal ?? 0, bonus: atkBonus,
+                  baseFormula: atkBase,
+                  category: initFlags.category ?? "", isDefender: false,
+                });
+                const defParts = ClashManager._buildTotalParts({
+                  actor: defActor, opponent: atkActorD,
+                  rollTotal: roll.total ?? 0, bonus,
+                  baseFormula: formula, category: sys.category ?? "", isDefender: true,
+                });
+
+                await ClashTotalFX.play({
+                  atkParts, defParts,
+                  startDice: () => ClashManager._showDiceEach([
+                    { roll: atkRoll, actor: atkActorD },
+                    { roll,          actor: defActor  },
+                  ]),
+                });
               }
               await ClashManager._sendResponseAndResolve(
                 defActor, defItem, roll, full, initMsgId, initFlags, slotIdx
@@ -2426,7 +2508,11 @@ export class ClashManager {
       await rerollAtk.evaluate();
       atkFinalTotal   = rerollAtk.total;
       atkFinalFormula = newAtkFull;
-      _rerollShow.push({ roll: rerollAtk, actor: atkActor });
+      _rerollShow.push({
+        roll: rerollAtk, actor: atkActor, side: "atk",
+        bonus: (parseInt(bonusPart) || 0), baseFormula: newAtkBase,
+        category: initFlags.category ?? "",
+      });
       _actMsgs.push({ trigger: "公式重投", itemName: atkItem?.name ?? "攻击方", msgs: [`公式变化（${atkBaseFormulaOrig} → ${newAtkBase}），重新投骰：${rerollAtk.result} = <b>${rerollAtk.total}</b>`] });
     }
 
@@ -2440,12 +2526,29 @@ export class ClashManager {
       await rerollDef.evaluate();
       defFinalTotal   = rerollDef.total;
       defFinalFormula = newDefFull;
-      _rerollShow.push({ roll: rerollDef, actor: defActor });
+      _rerollShow.push({
+        roll: rerollDef, actor: defActor, side: "def",
+        bonus: (parseInt(defBonusPart) || 0), baseFormula: newDefBase,
+        category: defItem?.system?.category ?? "",
+      });
       _actMsgs.push({ trigger: "公式重投", itemName: defItem?.name ?? "防守方", msgs: [`公式变化（${defBaseFormulaOrig} → ${newDefBase}），重新投骰：${rerollDef.result} = <b>${rerollDef.total}</b>`] });
     }
 
-    // 重投的骰子动画：与首次投骰一致（同时入场 + 各自皮肤）
-    await ClashManager._showDice(_rerollShow);
+    // 重投的骰子动画：套用同一套 TOTAL 演出，带【公式重投】标记
+    if (_rerollShow.length) {
+      await ClashTotalFX.playReroll({
+        entries: _rerollShow.map(e => ({
+          side:  e.side,
+          parts: ClashManager._buildTotalParts({
+            actor: e.actor, opponent: e.side === "atk" ? defActor : atkActor,
+            rollTotal: e.roll?.total ?? 0, bonus: e.bonus ?? 0,
+            baseFormula: e.baseFormula ?? "", category: e.category ?? "",
+            isDefender: e.side === "def",
+          }),
+        })),
+        startDice: () => ClashManager._showDiceEach(_rerollShow),
+      });
+    }
 
     // 汇总 [攻击时/拼点时] 后所有可能被修改的攻击方字段，统一覆盖 initFlags
     // 目前覆盖字段：rollTotal / formula（骰子公式变化重投）、weight（weightAdj 修改加重值）

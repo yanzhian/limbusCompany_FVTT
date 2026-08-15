@@ -842,7 +842,15 @@ async function _migrateTokenLinks() {
  * 注册游戏系统设置（globalSins 已由 SinResourceHUD.init() 在 init 钩子中注册）
  */
 function _registerSettings() {
-  // 保留槽位，后续阶段按需添加
+  // 拼点 TOTAL 演出开关（每个玩家各自设置）
+  game.settings.register("limbusCompany_FVTT", "clashTotalFx", {
+    name:    "拼点 TOTAL 演出",
+    hint:    "双方确定技能开骰时播放全屏 TOTAL 动画；关闭后只保留骰子动画。",
+    scope:   "client",
+    config:  true,
+    type:    Boolean,
+    default: true,
+  });
 }
 
 /**
