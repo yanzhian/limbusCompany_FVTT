@@ -725,19 +725,40 @@ export class LimbusActorSheet extends ActorSheet {
   /* ─── 拖放处理 ──────────────────────────────────────────────────────────── */
 
   /**
-   * 把拖拽残影换成物品图标本身。
-   * 不设的话浏览器会把被拖元素**整个盒子**截图当残影——技能槽/装备槽外面裹着
-   * skill-slot-wrap → skill-slot-octa → 边框图好几层，拖出来就是一坨带边框的方块。
-   * @param {DragEvent} event
-   * @param {HTMLElement} el 被拖的槽位元素
+   * 把拖拽残影换成一张干净的物品图标。
+   *
+   * 两个坑：
+   * ① 不设 setDragImage 时，浏览器会把被拖元素**整个盒子**截图当残影——技能槽外面
+   *    裹着 skill-slot-wrap → skill-slot-octa → 220% 的边框图好几层，拖出来是一坨方块。
+   * ② 直接把槽位里那张 img 传给 setDragImage 同样不行：它带着
+   *    position:absolute + translate(-50%,-50%) + clip-path(七边形)，
+   *    Chrome 生成残影时会把这些一起算进去，仍然得到一个偏移的大方框。
+   * 因此这里另外造一张脱离样式的临时 img（只有 src 和尺寸），用完即弃。
+   *
+   * @param {DragEvent}   event
+   * @param {HTMLElement} el   被拖的槽位元素
+   * @param {string}      src  图标路径
    */
-  _setIconDragImage(event, el) {
-    const img = el?.querySelector?.("img.skill-slot-img, img.equip-slot-img, img");
-    if (!img || !event.dataTransfer?.setDragImage) return;
-    const rect = img.getBoundingClientRect();
+  _setIconDragImage(event, el, src) {
+    if (!src || !event.dataTransfer?.setDragImage) return;
+    const size  = 48;
+    const ghost = document.createElement("img");
+    ghost.src = src;
+    Object.assign(ghost.style, {
+      position: "fixed",
+      top:      "-1000px",     // 挪到屏幕外，只为让浏览器能把它渲染成残影
+      left:     "-1000px",
+      width:    `${size}px`,
+      height:   `${size}px`,
+      objectFit: "contain",
+      pointerEvents: "none",
+    });
+    document.body.appendChild(ghost);
     try {
-      event.dataTransfer.setDragImage(img, rect.width / 2, rect.height / 2);
-    } catch (err) { /* 个别浏览器对 clip-path 元素会抛错，忽略即可 */ }
+      event.dataTransfer.setDragImage(ghost, size / 2, size / 2);
+    } catch (err) { /* 极少数浏览器不支持，回落到默认残影 */ }
+    // 残影在 dragstart 结束时已被截取，随后即可移除
+    setTimeout(() => ghost.remove(), 0);
   }
 
   _onDragStart(event) {
@@ -750,7 +771,7 @@ export class LimbusActorSheet extends ActorSheet {
       const slotIndex = Number(equipSlotEl.dataset.slot);
       const item = this.actor.items.get(itemId);
       if (!item) return;
-      this._setIconDragImage(event, equipSlotEl);
+      this._setIconDragImage(event, equipSlotEl, item.img);
       event.dataTransfer.setData("text/plain", JSON.stringify({
         type: "Item",
         uuid: item.uuid,
@@ -767,7 +788,7 @@ export class LimbusActorSheet extends ActorSheet {
       const slotIndex = parseInt(skillSlotEl.dataset.slotIndex ?? "-1");
       const item      = this.actor.items.get(itemId);
       if (!item) return;
-      this._setIconDragImage(event, skillSlotEl);
+      this._setIconDragImage(event, skillSlotEl, item.img);
       event.dataTransfer.setData("text/plain", JSON.stringify({
         type:              "Item",
         uuid:              item.uuid,
