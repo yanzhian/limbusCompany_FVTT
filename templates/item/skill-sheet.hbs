@@ -20,7 +20,7 @@
 
         {{!-- 图标 --}}
         <div class="equip-icon-col">
-          <div class="skill-slot-octa skill-icon-big" style="border-color:{{sinColor}}">
+          <div class="skill-slot-octa skill-icon-big {{#if isEgo}}skill-icon-big--ego{{/if}}" style="border-color:{{sinColor}}">
             {{#if isEditable}}
               <img src="{{item.img}}" class="skill-slot-img" data-edit="img" title="更换图标" alt="icon">
             {{else}}
