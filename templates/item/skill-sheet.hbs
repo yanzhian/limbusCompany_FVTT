@@ -20,11 +20,15 @@
 
         {{!-- 图标 --}}
         <div class="equip-icon-col">
-          <div class="skill-slot-octa skill-icon-big" style="border-color:{{sinColor}}">
+          <div class="skill-slot-octa skill-icon-big {{#if isEgo}}skill-icon-big--ego{{/if}}" style="border-color:{{sinColor}}">
             {{#if isEditable}}
               <img src="{{item.img}}" class="skill-slot-img" data-edit="img" title="更换图标" alt="icon">
             {{else}}
               <img src="{{item.img}}" class="skill-slot-img" alt="icon">
+            {{/if}}
+            {{!-- 罪孽 + 等级边框（EGO 为圆环），叠在图标之上 --}}
+            {{#if skillFrame}}
+              <img src="{{skillFrame}}" class="skill-icon-frame" alt="" draggable="false">
             {{/if}}
           </div>
         </div>
@@ -65,13 +69,21 @@
                   <option value="unbreakable" {{#eq system.diceType "unbreakable"}}selected{{/eq}}>不可摧毁</option>
                 </select>
               {{/unless}}
+              {{!-- 无法装备：衍生技能专用，只能由【相关技能转换】换上场 --}}
+              <label class="no-equip-toggle" title="衍生技能：无法直接装备，只能通过【相关技能转换】替换上场">
+                <input type="checkbox" name="system.noEquip" {{#if system.noEquip}}checked{{/if}}>
+                无法装备
+              </label>
             {{else}}
               {{#if system.category}}
                 <img src="{{lookup @root.config.CATEGORY_ICON_PATHS system.category}}" class="category-icon" width="22" height="22" alt="{{system.category}}">
               {{/if}}
               <span class="dice-formula-display">{{diceFormulaDisplay}}</span>
               {{#if (eq system.diceType "unbreakable")}}
-                <span class="dice-type-badge unbreakable-badge" title="不可摧毁：受到伤害后自动反击（变动值+1）">不可摧毁</span>
+                <span class="dice-type-badge unbreakable-badge">不可摧毁</span>
+              {{/if}}
+              {{#if system.noEquip}}
+                <span class="dice-type-badge no-equip-badge">无法装备</span>
               {{/if}}
             {{/if}}
           </div>
@@ -170,7 +182,7 @@
           <div class="ego-cost-block">
             {{#each sinCosts}}
               <div class="ego-cost-item">
-                {{#if ../isEditable}}
+                {{#if (and ../isEditable (not ../isLocked))}}
                   <select name="system.sinCost.{{@index}}.sinType" class="sin-cost-sel">
                     {{#each @root.config.SINS}}
                       <option value="{{this}}" {{#if (eq this ../sinType)}}selected{{/if}}>{{lookup @root.config.SIN_LABELS_ZH this}}</option>
@@ -206,7 +218,7 @@
           <div class="ego-resist-block">
             {{#each egoResChanges}}
               <div class="ego-resist-item">
-                {{#if ../isEditable}}
+                {{#if (and ../isEditable (not ../isLocked))}}
                   <select name="system.egoResistanceAdj.{{@index}}.sinType" class="sin-cost-sel">
                     {{#each @root.config.SINS}}
                       <option value="{{this}}" {{#if (eq this ../sinType)}}selected{{/if}}>{{lookup @root.config.SIN_LABELS_ZH this}}</option>
@@ -219,7 +231,8 @@
                   </select>
                   <button type="button" class="res-change-remove-btn" data-idx="{{@index}}">×</button>
                 {{else}}
-                  <span>{{sinType}}×{{multiplier}}</span>
+                  <img src="{{lookup @root.config.SIN_ICON_PATHS sinType}}" width="16" height="16" alt="{{sinType}}">
+                  <span>{{multiplier}}</span>
                 {{/if}}
               </div>
             {{/each}}

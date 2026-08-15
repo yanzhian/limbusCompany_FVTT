@@ -367,6 +367,53 @@
   max-width: 90px;
 }
 
+/* 无法装备：衍生技能标记（只能由【相关技能转换】换上场） */
+.limbuscompany .no-equip-badge {
+  background: #B43822;
+  color: #FFE2DA;
+}
+.limbuscompany .no-equip-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 0.72rem;
+  color: var(--text-main);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.limbuscompany .no-equip-toggle input { margin: 0; }
+
+/* 技能卡大图标：图片保持原始尺寸（60px 就显示 60px，不放大以免发糊），
+   外面叠一层罪孽/等级边框。--skill-frame-scale 控制边框相对槽位的大小，
+   调整外框松紧改这一个值即可。 */
+.limbuscompany .skill-slot-octa.skill-icon-big {
+  --skill-frame-scale: 150%;
+}
+.limbuscompany .skill-slot-octa.skill-icon-big .skill-slot-img {
+  width: auto;
+  height: auto;
+  max-width: 100%;
+  max-height: 100%;
+}
+/* 基础/守备技能：图源尺寸不一（有 60px 也有 400px），统一压到 --skill-art-max，
+   小图保持原样、大图缩到同一档，避免边框里图标大小参差。
+   EGO 用的是圆环边框、图本身就该铺满，因此不参与这条限制。 */
+.limbuscompany .skill-slot-octa.skill-icon-big:not(.skill-icon-big--ego) .skill-slot-img {
+  --skill-art-max: 60px;
+  max-width: var(--skill-art-max);
+  max-height: var(--skill-art-max);
+}
+.limbuscompany .skill-icon-frame {
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  width: var(--skill-frame-scale);
+  height: var(--skill-frame-scale);
+  object-fit: contain;
+  pointer-events: none;
+  z-index: 2;
+}
+
 .limbuscompany .resource-bar-fill.sanity-fill {
   background: linear-gradient(
     to left,
@@ -8713,3 +8760,163 @@ input.item-piles-quantity {
   0%, 100% { transform: rotate(-10deg) scale(1);    opacity: 1;   }
   50%      { transform: rotate(-10deg) scale(1.04); opacity: .88; }
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   拼点 TOTAL 演出（clash-total-fx.mjs）
+   两条倾斜黑条从左下 / 右上切入，数字随骰子动画滚动，
+   骰子落定后分段揭示（骰值 → 加值 → 各 BUFF）并累加成最终 TOTAL。
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+#limbus-clash-fx {
+  --lcfx-angle:   12deg;    /* 黑条倾斜角 */
+  --lcfx-h:       290px;    /* 黑条厚度 */
+  --lcfx-offset:  297px;    /* 向画面外推出的距离（决定角落三角形大小） */
+  --lcfx-num:     121px;    /* TOTAL 数字字号 */
+  --lcfx-label:   46px;     /* "TOTAL" 字号 */
+  --lcfx-part:    30px;     /* 分段小条字号 */
+  --lcfx-bg:      #0b0b0b;
+  --lcfx-win:     #ffe9a8;
+  --lcfx-lose:    #9b9b9b;
+  --lcfx-accent:  #34c8df;  /* 增益分段 */
+  --lcfx-neg:     #E5443A;  /* 减益分段 / 公式重投标记 */
+
+  position: fixed;
+  inset: 0;
+  z-index: 200;             /* 盖过画布与 HUD，低于对话框 */
+  pointer-events: none;
+  overflow: hidden;
+  font-family: "Impact", "Haettenschweiler", "Arial Black", "Noto Sans SC", sans-serif;
+}
+
+#limbus-clash-fx .lcfx-band {
+  position: absolute;
+  width: 260vmax;
+  height: var(--lcfx-h);
+  background: var(--lcfx-bg);
+  display: none;                 /* is-active 时才参与布局 */
+  align-items: center;
+  gap: 28px;
+  opacity: 0;
+  box-shadow: 0 0 40px rgba(0, 0, 0, .8);
+}
+#limbus-clash-fx .lcfx-band.is-active { display: flex; }
+
+/* 进攻方：左下角，由下往上切入 */
+#limbus-clash-fx .lcfx-band--atk {
+  left: -60vmax;
+  bottom: calc(var(--lcfx-offset) * -1);
+  transform: rotate(var(--lcfx-angle)) translateY(160%);
+  transform-origin: 50% 50%;
+  justify-content: flex-start;
+  padding-left: 62vmax;
+  --lcfx-from-y: 160%;
+}
+/* 防守方：右上角，由上往下切入 */
+#limbus-clash-fx .lcfx-band--def {
+  right: -60vmax;
+  top: calc(var(--lcfx-offset) * -1);
+  transform: rotate(var(--lcfx-angle)) translateY(-160%);
+  transform-origin: 50% 50%;
+  justify-content: flex-end;
+  padding-right: 62vmax;
+  --lcfx-from-y: -160%;
+}
+
+/* 黑条朝画面角落的那一侧补满黑色：::after 跟随黑条一起旋转，
+   沿边缘无缝延伸出去，填掉旋转后露在角上的楔形空白 */
+#limbus-clash-fx .lcfx-band::after {
+  content: "";
+  position: absolute;
+  left: 0; right: 0;
+  height: 200vh;
+  background: var(--lcfx-bg);
+}
+#limbus-clash-fx .lcfx-band--atk::after { top: 100%; }
+#limbus-clash-fx .lcfx-band--def::after { bottom: 100%; }
+
+#limbus-clash-fx .lcfx-band.is-in  { animation: lcfx-in  .42s cubic-bezier(.16, .9, .3, 1) forwards; }
+#limbus-clash-fx .lcfx-band.is-out { animation: lcfx-out .34s cubic-bezier(.6, 0, .85, .2) forwards; }
+
+@keyframes lcfx-in {
+  from { opacity: 0; transform: rotate(var(--lcfx-angle)) translateY(var(--lcfx-from-y)); }
+  to   { opacity: 1; transform: rotate(var(--lcfx-angle)) translateY(0); }
+}
+@keyframes lcfx-out {
+  from { opacity: 1; transform: rotate(var(--lcfx-angle)) translateY(0); }
+  to   { opacity: 0; transform: rotate(var(--lcfx-angle)) translateY(var(--lcfx-from-y)); }
+}
+
+#limbus-clash-fx .lcfx-label {
+  font-size: var(--lcfx-label);
+  letter-spacing: .12em;
+  color: #fff;
+  transform: translateY(-6px);
+}
+#limbus-clash-fx .lcfx-num {
+  font-size: var(--lcfx-num);
+  line-height: .9;
+  color: #fff;
+  font-variant-numeric: tabular-nums;
+  min-width: 2.2ch;
+  text-align: center;
+  text-shadow: 0 0 24px rgba(255, 255, 255, .25);
+}
+#limbus-clash-fx .lcfx-band.win  .lcfx-num { color: var(--lcfx-win); text-shadow: 0 0 34px rgba(255, 200, 90, .75); }
+#limbus-clash-fx .lcfx-band.lose .lcfx-num { color: var(--lcfx-lose); }
+#limbus-clash-fx .lcfx-band.win  { box-shadow: 0 0 60px rgba(255, 190, 80, .35); }
+
+/* 定格 / 累加时的弹跳 */
+#limbus-clash-fx .lcfx-num.settle { animation: lcfx-settle .38s cubic-bezier(.2, 1.6, .4, 1); }
+#limbus-clash-fx .lcfx-num.bump   { animation: lcfx-bump   .26s cubic-bezier(.2, 1.6, .4, 1); }
+@keyframes lcfx-settle {
+  0%   { transform: scale(1.45); filter: brightness(2.2); }
+  100% { transform: scale(1);    filter: brightness(1); }
+}
+@keyframes lcfx-bump {
+  0%   { transform: scale(1.22); filter: brightness(1.8); }
+  100% { transform: scale(1); }
+}
+
+/* 分段小条 */
+#limbus-clash-fx .lcfx-parts { display: flex; align-items: center; gap: 12px; }
+#limbus-clash-fx .lcfx-band--def .lcfx-parts { flex-direction: row-reverse; }
+#limbus-clash-fx .lcfx-part {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: var(--lcfx-part);
+  letter-spacing: .04em;
+  color: var(--lcfx-accent);
+  border: 2px solid currentColor;
+  border-radius: 4px;
+  padding: 2px 10px;
+  white-space: nowrap;
+  opacity: 0;
+  transform: translateY(10px) scale(.85);
+}
+#limbus-clash-fx .lcfx-part .lcfx-pname {
+  font-size: .66em;
+  color: #b9b0a2;
+  font-family: "Noto Sans SC", "Microsoft YaHei", sans-serif;
+}
+#limbus-clash-fx .lcfx-part--dice { color: #fff; }
+#limbus-clash-fx .lcfx-part--neg  { color: var(--lcfx-neg); }
+#limbus-clash-fx .lcfx-part.show  { animation: lcfx-part-in .34s cubic-bezier(.2, 1.5, .4, 1) forwards; }
+@keyframes lcfx-part-in {
+  0%   { opacity: 0; transform: translateY(10px) scale(.85); }
+  60%  { opacity: 1; transform: translateY(0) scale(1.12); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* 公式重投标记 */
+#limbus-clash-fx .lcfx-reroll {
+  font-size: 26px;
+  letter-spacing: .1em;
+  color: var(--lcfx-neg);
+  border: 2px solid currentColor;
+  border-radius: 3px;
+  padding: 2px 10px;
+  font-family: "Noto Sans SC", "Microsoft YaHei", sans-serif;
+  display: none;
+}
+#limbus-clash-fx .lcfx-reroll.show { display: inline-block; animation: lcfx-part-in .3s ease-out; }

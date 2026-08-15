@@ -103,6 +103,17 @@ export function normalizeBuffType(type, name = "") {
   return type;
 }
 
+/**
+ * 安全写入：目标文档可能不属于当前玩家（例如防守方客户端要改攻击方），
+ * 一律走 ClashManager._safeDocUpdate，由它在无权限时通过 socket 委托 GM 执行。
+ * clash.mjs 静态 import 了本文件，所以这里只能动态 import。
+ */
+async function _safeUpdate(doc, data) {
+  if (!doc) return;
+  const { ClashManager } = await import("./clash.mjs");
+  return ClashManager._safeDocUpdate(doc, data);
+}
+
 /* ─── 震颤族（普通震颤 + 特殊震颤） ─────────────────────────────────────── */
 
 /**
@@ -159,14 +170,14 @@ registerCustomBuff("defensiveStance", {
     const newStacks = (buffs[idx].stacks ?? 1) - 1;
     if (newStacks <= 0) {
       buffs.splice(idx, 1);
-      await actor.update({ "system.buffs": buffs });
+      await _safeUpdate(actor, { "system.buffs": buffs });
       await ChatMessage.create({
         speaker: ChatMessage.getSpeaker({ actor }),
         content: `<div class="limbuscompany chat-clash"><strong>${actor.name}</strong>【防御姿态】已消散。</div>`,
       });
     } else {
       buffs[idx].stacks = newStacks;
-      await actor.update({ "system.buffs": buffs });
+      await _safeUpdate(actor, { "system.buffs": buffs });
     }
   },
 
@@ -243,7 +254,7 @@ registerCustomBuff("butterfly", {
         whenAdded: "本回合",
       });
     }
-    await actor.update({ "system.buffs": buffs });
+    await _safeUpdate(actor, { "system.buffs": buffs });
 
     // 为伤害来源（attacker）恢复 1D6 理智
     const target = ctx?.attacker ?? null;
@@ -254,7 +265,7 @@ registerCustomBuff("butterfly", {
       sanHeal = healRoll.total;
       const curSan = target.system?.sanity?.value ?? 50;
       const newSan = Math.min(95, curSan + sanHeal);
-      await target.update({ "system.sanity.value": newSan });
+      await _safeUpdate(target, { "system.sanity.value": newSan });
     }
 
     // 返回消息文本，由 _applyAndSendTake 收集后并入 ⚡ 活动消息
@@ -292,7 +303,7 @@ registerCustomBuff("indomitable", {
     } else {
       buffs[idx].stacks = newStacks;
     }
-    await actor.update({ "system.buffs": buffs });
+    await _safeUpdate(actor, { "system.buffs": buffs });
   },
 });
 
@@ -320,7 +331,7 @@ registerCustomBuff("nativeSwordArt", {
     } else {
       buffs[idx].stacks = newStacks;
     }
-    await actor.update({ "system.buffs": buffs });
+    await _safeUpdate(actor, { "system.buffs": buffs });
   },
 
   /**
@@ -403,7 +414,7 @@ registerCustomBuff("shield", {
     const idx   = buffs.findIndex(b => b.id === buff.id);
     if (idx < 0) return;
     buffs.splice(idx, 1);
-    await actor.update({ "system.buffs": buffs });
+    await _safeUpdate(actor, { "system.buffs": buffs });
     // await ChatMessage.create({
     //   speaker: ChatMessage.getSpeaker({ actor }),
     //   content: `<div class="limbuscompany chat-clash"><strong>${actor.name}</strong> 的【护盾】在回合结束时消散。</div>`,
@@ -452,7 +463,7 @@ registerCustomBuff("bloodFlame", {
     } else {
       buffs[idx].stacks = newStacks;
     }
-    await actor.update({ "system.buffs": buffs });
+    await _safeUpdate(actor, { "system.buffs": buffs });
   },
 });
 
@@ -554,7 +565,7 @@ registerCustomBuff("flameButterflyCoffin", {
       note = `获得 <strong>${gain}</strong> 级【烧伤】强度（本层数 ${stacks} 的一半）`;
     }
 
-    await actor.update({ "system.buffs": buffs });
+    await _safeUpdate(actor, { "system.buffs": buffs });
     await ChatMessage.create({
       speaker: ChatMessage.getSpeaker({ actor }),
       content: `<div class="limbuscompany chat-clash"><strong>${actor.name}</strong>【炎蝶之棺】：${note}。</div>`,
@@ -651,7 +662,7 @@ registerCustomBuff("greetTheDawn", {
     const newStacks = (buffs[idx].stacks ?? 1) - 1;
     if (newStacks <= 0) buffs.splice(idx, 1);
     else                buffs[idx].stacks = newStacks;
-    await actor.update({ "system.buffs": buffs });
+    await _safeUpdate(actor, { "system.buffs": buffs });
   },
 });
 

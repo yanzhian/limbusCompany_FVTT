@@ -35,6 +35,7 @@ import { SinResourceHUD }   from "./helpers/sin-resource-hud.mjs";
 import { QuickActionHUD }   from "./sheets/quick-action-hud.mjs";
 import { registerItemPiles } from "./helpers/item-piles.mjs";
 import { ChaosTokenLabel }   from "./helpers/chaos-token-label.mjs";
+import { ClashTotalFX }     from "./helpers/clash-total-fx.mjs";
 
 /* ─── Item Piles 联动注册 ─────────────────────────────────────────────────── */
 
@@ -98,6 +99,7 @@ Hooks.once("init", () => {
   game.socket.on("system.limbusCompany_FVTT", async (msg) => {
     await SinResourceHUD.handleSocketMsg(msg);
     await ClashManager.handleSocketMsg(msg);
+    await ClashTotalFX.handleSocketMsg(msg);
     await LimbusMerchantSheet.handleSocketMsg(msg);
     await LimbusCampSheet.handleSocketMsg(msg);
     await LimbusLootSheet.handleSocketMsg(msg);
@@ -842,7 +844,15 @@ async function _migrateTokenLinks() {
  * 注册游戏系统设置（globalSins 已由 SinResourceHUD.init() 在 init 钩子中注册）
  */
 function _registerSettings() {
-  // 保留槽位，后续阶段按需添加
+  // 拼点 TOTAL 演出开关（每个玩家各自设置）
+  game.settings.register("limbusCompany_FVTT", "clashTotalFx", {
+    name:    "拼点 TOTAL 演出",
+    hint:    "双方确定技能开骰时播放全屏 TOTAL 动画；关闭后只保留骰子动画。",
+    scope:   "client",
+    config:  true,
+    type:    Boolean,
+    default: true,
+  });
 }
 
 /**
