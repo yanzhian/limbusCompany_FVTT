@@ -26,6 +26,10 @@
             {{else}}
               <img src="{{item.img}}" class="skill-slot-img" alt="icon">
             {{/if}}
+            {{!-- 罪孽 + 等级边框（EGO 为圆环），叠在图标之上 --}}
+            {{#if skillFrame}}
+              <img src="{{skillFrame}}" class="skill-icon-frame" alt="" draggable="false">
+            {{/if}}
           </div>
         </div>
 

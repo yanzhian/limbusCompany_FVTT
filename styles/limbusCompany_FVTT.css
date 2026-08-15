@@ -383,12 +383,27 @@
 }
 .limbuscompany .no-equip-toggle input { margin: 0; }
 
-/* 技能卡大图标：小尺寸图（如 60px）也拉满 100px 槽位 */
+/* 技能卡大图标：图片保持原始尺寸（60px 就显示 60px，不放大以免发糊），
+   外面叠一层罪孽/等级边框。--skill-frame-scale 控制边框相对槽位的大小，
+   调整外框松紧改这一个值即可。 */
+.limbuscompany .skill-slot-octa.skill-icon-big {
+  --skill-frame-scale: 150%;
+}
 .limbuscompany .skill-slot-octa.skill-icon-big .skill-slot-img {
-  width: 100%;
-  height: 100%;
+  width: auto;
+  height: auto;
+  max-width: 100%;
+  max-height: 100%;
+}
+.limbuscompany .skill-icon-frame {
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  width: var(--skill-frame-scale);
+  height: var(--skill-frame-scale);
   object-fit: contain;
-  image-rendering: pixelated;   /* 像素风图标放大后保持锐利，不糊 */
+  pointer-events: none;
+  z-index: 2;
 }
 
 .limbuscompany .resource-bar-fill.sanity-fill {

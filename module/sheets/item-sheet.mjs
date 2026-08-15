@@ -106,6 +106,9 @@ export class LimbusItemSheet extends ItemSheet {
 
       // 加重值小方块
       context.weightSquares = Array.from({ length: sys.weight ?? 0 }, (_, i) => i);
+
+      // 图标边框：与 HUD / 技能槽同一套（罪孽+等级空心框，EGO 为圆环）
+      context.skillFrame = ClashManager._skillFrameIcon(item);
     }
 
     // ── 装备专用数据 ──────────────────────────────────────────────────────
