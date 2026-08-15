@@ -65,13 +65,21 @@
                   <option value="unbreakable" {{#eq system.diceType "unbreakable"}}selected{{/eq}}>不可摧毁</option>
                 </select>
               {{/unless}}
+              {{!-- 无法装备：衍生技能专用，只能由【相关技能转换】换上场 --}}
+              <label class="no-equip-toggle" title="衍生技能：无法直接装备，只能通过【相关技能转换】替换上场">
+                <input type="checkbox" name="system.noEquip" {{#if system.noEquip}}checked{{/if}}>
+                无法装备
+              </label>
             {{else}}
               {{#if system.category}}
                 <img src="{{lookup @root.config.CATEGORY_ICON_PATHS system.category}}" class="category-icon" width="22" height="22" alt="{{system.category}}">
               {{/if}}
               <span class="dice-formula-display">{{diceFormulaDisplay}}</span>
               {{#if (eq system.diceType "unbreakable")}}
-                <span class="dice-type-badge unbreakable-badge" title="不可摧毁：受到伤害后自动反击（变动值+1）">不可摧毁</span>
+                <span class="dice-type-badge unbreakable-badge">不可摧毁</span>
+              {{/if}}
+              {{#if system.noEquip}}
+                <span class="dice-type-badge no-equip-badge">无法装备</span>
               {{/if}}
             {{/if}}
           </div>

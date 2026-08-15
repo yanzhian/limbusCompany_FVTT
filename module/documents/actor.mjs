@@ -600,12 +600,24 @@ export class LimbusActor extends Actor {
   // ─── 装备技能 ──────────────────────────────────────────────────────────
 
   /**
+   * 标了【无法装备】的衍生技能不能直接装进技能槽，
+   * 只能由【相关技能转换】把已装备的技能替换成它（replaceSkillSlot 不走这里）。
+   * @returns {boolean} 是否应当拒绝本次装备
+   */
+  _rejectNoEquip(item) {
+    if (!item?.system?.noEquip) return false;
+    ui.notifications?.warn(`【${item.name}】无法装备，只能通过【相关技能转换】替换上场。`);
+    return true;
+  }
+
+  /**
    * 装备技能到对应槽位
    * @param {string} itemId  物品 ID
    */
   async equipSkill(itemId) {
     const item = this.items.get(itemId);
     if (!item || item.type !== "skill") return;
+    if (this._rejectNoEquip(item)) return;
 
     const skillType = item.system.type;
 
@@ -663,6 +675,8 @@ export class LimbusActor extends Actor {
   async equipSkillToSlot(itemId, targetSlot, fromSlot = -1) {
     const item = this.items.get(itemId);
     if (!item || item.type !== "skill" || item.system.type !== "basic") return;
+    // 槽位间移动不算"装备"，衍生技能一旦上场就允许挪位
+    if (fromSlot < 0 && this._rejectNoEquip(item)) return;
 
     const slots = [...(this.system.skills.basic ?? [null, null, null, null, null, null])];
 

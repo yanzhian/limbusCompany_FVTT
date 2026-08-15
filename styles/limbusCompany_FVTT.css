@@ -367,6 +367,30 @@
   max-width: 90px;
 }
 
+/* 无法装备：衍生技能标记（只能由【相关技能转换】换上场） */
+.limbuscompany .no-equip-badge {
+  background: #B43822;
+  color: #FFE2DA;
+}
+.limbuscompany .no-equip-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 0.72rem;
+  color: var(--text-main);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.limbuscompany .no-equip-toggle input { margin: 0; }
+
+/* 技能卡大图标：小尺寸图（如 60px）也拉满 100px 槽位 */
+.limbuscompany .skill-slot-octa.skill-icon-big .skill-slot-img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  image-rendering: pixelated;   /* 像素风图标放大后保持锐利，不糊 */
+}
+
 .limbuscompany .resource-bar-fill.sanity-fill {
   background: linear-gradient(
     to left,

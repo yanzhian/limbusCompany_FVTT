@@ -189,6 +189,10 @@ export class SkillData extends foundry.abstract.TypeDataModel {
       // 武器限制（填写武器分类名，空字符串=无限制）
       weaponRestriction: new fields.StringField({ required: false, initial: "" }),
 
+      // 无法装备：衍生技能专用——不能直接装进技能槽，
+      // 只能由【相关技能转换】把已装备的技能替换成它
+      noEquip: new fields.BooleanField({ required: false, initial: false }),
+
       // 标签
       tags: new fields.ArrayField(
         new fields.StringField({ required: true }),
