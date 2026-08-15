@@ -467,6 +467,56 @@ export class LimbusActorSheet extends ActorSheet {
     return true;
   }
 
+  /**
+   * 列表里双击一行：已装备 → 卸下；未装备 → 自动找空位装上。
+   * 找不到空位就什么都不做（不替换已有装备，避免误覆盖）。
+   * @param {Event}  event
+   * @param {string} kind "skill" | "item"
+   */
+  async _onQuickToggleEquip(event, kind) {
+    event.preventDefault();
+    const itemId = event.currentTarget.dataset.itemId;
+    const item   = this.actor.items.get(itemId);
+    if (!item) return;
+
+    const sys = this.actor.system;
+
+    if (kind === "skill" || item.type === "skill") {
+      // 已装备 → 卸下
+      if (this._isItemEquipped(itemId)) return this.actor.unequipSkill(itemId);
+      if (item.system?.noEquip) {
+        ui.notifications.warn(`【${item.name}】无法装备，只能通过【相关技能转换】替换上场。`);
+        return;
+      }
+      const type = item.system?.type;
+      if (type === "basic") {
+        const slots = sys.skills?.basic ?? [];
+        if (!slots.some(s => !s)) return;                    // 六格已满 → 不执行
+      } else if (type === "defense") {
+        if (sys.skills?.defense) return;                     // 守备槽已占 → 不执行
+      } else if (type === "ego") {
+        const grade = item.system?.egoDiceRating;
+        if (!grade || sys.skills?.ego?.[grade]) return;      // 对应等级已占 → 不执行
+      } else return;
+      if (!this._checkStellarBudget(item)) return;
+      return this.actor.equipSkill(itemId);
+    }
+
+    // ── 装备：九宫格 ──────────────────────────────────────────────────
+    if (item.type !== "equipment") return;
+    const equipped = Object.entries(sys.equipment ?? {}).find(([, id]) => id === itemId);
+    if (equipped) {
+      const idx = parseInt(String(equipped[0]).replace("slot", ""));
+      if (Number.isInteger(idx)) return this.actor.unequipFromGrid(idx);
+      return;
+    }
+    // 找第一个空格；没有空格就不执行
+    const freeSlot = [...Array(9).keys()].find(i => !sys.equipment?.[`slot${i}`]);
+    if (freeSlot === undefined) return;
+    if (!this._checkStellarBudget(item)) return;
+    return this.actor.equipToGrid(itemId, freeSlot);
+  }
+
   _isItemGridEquipped(itemId) {
     const sys = this.actor.system;
     return Object.values(sys.equipment ?? {}).includes(itemId);
@@ -520,6 +570,27 @@ export class LimbusActorSheet extends ActorSheet {
     html.find(".equip-slot[data-item-id]").on("mouseleave", () => this._onItemHoverEnd());
     html.find(".skill-slot-wrap[data-item-id]").on("mouseenter", this._onItemHover.bind(this));
     html.find(".skill-slot-wrap[data-item-id]").on("mouseleave", () => this._onItemHoverEnd());
+    // ── 双击快速装备 / 卸下 ────────────────────────────────────────────
+    // 双击行内的操作按钮（发起对抗/收藏/更多…）不触发，避免误操作
+    html.find(".skill-row[data-item-id]").on("dblclick", (ev) => {
+      if ($(ev.target).closest(".action-btn, button").length) return;
+      this._onQuickToggleEquip(ev, "skill");
+    });
+    html.find(".item-row[data-item-id]").on("dblclick", (ev) => {
+      if ($(ev.target).closest(".action-btn, button").length) return;
+      if ($(ev.currentTarget).hasClass("skill-row")) return;   // 技能行已在上面处理
+      this._onQuickToggleEquip(ev, "item");
+    });
+    // 槽位上双击 = 卸下
+    html.find(".equip-slot[data-item-id]").on("dblclick", (ev) => {
+      const slotIdx = parseInt(ev.currentTarget.dataset.slot ?? "-1");
+      if (slotIdx >= 0) this.actor.unequipFromGrid(slotIdx);
+    });
+    html.find(".skill-slot-wrap[data-item-id]").on("dblclick", (ev) => {
+      const itemId = ev.currentTarget.dataset.itemId;
+      if (itemId) this.actor.unequipSkill(itemId);
+    });
+
     // 图标本身也能中键锁定 Title 卡，不必先把鼠标挪到卡片上
     html.find(".item-icon[data-item-id], .equip-slot[data-item-id], .skill-slot-wrap[data-item-id]")
       .on("mousedown", (ev) => {
@@ -954,8 +1025,11 @@ export class LimbusActorSheet extends ActorSheet {
         ui.notifications.warn("只有技能才能拖入技能列表。");
         return;
       }
-      // 来自已装备槽位的拖拽，忽略
-      if (data.fromSkillSlotType) return;
+      // 从技能槽拖回技能列表 = 快速卸下
+      if (data.fromSkillSlotType) {
+        if (ownedItem) await this.actor.unequipSkill(ownedItem.id);
+        return;
+      }
       // 已在角色中则不重复导入
       if (!ownedItem) await this._importItemToActor(item);
       return;
