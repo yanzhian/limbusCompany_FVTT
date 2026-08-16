@@ -2545,6 +2545,36 @@ export class ClashManager {
       ? { ...defRoll, total: defFinalTotal }
       : defRoll;
 
+    // ── 反击 / 格挡：不是交锋，而是一前一后各骰一次 ────────────────────
+    //    格挡先显示防守方（先挡），反击先显示进攻方（后反击）
+    if (defCategory === "counter" || defCategory === "block") {
+      const atkRollFx = initFlags.rollData
+        ? Roll.fromJSON(JSON.stringify(initFlags.rollData)) : null;
+      const seqParts = {
+        atk: ClashManager._buildTotalParts({
+          actor: atkActor, opponent: defActor, rollTotal: atkFinalTotal ?? 0,
+          bonus: atkBonusVal, baseFormula: atkFinalBase ?? "",
+          category: initFlags.category ?? "", isDefender: false }),
+        def: ClashManager._buildTotalParts({
+          actor: defActor, opponent: atkActor, rollTotal: defFinalTotal ?? 0,
+          bonus: defBonusVal, baseFormula: defFinalBase ?? "",
+          category: defCategory, isDefender: true }),
+      };
+      const seqRolls = { atk: atkRollFx, def: defRoll };
+      await ClashTotalFX.playSequence({
+        order: defCategory === "block" ? ["def", "atk"] : ["atk", "def"],
+        label: defCategory === "block" ? "格挡" : "反击",
+        parts: seqParts,
+        diceType: {
+          atk: atkItem?.system?.diceType ?? "default",
+          def: defItem?.system?.diceType ?? "default",
+        },
+        startDice: (side) => ClashManager._showDiceEach([
+          { roll: seqRolls[side], actor: side === "atk" ? atkActor : defActor },
+        ]),
+      });
+    }
+
     // 反击/防御：不走拼点流程，直接结算
     if (defCategory === "counter") {
       await ClashManager._resolveDirectCounter(atkActor, defActor, effectiveInitFlags, defItem, defFinalRoll, defFinalFormula);
@@ -2581,6 +2611,7 @@ export class ClashManager {
       defBase: defFinalBase, defBonus: defBonusVal, defTotal0: defFinalTotal,
       defRoll0: defRoll, defCategory,
     });
+    // 卡片显示最后一次交锋的比拼，伤害用胜方【重新骰掷】的骰值
     atkFinalTotal   = exch.atkTotal;
     defFinalTotal   = exch.defTotal;
     atkFinalFormula = exch.atkFormula;
@@ -2595,10 +2626,8 @@ export class ClashManager {
       defActor,    defTotal:    defFinalTotal,          defFormula:  defFinalFormula,
       defItemName: defItem.name,       defItemImg: defItem.img,
       defCategory,                                     defSinType:  sys.sinType ?? "",
+      finalWinTotal: exch.finalWinTotal,
     });
-
-    // 交锋过程写进结算说明（放在既有说明之前）
-    if (exch.notes.length) resolution.notes.splice(2, 0, ...exch.notes.map(n => `　${n}`));
 
     // 呼吸暴击触发：层数-1
     if (resolution.breatheCrit && resolution.winner) {
@@ -2738,7 +2767,10 @@ export class ClashManager {
    * 碎后留场、之后每次固定出 1 点。直到一方再无完好骰子，由胜方【重新骰掷】
    * 一次，用这一掷的结果结算最终伤害。
    *
-   * @returns {{atkTotal:number, defTotal:number, atkFormula:string, defFormula:string, notes:string[]}}
+   * 返回的 atkTotal/defTotal 是「最后一次交锋」的骰值——结算卡片显示这一组，
+   * 玩家看到的就是动画里最后那一次比拼；真正用于伤害的是 finalWinTotal
+   * （胜方【重新骰掷】的骰值）。逐次交锋的过程动画里已经看得一清二楚，
+   * 不再重复写进卡片。
    */
   static async _runClashExchanges(ctx) {
     const { atkActor, defActor, atkItem, defItem,
@@ -2759,7 +2791,6 @@ export class ClashManager {
           baseFormula: base, category: defCategory, isDefender: true });
     const sum = (parts) => parts.reduce((a, p) => a + (p.value ?? 0), 0);
 
-    const notes = [];
     // 无骰公式（纯定值）不参与多次交锋，按单次拼点处理
     if (!atkSt.intact || !defSt.intact) {
       await ClashTotalFX.play({
@@ -2771,7 +2802,7 @@ export class ClashManager {
         ]),
       });
       return { atkTotal: atkTotal0, defTotal: defTotal0,
-               atkFormula: atkBase, defFormula: defBase, notes };
+               atkFormula: atkBase, defFormula: defBase, finalWinTotal: null };
     }
 
     const MAX_EXCHANGES = 20;   // 平局互不损失，兜底防止死循环
@@ -2805,16 +2836,10 @@ export class ClashManager {
       });
 
       const aEff = sum(aParts), dEff = sum(dParts);
-      if (aEff === dEff) {
-        notes.push(`第 ${round} 次交锋：${aEff} vs ${dEff} 平局，双方均未损失骰子`);
-        continue;
-      }
-      const loserSt   = aEff > dEff ? defSt : atkSt;
-      const loserName = (aEff > dEff ? defActor : atkActor)?.name ?? "?";
+      if (aEff === dEff) continue;   // 平局：双方均不损失骰子
+      const loserSt = aEff > dEff ? defSt : atkSt;
       loserSt.intact -= 1;
       if (loserSt.unbreakable) loserSt.broken += 1;
-      notes.push(`第 ${round} 次交锋：${aEff} vs ${dEff}，${loserName} 损失 1 枚`
-        + `${loserSt.unbreakable ? "【不可摧毁】骰（碎裂后固定 1 点）" : "骰子"}`);
     }
 
     // 一方骰子耗尽 → 胜方【重新骰掷】一次，用这一掷结算最终伤害
@@ -2835,23 +2860,20 @@ export class ClashManager {
       diceType: winSide === "atk" ? atkType : defType,
       startDice: () => ClashManager._showDiceEach([{ roll: finalRoll, actor: winActor }]),
     });
-    notes.push(`${winActor?.name ?? "?"} 【重新骰掷】：${winFml.toUpperCase()} = ${winTotal}`);
-
-    // 败方已无完好骰子，只剩碎掉的【不可摧毁】各出 1 点
-    const loseSt    = winSide === "atk" ? defSt : atkSt;
-    const loseBonus = winSide === "atk" ? defBonus : atkBonus;
-    const loseTotal = loseSt.broken + loseBonus;
-    const loseFml   = ClashManager._stateFormula(loseSt, loseBonus);
-
-    return winSide === "atk"
-      ? { atkTotal: winTotal, defTotal: loseTotal, atkFormula: winFml, defFormula: loseFml, notes }
-      : { atkTotal: loseTotal, defTotal: winTotal, atkFormula: loseFml, defFormula: winFml, notes };
+    // 卡片显示最后一次交锋的比拼（而不是败方已被清空的 0），
+    // 伤害则由 finalWinTotal（重新骰掷）决定
+    return {
+      atkTotal: atkCur, defTotal: defCur,
+      atkFormula: atkFml, defFormula: defFml,
+      finalWinTotal: winTotal, finalWinFormula: winFml, finalWinSide: winSide,
+    };
   }
 
   /* ─── 阶段五b：拼点结算逻辑 ────────────────────────────────────────────── */
 
   static _computeResolution({ atkActor, atkTotal, atkFormula, atkItemName, atkItemImg, atkCategory, atkSinType,
-                               defActor, defTotal, defFormula, defItemName, defItemImg, defCategory, defSinType }) {
+                               defActor, defTotal, defFormula, defItemName, defItemImg, defCategory, defSinType,
+                               finalWinTotal = null }) {
 
     // ── 技能分类分组 ──────────────────────────────────────────────────────
     // 守备技能（全部）→ 使用忍耐/破绽调整骰数
@@ -2895,7 +2917,12 @@ export class ClashManager {
     const atkWins  = atkEffective >= defEffective; // 平局暂时归攻击方，由 isTie 旗标覆盖显示
     const winner   = atkWins ? atkActor : defActor;
     const loser    = atkWins ? defActor : atkActor;
-    const winScore = atkWins ? atkEffective : defEffective;
+    // 多次交锋：胜负由最后一次比拼决定，伤害基数改用胜方【重新骰掷】的骰值
+    const winScore = (finalWinTotal === null)
+      ? (atkWins ? atkEffective : defEffective)
+      : finalWinTotal + (atkWins
+          ? (atkDiceMod + atkLvBonus)
+          : (defDiceMod + defPwrMod + defLvBonus));
     const winCat   = atkWins ? atkCategory  : defCategory;
     const winSin   = atkWins ? atkSinType   : defSinType;
 

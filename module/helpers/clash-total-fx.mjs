@@ -68,6 +68,11 @@ export class ClashTotalFX {
           side: msg.side ?? "atk", parts: msg.parts ?? [], reroll: !!msg.reroll,
           diceType: msg.diceType ?? "default", label: msg.label ?? "", broadcast: false,
         });
+      } else if (msg.mode === "seq") {
+        await this.playSequence({
+          order: msg.order ?? ["def", "atk"], parts: msg.parts ?? {},
+          diceType: msg.diceType ?? {}, label: msg.label ?? "", broadcast: false,
+        });
       } else if (msg.mode === "reroll") {
         await this.playReroll({ ...common, rerollSides: msg.rerollSides ?? [] });
       } else {
@@ -409,6 +414,41 @@ export class ClashTotalFX {
     await this._sleep(260);
     await this._revealParts(side, parts);
     await this._sleep(500);
+    this._exitExchange();
+  }
+
+  /**
+   * 先后出手的演出：不是交锋，而是一方先骰、另一方再骰。
+   * 【格挡】先显示防守方，再显示进攻方；【反击】先显示进攻方，再显示防守方。
+   *
+   * @param {string[]} opts.order      出场顺序，如 ["def", "atk"]
+   * @param {object}   opts.parts      { atk: 分段[], def: 分段[] }
+   * @param {object}   opts.diceType   { atk: "default"|"unbreakable", def: ... }
+   * @param {string}   opts.label      中央字样（如"格挡""反击"）
+   * @param {Function} opts.startDice  (side) => Promise，该方的骰子动画
+   */
+  static async playSequence({ order = ["def", "atk"], parts = {}, diceType = {},
+                              label = "", startDice = null, broadcast = true } = {}) {
+    if (!this._enabled()) { for (const side of order) startDice?.(side); return; }
+
+    if (broadcast) this._emit({ type: "clashFxStart", mode: "seq", order, parts, diceType, label });
+
+    const totals = {};
+    for (const [i, side] of order.entries()) {
+      const sideParts = parts[side] ?? [];
+      await this._enterExchange([side], {
+        label: i === 0 ? label : "",
+        dice: { [side]: { formula: sideParts[0]?.name ?? "", type: diceType[side] ?? "default" } },
+      });
+      startDice?.(side);
+      await this._rollFor(this._band(side).querySelector(".lcfx-num"), sideParts[0]?.value ?? 0);
+      await this._sleep(200);
+      totals[side] = await this._revealParts(side, sideParts);
+      await this._sleep(240);
+    }
+
+    if (order.length === 2) this._judge(totals.atk ?? 0, totals.def ?? 0);
+    await this._sleep(600);
     this._exitExchange();
   }
 
