@@ -2343,6 +2343,10 @@ export class ClashManager {
                 const atkBase   = initFlags.baseFormula ?? initFlags.formula ?? "";
                 const atkBonus  = parseInt(String(initFlags.formula ?? "").slice(atkBase.length)) || 0;
 
+                // 骰子条要按【不可摧毁】区分素材
+                const atkItemFx = initFlags.itemUuid
+                  ? await fromUuid(initFlags.itemUuid).catch(() => null) : null;
+
                 const atkParts = ClashManager._buildTotalParts({
                   actor: atkActorD, opponent: defActor,
                   rollTotal: initFlags.rollTotal ?? 0, bonus: atkBonus,
@@ -2357,6 +2361,8 @@ export class ClashManager {
 
                 await ClashTotalFX.play({
                   atkParts, defParts,
+                  atkDiceType: atkItemFx?.system?.diceType ?? "default",
+                  defDiceType: defItem?.system?.diceType ?? "default",
                   startDice: () => ClashManager._showDiceEach([
                     { roll: atkRoll, actor: atkActorD },
                     { roll,          actor: defActor  },
@@ -2553,6 +2559,8 @@ export class ClashManager {
           baseFormula: defFinalBase ?? "", category: defItem?.system?.category ?? "",
           isDefender: true,
         }),
+        atkDiceType: atkItem?.system?.diceType ?? "default",
+        defDiceType: defItem?.system?.diceType ?? "default",
         startDice: () => ClashManager._showDiceEach(_rerollShow),
       });
     }
@@ -3200,6 +3208,8 @@ export class ClashManager {
           baseFormula: takeBase, category: initFlags.category ?? "",
           isDefender: false, includeClashPower: false,
         }),
+        diceType: (initFlags.itemUuid
+          ? (await fromUuid(initFlags.itemUuid).catch(() => null))?.system?.diceType : null) ?? "default",
         startDice: () => ClashManager._showDiceEach([{ roll: takeRoll, actor: atkActor }]),
       });
     }
@@ -3254,6 +3264,7 @@ export class ClashManager {
             baseFormula: newAtkBase, category: initFlags.category ?? "",
             isDefender: false, includeClashPower: false,
           }),
+          diceType: atkItem2?.system?.diceType ?? "default",
           startDice: () => ClashManager._showDiceEach([{ roll: rerollAtk, actor: atkActor }]),
         });
         _actMsgs2.push({

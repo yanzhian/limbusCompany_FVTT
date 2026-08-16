@@ -8798,6 +8798,9 @@ input.item-piles-quantity {
   --lcfx-num:     121px;    /* TOTAL 数字字号 */
   --lcfx-label:   46px;     /* "TOTAL" 字号 */
   --lcfx-part:    30px;     /* 分段小条字号 */
+  --lcfx-die:     50px;     /* 骰子图标边长 */
+  --lcfx-die-gap: 10px;     /* 骰子之间的间距 */
+  --lcfx-die-row: 25px;     /* 骰子条与 TOTAL 之间的距离 */
   --lcfx-bg:      #0b0b0b;
   --lcfx-win:     #ffe9a8;
   --lcfx-lose:    #9b9b9b;
@@ -8824,6 +8827,52 @@ input.item-piles-quantity {
   box-shadow: 0 0 40px rgba(0, 0, 0, .8);
 }
 #limbus-clash-fx .lcfx-band.is-active { display: flex; }
+
+/* 骰子条在上、TOTAL 在下 */
+#limbus-clash-fx .lcfx-col {
+  display: flex;
+  flex-direction: column;
+  gap: var(--lcfx-die-row);
+}
+#limbus-clash-fx .lcfx-band--atk .lcfx-col { align-items: flex-start; }
+#limbus-clash-fx .lcfx-band--def .lcfx-col { align-items: flex-end; }
+#limbus-clash-fx .lcfx-row {
+  display: flex;
+  align-items: center;
+  gap: 28px;
+}
+
+/* 骰子图标（暂用硬币占位，正式素材为 dice/{default,unbreakable}/dN.svg） */
+#limbus-clash-fx .lcfx-dice {
+  display: flex;
+  align-items: center;
+  gap: var(--lcfx-die-gap);
+}
+#limbus-clash-fx .lcfx-band--def .lcfx-dice { flex-direction: row-reverse; }
+#limbus-clash-fx .lcfx-die {
+  width:  var(--lcfx-die);
+  height: var(--lcfx-die);
+  flex: 0 0 auto;
+  object-fit: contain;
+  border: none;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, .8));
+  animation: lcfx-die-in .3s cubic-bezier(.2, 1.5, .4, 1);
+}
+@keyframes lcfx-die-in {
+  from { opacity: 0; transform: translateY(-14px) scale(.7); }
+  to   { opacity: 1; transform: none; }
+}
+/* 交锋失败：碎裂抖动；不可摧毁碎后留场变暗 */
+#limbus-clash-fx .lcfx-die.is-shatter { animation: lcfx-die-shatter .26s linear; }
+@keyframes lcfx-die-shatter {
+  0%,100% { transform: translate(0, 0) rotate(0); }
+  25%     { transform: translate(-4px, 2px) rotate(-8deg); }
+  50%     { transform: translate(4px, -2px) rotate(8deg); filter: brightness(2.4); }
+  75%     { transform: translate(-3px, 3px) rotate(-4deg); }
+}
+#limbus-clash-fx .lcfx-die.is-broken {
+  filter: brightness(.4) saturate(.5) drop-shadow(0 2px 4px rgba(0, 0, 0, .8));
+}
 
 /* 进攻方：左下角，由下往上切入 */
 #limbus-clash-fx .lcfx-band--atk {

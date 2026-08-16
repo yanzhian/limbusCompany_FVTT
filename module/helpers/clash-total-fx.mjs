@@ -34,6 +34,17 @@ export class ClashTotalFX {
   /** 连击窗口：上一次交锋结束后多久没有新交锋，黑条才退场 */
   static CHAIN_GRACE = 900;
 
+  /**
+   * 骰子图标。正式素材是 assets/icons/dice/{default,unbreakable}/dN.svg，
+   * 眼下先用硬币占位，等 SVG 定稿再把 USE_SVG 打开即可。
+   */
+  static USE_SVG = false;
+  static DICE_SVG  = "systems/limbusCompany_FVTT/assets/icons/dice";
+  static DICE_COIN = {
+    default:     "systems/limbusCompany_FVTT/assets/icons/Base_icon/硬币_正面.webp",
+    unbreakable: "systems/limbusCompany_FVTT/assets/icons/Base_icon/不可摧毁的硬币.webp",
+  };
+
   /** 连击链状态 */
   static _chain = { active: false, combo: 0, timer: null, sides: [] };
 
@@ -52,10 +63,14 @@ export class ClashTotalFX {
   static async handleSocketMsg(msg) {
     if (msg?.type === "clashFxStart") {
       // 数字不再等骰子动画，远端按同样的固定时长跑即可，无需 settle 信号
-      const common = { atkParts: msg.atkParts ?? [], defParts: msg.defParts ?? [], broadcast: false };
+      const common = {
+        atkParts: msg.atkParts ?? [], defParts: msg.defParts ?? [], broadcast: false,
+        atkDiceType: msg.atkDiceType ?? "default", defDiceType: msg.defDiceType ?? "default",
+      };
       if (msg.mode === "solo") {
         await this.playSolo({
-          side: msg.side ?? "atk", parts: msg.parts ?? [], reroll: !!msg.reroll, broadcast: false,
+          side: msg.side ?? "atk", parts: msg.parts ?? [], reroll: !!msg.reroll,
+          diceType: msg.diceType ?? "default", broadcast: false,
         });
       } else if (msg.mode === "reroll") {
         await this.playReroll({ ...common, rerollSides: msg.rerollSides ?? [] });
@@ -74,16 +89,26 @@ export class ClashTotalFX {
     el.id = "limbus-clash-fx";
     el.innerHTML = `
       <div class="lcfx-band lcfx-band--atk" data-side="atk">
-        <span class="lcfx-label">TOTAL</span>
-        <span class="lcfx-num">0</span>
-        <span class="lcfx-parts"></span>
-        <span class="lcfx-reroll">公式重投</span>
+        <div class="lcfx-col">
+          <div class="lcfx-dice"></div>
+          <div class="lcfx-row">
+            <span class="lcfx-label">TOTAL</span>
+            <span class="lcfx-num">0</span>
+            <span class="lcfx-parts"></span>
+            <span class="lcfx-reroll">公式重投</span>
+          </div>
+        </div>
       </div>
       <div class="lcfx-band lcfx-band--def" data-side="def">
-        <span class="lcfx-reroll">公式重投</span>
-        <span class="lcfx-parts"></span>
-        <span class="lcfx-num">0</span>
-        <span class="lcfx-label">TOTAL</span>
+        <div class="lcfx-col">
+          <div class="lcfx-dice"></div>
+          <div class="lcfx-row">
+            <span class="lcfx-reroll">公式重投</span>
+            <span class="lcfx-parts"></span>
+            <span class="lcfx-num">0</span>
+            <span class="lcfx-label">TOTAL</span>
+          </div>
+        </div>
       </div>
       <div class="lcfx-combos"></div>`;
     document.body.appendChild(el);
@@ -121,6 +146,7 @@ export class ClashTotalFX {
       if (!keepIn) band.classList.remove("is-in", "is-out", "is-active");
       band.querySelector(".lcfx-num").textContent = "0";
       band.querySelector(".lcfx-parts").replaceChildren();
+      if (!keepIn) band.querySelector(".lcfx-dice").replaceChildren();
       band.querySelector(".lcfx-reroll").classList.remove("show");
     }
   }
@@ -143,6 +169,48 @@ export class ClashTotalFX {
     }
     await this._sleep(360);
     for (const side of sides) this._band(side).classList.remove("is-active");
+  }
+
+  /* ─── 骰子条 ──────────────────────────────────────────────────────────── */
+
+  /** 从基础公式里读出骰数与面数，如 "3D6+2" → { count: 3, faces: 6 } */
+  static _parseDice(formula = "") {
+    const m = /(\d*)\s*[dD]\s*(\d+)/.exec(String(formula));
+    if (!m) return { count: 0, faces: 6 };
+    return { count: Math.min(12, Math.max(1, parseInt(m[1] || "1"))), faces: parseInt(m[2]) };
+  }
+
+  static _dieSrc(faces, type) {
+    return this.USE_SVG
+      ? `${this.DICE_SVG}/${type === "unbreakable" ? "unbreakable" : "default"}/d${faces}.svg`
+      : (this.DICE_COIN[type] ?? this.DICE_COIN.default);
+  }
+
+  /** 按骰数在 TOTAL 上方摆出骰子图标 */
+  static _buildDice(side, formula, type = "default") {
+    const box = this._band(side).querySelector(".lcfx-dice");
+    box.replaceChildren();
+    const { count, faces } = this._parseDice(formula);
+    for (let i = 0; i < count; i++) {
+      const img = document.createElement("img");
+      img.className = "lcfx-die" + (type === "unbreakable" ? " lcfx-die--unbreak" : "");
+      img.src = this._dieSrc(faces, type);
+      img.dataset.type = type;
+      box.appendChild(img);
+    }
+  }
+
+  /** 交锋失败：毁掉末尾一枚骰子——一般骰子消失，不可摧毁碎裂后变暗留场 */
+  static _breakDie(side) {
+    const box = this._band(side).querySelector(".lcfx-dice");
+    const die = [...box.querySelectorAll(".lcfx-die:not(.is-broken)")].pop();
+    if (!die) return;
+    die.classList.add("is-shatter");
+    setTimeout(() => {
+      die.classList.remove("is-shatter");
+      if (die.dataset.type === "unbreakable") die.classList.add("is-broken");
+      else die.remove();
+    }, 260);
   }
 
   /** 固定时长乱跳后定格（不等 DiceSoNice） */
@@ -184,7 +252,7 @@ export class ClashTotalFX {
    * 进入一次交锋。同一条连击链内黑条不重新切入，只清掉上一次的数字/分段。
    * @returns {number} 本次是第几连击
    */
-  static async _enterExchange(sides, { reroll = [] } = {}) {
+  static async _enterExchange(sides, { reroll = [], dice = {} } = {}) {
     const chain = this._chain;
     if (chain.timer) { clearTimeout(chain.timer); chain.timer = null; }
 
@@ -197,6 +265,12 @@ export class ClashTotalFX {
     this._reset(entering, false);
     for (const side of reroll) this._band(side).querySelector(".lcfx-reroll").classList.add("show");
 
+    // 骰子条只在一侧首次入场时生成，连击过程中沿用（会被逐次打碎）
+    for (const side of entering) {
+      const d = dice[side];
+      if (d) this._buildDice(side, d.formula, d.type);
+      else this._band(side).querySelector(".lcfx-dice").replaceChildren();
+    }
     chain.sides = [...new Set([...chain.sides, ...sides])];
     if (entering.length) await this._bandsIn(entering);
 
@@ -267,6 +341,7 @@ export class ClashTotalFX {
     const loseSide = winSide === "atk" ? "def" : "atk";
     this._band(winSide).classList.add("win");
     this._band(loseSide).classList.add("lose");
+    this._breakDie(loseSide);
   }
 
   /* ─── 对外接口 ────────────────────────────────────────────────────────── */
@@ -279,14 +354,18 @@ export class ClashTotalFX {
    * @param {Function} opts.startDice  黑条切入后调用，需返回 [攻方Promise, 守方Promise]
    *                                   （即两边 DiceSoNice 动画各自的完成信号）
    */
-  static async play({ atkParts = [], defParts = [], startDice = null, broadcast = true } = {}) {
+  static async play({ atkParts = [], defParts = [], atkDiceType = "default", defDiceType = "default",
+                      startDice = null, broadcast = true } = {}) {
     if (!this._enabled()) { await startDice?.(); return; }
 
     const sides = ["atk", "def"];
     // 先让其他客户端把黑条切进来，双方同步开演
-    if (broadcast) this._emit({ type: "clashFxStart", mode: "play", atkParts, defParts });
+    if (broadcast) this._emit({ type: "clashFxStart", mode: "play", atkParts, defParts, atkDiceType, defDiceType });
 
-    await this._enterExchange(sides);
+    await this._enterExchange(sides, { dice: {
+      atk: { formula: atkParts[0]?.name ?? "", type: atkDiceType },
+      def: { formula: defParts[0]?.name ?? "", type: defDiceType },
+    } });
 
     // 骰子照常发射，但不 await——数字只滚固定时长就定格
     startDice?.();
@@ -317,13 +396,17 @@ export class ClashTotalFX {
    * @param {boolean}  opts.reroll    是否标记【公式重投】
    * @param {Function} opts.startDice 返回 [该方 DiceSoNice 动画的 Promise]
    */
-  static async playSolo({ side = "atk", parts = [], reroll = false, startDice = null, broadcast = true } = {}) {
+  static async playSolo({ side = "atk", parts = [], reroll = false, diceType = "default",
+                          startDice = null, broadcast = true } = {}) {
     if (!this._enabled()) { await startDice?.(); return; }
 
     const sides = [side];
-    if (broadcast) this._emit({ type: "clashFxStart", mode: "solo", side, parts, reroll });
+    if (broadcast) this._emit({ type: "clashFxStart", mode: "solo", side, parts, reroll, diceType });
 
-    await this._enterExchange(sides, { reroll: reroll ? [side] : [] });
+    await this._enterExchange(sides, {
+      reroll: reroll ? [side] : [],
+      dice: { [side]: { formula: parts[0]?.name ?? "", type: diceType } },
+    });
 
     startDice?.();
     await this._rollFor(this._band(side).querySelector(".lcfx-num"), parts[0]?.value ?? 0);
@@ -344,7 +427,9 @@ export class ClashTotalFX {
    * @param {string[]} opts.rerollSides  实际发生重投的一方或双方，如 ["atk"]
    * @param {Function} opts.startDice    返回与 rerollSides 等长的 Promise 数组
    */
-  static async playReroll({ atkParts = [], defParts = [], rerollSides = [], startDice = null, broadcast = true } = {}) {
+  static async playReroll({ atkParts = [], defParts = [], rerollSides = [],
+                            atkDiceType = "default", defDiceType = "default",
+                            startDice = null, broadcast = true } = {}) {
     if (!rerollSides.length) return;
     if (!this._enabled()) { await startDice?.(); return; }
 
@@ -352,10 +437,13 @@ export class ClashTotalFX {
     const partsOf = (side) => (side === "atk" ? atkParts : defParts);
 
     if (broadcast) {
-      this._emit({ type: "clashFxStart", mode: "reroll", atkParts, defParts, rerollSides });
+      this._emit({ type: "clashFxStart", mode: "reroll", atkParts, defParts, rerollSides, atkDiceType, defDiceType });
     }
 
-    await this._enterExchange(sides, { reroll: rerollSides });
+    await this._enterExchange(sides, { reroll: rerollSides, dice: {
+      atk: { formula: atkParts[0]?.name ?? "", type: atkDiceType },
+      def: { formula: defParts[0]?.name ?? "", type: defDiceType },
+    } });
 
     startDice?.();
 
