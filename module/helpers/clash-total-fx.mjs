@@ -45,7 +45,13 @@ export class ClashTotalFX {
       const signals = { atk: this._deferred(), def: this._deferred() };
       this._remoteSignals = signals;
       const common = { atkParts: msg.atkParts ?? [], defParts: msg.defParts ?? [], broadcast: false };
-      if (msg.mode === "reroll") {
+      if (msg.mode === "solo") {
+        const side = msg.side ?? "atk";
+        await this.playSolo({
+          side, parts: msg.parts ?? [], reroll: !!msg.reroll, broadcast: false,
+          startDice: () => [signals[side].promise],
+        });
+      } else if (msg.mode === "reroll") {
         const sides = msg.rerollSides ?? [];
         await this.playReroll({
           ...common, rerollSides: sides,
@@ -255,6 +261,34 @@ export class ClashTotalFX {
     await this._sleep(240);
     this._judge(atkTotal, defTotal);
     await this._sleep(1100);
+    await this._bandsOut(sides);
+  }
+
+  /**
+   * 单方面攻击（承受）的演出：只有攻击方一条黑条，没有胜负判定。
+   *
+   * @param {object}   opts
+   * @param {string}   opts.side      哪一侧出场，默认 "atk"
+   * @param {object[]} opts.parts     分段，第一项为骰值
+   * @param {boolean}  opts.reroll    是否标记【公式重投】
+   * @param {Function} opts.startDice 返回 [该方 DiceSoNice 动画的 Promise]
+   */
+  static async playSolo({ side = "atk", parts = [], reroll = false, startDice = null, broadcast = true } = {}) {
+    if (!this._enabled()) { await startDice?.(); return; }
+
+    const sides = [side];
+    if (broadcast) this._emit({ type: "clashFxStart", mode: "solo", side, parts, reroll });
+
+    this._reset(sides);
+    if (reroll) this._band(side).querySelector(".lcfx-reroll").classList.add("show");
+    await this._bandsIn(sides);
+
+    const [signal] = this._wrapSignals((await startDice?.()) ?? [], sides, broadcast);
+    await this._rollUntil(this._band(side).querySelector(".lcfx-num"), parts[0]?.value ?? 0, signal);
+
+    await this._sleep(260);
+    await this._revealParts(side, parts);
+    await this._sleep(900);
     await this._bandsOut(sides);
   }
 

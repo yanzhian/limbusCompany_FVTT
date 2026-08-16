@@ -138,7 +138,8 @@ export class ClashManager {
    * @param {boolean} o.isDefender 是否为防守方
    * @returns {{name:string, value:number}[]}
    */
-  static _buildTotalParts({ actor, opponent, rollTotal = 0, bonus = 0, baseFormula = "", category = "", isDefender = false }) {
+  static _buildTotalParts({ actor, opponent, rollTotal = 0, bonus = 0, baseFormula = "",
+                            category = "", isDefender = false, includeClashPower = true }) {
     const gs = (a, t) => ClashManager._getBuffVal(a, t).stacks;
     const parts = [{ name: baseFormula || "骰值", value: (rollTotal ?? 0) - (bonus ?? 0) }];
     if (bonus) parts.push({ name: "加值", value: bonus });
@@ -157,7 +158,8 @@ export class ClashManager {
       push("强壮", gs(actor, "strong"));
       push("虚弱", -gs(actor, "weak"));
     }
-    push("拼点威力", gs(actor, "clashPowerUp") - gs(actor, "clashPowerDown"));
+    // 承受（单方面攻击）不拼点，拼点威力↑↓不计入
+    if (includeClashPower) push("拼点威力", gs(actor, "clashPowerUp") - gs(actor, "clashPowerDown"));
 
     // 等级差：每 3 级 +1，仅高的一方获得
     if (opponent) {
@@ -3185,12 +3187,21 @@ export class ClashManager {
 
     const atkActor  = game.actors.get(initFlags.attackerId);
     const defActor  = selActor;
-    // DiceSoNice: 承受时先播攻击方骰子动画（使用攻击方自己的皮肤）
+    // 单方面攻击（承受）的 TOTAL 演出：只有攻击方一条黑条，无胜负判定
     if (initFlags.rollData) {
-      await ClashManager._showDice([{
-        roll:  Roll.fromJSON(JSON.stringify(initFlags.rollData)),
-        actor: atkActor,
-      }]);
+      const takeRoll  = Roll.fromJSON(JSON.stringify(initFlags.rollData));
+      const takeBase  = initFlags.baseFormula ?? initFlags.formula ?? "";
+      const takeBonus = parseInt(String(initFlags.formula ?? "").slice(takeBase.length)) || 0;
+      await ClashTotalFX.playSolo({
+        side:  "atk",
+        parts: ClashManager._buildTotalParts({
+          actor: atkActor, opponent: selActor,
+          rollTotal: initFlags.rollTotal ?? 0, bonus: takeBonus,
+          baseFormula: takeBase, category: initFlags.category ?? "",
+          isDefender: false, includeClashPower: false,
+        }),
+        startDice: () => ClashManager._showDiceEach([{ roll: takeRoll, actor: atkActor }]),
+      });
     }
     const rollTotal = initFlags.rollTotal ?? 0;
     const category  = initFlags.category ?? "";
@@ -3233,7 +3244,18 @@ export class ClashManager {
         const rerollAtk  = new Roll(newAtkFull);
         await rerollAtk.evaluate();
         finalRollTotal = rerollAtk.total;
-        await ClashManager._showDice([{ roll: rerollAtk, actor: atkActor }]);
+        // 重投同样走单条 TOTAL 演出，带【公式重投】标记
+        await ClashTotalFX.playSolo({
+          side:   "atk",
+          reroll: true,
+          parts:  ClashManager._buildTotalParts({
+            actor: atkActor, opponent: baseActor,
+            rollTotal: rerollAtk.total, bonus: parseInt(bonusPart) || 0,
+            baseFormula: newAtkBase, category: initFlags.category ?? "",
+            isDefender: false, includeClashPower: false,
+          }),
+          startDice: () => ClashManager._showDiceEach([{ roll: rerollAtk, actor: atkActor }]),
+        });
         _actMsgs2.push({
           trigger:  "公式重投",
           itemName: atkItem2?.name ?? "攻击方",
