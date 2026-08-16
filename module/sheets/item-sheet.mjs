@@ -109,10 +109,6 @@ export class LimbusItemSheet extends ItemSheet {
 
       // 图标边框：与 HUD / 技能槽同一套（罪孽+等级空心框，EGO 为圆环）
       context.skillFrame = ClashManager._skillFrameIcon(item);
-
-      // 训练等级罗马数字
-      const _roman = ["Ⅰ", "Ⅱ", "Ⅲ", "Ⅳ", "Ⅴ"];
-      context.trainingRoman = _roman[(sys.trainingLevel ?? 3) - 1] ?? "Ⅲ";
     }
 
     // ── 装备专用数据 ──────────────────────────────────────────────────────
@@ -348,15 +344,6 @@ export class LimbusItemSheet extends ItemSheet {
 
     // ── 编辑锁切换 ────────────────────────────────────────────────────────
     html.find(".sheet-lock-icon").on("click", this._onToggleLock.bind(this));
-
-    // ── 训练等级：左键升一级、右键降一级（仅解锁时可改） ──────────────────
-    html.find(".training-level--editable").on("click contextmenu", async (event) => {
-      event.preventDefault();
-      const cur  = this.item.system?.trainingLevel ?? 3;
-      const step = event.type === "contextmenu" ? -1 : 1;
-      const next = Math.min(5, Math.max(1, cur + step));
-      if (next !== cur) await this.item.setTrainingLevel(next);
-    });
 
     // ── 图标点击：锁定时查看插图，解锁时由 Foundry data-edit 处理 ─────────
     html.find(".item-sheet-icon").on("click", (event) => {

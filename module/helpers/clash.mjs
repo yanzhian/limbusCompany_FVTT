@@ -1585,18 +1585,16 @@ export class ClashManager {
               // 按名字在角色背包/技能列表中检索：比 UUID 更稳定（合集包提取后 UUID 会变，名字不变）
               const name = (eff.skillName ?? "").trim();
               if (!name) { descStr = "useSkill：未配置技能名字"; break; }
-              skillItem = (useTgt?.items ?? []).find(it =>
-                it.type === "skill" && it.name === name
-                && ClashManager._sameTrainingLevel(it, item)) ?? null;
-              if (!skillItem) { descStr = `useSkill：背包中找不到同训练等级的技能【${name}】`; break; }
+              skillItem = (useTgt?.items ?? []).find(it => it.type === "skill" && it.name === name) ?? null;
+              if (!skillItem) { descStr = `useSkill：背包中找不到技能【${name}】`; break; }
             } else {
               // 标签+等级：在目标的技能列表中按 tags / level 检索
               const tag = (eff.skillTag ?? "").trim();
               const lv  = parseInt(eff.skillLevel) || 0;
               if (!tag) { descStr = "useSkill：未配置技能标签"; break; }
-              skillItem = ClashManager._findSkillByTagLevel(useTgt, tag, lv, item);
+              skillItem = ClashManager._findSkillByTagLevel(useTgt, tag, lv);
               if (!skillItem) {
-                descStr = `useSkill：背包中找不到同训练等级、标签为【${tag}】${lv > 0 ? ` Lv.${lv}` : ""}的技能`;
+                descStr = `useSkill：背包中找不到标签为【${tag}】${lv > 0 ? ` Lv.${lv}` : ""}的技能`;
                 break;
               }
             }
@@ -4339,31 +4337,19 @@ export class ClashManager {
   }
 
   /**
-   * 【使用技能】只在同一【训练等级】的技能之间生效。
-   * 升级会改写技能的骰数与效果，跨等级引用等于引用了另一套数据，
-   * 因此检索时以「发起效果的那个技能」的训练等级为准过滤。
-   * refItem 不是技能（装备等）时不做限制。
-   */
-  static _sameTrainingLevel(candidate, refItem) {
-    if (!refItem || refItem.type !== "skill") return true;
-    return (candidate?.system?.trainingLevel ?? 3) === (refItem.system?.trainingLevel ?? 3);
-  }
-
-  /**
    * 在角色的技能列表中按 [标签] + [等级] 检索技能。
    * @param {Actor}  actor
    * @param {string} tag   技能标签（skill-tags，system.tags）
    * @param {number} level 技能等级（skill-level-badge，system.level）；0 = 不限
    * @returns {Item|null}  命中的第一个技能
    */
-  static _findSkillByTagLevel(actor, tag, level = 0, refItem = null) {
+  static _findSkillByTagLevel(actor, tag, level = 0) {
     const key = String(tag ?? "").trim();
     if (!actor || !key) return null;
     return (actor.items ?? []).find(it =>
       it.type === "skill" &&
       ClashManager._itemTags(it).includes(key) &&
-      (!(level > 0) || (it.system?.level ?? 0) === level) &&
-      ClashManager._sameTrainingLevel(it, refItem)
+      (!(level > 0) || (it.system?.level ?? 0) === level)
     ) ?? null;
   }
 
@@ -4459,11 +4445,9 @@ export class ClashManager {
         // 按名字在角色背包/技能列表中检索：比 UUID 更稳定（合集包提取后 UUID 会变，名字不变）
         const name = (eff.skillName ?? "").trim();
         if (!name) return;
-        skillItem = (actor.items ?? []).find(it =>
-          it.type === "skill" && it.name === name
-          && ClashManager._sameTrainingLevel(it, item)) ?? null;
+        skillItem = (actor.items ?? []).find(it => it.type === "skill" && it.name === name) ?? null;
         if (!skillItem) {
-          ui.notifications.warn(`反应：背包中找不到同训练等级的技能【${name}】`);
+          ui.notifications.warn(`反应：背包中找不到技能【${name}】`);
           return;
         }
       } else {
@@ -4471,9 +4455,9 @@ export class ClashManager {
         const tag = (eff?.skillTag ?? "").trim();
         const lv  = parseInt(eff?.skillLevel) || 0;
         if (!tag) return;
-        skillItem = ClashManager._findSkillByTagLevel(actor, tag, lv, item);
+        skillItem = ClashManager._findSkillByTagLevel(actor, tag, lv);
         if (!skillItem) {
-          ui.notifications.warn(`反应：背包中找不到同训练等级、标签为【${tag}】${lv > 0 ? ` Lv.${lv}` : ""}的技能`);
+          ui.notifications.warn(`反应：背包中找不到标签为【${tag}】${lv > 0 ? ` Lv.${lv}` : ""}的技能`);
           return;
         }
       }
