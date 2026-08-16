@@ -664,34 +664,33 @@ export function buildTemplateCSV(itemType) {
   return "﻿" + [cols.join(","), example.join(",")].join("\r\n") + "\r\n";
 }
 
+/** 各列的填写说明（对照表用） */
+const COLUMN_NOTES = {
+  "类型":     "决定物品类型：基础技能/守备技能/E.G.O/上装/下装/武器/饰品/消耗品/材料/容器",
+  "分类":     "技能：斩击、打击、突刺；守备可写 反击-打击、可拼点反击-斩击；其余类型为自由文本",
+  "等级":     "基础/守备填数字；E.G.O 填 ZAYIN/TET/HE/WAW/ALEPH",
+  "骰数":     "形如 1D4、1D4+2；留空或 - 表示无",
+  "骰类型":   "留空=一般骰子；可填 不可摧毁 / 斩断",
+  "抗性":     "斩/打/突，记 x0.5，可多写",
+  "弱性":     "斩/打/突，记 x2.0，可多写",
+  "容量":     "形如 2x3（背包占格）",
+  "内部数量": "形如 4x8（容器内部网格）",
+  "标签":     "用 / 或 、分隔",
+  "罪孽资源消耗": "形如 暴怒2，怠惰2，傲慢4（分隔符可省）",
+  "抗性修改": "形如 暴怒x0.5傲慢x0.5怠惰x2.0（分隔符可省）",
+  "无法装备": "填 是/否、TRUE/FALSE",
+  "可复用":   "填 是/否、TRUE/FALSE",
+  "无限耐久": "填 是/否、TRUE/FALSE",
+  "图标":     "表格自用，导入时忽略",
+  "完成":     "表格自用，导入时忽略",
+};
+
 /**
- * 列出某物品类型可用的列头（供对照表展示）。
+ * 列出某物品类型的模板列与填写说明（供对照表展示）。
  * @param {string} itemType
- * @returns {{ header:string, path:string }[]}
+ * @returns {{ header:string, note:string }[]}
  */
 export function listAvailableColumns(itemType) {
-  const schema = getSystemSchema(itemType);
-  const out = [{ header: "名称", path: "name" }, { header: "图标", path: "img" }];
-  if (!schema) return out;
-
-  // 反向别名表：路径 → 首个中文别名
-  const aliasByPath = {};
-  for (const [zh, path] of Object.entries(COLUMN_ALIASES)) {
-    if (!aliasByPath[path] && /[一-龥]/.test(zh)) aliasByPath[path] = zh;
-  }
-
-  const walk = (schemaField, prefix) => {
-    const fields = foundry.data?.fields ?? {};
-    for (const [key, field] of Object.entries(schemaField.fields ?? {})) {
-      const path = prefix ? `${prefix}.${key}` : key;
-      if (fields.SchemaField && field instanceof fields.SchemaField) {
-        walk(field, path);
-        continue;
-      }
-      const full = `system.${path}`;
-      out.push({ header: aliasByPath[full] ?? full, path: full });
-    }
-  };
-  walk(schema, "");
-  return out;
+  const cols = TEMPLATE_COLUMNS[itemType] ?? ["名称", "类型", "分类", "标签", "效果"];
+  return cols.map(header => ({ header, note: COLUMN_NOTES[header] ?? "" }));
 }

@@ -4,7 +4,7 @@
   {{!-- ── 设置行 ────────────────────────────────────────────────── --}}
   <section class="csvi-section csvi-config">
     <label class="csvi-field">
-      <span class="csvi-label">物品类型</span>
+      <span class="csvi-label" title="表里有【类型】列时以该列为准，这里只作为没有类型列时的缺省值">缺省类型</span>
       <select class="csvi-type">
         {{#each types}}
           <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
@@ -41,7 +41,7 @@
     </div>
 
     <textarea class="csvi-paste" rows="7"
-      placeholder="第一行必须是列头，例如：&#10;名称,部位,攻击修正,标签,描述&#10;军用匕首,weapon,2,锐利/单手,造成额外伤害">{{rawText}}</textarea>
+      placeholder="第一行必须是列头，例如：&#10;图标,完成,名称,类型,分类,罪孽,等级,骰数,加重值,骰类型,无法装备,标签,效果&#10;,FALSE,鹤斩·Ⅲ,基础技能,斩击,暴怒,1,1D4,1,,,收尾人/定事务所,[命中时]：…">{{rawText}}</textarea>
   </section>
 
   {{!-- ── 预览 ──────────────────────────────────────────────────── --}}
@@ -57,12 +57,14 @@
     {{#if showColumns}}
       <div class="csvi-columns">
         {{#each columns}}
-          <span class="csvi-col-chip" title="{{path}}">{{header}}</span>
+          <span class="csvi-col-chip" title="{{note}}">{{header}}</span>
         {{/each}}
       </div>
       <p class="csvi-note">
-        列头可以写中文别名，也可以直接写数据路径（如 <code>system.atkAdj</code>）。
-        标签类列用 <code>/</code> 分隔；布尔列填 是/否；活动（activities）等复杂列填 JSON。
+        列按<strong>列头名</strong>匹配，与列的顺序无关，多余的空列不影响。
+        鼠标悬停列头可看填写格式。空格与 <code>-</code> 都表示留空；
+        「图标 / 完成 / 区域1–6」为表格自用，导入时忽略。
+        表中有【类型】列时逐行决定物品类型，因此装备、技能、材料可以混在同一个文件里导入。
       </p>
     {{/if}}
 
