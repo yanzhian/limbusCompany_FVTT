@@ -11,6 +11,15 @@
  * DiceSoNice 只在动画播完时兑现 Promise，没有逐帧读取骰面的接口，
  * 所以③是"跟着动画时长走"，而不是"数字实时反映骰面"。
  *
+ * 【连击（回合内多次交锋）】
+ * 一次攻击链里常常连着打好几次（例如【不可摧毁】拼点失败反击），演出不再
+ * 一次一收：黑条切进来后会停留一小段"连击窗口"（CHAIN_GRACE），窗口内又
+ * 开打就算同一条连击链——黑条不退场，中央甩出一枚「N 连击」字样，直到
+ * 窗口内不再有新的交锋才整体退场。
+ *
+ * 数字也不再等 DiceSoNice：每次交锋照常发射 3D 骰子（不 await），数字只滚
+ * 固定的 ROLL_MS 就定格，这样连击节奏不会被骰子动画的 5 秒拖住。
+ *
  * 演出层挂在 body 上、pointer-events:none，不拦截任何操作。
  */
 
@@ -19,20 +28,20 @@ export class ClashTotalFX {
 
   static _root = null;
 
+  /** 数字滚动时长（ms，实际还会被 _speed() 缩放）——不再等 DiceSoNice */
+  static ROLL_MS = 400;
+
+  /** 连击窗口：上一次交锋结束后多久没有新交锋，黑条才退场 */
+  static CHAIN_GRACE = 900;
+
+  /** 连击链状态 */
+  static _chain = { active: false, combo: 0, timer: null, sides: [] };
+
   /** 系统 socket 频道（与 ClashManager 共用同一条） */
   static SOCKET = "system.limbusCompany_FVTT";
 
-  /** 远端播放时，各方"骰子已落定"的等待句柄 */
-  static _remoteSignals = null;
-
   static _emit(payload) {
     try { game.socket?.emit?.(this.SOCKET, payload); } catch (err) { /* 单机或断线时忽略 */ }
-  }
-
-  static _deferred() {
-    let resolve;
-    const promise = new Promise(r => { resolve = r; });
-    return { promise, resolve };
   }
 
   /**
@@ -42,38 +51,19 @@ export class ClashTotalFX {
    */
   static async handleSocketMsg(msg) {
     if (msg?.type === "clashFxStart") {
-      const signals = { atk: this._deferred(), def: this._deferred() };
-      this._remoteSignals = signals;
+      // 数字不再等骰子动画，远端按同样的固定时长跑即可，无需 settle 信号
       const common = { atkParts: msg.atkParts ?? [], defParts: msg.defParts ?? [], broadcast: false };
       if (msg.mode === "solo") {
-        const side = msg.side ?? "atk";
         await this.playSolo({
-          side, parts: msg.parts ?? [], reroll: !!msg.reroll, broadcast: false,
-          startDice: () => [signals[side].promise],
+          side: msg.side ?? "atk", parts: msg.parts ?? [], reroll: !!msg.reroll, broadcast: false,
         });
       } else if (msg.mode === "reroll") {
-        const sides = msg.rerollSides ?? [];
-        await this.playReroll({
-          ...common, rerollSides: sides,
-          startDice: () => sides.map(side => signals[side].promise),
-        });
+        await this.playReroll({ ...common, rerollSides: msg.rerollSides ?? [] });
       } else {
-        await this.play({ ...common, startDice: () => [signals.atk.promise, signals.def.promise] });
+        await this.play(common);
       }
-      this._remoteSignals = null;
       return;
     }
-    if (msg?.type === "clashFxSettle") {
-      this._remoteSignals?.[msg.side]?.resolve();
-    }
-  }
-
-  /** 本地等待各方骰子动画，同时把"已落定"广播出去，让远端同步定格 */
-  static _wrapSignals(signals, sides, broadcast) {
-    return signals.map((p, i) => Promise.resolve(p).then(
-      () => { if (broadcast) this._emit({ type: "clashFxSettle", side: sides[i] }); },
-      () => { if (broadcast) this._emit({ type: "clashFxSettle", side: sides[i] }); },
-    ));
   }
 
   /* ─── DOM ─────────────────────────────────────────────────────────────── */
@@ -94,7 +84,8 @@ export class ClashTotalFX {
         <span class="lcfx-parts"></span>
         <span class="lcfx-num">0</span>
         <span class="lcfx-label">TOTAL</span>
-      </div>`;
+      </div>
+      <div class="lcfx-combos"></div>`;
     document.body.appendChild(el);
     this._root = el;
     return el;
@@ -119,10 +110,15 @@ export class ClashTotalFX {
   /** 停顿：按当前节奏缩放（骰子动画本身不受影响，它由 DiceSoNice 控制） */
   static _sleep(ms) { return new Promise(r => setTimeout(r, Math.round(ms * this._speed()))); }
 
-  static _reset(sides = ["atk", "def"]) {
+  /**
+   * 清掉上一次交锋的数字与分段。
+   * keepIn=true 时保留 is-in/is-active——连击链中黑条要一直挂在场上。
+   */
+  static _reset(sides = ["atk", "def"], keepIn = false) {
     for (const side of sides) {
       const band = this._band(side);
-      band.classList.remove("is-in", "is-out", "win", "lose", "is-active");
+      band.classList.remove("win", "lose");
+      if (!keepIn) band.classList.remove("is-in", "is-out", "is-active");
       band.querySelector(".lcfx-num").textContent = "0";
       band.querySelector(".lcfx-parts").replaceChildren();
       band.querySelector(".lcfx-reroll").classList.remove("show");
@@ -149,33 +145,75 @@ export class ClashTotalFX {
     for (const side of sides) this._band(side).classList.remove("is-active");
   }
 
-  /** 一直乱跳，直到 signal 兑现（骰子动画播完）才定格在 finalValue */
-  static _rollUntil(numEl, finalValue, signal) {
+  /** 固定时长乱跳后定格（不等 DiceSoNice） */
+  static _rollFor(numEl, finalValue) {
     return new Promise(resolve => {
       const max = Math.max(30, Math.abs(finalValue) * 2);
-      let raf, done = false;
-      const tick = () => {
-        if (done) return;
-        numEl.textContent = Math.floor(Math.random() * max);
-        raf = requestAnimationFrame(tick);
-      };
-      raf = requestAnimationFrame(tick);
-
-      const settle = () => {
-        if (done) return;
-        done = true;
-        cancelAnimationFrame(raf);
+      const end = performance.now() + Math.round(this.ROLL_MS * this._speed());
+      const tick = (now) => {
+        if (now < end) {
+          numEl.textContent = Math.floor(Math.random() * max);
+          return requestAnimationFrame(tick);
+        }
         numEl.textContent = finalValue;
         numEl.classList.remove("settle");
-        void numEl.offsetWidth;      // 重排以重启动画
+        void numEl.offsetWidth;
         numEl.classList.add("settle");
         resolve();
       };
-      Promise.resolve(signal).then(settle, settle);
-      // 兜底：DiceSoNice 未安装或信号丢失时不至于一直滚下去。
-      // 必须明显长于骰子动画时长，否则数字会在骰子还在滚时提前定死。
-      setTimeout(settle, 15000);
+      requestAnimationFrame(tick);
     });
+  }
+
+  /** 甩出一枚「N 连击」：中心附近随机落点，瞬间出现后缓慢淡出，互不等待 */
+  static _combo(text, cls = "") {
+    const box = this._ensureRoot().querySelector(".lcfx-combos");
+    if (!box) return;
+    const jitter = 50;
+    const rand = () => ((Math.random() * 2 - 1) * jitter).toFixed(0);
+    const el = document.createElement("div");
+    el.className = "lcfx-combo " + cls;
+    el.textContent = text;
+    el.style.setProperty("--lcfx-cx", `${rand()}px`);
+    el.style.setProperty("--lcfx-cy", `${rand()}px`);
+    el.addEventListener("animationend", () => el.remove());
+    box.appendChild(el);
+  }
+
+  /**
+   * 进入一次交锋。同一条连击链内黑条不重新切入，只清掉上一次的数字/分段。
+   * @returns {number} 本次是第几连击
+   */
+  static async _enterExchange(sides, { reroll = [] } = {}) {
+    const chain = this._chain;
+    if (chain.timer) { clearTimeout(chain.timer); chain.timer = null; }
+
+    if (!chain.active) { chain.active = true; chain.combo = 0; chain.sides = []; }
+
+    // 链中已在场的一侧保留黑条，只清数字；新出场的一侧完全重置后再切入
+    const staying = sides.filter(side => chain.sides.includes(side));
+    const entering = sides.filter(side => !chain.sides.includes(side));
+    this._reset(staying, true);
+    this._reset(entering, false);
+    for (const side of reroll) this._band(side).querySelector(".lcfx-reroll").classList.add("show");
+
+    chain.sides = [...new Set([...chain.sides, ...sides])];
+    if (entering.length) await this._bandsIn(entering);
+
+    chain.combo += 1;
+    this._combo(`${chain.combo} 连击`);
+    return chain.combo;
+  }
+
+  /** 结束一次交锋：留出连击窗口，窗口内没有新交锋才退场 */
+  static _exitExchange() {
+    const chain = this._chain;
+    if (chain.timer) clearTimeout(chain.timer);
+    chain.timer = setTimeout(() => {
+      const sides = chain.sides;
+      chain.timer = null; chain.active = false; chain.combo = 0; chain.sides = [];
+      this._bandsOut(sides);
+    }, Math.round(this.CHAIN_GRACE * this._speed()));
   }
 
   static _bump(numEl, value) {
@@ -248,16 +286,14 @@ export class ClashTotalFX {
     // 先让其他客户端把黑条切进来，双方同步开演
     if (broadcast) this._emit({ type: "clashFxStart", mode: "play", atkParts, defParts });
 
-    this._reset(sides);
-    await this._bandsIn(sides);
+    await this._enterExchange(sides);
 
-    // 黑条就位后才开骰——骰子动画与数字滚动同时进行
-    const raw = (await startDice?.()) ?? [];
-    const [atkSignal, defSignal] = this._wrapSignals(raw, sides, broadcast);
+    // 骰子照常发射，但不 await——数字只滚固定时长就定格
+    startDice?.();
 
     await Promise.all([
-      this._rollUntil(this._band("atk").querySelector(".lcfx-num"), atkParts[0]?.value ?? 0, atkSignal),
-      this._rollUntil(this._band("def").querySelector(".lcfx-num"), defParts[0]?.value ?? 0, defSignal),
+      this._rollFor(this._band("atk").querySelector(".lcfx-num"), atkParts[0]?.value ?? 0),
+      this._rollFor(this._band("def").querySelector(".lcfx-num"), defParts[0]?.value ?? 0),
     ]);
 
     await this._sleep(260);
@@ -268,8 +304,8 @@ export class ClashTotalFX {
 
     await this._sleep(240);
     this._judge(atkTotal, defTotal);
-    await this._sleep(800);
-    await this._bandsOut(sides);
+    await this._sleep(500);
+    this._exitExchange();
   }
 
   /**
@@ -287,17 +323,15 @@ export class ClashTotalFX {
     const sides = [side];
     if (broadcast) this._emit({ type: "clashFxStart", mode: "solo", side, parts, reroll });
 
-    this._reset(sides);
-    if (reroll) this._band(side).querySelector(".lcfx-reroll").classList.add("show");
-    await this._bandsIn(sides);
+    await this._enterExchange(sides, { reroll: reroll ? [side] : [] });
 
-    const [signal] = this._wrapSignals((await startDice?.()) ?? [], sides, broadcast);
-    await this._rollUntil(this._band(side).querySelector(".lcfx-num"), parts[0]?.value ?? 0, signal);
+    startDice?.();
+    await this._rollFor(this._band(side).querySelector(".lcfx-num"), parts[0]?.value ?? 0);
 
     await this._sleep(260);
     await this._revealParts(side, parts);
-    await this._sleep(900);
-    await this._bandsOut(sides);
+    await this._sleep(500);
+    this._exitExchange();
   }
 
   /**
@@ -321,20 +355,15 @@ export class ClashTotalFX {
       this._emit({ type: "clashFxStart", mode: "reroll", atkParts, defParts, rerollSides });
     }
 
-    this._reset(sides);
-    for (const side of rerollSides) {
-      this._band(side).querySelector(".lcfx-reroll").classList.add("show");
-    }
-    await this._bandsIn(sides);
+    await this._enterExchange(sides, { reroll: rerollSides });
 
-    const signals = this._wrapSignals((await startDice?.()) ?? [], rerollSides, broadcast);
+    startDice?.();
 
     await Promise.all(sides.map(side => {
       const numEl = this._band(side).querySelector(".lcfx-num");
       const dice  = partsOf(side)[0]?.value ?? 0;
-      const idx   = rerollSides.indexOf(side);
-      // 重投方：滚到自己的骰子动画播完；未重投方：沿用原点数，直接显示
-      if (idx >= 0) return this._rollUntil(numEl, dice, signals[idx]);
+      // 重投方重滚；未重投方沿用原点数，直接显示
+      if (rerollSides.includes(side)) return this._rollFor(numEl, dice);
       numEl.textContent = dice;
       return Promise.resolve();
     }));
@@ -347,7 +376,7 @@ export class ClashTotalFX {
 
     await this._sleep(240);
     this._judge(atkTotal, defTotal);
-    await this._sleep(1000);
-    await this._bandsOut(sides);
+    await this._sleep(600);
+    this._exitExchange();
   }
 }

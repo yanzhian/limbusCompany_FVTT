@@ -8945,6 +8945,30 @@ input.item-piles-quantity {
 }
 #limbus-clash-fx .lcfx-reroll.show { display: inline-block; animation: lcfx-part-in .3s ease-out; }
 
+/* 连击（回合内多次交锋）：中心附近瞬间出现、缓慢淡出，可同屏叠多个 */
+#limbus-clash-fx .lcfx-combos { position: fixed; inset: 0; pointer-events: none; }
+#limbus-clash-fx .lcfx-combo {
+  position: fixed;
+  left: 50%;
+  top:  34%;
+  --lcfx-cx: 0px;
+  --lcfx-cy: 0px;
+  transform: translate(calc(-50% + var(--lcfx-cx)), calc(-50% + var(--lcfx-cy))) rotate(-15deg);
+  font-family: "Noto Sans SC", "Source Han Sans SC", "Microsoft YaHei", "SimHei", sans-serif;
+  font-weight: 900;
+  font-size:   40px;
+  letter-spacing: .06em;
+  color: #fff;
+  text-shadow: 0 0 14px rgba(0, 0, 0, .95), 0 2px 4px rgba(0, 0, 0, .9);
+  opacity: 1;
+  animation: lcfx-combo-fade 1.1s linear forwards;
+}
+@keyframes lcfx-combo-fade {
+  0%   { opacity: 1; }
+  45%  { opacity: 1; }
+  100% { opacity: 0; }
+}
+
 /* ═══════════════════════════════════════════════════════════════
    物品批量导入（#limbus-csv-import）
    ═══════════════════════════════════════════════════════════════ */
