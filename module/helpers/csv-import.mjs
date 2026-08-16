@@ -94,6 +94,7 @@ const V_CATEGORY  = "__category";
 const V_CAPACITY  = "__capacity";
 const V_GRID      = "__grid";
 const V_DICE      = "__dice";
+const V_LEVEL     = "__level";
 const V_RESIST    = "__resist";
 const V_WEAK      = "__weak";
 const V_SIN_COST  = "__sinCost";
@@ -145,7 +146,7 @@ export const COLUMN_ALIASES = {
 
   // ── 技能 ──────────────────────────────────────────────────────────────
   "罪孽": "system.sinType", "罪孽属性": "system.sinType",
-  "等级": "system.level",
+  "等级": V_LEVEL,               // 基础/守备写数字；EGO 写 ZAYIN/TET/HE/WAW/ALEPH
   "骰数": V_DICE,                   // "1D4+2" → diceCount / diceFaces / baseValue
   "加重值": "system.weight", "加重": "system.weight",
   "骰类型": "system.diceType", "骰子类型": "system.diceType",
@@ -400,33 +401,59 @@ function parsePhysList(text, mult) {
   return out;
 }
 
-/** 【罪孽资源消耗】列："暴怒2/嫉妒1" → sinCost 数组 */
+/** EGO 等级评级 */
+const EGO_GRADES = ["ZAYIN", "TET", "HE", "WAW", "ALEPH"];
+
+/**
+ * 【等级】列：基础/守备技能是数字等级；EGO 技能填的是评级（HE / WAW…），
+ * 同一列两种含义，按内容判断落到 level 还是 egoDiceRating。
+ */
+function parseLevel(text) {
+  if (isBlank(text)) return {};
+  const upper = text.toUpperCase().replace(/[.\s]/g, "");
+  if (EGO_GRADES.includes(upper)) return { "system.egoDiceRating": upper };
+  const n = Number(text);
+  if (Number.isNaN(n)) return { __error: `等级「${text}」无法解析（数字或 ZAYIN/TET/HE/WAW/ALEPH）` };
+  return { "system.level": Math.round(n) };
+}
+
+/** 罪孽名的匹配用正则片段（按长度倒序，避免短名先匹配掉） */
+function sinNamePattern() {
+  return Object.keys(VALUE_ALIASES["system.sinType"])
+    .sort((a, b) => b.length - a.length).join("|");
+}
+
+/**
+ * 【罪孽资源消耗】列："暴怒2，怠惰2，傲慢4"，也允许不写分隔符连着排。
+ * 一律用扫描式匹配，分隔符（/ , ，、空格）有没有都不影响。
+ */
 function parseSinCost(text) {
   if (isBlank(text)) return {};
   const sins = VALUE_ALIASES["system.sinType"];
+  const re   = new RegExp(`(${sinNamePattern()})\\s*(\\d+)`, "g");
   const list = [];
-  for (const part of text.split(/[\/,，、]+/).map(t => t.trim()).filter(Boolean)) {
-    const m = /^(\D+?)\s*(\d+)$/.exec(part);
-    if (!m) return { __error: `罪孽资源消耗「${part}」无法解析（应形如 暴怒2）` };
-    const sinType = sins[m[1].trim()];
-    if (!sinType) return { __error: `未知罪孽「${m[1].trim()}」` };
-    list.push({ sinType, amount: Number(m[2]) });
+  let m;
+  while ((m = re.exec(text)) !== null) {
+    list.push({ sinType: sins[m[1]], amount: Number(m[2]) });
   }
+  if (!list.length) return { __error: `罪孽资源消耗「${text}」无法解析（应形如 暴怒2，怠惰2）` };
   return { "system.sinCost": list };
 }
 
-/** 【抗性修改】列："暴怒x0.5/嫉妒x2.0" → egoResistanceAdj 数组 */
+/**
+ * 【抗性修改】列："暴怒x0.5傲慢x0.5怠惰x2.0嫉妒x2.0"
+ * 实际表里是不带分隔符连写的，同样用扫描式匹配。
+ */
 function parseEgoRes(text) {
   if (isBlank(text)) return {};
   const sins = VALUE_ALIASES["system.sinType"];
+  const re   = new RegExp(`(${sinNamePattern()})\\s*[xX×]\\s*([\\d.]+)`, "g");
   const list = [];
-  for (const part of text.split(/[\/,，、]+/).map(t => t.trim()).filter(Boolean)) {
-    const m = /^(\D+?)\s*[xX×]\s*([\d.]+)$/.exec(part);
-    if (!m) return { __error: `抗性修改「${part}」无法解析（应形如 暴怒x0.5）` };
-    const sinType = sins[m[1].trim()];
-    if (!sinType) return { __error: `未知罪孽「${m[1].trim()}」` };
-    list.push({ sinType, multiplier: `x${Number(m[2]).toFixed(1)}` });
+  let m;
+  while ((m = re.exec(text)) !== null) {
+    list.push({ sinType: sins[m[1]], multiplier: `x${Number(m[2]).toFixed(1)}` });
   }
+  if (!list.length) return { __error: `抗性修改「${text}」无法解析（应形如 暴怒x0.5傲慢x2.0）` };
   return { "system.egoResistanceAdj": list };
 }
 
@@ -437,6 +464,7 @@ function parseVirtualColumn(marker, text, itemType) {
   switch (marker) {
     case V_CATEGORY: return parseCategory(text, itemType);
     case V_DICE:     return parseDice(text);
+    case V_LEVEL:    return parseLevel(text);
     case V_RESIST:   return parsePhysList(text, RESIST_MULT);
     case V_WEAK:     return parsePhysList(text, WEAK_MULT);
     case V_SIN_COST: return parseSinCost(text);
@@ -607,8 +635,11 @@ const TEMPLATE_EXAMPLE = {
   equipment:  { "名称": "中指-怨恨纹身", "类型": "上装", "防御等级": "4", "抗性": "打",
                 "弱性": "突", "分类": "西服-纹身", "星芒": "1", "容量": "2x3",
                 "标签": "手指/中指", "价格": "240" },
-  skill:      { "名称": "花札洗切·Ⅲ", "类型": "守备技能", "分类": "可拼点反击-斩击",
-                "罪孽": "傲慢", "等级": "0", "骰数": "1D4+2", "加重值": "1" },
+  skill:      { "名称": "七发魔弹", "类型": "E.G.O", "分类": "突刺", "罪孽": "傲慢",
+                "等级": "HE", "骰数": "1D2", "加重值": "1", "骰类型": "不可摧毁",
+                "标签": "E.G.O装备/脑叶公司", "理智消耗": "10",
+                "罪孽资源消耗": "暴怒2，怠惰2，傲慢4",
+                "抗性修改": "暴怒x0.5傲慢x0.5怠惰x2.0嫉妒x2.0" },
   consumable: { "名称": "紧急恢复针剂", "类型": "消耗品", "分类": "医疗",
                 "可复用": "FALSE", "无限耐久": "FALSE", "星芒": "0",
                 "容量": "1x1", "价格": "30" },
