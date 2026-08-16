@@ -125,6 +125,8 @@ export const COLUMN_ALIASES = {
   "分类": V_CATEGORY,               // 技能：斩击 / 反击-打击 / 可拼点反击-斩击；其余：自由文本
   "标签": "system.tags",
   "效果": "system.effect", "描述": "system.effect", "效果描述": "system.effect",
+  "副标题": "system.subtitle",
+  "简介": "system.description", "背景描述": "system.description",
   "星芒": "system.stellarCost", "星芒费用": "system.stellarCost",
   "容量": V_CAPACITY,               // "2x3" → capacity.w / capacity.h
   "价格": "system.price", "售价": "system.price",
@@ -646,6 +648,8 @@ const TEMPLATE_EXAMPLE = {
   container:  { "名称": "小型木箱", "类型": "容器", "分类": "建筑",
                 "容量": "3x2", "内部数量": "4x8" },
   material:   { "名称": "绳索", "类型": "材料", "分类": "建材", "容量": "1x1" },
+  background: { "名称": "中指", "类型": "背景", "副标题": "中指-长兄", "分类": "帮派",
+                "标签": "中指/手指", "简介": "永不遗忘。中指的核心理念就是记仇。" },
 };
 
 /**
