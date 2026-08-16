@@ -8719,6 +8719,24 @@ input.item-piles-quantity {
   z-index: 1;
 }
 
+/* 混乱特效底图：铺在 token 上、字样之下。
+   --chaos-vfx-scale 相对 token 尺寸放大（1 = 正好一格）。 */
+#limbus-chaos-labels .limbus-chaos-vfx {
+  position: absolute;
+  --chaos-vfx-scale: 1.35;
+  transform: translate(-50%, -50%) scale(var(--chaos-vfx-scale));
+  object-fit: contain;
+  pointer-events: none;
+  user-select: none;
+  opacity: .9;
+  animation: limbus-chaos-vfx-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes limbus-chaos-vfx-pulse {
+  0%, 100% { opacity: .9;  }
+  50%      { opacity: .65; }
+}
+
 #limbus-chaos-labels .limbus-chaos-label {
   position: absolute;
   transform: translate(-50%, -50%);

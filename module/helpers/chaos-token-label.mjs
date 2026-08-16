@@ -1,7 +1,7 @@
 /**
  * chaos-token-label.mjs — 【陷入混乱】token 悬浮字样
  *
- * 给场上所有处于【陷入混乱/+/++】状态的 token 在其中心叠一行大字，
+ * 给场上所有处于【陷入混乱/+/++】状态的 token 叠一层特效底图 + 一行大字，
  * 提示该单位当前正处于混乱（物理抗性大幅提升、行动值已清零）。
  *
  * 实现要点：标签是普通 HTML 元素，挂进 Foundry 的 `#hud` 层。`#hud` 由
@@ -87,12 +87,27 @@ export class ChaosTokenLabel {
       const name = ChaosTokenLabel._chaosName(token);
       if (!name) continue;
 
+      const cx = token.x + token.w / 2;
+      const cy = token.y + token.h / 2;
+
+      // ① 特效底图：先入 DOM，排在字样之前，因此始终在字的下面
+      const vfx = document.createElement("img");
+      vfx.className = "limbus-chaos-vfx";
+      vfx.src = ChaosTokenLabel.VFX_SRC;
+      vfx.draggable = false;
+      vfx.style.left   = `${cx}px`;
+      vfx.style.top    = `${cy}px`;
+      vfx.style.width  = `${token.w}px`;
+      vfx.style.height = `${token.h}px`;
+      frag.appendChild(vfx);
+
+      // ② 字样
       const el = document.createElement("div");
       el.className = "limbus-chaos-label";
       el.appendChild(ChaosTokenLabel._buildChars(name));
       // 画布坐标定位；字号随 token 大小走，缩放由 #hud 的 transform 负责
-      el.style.left     = `${token.x + token.w / 2}px`;
-      el.style.top      = `${token.y + token.h / 2}px`;
+      el.style.left     = `${cx}px`;
+      el.style.top      = `${cy}px`;
       el.style.fontSize = `${Math.max(12, Math.round(token.w * 0.2))}px`;
       frag.appendChild(el);
     }
