@@ -3098,10 +3098,10 @@ body.game .limbuscompany.app img {
 }
 /* 图标32px / 名称自适应 / 分类130px / 数量50px / 容量40px / 星芒45px / 操作70px */
 .limbuscompany {
-  --item-list-columns: 32px 1fr 130px 40px 45px 70px 80px;
+  --item-list-columns: 32px 1fr 130px 40px 45px 70px 100px;
 }
 .limbuscompany .item-list-header  { grid-template-columns: var(--item-list-columns); gap: 4px; }
-.limbuscompany .skill-list-header { grid-template-columns: 32px 1fr 80px 60px 50px 50px 80px; gap: 4px; }
+.limbuscompany .skill-list-header { grid-template-columns: 32px 1fr 80px 60px 50px 50px 100px; gap: 4px; }
 
 /* 分组 */
 .limbuscompany .item-group { flex-shrink: 0; }
@@ -3172,19 +3172,25 @@ body.game .limbuscompany.app img {
   text-align: center;
 }
 
-.limbuscompany .item-row .col-actions {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
+/* 操作列：三个按钮横排居中，按钮做成正方形以便点中
+   （原先是 padding:0 2px 的裸文字按钮，可点区域只有字符本身那么宽） */
+.limbuscompany .item-row .col-actions,
+.limbuscompany .skill-row .col-actions,
+.limbuscompany .col-actions {
+  display: flex; align-items: center; justify-content: center; gap: 2px;
 }
-
 .limbuscompany .action-btn {
   background: none; border: none; cursor: pointer;
-  color: var(--text-sub); font-size: .75rem; padding: 0 2px;
-  transition: color .1s;
+  color: var(--text-sub); font-size: .8rem; padding: 0;
+  width: 28px; height: 28px; flex: 0 0 28px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 3px;
+  transition: color .1s, background .1s;
 }
-.limbuscompany .action-btn:hover { color: var(--gold-active); }
+.limbuscompany .action-btn:hover {
+  color: var(--gold-active);
+  background: rgba(95, 62, 33, .45);
+}
 .limbuscompany .fav-active { color: var(--gold-active) !important; }
 
 .limbuscompany .list-empty { font-size: .75rem; color: var(--text-dim); padding: 8px 6px; font-style: italic; }
