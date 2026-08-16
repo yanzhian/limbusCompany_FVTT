@@ -1,7 +1,11 @@
 /**
  * clash-total-fx.mjs — 拼点 TOTAL 演出
  *
- * 双方确定技能、正式开骰时的全屏演出：
+ * 一次对抗只演一次：发起/对抗时不演，等 [攻击时/拼点时] 这些可能改写骰子
+ * 公式的效果都结算完（必要时已重投）之后，用最终生效的骰值演一遍——真正
+ * 重投过的一方额外带【公式重投】标记。
+ *
+ * 演出流程：
  *   ① 两条倾斜黑条切入（进攻方左下由下往上，防守方右上由上往下）
  *   ② 数字疯狂滚动 —— 与 DiceSoNice 动画同时开始
  *   ③ 各自的骰子动画播完时，数字定格在骰值上（谁先落定谁先停）
@@ -51,14 +55,11 @@ export class ClashTotalFX {
           side, parts: msg.parts ?? [], reroll: !!msg.reroll, broadcast: false,
           startDice: () => [signals[side].promise],
         });
-      } else if (msg.mode === "reroll") {
-        const sides = msg.rerollSides ?? [];
-        await this.playReroll({
-          ...common, rerollSides: sides,
-          startDice: () => sides.map(side => signals[side].promise),
-        });
       } else {
-        await this.play({ ...common, startDice: () => [signals.atk.promise, signals.def.promise] });
+        await this.play({
+          ...common, rerollSides: msg.rerollSides ?? [],
+          startDice: () => [signals.atk.promise, signals.def.promise],
+        });
       }
       this._remoteSignals = null;
       return;
@@ -238,17 +239,21 @@ export class ClashTotalFX {
    * @param {object}   opts
    * @param {object[]} opts.atkParts   进攻方分段，第一项为骰值
    * @param {object[]} opts.defParts   防守方分段
+   * @param {string[]} opts.rerollSides 因公式变化真正重投过的一方或双方，带【公式重投】标记
    * @param {Function} opts.startDice  黑条切入后调用，需返回 [攻方Promise, 守方Promise]
    *                                   （即两边 DiceSoNice 动画各自的完成信号）
    */
-  static async play({ atkParts = [], defParts = [], startDice = null, broadcast = true } = {}) {
+  static async play({ atkParts = [], defParts = [], rerollSides = [], startDice = null, broadcast = true } = {}) {
     if (!this._enabled()) { await startDice?.(); return; }
 
     const sides = ["atk", "def"];
     // 先让其他客户端把黑条切进来，双方同步开演
-    if (broadcast) this._emit({ type: "clashFxStart", mode: "play", atkParts, defParts });
+    if (broadcast) this._emit({ type: "clashFxStart", mode: "play", atkParts, defParts, rerollSides });
 
     this._reset(sides);
+    for (const side of rerollSides) {
+      this._band(side).querySelector(".lcfx-reroll").classList.add("show");
+    }
     await this._bandsIn(sides);
 
     // 黑条就位后才开骰——骰子动画与数字滚动同时进行
@@ -300,54 +305,4 @@ export class ClashTotalFX {
     await this._bandsOut(sides);
   }
 
-  /**
-   * 公式重投的演出：两条黑条都在场，只有实际重投的那一方带【公式重投】标记并重滚，
-   * 另一方保留原有点数直接显示，最后重新分出胜负——这样玩家能看清重投前后的对比。
-   *
-   * @param {object}   opts
-   * @param {object[]} opts.atkParts     进攻方分段（重投方为重投后的值）
-   * @param {object[]} opts.defParts     防守方分段
-   * @param {string[]} opts.rerollSides  实际发生重投的一方或双方，如 ["atk"]
-   * @param {Function} opts.startDice    返回与 rerollSides 等长的 Promise 数组
-   */
-  static async playReroll({ atkParts = [], defParts = [], rerollSides = [], startDice = null, broadcast = true } = {}) {
-    if (!rerollSides.length) return;
-    if (!this._enabled()) { await startDice?.(); return; }
-
-    const sides = ["atk", "def"];
-    const partsOf = (side) => (side === "atk" ? atkParts : defParts);
-
-    if (broadcast) {
-      this._emit({ type: "clashFxStart", mode: "reroll", atkParts, defParts, rerollSides });
-    }
-
-    this._reset(sides);
-    for (const side of rerollSides) {
-      this._band(side).querySelector(".lcfx-reroll").classList.add("show");
-    }
-    await this._bandsIn(sides);
-
-    const signals = this._wrapSignals((await startDice?.()) ?? [], rerollSides, broadcast);
-
-    await Promise.all(sides.map(side => {
-      const numEl = this._band(side).querySelector(".lcfx-num");
-      const dice  = partsOf(side)[0]?.value ?? 0;
-      const idx   = rerollSides.indexOf(side);
-      // 重投方：滚到自己的骰子动画播完；未重投方：沿用原点数，直接显示
-      if (idx >= 0) return this._rollUntil(numEl, dice, signals[idx]);
-      numEl.textContent = dice;
-      return Promise.resolve();
-    }));
-
-    await this._sleep(260);
-    const [atkTotal, defTotal] = await Promise.all([
-      this._revealParts("atk", atkParts),
-      this._revealParts("def", defParts),
-    ]);
-
-    await this._sleep(240);
-    this._judge(atkTotal, defTotal);
-    await this._sleep(1000);
-    await this._bandsOut(sides);
-  }
 }

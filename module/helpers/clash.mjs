@@ -2332,37 +2332,8 @@ export class ClashManager {
               await roll.evaluate();
               ClashManager.applyDiceRollMods(defActor, roll, { item: defItem, isDefense: true });
 
-              // ── TOTAL 演出 + DiceSoNice ────────────────────────────────
-              // 黑条先切入，就位后才开骰；双方骰子同时入场、各用各的皮肤，
-              // 数字滚到各自骰子落定时定格，再分段揭示加值与 BUFF。
-              {
-                const atkActorD = game.actors.get(initFlags.attackerId);
-                const atkRoll   = initFlags.rollData
-                  ? Roll.fromJSON(JSON.stringify(initFlags.rollData)) : null;
-                // 攻击方的手动加值：完整公式相对基础公式多出来的那一截（如 "+3"）
-                const atkBase   = initFlags.baseFormula ?? initFlags.formula ?? "";
-                const atkBonus  = parseInt(String(initFlags.formula ?? "").slice(atkBase.length)) || 0;
-
-                const atkParts = ClashManager._buildTotalParts({
-                  actor: atkActorD, opponent: defActor,
-                  rollTotal: initFlags.rollTotal ?? 0, bonus: atkBonus,
-                  baseFormula: atkBase,
-                  category: initFlags.category ?? "", isDefender: false,
-                });
-                const defParts = ClashManager._buildTotalParts({
-                  actor: defActor, opponent: atkActorD,
-                  rollTotal: roll.total ?? 0, bonus,
-                  baseFormula: formula, category: sys.category ?? "", isDefender: true,
-                });
-
-                await ClashTotalFX.play({
-                  atkParts, defParts,
-                  startDice: () => ClashManager._showDiceEach([
-                    { roll: atkRoll, actor: atkActorD },
-                    { roll,          actor: defActor  },
-                  ]),
-                });
-              }
+              // TOTAL 演出与 DiceSoNice 推迟到 [攻击时/拼点时] 之后统一播放：
+              // 那些效果可能改写骰子公式导致重投，先演一次就白演了。
               await ClashManager._sendResponseAndResolve(
                 defActor, defItem, roll, full, initMsgId, initFlags, slotIdx
               );
@@ -2536,10 +2507,14 @@ export class ClashManager {
       _actMsgs.push({ trigger: "公式重投", itemName: defItem?.name ?? "防守方", msgs: [`公式变化（${defBaseFormulaOrig} → ${newDefBase}），重新投骰：${rerollDef.result} = <b>${rerollDef.total}</b>`] });
     }
 
-    // 重投的演出：两条黑条都在场——只有真正重投的那方带【公式重投】标记并重滚，
-    // 另一方保留原点数一同显示，重新分出胜负
-    if (_rerollShow.length) {
-      await ClashTotalFX.playReroll({
+    // ── TOTAL 演出 + DiceSoNice（本次对抗唯一的一次）────────────────────
+    // 发起/对抗时不再演一遍——那时的骰值可能被 [攻击时/拼点时] 改写公式后作废。
+    // 这里演的就是最终生效的骰值，真正发生了重投的一方额外带【公式重投】标记。
+    {
+      const atkRollFx = _rerollShow.find(e => e.side === "atk")?.roll
+        ?? (initFlags.rollData ? Roll.fromJSON(JSON.stringify(initFlags.rollData)) : null);
+      const defRollFx = _rerollShow.find(e => e.side === "def")?.roll ?? defRoll;
+      await ClashTotalFX.play({
         rerollSides: _rerollShow.map(e => e.side),
         atkParts: ClashManager._buildTotalParts({
           actor: atkActor, opponent: defActor,
@@ -2553,7 +2528,10 @@ export class ClashManager {
           baseFormula: defFinalBase ?? "", category: defItem?.system?.category ?? "",
           isDefender: true,
         }),
-        startDice: () => ClashManager._showDiceEach(_rerollShow),
+        startDice: () => ClashManager._showDiceEach([
+          { roll: atkRollFx, actor: atkActor },
+          { roll: defRollFx, actor: defActor },
+        ]),
       });
     }
 
