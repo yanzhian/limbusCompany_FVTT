@@ -36,30 +36,29 @@
             <span class="bg-subtitle-label">{{system.subtitle}}</span>
           {{/if}}
         </div>
-      </div>
-    </div>
 
-    {{!-- ── 标签（合集包分类） ─────────────────────────────────────────── --}}
-    <div class="item-tags-row">
-      <div class="tags-area">
-        {{#if (and isEditable (not isLocked))}}
-          <input type="text" name="system.category" value="{{system.category}}" class="tags-input" placeholder="合集分类（如：事务所）"/>
-        {{else}}
-          {{#if system.category}}<span class="tag">{{system.category}}</span>{{/if}}
-        {{/if}}
-      </div>
-    </div>
+        {{!-- 合集分类 + 势力标签：贴在信息列底部，与左侧图标下沿对齐 --}}
+        <div class="item-tags-row bg-tags-row">
+          <div class="tags-area">
+            {{#if (and isEditable (not isLocked))}}
+              <input type="text" name="system.category" value="{{system.category}}" class="tags-input" placeholder="合集分类（如：事务所）"/>
+            {{else}}
+              {{#if system.category}}<span class="bg-category">{{system.category}}</span>{{/if}}
+            {{/if}}
+          </div>
+        </div>
 
-    {{!-- ── 势力/阵营标签（供场地资源等玩法逻辑匹配） ───────────────────── --}}
-    <div class="item-tags-row">
-      <div class="tags-area">
-        {{#if (and isEditable (not isLocked))}}
-          <input type="text" name="system.tags" value="{{system.tags}}" class="tags-input" placeholder="势力标签（如：拉曼却/血魔）"/>
-        {{else}}
-          {{#each (split system.tags "/")}}
-            {{#if this}}<span class="tag">{{trim this}}</span>{{/if}}
-          {{/each}}
-        {{/if}}
+        <div class="item-tags-row bg-tags-row">
+          <div class="tags-area">
+            {{#if (and isEditable (not isLocked))}}
+              <input type="text" name="system.tags" value="{{system.tags}}" class="tags-input" placeholder="势力标签（如：拉曼却/血魔）"/>
+            {{else}}
+              {{#each (split system.tags "/")}}
+                {{#if this}}<span class="tag">{{trim this}}</span>{{/if}}
+              {{/each}}
+            {{/if}}
+          </div>
+        </div>
       </div>
     </div>
 

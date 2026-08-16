@@ -9112,3 +9112,28 @@ input.item-piles-quantity {
 /* 物品侧边栏的批量导入按钮 */
 #items .directory-header .limbus-csv-import,
 .items-sidebar .limbus-csv-import { flex: 0 0 auto; }
+
+/* ── 背景卡：合集分类 + 势力标签移入信息列并置底 ─────────────────────────
+   第一行标签用 margin-top:auto 把这一组推到信息列底部，与左侧 100px 图标下沿齐平。 */
+.limbuscompany .background-sheet .equip-info-col > .bg-tags-row:first-of-type {
+  margin-top: auto;
+}
+.limbuscompany .background-sheet .bg-tags-row {
+  padding: 0;
+  border: none;
+  margin: 0;
+}
+.limbuscompany .background-sheet .bg-tags-row .tags-area {
+  padding: 0;
+  gap: 4px;
+}
+
+/* 合集分类：纯文字色块，不描边（与下方势力标签的边框样式区分开） */
+.limbuscompany .background-sheet .bg-category {
+  color: #E8C199;
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: .8rem;
+  letter-spacing: .04em;
+}
