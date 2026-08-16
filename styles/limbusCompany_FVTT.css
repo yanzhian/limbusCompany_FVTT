@@ -8908,7 +8908,7 @@ input.item-piles-quantity {
 #limbus-clash-fx .lcfx-band--def::after { bottom: 100%; }
 
 #limbus-clash-fx .lcfx-band.is-in  { animation: lcfx-in  .42s cubic-bezier(.16, .9, .3, 1) forwards; }
-#limbus-clash-fx .lcfx-band.is-out { animation: lcfx-out .34s cubic-bezier(.6, 0, .85, .2) forwards; }
+#limbus-clash-fx .lcfx-band.is-out { animation: lcfx-out .58s cubic-bezier(.45, 0, .7, .35) forwards; }
 
 @keyframes lcfx-in {
   from { opacity: 0; transform: rotate(var(--lcfx-angle)) translateY(var(--lcfx-from-y)); }

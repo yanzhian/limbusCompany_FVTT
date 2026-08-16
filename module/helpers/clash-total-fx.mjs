@@ -32,15 +32,10 @@ export class ClashTotalFX {
   static ROLL_MS = 400;
 
   /** 连击窗口：上一次交锋结束后多久没有新交锋，黑条才退场 */
-  static CHAIN_GRACE = 900;
+  static CHAIN_GRACE = 1200;
 
-  /**
-   * 骰子图标。正式素材是 assets/icons/dice/{default,unbreakable}/dN.svg，
-   * 眼下先用硬币占位，等 SVG 定稿再把 USE_SVG 打开即可。
-   */
-  static USE_SVG = false;
-  static DICE_SVG  = "systems/limbusCompany_FVTT/assets/icons/dice";
-  static DICE_COIN = {
+  /** 骰子图标：一般骰子用硬币正面，【不可摧毁】用不可摧毁的硬币 */
+  static DICE_ICON = {
     default:     "systems/limbusCompany_FVTT/assets/icons/Base_icon/硬币_正面.webp",
     unbreakable: "systems/limbusCompany_FVTT/assets/icons/Base_icon/不可摧毁的硬币.webp",
   };
@@ -167,7 +162,7 @@ export class ClashTotalFX {
       band.classList.remove("is-in");
       band.classList.add("is-out");
     }
-    await this._sleep(360);
+    await this._sleep(600);
     for (const side of sides) this._band(side).classList.remove("is-active");
   }
 
@@ -180,21 +175,19 @@ export class ClashTotalFX {
     return { count: Math.min(12, Math.max(1, parseInt(m[1] || "1"))), faces: parseInt(m[2]) };
   }
 
-  static _dieSrc(faces, type) {
-    return this.USE_SVG
-      ? `${this.DICE_SVG}/${type === "unbreakable" ? "unbreakable" : "default"}/d${faces}.svg`
-      : (this.DICE_COIN[type] ?? this.DICE_COIN.default);
+  static _dieSrc(type) {
+    return this.DICE_ICON[type] ?? this.DICE_ICON.default;
   }
 
   /** 按骰数在 TOTAL 上方摆出骰子图标 */
   static _buildDice(side, formula, type = "default") {
     const box = this._band(side).querySelector(".lcfx-dice");
     box.replaceChildren();
-    const { count, faces } = this._parseDice(formula);
+    const { count } = this._parseDice(formula);
     for (let i = 0; i < count; i++) {
       const img = document.createElement("img");
       img.className = "lcfx-die" + (type === "unbreakable" ? " lcfx-die--unbreak" : "");
-      img.src = this._dieSrc(faces, type);
+      img.src = this._dieSrc(type);
       img.dataset.type = type;
       box.appendChild(img);
     }
