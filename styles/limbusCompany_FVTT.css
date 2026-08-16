@@ -9106,3 +9106,24 @@ input.item-piles-quantity {
 /* 物品侧边栏的批量导入按钮 */
 #items .directory-header .limbus-csv-import,
 .items-sidebar .limbus-csv-import { flex: 0 0 auto; }
+
+/* ── 技能训练等级（Ⅰ–Ⅴ，名称行右端） ─────────────────────────────────────
+   只影响骰数/加重值/骰子类型/效果描述/效果触发列表，其余字段各等级共用。 */
+.limbuscompany .training-level {
+  margin-left: auto;
+  flex: 0 0 auto;
+  font-size: 40px;
+  line-height: 1;
+  font-weight: bold;
+  color: #E8C9A2;
+  text-shadow: 0 0 6px rgba(0, 0, 0, .8);
+  user-select: none;
+}
+.limbuscompany .training-level--editable {
+  cursor: pointer;
+  transition: color .15s, transform .15s;
+}
+.limbuscompany .training-level--editable:hover {
+  color: #FFE9A8;
+  transform: scale(1.08);
+}

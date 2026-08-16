@@ -107,6 +107,26 @@ export class EquipmentData extends foundry.abstract.TypeDataModel {
 //  SkillData — 技能数据模型（基础 / 守备 / EGO）
 // ═══════════════════════════════════════════════════════════════════════════
 
+/**
+ * 训练等级档案：只有这几项会随【训练等级】变化，其余（名称/类型/分类/罪孽/等级/
+ * 标签/无法装备…）在各等级之间共用。
+ * 存 5 份（Ⅰ–Ⅴ），切换等级时把当前值存回本级、再把目标级的值载入生效字段。
+ */
+function makeTrainingProfileSchema() {
+  const fields = foundry.data.fields;
+  return new fields.SchemaField({
+    baseValue:  new fields.NumberField({ required: true, integer: true, min: 0, initial: 0 }),
+    diceCount:  new fields.NumberField({ required: true, integer: true, min: 0, initial: 1 }),
+    diceFaces:  new fields.NumberField({ required: true, integer: true, min: 1, initial: 4 }),
+    weight:     new fields.NumberField({ required: true, integer: true, min: 0, initial: 1 }),
+    diceType:   new fields.StringField({ required: true, initial: "normal" }),
+    effectDesc: new fields.HTMLField({ required: false, initial: "" }),
+    activities: new fields.ArrayField(makeActivitySchema(), { required: true, initial: [] }),
+    // 该档是否已配置过；false 时切换过去会以当前档为模板复制一份，而不是给你一张空卡
+    configured: new fields.BooleanField({ required: true, initial: false }),
+  });
+}
+
 export class SkillData extends foundry.abstract.TypeDataModel {
   static defineSchema() {
     const fields = foundry.data.fields;
@@ -213,6 +233,12 @@ export class SkillData extends foundry.abstract.TypeDataModel {
 
       // 收藏
       favorited: new fields.BooleanField({ required: true, initial: false }),
+
+      // ── 训练等级（Ⅰ–Ⅴ，默认 Ⅲ）────────────────────────────────────────
+      // 切换等级只影响：骰数(baseValue/diceCount/diceFaces)、加重值、骰子类型、
+      // 效果描述、效果触发列表；名称/类型/分类/罪孽/等级/标签/无法装备保持不变。
+      trainingLevel: new fields.NumberField({ required: true, integer: true, min: 1, max: 5, initial: 3 }),
+      training: new fields.ArrayField(makeTrainingProfileSchema(), { required: true, initial: [] }),
 
       // ── 商人货架字段 ────────────────────────────────────────────────────
       price:  new fields.NumberField({ required: true, integer: true, min: 0, initial: 0 }),
@@ -476,6 +502,55 @@ export class BackgroundData extends foundry.abstract.TypeDataModel {
 // ═══════════════════════════════════════════════════════════════════════════
 
 export class LimbusItem extends Item {
+
+  /* ─── 训练等级（技能） ─────────────────────────────────────────────────── */
+
+  /** 罗马数字标记 */
+  static TRAINING_ROMAN = ["Ⅰ", "Ⅱ", "Ⅲ", "Ⅳ", "Ⅴ"];
+
+  /** 随训练等级切换的字段（其余字段各等级共用） */
+  static TRAINING_FIELDS = ["baseValue", "diceCount", "diceFaces", "weight", "diceType", "effectDesc", "activities"];
+
+  /** 当前生效值打包成一份档案 */
+  _snapshotTrainingProfile() {
+    const sys  = this.system;
+    const snap = { configured: true };
+    for (const key of LimbusItem.TRAINING_FIELDS) {
+      snap[key] = foundry.utils.deepClone(sys[key]);
+    }
+    return snap;
+  }
+
+  /**
+   * 切换训练等级：先把当前生效值存回当前等级的档案，再把目标等级的档案载入生效字段。
+   * 目标等级从未配置过时，以当前档为模板复制一份——升级往往是在原技能基础上改，
+   * 直接给一张空卡反而更麻烦。
+   * @param {number} next 目标等级 1–5
+   */
+  async setTrainingLevel(next) {
+    if (this.type !== "skill") return;
+    const level = Math.max(1, Math.min(5, Math.round(Number(next) || 0)));
+    const cur   = this.system.trainingLevel ?? 3;
+    if (level === cur) return;
+
+    const list = foundry.utils.deepClone(this.system.training ?? []);
+    while (list.length < 5) list.push({ configured: false });
+
+    // ① 存回当前等级
+    list[cur - 1] = this._snapshotTrainingProfile();
+
+    // ② 载入目标等级（未配置过则以当前档为模板）
+    const target = list[level - 1]?.configured ? list[level - 1] : list[cur - 1];
+    const update = { "system.trainingLevel": level, "system.training": list };
+    for (const key of LimbusItem.TRAINING_FIELDS) {
+      update[`system.${key}`] = foundry.utils.deepClone(target[key]);
+    }
+    // 目标档标记为已配置，下次切回来就用它自己的数据
+    list[level - 1] = { ...target, configured: true };
+    update["system.training"] = list;
+
+    return this.update(update);
+  }
 
   /** @override */
   prepareData() {

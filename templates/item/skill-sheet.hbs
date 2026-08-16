@@ -43,6 +43,12 @@
             {{else}}
               <div class="item-name-display" style="color:{{sinColor}}">{{item.name}}</div>
             {{/if}}
+            {{!-- 训练等级：解锁后左键升一级、右键降一级 --}}
+            <span class="training-level {{#if (and isEditable (not isLocked))}}training-level--editable{{/if}}"
+                  data-level="{{system.trainingLevel}}"
+                  title="训练等级 {{trainingRoman}}{{#if (and isEditable (not isLocked))}}　左键升级 / 右键降级{{/if}}">
+              {{trainingRoman}}
+            </span>
           </div>
 
           {{!-- 分类 + 骰数 --}}
