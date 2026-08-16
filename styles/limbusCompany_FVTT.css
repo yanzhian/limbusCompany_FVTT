@@ -9137,3 +9137,12 @@ input.item-piles-quantity {
   font-size: .8rem;
   letter-spacing: .04em;
 }
+
+/* 背景卡的简介：改为按内容撑高，不参与伸缩。
+   .item-desc-block 默认是 flex:1（grow/shrink 都为 1、basis 0），在背景卡这种
+   下面还有"等级物品"若干区块的布局里会被压扁到 basis 附近，而块内富文本没有
+   裁剪，于是文字溢出压在下一节上面。 */
+.limbuscompany .background-sheet .item-desc-block {
+  flex: 0 0 auto;
+  min-height: 80px;
+}
