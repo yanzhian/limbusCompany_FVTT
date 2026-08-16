@@ -13,6 +13,9 @@ export class ChaosTokenLabel {
   /** 标签容器（#hud 的子节点） */
   static _layer = null;
 
+  /** 混乱特效底图 */
+  static VFX_SRC = "systems/limbusCompany_FVTT/assets/icons/Battle_VFX/StaggeredEffect.png";
+
   /** 注册钩子（在 Hooks.once("ready") 中调用一次） */
   static init() {
     Hooks.on("canvasReady",  () => ChaosTokenLabel.refresh());
