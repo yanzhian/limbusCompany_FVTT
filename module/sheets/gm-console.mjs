@@ -117,6 +117,12 @@ export class GMConsole extends Application {
     // ── 分配经验 ──────────────────────────────────────────────────
     html.find(".gmc-btn-xp").on("click", this._onAddXP.bind(this));
 
+    // ── 批量导入物品（CSV / 表格）─────────────────────────────────
+    html.find(".gmc-btn-csv-import").on("click", async () => {
+      const { CSVImportDialog } = await import("./csv-import-dialog.mjs");
+      CSVImportDialog.open();
+    });
+
     // ── 拖放区域：接收侧边栏角色 ──────────────────────────────────
     const drop = html.find(".gmc-drop-zone")[0];
     drop.addEventListener("dragover", e => { e.preventDefault(); e.dataTransfer.dropEffect = "copy"; });

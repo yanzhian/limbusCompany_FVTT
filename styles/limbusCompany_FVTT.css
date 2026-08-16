@@ -8920,3 +8920,189 @@ input.item-piles-quantity {
   display: none;
 }
 #limbus-clash-fx .lcfx-reroll.show { display: inline-block; animation: lcfx-part-in .3s ease-out; }
+
+/* ═══════════════════════════════════════════════════════════════
+   物品批量导入（#limbus-csv-import）
+   ═══════════════════════════════════════════════════════════════ */
+
+#limbus-csv-import .window-content {
+  padding:    0;
+  overflow-y: auto;
+  background: var(--bg-darkest);
+}
+
+.csvi-body {
+  display:        flex;
+  flex-direction: column;
+}
+
+.csvi-section {
+  padding:       10px 12px;
+  border-bottom: 1px solid #3A2A18;
+}
+.csvi-section:last-child { border-bottom: none; }
+
+.csvi-section-header {
+  display:       flex;
+  align-items:   center;
+  gap:           8px;
+  margin-bottom: 6px;
+}
+.csvi-section-title {
+  font-size:   0.9rem;
+  color:       var(--gold-active, #C9A227);
+  font-weight: bold;
+}
+.csvi-count    { font-size: 0.8rem; color: var(--text-main); opacity: 0.8; }
+.csvi-filename { font-size: 0.8rem; color: var(--text-main); opacity: 0.7; }
+
+.csvi-text-btn {
+  margin-left: auto;
+  background:  none;
+  border:      none;
+  color:       var(--gold-mid, #8A6A2A);
+  font-size:   0.78rem;
+  cursor:      pointer;
+  width:       auto;
+  padding:     0;
+}
+.csvi-text-btn:hover { color: var(--gold-active, #C9A227); }
+
+/* ── 设置行 ─────────────────────────────────────────────────── */
+
+.csvi-config {
+  display:     flex;
+  align-items: flex-end;
+  gap:         10px;
+  flex-wrap:   wrap;
+}
+.csvi-field {
+  display:        flex;
+  flex-direction: column;
+  gap:            3px;
+  flex:           1 1 180px;
+}
+.csvi-label { font-size: 0.78rem; opacity: 0.85; }
+.csvi-field select { width: 100%; }
+
+.csvi-btn {
+  padding:       4px 14px;
+  font-size:     0.85rem;
+  background:    var(--bg-title-bar);
+  border:        1px solid #5A3A18;
+  border-radius: 2px;
+  color:         var(--text-main);
+  cursor:        pointer;
+  white-space:   nowrap;
+  transition:    background 0.15s, border-color 0.15s;
+}
+.csvi-btn:hover:not(:disabled) {
+  background:   var(--gold-mid);
+  border-color: var(--gold-active);
+  color:        var(--bg-darkest);
+}
+.csvi-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+/* ── 文件区 ─────────────────────────────────────────────────── */
+
+.csvi-dropzone {
+  display:        flex;
+  flex-direction: column;
+  gap:            5px;
+  padding:        8px;
+  border:         1px dashed #5A3A18;
+  border-radius:  3px;
+  margin-bottom:  6px;
+}
+.csvi-hint { font-size: 0.75rem; opacity: 0.7; line-height: 1.4; }
+
+.csvi-paste {
+  width:       100%;
+  font-family: "Consolas", "Courier New", monospace;
+  font-size:   0.78rem;
+  resize:      vertical;
+}
+
+/* ── 预览表 ─────────────────────────────────────────────────── */
+
+.csvi-preview-wrap {
+  max-height: 220px;
+  overflow:   auto;
+  border:     1px solid #3A2A18;
+}
+.csvi-preview {
+  border-collapse: collapse;
+  font-size:       0.75rem;
+  width:           max-content;
+  min-width:       100%;
+}
+.csvi-preview th,
+.csvi-preview td {
+  border:      1px solid #3A2A18;
+  padding:     2px 6px;
+  white-space: nowrap;
+  max-width:   220px;
+  overflow:    hidden;
+  text-overflow: ellipsis;
+}
+.csvi-preview th {
+  background: var(--bg-title-bar);
+  color:      var(--gold-active, #C9A227);
+  position:   sticky;
+  top:        0;
+}
+
+.csvi-empty {
+  font-size: 0.8rem;
+  opacity:   0.6;
+  padding:   10px 0;
+}
+
+/* ── 列头对照 ───────────────────────────────────────────────── */
+
+.csvi-columns {
+  display:   flex;
+  flex-wrap: wrap;
+  gap:       4px;
+  margin-bottom: 6px;
+}
+.csvi-col-chip {
+  font-size:     0.72rem;
+  padding:       1px 6px;
+  border:        1px solid #5A3A18;
+  border-radius: 8px;
+  cursor:        help;
+}
+.csvi-note {
+  font-size:   0.73rem;
+  opacity:     0.75;
+  line-height: 1.5;
+  margin:      4px 0;
+}
+.csvi-note code {
+  font-size:  0.72rem;
+  padding:    0 3px;
+  background: rgba(0, 0, 0, 0.35);
+}
+
+/* ── 校验信息 ───────────────────────────────────────────────── */
+
+.csvi-msgs {
+  margin:      6px 0 0;
+  padding-left:18px;
+  font-size:   0.75rem;
+  line-height: 1.5;
+  max-height:  140px;
+  overflow-y:  auto;
+}
+.csvi-warn  li { color: #D6A94A; }
+.csvi-error li { color: #D45B4A; }
+
+/* ── 执行 ───────────────────────────────────────────────────── */
+
+.csvi-actions { display: flex; justify-content: flex-end; }
+.csvi-actions .csvi-btn { padding: 5px 24px; }
+
+/* 物品侧边栏的批量导入按钮 */
+#items .directory-header .limbus-csv-import,
+.items-sidebar .limbus-csv-import { flex: 0 0 auto; }

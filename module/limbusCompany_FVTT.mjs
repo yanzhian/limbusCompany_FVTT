@@ -241,6 +241,27 @@ Hooks.on("canvasReady", () => {
   _installTokenDoubleClickOpenActorSheet();
 });
 
+/* ─── 物品侧边栏：批量导入按钮（仅 GM） ─────────────────────────────────── */
+
+Hooks.on("renderItemDirectory", (app, html) => {
+  if (!game.user.isGM) return;
+  // v13 传入原生 HTMLElement，旧版传 jQuery，这里统一取原生节点
+  const root = html instanceof HTMLElement ? html : html?.[0];
+  const header = root?.querySelector(".directory-header .header-actions")
+              ?? root?.querySelector(".directory-header");
+  if (!header || header.querySelector(".limbus-csv-import")) return;
+
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "limbus-csv-import";
+  btn.innerHTML = `<i class="fas fa-file-csv"></i> 批量导入`;
+  btn.addEventListener("click", async () => {
+    const { CSVImportDialog } = await import("./sheets/csv-import-dialog.mjs");
+    CSVImportDialog.open();
+  });
+  header.appendChild(btn);
+});
+
 /* ─── 对抗结算触发：GM 端捕获玩家委托的结算请求 ──────────────────────────── */
 
 Hooks.on("createChatMessage", async (message) => {
@@ -878,6 +899,7 @@ async function _preloadTemplates() {
     "systems/limbusCompany_FVTT/templates/item/background-sheet.hbs",
     "systems/limbusCompany_FVTT/templates/apps/background-wizard.hbs",
     "systems/limbusCompany_FVTT/templates/apps/level-up-dialog.hbs",
+    "systems/limbusCompany_FVTT/templates/apps/csv-import.hbs",
     // Combat
     "systems/limbusCompany_FVTT/templates/combat/combat-hud.hbs",
     // Partials

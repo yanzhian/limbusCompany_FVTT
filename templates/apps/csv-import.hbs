@@ -1,0 +1,109 @@
+{{!-- csv-import.hbs — 物品批量导入（CSV / 表格） --}}
+<div class="csvi-body">
+
+  {{!-- ── 设置行 ────────────────────────────────────────────────── --}}
+  <section class="csvi-section csvi-config">
+    <label class="csvi-field">
+      <span class="csvi-label">物品类型</span>
+      <select class="csvi-type">
+        {{#each types}}
+          <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+        {{/each}}
+      </select>
+    </label>
+
+    <label class="csvi-field">
+      <span class="csvi-label">导入到</span>
+      <select class="csvi-target">
+        <option value="world" {{#if targetWorld}}selected{{/if}}>世界物品列表</option>
+        {{#each packs}}
+          <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+        {{/each}}
+      </select>
+    </label>
+
+    <button type="button" class="csvi-btn csvi-template" title="下载当前类型的空白模板 CSV">
+      下载模板 CSV
+    </button>
+  </section>
+
+  {{!-- ── 数据输入 ──────────────────────────────────────────────── --}}
+  <section class="csvi-section">
+    <div class="csvi-section-header">
+      <span class="csvi-section-title">① 表格数据</span>
+      {{#if fileName}}<span class="csvi-filename">{{fileName}}</span>{{/if}}
+      <button type="button" class="csvi-text-btn csvi-clear">清空</button>
+    </div>
+
+    <div class="csvi-dropzone">
+      <input type="file" class="csvi-file" accept=".csv,.tsv,.txt,text/csv,text/tab-separated-values,text/plain">
+      <span class="csvi-hint">选择 / 拖入 CSV 或 TSV 文件，也可以直接从 Excel 复制整块单元格粘贴到下方。</span>
+    </div>
+
+    <textarea class="csvi-paste" rows="7"
+      placeholder="第一行必须是列头，例如：&#10;名称,部位,攻击修正,标签,描述&#10;军用匕首,weapon,2,锐利/单手,造成额外伤害">{{rawText}}</textarea>
+  </section>
+
+  {{!-- ── 预览 ──────────────────────────────────────────────────── --}}
+  <section class="csvi-section">
+    <div class="csvi-section-header">
+      <span class="csvi-section-title">② 预览与校验</span>
+      <span class="csvi-count">可导入 {{count}} 条</span>
+      <button type="button" class="csvi-text-btn csvi-toggle-columns">
+        {{#if showColumns}}收起可用列头{{else}}查看可用列头{{/if}}
+      </button>
+    </div>
+
+    {{#if showColumns}}
+      <div class="csvi-columns">
+        {{#each columns}}
+          <span class="csvi-col-chip" title="{{path}}">{{header}}</span>
+        {{/each}}
+      </div>
+      <p class="csvi-note">
+        列头可以写中文别名，也可以直接写数据路径（如 <code>system.atkAdj</code>）。
+        标签类列用 <code>/</code> 分隔；布尔列填 是/否；活动（activities）等复杂列填 JSON。
+      </p>
+    {{/if}}
+
+    {{#if preview}}
+      <div class="csvi-preview-wrap">
+        <table class="csvi-preview">
+          <thead>
+            <tr>{{#each preview.headers}}<th>{{this}}</th>{{/each}}</tr>
+          </thead>
+          <tbody>
+            {{#each preview.rows}}
+              <tr>{{#each this}}<td>{{this}}</td>{{/each}}</tr>
+            {{/each}}
+          </tbody>
+        </table>
+      </div>
+      {{#if preview.more}}
+        <div class="csvi-note">…另有 {{preview.more}} 行未在预览中显示。</div>
+      {{/if}}
+    {{else}}
+      <div class="csvi-empty">尚未载入数据。</div>
+    {{/if}}
+
+    {{#if warnings.length}}
+      <ul class="csvi-msgs csvi-warn">
+        {{#each warnings}}<li>{{this}}</li>{{/each}}
+      </ul>
+    {{/if}}
+
+    {{#if errors.length}}
+      <ul class="csvi-msgs csvi-error">
+        {{#each errors}}<li>{{this}}</li>{{/each}}
+      </ul>
+    {{/if}}
+  </section>
+
+  {{!-- ── 执行 ──────────────────────────────────────────────────── --}}
+  <section class="csvi-section csvi-actions">
+    <button type="button" class="csvi-btn csvi-import" {{#unless canImport}}disabled{{/unless}}>
+      导入 {{count}} 个物品
+    </button>
+  </section>
+
+</div>
