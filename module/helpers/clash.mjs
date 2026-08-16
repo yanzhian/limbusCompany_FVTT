@@ -2332,43 +2332,8 @@ export class ClashManager {
               await roll.evaluate();
               ClashManager.applyDiceRollMods(defActor, roll, { item: defItem, isDefense: true });
 
-              // ── TOTAL 演出 + DiceSoNice ────────────────────────────────
-              // 黑条先切入，就位后才开骰；双方骰子同时入场、各用各的皮肤，
-              // 数字滚到各自骰子落定时定格，再分段揭示加值与 BUFF。
-              {
-                const atkActorD = game.actors.get(initFlags.attackerId);
-                const atkRoll   = initFlags.rollData
-                  ? Roll.fromJSON(JSON.stringify(initFlags.rollData)) : null;
-                // 攻击方的手动加值：完整公式相对基础公式多出来的那一截（如 "+3"）
-                const atkBase   = initFlags.baseFormula ?? initFlags.formula ?? "";
-                const atkBonus  = parseInt(String(initFlags.formula ?? "").slice(atkBase.length)) || 0;
-
-                // 骰子条要按【不可摧毁】区分素材
-                const atkItemFx = initFlags.itemUuid
-                  ? await fromUuid(initFlags.itemUuid).catch(() => null) : null;
-
-                const atkParts = ClashManager._buildTotalParts({
-                  actor: atkActorD, opponent: defActor,
-                  rollTotal: initFlags.rollTotal ?? 0, bonus: atkBonus,
-                  baseFormula: atkBase,
-                  category: initFlags.category ?? "", isDefender: false,
-                });
-                const defParts = ClashManager._buildTotalParts({
-                  actor: defActor, opponent: atkActorD,
-                  rollTotal: roll.total ?? 0, bonus,
-                  baseFormula: formula, category: sys.category ?? "", isDefender: true,
-                });
-
-                await ClashTotalFX.play({
-                  atkParts, defParts,
-                  atkDiceType: atkItemFx?.system?.diceType ?? "default",
-                  defDiceType: defItem?.system?.diceType ?? "default",
-                  startDice: () => ClashManager._showDiceEach([
-                    { roll: atkRoll, actor: atkActorD },
-                    { roll,          actor: defActor  },
-                  ]),
-                });
-              }
+              // TOTAL 演出与 DiceSoNice 交给「交锋序列」统一播放
+              // （见 _runClashExchanges，公式重投等修正都结算完后才开演）
               await ClashManager._sendResponseAndResolve(
                 defActor, defItem, roll, full, initMsgId, initFlags, slotIdx
               );
@@ -2606,6 +2571,23 @@ export class ClashManager {
       return;
     }
 
+    // ── 回合内多次交锋：双方按剩余骰数反复重掷，输的一方每次碎一枚骰子，
+    //    直到一方无完好骰子，由胜方【重新骰掷】一次结算最终伤害 ──────────
+    const exch = await ClashManager._runClashExchanges({
+      atkActor, defActor, atkItem, defItem,
+      atkBase: atkFinalBase, atkBonus: atkBonusVal, atkTotal0: atkFinalTotal,
+      atkRoll0: initFlags.rollData ? Roll.fromJSON(JSON.stringify(initFlags.rollData)) : null,
+      atkCategory: initFlags.category ?? "",
+      defBase: defFinalBase, defBonus: defBonusVal, defTotal0: defFinalTotal,
+      defRoll0: defRoll, defCategory,
+    });
+    atkFinalTotal   = exch.atkTotal;
+    defFinalTotal   = exch.defTotal;
+    atkFinalFormula = exch.atkFormula;
+    defFinalFormula = exch.defFormula;
+    // 交锋后攻击方的骰值/公式已变（重新骰掷的结果），结算卡片要用新的
+    const finalInitFlags = { ...effectiveInitFlags, rollTotal: atkFinalTotal, formula: atkFinalFormula };
+
     const resolution = ClashManager._computeResolution({
       atkActor,    atkTotal:    atkFinalTotal,   atkFormula:  atkFinalFormula,
       atkItemName: initFlags.itemName, atkItemImg: initFlags.itemImg,
@@ -2614,6 +2596,9 @@ export class ClashManager {
       defItemName: defItem.name,       defItemImg: defItem.img,
       defCategory,                                     defSinType:  sys.sinType ?? "",
     });
+
+    // 交锋过程写进结算说明（放在既有说明之前）
+    if (exch.notes.length) resolution.notes.splice(2, 0, ...exch.notes.map(n => `　${n}`));
 
     // 呼吸暴击触发：层数-1
     if (resolution.breatheCrit && resolution.winner) {
@@ -2702,7 +2687,7 @@ export class ClashManager {
       if (lossNote) sanityNotes.push(lossNote);
     }
 
-    await ClashManager._sendResolveMsg(resolution, effectiveInitFlags, defActor, defItem, defFormula, sanityNotes);
+    await ClashManager._sendResolveMsg(resolution, finalInitFlags, defActor, defItem, defFinalFormula, sanityNotes);
 
     // 【不可摧毁】反击消息在拼点对抗结果之后发出
     if (_unbreakableCounterArgs) {
@@ -2716,6 +2701,151 @@ export class ClashManager {
     // 统一发出本次对抗所有 activity 通知（汇总为一条，避免并发清理竞态）
     await ClashManager._flushActMsgs(_actMsgs, atkActor);
     await ClashManager._broadcastAndCheckReactions({ lastSkillUuid: atkItem?.uuid ?? null, attacker: atkActor, defender: defActor });
+  }
+
+  /* ─── 阶段五a：回合内多次交锋 ─────────────────────────────────────────── */
+
+  /** 从骰子公式里读出骰数与面数，如 "3D6" → { count: 3, faces: 6 } */
+  static _parseDiceFormula(formula = "") {
+    const m = /(\d*)\s*[dD]\s*(\d+)/.exec(String(formula));
+    if (!m) return { count: 0, faces: 0 };
+    return { count: Math.max(1, parseInt(m[1] || "1")), faces: parseInt(m[2]) };
+  }
+
+  /** 一方在交锋中的骰子状态 */
+  static _diceState(base, item) {
+    const { count, faces } = ClashManager._parseDiceFormula(base);
+    return {
+      intact: count,                                    // 完好骰数
+      broken: 0,                                        // 已碎的【不可摧毁】骰（每枚固定 1 点）
+      faces,
+      unbreakable: item?.system?.diceType === "unbreakable",
+    };
+  }
+
+  /** 按当前骰子状态重建公式：完好骰数 D 面数 +（每枚碎骰 1 点）+ 手动加值 */
+  static _stateFormula(st, bonus = 0) {
+    const flat = st.broken + (bonus || 0);
+    const dice = st.intact > 0 ? `${st.intact}D${st.faces}` : "0";
+    return flat !== 0 ? `${dice}${flat > 0 ? "+" : ""}${flat}` : dice;
+  }
+
+  /**
+   * 回合内多次交锋。
+   *
+   * 双方每次交锋按当前剩余骰数重掷整条公式（3D6 → 2D6 → 1D6），加值与 BUFF
+   * 修正照常计入 TOTAL；输的一方毁掉一枚骰子——一般骰子直接消失，【不可摧毁】
+   * 碎后留场、之后每次固定出 1 点。直到一方再无完好骰子，由胜方【重新骰掷】
+   * 一次，用这一掷的结果结算最终伤害。
+   *
+   * @returns {{atkTotal:number, defTotal:number, atkFormula:string, defFormula:string, notes:string[]}}
+   */
+  static async _runClashExchanges(ctx) {
+    const { atkActor, defActor, atkItem, defItem,
+            atkBase, atkBonus, atkTotal0, atkRoll0, atkCategory,
+            defBase, defBonus, defTotal0, defRoll0, defCategory } = ctx;
+
+    const atkSt = ClashManager._diceState(atkBase, atkItem);
+    const defSt = ClashManager._diceState(defBase, defItem);
+    const atkType = atkSt.unbreakable ? "unbreakable" : "default";
+    const defType = defSt.unbreakable ? "unbreakable" : "default";
+
+    const partsOf = (side, total, base) => (side === "atk")
+      ? ClashManager._buildTotalParts({
+          actor: atkActor, opponent: defActor, rollTotal: total, bonus: atkBonus,
+          baseFormula: base, category: atkCategory, isDefender: false })
+      : ClashManager._buildTotalParts({
+          actor: defActor, opponent: atkActor, rollTotal: total, bonus: defBonus,
+          baseFormula: base, category: defCategory, isDefender: true });
+    const sum = (parts) => parts.reduce((a, p) => a + (p.value ?? 0), 0);
+
+    const notes = [];
+    // 无骰公式（纯定值）不参与多次交锋，按单次拼点处理
+    if (!atkSt.intact || !defSt.intact) {
+      await ClashTotalFX.play({
+        atkParts: partsOf("atk", atkTotal0, atkBase),
+        defParts: partsOf("def", defTotal0, defBase),
+        atkDiceType: atkType, defDiceType: defType,
+        startDice: () => ClashManager._showDiceEach([
+          { roll: atkRoll0, actor: atkActor }, { roll: defRoll0, actor: defActor },
+        ]),
+      });
+      return { atkTotal: atkTotal0, defTotal: defTotal0,
+               atkFormula: atkBase, defFormula: defBase, notes };
+    }
+
+    const MAX_EXCHANGES = 20;   // 平局互不损失，兜底防止死循环
+    let round = 0;
+    let atkCur = atkTotal0, defCur = defTotal0;
+    let atkFml = ClashManager._stateFormula(atkSt, atkBonus);
+    let defFml = ClashManager._stateFormula(defSt, defBonus);
+
+    while (atkSt.intact > 0 && defSt.intact > 0 && round < MAX_EXCHANGES) {
+      round++;
+      let atkRoll = atkRoll0, defRoll = defRoll0;
+      if (round > 1) {
+        atkFml = ClashManager._stateFormula(atkSt, atkBonus);
+        defFml = ClashManager._stateFormula(defSt, defBonus);
+        atkRoll = new Roll(atkFml); await atkRoll.evaluate();
+        defRoll = new Roll(defFml); await defRoll.evaluate();
+        ClashManager.applyDiceRollMods(atkActor, atkRoll, { item: atkItem, isDefense: false });
+        ClashManager.applyDiceRollMods(defActor, defRoll, { item: defItem, isDefense: true });
+        atkCur = atkRoll.total ?? 0;
+        defCur = defRoll.total ?? 0;
+      }
+
+      const aParts = partsOf("atk", atkCur, atkFml);
+      const dParts = partsOf("def", defCur, defFml);
+      await ClashTotalFX.play({
+        atkParts: aParts, defParts: dParts,
+        atkDiceType: atkType, defDiceType: defType,
+        startDice: () => ClashManager._showDiceEach([
+          { roll: atkRoll, actor: atkActor }, { roll: defRoll, actor: defActor },
+        ]),
+      });
+
+      const aEff = sum(aParts), dEff = sum(dParts);
+      if (aEff === dEff) {
+        notes.push(`第 ${round} 次交锋：${aEff} vs ${dEff} 平局，双方均未损失骰子`);
+        continue;
+      }
+      const loserSt   = aEff > dEff ? defSt : atkSt;
+      const loserName = (aEff > dEff ? defActor : atkActor)?.name ?? "?";
+      loserSt.intact -= 1;
+      if (loserSt.unbreakable) loserSt.broken += 1;
+      notes.push(`第 ${round} 次交锋：${aEff} vs ${dEff}，${loserName} 损失 1 枚`
+        + `${loserSt.unbreakable ? "【不可摧毁】骰（碎裂后固定 1 点）" : "骰子"}`);
+    }
+
+    // 一方骰子耗尽 → 胜方【重新骰掷】一次，用这一掷结算最终伤害
+    const winSide = atkSt.intact > 0 ? "atk" : "def";
+    const winSt   = winSide === "atk" ? atkSt : defSt;
+    const winActor = winSide === "atk" ? atkActor : defActor;
+    const winBonus = winSide === "atk" ? atkBonus : defBonus;
+    const winFml   = ClashManager._stateFormula(winSt, winBonus);
+    const finalRoll = new Roll(winFml);
+    await finalRoll.evaluate();
+    ClashManager.applyDiceRollMods(winActor, finalRoll, {
+      item: winSide === "atk" ? atkItem : defItem, isDefense: winSide === "def" });
+
+    const winTotal = finalRoll.total ?? 0;
+    const winParts = partsOf(winSide, winTotal, winFml);
+    await ClashTotalFX.playSolo({
+      side: winSide, parts: winParts, label: "重新骰掷",
+      diceType: winSide === "atk" ? atkType : defType,
+      startDice: () => ClashManager._showDiceEach([{ roll: finalRoll, actor: winActor }]),
+    });
+    notes.push(`${winActor?.name ?? "?"} 【重新骰掷】：${winFml.toUpperCase()} = ${winTotal}`);
+
+    // 败方已无完好骰子，只剩碎掉的【不可摧毁】各出 1 点
+    const loseSt    = winSide === "atk" ? defSt : atkSt;
+    const loseBonus = winSide === "atk" ? defBonus : atkBonus;
+    const loseTotal = loseSt.broken + loseBonus;
+    const loseFml   = ClashManager._stateFormula(loseSt, loseBonus);
+
+    return winSide === "atk"
+      ? { atkTotal: winTotal, defTotal: loseTotal, atkFormula: winFml, defFormula: loseFml, notes }
+      : { atkTotal: loseTotal, defTotal: winTotal, atkFormula: loseFml, defFormula: winFml, notes };
   }
 
   /* ─── 阶段五b：拼点结算逻辑 ────────────────────────────────────────────── */

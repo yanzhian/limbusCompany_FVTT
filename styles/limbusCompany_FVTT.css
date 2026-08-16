@@ -9012,6 +9012,7 @@ input.item-piles-quantity {
   opacity: 1;
   animation: lcfx-combo-fade 1.1s linear forwards;
 }
+#limbus-clash-fx .lcfx-combo.reroll { color: var(--lcfx-neg); }
 @keyframes lcfx-combo-fade {
   0%   { opacity: 1; }
   45%  { opacity: 1; }

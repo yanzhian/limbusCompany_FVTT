@@ -61,11 +61,12 @@ export class ClashTotalFX {
       const common = {
         atkParts: msg.atkParts ?? [], defParts: msg.defParts ?? [], broadcast: false,
         atkDiceType: msg.atkDiceType ?? "default", defDiceType: msg.defDiceType ?? "default",
+        label: msg.label ?? "",
       };
       if (msg.mode === "solo") {
         await this.playSolo({
           side: msg.side ?? "atk", parts: msg.parts ?? [], reroll: !!msg.reroll,
-          diceType: msg.diceType ?? "default", broadcast: false,
+          diceType: msg.diceType ?? "default", label: msg.label ?? "", broadcast: false,
         });
       } else if (msg.mode === "reroll") {
         await this.playReroll({ ...common, rerollSides: msg.rerollSides ?? [] });
@@ -245,7 +246,7 @@ export class ClashTotalFX {
    * 进入一次交锋。同一条连击链内黑条不重新切入，只清掉上一次的数字/分段。
    * @returns {number} 本次是第几连击
    */
-  static async _enterExchange(sides, { reroll = [], dice = {} } = {}) {
+  static async _enterExchange(sides, { reroll = [], dice = {}, label = "" } = {}) {
     const chain = this._chain;
     if (chain.timer) { clearTimeout(chain.timer); chain.timer = null; }
 
@@ -268,7 +269,7 @@ export class ClashTotalFX {
     if (entering.length) await this._bandsIn(entering);
 
     chain.combo += 1;
-    this._combo(`${chain.combo} 连击`);
+    this._combo(label || `${chain.combo} 连击`, label ? "reroll" : "");
     return chain.combo;
   }
 
@@ -348,14 +349,14 @@ export class ClashTotalFX {
    *                                   （即两边 DiceSoNice 动画各自的完成信号）
    */
   static async play({ atkParts = [], defParts = [], atkDiceType = "default", defDiceType = "default",
-                      startDice = null, broadcast = true } = {}) {
+                      label = "", startDice = null, broadcast = true } = {}) {
     if (!this._enabled()) { await startDice?.(); return; }
 
     const sides = ["atk", "def"];
     // 先让其他客户端把黑条切进来，双方同步开演
-    if (broadcast) this._emit({ type: "clashFxStart", mode: "play", atkParts, defParts, atkDiceType, defDiceType });
+    if (broadcast) this._emit({ type: "clashFxStart", mode: "play", atkParts, defParts, atkDiceType, defDiceType, label });
 
-    await this._enterExchange(sides, { dice: {
+    await this._enterExchange(sides, { label, dice: {
       atk: { formula: atkParts[0]?.name ?? "", type: atkDiceType },
       def: { formula: defParts[0]?.name ?? "", type: defDiceType },
     } });
@@ -390,13 +391,14 @@ export class ClashTotalFX {
    * @param {Function} opts.startDice 返回 [该方 DiceSoNice 动画的 Promise]
    */
   static async playSolo({ side = "atk", parts = [], reroll = false, diceType = "default",
-                          startDice = null, broadcast = true } = {}) {
+                          label = "", startDice = null, broadcast = true } = {}) {
     if (!this._enabled()) { await startDice?.(); return; }
 
     const sides = [side];
-    if (broadcast) this._emit({ type: "clashFxStart", mode: "solo", side, parts, reroll, diceType });
+    if (broadcast) this._emit({ type: "clashFxStart", mode: "solo", side, parts, reroll, diceType, label });
 
     await this._enterExchange(sides, {
+      label,
       reroll: reroll ? [side] : [],
       dice: { [side]: { formula: parts[0]?.name ?? "", type: diceType } },
     });
