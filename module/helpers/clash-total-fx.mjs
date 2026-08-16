@@ -108,9 +108,16 @@ export class ClashTotalFX {
     return game.settings?.get?.("limbusCompany_FVTT", "clashTotalFx") !== false;
   }
 
+  /** 演出节奏缩放：一回合常有多次拼点，默认按"快速"跑 */
+  static _speed() {
+    const mode = game.settings?.get?.("limbusCompany_FVTT", "clashTotalFxSpeed") ?? "fast";
+    return { standard: 1, fast: 0.6, turbo: 0.35 }[mode] ?? 0.6;
+  }
+
   /* ─── 基础动作 ────────────────────────────────────────────────────────── */
 
-  static _sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+  /** 停顿：按当前节奏缩放（骰子动画本身不受影响，它由 DiceSoNice 控制） */
+  static _sleep(ms) { return new Promise(r => setTimeout(r, Math.round(ms * this._speed()))); }
 
   static _reset(sides = ["atk", "def"]) {
     for (const side of sides) {
@@ -165,8 +172,9 @@ export class ClashTotalFX {
         resolve();
       };
       Promise.resolve(signal).then(settle, settle);
-      // 兜底：DiceSoNice 未安装或异常时最长滚 4 秒
-      setTimeout(settle, 4000);
+      // 兜底：DiceSoNice 未安装或信号丢失时不至于一直滚下去。
+      // 必须明显长于骰子动画时长，否则数字会在骰子还在滚时提前定死。
+      setTimeout(settle, 15000);
     });
   }
 
@@ -182,7 +190,7 @@ export class ClashTotalFX {
     const band    = this._band(side);
     const numEl   = band.querySelector(".lcfx-num");
     const partsEl = band.querySelector(".lcfx-parts");
-    const gap     = 500;
+    const gap     = 500;   // 实际间隔由 _sleep 按节奏缩放
 
     partsEl.replaceChildren();
     let sum = parts[0]?.value ?? 0;
@@ -260,7 +268,7 @@ export class ClashTotalFX {
 
     await this._sleep(240);
     this._judge(atkTotal, defTotal);
-    await this._sleep(1100);
+    await this._sleep(800);
     await this._bandsOut(sides);
   }
 

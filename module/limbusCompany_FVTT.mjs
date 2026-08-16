@@ -874,6 +874,21 @@ function _registerSettings() {
     type:    Boolean,
     default: true,
   });
+
+  // 演出节奏：一回合往往要打好几次拼点，标准节奏容易拖沓
+  game.settings.register("limbusCompany_FVTT", "clashTotalFxSpeed", {
+    name:    "拼点 TOTAL 演出节奏",
+    hint:    "缩放演出各阶段的时长（不含骰子动画本身——那取决于 Dice So Nice 的动画速度设置）。",
+    scope:   "client",
+    config:  true,
+    type:    String,
+    choices: {
+      standard: "标准",
+      fast:     "快速（约 6 成）",
+      turbo:    "极速（约 3 成）",
+    },
+    default: "fast",
+  });
 }
 
 /**
