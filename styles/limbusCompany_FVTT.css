@@ -2555,12 +2555,12 @@ body.game .limbuscompany.app img {
 
 /* 中列：220px 固定 */
 .limbuscompany .header-mid {
-  width: 220px; flex-shrink: 0; padding: 0 4px;
+  width: 240px; flex-shrink: 0; padding: 0 4px;
 }
 
 /* 右列：剩余空间，最小 370px */
 .limbuscompany .header-right {
-  flex: 1; min-width: 370px;
+  flex: 1; min-width: 320px;
 }
 
 /* ── 头像区块（260×100px）：头像100×100 + XP区域150×60 ─────────────── */
