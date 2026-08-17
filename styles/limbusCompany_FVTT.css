@@ -8798,6 +8798,12 @@ input.item-piles-quantity {
   --lcfx-num:     121px;    /* TOTAL 数字字号 */
   --lcfx-label:   46px;     /* "TOTAL" 字号 */
   --lcfx-part:    30px;     /* 分段小条字号 */
+  --lcfx-die:     50px;     /* 硬币大小 */
+  --lcfx-die-gap: 10px;     /* 硬币间距 */
+  --lcfx-die-row: 25px;     /* 硬币条与 TOTAL 的距离 */
+  --lcfx-die-face: 20px;    /* 硬币上的点数字号（素材自带点数时不生效） */
+  --lcfx-combo:   40px;     /* 连击字号 */
+  --lcfx-combo-jitter: 50px;/* 连击随机落点范围 */
   --lcfx-bg:      #0b0b0b;
   --lcfx-win:     #ffe9a8;
   --lcfx-lose:    #9b9b9b;
@@ -8824,6 +8830,53 @@ input.item-piles-quantity {
   box-shadow: 0 0 40px rgba(0, 0, 0, .8);
 }
 #limbus-clash-fx .lcfx-band.is-active { display: flex; }
+
+/* 硬币条在上、TOTAL 在下 */
+#limbus-clash-fx .lcfx-col {
+  display: flex;
+  flex-direction: column;
+  gap: var(--lcfx-die-row);
+}
+#limbus-clash-fx .lcfx-band--atk .lcfx-col { align-items: flex-start; }
+#limbus-clash-fx .lcfx-band--def .lcfx-col { align-items: flex-end; }
+#limbus-clash-fx .lcfx-row {
+  display: flex;
+  align-items: center;
+  gap: 28px;
+}
+
+/* 骰子条（硬币）：一般骰子=硬币正面，【不可摧毁】=不可摧毁的硬币 */
+#limbus-clash-fx .lcfx-dice {
+  display: flex;
+  align-items: center;
+  gap: var(--lcfx-die-gap);
+  font-size: var(--lcfx-die-face);
+}
+#limbus-clash-fx .lcfx-band--def .lcfx-dice { flex-direction: row-reverse; }
+#limbus-clash-fx .lcfx-die {
+  width:  var(--lcfx-die);
+  height: var(--lcfx-die);
+  flex: 0 0 auto;
+  object-fit: contain;
+  border: none;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, .8));
+  animation: lcfx-die-in .3s cubic-bezier(.2, 1.5, .4, 1);
+}
+@keyframes lcfx-die-in {
+  from { opacity: 0; transform: translateY(-14px) scale(.7); }
+  to   { opacity: 1; transform: none; }
+}
+/* 交锋失败：抖动闪白；不可摧毁碎后留场变暗 */
+#limbus-clash-fx .lcfx-die.is-shatter { animation: lcfx-die-shatter .1s linear; }
+@keyframes lcfx-die-shatter {
+  0%,100% { transform: translate(0, 0) rotate(0); }
+  25%     { transform: translate(-4px, 2px) rotate(-8deg); }
+  50%     { transform: translate(4px, -2px) rotate(8deg); filter: brightness(2.4); }
+  75%     { transform: translate(-3px, 3px) rotate(-4deg); }
+}
+#limbus-clash-fx .lcfx-die.is-broken {
+  filter: brightness(.4) saturate(.5) drop-shadow(0 2px 4px rgba(0, 0, 0, .8));
+}
 
 /* 进攻方：左下角，由下往上切入 */
 #limbus-clash-fx .lcfx-band--atk {
@@ -8956,7 +9009,7 @@ input.item-piles-quantity {
   transform: translate(calc(-50% + var(--lcfx-cx)), calc(-50% + var(--lcfx-cy))) rotate(-15deg);
   font-family: "Noto Sans SC", "Source Han Sans SC", "Microsoft YaHei", "SimHei", sans-serif;
   font-weight: 900;
-  font-size:   40px;
+  font-size:   var(--lcfx-combo);
   letter-spacing: .06em;
   color: #fff;
   text-shadow: 0 0 14px rgba(0, 0, 0, .95), 0 2px 4px rgba(0, 0, 0, .9);

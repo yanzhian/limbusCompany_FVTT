@@ -35,6 +35,21 @@ export class ClashTotalFX {
   /** 连击窗口：上一次交锋结束后多久没有新交锋，黑条才退场 */
   static CHAIN_GRACE = 1200;
 
+  /** 骰子图标：一般骰子用硬币正面，【不可摧毁】用不可摧毁的硬币 */
+  static DICE_ICON = {
+    default:     "systems/limbusCompany_FVTT/assets/icons/Base_icon/硬币_正面.webp",
+    unbreakable: "systems/limbusCompany_FVTT/assets/icons/Base_icon/不可摧毁的硬币.webp",
+  };
+
+  /** 破碎动画时长（ms） */
+  static BREAK_MS = 100;
+
+  /** 音效（占位空音频，替换同名文件即可换声） */
+  static SFX = {
+    tick:  "systems/limbusCompany_FVTT/assets/audio/clash_number_tick.wav",
+    break: "systems/limbusCompany_FVTT/assets/audio/clash_coin_break.wav",
+  };
+
   /** 连击链状态 */
   static _chain = { active: false, combo: 0, timer: null, sides: [] };
 
@@ -63,11 +78,15 @@ export class ClashTotalFX {
     if (msg?.type === "clashFxStart") {
       const signals = { atk: this._deferred(), def: this._deferred() };
       this._remoteSignals = signals;
-      const common = { atkParts: msg.atkParts ?? [], defParts: msg.defParts ?? [], broadcast: false };
+      const common = {
+        atkParts: msg.atkParts ?? [], defParts: msg.defParts ?? [], broadcast: false,
+        atkDiceType: msg.atkDiceType ?? "default", defDiceType: msg.defDiceType ?? "default",
+      };
       if (msg.mode === "solo") {
         const side = msg.side ?? "atk";
         await this.playSolo({
-          side, parts: msg.parts ?? [], reroll: !!msg.reroll, label: msg.label ?? "", broadcast: false,
+          side, parts: msg.parts ?? [], reroll: !!msg.reroll, label: msg.label ?? "",
+          diceType: msg.diceType ?? "default", broadcast: false,
           startDice: () => [signals[side].promise],
         });
       } else {
@@ -94,6 +113,16 @@ export class ClashTotalFX {
     ));
   }
 
+  /** 播放一次音效（音频未就绪或被浏览器拦截时静默失败） */
+  static _sfx(key, volume = 0.6) {
+    const src = this.SFX[key];
+    if (!src) return;
+    try {
+      const helper = foundry?.audio?.AudioHelper ?? globalThis.AudioHelper;
+      helper?.play?.({ src, volume, autoplay: true, loop: false }, false);
+    } catch (err) { /* 忽略：音效不该影响演出 */ }
+  }
+
   /* ─── DOM ─────────────────────────────────────────────────────────────── */
 
   static _ensureRoot() {
@@ -102,17 +131,26 @@ export class ClashTotalFX {
     el.id = "limbus-clash-fx";
     el.innerHTML = `
       <div class="lcfx-band lcfx-band--atk" data-side="atk">
-        <span class="lcfx-label">TOTAL</span>
-        <span class="lcfx-num">0</span>
-        <span class="lcfx-parts"></span>
-        <span class="lcfx-reroll">公式重投</span>
+        <div class="lcfx-col">
+          <div class="lcfx-dice"></div>
+          <div class="lcfx-row">
+            <span class="lcfx-label">TOTAL</span>
+            <span class="lcfx-num">0</span>
+            <span class="lcfx-parts"></span>
+            <span class="lcfx-reroll">公式重投</span>
+          </div>
+        </div>
       </div>
       <div class="lcfx-band lcfx-band--def" data-side="def">
-        <span class="lcfx-reroll">公式重投</span>
-        <span class="lcfx-parts"></span>
-        <span class="lcfx-num">0</span>
-        <span class="lcfx-label">TOTAL</span>
-      </div>
+        <div class="lcfx-col">
+          <div class="lcfx-dice"></div>
+          <div class="lcfx-row">
+            <span class="lcfx-reroll">公式重投</span>
+            <span class="lcfx-parts"></span>
+            <span class="lcfx-num">0</span>
+            <span class="lcfx-label">TOTAL</span>
+          </div>
+        </div>
       <div class="lcfx-combos"></div>`;
     document.body.appendChild(el);
     this._root = el;
@@ -149,6 +187,7 @@ export class ClashTotalFX {
       if (!keepIn) band.classList.remove("is-in", "is-out", "is-active");
       band.querySelector(".lcfx-num").textContent = "0";
       band.querySelector(".lcfx-parts").replaceChildren();
+      if (!keepIn) band.querySelector(".lcfx-dice").replaceChildren();
       band.querySelector(".lcfx-reroll").classList.remove("show");
     }
   }
@@ -175,6 +214,7 @@ export class ClashTotalFX {
 
   /** 一直乱跳，直到 signal 兑现（骰子动画播完）才定格在 finalValue */
   static _rollUntil(numEl, finalValue, signal) {
+    this._sfx("tick");
     return new Promise(resolve => {
       const max = Math.max(30, Math.abs(finalValue) * 2);
       let raf, done = false;
@@ -202,8 +242,45 @@ export class ClashTotalFX {
     });
   }
 
+  /* ─── 骰子条（TOTAL 上方的硬币）──────────────────────────────────────── */
+
+  /** 从基础公式里读出骰数，如 "3D6+2" → 3 */
+  static _diceCount(formula = "") {
+    const m = /(\d*)\s*[dD]\s*\d+/.exec(String(formula));
+    if (!m) return 0;
+    return Math.min(12, Math.max(1, parseInt(m[1] || "1")));
+  }
+
+  /** 按骰数在 TOTAL 上方摆出硬币 */
+  static _buildDice(side, formula, type = "default") {
+    const box = this._band(side).querySelector(".lcfx-dice");
+    box.replaceChildren();
+    for (let i = 0; i < this._diceCount(formula); i++) {
+      const img = document.createElement("img");
+      img.className = "lcfx-die" + (type === "unbreakable" ? " lcfx-die--unbreak" : "");
+      img.src = this.DICE_ICON[type] ?? this.DICE_ICON.default;
+      img.dataset.type = type;
+      box.appendChild(img);
+    }
+  }
+
+  /** 交锋失败：毁掉末尾一枚硬币——一般硬币消失，不可摧毁碎裂后变暗留场 */
+  static _breakDie(side) {
+    const box = this._band(side).querySelector(".lcfx-dice");
+    const die = [...box.querySelectorAll(".lcfx-die:not(.is-broken)")].pop();
+    if (!die) return;
+    this._sfx("break");
+    die.classList.add("is-shatter");
+    setTimeout(() => {
+      die.classList.remove("is-shatter");
+      if (die.dataset.type === "unbreakable") die.classList.add("is-broken");
+      else die.remove();
+    }, this.BREAK_MS);
+  }
+
   /** 固定时长乱跳后定格（该次交锋没有骰子动画时用） */
   static _rollFor(numEl, finalValue) {
+    this._sfx("tick");
     return new Promise(resolve => {
       const max = Math.max(30, Math.abs(finalValue) * 2);
       const end = performance.now() + Math.round(this.ROLL_MS * this._speed());
@@ -226,7 +303,8 @@ export class ClashTotalFX {
   static _combo(text, cls = "") {
     const box = this._ensureRoot().querySelector(".lcfx-combos");
     if (!box) return;
-    const jitter = 50;
+    const jitter = parseFloat(
+      getComputedStyle(document.documentElement).getPropertyValue("--lcfx-combo-jitter")) || 50;
     const rand = () => ((Math.random() * 2 - 1) * jitter).toFixed(0);
     const el = document.createElement("div");
     el.className = "lcfx-combo " + cls;
@@ -238,7 +316,7 @@ export class ClashTotalFX {
   }
 
   /** 进入一次交锋：同一条连击链内黑条不重新切入，只清掉上一次的数字/分段 */
-  static async _enterExchange(sides, { reroll = [], label = "" } = {}) {
+  static async _enterExchange(sides, { reroll = [], label = "", dice = {} } = {}) {
     const chain = this._chain;
     if (chain.timer) { clearTimeout(chain.timer); chain.timer = null; }
     if (!chain.active) { chain.active = true; chain.combo = 0; chain.sides = []; }
@@ -249,6 +327,11 @@ export class ClashTotalFX {
     this._reset(entering, false);
     for (const side of reroll) this._band(side).querySelector(".lcfx-reroll").classList.add("show");
 
+    // 硬币条只在一侧首次入场时生成，连击途中沿用（会被逐次打碎）
+    for (const side of entering) {
+      const d = dice[side];
+      if (d) this._buildDice(side, d.formula, d.type);
+    }
     chain.sides = [...new Set([...chain.sides, ...sides])];
     if (entering.length) await this._bandsIn(entering);
 
@@ -319,6 +402,7 @@ export class ClashTotalFX {
     const loseSide = winSide === "atk" ? "def" : "atk";
     this._band(winSide).classList.add("win");
     this._band(loseSide).classList.add("lose");
+    this._breakDie(loseSide);
   }
 
   /* ─── 对外接口 ────────────────────────────────────────────────────────── */
@@ -333,6 +417,7 @@ export class ClashTotalFX {
    *                                   （即两边 DiceSoNice 动画各自的完成信号）
    */
   static async play({ atkParts = [], defParts = [], rerollSides = [], label = "",
+                      atkDiceType = "default", defDiceType = "default",
                       startDice = null, broadcast = true } = {}) {
     if (!this._enabled()) { await startDice?.(); return; }
 
@@ -340,10 +425,13 @@ export class ClashTotalFX {
     // 先让其他客户端把黑条切进来，双方同步开演
     if (broadcast) {
       this._emit({ type: "clashFxStart", mode: "play", atkParts, defParts, rerollSides, label,
-                   withDice: !!startDice });
+                   atkDiceType, defDiceType, withDice: !!startDice });
     }
 
-    await this._enterExchange(sides, { reroll: rerollSides, label });
+    await this._enterExchange(sides, { reroll: rerollSides, label, dice: {
+      atk: { formula: atkParts[0]?.name ?? "", type: atkDiceType },
+      def: { formula: defParts[0]?.name ?? "", type: defDiceType },
+    } });
 
     const atkNum = this._band("atk").querySelector(".lcfx-num");
     const defNum = this._band("def").querySelector(".lcfx-num");
@@ -386,13 +474,16 @@ export class ClashTotalFX {
    * @param {Function} opts.startDice 返回 [该方 DiceSoNice 动画的 Promise]
    */
   static async playSolo({ side = "atk", parts = [], reroll = false, label = "",
-                          startDice = null, broadcast = true } = {}) {
+                          diceType = "default", startDice = null, broadcast = true } = {}) {
     if (!this._enabled()) { await startDice?.(); return; }
 
     const sides = [side];
-    if (broadcast) this._emit({ type: "clashFxStart", mode: "solo", side, parts, reroll, label });
+    if (broadcast) this._emit({ type: "clashFxStart", mode: "solo", side, parts, reroll, label, diceType });
 
-    await this._enterExchange(sides, { reroll: reroll ? [side] : [], label });
+    await this._enterExchange(sides, {
+      reroll: reroll ? [side] : [], label,
+      dice: { [side]: { formula: parts[0]?.name ?? "", type: diceType } },
+    });
 
     const [signal] = this._wrapSignals((await startDice?.()) ?? [], sides, broadcast);
     await this._rollUntil(this._band(side).querySelector(".lcfx-num"), parts[0]?.value ?? 0, signal);
