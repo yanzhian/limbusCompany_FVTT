@@ -1,11 +1,11 @@
 /**
  * knockback.mjs — 拼点斥力（击退 / 追击 / 撞墙引爆）
  *
- * 冷兵器贴身对拼时，双方本来相距一格。每次交锋分出胜负后，按胜方的点数产生
- * 斥力把两人一起震开：
- *   · 胜方点数 ≥ 10 / 20 / 30 → 双方各被震退 1 / 2 / 3 格
- *   · 谁背后是墙就推不动 → 撞墙，触发【震颤引爆】
- *   · 随后只有胜方瞬移追击，重新贴到败方身边（【伤害计算】那一下不追击）
+ * 冷兵器贴身对拼时，双方本来相距一格。每次交锋分出胜负后，按胜方的点数把
+ * 败方往后击退：
+ *   · 胜方点数 ≥ 10 / 20 / 30 → 败方被击退 1 / 2 / 3 格
+ *   · 败方背后是墙就推不动 → 撞墙，触发【震颤引爆】
+ *   · 随后胜方瞬移追上去，重新贴身（【伤害计算】那一下不追击）
  *
  * 只有"面对面"（正交相邻一格）才会触发；隔着距离的攻击视为远程，不产生斥力。
  * 移动一律是瞬移——不做补间，避免和拼点演出的节奏打架。
@@ -26,11 +26,17 @@ export class ClashKnockback {
   /** 总开关：想临时关掉整套斥力，把它置为 false 即可 */
   static ENABLED = true;
 
-  /** 判定落定 → 双方被震开 之间的停顿（ms） */
+  /** 判定落定 → 击退 之间的停顿（ms） */
   static DELAY_RECOIL = 160;
 
-  /** 震开 → 胜方追击 之间的停顿（ms）。太短会像两人在跳恰恰，留一拍才看得出"被弹开了，然后追上去" */
-  static DELAY_CHASE = 320;
+  /** 击退 → 胜方追击 之间的停顿（ms） */
+  static DELAY_CHASE = 100;
+
+  /**
+   * 胜方是否也被反冲后退。默认 false——只有目标被击退，胜方站桩后追击，
+   * 双方一起后退再一起贴回来看着像在跳恰恰。
+   */
+  static RECOIL_WINNER = false;
 
   static _wait(ms) { return new Promise(r => setTimeout(r, ms)); }
 
@@ -93,7 +99,9 @@ export class ClashKnockback {
 
   /**
    * 把一个 token 沿 (dx, dy) 方向推 cells 格。
-   * @returns {boolean} 是否撞墙（一格都没推动或中途被拦下）
+   * @returns {{hitWall: boolean, center: {x: number, y: number}}}
+   *          hitWall = 是否被墙/出界/他人拦下；center = 推完后的中心点
+   *          （委托 GM 移动时本地 token.center 未必立刻刷新，追击要用这个值）
    */
   static async _push(token, dx, dy, cells) {
     const gs = canvas.grid.size;
@@ -101,12 +109,12 @@ export class ClashKnockback {
     let moved = 0;
     for (let i = 0; i < cells; i++) {
       const next = { x: center.x + dx * gs, y: center.y + dy * gs };
-      if (this._blocked(token, center, next)) return true;   // 撞墙
+      if (this._blocked(token, center, next)) return { hitWall: true, center };
       center = next;
       moved++;
     }
     if (moved) await this._teleport(token, center);
-    return false;
+    return { hitWall: false, center };
   }
 
   /**
@@ -133,25 +141,29 @@ export class ClashKnockback {
     const facing = this._facing(winTok, loseTok);
     if (!facing) { this._log("双方并非贴身，跳过斥力"); return; }
 
-    this._log(`斥力：点数 ${winScore} → 各震退 ${cells} 格`);
+    this._log(`斥力：点数 ${winScore} → 击退 ${cells} 格`);
     await this._wait(this.DELAY_RECOIL);
 
-    // ① 双方一起被震开，各自朝远离对方的方向
-    const wallLose = await this._push(loseTok,  facing.dx,  facing.dy, cells);
-    const wallWin  = await this._push(winTok,  -facing.dx, -facing.dy, cells);
+    // ① 把目标往后击退（facing 是"胜方 → 败方"的方向）
+    const pushed = await this._push(loseTok, facing.dx, facing.dy, cells);
+
+    // 可选：胜方也被反冲后退（默认关闭）
+    let winRecoil = { hitWall: false };
+    if (this.RECOIL_WINNER) winRecoil = await this._push(winTok, -facing.dx, -facing.dy, cells);
 
     // ② 撞墙 → 【震颤引爆】
-    for (const [actor, hit] of [[loser, wallLose], [winner, wallWin]]) {
+    for (const [actor, hit] of [[loser, pushed.hitWall], [winner, winRecoil.hitWall]]) {
       if (hit && typeof onWallHit === "function") await onWallHit(actor);
     }
 
-    // ③ 只有胜方追击，瞬移贴回败方身边（【伤害计算】那一下不追）
+    // ③ 胜方瞬移追上去，重新贴身（【伤害计算】那一下不追）
     if (!chase) return;
     await this._wait(this.DELAY_CHASE);
     const gs = canvas.grid.size;
+    // 用推算出来的坐标，而不是 token.center——委托 GM 移动时本地未必已经刷新
     const target = {
-      x: loseTok.center.x - facing.dx * gs,
-      y: loseTok.center.y - facing.dy * gs,
+      x: pushed.center.x - facing.dx * gs,
+      y: pushed.center.y - facing.dy * gs,
     };
     if (Math.hypot(target.x - winTok.center.x, target.y - winTok.center.y) < gs * 0.5) return;
     if (this._blocked(winTok, winTok.center, target)) { this._log("追击路线被挡"); return; }
