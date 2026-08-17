@@ -5,6 +5,7 @@
 
 import { SinResourceHUD } from "./sin-resource-hud.mjs";
 import { ClashTotalFX }   from "./clash-total-fx.mjs";
+import { ClashKnockback } from "./knockback.mjs";
 import {
   CustomBuffRegistry, resolveBuffHandler, FieldResourceRegistry,
   isTremorFamilyType, TREMOR_BASE_TYPE, TREMOR_DEPENDENT_TYPES,
@@ -2809,6 +2810,19 @@ export class ClashManager {
           : null,
       });
 
+      // 斥力：分出胜负后双方一起被震开，胜方随即瞬移追回贴身；
+      // 撞墙的一方触发【震颤引爆】
+      if (aEff !== dEff) {
+        await ClashKnockback.repel({
+          winner: aEff > dEff ? atkActor : defActor,
+          loser:  aEff > dEff ? defActor : atkActor,
+          winScore: Math.max(aEff, dEff),
+          chase: true,
+          onWallHit: (actor) => ClashManager.seismicBlast(actor, 1,
+            { attacker: aEff > dEff ? atkActor : defActor }),
+        });
+      }
+
       if (aEff === dEff) continue;                  // 平局：不扣行动值，再拼一次
 
       const atkWon = aEff > dEff;
@@ -2843,6 +2857,15 @@ export class ClashManager {
         coins: apOf(winActor),
         diceType: (winSide === "atk" ? atkItem : defItem)?.system?.diceType ?? "default",
         startDice: () => ClashManager._showDiceEach([{ roll: winRoll, actor: winActor }]),
+      });
+
+      // 最后一击同样有斥力，但胜方不再追击
+      const loseActor = winSide === "atk" ? defActor : atkActor;
+      await ClashKnockback.repel({
+        winner: winActor, loser: loseActor,
+        winScore: winParts.reduce((a, p) => a + (p.value ?? 0), 0),
+        chase: false,
+        onWallHit: (actor) => ClashManager.seismicBlast(actor, 1, { attacker: winActor }),
       });
     }
 

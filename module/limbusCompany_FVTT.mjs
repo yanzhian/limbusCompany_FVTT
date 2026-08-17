@@ -36,6 +36,7 @@ import { QuickActionHUD }   from "./sheets/quick-action-hud.mjs";
 import { registerItemPiles } from "./helpers/item-piles.mjs";
 import { ChaosTokenLabel }   from "./helpers/chaos-token-label.mjs";
 import { ClashTotalFX }     from "./helpers/clash-total-fx.mjs";
+import { ClashKnockback } from "./helpers/knockback.mjs";
 
 /* ─── Item Piles 联动注册 ─────────────────────────────────────────────────── */
 
@@ -92,6 +93,8 @@ Hooks.once("init", () => {
   globalThis.SinResourceHUD = SinResourceHUD;
   // 调试用：控制台里可直接 ClashTotalFX.DEBUG = true 观察 TOTAL 演出参数
   globalThis.ClashTotalFX = ClashTotalFX;
+  // 击退系统：ClashKnockback.ENABLED = false 可随时整套关掉
+  globalThis.ClashKnockback = ClashKnockback;
 
   // 注册全局罪孽资源 setting（需在 init 阶段注册 setting）
   SinResourceHUD.init();
