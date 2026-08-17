@@ -173,12 +173,12 @@ export class ClashTotalFX {
   }
 
   /**
-   * 【震颤引爆】：拼点演出正在进行时不当场发声，而是记下来，等【伤害结算】
-   * 用引爆声替掉命中声——一次拼点里连爆多次也只会响一次。
-   * 不在拼点中（回合结束、效果直接引爆等）则立刻发声。
+   * 【震颤引爆】：引爆的当下就发声，同时记下标记——本次拼点的【伤害结算】
+   * 不再播命中声（命中声被引爆声取代）。一次拼点里连爆多次也只响一次。
    */
   static tremorBurst() {
-    if (this._chain.active) { this._tremorPending = true; return; }
+    if (this._chain.active && this._tremorPending) return;   // 本次拼点已经响过
+    if (this._chain.active) this._tremorPending = true;
     this.broadcastSfx("tremor");
   }
 
@@ -561,8 +561,8 @@ export class ClashTotalFX {
     await this._revealParts(side, parts);
     // 【伤害结算】：加值揭示完毕、真正落到伤害上时的命中声
     if (label === this.LABEL_DAMAGE) {
-      // 本次拼点发生过【震颤引爆】时，命中声换成引爆声
-      this._sfx(this._tremorPending ? "tremor" : "hit", 0.8);
+      // 本次拼点发生过【震颤引爆】：命中声静音，那一声由引爆声代表
+      if (!this._tremorPending) this._sfx("hit", 0.8);
       this._tremorPending = false;
     }
     await this._sleep(600);
