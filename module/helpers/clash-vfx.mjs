@@ -3,12 +3,11 @@
  *
  * 两种特效，都是纯 DOM + CSS，不依赖任何图片素材：
  *   ① 破币：两圈空心圆由小扩大淡出，上层再炸一圈火花。
- *      画在演出层（屏幕坐标），因为硬币本来就画在黑条上。
+ *      炸在场上两个 token 的正中间——刀剑相击的那一点，画在 #hud 层。
  *   ② 瞬移：沿"起点 → 终点"拉一束风线，起点留一个残影圆环。
  *      画在 #hud 层（画布坐标），跟着画布平移缩放走。
  *
- * 破币是各客户端各自演出时本地触发的，不必广播；瞬移与镜头推移由某一台机器
- * （多数时候是 GM）驱动，需要广播给所有人。
+ * 三者都由某一台机器（多数时候是 GM）驱动，需要广播给所有人。
  */
 
 export class ClashVFX {
@@ -24,17 +23,6 @@ export class ClashVFX {
   }
 
   /* ─── 图层 ────────────────────────────────────────────────────────────── */
-
-  /** 屏幕坐标层（破币用，盖在黑条上） */
-  static _screen = null;
-  static _screenLayer() {
-    if (this._screen?.isConnected) return this._screen;
-    const el = document.createElement("div");
-    el.id = "limbus-clash-vfx";
-    document.body.appendChild(el);
-    this._screen = el;
-    return el;
-  }
 
   /** 画布坐标层（瞬移用，挂进 #hud，由 canvas.hud.align() 带着走） */
   static _canvasLayer = null;
@@ -57,19 +45,23 @@ export class ClashVFX {
   /* ─── ① 破币：空心圆 + 火花 ──────────────────────────────────────────── */
 
   /**
-   * 在屏幕坐标处炸一朵。
-   * @param {number} x 屏幕 X（px）
-   * @param {number} y 屏幕 Y（px）
+   * 在画布坐标处炸一朵（两个 token 的正中间）。
+   * @param {{x: number, y: number}} point 画布坐标
    */
-  static burst(x, y) {
-    if (!this.ENABLED) return;
-    const layer = this._screenLayer();
+  static burst(point) {
+    if (!this.ENABLED || !point) return;
+    const layer = this._hudLayer();
+    if (!layer) return;
+    const { x, y } = point;
+    // 尺寸跟着格子走，缩放画布时不会忽大忽小
+    const size = (canvas?.grid?.size ?? 100) * this.BURST_SCALE;
 
     for (const cls of ["lcvfx-ring", "lcvfx-ring lcvfx-ring--inner"]) {
       const ring = document.createElement("div");
       ring.className = cls;
       ring.style.left = `${x}px`;
       ring.style.top  = `${y}px`;
+      ring.style.width = ring.style.height = `${size}px`;
       this._autoRemove(ring);
       layer.appendChild(ring);
     }
@@ -85,7 +77,8 @@ export class ClashVFX {
       s.className = "lcvfx-spark";
       // 均匀分布再加一点随机，免得看着像时钟刻度
       s.style.setProperty("--a", `${(360 / n) * i + (Math.random() * 20 - 10)}deg`);
-      s.style.setProperty("--d", `${this.SPARK_DIST * (0.7 + Math.random() * 0.6)}px`);
+      s.style.setProperty("--d", `${size * 0.5 * (0.7 + Math.random() * 0.6)}px`);
+      s.style.width = `${size * 0.32}px`;
       s.style.animationDelay = `${Math.random() * 60}ms`;
       box.appendChild(s);
     }
@@ -93,15 +86,21 @@ export class ClashVFX {
     setTimeout(() => box.remove(), 1600);
   }
 
-  /** 火花数量与飞出距离（其余参数在 CSS 变量里） */
+  /** 火花数量 / 整体尺寸相对格子的倍数（其余参数在 CSS 变量里） */
   static SPARK_COUNT = 10;
-  static SPARK_DIST  = 70;
+  static BURST_SCALE = 1.5;
 
-  /** 直接对着某个 DOM 元素（比如黑条上的那枚硬币）炸 */
-  static burstOn(el) {
-    if (!el || !this.ENABLED) return;
-    const r = el.getBoundingClientRect();
-    this.burst(r.left + r.width / 2, r.top + r.height / 2);
+  /** 破币特效 + 广播给其他客户端 */
+  static broadcastBurst(point) {
+    this.burst(point);
+    this._emit({ type: "clashVfx", kind: "burst", point });
+  }
+
+  /** 两个 Actor 的 token 连线中点——刀剑相击的那一点 */
+  static midPoint(a, b) {
+    const pa = this.centerOf(a), pb = this.centerOf(b);
+    if (!pa || !pb) return null;
+    return { x: (pa.x + pb.x) / 2, y: (pa.y + pb.y) / 2 };
   }
 
   /* ─── ② 瞬移：风线 + 残影 ────────────────────────────────────────────── */
@@ -188,7 +187,8 @@ export class ClashVFX {
 
   static handleSocketMsg(msg) {
     if (msg?.type !== "clashVfx") return;
-    if (msg.kind === "dash") this.dash(msg.from, msg.to);
+    if (msg.kind === "burst") this.burst(msg.point);
+    else if (msg.kind === "dash") this.dash(msg.from, msg.to);
     else if (msg.kind === "pan") this.panTo(msg.point);
   }
 }

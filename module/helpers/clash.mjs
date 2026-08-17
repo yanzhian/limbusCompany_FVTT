@@ -2834,8 +2834,9 @@ export class ClashManager {
       const loserUnbreak =
         (atkWon ? defItem : atkItem)?.system?.diceType === "unbreakable";
 
-      // 输掉这一次就要扣一点行动值（币碎一枚）
+      // 输掉这一次就要扣一点行动值（币碎一枚）——刀剑相击处炸一朵
       if (apOf(loser) > 0) {
+        ClashVFX.broadcastBurst(ClashVFX.midPoint(atkActor, defActor));
         await ClashManager._safeDocUpdate(loser, { "system.ap.value": apOf(loser) - 1 });
       }
 
