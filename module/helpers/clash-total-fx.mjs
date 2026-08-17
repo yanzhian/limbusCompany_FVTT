@@ -44,9 +44,13 @@ export class ClashTotalFX {
   /** 破碎动画时长（ms） */
   static BREAK_MS = 100;
 
-  /** 音效（占位空音频，替换同名文件即可换声） */
+  /**
+   * 音效（占位空音频，替换同名文件即可换声）
+   * - add   骰子落定后，等级差/BUFF 等加值逐条浮现时，每条"当"一声
+   * - break 硬币碎裂
+   */
   static SFX = {
-    tick:  "systems/limbusCompany_FVTT/assets/audio/clash_number_tick.wav",
+    add:   "systems/limbusCompany_FVTT/assets/audio/clash_number_tick.wav",
     break: "systems/limbusCompany_FVTT/assets/audio/clash_coin_break.wav",
   };
 
@@ -225,7 +229,6 @@ export class ClashTotalFX {
 
   /** 一直乱跳，直到 signal 兑现（骰子动画播完）才定格在 finalValue */
   static _rollUntil(numEl, finalValue, signal) {
-    this._sfx("tick");
     return new Promise(resolve => {
       const max = Math.max(30, Math.abs(finalValue) * 2);
       let raf, done = false;
@@ -289,7 +292,6 @@ export class ClashTotalFX {
 
   /** 固定时长乱跳后定格（该次交锋没有骰子动画时用） */
   static _rollFor(numEl, finalValue) {
-    this._sfx("tick");
     return new Promise(resolve => {
       const max = Math.max(30, Math.abs(finalValue) * 2);
       const end = performance.now() + Math.round(this.ROLL_MS * this._speed());
@@ -398,6 +400,7 @@ export class ClashTotalFX {
 
     for (const part of parts.slice(1)) {
       await this._sleep(gap);
+      this._sfx("add");          // 每加一条"当"一声
       chip(part, false);
       sum += part.value;
       this._bump(numEl, sum);
