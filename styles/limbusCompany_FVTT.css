@@ -9026,6 +9026,105 @@ input.item-piles-quantity {
 }
 
 /* ═══════════════════════════════════════════════════════════════
+   拼点小特效（破币 / 瞬移）
+   破币画在屏幕坐标层，瞬移画在 #hud 的画布坐标层。
+   ═══════════════════════════════════════════════════════════════ */
+
+#limbus-clash-vfx,
+#limbus-clash-vfx-canvas {
+  --lcvfx-ring:        150px;   /* 空心圆最终直径 */
+  --lcvfx-ring-w:      6px;     /* 圆环粗细 */
+  --lcvfx-ring-ms:     520ms;   /* 扩散时长 */
+  --lcvfx-ring-color:  #ffe9a8;
+  --lcvfx-spark-len:   46px;    /* 火花长度 */
+  --lcvfx-spark-ms:    460ms;
+  --lcvfx-spark-color: #fff2c4;
+  --lcvfx-wind-ms:     380ms;   /* 风线存续时长 */
+  --lcvfx-wind-thick:  3px;
+  --lcvfx-wind-color:  #bfe9ff;
+  --lcvfx-ghost-ms:    420ms;
+}
+
+#limbus-clash-vfx {
+  position: fixed;
+  inset: 0;
+  z-index: 210;            /* 盖在 TOTAL 黑条之上 */
+  pointer-events: none;
+  overflow: hidden;
+}
+#limbus-clash-vfx-canvas { pointer-events: none; }
+
+/* ── 破币：空心圆 + 火花 ─────────────────────────────────────────── */
+#limbus-clash-vfx .lcvfx-ring {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  width:  var(--lcvfx-ring);
+  height: var(--lcvfx-ring);
+  border: var(--lcvfx-ring-w) solid var(--lcvfx-ring-color);
+  border-radius: 50%;
+  animation: lcvfx-ring-out var(--lcvfx-ring-ms) cubic-bezier(.2, .7, .3, 1) forwards;
+}
+#limbus-clash-vfx .lcvfx-ring--inner {
+  animation-duration: calc(var(--lcvfx-ring-ms) * 1.35);
+  border-width: calc(var(--lcvfx-ring-w) / 2);
+  opacity: .7;
+}
+@keyframes lcvfx-ring-out {
+  0%   { opacity: 1;  transform: translate(-50%, -50%) scale(.15); filter: brightness(2.2); }
+  70%  { opacity: .8; }
+  100% { opacity: 0;  transform: translate(-50%, -50%) scale(1);   filter: brightness(1); }
+}
+
+#limbus-clash-vfx .lcvfx-sparks { position: absolute; transform: translate(-50%, -50%); }
+#limbus-clash-vfx .lcvfx-spark {
+  position: absolute;
+  left: 0; top: 0;
+  width: var(--lcvfx-spark-len);
+  height: 2px;
+  background: linear-gradient(90deg, var(--lcvfx-spark-color), transparent);
+  transform-origin: 0 50%;
+  animation: lcvfx-spark-fly var(--lcvfx-spark-ms) cubic-bezier(.1, .8, .3, 1) forwards;
+}
+@keyframes lcvfx-spark-fly {
+  0%   { opacity: 1; transform: rotate(var(--a)) translateX(0)          scaleX(.4); }
+  35%  { opacity: 1; }
+  100% { opacity: 0; transform: rotate(var(--a)) translateX(var(--d))   scaleX(1); }
+}
+
+/* ── 瞬移：风线 + 残影 ───────────────────────────────────────────── */
+#limbus-clash-vfx-canvas .lcvfx-dash {
+  position: absolute;
+  transform-origin: 0 50%;
+  height: 0;
+}
+#limbus-clash-vfx-canvas .lcvfx-wind {
+  position: absolute;
+  left: 0;
+  height: var(--lcvfx-wind-thick);
+  background: linear-gradient(90deg, transparent, var(--lcvfx-wind-color) 30%, #fff 60%, transparent);
+  border-radius: 2px;
+  opacity: 0;
+  animation: lcvfx-wind-go var(--lcvfx-wind-ms) cubic-bezier(.15, .85, .25, 1) forwards;
+}
+@keyframes lcvfx-wind-go {
+  0%   { opacity: 0; transform: translateX(0)   scaleX(.2); }
+  25%  { opacity: 1; }
+  100% { opacity: 0; transform: translateX(20%) scaleX(1); }
+}
+#limbus-clash-vfx-canvas .lcvfx-ghost {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  border: 2px solid var(--lcvfx-wind-color);
+  background: radial-gradient(circle, rgba(191, 233, 255, .35), transparent 70%);
+  animation: lcvfx-ghost-fade var(--lcvfx-ghost-ms) ease-out forwards;
+}
+@keyframes lcvfx-ghost-fade {
+  0%   { opacity: .9; transform: translate(-50%, -50%) scale(1); }
+  100% { opacity: 0;  transform: translate(-50%, -50%) scale(1.35); }
+}
+
+/* ═══════════════════════════════════════════════════════════════
    物品批量导入（#limbus-csv-import）
    ═══════════════════════════════════════════════════════════════ */
 

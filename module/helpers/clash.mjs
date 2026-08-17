@@ -6,6 +6,7 @@
 import { SinResourceHUD } from "./sin-resource-hud.mjs";
 import { ClashTotalFX }   from "./clash-total-fx.mjs";
 import { ClashKnockback } from "./knockback.mjs";
+import { ClashVFX }       from "./clash-vfx.mjs";
 import {
   CustomBuffRegistry, resolveBuffHandler, FieldResourceRegistry,
   isTremorFamilyType, TREMOR_BASE_TYPE, TREMOR_DEPENDENT_TYPES,
@@ -2765,6 +2766,8 @@ export class ClashManager {
 
     while (round < MAX_ROUNDS) {
       round++;
+      // 开场把镜头推给进攻方，让所有人看着同一处开打
+      if (round === 1) ClashVFX.broadcastPan(ClashVFX.centerOf(atkActor));
       let atkRoll = atkRoll0, defRoll = defRoll0;
       if (round > 1) {
         // 连击途中只重跑 [拼点时]（【流血】也挂在这里，会再发作一次）；

@@ -24,6 +24,8 @@
  * 演出层挂在 body 上、pointer-events:none，不拦截任何操作。
  */
 
+import { ClashVFX } from "./clash-vfx.mjs";
+
 /** 分段：{ name: 显示名, value: 数值 } */
 export class ClashTotalFX {
 
@@ -383,6 +385,7 @@ export class ClashTotalFX {
     this._log(`碎硬币 ${side}：${alive.length + (die ? 1 : 0)} 枚 → ${alive.length} 枚`);
     if (!die) return false;
     this._sfx("break");
+    ClashVFX.burstOn(die);          // 空心圆扩散 + 火花
     die.classList.add("is-shatter");
     setTimeout(() => {
       die.classList.remove("is-shatter");

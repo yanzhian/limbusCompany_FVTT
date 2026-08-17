@@ -37,6 +37,7 @@ import { registerItemPiles } from "./helpers/item-piles.mjs";
 import { ChaosTokenLabel }   from "./helpers/chaos-token-label.mjs";
 import { ClashTotalFX }     from "./helpers/clash-total-fx.mjs";
 import { ClashKnockback } from "./helpers/knockback.mjs";
+import { ClashVFX }       from "./helpers/clash-vfx.mjs";
 
 /* ─── Item Piles 联动注册 ─────────────────────────────────────────────────── */
 
@@ -95,6 +96,7 @@ Hooks.once("init", () => {
   globalThis.ClashTotalFX = ClashTotalFX;
   // 击退系统：ClashKnockback.ENABLED = false 可随时整套关掉
   globalThis.ClashKnockback = ClashKnockback;
+  globalThis.ClashVFX = ClashVFX;
 
   // 注册全局罪孽资源 setting（需在 init 阶段注册 setting）
   SinResourceHUD.init();
@@ -105,6 +107,7 @@ Hooks.once("init", () => {
     await SinResourceHUD.handleSocketMsg(msg);
     await ClashManager.handleSocketMsg(msg);
     await ClashTotalFX.handleSocketMsg(msg);
+    ClashVFX.handleSocketMsg(msg);
     await LimbusMerchantSheet.handleSocketMsg(msg);
     await LimbusCampSheet.handleSocketMsg(msg);
     await LimbusLootSheet.handleSocketMsg(msg);

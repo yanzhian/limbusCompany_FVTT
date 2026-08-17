@@ -14,6 +14,8 @@
  * 过"的墙也能正确区分）。
  */
 
+import { ClashVFX } from "./clash-vfx.mjs";
+
 export class ClashKnockback {
 
   /** 胜方点数达到多少 → 震退几格（从大到小匹配） */
@@ -167,6 +169,8 @@ export class ClashKnockback {
     };
     if (Math.hypot(target.x - winTok.center.x, target.y - winTok.center.y) < gs * 0.5) return;
     if (this._blocked(winTok, winTok.center, target)) { this._log("追击路线被挡"); return; }
+    // 疾驰的风线（全场可见）
+    ClashVFX.broadcastDash({ ...winTok.center }, target);
     await this._teleport(winTok, target);
   }
 }
