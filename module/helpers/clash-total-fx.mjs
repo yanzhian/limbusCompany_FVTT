@@ -47,11 +47,12 @@ export class ClashTotalFX {
   /**
    * 音效（占位空音频，替换同名文件即可换声）
    * - add   骰子落定后，等级差/BUFF 等加值逐条浮现时，每条"当"一声
-   * - break 硬币碎裂
+   * - break 硬币碎裂（6 个候选，每次随机挑一个，避免连击时听着重复）
    */
   static SFX = {
     add:   "systems/limbusCompany_FVTT/assets/audio/clash_number_tick.wav",
-    break: "systems/limbusCompany_FVTT/assets/audio/clash_coin_break.wav",
+    break: Array.from({ length: 6 },
+      (_, i) => `systems/limbusCompany_FVTT/assets/audio/clash_coin_break_${i + 1}.wav`),
   };
 
   /**
@@ -130,7 +131,11 @@ export class ClashTotalFX {
 
   /** 播放一次音效（音频未就绪或被浏览器拦截时静默失败） */
   static _sfx(key, volume = 0.6) {
-    const src = this.SFX[key];
+    const entry = this.SFX[key];
+    // 数组 = 多个候选音效，随机挑一个
+    const src = Array.isArray(entry)
+      ? entry[Math.floor(Math.random() * entry.length)]
+      : entry;
     if (!src) return;
     try {
       const helper = foundry?.audio?.AudioHelper ?? globalThis.AudioHelper;
