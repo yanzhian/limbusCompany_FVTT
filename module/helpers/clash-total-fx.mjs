@@ -518,7 +518,8 @@ export class ClashTotalFX {
   }
 
   static _judge(atkTotal, defTotal, { allowBreak = true } = {}) {
-    if (atkTotal === defTotal) return;
+    // 平局：谁也没输，但刀枪硬碰硬的那一声还是要有
+    if (atkTotal === defTotal) { this._sfx("win"); return; }
     const winSide = atkTotal > defTotal ? "atk" : "def";
     const loseSide = winSide === "atk" ? "def" : "atk";
     this._band(winSide).classList.add("win");
