@@ -2495,29 +2495,42 @@ export class ClashManager {
       ?? (initFlags.rollData ? Roll.fromJSON(JSON.stringify(initFlags.rollData)) : null);
     const defRollFx = _rerollShow.find(e => e.side === "def")?.roll ?? defRoll;
 
-    // 反击 / 格挡不走拼点，也就没有连击：只演一次
+    // 演出用的分段（闪避 / 格挡 / 反击共用）
+    const _atkPartsFx = ClashManager._buildTotalParts({
+      actor: atkActor, opponent: defActor,
+      rollTotal: atkFinalTotal ?? 0, bonus: atkBonusVal,
+      baseFormula: atkFinalBase ?? "", category: initFlags.category ?? "",
+      isDefender: false,
+    });
+    const _defPartsFx = ClashManager._buildTotalParts({
+      actor: defActor, opponent: atkActor,
+      rollTotal: defFinalTotal ?? 0, bonus: defBonusVal,
+      baseFormula: defFinalBase ?? "", category: defItem?.system?.category ?? "",
+      isDefender: true,
+    });
+    const _coinsFx = {
+      atk: atkActor?.system?.ap?.value ?? 0,
+      def: defActor?.system?.ap?.value ?? 0,
+    };
+    const _diceTypeFx = {
+      atk: atkItem?.system?.diceType ?? "default",
+      def: defItem?.system?.diceType ?? "default",
+    };
+    const _rollsFx = { atk: atkRollFx, def: defRollFx };
+
+    // 反击 / 格挡不是交锋，而是一前一后各骰一次：
+    // 【格挡】防守方先出（先挡），【反击】进攻方先出（后反击）；命中的一方带命中声
     if (defCategory === "counter" || defCategory === "block") {
-      await ClashTotalFX.play({
-        rerollSides: _rerollShow.map(e => e.side),
-        atkCoins: atkActor?.system?.ap?.value ?? 0,
-        defCoins: defActor?.system?.ap?.value ?? 0,
-        atkDiceType: atkItem?.system?.diceType ?? "default",
-        defDiceType: defItem?.system?.diceType ?? "default",
-        atkParts: ClashManager._buildTotalParts({
-          actor: atkActor, opponent: defActor,
-          rollTotal: atkFinalTotal ?? 0, bonus: atkBonusVal,
-          baseFormula: atkFinalBase ?? "", category: initFlags.category ?? "",
-          isDefender: false,
-        }),
-        defParts: ClashManager._buildTotalParts({
-          actor: defActor, opponent: atkActor,
-          rollTotal: defFinalTotal ?? 0, bonus: defBonusVal,
-          baseFormula: defFinalBase ?? "", category: defItem?.system?.category ?? "",
-          isDefender: true,
-        }),
-        startDice: () => ClashManager._showDiceEach([
-          { roll: atkRollFx, actor: atkActor },
-          { roll: defRollFx, actor: defActor },
+      await ClashTotalFX.playSequence({
+        order:    defCategory === "block" ? ["def", "atk"] : ["atk", "def"],
+        label:    defCategory === "block" ? "格挡" : "反击",
+        parts:    { atk: _atkPartsFx, def: _defPartsFx },
+        diceType: _diceTypeFx,
+        coins:    _coinsFx,
+        // 格挡：只有进攻方结算伤害；反击：双方都结算伤害
+        hitOn:    defCategory === "block" ? ["atk"] : ["atk", "def"],
+        startDice: (side) => ClashManager._showDiceEach([
+          { roll: _rollsFx[side], actor: side === "atk" ? atkActor : defActor },
         ]),
       });
     }
@@ -2563,8 +2576,26 @@ export class ClashManager {
       return;
     }
 
+    // ── 闪避：双方同时出手，只拼一次，不消耗行动值也不碎硬币 ──────────
+    if (defCategory === "dodge") {
+      const atkEffFx = _atkPartsFx.reduce((a, p) => a + (p.value ?? 0), 0);
+      const defEffFx = _defPartsFx.reduce((a, p) => a + (p.value ?? 0), 0);
+      await ClashTotalFX.play({
+        atkParts: _atkPartsFx, defParts: _defPartsFx,
+        rerollSides: _rerollShow.map(e => e.side),
+        atkCoins: _coinsFx.atk, defCoins: _coinsFx.def,
+        atkDiceType: _diceTypeFx.atk, defDiceType: _diceTypeFx.def,
+        noBreak: true,
+        // 闪避失败（攻击方胜）才有命中声
+        hitSfx: atkEffFx > defEffFx,
+        startDice: () => ClashManager._showDiceEach([
+          { roll: atkRollFx, actor: atkActor },
+          { roll: defRollFx, actor: defActor },
+        ]),
+      });
+    }
     // ── 连击：行动值决定还能输几次，输光了才由这一次的胜方结算伤害 ──────
-    {
+    else {
       const combo = await ClashManager._runComboClash({
         atkActor, defActor, atkItem, defItem, atkCtx, defCtx,
         atkFormula: atkFinalBase ?? "", atkBonus: atkBonusVal,
@@ -4148,7 +4179,10 @@ export class ClashManager {
     // 易损/守护先修正攻击方骰数，再乘抗性
     const adjustedAtk  = Math.max(0, atkEffective + fragile - guard);
     const rawDamage    = Math.round(adjustedAtk * atkPhysMult * atkSinMult);
-    const finalDamage  = Math.max(0, rawDamage - defEffective);
+    // 格挡改为先给自己叠等同于格挡骰数的【护盾】，再由攻击方结算完整伤害：
+    // 护盾在承受结算里逐点抵挡，用不完的部分会留到后面继续挡
+    const finalDamage  = Math.max(0, rawDamage);
+    if (defEffective > 0) await ClashManager._addBuff(defActor, "shield", 0, defEffective);
 
     // ── 说明文字 ─────────────────────────────────────────────────────────
     const resNote = atkPhysMult !== 1.0 || atkSinMult !== 1.0
@@ -4180,7 +4214,8 @@ export class ClashManager {
     const notes = [
       `${atkActor?.name ?? "?"}：${initFlags.formula?.toUpperCase() ?? ""}=${initFlags.rollTotal}${atkModStr}${fragileGuardStr}`,
       `${defActor?.name ?? "?"} 格挡：${defFormula?.toUpperCase() ?? ""}=${defRoll.total}${defModStr}`,
-      `伤害 ${adjustedAtk}${resNote} → ${rawDamage} − 格挡 ${defEffective} = ${finalDamage} 点`,
+      `${defActor?.name ?? "?"} 获得 <strong>${defEffective}</strong> 层【护盾】`,
+      `伤害 ${adjustedAtk}${resNote} → ${rawDamage} 点（由【护盾】逐点抵挡，未挡下的部分才会扣血）`,
     ];
     if (atkLvBonus > 0) notes.push(`（攻击方等级 ${atkLv} vs 防守方等级 ${defLv}，等级差 ${atkLv - defLv}，+${atkLvBonus}）`);
     if (defLvBonus > 0) notes.push(`（防守方等级 ${defLv} vs 攻击方等级 ${atkLv}，等级差 ${defLv - atkLv}，格挡+${defLvBonus}）`);
@@ -4207,7 +4242,7 @@ export class ClashManager {
         ${ClashManager._goldDivider()}
         <div style="font-size:.8rem;color:#9A8462;line-height:1.7;margin:4px 0 8px;">
           ${notes.map(n => `<div>${n}</div>`).join("")}
-          ${finalDamage === 0 ? `<div style="color:#6EE06E;font-weight:bold;">✓ 格挡完全抵消伤害！</div>` : ""}
+          ${defEffective >= rawDamage ? `<div style="color:#6EE06E;font-weight:bold;">✓ 护盾足以挡下本次伤害！</div>` : ""}
         </div>
         ${ClashManager._goldDivider()}
         ${finalDamage > 0

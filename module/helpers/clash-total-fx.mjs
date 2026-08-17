@@ -112,6 +112,7 @@ export class ClashTotalFX {
         atkParts: msg.atkParts ?? [], defParts: msg.defParts ?? [], broadcast: false,
         atkDiceType: msg.atkDiceType ?? "default", defDiceType: msg.defDiceType ?? "default",
         atkCoins: msg.atkCoins ?? 0, defCoins: msg.defCoins ?? 0,
+        noBreak: !!msg.noBreak, hitSfx: !!msg.hitSfx,
       };
       if (msg.mode === "solo") {
         const side = msg.side ?? "atk";
@@ -119,6 +120,12 @@ export class ClashTotalFX {
           side, parts: msg.parts ?? [], reroll: !!msg.reroll, label: msg.label ?? "",
           diceType: msg.diceType ?? "default", coins: msg.coins ?? 0, broadcast: false,
           startDice: () => [signals[side].promise],
+        });
+      } else if (msg.mode === "seq") {
+        await this.playSequence({
+          order: msg.order ?? ["def", "atk"], parts: msg.parts ?? {},
+          diceType: msg.diceType ?? {}, coins: msg.coins ?? {},
+          hitOn: msg.hitOn ?? [], label: msg.label ?? "", broadcast: false,
         });
       } else {
         await this.play({
@@ -464,12 +471,14 @@ export class ClashTotalFX {
     return sum;
   }
 
-  static _judge(atkTotal, defTotal) {
+  static _judge(atkTotal, defTotal, { allowBreak = true } = {}) {
     if (atkTotal === defTotal) return;
     const winSide = atkTotal > defTotal ? "atk" : "def";
     const loseSide = winSide === "atk" ? "def" : "atk";
     this._band(winSide).classList.add("win");
     this._band(loseSide).classList.add("lose");
+    // 闪避/守备/反击这类一次定输赢的对抗不碎硬币（也不消耗行动值）
+    if (!allowBreak) { this._sfx("win"); return; }
     // 败方还有硬币 → 碎一枚（碎裂声）；已经没硬币可碎 → 这一败定胜负（胜负声）
     if (!this._breakDie(loseSide)) this._sfx("win");
   }
@@ -487,7 +496,7 @@ export class ClashTotalFX {
    */
   static async play({ atkParts = [], defParts = [], rerollSides = [], label = "",
                       atkDiceType = "default", defDiceType = "default",
-                      atkCoins = 0, defCoins = 0,
+                      atkCoins = 0, defCoins = 0, noBreak = false, hitSfx = false,
                       startDice = null, broadcast = true } = {}) {
     if (!this._enabled()) { await startDice?.(); return; }
 
@@ -495,7 +504,8 @@ export class ClashTotalFX {
     // 先让其他客户端把黑条切进来，双方同步开演
     if (broadcast) {
       this._emit({ type: "clashFxStart", mode: "play", atkParts, defParts, rerollSides, label,
-                   atkDiceType, defDiceType, atkCoins, defCoins, withDice: !!startDice });
+                   atkDiceType, defDiceType, atkCoins, defCoins, noBreak, hitSfx,
+                   withDice: !!startDice });
     }
 
     this._log("play()", { atkCoins, defCoins, atkDiceType, defDiceType, label,
@@ -534,8 +544,52 @@ export class ClashTotalFX {
     ]);
 
     await this._sleep(240);
-    this._judge(atkTotal, defTotal);
+    this._judge(atkTotal, defTotal, { allowBreak: !noBreak });
+    // hitSfx：闪避失败之类"这一下真的打上了"的场合
+    if (hitSfx && atkTotal !== defTotal) this._sfx(this._tremorPending ? "tremor" : "hit", 0.8);
     await this._sleep(500);
+    this._exitExchange();
+  }
+
+  /**
+   * 先后出手的演出：不是交锋，而是一方先骰、另一方再骰。
+   * 【格挡】先显示防守方（先挡），【反击】先显示进攻方（后反击）。
+   *
+   * @param {string[]} opts.order     出场顺序，如 ["def", "atk"]
+   * @param {object}   opts.parts     { atk: 分段[], def: 分段[] }
+   * @param {object}   opts.diceType  { atk, def }
+   * @param {object}   opts.coins     { atk, def } 行动值硬币数
+   * @param {string[]} opts.hitOn     哪几方揭示完毕后播命中声
+   * @param {string}   opts.label     中央字样
+   * @param {Function} opts.startDice (side) => 该方的骰子动画
+   */
+  static async playSequence({ order = ["def", "atk"], parts = {}, diceType = {}, coins = {},
+                              hitOn = [], label = "", startDice = null, broadcast = true } = {}) {
+    if (!this._enabled()) { for (const side of order) startDice?.(side); return; }
+
+    if (broadcast) {
+      this._emit({ type: "clashFxStart", mode: "seq", order, parts, diceType, coins, hitOn, label });
+    }
+
+    for (const [i, side] of order.entries()) {
+      const sideParts = parts[side] ?? [];
+      await this._enterExchange([side], {
+        label: i === 0 ? label : "",
+        dice:  { [side]: { count: coins[side] ?? 0, type: diceType[side] ?? "default" } },
+      });
+      const numEl = this._band(side).querySelector(".lcfx-num");
+      const raw    = startDice?.(side);
+      const signal = Array.isArray(raw) ? raw[0] : raw;
+      // 本地有骰子动画就等它落定，远端（无骰子）按固定时长滚
+      if (signal) await this._rollUntil(numEl, sideParts[0]?.value ?? 0, signal);
+      else        await this._rollFor(numEl, sideParts[0]?.value ?? 0);
+      await this._sleep(200);
+      await this._revealParts(side, sideParts);
+      if (hitOn.includes(side)) this._sfx(this._tremorPending ? "tremor" : "hit", 0.8);
+      await this._sleep(300);
+    }
+
+    await this._sleep(400);
     this._exitExchange();
   }
 
