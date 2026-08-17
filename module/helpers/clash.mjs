@@ -2680,7 +2680,9 @@ export class ClashManager {
    * 结算伤害。连击途中只重新结算 [拼点时]（连带【流血】），其余触发时机
    * （命中时 / 拼点成功失败 / 攻击后 等）仍然只在最后结算一次，不会滚雪球。
    *
-   * DiceSoNice 只在第一次与最后一次交锋播放，中间几次数字滚一下即可。
+   * DiceSoNice 只在第一次交锋播放；胜负决出后，再单独为胜方演一次
+   * 【伤害结算】——点数就是决出胜负那一次的点数，不重掷，只是把用来结算
+   * 伤害的那一掷郑重地摆出来。
    *
    * @returns {{atkTotal:number, defTotal:number, rounds:number}}
    *          最后一次交锋的骰值，用于最终结算
@@ -2705,6 +2707,9 @@ export class ClashManager {
     let round   = 0;
     let atkCur  = atkTotal0;
     let defCur  = defTotal0;
+    let winSide = "";                // 决出胜负的一方
+    let winRoll = null;              // 决胜那一掷（【伤害结算】沿用它，不重掷）
+    let winParts = null;
 
     while (round < MAX_ROUNDS) {
       round++;
@@ -2730,16 +2735,11 @@ export class ClashManager {
       const dParts = partsOf("def", defCur);
       const aEff = sum(aParts), dEff = sum(dParts);
 
-      // 本次是否可能是最后一次：任意一方行动值为 0，输了就要吃伤害
-      const decisive = apOf(atkActor) <= 0 || apOf(defActor) <= 0;
-      // DiceSoNice 只在第一次与最后一次播放
-      const withDice = round === 1 || decisive;
-
       await ClashTotalFX.play({
         atkParts: aParts, defParts: dParts,
         rerollSides: round === 1 ? rerollSides : [],
-        label: decisive && round > 1 ? "最后一击" : "",
-        startDice: withDice
+        // DiceSoNice 只在第一次交锋掷，之后的交锋数字滚一下即可
+        startDice: round === 1
           ? () => ClashManager._showDiceEach([
               { roll: atkRoll, actor: atkActor }, { roll: defRoll, actor: defActor },
             ])
@@ -2748,10 +2748,26 @@ export class ClashManager {
 
       if (aEff === dEff) continue;                  // 平局：不扣行动值，再拼一次
 
-      const loser = aEff > dEff ? defActor : atkActor;
-      if (apOf(loser) <= 0) break;                  // 行动值耗尽，这一次定胜负
+      const atkWon = aEff > dEff;
+      const loser  = atkWon ? defActor : atkActor;
+      if (apOf(loser) <= 0) {                       // 行动值耗尽，这一次定胜负
+        winSide  = atkWon ? "atk" : "def";
+        winRoll  = atkWon ? atkRoll : defRoll;
+        winParts = atkWon ? aParts : dParts;
+        break;
+      }
 
       await ClashManager._safeDocUpdate(loser, { "system.ap.value": apOf(loser) - 1 });
+    }
+
+    // 胜负已定 → 单独为胜方演一次【伤害结算】：点数与决胜那次一致，不重掷，
+    // 但这一掷会真的把骰子摆出来（DiceSoNice）
+    if (winSide) {
+      const winActor = winSide === "atk" ? atkActor : defActor;
+      await ClashTotalFX.playSolo({
+        side: winSide, parts: winParts, label: "伤害结算",
+        startDice: () => ClashManager._showDiceEach([{ roll: winRoll, actor: winActor }]),
+      });
     }
 
     return { atkTotal: atkCur, defTotal: defCur, rounds: round };

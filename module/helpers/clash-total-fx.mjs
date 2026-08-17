@@ -67,7 +67,7 @@ export class ClashTotalFX {
       if (msg.mode === "solo") {
         const side = msg.side ?? "atk";
         await this.playSolo({
-          side, parts: msg.parts ?? [], reroll: !!msg.reroll, broadcast: false,
+          side, parts: msg.parts ?? [], reroll: !!msg.reroll, label: msg.label ?? "", broadcast: false,
           startDice: () => [signals[side].promise],
         });
       } else {
@@ -385,13 +385,14 @@ export class ClashTotalFX {
    * @param {boolean}  opts.reroll    是否标记【公式重投】
    * @param {Function} opts.startDice 返回 [该方 DiceSoNice 动画的 Promise]
    */
-  static async playSolo({ side = "atk", parts = [], reroll = false, startDice = null, broadcast = true } = {}) {
+  static async playSolo({ side = "atk", parts = [], reroll = false, label = "",
+                          startDice = null, broadcast = true } = {}) {
     if (!this._enabled()) { await startDice?.(); return; }
 
     const sides = [side];
-    if (broadcast) this._emit({ type: "clashFxStart", mode: "solo", side, parts, reroll });
+    if (broadcast) this._emit({ type: "clashFxStart", mode: "solo", side, parts, reroll, label });
 
-    await this._enterExchange(sides, { reroll: reroll ? [side] : [] });
+    await this._enterExchange(sides, { reroll: reroll ? [side] : [], label });
 
     const [signal] = this._wrapSignals((await startDice?.()) ?? [], sides, broadcast);
     await this._rollUntil(this._band(side).querySelector(".lcfx-num"), parts[0]?.value ?? 0, signal);
