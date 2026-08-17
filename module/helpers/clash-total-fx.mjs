@@ -50,6 +50,16 @@ export class ClashTotalFX {
     break: "systems/limbusCompany_FVTT/assets/audio/clash_coin_break.wav",
   };
 
+  /**
+   * 调试开关：控制台里 `ClashTotalFX.DEBUG = true` 打开，
+   * 会把每次演出的硬币数、来源、行动值打进控制台。
+   */
+  static DEBUG = false;
+
+  static _log(...args) {
+    if (this.DEBUG) console.log("%c[LimbusFX]", "color:#34c8df;font-weight:bold", ...args);
+  }
+
   /** 连击链状态 */
   static _chain = { active: false, combo: 0, timer: null, sides: [] };
 
@@ -250,6 +260,7 @@ export class ClashTotalFX {
   /** 按行动值在 TOTAL 上方摆出硬币 */
   static _buildDice(side, count = 0, type = "default") {
     const box = this._band(side).querySelector(".lcfx-dice");
+    this._log(`建硬币条 ${side}：count=${count} type=${type}`);
     box.replaceChildren();
     for (let i = 0; i < Math.min(12, Math.max(0, count)); i++) {
       const img = document.createElement("img");
@@ -264,6 +275,7 @@ export class ClashTotalFX {
   static _breakDie(side) {
     const box = this._band(side).querySelector(".lcfx-dice");
     const die = [...box.querySelectorAll(".lcfx-die:not(.is-broken)")].pop();
+    this._log(`碎硬币 ${side}：剩余 ${box.querySelectorAll(".lcfx-die:not(.is-broken)").length} 枚`);
     if (!die) return;
     this._sfx("break");
     die.classList.add("is-shatter");
@@ -425,6 +437,8 @@ export class ClashTotalFX {
                    atkDiceType, defDiceType, atkCoins, defCoins, withDice: !!startDice });
     }
 
+    this._log("play()", { atkCoins, defCoins, atkDiceType, defDiceType, label,
+                          withDice: !!startDice, broadcast });
     await this._enterExchange(sides, { reroll: rerollSides, label, dice: {
       atk: { count: atkCoins, type: atkDiceType },
       def: { count: defCoins, type: defDiceType },

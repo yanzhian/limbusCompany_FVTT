@@ -90,6 +90,8 @@ Hooks.once("init", () => {
 
   // 暴露 SinResourceHUD 到全局，供宏/控制台调用
   globalThis.SinResourceHUD = SinResourceHUD;
+  // 调试用：控制台里可直接 ClashTotalFX.DEBUG = true 观察 TOTAL 演出参数
+  globalThis.ClashTotalFX = ClashTotalFX;
 
   // 注册全局罪孽资源 setting（需在 init 阶段注册 setting）
   SinResourceHUD.init();

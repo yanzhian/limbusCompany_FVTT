@@ -2754,6 +2754,9 @@ export class ClashManager {
       const aParts = partsOf("atk", atkCur);
       const dParts = partsOf("def", defCur);
       const aEff = sum(aParts), dEff = sum(dParts);
+      ClashTotalFX._log(`连击第 ${round} 次：` +
+        `攻 ${aEff}（行动值 ${apOf(atkActor)}，公式 ${atkFormula}）` +
+        ` vs 守 ${dEff}（行动值 ${apOf(defActor)}，公式 ${defFormula}）`);
 
       await ClashTotalFX.play({
         atkParts: aParts, defParts: dParts,
