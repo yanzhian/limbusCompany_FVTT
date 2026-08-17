@@ -2697,7 +2697,7 @@ export class ClashManager {
    * （命中时 / 拼点成功失败 / 攻击后 等）仍然只在最后结算一次，不会滚雪球。
    *
    * DiceSoNice 只在第一次交锋播放；胜负决出后，再单独为胜方演一次
-   * 【伤害结算】——点数就是决出胜负那一次的点数，不重掷，只是把用来结算
+   * 【伤害计算】——点数就是决出胜负那一次的点数，不重掷，只是把用来结算
    * 伤害的那一掷郑重地摆出来。
    *
    * @returns {{atkTotal:number, defTotal:number, rounds:number}}
@@ -2724,7 +2724,7 @@ export class ClashManager {
     let atkCur  = atkTotal0;
     let defCur  = defTotal0;
     let winSide = "";                // 决出胜负的一方
-    let winRoll = null;              // 决胜那一掷（【伤害结算】沿用它，不重掷）
+    let winRoll = null;              // 决胜那一掷（【伤害计算】沿用它，不重掷）
     let winParts = null;
 
     while (round < MAX_ROUNDS) {
@@ -2788,7 +2788,7 @@ export class ClashManager {
       await ClashManager._safeDocUpdate(loser, { "system.ap.value": apOf(loser) - 1 });
     }
 
-    // 胜负已定 → 单独为胜方演一次【伤害结算】：点数与决胜那次一致，不重掷，
+    // 胜负已定 → 单独为胜方演一次【伤害计算】：点数与决胜那次一致，不重掷，
     // 但这一掷会真的把骰子摆出来（DiceSoNice）
     if (winSide) {
       const winActor = winSide === "atk" ? atkActor : defActor;

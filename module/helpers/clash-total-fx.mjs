@@ -49,7 +49,7 @@ export class ClashTotalFX {
    * - add   骰子落定后，等级差/BUFF 等加值逐条浮现时，每条"当"一声
    * - break 硬币碎裂（3 个候选）
    * - win   败方已经没有硬币可碎，这一败即决出胜负（3 个候选）
-   * - hit   【伤害结算】命中（3 个候选）
+   * - hit   【伤害计算】命中（3 个候选）
    * - tremor 【震颤引爆】
    * - chaos  进入【混乱阈值】
    * 数组即多个候选，每次随机挑一个，避免连击时听着重复。
@@ -64,10 +64,10 @@ export class ClashTotalFX {
     chaos:  `${ClashTotalFX.AUDIO}/clash_chaos.wav`,
   };
 
-  /** 【伤害结算】那一次演出的中央字样 */
-  static LABEL_DAMAGE = "伤害结算";
+  /** 【伤害计算】那一次演出的中央字样 */
+  static LABEL_DAMAGE = "伤害计算";
 
-  /** 本次拼点中是否发生过【震颤引爆】——为真时【伤害结算】的命中声换成引爆声 */
+  /** 本次拼点中是否发生过【震颤引爆】——为真时【伤害计算】的命中声换成引爆声 */
   static _tremorPending = false;
 
   /**
@@ -173,7 +173,7 @@ export class ClashTotalFX {
   }
 
   /**
-   * 【震颤引爆】：引爆的当下就发声，同时记下标记——本次拼点的【伤害结算】
+   * 【震颤引爆】：引爆的当下就发声，同时记下标记——本次拼点的【伤害计算】
    * 不再播命中声（命中声被引爆声取代）。一次拼点里连爆多次也只响一次。
    */
   static tremorBurst() {
@@ -363,7 +363,7 @@ export class ClashTotalFX {
     const box = this._ensureRoot().querySelector(".lcfx-combos");
     if (!box) return;
     const jitter = parseFloat(
-      getComputedStyle(document.documentElement).getPropertyValue("--lcfx-combo-jitter")) || 50;
+      getComputedStyle(document.documentElement).getPropertyValue("--lcfx-combo-jitter")) || 80;
     const rand = () => ((Math.random() * 2 - 1) * jitter).toFixed(0);
     const el = document.createElement("div");
     el.className = "lcfx-combo " + cls;
@@ -559,7 +559,7 @@ export class ClashTotalFX {
 
     await this._sleep(260);
     await this._revealParts(side, parts);
-    // 【伤害结算】：加值揭示完毕、真正落到伤害上时的命中声
+    // 【伤害计算】：加值揭示完毕、真正落到伤害上时的命中声
     if (label === this.LABEL_DAMAGE) {
       // 本次拼点发生过【震颤引爆】：命中声静音，那一声由引爆声代表
       if (!this._tremorPending) this._sfx("hit", 0.8);

@@ -8802,8 +8802,8 @@ input.item-piles-quantity {
   --lcfx-die-gap: 10px;     /* 硬币间距 */
   --lcfx-die-row: 25px;     /* 硬币条与 TOTAL 的距离 */
   --lcfx-die-face: 20px;    /* 硬币上的点数字号（素材自带点数时不生效） */
-  --lcfx-combo:   40px;     /* 连击字号 */
-  --lcfx-combo-jitter: 50px;/* 连击随机落点范围 */
+  --lcfx-combo:   60px;     /* 连击字号 */
+  --lcfx-combo-jitter: 80px;/* 连击随机落点范围 */
   --lcfx-bg:      #0b0b0b;
   --lcfx-win:     #ffe9a8;
   --lcfx-lose:    #9b9b9b;
