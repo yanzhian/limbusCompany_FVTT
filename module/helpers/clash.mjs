@@ -2325,6 +2325,15 @@ export class ClashManager {
               await roll.evaluate();
               ClashManager.applyDiceRollMods(defActor, roll, { item: defItem, isDefense: true });
 
+              // 推进防守方战斗袋（技能消失，后面的技能填充）。
+              // 战斗袋状态是各客户端本地的，必须在防守方自己这台机器上推进——
+              // _sendResponseAndResolve 对非 GM 玩家会把结算整个委托给 GM，
+              // 放在那里推的是 GM 端的状态，玩家自己的 6-bag 纹丝不动。
+              if (slotIdx >= 0) {
+                const defSheet = defActor.sheet;
+                if (defSheet?._combatBagState) defSheet._animateCombatSkillUse?.(slotIdx);
+              }
+
               // TOTAL 演出与 DiceSoNice 推迟到 [攻击时/拼点时] 之后统一播放：
               // 那些效果可能改写骰子公式导致重投，先演一次就白演了。
               await ClashManager._sendResponseAndResolve(
@@ -2413,12 +2422,6 @@ export class ClashManager {
     // 拼点结算所需的攻击方角色（提前获取，供 [使用时] 触发使用）
     const atkActor = game.actors.get(initFlags.attackerId);
 
-
-    // 推进防守方战斗袋（技能消失，后面的技能填充）
-    if (slotIdx >= 0) {
-      const sheet = defActor.sheet;
-      if (sheet?._combatBagState) sheet._animateCombatSkillUse?.(slotIdx);
-    }
 
     // 拼点结算
     const defCategory = sys.category ?? "";
