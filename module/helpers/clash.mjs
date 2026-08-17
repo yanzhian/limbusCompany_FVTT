@@ -387,6 +387,14 @@ export class ClashManager {
 
   /** 对 item 触发 trigger，同时对 ctx.owner 装备格中所有物品也触发同一 trigger。
    *  "受到伤害时" 各路径已单独处理装备格循环，不应使用此方法。 */
+  /**
+   * 只在一次对抗的第一次交锋结算的效果类型。
+   * 它们直接改写技能物品自身（会被持久化），连击时重复执行就会累积。
+   */
+  static COMBO_ONCE_EFFECTS = new Set([
+    "diceAdj", "diceFacesAdj", "baseValue", "weightAdj", "diceTypeChg",
+  ]);
+
   static async _applyActivitiesAndEquip(item, trigger, ctx) {
     await ClashManager._applyActivities(item, trigger, ctx);
     const owner = ctx.owner ?? null;
@@ -1264,6 +1272,9 @@ export class ClashManager {
 
       for (const eff of effects) {
         if (!eff?.type) continue;
+        // 连击的第 2 次交锋起：改写技能本身的效果（骰数/面数/基础值/加重值/
+        // 骰子类型）不再重复执行，否则每交锋一次就再加一遍，3d 会滚成 6d
+        if (ctx._comboRound > 1 && ClashManager.COMBO_ONCE_EFFECTS.has(eff.type)) continue;
         const effTgts = await ClashManager._resolveTargets(eff.target ?? "self", owner, other, eff);
         if (effTgts.length === 0) continue;
 
@@ -2719,11 +2730,16 @@ export class ClashManager {
       round++;
       let atkRoll = atkRoll0, defRoll = defRoll0;
       if (round > 1) {
-        // 连击途中只重跑 [拼点时]（【流血】也挂在这里，会再发作一次）
+        // 连击途中只重跑 [拼点时]（【流血】也挂在这里，会再发作一次）；
+        // 改写技能自身的效果由 COMBO_ONCE_EFFECTS 拦下，不会重复累加
+        atkCtx._comboRound = round;
+        defCtx._comboRound = round;
         await ClashManager._applyActivitiesAndEquip(atkItem, "拼点时", atkCtx);
         await ClashManager._applyActivitiesAndEquip(defItem, "拼点时", defCtx);
         await ClashManager._processBleed(atkActor);
         await ClashManager._processBleed(defActor);
+        atkCtx._comboRound = 1;
+        defCtx._comboRound = 1;
 
         atkRoll = new Roll(atkFormula + (atkBonus ? `${atkBonus > 0 ? "+" : ""}${atkBonus}` : ""));
         defRoll = new Roll(defFormula + (defBonus ? `${defBonus > 0 ? "+" : ""}${defBonus}` : ""));
