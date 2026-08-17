@@ -2724,7 +2724,11 @@ export class ClashManager {
    *
    * 行动值代表"还能承受几次拼点失败"：每次交锋输的一方扣 1 点行动值，双方
    * 重新骰掷再拼一次；若输的一方行动值已经是 0，交锋结束，由这一次的胜方
-   * 结算伤害。连击途中只重新结算 [拼点时]（连带【流血】），其余触发时机
+   * 结算伤害。
+   *
+   * 【不可摧毁】是个例外：它拼点失败照样能给对面造成伤害，所以只要它的币被
+   * 打坏一枚，连击就当场结束——先由胜方结算伤害，随后再由【不可摧毁】那一方
+   * 结算自己的反击伤害（见 _triggerUnbreakableCounter）。连击途中只重新结算 [拼点时]（连带【流血】），其余触发时机
    * （命中时 / 拼点成功失败 / 攻击后 等）仍然只在最后结算一次，不会滚雪球。
    *
    * DiceSoNice 只在第一次交锋播放；胜负决出后，再单独为胜方演一次
@@ -2809,14 +2813,25 @@ export class ClashManager {
 
       const atkWon = aEff > dEff;
       const loser  = atkWon ? defActor : atkActor;
-      if (apOf(loser) <= 0) {                       // 行动值耗尽，这一次定胜负
+      // 【不可摧毁】：拼点失败照样能打回去，所以它的币只要坏掉一枚，连击当场结束
+      const loserUnbreak =
+        (atkWon ? defItem : atkItem)?.system?.diceType === "unbreakable";
+
+      // 输掉这一次就要扣一点行动值（币碎一枚）
+      if (apOf(loser) > 0) {
+        await ClashManager._safeDocUpdate(loser, { "system.ap.value": apOf(loser) - 1 });
+      }
+
+      // 行动值耗尽、或败方用的是【不可摧毁】：这一次定胜负
+      if (loserUnbreak || apOf(loser) <= 0) {
         winSide  = atkWon ? "atk" : "def";
         winRoll  = atkWon ? atkRoll : defRoll;
         winParts = atkWon ? aParts : dParts;
+        ClashTotalFX._log(loserUnbreak
+          ? "【不可摧毁】的币被打坏，连击结束，随后由它反击"
+          : "行动值耗尽，连击结束");
         break;
       }
-
-      await ClashManager._safeDocUpdate(loser, { "system.ap.value": apOf(loser) - 1 });
     }
 
     // 胜负已定 → 单独为胜方演一次【伤害计算】：点数与决胜那次一致，不重掷，
