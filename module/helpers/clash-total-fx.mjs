@@ -67,6 +67,9 @@ export class ClashTotalFX {
   /** 【伤害结算】那一次演出的中央字样 */
   static LABEL_DAMAGE = "伤害结算";
 
+  /** 本次拼点中是否发生过【震颤引爆】——为真时【伤害结算】的命中声换成引爆声 */
+  static _tremorPending = false;
+
   /**
    * 调试开关：控制台里 `ClashTotalFX.DEBUG = true` 打开，
    * 会把每次演出的硬币数、来源、行动值打进控制台。
@@ -167,6 +170,16 @@ export class ClashTotalFX {
   static broadcastSfx(key, volume = 0.8) {
     this._sfx(key, volume);
     this._emit({ type: "clashFxSfx", key, volume });
+  }
+
+  /**
+   * 【震颤引爆】：拼点演出正在进行时不当场发声，而是记下来，等【伤害结算】
+   * 用引爆声替掉命中声——一次拼点里连爆多次也只会响一次。
+   * 不在拼点中（回合结束、效果直接引爆等）则立刻发声。
+   */
+  static tremorBurst() {
+    if (this._chain.active) { this._tremorPending = true; return; }
+    this.broadcastSfx("tremor");
   }
 
   /* ─── DOM ─────────────────────────────────────────────────────────────── */
@@ -393,6 +406,7 @@ export class ClashTotalFX {
     chain.timer = setTimeout(() => {
       const sides = chain.sides;
       chain.timer = null; chain.active = false; chain.combo = 0; chain.sides = [];
+      this._tremorPending = false;
       this._bandsOut(sides);
     }, Math.round(this.CHAIN_GRACE * this._speed()));
   }
@@ -546,7 +560,11 @@ export class ClashTotalFX {
     await this._sleep(260);
     await this._revealParts(side, parts);
     // 【伤害结算】：加值揭示完毕、真正落到伤害上时的命中声
-    if (label === this.LABEL_DAMAGE) this._sfx("hit", 0.8);
+    if (label === this.LABEL_DAMAGE) {
+      // 本次拼点发生过【震颤引爆】时，命中声换成引爆声
+      this._sfx(this._tremorPending ? "tremor" : "hit", 0.8);
+      this._tremorPending = false;
+    }
     await this._sleep(600);
     this._exitExchange();
   }
