@@ -2792,7 +2792,7 @@ export class ClashManager {
     if (winSide) {
       const winActor = winSide === "atk" ? atkActor : defActor;
       await ClashTotalFX.playSolo({
-        side: winSide, parts: winParts, label: "伤害结算",
+        side: winSide, parts: winParts, label: ClashTotalFX.LABEL_DAMAGE,
         coins: apOf(winActor),
         diceType: (winSide === "atk" ? atkItem : defItem)?.system?.diceType ?? "default",
         startDice: () => ClashManager._showDiceEach([{ roll: winRoll, actor: winActor }]),

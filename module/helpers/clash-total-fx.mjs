@@ -47,13 +47,21 @@ export class ClashTotalFX {
   /**
    * 音效（占位空音频，替换同名文件即可换声）
    * - add   骰子落定后，等级差/BUFF 等加值逐条浮现时，每条"当"一声
-   * - break 硬币碎裂（6 个候选，每次随机挑一个，避免连击时听着重复）
+   * - break 硬币碎裂（3 个候选）
+   * - win   拼点分出胜负（3 个候选）
+   * - hit   【伤害结算】命中
+   * 数组即多个候选，每次随机挑一个，避免连击时听着重复。
    */
+  static AUDIO = "systems/limbusCompany_FVTT/assets/audio";
   static SFX = {
-    add:   "systems/limbusCompany_FVTT/assets/audio/clash_number_tick.wav",
-    break: Array.from({ length: 6 },
-      (_, i) => `systems/limbusCompany_FVTT/assets/audio/clash_coin_break_${i + 1}.wav`),
+    add:   `${ClashTotalFX.AUDIO}/clash_number_tick.wav`,
+    break: [1, 2, 3].map(i => `${ClashTotalFX.AUDIO}/clash_coin_break_${i}.wav`),
+    win:   [1, 2, 3].map(i => `${ClashTotalFX.AUDIO}/clash_win_${i}.wav`),
+    hit:   `${ClashTotalFX.AUDIO}/clash_hit.wav`,
   };
+
+  /** 【伤害结算】那一次演出的中央字样 */
+  static LABEL_DAMAGE = "伤害结算";
 
   /**
    * 调试开关：控制台里 `ClashTotalFX.DEBUG = true` 打开，
@@ -419,6 +427,7 @@ export class ClashTotalFX {
     const loseSide = winSide === "atk" ? "def" : "atk";
     this._band(winSide).classList.add("win");
     this._band(loseSide).classList.add("lose");
+    this._sfx("win");
     this._breakDie(loseSide);
   }
 
@@ -511,6 +520,8 @@ export class ClashTotalFX {
 
     await this._sleep(260);
     await this._revealParts(side, parts);
+    // 【伤害结算】：加值揭示完毕、真正落到伤害上时的命中声
+    if (label === this.LABEL_DAMAGE) this._sfx("hit", 0.8);
     await this._sleep(600);
     this._exitExchange();
   }
