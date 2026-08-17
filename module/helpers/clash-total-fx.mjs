@@ -274,8 +274,9 @@ export class ClashTotalFX {
   /** 交锋失败：毁掉末尾一枚硬币——一般硬币消失，不可摧毁碎裂后变暗留场 */
   static _breakDie(side) {
     const box = this._band(side).querySelector(".lcfx-dice");
-    const die = [...box.querySelectorAll(".lcfx-die:not(.is-broken)")].pop();
-    this._log(`碎硬币 ${side}：剩余 ${box.querySelectorAll(".lcfx-die:not(.is-broken)").length} 枚`);
+    const alive = [...box.querySelectorAll(".lcfx-die:not(.is-broken)")];
+    const die = alive.pop();
+    this._log(`碎硬币 ${side}：${alive.length + (die ? 1 : 0)} 枚 → ${alive.length} 枚`);
     if (!die) return;
     this._sfx("break");
     die.classList.add("is-shatter");
