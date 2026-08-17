@@ -888,11 +888,11 @@ function _registerSettings() {
     config:  true,
     type:    String,
     choices: {
-      standard: "标准",
-      fast:     "快速（约 6 成）",
-      turbo:    "极速（约 3 成）",
+      slow:     "慢速（默认的 3 倍时长）",
+      standard: "默认",
+      fast:     "快速（默认的 1/3 时长）",
     },
-    default: "fast",
+    default: "standard",
   });
 }
 

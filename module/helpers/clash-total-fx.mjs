@@ -273,10 +273,15 @@ export class ClashTotalFX {
     return game.settings?.get?.("limbusCompany_FVTT", "clashTotalFx") !== false;
   }
 
-  /** 演出节奏缩放：一回合常有多次拼点，默认按"快速"跑 */
+  /**
+   * 演出节奏缩放。默认档就是原先的"极速"（约原始时长的 35%），
+   * 另外两档分别是它的 3 倍时长与 1/3 时长。
+   */
+  static SPEED_BASE = 0.35;
   static _speed() {
-    const mode = game.settings?.get?.("limbusCompany_FVTT", "clashTotalFxSpeed") ?? "fast";
-    return { standard: 1, fast: 0.6, turbo: 0.35 }[mode] ?? 0.6;
+    const mode = game.settings?.get?.("limbusCompany_FVTT", "clashTotalFxSpeed") ?? "standard";
+    const mult = { slow: 3, standard: 1, fast: 1 / 3 }[mode] ?? 1;
+    return this.SPEED_BASE * mult;
   }
 
   /* ─── 基础动作 ────────────────────────────────────────────────────────── */
