@@ -48,7 +48,7 @@ export class ClashTotalFX {
    * 音效（占位空音频，替换同名文件即可换声）
    * - add   骰子落定后，等级差/BUFF 等加值逐条浮现时，每条"当"一声
    * - break 硬币碎裂（3 个候选）
-   * - win   拼点分出胜负（3 个候选）
+   * - win   败方已经没有硬币可碎，这一败即决出胜负（3 个候选）
    * - hit   【伤害结算】命中
    * 数组即多个候选，每次随机挑一个，避免连击时听着重复。
    */
@@ -287,13 +287,16 @@ export class ClashTotalFX {
     }
   }
 
-  /** 交锋失败：毁掉末尾一枚硬币——一般硬币消失，不可摧毁碎裂后变暗留场 */
+  /**
+   * 交锋失败：毁掉末尾一枚硬币——一般硬币消失，不可摧毁碎裂后变暗留场。
+   * @returns {boolean} 是否真的碎掉了一枚（已经没硬币可碎时返回 false）
+   */
   static _breakDie(side) {
     const box = this._band(side).querySelector(".lcfx-dice");
     const alive = [...box.querySelectorAll(".lcfx-die:not(.is-broken)")];
     const die = alive.pop();
     this._log(`碎硬币 ${side}：${alive.length + (die ? 1 : 0)} 枚 → ${alive.length} 枚`);
-    if (!die) return;
+    if (!die) return false;
     this._sfx("break");
     die.classList.add("is-shatter");
     setTimeout(() => {
@@ -301,6 +304,7 @@ export class ClashTotalFX {
       if (die.dataset.type === "unbreakable") die.classList.add("is-broken");
       else die.remove();
     }, this.BREAK_MS);
+    return true;
   }
 
   /** 固定时长乱跳后定格（该次交锋没有骰子动画时用） */
@@ -383,7 +387,7 @@ export class ClashTotalFX {
   }
 
   /** 骰值已定格后：逐条浮现加值/BUFF 并累加，返回最终 TOTAL */
-  static async _revealParts(side, parts) {
+  static async _revealParts(side, parts, withSfx = true) {
     const band    = this._band(side);
     const numEl   = band.querySelector(".lcfx-num");
     const partsEl = band.querySelector(".lcfx-parts");
@@ -413,7 +417,7 @@ export class ClashTotalFX {
 
     for (const part of parts.slice(1)) {
       await this._sleep(gap);
-      this._sfx("add");          // 每加一条"当"一声
+      if (withSfx) this._sfx("add");   // 每加一条"当"一声
       chip(part, false);
       sum += part.value;
       this._bump(numEl, sum);
@@ -427,8 +431,8 @@ export class ClashTotalFX {
     const loseSide = winSide === "atk" ? "def" : "atk";
     this._band(winSide).classList.add("win");
     this._band(loseSide).classList.add("lose");
-    this._sfx("win");
-    this._breakDie(loseSide);
+    // 败方还有硬币 → 碎一枚（碎裂声）；已经没硬币可碎 → 这一败定胜负（胜负声）
+    if (!this._breakDie(loseSide)) this._sfx("win");
   }
 
   /* ─── 对外接口 ────────────────────────────────────────────────────────── */
@@ -482,9 +486,12 @@ export class ClashTotalFX {
     }
 
     await this._sleep(260);
+    // 双方同时揭示，两串"当当当"叠在一起会互相盖住；只让分段更多的一方出声，
+    // 这样听到的次数一定是两边里最多的那个，不会漏拍。
+    const sfxSide = defParts.length > atkParts.length ? "def" : "atk";
     const [atkTotal, defTotal] = await Promise.all([
-      this._revealParts("atk", atkParts),
-      this._revealParts("def", defParts),
+      this._revealParts("atk", atkParts, sfxSide === "atk"),
+      this._revealParts("def", defParts, sfxSide === "def"),
     ]);
 
     await this._sleep(240);
