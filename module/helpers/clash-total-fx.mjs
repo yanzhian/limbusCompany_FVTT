@@ -210,6 +210,7 @@ export class ClashTotalFX {
             <span class="lcfx-label">TOTAL</span>
           </div>
         </div>
+      </div>
       <div class="lcfx-combos"></div>`;
     document.body.appendChild(el);
     this._root = el;
@@ -360,10 +361,14 @@ export class ClashTotalFX {
 
   /** 甩出一枚「N 连击」：中心附近随机落点，瞬间出现后缓慢淡出，互不等待 */
   static _combo(text, cls = "") {
-    const box = this._ensureRoot().querySelector(".lcfx-combos");
-    if (!box) return;
-    const jitter = parseFloat(
-      getComputedStyle(document.documentElement).getPropertyValue("--lcfx-combo-jitter")) || 80;
+    const root = this._ensureRoot();
+    let box = root.querySelector(".lcfx-combos");
+    if (!box) {
+      box = document.createElement("div");
+      box.className = "lcfx-combos";
+      root.appendChild(box);
+    }
+    const jitter = parseFloat(getComputedStyle(root).getPropertyValue("--lcfx-combo-jitter")) || 80;
     const rand = () => ((Math.random() * 2 - 1) * jitter).toFixed(0);
     const el = document.createElement("div");
     el.className = "lcfx-combo " + cls;
@@ -372,6 +377,8 @@ export class ClashTotalFX {
     el.style.setProperty("--lcfx-cy", `${rand()}px`);
     el.addEventListener("animationend", () => el.remove());
     box.appendChild(el);
+    this._log(`连击字样「${text}」cls=${cls || "-"} 偏移 ${el.style.getPropertyValue("--lcfx-cx")},`
+      + ` ${el.style.getPropertyValue("--lcfx-cy")}`);
   }
 
   /** 进入一次交锋：同一条连击链内黑条不重新切入，只清掉上一次的数字/分段 */
