@@ -1353,10 +1353,8 @@ export class ClashManager {
             const { mode, value: rawVal } = await ClashManager._evalSignedValue(eff.value, eff.intensity);
             const val = _scaleVal(rawVal, mode);
             const cur = effTgt.system?.ap?.value ?? 0;
-            const max = effTgt.system?.ap?.max   ?? 3;
-            const nv  = mode === "absolute"
-              ? Math.max(0, Math.min(max, val))
-              : Math.max(0, Math.min(max, cur + val));
+            // 行动值没有上限，只保证不为负
+            const nv  = mode === "absolute" ? Math.max(0, val) : Math.max(0, cur + val);
             await ClashManager._safeDocUpdate(effTgt, { "system.ap.value": nv });
             descStr = mode === "absolute"
               ? `【${effTgt.name}】行动值 调整为 ${nv}`
@@ -2048,25 +2046,10 @@ export class ClashManager {
       },
     });
 
-    // 流血：发起者执行攻击动作时触发
-    await ClashManager._processBleed(actor);
-
-
-    // 推进战斗槽 + 扣 AP
-    // slotIndex >= 0：从战斗槽触发，推进 6-bag + 扣 AP（延迟动画后）
-    // slotIndex === -2：从技能列表/右键触发，只扣 AP，不推进 bag
+    // 推进战斗槽（使用技能不再消耗行动值；流血改由 [攻击时]/[拼点时] 触发）
     if (slotIndex >= 0) {
       const sheet = actor.sheet;
-      if (sheet?._combatBagState) {
-        sheet._animateCombatSkillUse?.(slotIndex);
-        setTimeout(async () => {
-          const ap = actor.system.ap?.value ?? 0;
-          if (ap > 0) await ClashManager._safeDocUpdate(actor, { "system.ap.value": ap - 1 });
-        }, 700);
-      }
-    } else if (slotIndex === -2) {
-      const ap = actor.system.ap?.value ?? 0;
-      if (ap > 0) await ClashManager._safeDocUpdate(actor, { "system.ap.value": ap - 1 });
+      if (sheet?._combatBagState) sheet._animateCombatSkillUse?.(slotIndex);
     }
   }
 
@@ -2097,12 +2080,8 @@ export class ClashManager {
       return;
     }
 
-    // 恐慌时只能用 EGO 响应（不需要 AP）；普通情况 AP 不足则无法对抗
+    // 恐慌时只能用 EGO 响应；行动值不再是对抗门槛（它代表可承受的拼点失败次数）
     const isInPanic = !!ClashManager._getBuff(defActor, "panic");
-    if ((defActor.system.ap?.value ?? 0) <= 0 && !isInPanic) {
-      ui.notifications.warn(`${defActor.name} 行动值不足，无法进行对抗`);
-      return;
-    }
     if (isInPanic) {
       const cfg    = CONFIG.LIMBUSCOMPANY ?? {};
       const hasEgo = (cfg.EGO_GRADES ?? []).some(grade => {
@@ -2417,20 +2396,9 @@ export class ClashManager {
       },
     });
 
-    // 流血：防守方进行对抗也是攻击动作，同样触发
-    await ClashManager._processBleed(defActor);
-
     // 拼点结算所需的攻击方角色（提前获取，供 [使用时] 触发使用）
     const atkActor = game.actors.get(initFlags.attackerId);
 
-
-    // 扣防守方 AP（恐慌时使用 EGO 免 AP 消耗）
-    const defIsEgo     = (defItem.system?.type === "ego");
-    const defIsInPanic = defIsEgo && !!ClashManager._getBuff(defActor, "panic");
-    if (!defIsInPanic) {
-      const defAp = defActor.system.ap?.value ?? 0;
-      if (defAp > 0) await defActor.update({ "system.ap.value": defAp - 1 });
-    }
 
     // 推进防守方战斗袋（技能消失，后面的技能填充）
     if (slotIdx >= 0) {
@@ -2462,9 +2430,12 @@ export class ClashManager {
     await ClashManager._applyActivitiesAndEquip(defItem, "攻击前", defCtx);
 
     // ── [攻击时] / [拼点时]：无论对抗类型，攻击时效果均应在此触发 ───────
+    // 【流血】挂在 [攻击时] 与 [拼点时] 上，因此连击时每次交锋都会再发作一次
     await ClashManager._applyActivitiesAndEquip(atkItem, "攻击时", atkCtx);
-    await ClashManager._applyActivitiesAndEquip(atkItem, "拼点时", atkCtx);
     await ClashManager._applyActivitiesAndEquip(defItem,  "攻击时", defCtx);
+    await ClashManager._processBleed(atkActor);
+    await ClashManager._processBleed(defActor);
+    await ClashManager._applyActivitiesAndEquip(atkItem, "拼点时", atkCtx);
     await ClashManager._applyActivitiesAndEquip(defItem,  "拼点时", defCtx);
 
     // ── [攻击时/拼点时] 可能修改骰子公式（diceAdj/diceFacesAdj/baseValue）──
@@ -2507,13 +2478,13 @@ export class ClashManager {
       _actMsgs.push({ trigger: "公式重投", itemName: defItem?.name ?? "防守方", msgs: [`公式变化（${defBaseFormulaOrig} → ${newDefBase}），重新投骰：${rerollDef.result} = <b>${rerollDef.total}</b>`] });
     }
 
-    // ── TOTAL 演出 + DiceSoNice（本次对抗唯一的一次）────────────────────
-    // 发起/对抗时不再演一遍——那时的骰值可能被 [攻击时/拼点时] 改写公式后作废。
-    // 这里演的就是最终生效的骰值，真正发生了重投的一方额外带【公式重投】标记。
-    {
-      const atkRollFx = _rerollShow.find(e => e.side === "atk")?.roll
-        ?? (initFlags.rollData ? Roll.fromJSON(JSON.stringify(initFlags.rollData)) : null);
-      const defRollFx = _rerollShow.find(e => e.side === "def")?.roll ?? defRoll;
+    // 演出用的最终骰：发生过公式重投的一方用重投后的骰
+    const atkRollFx = _rerollShow.find(e => e.side === "atk")?.roll
+      ?? (initFlags.rollData ? Roll.fromJSON(JSON.stringify(initFlags.rollData)) : null);
+    const defRollFx = _rerollShow.find(e => e.side === "def")?.roll ?? defRoll;
+
+    // 反击 / 格挡不走拼点，也就没有连击：只演一次
+    if (defCategory === "counter" || defCategory === "block") {
       await ClashTotalFX.play({
         rerollSides: _rerollShow.map(e => e.side),
         atkParts: ClashManager._buildTotalParts({
@@ -2576,6 +2547,24 @@ export class ClashManager {
       return;
     }
 
+    // ── 连击：行动值决定还能输几次，输光了才由这一次的胜方结算伤害 ──────
+    {
+      const combo = await ClashManager._runComboClash({
+        atkActor, defActor, atkItem, defItem, atkCtx, defCtx,
+        atkFormula: atkFinalBase ?? "", atkBonus: atkBonusVal,
+        atkTotal0: atkFinalTotal ?? 0, atkRoll0: atkRollFx,
+        atkCategory: initFlags.category ?? "",
+        defFormula: defFinalBase ?? "", defBonus: defBonusVal,
+        defTotal0: defFinalTotal ?? 0, defRoll0: defRollFx,
+        defCategory,
+        rerollSides: _rerollShow.map(e => e.side),
+      });
+      atkFinalTotal = combo.atkTotal;
+      defFinalTotal = combo.defTotal;
+    }
+    // 连击后攻击方的骰值已变，结算卡片要用最后一次交锋的值
+    const finalInitFlags = { ...effectiveInitFlags, rollTotal: atkFinalTotal };
+
     const resolution = ClashManager._computeResolution({
       atkActor,    atkTotal:    atkFinalTotal,   atkFormula:  atkFinalFormula,
       atkItemName: initFlags.itemName, atkItemImg: initFlags.itemImg,
@@ -2588,13 +2577,6 @@ export class ClashManager {
     // 呼吸暴击触发：层数-1
     if (resolution.breatheCrit && resolution.winner) {
       await ClashManager._reduceBuffStacks(resolution.winner, "breathing");
-    }
-
-    // 闪避成功：恢复防守方 1 AP（不扣 AP，恢复之前已扣的那 1 点）
-    if (resolution.dodgeWin) {
-      const curAp = defActor.system.ap?.value ?? 0;
-      const maxAp = defActor.system.ap?.max ?? 3;
-      await defActor.update({ "system.ap.value": Math.min(curAp + 1, maxAp) });
     }
 
     // ── [拼点成功/失败] / [命中时] / [暴击命中时] / [受到伤害时] ────────
@@ -2672,7 +2654,7 @@ export class ClashManager {
       if (lossNote) sanityNotes.push(lossNote);
     }
 
-    await ClashManager._sendResolveMsg(resolution, effectiveInitFlags, defActor, defItem, defFormula, sanityNotes);
+    await ClashManager._sendResolveMsg(resolution, finalInitFlags, defActor, defItem, defFormula, sanityNotes);
 
     // 【不可摧毁】反击消息在拼点对抗结果之后发出
     if (_unbreakableCounterArgs) {
@@ -2686,6 +2668,93 @@ export class ClashManager {
     // 统一发出本次对抗所有 activity 通知（汇总为一条，避免并发清理竞态）
     await ClashManager._flushActMsgs(_actMsgs, atkActor);
     await ClashManager._broadcastAndCheckReactions({ lastSkillUuid: atkItem?.uuid ?? null, attacker: atkActor, defender: defActor });
+  }
+
+  /* ─── 阶段五a：连击（行动值决定的多次交锋）──────────────────────────── */
+
+  /**
+   * 连击：同一次对抗内的多次交锋。
+   *
+   * 行动值代表"还能承受几次拼点失败"：每次交锋输的一方扣 1 点行动值，双方
+   * 重新骰掷再拼一次；若输的一方行动值已经是 0，交锋结束，由这一次的胜方
+   * 结算伤害。连击途中只重新结算 [拼点时]（连带【流血】），其余触发时机
+   * （命中时 / 拼点成功失败 / 攻击后 等）仍然只在最后结算一次，不会滚雪球。
+   *
+   * DiceSoNice 只在第一次与最后一次交锋播放，中间几次数字滚一下即可。
+   *
+   * @returns {{atkTotal:number, defTotal:number, rounds:number}}
+   *          最后一次交锋的骰值，用于最终结算
+   */
+  static async _runComboClash(ctx) {
+    const { atkActor, defActor, atkItem, defItem, atkCtx, defCtx,
+            atkFormula, atkBonus, atkTotal0, atkRoll0, atkCategory,
+            defFormula, defBonus, defTotal0, defRoll0, defCategory,
+            rerollSides = [] } = ctx;
+
+    const partsOf = (side, total) => (side === "atk")
+      ? ClashManager._buildTotalParts({
+          actor: atkActor, opponent: defActor, rollTotal: total, bonus: atkBonus,
+          baseFormula: atkFormula, category: atkCategory, isDefender: false })
+      : ClashManager._buildTotalParts({
+          actor: defActor, opponent: atkActor, rollTotal: total, bonus: defBonus,
+          baseFormula: defFormula, category: defCategory, isDefender: true });
+    const sum   = (parts) => parts.reduce((a, p) => a + (p.value ?? 0), 0);
+    const apOf  = (actor) => actor?.system?.ap?.value ?? 0;
+
+    const MAX_ROUNDS = 20;           // 平局不扣行动值，兜底防止死循环
+    let round   = 0;
+    let atkCur  = atkTotal0;
+    let defCur  = defTotal0;
+
+    while (round < MAX_ROUNDS) {
+      round++;
+      let atkRoll = atkRoll0, defRoll = defRoll0;
+      if (round > 1) {
+        // 连击途中只重跑 [拼点时]（【流血】也挂在这里，会再发作一次）
+        await ClashManager._applyActivitiesAndEquip(atkItem, "拼点时", atkCtx);
+        await ClashManager._applyActivitiesAndEquip(defItem, "拼点时", defCtx);
+        await ClashManager._processBleed(atkActor);
+        await ClashManager._processBleed(defActor);
+
+        atkRoll = new Roll(atkFormula + (atkBonus ? `${atkBonus > 0 ? "+" : ""}${atkBonus}` : ""));
+        defRoll = new Roll(defFormula + (defBonus ? `${defBonus > 0 ? "+" : ""}${defBonus}` : ""));
+        await atkRoll.evaluate();
+        await defRoll.evaluate();
+        ClashManager.applyDiceRollMods(atkActor, atkRoll, { item: atkItem, isDefense: false });
+        ClashManager.applyDiceRollMods(defActor, defRoll, { item: defItem, isDefense: true });
+        atkCur = atkRoll.total ?? 0;
+        defCur = defRoll.total ?? 0;
+      }
+
+      const aParts = partsOf("atk", atkCur);
+      const dParts = partsOf("def", defCur);
+      const aEff = sum(aParts), dEff = sum(dParts);
+
+      // 本次是否可能是最后一次：任意一方行动值为 0，输了就要吃伤害
+      const decisive = apOf(atkActor) <= 0 || apOf(defActor) <= 0;
+      // DiceSoNice 只在第一次与最后一次播放
+      const withDice = round === 1 || decisive;
+
+      await ClashTotalFX.play({
+        atkParts: aParts, defParts: dParts,
+        rerollSides: round === 1 ? rerollSides : [],
+        label: decisive && round > 1 ? "最后一击" : "",
+        startDice: withDice
+          ? () => ClashManager._showDiceEach([
+              { roll: atkRoll, actor: atkActor }, { roll: defRoll, actor: defActor },
+            ])
+          : null,
+      });
+
+      if (aEff === dEff) continue;                  // 平局：不扣行动值，再拼一次
+
+      const loser = aEff > dEff ? defActor : atkActor;
+      if (apOf(loser) <= 0) break;                  // 行动值耗尽，这一次定胜负
+
+      await ClashManager._safeDocUpdate(loser, { "system.ap.value": apOf(loser) - 1 });
+    }
+
+    return { atkTotal: atkCur, defTotal: defCur, rounds: round };
   }
 
   /* ─── 阶段五b：拼点结算逻辑 ────────────────────────────────────────────── */
@@ -3060,9 +3129,6 @@ export class ClashManager {
       await ClashManager._reduceBuffStacks(resolution.winner, "breathing");
     }
     if (resolution.dodgeWin) {
-      const curAp = defActor.system.ap?.value ?? 0;
-      const maxAp = defActor.system.ap?.max ?? 3;
-      await defActor.update({ "system.ap.value": Math.min(curAp + 1, maxAp) });
     }
 
     await ClashManager._sendResolveMsg(resolution,

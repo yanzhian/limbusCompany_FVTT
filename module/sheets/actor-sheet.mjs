@@ -207,8 +207,10 @@ export class LimbusActorSheet extends ActorSheet {
     // ── 混乱阈值（HP条刻度） ──────────────────────────────────────────────
     context.chaosThresholds = system.chaosThresholds ?? [];
 
-    // ── 战斗行动值显示（3枚硬币） ─────────────────────────────────────────
-    context.apCoins = [0, 1, 2].map(i => ({ index: i, active: i < (system.ap.value ?? 0) }));
+    // ── 战斗行动值显示（行动值无上限，至少画 3 枚硬币） ──────────────────
+    const apVal = system.ap.value ?? 0;
+    context.apCoins = Array.from({ length: Math.max(3, apVal) },
+      (_, i) => ({ index: i, active: i < apVal }));
 
     // ── 罪孽抗性（战斗 Tab 显示，供 EGO 修改后实时刷新） ─────────────────
     const SINS = cfg.SINS ?? ["wrath","lust","sloth","gluttony","gloom","pride","envy"];
@@ -1298,12 +1300,7 @@ export class LimbusActorSheet extends ActorSheet {
     const item   = this.actor.items.get(itemId);
     if (!item) return;
 
-    // 与战斗 Tab 同步：AP 不足时拦截
-    if ((this.actor.system.ap?.value ?? 0) <= 0) {
-      ui.notifications?.warn("行动值不足，无法发起对抗");
-      return;
-    }
-    // slotIndex = -2：扣 AP 但不推进 6-bag（非战斗槽触发）
+    // slotIndex = -2：不推进 6-bag（非战斗槽触发）
     await this._showClashDialog(item, -2);
   }
 
@@ -1325,23 +1322,16 @@ export class LimbusActorSheet extends ActorSheet {
       ui.notifications.warn("数量不足。"); return;
     }
 
-    // 装备 / 守备技能激活：消耗 1 行动值
-    const needsAp = item.type === "equipment"
+    // 装备 / 守备技能激活不再消耗行动值，仍要做[使用时]次数预检
+    const needsCheck = item.type === "equipment"
       || (item.type === "skill" && item.system?.type === "defense");
-    if (needsAp) {
-      const curAp = this.actor.system?.ap?.value ?? 0;
-      const label = item.type === "equipment" ? "装备" : "守备技能";
-      if (curAp < 1) {
-        ui.notifications.warn(`行动值不足，无法激活${label}。`); return;
-      }
-      // 预检：若所有[使用时]效果均已达到次数限制，拒绝本次使用并给出黄色警告
+    if (needsCheck) {
       const { blocked, reasons } = ClashManager._checkAllActivitiesBlocked(item, "使用时", this.actor);
       if (blocked) {
         const detail = reasons.length ? `（${reasons.join("；")}）` : "";
         ui.notifications.warn(`【${item.name}】的使用次数已达上限，本次使用被取消。${detail}`);
         return;
       }
-      await this.actor.update({ "system.ap.value": curAp - 1 });
     }
 
     // Activity 效果可能涉及群体目标（其他玩家角色），非GM无权直接 update
@@ -1426,7 +1416,6 @@ export class LimbusActorSheet extends ActorSheet {
       { name: "卸下",      icon: "<i class='fas fa-times'></i>",   callback: () => this.actor.unequipSkill(itemId) },
       { name: "查看/编辑", icon: "<i class='fas fa-edit'></i>",    callback: () => item.sheet.render(true) },
       { name: "发起对抗",  icon: "<i class='fas fa-swords'></i>",  callback: () => {
-          if ((this.actor.system.ap?.value ?? 0) <= 0) { ui.notifications?.warn("行动值不足，无法发起对抗"); return; }
           this._showClashDialog(item, -2);
         } },
       { name: "发送聊天框",icon: "<i class='fas fa-comment'></i>", callback: () => item.sendToChat?.() },
@@ -1873,12 +1862,6 @@ export class LimbusActorSheet extends ActorSheet {
     const itemId = $slot.attr("data-item-id");
     if (!itemId) return;
 
-    // AP 不足时拦截，保留视觉状态但阻止操作
-    if ((this.actor.system.ap?.value ?? 0) <= 0) {
-      ui.notifications?.warn("行动值不足，无法使用技能");
-      return;
-    }
-
     const slotIndex = parseInt($slot.attr("data-slot-index") ?? "0");
 
     const item = this.actor.items.get(itemId);
@@ -2026,11 +2009,11 @@ export class LimbusActorSheet extends ActorSheet {
     const current = this.actor.system.ap.value;
     // 点击已使用硬币 → 恢复；点击未使用硬币 → 使用
     const newVal  = idx < current ? idx : idx + 1;
-    await this.actor.update({ "system.ap.value": Math.min(3, Math.max(0, newVal)) });
+    await this.actor.update({ "system.ap.value": Math.max(0, newVal) });
   }
 
   async _onApReset(event) {
-    await this.actor.update({ "system.ap.value": this.actor.system.ap.max });
+    await this.actor.update({ "system.ap.value": this.actor.system.ap.max ?? 3 });
   }
 
   /* ─── BUFF 管理 ─────────────────────────────────────────────────────────── */

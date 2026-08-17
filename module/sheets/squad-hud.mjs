@@ -134,9 +134,8 @@ export class SquadHUD extends Application {
       // 理智颜色阶段
       const sanClass = sanVal <= 5 ? "san-panic" : sanVal <= 20 ? "san-low" : "san-normal";
 
-      // AP 硬币（最多3个）
-      const apMax   = sys.ap?.max ?? 3;
-      const apCoins = Array.from({ length: apMax }, (_, i) => ({ active: i < apVal }));
+      // AP 硬币（行动值无上限，至少画 3 个）
+      const apCoins = Array.from({ length: Math.max(3, apVal) }, (_, i) => ({ active: i < apVal }));
 
       // BUFF（只显示本回合有效的）
       const buffs = (sys.buffs ?? [])

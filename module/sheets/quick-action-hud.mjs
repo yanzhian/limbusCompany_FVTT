@@ -290,10 +290,10 @@ export class QuickActionHUD extends Application {
     const cfg = CONFIG.LIMBUSCOMPANY ?? {};
 
     // AP 硬币
-    const apCoins = [0, 1, 2].map(i => ({
-      index:  i,
-      active: i < (sys.ap?.value ?? 0),
-    }));
+    // 行动值无上限，至少画 3 枚硬币
+    const apVal   = sys.ap?.value ?? 0;
+    const apCoins = Array.from({ length: Math.max(3, apVal) },
+      (_, i) => ({ index: i, active: i < apVal }));
 
     // 状态 BUFF：仅显示本回合有效的（排除"下回合"）
     const activeBuffs = (sys.buffs ?? []).filter(b => b.whenAdded !== "下回合");
@@ -415,7 +415,7 @@ export class QuickActionHUD extends Application {
       const idx    = parseInt(e.currentTarget.dataset.index);
       const cur    = this._actor.system.ap.value;
       const newVal = idx < cur ? idx : idx + 1;
-      await this._actor.update({ "system.ap.value": Math.min(3, Math.max(0, newVal)) });
+      await this._actor.update({ "system.ap.value": Math.max(0, newVal) });
     });
 
     // ── 面板展开/折叠按钮 ─────────────────────────────────────────────────
@@ -577,14 +577,6 @@ export class QuickActionHUD extends Application {
   async _activateItem(item) {
     if (item.type === "consumable" && (item.system.quantity ?? 0) <= 0) {
       ui.notifications.warn("数量不足。"); return;
-    }
-    // 装备激活消耗 1 行动值
-    if (item.type === "equipment") {
-      const curAp = this._actor?.system?.ap?.value ?? 0;
-      if (curAp < 1) {
-        ui.notifications.warn("行动值不足，无法激活装备。"); return;
-      }
-      await this._actor.update({ "system.ap.value": curAp - 1 });
     }
     await ClashManager._applyActivities(item, "使用时", {
       owner: this._actor, atkActor: this._actor, defActor: null, _fireCounts: {},
@@ -904,11 +896,6 @@ export class QuickActionHUD extends Application {
       ui.notifications.warn("不能对自己发起对抗");
       return;
     }
-    if ((actor.system.ap?.value ?? 0) <= 0) {
-      ui.notifications.warn(`${actor.name} 行动值不足，无法发起对抗`);
-      return;
-    }
-
     // 确保战斗袋已初始化（状态存在模块级 Map 中，按 actorId 索引，
     // 关闭角色卡也不会丢失）
     this._ensureBagState();
