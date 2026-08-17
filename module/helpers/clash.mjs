@@ -781,6 +781,7 @@ export class ClashManager {
     const msgs = [];
     if (!target) return { blasts: 0, msgs };
     let blasts = 0;
+    ClashTotalFX.broadcastSfx("tremor");
 
     for (let n = 0; n < Math.max(1, Math.round(times)); n++) {
       // 每轮都重新读取：上一轮已经改过层数

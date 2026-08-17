@@ -49,7 +49,9 @@ export class ClashTotalFX {
    * - add   骰子落定后，等级差/BUFF 等加值逐条浮现时，每条"当"一声
    * - break 硬币碎裂（3 个候选）
    * - win   败方已经没有硬币可碎，这一败即决出胜负（3 个候选）
-   * - hit   【伤害结算】命中
+   * - hit   【伤害结算】命中（3 个候选）
+   * - tremor 【震颤引爆】
+   * - chaos  进入【混乱阈值】
    * 数组即多个候选，每次随机挑一个，避免连击时听着重复。
    */
   static AUDIO = "systems/limbusCompany_FVTT/assets/audio";
@@ -57,7 +59,9 @@ export class ClashTotalFX {
     add:   `${ClashTotalFX.AUDIO}/clash_number_tick.wav`,
     break: [1, 2, 3].map(i => `${ClashTotalFX.AUDIO}/clash_coin_break_${i}.wav`),
     win:   [1, 2, 3].map(i => `${ClashTotalFX.AUDIO}/clash_win_${i}.wav`),
-    hit:   `${ClashTotalFX.AUDIO}/clash_hit.wav`,
+    hit:   [1, 2, 3].map(i => `${ClashTotalFX.AUDIO}/clash_hit_${i}.wav`),
+    tremor: `${ClashTotalFX.AUDIO}/clash_tremor_burst.wav`,
+    chaos:  `${ClashTotalFX.AUDIO}/clash_chaos.wav`,
   };
 
   /** 【伤害结算】那一次演出的中央字样 */
@@ -124,6 +128,10 @@ export class ClashTotalFX {
       this._remoteSignals = null;
       return;
     }
+    if (msg?.type === "clashFxSfx") {
+      this._sfx(msg.key, msg.volume ?? 0.8);
+      return;
+    }
     if (msg?.type === "clashFxSettle") {
       this._remoteSignals?.[msg.side]?.resolve();
     }
@@ -149,6 +157,16 @@ export class ClashTotalFX {
       const helper = foundry?.audio?.AudioHelper ?? globalThis.AudioHelper;
       helper?.play?.({ src, volume, autoplay: true, loop: false }, false);
     } catch (err) { /* 忽略：音效不该影响演出 */ }
+  }
+
+  /**
+   * 播放音效并广播给其他客户端。
+   * 战斗结算大多只在一台机器上跑（常常是 GM 端），像【震颤引爆】【混乱阈值】
+   * 这种全场都该听见的声音要走这里。
+   */
+  static broadcastSfx(key, volume = 0.8) {
+    this._sfx(key, volume);
+    this._emit({ type: "clashFxSfx", key, volume });
   }
 
   /* ─── DOM ─────────────────────────────────────────────────────────────── */

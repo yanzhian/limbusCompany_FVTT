@@ -939,6 +939,10 @@ export class LimbusActor extends Actor {
       "system.buffs":           newBuffs,
     });
 
+    // 混乱阈值被击穿：全场都该听见
+    const { ClashTotalFX } = await import("../helpers/clash-total-fx.mjs");
+    ClashTotalFX.broadcastSfx("chaos");
+
     // silent=true 时调用方已在取血消息中展示混乱触发信息，无需再创建独立消息
     if (!silent) {
       const pctList  = burnedIdxs.map(i => thresholds[i].percent + "%").join("、");
