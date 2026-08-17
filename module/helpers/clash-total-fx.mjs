@@ -86,8 +86,27 @@ export class ClashTotalFX {
   /** 系统 socket 频道（与 ClashManager 共用同一条） */
   static SOCKET = "system.limbusCompany_FVTT";
 
-  /** 远端播放时，各方"骰子已落定"的等待句柄 */
-  static _remoteSignals = null;
+  /**
+   * 远端播放时，各方"骰子已落定"的等待句柄，按本次演出的 id 索引。
+   * 一次连击会连着广播好几段演出，用单个槽位会被后来的覆盖，
+   * 先前那段就只能傻等 15 秒兜底——PL 那边"很久之后才响"就是这么来的。
+   */
+  static _remoteSignals = new Map();
+
+  /** 已经收到、但那段演出还在队列里没轮到播的落定信号 */
+  static _settledEarly = new Set();
+
+  /** 远端播放队列：广播来得比播得快，必须排队，否则几段演出会在同一块 DOM 上打架 */
+  static _queue = Promise.resolve();
+
+  static _enqueue(fn) {
+    this._queue = this._queue.then(fn).catch(err => console.error("[LimbusFX]", err));
+    return this._queue;
+  }
+
+  /** 本次演出的 id（广播与落定信号靠它配对） */
+  static _fxId = 0;
+  static _nextFxId() { return `${game.userId ?? "u"}-${++this._fxId}`; }
 
   static _emit(payload) {
     try { game.socket?.emit?.(this.SOCKET, payload); } catch (err) { /* 单机或断线时忽略 */ }
@@ -105,53 +124,75 @@ export class ClashTotalFX {
    * 其余客户端据此播放同一套演出，定格时机与本地保持一致。
    */
   static async handleSocketMsg(msg) {
-    if (msg?.type === "clashFxStart") {
+    if (msg?.type === "clashFxSfx") {
+      this._sfx(msg.key, msg.volume ?? 0.8);
+      return;
+    }
+    if (msg?.type === "clashFxSettle") {
+      const slot = this._remoteSignals.get(msg.fxId);
+      // 那段演出还排在队列里没开始播：先记下来，轮到它时立即落定
+      if (slot) slot[msg.side]?.resolve();
+      else this._settledEarly.add(`${msg.fxId}:${msg.side}`);
+      return;
+    }
+    if (msg?.type !== "clashFxStart") return;
+
+    // 排队播放：一次连击会连着广播好几段，必须一段播完再播下一段
+    this._enqueue(async () => {
+      const fxId    = msg.fxId ?? "";
       const signals = { atk: this._deferred(), def: this._deferred() };
-      this._remoteSignals = signals;
+      this._remoteSignals.set(fxId, signals);
+      for (const side of ["atk", "def"]) {
+        const key = `${fxId}:${side}`;
+        if (this._settledEarly.delete(key)) signals[side].resolve();
+      }
+      // 兜底：本地那段若因故没发落定信号，也不至于卡住整条队列
+      const guard = setTimeout(() => { signals.atk.resolve(); signals.def.resolve(); }, 15000);
+
       const common = {
         atkParts: msg.atkParts ?? [], defParts: msg.defParts ?? [], broadcast: false,
         atkDiceType: msg.atkDiceType ?? "default", defDiceType: msg.defDiceType ?? "default",
         atkCoins: msg.atkCoins ?? 0, defCoins: msg.defCoins ?? 0,
         noBreak: !!msg.noBreak, hitSfx: !!msg.hitSfx,
       };
-      if (msg.mode === "solo") {
-        const side = msg.side ?? "atk";
-        await this.playSolo({
-          side, parts: msg.parts ?? [], reroll: !!msg.reroll, label: msg.label ?? "",
-          diceType: msg.diceType ?? "default", coins: msg.coins ?? 0, broadcast: false,
-          startDice: () => [signals[side].promise],
-        });
-      } else if (msg.mode === "seq") {
-        await this.playSequence({
-          order: msg.order ?? ["def", "atk"], parts: msg.parts ?? {},
-          diceType: msg.diceType ?? {}, coins: msg.coins ?? {},
-          hitOn: msg.hitOn ?? [], label: msg.label ?? "", broadcast: false,
-        });
-      } else {
-        await this.play({
-          ...common, rerollSides: msg.rerollSides ?? [], label: msg.label ?? "",
-          // 远端不知道本次是否有骰子动画：有 clashFxSettle 就等，没有就按固定时长
-          startDice: msg.withDice === false ? null
-            : () => [signals.atk.promise, signals.def.promise],
-        });
+
+      try {
+        if (msg.mode === "solo") {
+          const side = msg.side ?? "atk";
+          await this.playSolo({
+            side, parts: msg.parts ?? [], reroll: !!msg.reroll, label: msg.label ?? "",
+            diceType: msg.diceType ?? "default", coins: msg.coins ?? 0, broadcast: false,
+            startDice: () => [signals[side].promise],
+          });
+        } else if (msg.mode === "seq") {
+          await this.playSequence({
+            order: msg.order ?? ["def", "atk"], parts: msg.parts ?? {},
+            diceType: msg.diceType ?? {}, coins: msg.coins ?? {},
+            hitOn: msg.hitOn ?? [], label: msg.label ?? "", broadcast: false,
+            startDice: (side) => [signals[side].promise],
+          });
+        } else {
+          await this.play({
+            ...common, rerollSides: msg.rerollSides ?? [], label: msg.label ?? "",
+            // 该段本地没掷骰子时，远端也按固定时长滚，不必等落定信号
+            startDice: msg.withDice === false ? null
+              : () => [signals.atk.promise, signals.def.promise],
+          });
+        }
+      } finally {
+        clearTimeout(guard);
+        this._remoteSignals.delete(fxId);
+        this._settledEarly.delete(`${fxId}:atk`);
+        this._settledEarly.delete(`${fxId}:def`);
       }
-      this._remoteSignals = null;
-      return;
-    }
-    if (msg?.type === "clashFxSfx") {
-      this._sfx(msg.key, msg.volume ?? 0.8);
-      return;
-    }
-    if (msg?.type === "clashFxSettle") {
-      this._remoteSignals?.[msg.side]?.resolve();
-    }
+    });
   }
 
   /** 本地等待各方骰子动画，同时把"已落定"广播出去，让远端同步定格 */
-  static _wrapSignals(signals, sides, broadcast) {
+  static _wrapSignals(signals, sides, broadcast, fxId = "") {
     return signals.map((p, i) => Promise.resolve(p).then(
-      () => { if (broadcast) this._emit({ type: "clashFxSettle", side: sides[i] }); },
-      () => { if (broadcast) this._emit({ type: "clashFxSettle", side: sides[i] }); },
+      () => { if (broadcast) this._emit({ type: "clashFxSettle", side: sides[i], fxId }); },
+      () => { if (broadcast) this._emit({ type: "clashFxSettle", side: sides[i], fxId }); },
     ));
   }
 
@@ -501,9 +542,10 @@ export class ClashTotalFX {
     if (!this._enabled()) { await startDice?.(); return; }
 
     const sides = ["atk", "def"];
+    const fxId  = this._nextFxId();
     // 先让其他客户端把黑条切进来，双方同步开演
     if (broadcast) {
-      this._emit({ type: "clashFxStart", mode: "play", atkParts, defParts, rerollSides, label,
+      this._emit({ type: "clashFxStart", fxId, mode: "play", atkParts, defParts, rerollSides, label,
                    atkDiceType, defDiceType, atkCoins, defCoins, noBreak, hitSfx,
                    withDice: !!startDice });
     }
@@ -521,7 +563,7 @@ export class ClashTotalFX {
     if (startDice) {
       // 有骰子动画的交锋（第一次与最后一次）：数字滚到各自骰子落定才定格
       const raw = (await startDice()) ?? [];
-      const [atkSignal, defSignal] = this._wrapSignals(raw, sides, broadcast);
+      const [atkSignal, defSignal] = this._wrapSignals(raw, sides, broadcast, fxId);
       await Promise.all([
         this._rollUntil(atkNum, atkParts[0]?.value ?? 0, atkSignal),
         this._rollUntil(defNum, defParts[0]?.value ?? 0, defSignal),
@@ -567,8 +609,9 @@ export class ClashTotalFX {
                               hitOn = [], label = "", startDice = null, broadcast = true } = {}) {
     if (!this._enabled()) { for (const side of order) startDice?.(side); return; }
 
+    const fxId = this._nextFxId();
     if (broadcast) {
-      this._emit({ type: "clashFxStart", mode: "seq", order, parts, diceType, coins, hitOn, label });
+      this._emit({ type: "clashFxStart", fxId, mode: "seq", order, parts, diceType, coins, hitOn, label });
     }
 
     for (const [i, side] of order.entries()) {
@@ -578,8 +621,9 @@ export class ClashTotalFX {
         dice:  { [side]: { count: coins[side] ?? 0, type: diceType[side] ?? "default" } },
       });
       const numEl = this._band(side).querySelector(".lcfx-num");
-      const raw    = startDice?.(side);
-      const signal = Array.isArray(raw) ? raw[0] : raw;
+      const raw     = startDice?.(side);
+      const rawOne  = Array.isArray(raw) ? raw[0] : raw;
+      const [signal] = rawOne ? this._wrapSignals([rawOne], [side], broadcast, fxId) : [null];
       // 本地有骰子动画就等它落定，远端（无骰子）按固定时长滚
       if (signal) await this._rollUntil(numEl, sideParts[0]?.value ?? 0, signal);
       else        await this._rollFor(numEl, sideParts[0]?.value ?? 0);
@@ -608,14 +652,15 @@ export class ClashTotalFX {
     if (!this._enabled()) { await startDice?.(); return; }
 
     const sides = [side];
-    if (broadcast) this._emit({ type: "clashFxStart", mode: "solo", side, parts, reroll, label, diceType, coins });
+    const fxId  = this._nextFxId();
+    if (broadcast) this._emit({ type: "clashFxStart", fxId, mode: "solo", side, parts, reroll, label, diceType, coins });
 
     await this._enterExchange(sides, {
       reroll: reroll ? [side] : [], label,
       dice: { [side]: { count: coins, type: diceType } },
     });
 
-    const [signal] = this._wrapSignals((await startDice?.()) ?? [], sides, broadcast);
+    const [signal] = this._wrapSignals((await startDice?.()) ?? [], sides, broadcast, fxId);
     await this._rollUntil(this._band(side).querySelector(".lcfx-num"), parts[0]?.value ?? 0, signal);
 
     await this._sleep(260);
