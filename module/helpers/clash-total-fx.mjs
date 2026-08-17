@@ -81,12 +81,13 @@ export class ClashTotalFX {
       const common = {
         atkParts: msg.atkParts ?? [], defParts: msg.defParts ?? [], broadcast: false,
         atkDiceType: msg.atkDiceType ?? "default", defDiceType: msg.defDiceType ?? "default",
+        atkCoins: msg.atkCoins ?? 0, defCoins: msg.defCoins ?? 0,
       };
       if (msg.mode === "solo") {
         const side = msg.side ?? "atk";
         await this.playSolo({
           side, parts: msg.parts ?? [], reroll: !!msg.reroll, label: msg.label ?? "",
-          diceType: msg.diceType ?? "default", broadcast: false,
+          diceType: msg.diceType ?? "default", coins: msg.coins ?? 0, broadcast: false,
           startDice: () => [signals[side].promise],
         });
       } else {
@@ -242,20 +243,15 @@ export class ClashTotalFX {
     });
   }
 
-  /* ─── 骰子条（TOTAL 上方的硬币）──────────────────────────────────────── */
+  /* ─── 硬币条（TOTAL 上方）────────────────────────────────────────────
+     硬币 = 行动值，也就是"还能输几次"。每输一次交锋碎一枚，与行动值同步。
+     ──────────────────────────────────────────────────────────────────── */
 
-  /** 从基础公式里读出骰数，如 "3D6+2" → 3 */
-  static _diceCount(formula = "") {
-    const m = /(\d*)\s*[dD]\s*\d+/.exec(String(formula));
-    if (!m) return 0;
-    return Math.min(12, Math.max(1, parseInt(m[1] || "1")));
-  }
-
-  /** 按骰数在 TOTAL 上方摆出硬币 */
-  static _buildDice(side, formula, type = "default") {
+  /** 按行动值在 TOTAL 上方摆出硬币 */
+  static _buildDice(side, count = 0, type = "default") {
     const box = this._band(side).querySelector(".lcfx-dice");
     box.replaceChildren();
-    for (let i = 0; i < this._diceCount(formula); i++) {
+    for (let i = 0; i < Math.min(12, Math.max(0, count)); i++) {
       const img = document.createElement("img");
       img.className = "lcfx-die" + (type === "unbreakable" ? " lcfx-die--unbreak" : "");
       img.src = this.DICE_ICON[type] ?? this.DICE_ICON.default;
@@ -330,7 +326,7 @@ export class ClashTotalFX {
     // 硬币条只在一侧首次入场时生成，连击途中沿用（会被逐次打碎）
     for (const side of entering) {
       const d = dice[side];
-      if (d) this._buildDice(side, d.formula, d.type);
+      if (d) this._buildDice(side, d.count, d.type);
     }
     chain.sides = [...new Set([...chain.sides, ...sides])];
     if (entering.length) await this._bandsIn(entering);
@@ -418,6 +414,7 @@ export class ClashTotalFX {
    */
   static async play({ atkParts = [], defParts = [], rerollSides = [], label = "",
                       atkDiceType = "default", defDiceType = "default",
+                      atkCoins = 0, defCoins = 0,
                       startDice = null, broadcast = true } = {}) {
     if (!this._enabled()) { await startDice?.(); return; }
 
@@ -425,12 +422,12 @@ export class ClashTotalFX {
     // 先让其他客户端把黑条切进来，双方同步开演
     if (broadcast) {
       this._emit({ type: "clashFxStart", mode: "play", atkParts, defParts, rerollSides, label,
-                   atkDiceType, defDiceType, withDice: !!startDice });
+                   atkDiceType, defDiceType, atkCoins, defCoins, withDice: !!startDice });
     }
 
     await this._enterExchange(sides, { reroll: rerollSides, label, dice: {
-      atk: { formula: atkParts[0]?.name ?? "", type: atkDiceType },
-      def: { formula: defParts[0]?.name ?? "", type: defDiceType },
+      atk: { count: atkCoins, type: atkDiceType },
+      def: { count: defCoins, type: defDiceType },
     } });
 
     const atkNum = this._band("atk").querySelector(".lcfx-num");
@@ -474,15 +471,16 @@ export class ClashTotalFX {
    * @param {Function} opts.startDice 返回 [该方 DiceSoNice 动画的 Promise]
    */
   static async playSolo({ side = "atk", parts = [], reroll = false, label = "",
-                          diceType = "default", startDice = null, broadcast = true } = {}) {
+                          diceType = "default", coins = 0,
+                          startDice = null, broadcast = true } = {}) {
     if (!this._enabled()) { await startDice?.(); return; }
 
     const sides = [side];
-    if (broadcast) this._emit({ type: "clashFxStart", mode: "solo", side, parts, reroll, label, diceType });
+    if (broadcast) this._emit({ type: "clashFxStart", mode: "solo", side, parts, reroll, label, diceType, coins });
 
     await this._enterExchange(sides, {
       reroll: reroll ? [side] : [], label,
-      dice: { [side]: { formula: parts[0]?.name ?? "", type: diceType } },
+      dice: { [side]: { count: coins, type: diceType } },
     });
 
     const [signal] = this._wrapSignals((await startDice?.()) ?? [], sides, broadcast);

@@ -2487,6 +2487,10 @@ export class ClashManager {
     if (defCategory === "counter" || defCategory === "block") {
       await ClashTotalFX.play({
         rerollSides: _rerollShow.map(e => e.side),
+        atkCoins: atkActor?.system?.ap?.value ?? 0,
+        defCoins: defActor?.system?.ap?.value ?? 0,
+        atkDiceType: atkItem?.system?.diceType ?? "default",
+        defDiceType: defItem?.system?.diceType ?? "default",
         atkParts: ClashManager._buildTotalParts({
           actor: atkActor, opponent: defActor,
           rollTotal: atkFinalTotal ?? 0, bonus: atkBonusVal,
@@ -2738,6 +2742,10 @@ export class ClashManager {
       await ClashTotalFX.play({
         atkParts: aParts, defParts: dParts,
         rerollSides: round === 1 ? rerollSides : [],
+        // 硬币 = 行动值：还能输几次，每输一次碎一枚
+        atkCoins: apOf(atkActor), defCoins: apOf(defActor),
+        atkDiceType: atkItem?.system?.diceType ?? "default",
+        defDiceType: defItem?.system?.diceType ?? "default",
         // DiceSoNice 只在第一次交锋掷，之后的交锋数字滚一下即可
         startDice: round === 1
           ? () => ClashManager._showDiceEach([
@@ -2766,6 +2774,8 @@ export class ClashManager {
       const winActor = winSide === "atk" ? atkActor : defActor;
       await ClashTotalFX.playSolo({
         side: winSide, parts: winParts, label: "伤害结算",
+        coins: apOf(winActor),
+        diceType: (winSide === "atk" ? atkItem : defItem)?.system?.diceType ?? "default",
         startDice: () => ClashManager._showDiceEach([{ roll: winRoll, actor: winActor }]),
       });
     }
@@ -3254,6 +3264,7 @@ export class ClashManager {
       const takeBonus = parseInt(String(initFlags.formula ?? "").slice(takeBase.length)) || 0;
       await ClashTotalFX.playSolo({
         side:  "atk",
+        coins: atkActor?.system?.ap?.value ?? 0,
         parts: ClashManager._buildTotalParts({
           actor: atkActor, opponent: selActor,
           rollTotal: initFlags.rollTotal ?? 0, bonus: takeBonus,
@@ -3308,6 +3319,7 @@ export class ClashManager {
         await ClashTotalFX.playSolo({
           side:   "atk",
           reroll: true,
+          coins:  atkActor?.system?.ap?.value ?? 0,
           parts:  ClashManager._buildTotalParts({
             actor: atkActor, opponent: baseActor,
             rollTotal: rerollAtk.total, bonus: parseInt(bonusPart) || 0,
