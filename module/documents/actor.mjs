@@ -244,7 +244,7 @@ export class CharacterData extends foundry.abstract.TypeDataModel {
     const xpTable = CONFIG.LIMBUSCOMPANY?.LEVEL_XP ?? [];
     this.xp.next = xpTable[level] ?? (xpTable[xpTable.length - 1] ?? 0);
 
-    // 行动点上限固定 3
+    // 行动值不再有上限：ap.max 只作为"回合开始时恢复到的默认值"
     this.ap.max = 3;
   }
 
@@ -938,6 +938,10 @@ export class LimbusActor extends Actor {
       "system.ap.value":        0,
       "system.buffs":           newBuffs,
     });
+
+    // 混乱阈值被击穿：全场都该听见
+    const { ClashTotalFX } = await import("../helpers/clash-total-fx.mjs");
+    ClashTotalFX.broadcastSfx("chaos");
 
     // silent=true 时调用方已在取血消息中展示混乱触发信息，无需再创建独立消息
     if (!silent) {

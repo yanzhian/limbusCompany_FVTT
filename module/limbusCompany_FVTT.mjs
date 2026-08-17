@@ -36,6 +36,8 @@ import { QuickActionHUD }   from "./sheets/quick-action-hud.mjs";
 import { registerItemPiles } from "./helpers/item-piles.mjs";
 import { ChaosTokenLabel }   from "./helpers/chaos-token-label.mjs";
 import { ClashTotalFX }     from "./helpers/clash-total-fx.mjs";
+import { ClashKnockback } from "./helpers/knockback.mjs";
+import { ClashVFX }       from "./helpers/clash-vfx.mjs";
 
 /* ─── Item Piles 联动注册 ─────────────────────────────────────────────────── */
 
@@ -90,6 +92,11 @@ Hooks.once("init", () => {
 
   // 暴露 SinResourceHUD 到全局，供宏/控制台调用
   globalThis.SinResourceHUD = SinResourceHUD;
+  // 调试用：控制台里可直接 ClashTotalFX.DEBUG = true 观察 TOTAL 演出参数
+  globalThis.ClashTotalFX = ClashTotalFX;
+  // 击退系统：ClashKnockback.ENABLED = false 可随时整套关掉
+  globalThis.ClashKnockback = ClashKnockback;
+  globalThis.ClashVFX = ClashVFX;
 
   // 注册全局罪孽资源 setting（需在 init 阶段注册 setting）
   SinResourceHUD.init();
@@ -100,6 +107,7 @@ Hooks.once("init", () => {
     await SinResourceHUD.handleSocketMsg(msg);
     await ClashManager.handleSocketMsg(msg);
     await ClashTotalFX.handleSocketMsg(msg);
+    ClashVFX.handleSocketMsg(msg);
     await LimbusMerchantSheet.handleSocketMsg(msg);
     await LimbusCampSheet.handleSocketMsg(msg);
     await LimbusLootSheet.handleSocketMsg(msg);
@@ -239,6 +247,27 @@ Hooks.once("ready", () => {
 // 画布每次就绪时再次确保双击补丁存在（重连/重载场景后仍生效）
 Hooks.on("canvasReady", () => {
   _installTokenDoubleClickOpenActorSheet();
+});
+
+/* ─── 物品侧边栏：批量导入按钮（仅 GM） ─────────────────────────────────── */
+
+Hooks.on("renderItemDirectory", (app, html) => {
+  if (!game.user.isGM) return;
+  // v13 传入原生 HTMLElement，旧版传 jQuery，这里统一取原生节点
+  const root = html instanceof HTMLElement ? html : html?.[0];
+  const header = root?.querySelector(".directory-header .header-actions")
+              ?? root?.querySelector(".directory-header");
+  if (!header || header.querySelector(".limbus-csv-import")) return;
+
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "limbus-csv-import";
+  btn.innerHTML = `<i class="fas fa-file-csv"></i> 批量导入`;
+  btn.addEventListener("click", async () => {
+    const { CSVImportDialog } = await import("./sheets/csv-import-dialog.mjs");
+    CSVImportDialog.open();
+  });
+  header.appendChild(btn);
 });
 
 /* ─── 对抗结算触发：GM 端捕获玩家委托的结算请求 ──────────────────────────── */
@@ -587,10 +616,13 @@ Hooks.on("updateCombat", async (combat, changed) => {
       });
       await actor.triggerPanicActivities?.("panic");
     }
-    // 一轮结束进入下一轮：非恐慌角色补满行动点
+    // 一轮结束进入下一轮：行动值恢复到默认值（已高于默认值的不动，也不封顶）
     // （第 0→1 轮由 combatStart 钩子已处理，跳过）
     else if ((changed.round ?? 0) > 1) {
-      await actor.update({ "system.ap.value": actor.system.ap.max ?? 3 });
+      const apDefault = actor.system.ap?.max ?? 3;
+      if ((actor.system.ap?.value ?? 0) < apDefault) {
+        await actor.update({ "system.ap.value": apDefault });
+      }
     }
 
 
@@ -853,6 +885,32 @@ function _registerSettings() {
     type:    Boolean,
     default: true,
   });
+
+  // 演出节奏：一回合往往要打好几次拼点，标准节奏容易拖沓
+  game.settings.register("limbusCompany_FVTT", "knockbackMode", {
+    name:    "击退模式",
+    hint:    "开启后，贴身拼点每次分出胜负都会按胜方点数把对手击退（10/20/30 点 → 1/2/3 格），"
+           + "胜方随即瞬移追击；被击退的一方背后若是墙则撞墙，触发【震颤引爆】。"
+           + "关闭则双方始终原地对拼。由 GM 设定，对全场生效。",
+    scope:   "world",
+    config:  true,
+    type:    Boolean,
+    default: true,
+  });
+
+  game.settings.register("limbusCompany_FVTT", "clashTotalFxSpeed", {
+    name:    "拼点 TOTAL 演出节奏",
+    hint:    "缩放演出各阶段的时长（不含骰子动画本身——那取决于 Dice So Nice 的动画速度设置）。",
+    scope:   "client",
+    config:  true,
+    type:    String,
+    choices: {
+      slow:     "慢速（默认的 3 倍时长）",
+      standard: "默认",
+      fast:     "快速（默认的 1/3 时长）",
+    },
+    default: "standard",
+  });
 }
 
 /**
@@ -878,6 +936,7 @@ async function _preloadTemplates() {
     "systems/limbusCompany_FVTT/templates/item/background-sheet.hbs",
     "systems/limbusCompany_FVTT/templates/apps/background-wizard.hbs",
     "systems/limbusCompany_FVTT/templates/apps/level-up-dialog.hbs",
+    "systems/limbusCompany_FVTT/templates/apps/csv-import.hbs",
     // Combat
     "systems/limbusCompany_FVTT/templates/combat/combat-hud.hbs",
     // Partials

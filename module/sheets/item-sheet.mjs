@@ -619,10 +619,7 @@ export class LimbusItemSheet extends ItemSheet {
     const item  = this.item;
     const actor = item.parent ?? null;
     if (!actor) { ui.notifications.warn("请从角色卡背包发起对抗。"); return; }
-    if ((actor.system.ap?.value ?? 0) <= 0) {
-      ui.notifications.warn("行动值不足，无法发起对抗");
-      return;
-    }
+    // 行动值不再是使用技能的门槛，它代表可承受的拼点失败次数
     await ClashManager.showInitiateDialog(actor, item, -2);
   }
 
@@ -635,17 +632,14 @@ export class LimbusItemSheet extends ItemSheet {
       const qty = item.system.quantity ?? 0;
       if (qty <= 0) { ui.notifications.warn("数量不足。"); return; }
     }
-    // 守备技能激活消耗 1 AP（与角色卡路径保持一致）
+    // 守备技能激活不再消耗行动值，但仍要做[使用时]次数预检
     if (item.type === "skill" && item.system?.type === "defense" && actor) {
-      const curAp = actor.system?.ap?.value ?? 0;
-      if (curAp < 1) { ui.notifications.warn("行动值不足，无法激活守备技能。"); return; }
       const { blocked, reasons } = ClashManager._checkAllActivitiesBlocked(item, "使用时", actor);
       if (blocked) {
         const detail = reasons.length ? `（${reasons.join("；")}）` : "";
         ui.notifications.warn(`【${item.name}】的使用次数已达上限，本次使用被取消。${detail}`);
         return;
       }
-      await actor.update({ "system.ap.value": curAp - 1 });
     }
     await ClashManager._applyActivities(item, "使用时", {
       owner: actor, atkActor: actor, defActor: null, _fireCounts: {}, _actMsgs: [],

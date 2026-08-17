@@ -132,8 +132,8 @@
     <div class="combat-section ap-initiative-section">
       <div class="combat-section-header">
         <span class="combat-section-title">行动值 / 先攻</span>
-        <button class="ap-reset-btn" title="恢复行动点至上限">重置</button>
-        <button class="ap-clear-btn" title="清零所有行动点">清除</button>
+        <button class="ap-reset-btn" title="恢复行动值至默认值（3）">重置</button>
+        <button class="ap-clear-btn" title="清零行动值">清除</button>
         <button class="roll-initiative-btn" title="骰掷先攻：1D6 + 敏捷">骰掷先攻</button>
       </div>
       <div class="ap-initiative-row">
@@ -142,7 +142,7 @@
           {{#each apCoins}}
             <div class="ap-coin {{#if active}}ap-coin-active{{else}}ap-coin-inactive{{/if}}"
                  data-index="{{index}}"
-                 title="行动点 {{index}}">
+                 title="行动值 {{index}}（拼点失败时消耗，为 0 时再失败即受到伤害）">
               <img src="{{#if active}}systems/limbusCompany_FVTT/assets/icons/Base_icon/硬币_正面.webp{{else}}systems/limbusCompany_FVTT/assets/icons/Base_icon/硬币_反面.webp{{/if}}"
                    width="36" height="36" alt="AP">
             </div>

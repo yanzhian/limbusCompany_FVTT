@@ -1,0 +1,700 @@
+/**
+ * csv-import.mjs — 物品批量导入（CSV / TSV）
+ *
+ * 用途：把 Excel / 表格里整理好的物品数据一次性导入为世界物品或合集包物品，
+ * 免去逐个手动录入。
+ *
+ * 设计要点：
+ *   - 解析：自建 RFC4180 风格解析器（支持引号包裹、字段内换行、"" 转义、BOM、
+ *     CRLF）。分隔符可自动嗅探（, / ; / Tab）。
+ *   - 列头：既支持直接写 schema 路径（如 `system.atkAdj`），也支持中文别名
+ *     （如 `攻击修正`）。别名表见 COLUMN_ALIASES。
+ *   - 取值：按 TypeDataModel schema 的字段类型自动转换（数字 / 布尔 / 字符串
+ *     数组 / 对象），而不是硬编码字段列表——新增 schema 字段后无需改这里。
+ *   - 只做纯数据处理，不碰 DOM，方便单独调用：
+ *       const rows = parseDelimited(text);
+ *       const { items, errors } = buildItemData(rows, "equipment");
+ *       await Item.createDocuments(items);
+ */
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  分隔符文本解析
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * 嗅探分隔符：取首行（忽略引号内内容）出现次数最多的候选。
+ * @param {string} text
+ * @returns {string}
+ */
+export function sniffDelimiter(text) {
+  const candidates = ["\t", ",", ";"];
+  let firstLine = "";
+  let inQuotes = false;
+  for (const ch of text) {
+    if (ch === '"') inQuotes = !inQuotes;
+    if (!inQuotes && (ch === "\n" || ch === "\r")) break;
+    firstLine += ch;
+  }
+  let best = ",";
+  let bestCount = 0;
+  for (const d of candidates) {
+    const n = firstLine.split(d).length - 1;
+    if (n > bestCount) { best = d; bestCount = n; }
+  }
+  return best;
+}
+
+/**
+ * 解析 CSV / TSV 文本为二维数组。
+ * @param {string} text        原始文本
+ * @param {string} [delimiter] 分隔符，缺省自动嗅探
+ * @returns {string[][]}       行 → 单元格
+ */
+export function parseDelimited(text, delimiter) {
+  if (typeof text !== "string") return [];
+  // 去 BOM，统一换行
+  let src = text.replace(/^﻿/, "").replace(/\r\n?/g, "\n");
+  const d = delimiter || sniffDelimiter(src);
+
+  const rows = [];
+  let row = [];
+  let cell = "";
+  let inQuotes = false;
+
+  for (let i = 0; i < src.length; i++) {
+    const ch = src[i];
+
+    if (inQuotes) {
+      if (ch === '"') {
+        if (src[i + 1] === '"') { cell += '"'; i++; }   // "" → 字面引号
+        else inQuotes = false;
+      } else cell += ch;
+      continue;
+    }
+
+    if (ch === '"' && cell === "") { inQuotes = true; continue; }
+    if (ch === d)    { row.push(cell); cell = ""; continue; }
+    if (ch === "\n") { row.push(cell); rows.push(row); row = []; cell = ""; continue; }
+    cell += ch;
+  }
+  // 收尾（文件末尾没有换行时）
+  if (cell !== "" || row.length) { row.push(cell); rows.push(row); }
+
+  // 丢弃完全空白的行
+  return rows.filter(r => r.some(c => String(c).trim() !== ""));
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  列头别名
+// ═══════════════════════════════════════════════════════════════════════════
+
+/** 需要专门解析的"虚拟列"标记（不是直接的 schema 路径） */
+const IGNORE      = "__ignore";
+const V_CATEGORY  = "__category";
+const V_CAPACITY  = "__capacity";
+const V_GRID      = "__grid";
+const V_DICE      = "__dice";
+const V_LEVEL     = "__level";
+const V_RESIST    = "__resist";
+const V_WEAK      = "__weak";
+const V_SIN_COST  = "__sinCost";
+const V_EGO_RES   = "__egoRes";
+
+/** 抗性 / 弱性列的倍率写法 */
+const RESIST_MULT = "x0.5";
+const WEAK_MULT   = "x2.0";
+
+/**
+ * 中文（及常见英文）列头 → 文档路径。
+ * 未列出的列头会被当作路径本身处理：
+ *   - `name` / `img` / `folder` 直接落在文档根上
+ *   - 其余没有前缀的列头视为 `system.<列头>`
+ */
+export const COLUMN_ALIASES = {
+  // ── 仅供表格自己看的列，导入时忽略 ────────────────────────────────────
+  "图标": IGNORE, "完成": IGNORE, "备注": IGNORE,
+  "区域1": IGNORE, "区域2": IGNORE, "区域3": IGNORE,
+  "区域4": IGNORE, "区域5": IGNORE, "区域6": IGNORE,
+
+  // ── 文档级 ────────────────────────────────────────────────────────────
+  "名称": "name", "名字": "name", "物品名": "name", "name": "name",
+  "图片": "img", "img": "img",
+  "文件夹": "folder", "folder": "folder",
+
+  // ── 通用 ──────────────────────────────────────────────────────────────
+  "分类": V_CATEGORY,               // 技能：斩击 / 反击-打击 / 可拼点反击-斩击；其余：自由文本
+  "标签": "system.tags",
+  "效果": "system.effect", "描述": "system.effect", "效果描述": "system.effect",
+  "副标题": "system.subtitle",
+  "简介": "system.description", "背景描述": "system.description",
+  "星芒": "system.stellarCost", "星芒费用": "system.stellarCost",
+  "容量": V_CAPACITY,               // "2x3" → capacity.w / capacity.h
+  "价格": "system.price", "售价": "system.price",
+  "数量": "system.quantity",
+  "库存": "system.stock",
+  "隐藏": "system.hidden",
+  "收藏": "system.favorited",
+
+  // ── 装备 ──────────────────────────────────────────────────────────────
+  "攻击等级": "system.atkAdj", "攻击修正": "system.atkAdj",
+  "防御等级": "system.defAdj", "防御修正": "system.defAdj",
+  "速度":     "system.speedAdj", "速度修正": "system.speedAdj",
+  "抗性": V_RESIST,                 // "打" → 打击抗性 x0.5
+  "弱性": V_WEAK,                   // "突" → 突刺抗性 x2.0
+  "斩击抗性": "system.resistanceAdj.slash",
+  "打击抗性": "system.resistanceAdj.blunt",
+  "突刺抗性": "system.resistanceAdj.pierce",
+  "穿刺抗性": "system.resistanceAdj.pierce",
+
+  // ── 技能 ──────────────────────────────────────────────────────────────
+  "罪孽": "system.sinType", "罪孽属性": "system.sinType",
+  "等级": V_LEVEL,               // 基础/守备写数字；EGO 写 ZAYIN/TET/HE/WAW/ALEPH
+  "骰数": V_DICE,                   // "1D4+2" → diceCount / diceFaces / baseValue
+  "加重值": "system.weight", "加重": "system.weight",
+  "骰类型": "system.diceType", "骰子类型": "system.diceType",
+  "无法装备": "system.noEquip",
+  "理智消耗": "system.sanityCost",
+  "罪孽资源消耗": V_SIN_COST,       // "暴怒2/嫉妒1"
+  "抗性修改": V_EGO_RES,            // "暴怒x0.5/嫉妒x2.0"
+  "EGO等级": "system.egoDiceRating", "ego等级": "system.egoDiceRating",
+  "武器限制": "system.weaponRestriction",
+  "技能描述": "system.effectDesc",
+
+  // ── 消耗品 / 材料 / 容器 ──────────────────────────────────────────────
+  "可复用": "system.reusable", "可重复使用": "system.reusable",
+  "无限耐久": "system.infinite", "无限": "system.infinite",
+  "内部数量": V_GRID,               // "4x8" → gridSize.width / height
+  "网格宽": "system.gridSize.width",
+  "网格高": "system.gridSize.height",
+};
+
+/** 子类型/枚举值的中文 → 内部值映射（大小写不敏感，按列路径区分） */
+const VALUE_ALIASES = {
+  "system.sinType": {
+    "暴怒": "wrath", "愤怒": "wrath", "色欲": "lust", "怠惰": "sloth",
+    "暴食": "gluttony", "忧郁": "gloom", "傲慢": "pride", "嫉妒": "envy",
+  },
+  "system.diceType": {
+    "": "normal", "-": "normal", "普通": "normal", "一般": "normal", "一般骰子": "normal",
+    "不可摧毁": "unbreakable", "不可破": "unbreakable", "斩断": "severing",
+  },
+};
+
+/** 「类型」列 → 物品类型 + 随类型固定的附加字段 */
+const TYPE_ALIASES = {
+  "基础技能": { type: "skill", extra: { "system.type": "basic" } },
+  "守备技能": { type: "skill", extra: { "system.type": "defense" } },
+  "EGO":     { type: "skill", extra: { "system.type": "ego" } },
+  "E.G.O":   { type: "skill", extra: { "system.type": "ego" } },
+  "上装":    { type: "equipment", extra: { "system.subtype": "upper" } },
+  "下装":    { type: "equipment", extra: { "system.subtype": "lower" } },
+  "武器":    { type: "equipment", extra: { "system.subtype": "weapon" } },
+  "饰品":    { type: "equipment", extra: { "system.subtype": "accessory" } },
+  "消耗品":  { type: "consumable", extra: {} },
+  "材料":    { type: "material",   extra: {} },
+  "容器":    { type: "container",  extra: {} },
+  "技能书":  { type: "skillbook",  extra: {} },
+  "恐慌卡":  { type: "panic",      extra: {} },
+  "背景":    { type: "background", extra: {} },
+};
+
+/** 攻击分类 / 守备分类的中文写法 */
+const ATTACK_CATS  = { "斩击": "slash", "打击": "blunt", "突刺": "pierce", "穿刺": "pierce" };
+const DEFENSE_CATS = {
+  "闪避": "dodge", "格挡": "block", "反击": "counter",
+  "可拼点格挡": "clashBlock", "拼点格挡": "clashBlock",
+  "可拼点反击": "clashCounter", "拼点反击": "clashCounter",
+};
+
+/**
+ * 把一个列头解析成文档路径。
+ * @param {string} header
+ * @returns {string|null} 路径；空列头返回 null
+ */
+export function resolveColumnPath(header) {
+  const raw = String(header ?? "").trim();
+  if (!raw) return null;
+  const alias = COLUMN_ALIASES[raw] ?? COLUMN_ALIASES[raw.toLowerCase()];
+  if (alias) return alias;   // 可能是 IGNORE 或 __xxx 虚拟列标记
+  // 已经是路径形式（system.xxx / flags.xxx / 根字段）
+  if (raw.startsWith("system.") || raw.startsWith("flags.")) return raw;
+  if (["name", "img", "folder", "type"].includes(raw)) return raw;
+  return `system.${raw}`;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  取值转换
+// ═══════════════════════════════════════════════════════════════════════════
+
+const TRUE_WORDS  = ["true", "1", "yes", "y", "是", "真", "有", "√", "✓", "on"];
+const FALSE_WORDS = ["false", "0", "no", "n", "否", "假", "无", "×", "off", ""];
+
+/**
+ * 取得某物品类型的 schema（TypeDataModel）。
+ * @param {string} itemType
+ * @returns {foundry.data.fields.SchemaField|null}
+ */
+function getSystemSchema(itemType) {
+  const model = CONFIG?.Item?.dataModels?.[itemType];
+  return model?.schema ?? null;
+}
+
+/**
+ * 同义字段兜底：不同物品类型里"描述"落在不同字段上
+ * （effect / effectDesc / description）。若别名给出的路径在该类型的 schema 中
+ * 不存在，则按同义组顺序找一个真实存在的字段。
+ * @param {string} path
+ * @param {string} itemType
+ * @returns {string}
+ */
+export function adjustPathForType(path, itemType) {
+  const schema = getSystemSchema(itemType);
+  if (!schema || !path.startsWith("system.")) return path;
+  const key = path.slice("system.".length);
+  if (schema.getField?.(key)) return path;
+
+  const SYNONYMS = [
+    ["effect", "effectDesc", "description"],
+    ["category", "typeName"],
+  ];
+  const group = SYNONYMS.find(g => g.includes(key));
+  if (!group) return path;
+  const hit = group.find(k => schema.getField?.(k));
+  return hit ? `system.${hit}` : path;
+}
+
+/**
+ * 按 schema 字段类型转换单元格文本。
+ * @param {string} path   完整路径（含 system. 前缀）
+ * @param {string} raw    单元格原文
+ * @param {string} itemType
+ * @returns {{ value:any }|{ error:string }}
+ */
+export function coerceValue(path, raw, itemType) {
+  const text = String(raw ?? "").trim();
+
+  // 文档根字段一律按字符串处理
+  if (!path.startsWith("system.")) return { value: text };
+
+  const fields = foundry.data?.fields ?? {};
+  const schema = getSystemSchema(itemType);
+  const field  = schema?.getField?.(path.slice("system.".length)) ?? null;
+
+  // 值别名（枚举中文写法）
+  const valueMap = VALUE_ALIASES[path];
+  if (valueMap) {
+    const mapped = valueMap[text] ?? valueMap[text.toUpperCase()];
+    if (mapped !== undefined) return { value: mapped };
+  }
+
+  // schema 里没有这个字段：保留原文，由调用方决定是否警告
+  if (!field) return { value: text, unknown: true };
+
+  // 数字
+  if (fields.NumberField && field instanceof fields.NumberField) {
+    if (text === "") return { value: field.initial ?? 0 };
+    const n = Number(text);
+    if (Number.isNaN(n)) return { error: `「${text}」不是数字` };
+    return { value: field.integer ? Math.round(n) : n };
+  }
+
+  // 布尔
+  if (fields.BooleanField && field instanceof fields.BooleanField) {
+    const low = text.toLowerCase();
+    if (TRUE_WORDS.includes(low))  return { value: true };
+    if (FALSE_WORDS.includes(low)) return { value: false };
+    return { error: `「${text}」不是布尔值（可填 是/否、true/false、1/0）` };
+  }
+
+  // 数组
+  if (fields.ArrayField && field instanceof fields.ArrayField) {
+    if (text === "") return { value: [] };
+    // 字符串数组（如 tags）：按 / 、 , 、； 分隔
+    if (fields.StringField && field.element instanceof fields.StringField) {
+      return { value: text.split(/[\/,，;；]/).map(s => s.trim()).filter(Boolean) };
+    }
+    // 复杂数组（如 activities）：要求填 JSON
+    try {
+      const parsed = JSON.parse(text);
+      if (!Array.isArray(parsed)) return { error: `「${path}」需要 JSON 数组` };
+      return { value: parsed };
+    } catch {
+      return { error: `「${path}」的 JSON 解析失败` };
+    }
+  }
+
+  // 纯对象字段：JSON
+  if (fields.ObjectField && field instanceof fields.ObjectField
+      && !(fields.SchemaField && field instanceof fields.SchemaField)) {
+    if (text === "") return { value: {} };
+    try { return { value: JSON.parse(text) }; }
+    catch { return { error: `「${path}」的 JSON 解析失败` }; }
+  }
+
+  // 其余（StringField / HTMLField / SchemaField 的叶子等）按字符串
+  return { value: text };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  虚拟列解析（一列写多个字段 / 需要拆分的写法）
+// ═══════════════════════════════════════════════════════════════════════════
+
+/** "-" 与空串在表里都表示"没有"，统一按空处理 */
+const isBlank = (t) => t === "" || t === "-" || t === "—" || t === "/";
+
+/**
+ * 【分类】列。
+ * - 攻击类技能：斩击 / 打击 / 突刺
+ * - 守备类技能：闪避 / 格挡 / 反击-打击 / 可拼点反击-斩击
+ *   连字符后面是反击伤害类型，拆成 category + counterType 两个字段。
+ * - 其余物品（消耗品/材料/容器/装备）：自由文本，原样写入。
+ */
+function parseCategory(text, itemType) {
+  if (isBlank(text)) return {};
+  if (itemType !== "skill") return { "system.category": text };
+
+  const [head, tail] = text.split(/[-－—]/).map(t => (t ?? "").trim());
+  const def = DEFENSE_CATS[head];
+  if (def) {
+    const out = { "system.category": def };
+    if (tail && ATTACK_CATS[tail]) out["system.counterType"] = ATTACK_CATS[tail];
+    return out;
+  }
+  const atk = ATTACK_CATS[head];
+  return atk ? { "system.category": atk } : { "system.category": text };
+}
+
+/** 【骰数】列："1D4+2" / "1d10" / "-" → diceCount / diceFaces / baseValue */
+function parseDice(text) {
+  if (isBlank(text)) return { "system.diceCount": 0 };
+  const m = /^\s*(\d*)\s*[dD]\s*(\d+)\s*(?:([+-])\s*(\d+))?\s*$/.exec(text);
+  if (!m) {
+    // 没有骰子、只有一个数字时视为纯基础值
+    const n = Number(text);
+    if (!Number.isNaN(n)) return { "system.diceCount": 0, "system.baseValue": Math.round(n) };
+    return { __error: `骰数「${text}」无法解析（应形如 1D4 或 1D4+2）` };
+  }
+  const [, count, faces, sign, bonus] = m;
+  const base = bonus ? (sign === "-" ? -Number(bonus) : Number(bonus)) : 0;
+  return {
+    "system.diceCount": count === "" ? 1 : Number(count),
+    "system.diceFaces": Number(faces),
+    "system.baseValue": Math.max(0, base),
+  };
+}
+
+/** 【容量】/【内部数量】列："2x3" → { w:2, h:3 } */
+function parseWxH(text) {
+  if (isBlank(text)) return null;
+  const m = /^\s*(\d+)\s*[xX×*]\s*(\d+)\s*$/.exec(text);
+  if (!m) return { __error: `「${text}」无法解析（应形如 2x3）` };
+  return { w: Number(m[1]), h: Number(m[2]) };
+}
+
+/** 【抗性】/【弱性】列："打" / "斩 突" → { resistanceAdj.blunt: "x0.5", … } */
+function parsePhysList(text, mult) {
+  if (isBlank(text)) return {};
+  const SHORT = { "斩": "slash", "打": "blunt", "突": "pierce", "刺": "pierce" };
+  const out = {};
+  for (const part of text.split(/[\/,，、\s]+/).map(t => t.trim()).filter(Boolean)) {
+    const key = SHORT[part] ?? ATTACK_CATS[part];
+    if (key) out[`system.resistanceAdj.${key}`] = mult;
+  }
+  return out;
+}
+
+/** EGO 等级评级 */
+const EGO_GRADES = ["ZAYIN", "TET", "HE", "WAW", "ALEPH"];
+
+/**
+ * 【等级】列：基础/守备技能是数字等级；EGO 技能填的是评级（HE / WAW…），
+ * 同一列两种含义，按内容判断落到 level 还是 egoDiceRating。
+ */
+function parseLevel(text) {
+  if (isBlank(text)) return {};
+  const upper = text.toUpperCase().replace(/[.\s]/g, "");
+  if (EGO_GRADES.includes(upper)) return { "system.egoDiceRating": upper };
+  const n = Number(text);
+  if (Number.isNaN(n)) return { __error: `等级「${text}」无法解析（数字或 ZAYIN/TET/HE/WAW/ALEPH）` };
+  return { "system.level": Math.round(n) };
+}
+
+/** 罪孽名的匹配用正则片段（按长度倒序，避免短名先匹配掉） */
+function sinNamePattern() {
+  return Object.keys(VALUE_ALIASES["system.sinType"])
+    .sort((a, b) => b.length - a.length).join("|");
+}
+
+/**
+ * 【罪孽资源消耗】列："暴怒2，怠惰2，傲慢4"，也允许不写分隔符连着排。
+ * 一律用扫描式匹配，分隔符（/ , ，、空格）有没有都不影响。
+ */
+function parseSinCost(text) {
+  if (isBlank(text)) return {};
+  const sins = VALUE_ALIASES["system.sinType"];
+  const re   = new RegExp(`(${sinNamePattern()})\\s*(\\d+)`, "g");
+  const list = [];
+  let m;
+  while ((m = re.exec(text)) !== null) {
+    list.push({ sinType: sins[m[1]], amount: Number(m[2]) });
+  }
+  if (!list.length) return { __error: `罪孽资源消耗「${text}」无法解析（应形如 暴怒2，怠惰2）` };
+  return { "system.sinCost": list };
+}
+
+/**
+ * 【抗性修改】列："暴怒x0.5傲慢x0.5怠惰x2.0嫉妒x2.0"
+ * 实际表里是不带分隔符连写的，同样用扫描式匹配。
+ */
+function parseEgoRes(text) {
+  if (isBlank(text)) return {};
+  const sins = VALUE_ALIASES["system.sinType"];
+  const re   = new RegExp(`(${sinNamePattern()})\\s*[xX×]\\s*([\\d.]+)`, "g");
+  const list = [];
+  let m;
+  while ((m = re.exec(text)) !== null) {
+    list.push({ sinType: sins[m[1]], multiplier: `x${Number(m[2]).toFixed(1)}` });
+  }
+  if (!list.length) return { __error: `抗性修改「${text}」无法解析（应形如 暴怒x0.5傲慢x2.0）` };
+  return { "system.egoResistanceAdj": list };
+}
+
+/**
+ * 解析一个虚拟列，返回 { 路径: 值 } 映射或 { __error }。
+ */
+function parseVirtualColumn(marker, text, itemType) {
+  switch (marker) {
+    case V_CATEGORY: return parseCategory(text, itemType);
+    case V_DICE:     return parseDice(text);
+    case V_LEVEL:    return parseLevel(text);
+    case V_RESIST:   return parsePhysList(text, RESIST_MULT);
+    case V_WEAK:     return parsePhysList(text, WEAK_MULT);
+    case V_SIN_COST: return parseSinCost(text);
+    case V_EGO_RES:  return parseEgoRes(text);
+    case V_CAPACITY: {
+      const r = parseWxH(text);
+      if (!r) return {};
+      if (r.__error) return r;
+      return { "system.capacity.w": r.w, "system.capacity.h": r.h };
+    }
+    case V_GRID: {
+      const r = parseWxH(text);
+      if (!r) return {};
+      if (r.__error) return r;
+      return { "system.gridSize.width": r.w, "system.gridSize.height": r.h };
+    }
+    default: return {};
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  行 → 物品数据
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * 把解析后的表格转换成可直接交给 Item.createDocuments 的数据数组。
+ *
+ * 表格第一行必须是列头。若表中含有 `type` 列（或列头写 `类型`），则每行各自
+ * 决定物品类型；否则使用 defaultType。
+ *
+ * @param {string[][]} rows          parseDelimited 的结果
+ * @param {string}     defaultType   缺省物品类型
+ * @returns {{ items:object[], errors:string[], warnings:string[] }}
+ */
+export function buildItemData(rows, defaultType) {
+  const errors   = [];
+  const warnings = [];
+  const items    = [];
+
+  if (!rows.length) return { items, errors: ["表格是空的。"], warnings };
+
+  const headerRow = rows[0];
+  const paths = headerRow.map(h => {
+    const t = String(h ?? "").trim();
+    if (t === "类型" || t.toLowerCase() === "type") return "type";
+    return resolveColumnPath(h);
+  });
+
+  if (!paths.some(p => p === "name")) {
+    errors.push("缺少「名称」列（列头写 名称 或 name）。");
+    return { items, errors, warnings };
+  }
+
+  const validTypes = Object.keys(CONFIG?.Item?.dataModels ?? {});
+  const unknownReported = new Set();
+  const typeIdx = paths.indexOf("type");
+
+  for (let r = 1; r < rows.length; r++) {
+    const row    = rows[r];
+    const lineNo = r + 1;
+
+    // ── 先定类型：中文写法（基础技能 / 上装 / 消耗品…）映射到物品类型，
+    //    并带出随类型固定的字段（技能的 system.type、装备的 system.subtype）──
+    let itemType = defaultType;
+    let typeExtra = {};
+    if (typeIdx >= 0) {
+      const t = String(row[typeIdx] ?? "").trim();
+      if (t) {
+        const mapped = TYPE_ALIASES[t] ?? TYPE_ALIASES[t.toUpperCase()];
+        if (mapped) { itemType = mapped.type; typeExtra = mapped.extra; }
+        else        { itemType = t; }
+      }
+    }
+    if (validTypes.length && !validTypes.includes(itemType)) {
+      errors.push(`第 ${lineNo} 行：未知类型「${itemType}」`);
+      continue;
+    }
+
+    const data = { type: itemType, system: {} };
+    for (const [path, value] of Object.entries(typeExtra)) {
+      foundry.utils.setProperty(data, path, value);
+    }
+    let rowFailed = false;
+
+    for (let c = 0; c < paths.length; c++) {
+      const marker = paths[c];
+      if (!marker || marker === "type" || marker === IGNORE) continue;
+
+      const raw  = row[c];
+      if (raw === undefined) continue;
+      const text = String(raw).trim();
+
+      // ── 虚拟列：一列拆成多个字段 ──────────────────────────────────────
+      if (marker.startsWith("__")) {
+        const res = parseVirtualColumn(marker, text, itemType);
+        if (res.__error) {
+          errors.push(`第 ${lineNo} 行 · 列「${headerRow[c]}」：${res.__error}`);
+          rowFailed = true;
+          continue;
+        }
+        for (const [path, value] of Object.entries(res)) {
+          foundry.utils.setProperty(data, path, value);
+        }
+        continue;
+      }
+
+      const path = adjustPathForType(marker, itemType);
+      // 空单元格：跳过，保留 schema 默认值（"-" 同样视为留空）
+      if (isBlank(text) && path !== "name") continue;
+
+      const res = coerceValue(path, text, itemType);
+      if (res.error) {
+        errors.push(`第 ${lineNo} 行 · 列「${headerRow[c]}」：${res.error}`);
+        rowFailed = true;
+        continue;
+      }
+      // schema 里没有这个字段：跳过而不是硬写。
+      // 三种布局共用一张表时（材料/消耗品/容器同表），必然有些列对某些类型不适用，
+      // 硬写会往 system 里塞进 "FALSE" 这类无意义字符串。
+      if (res.unknown) {
+        const key = `${itemType}|${path}`;
+        if (!unknownReported.has(key)) {
+          unknownReported.add(key);
+          warnings.push(`列「${headerRow[c]}」对「${itemType}」不适用，已跳过。`);
+        }
+        continue;
+      }
+      foundry.utils.setProperty(data, path, res.value);
+    }
+
+    if (rowFailed) continue;
+
+    if (!String(data.name ?? "").trim()) {
+      errors.push(`第 ${lineNo} 行：名称为空，已跳过。`);
+      continue;
+    }
+
+    items.push(data);
+  }
+
+  return { items, errors, warnings };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  模板 CSV 生成
+// ═══════════════════════════════════════════════════════════════════════════
+
+/** 各类型的模板列（与实际编辑用的表格布局一致；「图标/完成/区域N」为表格自用，导入时忽略） */
+const TEMPLATE_COLUMNS = {
+  equipment:  ["图标", "完成", "名称", "类型", "攻击等级", "防御等级", "速度",
+               "抗性", "弱性", "分类", "星芒", "容量", "标签", "效果", "价格"],
+  skill:      ["图标", "完成", "名称", "类型", "分类", "罪孽", "等级", "骰数",
+               "加重值", "骰类型", "无法装备", "标签", "效果",
+               "理智消耗", "罪孽资源消耗", "抗性修改"],
+  consumable: ["图标", "完成", "名称", "类型", "分类", "可复用", "无限耐久", "星芒",
+               "容量", "标签", "效果", "价格", "内部数量"],
+  container:  ["图标", "完成", "名称", "类型", "分类", "可复用", "无限耐久", "星芒",
+               "容量", "标签", "效果", "价格", "内部数量"],
+  material:   ["图标", "完成", "名称", "类型", "分类", "可复用", "无限耐久", "星芒",
+               "容量", "标签", "效果", "价格", "内部数量"],
+  skillbook:  ["图标", "完成", "名称", "类型", "分类", "标签", "效果", "价格", "容量"],
+  panic:      ["图标", "完成", "名称", "类型", "标签", "效果"],
+  background: ["图标", "完成", "名称", "类型", "副标题", "分类", "标签", "简介"],
+};
+
+/** 模板示例行：给出各类型最典型的一条，照着改即可 */
+const TEMPLATE_EXAMPLE = {
+  equipment:  { "名称": "中指-怨恨纹身", "类型": "上装", "防御等级": "4", "抗性": "打",
+                "弱性": "突", "分类": "西服-纹身", "星芒": "1", "容量": "2x3",
+                "标签": "手指/中指", "价格": "240" },
+  skill:      { "名称": "七发魔弹", "类型": "E.G.O", "分类": "突刺", "罪孽": "傲慢",
+                "等级": "HE", "骰数": "1D2", "加重值": "1", "骰类型": "不可摧毁",
+                "标签": "E.G.O装备/脑叶公司", "理智消耗": "10",
+                "罪孽资源消耗": "暴怒2，怠惰2，傲慢4",
+                "抗性修改": "暴怒x0.5傲慢x0.5怠惰x2.0嫉妒x2.0" },
+  consumable: { "名称": "紧急恢复针剂", "类型": "消耗品", "分类": "医疗",
+                "可复用": "FALSE", "无限耐久": "FALSE", "星芒": "0",
+                "容量": "1x1", "价格": "30" },
+  container:  { "名称": "小型木箱", "类型": "容器", "分类": "建筑",
+                "容量": "3x2", "内部数量": "4x8" },
+  material:   { "名称": "绳索", "类型": "材料", "分类": "建材", "容量": "1x1" },
+  background: { "名称": "中指", "类型": "背景", "副标题": "中指-长兄", "分类": "帮派",
+                "标签": "中指/手指", "简介": "永不遗忘。中指的核心理念就是记仇。" },
+};
+
+/**
+ * 生成某物品类型的模板 CSV 文本（含 BOM，Excel 直接双击不乱码）。
+ * @param {string} itemType
+ * @returns {string}
+ */
+export function buildTemplateCSV(itemType) {
+  const cols = TEMPLATE_COLUMNS[itemType] ?? ["名称", "类型", "分类", "标签", "效果"];
+  const sample = TEMPLATE_EXAMPLE[itemType] ?? { "名称": "示例物品" };
+  const esc = (v) => {
+    const t = String(v ?? "");
+    return /[",\n]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t;
+  };
+  const example = cols.map(c => esc(sample[c] ?? ""));
+  return "﻿" + [cols.join(","), example.join(",")].join("\r\n") + "\r\n";
+}
+
+/** 各列的填写说明（对照表用） */
+const COLUMN_NOTES = {
+  "类型":     "决定物品类型：基础技能/守备技能/E.G.O/上装/下装/武器/饰品/消耗品/材料/容器",
+  "分类":     "技能：斩击、打击、突刺；守备可写 反击-打击、可拼点反击-斩击；其余类型为自由文本",
+  "等级":     "基础/守备填数字；E.G.O 填 ZAYIN/TET/HE/WAW/ALEPH",
+  "骰数":     "形如 1D4、1D4+2；留空或 - 表示无",
+  "骰类型":   "留空=一般骰子；可填 不可摧毁 / 斩断",
+  "抗性":     "斩/打/突，记 x0.5，可多写",
+  "弱性":     "斩/打/突，记 x2.0，可多写",
+  "容量":     "形如 2x3（背包占格）",
+  "内部数量": "形如 4x8（容器内部网格）",
+  "标签":     "用 / 或 、分隔",
+  "罪孽资源消耗": "形如 暴怒2，怠惰2，傲慢4（分隔符可省）",
+  "抗性修改": "形如 暴怒x0.5傲慢x0.5怠惰x2.0（分隔符可省）",
+  "无法装备": "填 是/否、TRUE/FALSE",
+  "可复用":   "填 是/否、TRUE/FALSE",
+  "无限耐久": "填 是/否、TRUE/FALSE",
+  "图标":     "表格自用，导入时忽略",
+  "完成":     "表格自用，导入时忽略",
+};
+
+/**
+ * 列出某物品类型的模板列与填写说明（供对照表展示）。
+ * @param {string} itemType
+ * @returns {{ header:string, note:string }[]}
+ */
+export function listAvailableColumns(itemType) {
+  const cols = TEMPLATE_COLUMNS[itemType] ?? ["名称", "类型", "分类", "标签", "效果"];
+  return cols.map(header => ({ header, note: COLUMN_NOTES[header] ?? "" }));
+}
