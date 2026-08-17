@@ -26,6 +26,14 @@ export class ClashKnockback {
   /** 总开关：想临时关掉整套斥力，把它置为 false 即可 */
   static ENABLED = true;
 
+  /** 判定落定 → 双方被震开 之间的停顿（ms） */
+  static DELAY_RECOIL = 160;
+
+  /** 震开 → 胜方追击 之间的停顿（ms）。太短会像两人在跳恰恰，留一拍才看得出"被弹开了，然后追上去" */
+  static DELAY_CHASE = 320;
+
+  static _wait(ms) { return new Promise(r => setTimeout(r, ms)); }
+
   static _log(...args) {
     const { ClashTotalFX } = globalThis;
     if (ClashTotalFX?.DEBUG) console.log("%c[Knockback]", "color:#E8C9A2;font-weight:bold", ...args);
@@ -126,6 +134,7 @@ export class ClashKnockback {
     if (!facing) { this._log("双方并非贴身，跳过斥力"); return; }
 
     this._log(`斥力：点数 ${winScore} → 各震退 ${cells} 格`);
+    await this._wait(this.DELAY_RECOIL);
 
     // ① 双方一起被震开，各自朝远离对方的方向
     const wallLose = await this._push(loseTok,  facing.dx,  facing.dy, cells);
@@ -138,6 +147,7 @@ export class ClashKnockback {
 
     // ③ 只有胜方追击，瞬移贴回败方身边（【伤害计算】那一下不追）
     if (!chase) return;
+    await this._wait(this.DELAY_CHASE);
     const gs = canvas.grid.size;
     const target = {
       x: loseTok.center.x - facing.dx * gs,
