@@ -8792,15 +8792,17 @@ input.item-piles-quantity {
    ═══════════════════════════════════════════════════════════════════════════ */
 
 #limbus-clash-fx {
-  --lcfx-angle:   12deg;    /* 黑条倾斜角 */
+  --lcfx-angle:   13deg;    /* 黑条倾斜角 */
   --lcfx-h:       290px;    /* 黑条厚度 */
-  --lcfx-offset:  297px;    /* 向画面外推出的距离（决定角落三角形大小） */
-  --lcfx-num:     121px;    /* TOTAL 数字字号 */
-  --lcfx-label:   46px;     /* "TOTAL" 字号 */
+  --lcfx-offset:  220px;    /* 向画面外推出的距离（决定角落三角形大小） */
+  --lcfx-num:     137px;    /* TOTAL 数字字号 */
+  --lcfx-label:   54px;     /* "TOTAL" 字号 */
   --lcfx-part:    30px;     /* 分段小条字号 */
-  --lcfx-die:     50px;     /* 硬币大小 */
-  --lcfx-die-gap: 10px;     /* 硬币间距 */
-  --lcfx-die-row: 25px;     /* 硬币条与 TOTAL 的距离 */
+  --lcfx-gap:     29px;     /* TOTAL / 数字 / 分段之间的间距 */
+  --lcfx-pad:     61vmax;   /* 黑条内容距画面边缘的距离 */
+  --lcfx-die:     55px;     /* 硬币大小 */
+  --lcfx-die-gap: 17px;     /* 硬币间距 */
+  --lcfx-die-row: 15px;     /* 硬币条与 TOTAL 的距离 */
   --lcfx-die-face: 20px;    /* 硬币上的点数字号（素材自带点数时不生效） */
   --lcfx-combo:   60px;     /* 连击字号 */
   --lcfx-combo-jitter: 80px;/* 连击随机落点范围 */
@@ -8825,7 +8827,7 @@ input.item-piles-quantity {
   background: var(--lcfx-bg);
   display: none;                 /* is-active 时才参与布局 */
   align-items: center;
-  gap: 28px;
+  gap: var(--lcfx-gap);
   opacity: 0;
   box-shadow: 0 0 40px rgba(0, 0, 0, .8);
 }
@@ -8842,7 +8844,7 @@ input.item-piles-quantity {
 #limbus-clash-fx .lcfx-row {
   display: flex;
   align-items: center;
-  gap: 28px;
+  gap: var(--lcfx-gap);
 }
 
 /* 骰子条（硬币）：一般骰子=硬币正面，【不可摧毁】=不可摧毁的硬币 */
@@ -8885,7 +8887,7 @@ input.item-piles-quantity {
   transform: rotate(var(--lcfx-angle)) translateY(160%);
   transform-origin: 50% 50%;
   justify-content: flex-start;
-  padding-left: 62vmax;
+  padding-left: var(--lcfx-pad);
   --lcfx-from-y: 160%;
 }
 /* 防守方：右上角，由上往下切入 */
@@ -8895,7 +8897,7 @@ input.item-piles-quantity {
   transform: rotate(var(--lcfx-angle)) translateY(-160%);
   transform-origin: 50% 50%;
   justify-content: flex-end;
-  padding-right: 62vmax;
+  padding-right: var(--lcfx-pad);
   --lcfx-from-y: -160%;
 }
 
