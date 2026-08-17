@@ -2866,8 +2866,9 @@ export class ClashManager {
         startDice: () => ClashManager._showDiceEach([{ roll: winRoll, actor: winActor }]),
       });
 
-      // 最后一击同样有斥力，但胜方不再追击
+      // 最后一击：刀剑相击处同样炸一朵，随后只震退、不追击
       const loseActor = winSide === "atk" ? defActor : atkActor;
+      ClashVFX.broadcastBurst(ClashVFX.midPoint(atkActor, defActor));
       await ClashKnockback.repel({
         winner: winActor, loser: loseActor,
         winScore: winParts.reduce((a, p) => a + (p.value ?? 0), 0),

@@ -887,6 +887,17 @@ function _registerSettings() {
   });
 
   // 演出节奏：一回合往往要打好几次拼点，标准节奏容易拖沓
+  game.settings.register("limbusCompany_FVTT", "knockbackMode", {
+    name:    "击退模式",
+    hint:    "开启后，贴身拼点每次分出胜负都会按胜方点数把对手击退（10/20/30 点 → 1/2/3 格），"
+           + "胜方随即瞬移追击；被击退的一方背后若是墙则撞墙，触发【震颤引爆】。"
+           + "关闭则双方始终原地对拼。由 GM 设定，对全场生效。",
+    scope:   "world",
+    config:  true,
+    type:    Boolean,
+    default: true,
+  });
+
   game.settings.register("limbusCompany_FVTT", "clashTotalFxSpeed", {
     name:    "拼点 TOTAL 演出节奏",
     hint:    "缩放演出各阶段的时长（不含骰子动画本身——那取决于 Dice So Nice 的动画速度设置）。",

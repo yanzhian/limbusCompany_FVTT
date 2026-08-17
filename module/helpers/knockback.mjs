@@ -25,8 +25,14 @@ export class ClashKnockback {
     { score: 10, cells: 1 },
   ];
 
-  /** 总开关：想临时关掉整套斥力，把它置为 false 即可 */
+  /** 代码侧的临时开关（控制台调试用）；正式开关是世界设定【击退模式】 */
   static ENABLED = true;
+
+  /** 是否启用：世界设定【击退模式】与本地开关都为真才生效 */
+  static get active() {
+    if (!this.ENABLED) return false;
+    return game.settings?.get?.("limbusCompany_FVTT", "knockbackMode") !== false;
+  }
 
   /** 判定落定 → 击退 之间的停顿（ms） */
   static DELAY_RECOIL = 160;
@@ -130,7 +136,7 @@ export class ClashKnockback {
    * @param {Function} opts.onWallHit 撞墙回调：(actor) => Promise，用来触发【震颤引爆】
    */
   static async repel({ winner, loser, winScore = 0, chase = true, onWallHit = null } = {}) {
-    if (!this.ENABLED || !canvas?.ready) return;
+    if (!this.active || !canvas?.ready) return;
 
     const cells = this.cellsFor(winScore);
     if (cells <= 0) return;
