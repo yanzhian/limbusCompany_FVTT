@@ -4438,6 +4438,9 @@ export class ClashManager {
             defaultYes: false,
           });
           if (!confirmed) continue;
+          // 先记账再执行：效果里可能又发起一次对抗，届时会重新走一遍反应检查，
+          // 不先扣次数就会自己触发自己
+          await ClashManager._bumpLimit(act, item, actor);
           // 执行效果
           for (const eff of (act.effects ?? [])) {
             await ClashManager._applyReactionEff(eff, item, actor, attacker, defender);
@@ -4635,10 +4638,39 @@ export class ClashManager {
   }
 
   /** 检查 Activity 次数限制（不计数，仅检查） */
+  /** 活动的计数键——与 _applyActivities 保持一致，两边共用同一份计数 */
+  static _actCountKey(item, act, trigger = "反应") {
+    return `${item?.id}_${act?.name ?? trigger}`;
+  }
+
+  /**
+   * 次数限制检查（perTurn / perEncounter）。
+   * 反应走的是 _checkAndOfferReactions 这条独立路径，不经过 _applyActivities，
+   * 因此计数必须在这里自己读、自己写（写在 _bumpLimit）。
+   */
   static _checkLimit(act, item, actor) {
-    if (!act.limit || act.limit.type === "unlimited") return true;
-    // 简单起见：如果没有火次计数存储，始终允许（计数由 _applyActivities 管理）
-    return true;
+    const limitType  = act?.limit?.type;
+    const limitCount = act?.limit?.count ?? 0;
+    if (!limitType || limitType === "unlimited" || limitCount <= 0) return true;
+    const flagKey = limitType === "perTurn" ? "turnFireCounts"
+                  : limitType === "perEncounter" ? "encounterFireCounts" : null;
+    if (!flagKey) return true;
+    const counts = actor?.getFlag?.("limbusCompany_FVTT", flagKey) ?? {};
+    return (counts[ClashManager._actCountKey(item, act)] ?? 0) < limitCount;
+  }
+
+  /** 记录一次触发（与 _applyActivities 写的是同一份 flag） */
+  static async _bumpLimit(act, item, actor) {
+    const limitType  = act?.limit?.type;
+    const limitCount = act?.limit?.count ?? 0;
+    if (!limitType || limitType === "unlimited" || limitCount <= 0 || !actor) return;
+    const flagKey = limitType === "perTurn" ? "turnFireCounts"
+                  : limitType === "perEncounter" ? "encounterFireCounts" : null;
+    if (!flagKey) return;
+    const counts = foundry.utils.deepClone(actor.getFlag?.("limbusCompany_FVTT", flagKey) ?? {});
+    const key    = ClashManager._actCountKey(item, act);
+    counts[key]  = (counts[key] ?? 0) + 1;
+    await ClashManager._safeDocUpdate(actor, { [`flags.limbusCompany_FVTT.${flagKey}`]: counts });
   }
 
   /**
