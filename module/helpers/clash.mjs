@@ -4507,6 +4507,18 @@ export class ClashManager {
       return ClashManager._cmp(curVal, pre.comparison ?? "lt", threshold);
     }
 
+    if (type === "background") {
+      // 背景：检查所选一方的"背景名称"或"背景标签"是否匹配
+      const want = String(pre.bgName ?? "").trim();
+      if (!want || !targetActor) return false;
+      const bgUuid = targetActor.system?.background?.uuid;
+      const bg = bgUuid ? await fromUuid(bgUuid).catch(() => null) : null;
+      if (!bg) return false;
+      if (bg.name === want) return true;
+      const tags = await ClashManager._getBackgroundTags(targetActor);
+      return tags.includes(want);
+    }
+
     if (type === "useSkill") {
       // lastSkillUuid 恒来自攻击方技能（广播时固定传 atkItem.uuid），故施放者视为 attacker
       if (!lastSkillUuid || !attacker) return false;
@@ -4705,9 +4717,19 @@ export class ClashManager {
         return;
       }
       // 非守备技能：发起对抗（反应触发，不消耗行动值：临时置 AP 为足够大再还原）
+      // reactTarget 决定这一击打谁：
+      //   defender（默认）＝触发者攻击的那个目标（例如友方打谁我就补刀谁）
+      //   attacker        ＝触发这次反应的人本身
+      //   none            ＝不指定，谁都能响应
       const curAP = actor.system?.ap?.value ?? 0;
       if (curAP <= 0) await ClashManager._safeDocUpdate(actor, { "system.ap.value": 1 });
-      await ClashManager.showInitiateDialog(actor, skillItem, -2);
+      const reactTarget = eff?.reactTarget ?? "defender";
+      let tgtId = "";
+      if (reactTarget === "defender") tgtId = defender?.id ?? "";
+      else if (reactTarget === "attacker") tgtId = attacker?.id ?? "";
+      // 指定目标不能是自己，否则发出的对抗卡没人能响应
+      if (tgtId === actor.id) tgtId = "";
+      await ClashManager.showInitiateDialog(actor, skillItem, -2, tgtId);
       return;
     }
     // 其他效果类型：构造只含此效果的临时活动，走 _applyActivities 路径

@@ -2074,7 +2074,7 @@ function _buildTriggerOpts(selected) {
 
 /** 前置条件行 HTML */
 function _buildCondRow(cond, idx, cfg) {
-  const condType   = ["perN","baseAttr","useSkill","buffCompare","category","fieldResource","sinResource","level"].includes(cond?.type) ? cond.type : "hasBuff";
+  const condType   = ["perN","baseAttr","useSkill","buffCompare","category","fieldResource","sinResource","level","background"].includes(cond?.type) ? cond.type : "hasBuff";
   const isBuffSec  = condType === "hasBuff" || condType === "perN" || condType === "buffCompare";
   const isAttrSec  = condType === "baseAttr";
   const isSkillSec = condType === "useSkill";
@@ -2082,6 +2082,7 @@ function _buildCondRow(cond, idx, cfg) {
   const isFieldSec = condType === "fieldResource";
   const isSinSec   = condType === "sinResource";
   const isLevelSec = condType === "level";
+  const isBgSec    = condType === "background";
   const isCompare  = condType === "buffCompare";
   const isPerN     = condType === "perN";
   const perNDim    = cond?.perNDim === "intensity" ? "intensity" : "stacks";
@@ -2132,6 +2133,7 @@ function _buildCondRow(cond, idx, cfg) {
           <option value="useSkill"    ${condType === "useSkill"    ? "selected" : ""}>使用技能</option>
           <option value="category"    ${condType === "category"    ? "selected" : ""}>使用分类</option>
           <option value="level"       ${condType === "level"       ? "selected" : ""}>使用等级</option>
+          <option value="background"  ${condType === "background"  ? "selected" : ""}>背景</option>
           <option value="fieldResource" ${condType === "fieldResource" ? "selected" : ""}>公用场地</option>
           <option value="sinResource"   ${condType === "sinResource"   ? "selected" : ""}>罪孽资源</option>
         </select>
@@ -2187,6 +2189,12 @@ function _buildCondRow(cond, idx, cfg) {
           <label class="ae-cond-cat-cb"><input type="checkbox" class="cond-category-cb" value="slash"  ${selCats.includes("slash")  ? "checked" : ""}> 斩击</label>
           <label class="ae-cond-cat-cb"><input type="checkbox" class="cond-category-cb" value="blunt"  ${selCats.includes("blunt")  ? "checked" : ""}> 打击</label>
           <label class="ae-cond-cat-cb"><input type="checkbox" class="cond-category-cb" value="pierce" ${selCats.includes("pierce") ? "checked" : ""}> 突刺</label>
+        </span>
+        <!-- 背景：检查所选一方的背景名称或背景标签 -->
+        <span class="ae-cond-bg-sec" ${isBgSec ? "" : 'style="display:none"'}>
+          <label>背景名/标签</label>
+          <input class="ae-input cond-bg-name" type="text"
+                 value="${_esc(cond?.bgName ?? "")}" placeholder="如：黎明事务所" style="width:130px;">
         </span>
         <span class="ae-cond-level-sec" ${isLevelSec ? "" : 'style="display:none"'}>
           <label>等级</label>
@@ -2545,6 +2553,14 @@ function _buildEffectRow(eff, idx, cfg) {
             <input class="ae-input eff-skill-name" type="text" list="ae-owned-skill-dl"
                    value="${_esc(eff?.skillName ?? "")}" placeholder="技能名字（在背包/技能列表中检索）" style="width:130px;" autocomplete="off">
           </span>
+          <!-- [反应] 里用这个技能打谁：默认打"触发者攻击的那个目标"（补刀），
+               其余触发时机下该选项不起作用 -->
+          <label>[反应]对谁</label>
+          <select class="ae-sel eff-react-target">
+            <option value="defender" ${(eff?.reactTarget ?? "defender") === "defender" ? "selected" : ""}>触发者的目标</option>
+            <option value="attacker" ${eff?.reactTarget === "attacker" ? "selected" : ""}>触发者本人</option>
+            <option value="none"     ${eff?.reactTarget === "none"     ? "selected" : ""}>不指定</option>
+          </select>
         </span>
         <span class="ae-eff-dicetypechg-sec" ${isDiceTypeChg ? "" : 'style="display:none"'}>
           <label>骰子类型</label>
@@ -2735,6 +2751,7 @@ function _bindCondType(html) {
     const isFieldSec = type === "fieldResource";
     const isSinSec   = type === "sinResource";
     const isLevelSec = type === "level";
+    const isBgSec    = type === "background";
     const isCompare  = type === "buffCompare";
     const isPerN     = type === "perN";
     const perNDim    = row.find(".cond-pern-dim").val() === "intensity" ? "intensity" : "stacks";
@@ -2746,6 +2763,7 @@ function _bindCondType(html) {
     row.find(".ae-cond-field-sec").toggle(isFieldSec);
     row.find(".ae-cond-sin-sec").toggle(isSinSec);
     row.find(".ae-cond-level-sec").toggle(isLevelSec);
+    row.find(".ae-cond-bg-sec").toggle(isBgSec);
     row.find(".ae-cond-target-sec").toggle(!isCatSec && !isFieldSec && !isSinSec && !isLevelSec);
     row.find(".ae-cond-pern-max").toggle(isPerN);
     row.find(".ae-cond-pern-dim-sec").toggle(isPerN);
@@ -2900,6 +2918,12 @@ function _readActivityForm(html, original) {
     } else if (condType === "category") {
       const cats = $r.find(".cond-category-cb:checked").map((_, el) => el.value).get();
       preconditions.push({ type: "category", categories: cats });
+    } else if (condType === "background") {
+      preconditions.push({
+        type:   "background",
+        target: $r.find(".cond-target").val() || "self",
+        bgName: $r.find(".cond-bg-name").val()?.trim() || "",
+      });
     } else if (condType === "level") {
       preconditions.push({
         type:       "level",
@@ -3063,6 +3087,7 @@ function _readActivityForm(html, original) {
         skillTag:   skillRef === "tag"  ? ($r.find(".eff-skill-tag").val()?.trim()  || "") : "",
         skillLevel: skillRef === "tag"  ? (parseInt($r.find(".eff-skill-level").val()) || 0) : 0,
         skillName:  skillRef === "name" ? ($r.find(".eff-skill-name").val()?.trim() || "") : "",
+        reactTarget: $r.find(".eff-react-target").val() || "defender",
         ..._readBgTagMeta($r, "eff"),
       });
       return;
