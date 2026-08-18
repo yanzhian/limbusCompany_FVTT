@@ -4199,6 +4199,13 @@ body.game .limbuscompany.app img {
   display: flex; align-items: center; gap: 6px; font-size: .8rem;
 }
 .limbuscompany .category-icon { object-fit: contain; flex-shrink: 0; }
+/* 解锁态的第二行：骰子类型 + 无法装备 / 援护防御 等开关
+   （锁上后它们变回徽章，回到 skill-cat-dice-row 里） */
+.limbuscompany .skill-flag-row {
+  display: flex; align-items: center; flex-wrap: wrap;
+  gap: 6px; margin-top: 3px; font-size: .8rem;
+}
+.limbuscompany .skill-flag-row .dice-type-sel { max-width: 96px; }
 .limbuscompany .dice-formula-display {
   font-size: .9rem; font-weight: bold; color: var(--text-main);
 }
