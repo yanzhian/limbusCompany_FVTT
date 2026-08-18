@@ -74,6 +74,11 @@
                 <input type="checkbox" name="system.noEquip" {{#if system.noEquip}}checked{{/if}}>
                 无法装备
               </label>
+              {{!-- 援护防御：队友被锁定且行动值为 0 时，可用本技能顶上去接下对抗 --}}
+              <label class="no-equip-toggle" title="【援护防御】专属技能：队友被锁定为目标且行动值为 0 时，可用它替队友接下这次对抗">
+                <input type="checkbox" name="system.coverDefense" {{#if system.coverDefense}}checked{{/if}}>
+                援护防御
+              </label>
             {{else}}
               {{#if system.category}}
                 <img src="{{lookup @root.config.CATEGORY_ICON_PATHS system.category}}" class="category-icon" width="22" height="22" alt="{{system.category}}">
@@ -84,6 +89,9 @@
               {{/if}}
               {{#if system.noEquip}}
                 <span class="dice-type-badge no-equip-badge">无法装备</span>
+              {{/if}}
+              {{#if system.coverDefense}}
+                <span class="dice-type-badge cover-defense-badge">援护防御</span>
               {{/if}}
             {{/if}}
           </div>

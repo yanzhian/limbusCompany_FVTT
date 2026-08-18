@@ -149,6 +149,7 @@ LIMBUSCOMPANY.BUFF_TYPES = {
   clashPowerUp:    "LIMBUSCOMPANY.Buff.ClashPowerUp",
   atkLevelUp:      "LIMBUSCOMPANY.Buff.AtkLevelUp",
   defLevelUp:      "LIMBUSCOMPANY.Buff.DefLevelUp",
+  coverDefense:    "援护防御",
   // 减益
   weak:            "LIMBUSCOMPANY.Buff.Weak",
   breach:          "LIMBUSCOMPANY.Buff.Breach",
@@ -178,7 +179,7 @@ LIMBUSCOMPANY.BUFF_TYPES = {
 
 /** 分组，用于 BUFF 下拉菜单 */
 LIMBUSCOMPANY.BUFF_GROUPS = {
-  positive: ["strong", "endure", "swift", "guard", "clashPowerUp", "atkLevelUp", "defLevelUp"],
+  positive: ["strong", "endure", "swift", "guard", "clashPowerUp", "atkLevelUp", "defLevelUp", "coverDefense"],
   negative: ["weak", "breach", "bind", "fragile", "clashPowerDown", "atkLevelDown", "defLevelDown"],
   special:  ["burn", "bleed", "tremor", "rupture", "sinking", "breathing", "charge", "chaos", "panic", "lowMorale"],
   other:    ["custom"],
@@ -205,6 +206,7 @@ LIMBUSCOMPANY.BUFF_DESCRIPTIONS = {
   atkLevelDown:   "攻击等级：每层 -1",
   defLevelUp:     "防御等级：每层 +1",
   defLevelDown:   "防御等级：每层 -1",
+  coverDefense:   "友方被锁定为目标、且其行动值为 0 时：可消耗 1 层，用背包里标有【援护防御】的专属技能顶上去，强制把攻击者的目标改为自己",
   burn:           "[回合结束时]：减少 1 层【烧伤】层数，受到【烧伤】强度的固定伤害",
   bleed:          "[攻击时]：减少 1 层【流血】层数，受到【流血】强度的固定伤害",
   tremor:         "受到【震颤引爆】攻击时：减少 1 层【震颤】层数，所有混乱阈值永久前移【震颤】强度百分比（直到长休重置）",

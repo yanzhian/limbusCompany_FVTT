@@ -383,6 +383,12 @@
 }
 .limbuscompany .no-equip-toggle input { margin: 0; }
 
+/* 援护防御：【援护防御】专属技能标记（队友被锁定且行动值为 0 时可顶上去） */
+.limbuscompany .cover-defense-badge {
+  background: #2A5F7A;
+  color: #D8EEFA;
+}
+
 /* 技能卡大图标：图片保持原始尺寸（60px 就显示 60px，不放大以免发糊），
    外面叠一层罪孽/等级边框。--skill-frame-scale 控制边框相对槽位的大小，
    调整外框松紧改这一个值即可。 */

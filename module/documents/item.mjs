@@ -193,6 +193,10 @@ export class SkillData extends foundry.abstract.TypeDataModel {
       // 只能由【相关技能转换】把已装备的技能替换成它
       noEquip: new fields.BooleanField({ required: false, initial: false }),
 
+      // 援护防御：标记为【援护防御】专属技能——队友被锁定且行动值为 0 时，
+      // 持有【援护防御】的角色可以用它顶上去替队友接下这次对抗
+      coverDefense: new fields.BooleanField({ required: false, initial: false }),
+
       // 标签
       tags: new fields.ArrayField(
         new fields.StringField({ required: true }),

@@ -142,15 +142,35 @@ export class ClashKnockback {
   static async approach(token, target) {
     const gs = canvas.grid.size;
     const dir = this._dirTo(token.center, target.center);
-    const spot = {
-      x: target.center.x - dir.dx * gs,
-      y: target.center.y - dir.dy * gs,
-    };
-    if (Math.hypot(spot.x - token.center.x, spot.y - token.center.y) < gs * 0.5) return true;
-    if (this._blocked(token, token.center, spot)) { this._log("贴身路线被挡"); return false; }
-    ClashVFX.broadcastDash({ ...token.center }, spot);
-    await this._teleport(token, spot);
-    return true;
+    // 首选正对着来的那一格，被占了就绕到目标身边其他空位
+    const spots = [
+      { x: target.center.x - dir.dx * gs, y: target.center.y - dir.dy * gs },
+      { x: target.center.x - gs, y: target.center.y },
+      { x: target.center.x + gs, y: target.center.y },
+      { x: target.center.x, y: target.center.y - gs },
+      { x: target.center.x, y: target.center.y + gs },
+    ];
+    for (const spot of spots) {
+      if (Math.hypot(spot.x - token.center.x, spot.y - token.center.y) < gs * 0.5) return true;
+      if (this._blocked(token, token.center, spot)) continue;
+      ClashVFX.broadcastDash({ ...token.center }, spot);
+      await this._teleport(token, spot);
+      return true;
+    }
+    this._log("贴身路线被挡，目标周围没有空位");
+    return false;
+  }
+
+  /**
+   * 【援护防御】等场合：把 actor 的 token 挪到 target 身旁的空位。
+   * 与击退模式无关，因此不看世界设定，始终可用。
+   */
+  static async moveNextTo(actor, target) {
+    if (!canvas?.ready) return false;
+    const tok = this._tokenOf(actor);
+    const tgt = this._tokenOf(target);
+    if (!tok || !tgt) return false;
+    return this.approach(tok, tgt);
   }
 
   /**

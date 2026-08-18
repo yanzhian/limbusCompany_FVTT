@@ -2158,6 +2158,118 @@ export class ClashManager {
       const sheet = actor.sheet;
       if (sheet?._combatBagState) sheet._animateCombatSkillUse?.(slotIndex);
     }
+
+    // 【援护防御】：被锁定的目标行动值为 0 时，问问队友要不要顶上来
+    await ClashManager._offerCoverDefense(msg?.id ?? "", msg?.flags?.limbusCompany_FVTT ?? {});
+  }
+
+  /* ─── 【援护防御】：替队友接下这次对抗 ─────────────────────────────────
+     指定了目标、且该目标行动值为 0（自己已经无法再接下任何一次拼点失败）时，
+     持有【援护防御】的队友可以消耗 1 层，用背包里标了【援护防御】的专属技能
+     顶上去——挪到攻击者身旁的空位，并把这次对抗的指定目标改成自己。      */
+
+  /** 广播询问（各客户端只处理自己拥有控制权的角色，避免多端重复弹框） */
+  static async _offerCoverDefense(msgId, initFlags) {
+    if (!msgId || !initFlags?.targetActorId) return;
+    game.socket?.emit("system.limbusCompany_FVTT", { type: "coverOffer", msgId, initFlags });
+    await ClashManager._checkCoverDefense(msgId, initFlags);
+  }
+
+  /** 本机检查：自己控制的角色里有谁能援护 */
+  static async _checkCoverDefense(msgId, initFlags) {
+    const target = game.actors.get(initFlags?.targetActorId ?? "");
+    if (!target) return;
+    // 只有"目标已经扛不住了"才需要援护
+    if ((target.system?.ap?.value ?? 0) > 0) return;
+
+    for (const actor of game.actors.contents) {
+      if (actor.type !== "character" || !actor.isOwner) continue;
+      if (actor.id === target.id || actor.id === initFlags.attackerId) continue;
+
+      const buff = ClashManager._getBuff(actor, "coverDefense");
+      if (!buff || (buff.stacks ?? 0) <= 0) continue;
+
+      const skills = actor.items.filter(i => i.type === "skill" && i.system?.coverDefense);
+      if (!skills.length) {
+        ui.notifications?.warn(`${actor.name} 持有【援护防御】，但背包里没有标记为【援护防御】的专属技能`);
+        continue;
+      }
+
+      const picked = await ClashManager._pickCoverSkill(actor, target, skills);
+      if (!picked) continue;
+
+      await ClashManager._performCoverDefense(actor, picked, msgId, initFlags);
+      return;   // 一次对抗只允许一个人顶上
+    }
+  }
+
+  /** 选技能弹窗：列出背包里所有【援护防御】专属技能 */
+  static async _pickCoverSkill(actor, target, skills) {
+    const rows = skills.map(sk => `
+      <label style="display:flex;align-items:center;gap:8px;padding:4px 6px;cursor:pointer;">
+        <input type="radio" name="cover-skill" value="${sk.id}">
+        <img src="${sk.img}" style="width:32px;height:32px;object-fit:cover;border-radius:3px;" alt="">
+        <span style="flex:1;">
+          <span style="color:#E8C9A2;">${sk.name}</span>
+          <span style="color:#9A8462;font-size:.75rem;"> ${(sk.system?.diceFormula ?? "").toUpperCase()}</span>
+        </span>
+      </label>`).join("");
+
+    return new Promise(resolve => {
+      new Dialog({
+        title: "【援护防御】触发",
+        content: `<div class="limbuscompany">
+          <div style="font-size:.85rem;color:#E8C9A2;margin-bottom:6px;">
+            <strong>${target.name}</strong> 行动值已耗尽且被锁定为目标。
+          </div>
+          <div style="font-size:.8rem;color:#9A8462;margin-bottom:8px;">
+            <strong>${actor.name}</strong> 可消耗 1 层【援护防御】顶上去，选择要使用的专属技能：
+          </div>
+          ${rows}
+        </div>`,
+        buttons: {
+          ok: {
+            label: "援护",
+            callback: (html) => {
+              const id = html.find("input[name='cover-skill']:checked").val();
+              resolve(id ? actor.items.get(id) : null);
+            },
+          },
+          cancel: { label: "不援护", callback: () => resolve(null) },
+        },
+        default: "ok",
+        close: () => resolve(null),
+      }).render(true);
+    });
+  }
+
+  /** 消耗层数 → 挪到攻击者身旁 → 改写指定目标 → 打开进行对抗弹窗 */
+  static async _performCoverDefense(actor, skill, msgId, initFlags) {
+    await ClashManager._reduceBuffStacks(actor, "coverDefense", 1);
+
+    const attacker = game.actors.get(initFlags.attackerId ?? "");
+    if (attacker) await ClashKnockback.moveNextTo(actor, attacker);
+
+    // 强制改写这次对抗的指定目标：后续所有校验都以聊天卡的 flags 为准
+    const newFlags = { ...initFlags, targetActorId: actor.id, coveredForId: initFlags.targetActorId };
+    const msg = game.messages.get(msgId);
+    if (msg) {
+      await ClashManager._safeDocUpdate(msg, {
+        "flags.limbusCompany_FVTT.targetActorId": actor.id,
+        "flags.limbusCompany_FVTT.coveredForId": initFlags.targetActorId,
+      });
+    }
+
+    const covered = game.actors.get(initFlags.targetActorId ?? "");
+    await ClashManager._safeChatCreate({
+      speaker: ChatMessage.getSpeaker({ actor }),
+      content: `<div class="limbuscompany chat-clash">
+        <strong>${actor.name}</strong> 发动【援护防御】，替 <strong>${covered?.name ?? "队友"}</strong>
+        接下这次对抗（使用 <strong>${skill.name}</strong>）。
+      </div>`,
+    });
+
+    await ClashManager.showPerformDialog(actor, skill, msgId, newFlags, -1);
   }
 
   /* ─── 阶段三：进行对抗技能选择弹窗（玩家B） ─────────────────────────── */
@@ -4868,6 +4980,11 @@ export class ClashManager {
   /** 处理 socket 消息（clashResolve / activityActivate / reactionCheck） */
   static async handleSocketMsg(msg) {
     // 反应检查广播：所有客户端均处理，各自只弹出自己拥有控制权的 actor 的对话框
+    if (msg.type === "coverOffer") {
+      await ClashManager._checkCoverDefense(msg.msgId, msg.initFlags);
+      return;
+    }
+
     if (msg.type === "reactionCheck") {
       const { lastSkillUuid, attackerId, defenderId } = msg.data ?? {};
       const attacker = attackerId ? game.actors.get(attackerId) : null;
