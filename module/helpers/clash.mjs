@@ -2345,11 +2345,16 @@ export class ClashManager {
       return;
     }
 
-    // 行动值为 0：再也接不下任何一次拼点失败，因此无法进行对抗，只能承受。
-    // 注意这只挡"被动应战"这条路——自己回合主动使用技能不看行动值。
-    if ((defActor.system?.ap?.value ?? 0) <= 0) {
-      ui.notifications.warn(`${defActor.name} 行动值为 0，无法进行对抗（只能承受）`);
-      return;
+    // 行动值为 0：再也接不下任何一次拼点失败，因此不能再用普通技能硬拼，
+    // 但仍可以用【守备技能】应战（闪避/格挡/反击等）。
+    // 这只影响"被动应战"这条路——自己回合主动使用技能不看行动值。
+    const apExhausted = (defActor.system?.ap?.value ?? 0) <= 0;
+    if (apExhausted) {
+      const defSkillId = defActor.system?.skills?.defense ?? null;
+      if (!defSkillId || !defActor.items.get(defSkillId)) {
+        ui.notifications.warn(`${defActor.name} 行动值为 0 且没有装备守备技能，只能承受伤害`);
+        return;
+      }
     }
 
     // 恐慌时只能用 EGO 响应
@@ -2368,10 +2373,15 @@ export class ClashManager {
 
     ClashManager._buildPickerDialog(defActor, (chosenItem, slotIdx) => {
       ClashManager.showPerformDialog(defActor, chosenItem, msgId, initFlags, slotIdx);
-    }, isInPanic);
+    }, isInPanic, apExhausted);
   }
 
-  static _buildPickerDialog(actor, onPick, panicMode = false) {
+  /**
+   * 技能选择弹窗。
+   * @param {boolean} panicMode     陷入恐慌：只能选 E.G.O
+   * @param {boolean} defenseOnly   行动值为 0：只能选守备技能
+   */
+  static _buildPickerDialog(actor, onPick, panicMode = false, defenseOnly = false) {
     const sheet    = actor.sheet;
     const bagState = sheet?._combatBagState;
     const sys      = actor.system;
@@ -2432,6 +2442,10 @@ export class ClashManager {
       ? `<div style="font-size:.75rem;color:#E8A444;text-align:center;padding:4px 0 6px;font-style:italic;">
            【陷入恐慌】只能使用 E.G.O 技能
          </div>`
+      : defenseOnly
+      ? `<div style="font-size:.75rem;color:#6EC1E4;text-align:center;padding:4px 0 6px;font-style:italic;">
+           行动值为 0：只能使用【守备技能】应战
+         </div>`
       : "";
 
     // 顶部：两个已激活技能 + 守备技能，上下各一条金色渐变分割线
@@ -2439,8 +2453,8 @@ export class ClashManager {
       ${panicNotice}
       ${ClashManager._goldDivider()}
       <div class="clash-pick-row">
-        ${octaSlotHtml(active0, "clash-pick-active", 0, panicMode)}
-        ${octaSlotHtml(active1, "clash-pick-active", 1, panicMode)}
+        ${octaSlotHtml(active0, "clash-pick-active", 0, panicMode || defenseOnly)}
+        ${octaSlotHtml(active1, "clash-pick-active", 1, panicMode || defenseOnly)}
         ${octaSlotHtml(defItem, "", -1, panicMode)}
       </div>
       ${ClashManager._goldDivider()}`;
@@ -2448,8 +2462,10 @@ export class ClashManager {
     // 展开区：6-bag 剩余技能 + EGO 技能，统一按固定 3 列排布。
     // EGO 空等级不渲染（与快捷 HUD 的处理一致）。
     const expandedSlots = [
-      ...restItems.map((it, j) => octaSlotHtml(it, "", 2 + j, panicMode)),
-      ...egoEntries.filter(e => e.item).map(e => circleSlotHtml(e.item, e.grade)),
+      ...restItems.map((it, j) => octaSlotHtml(it, "", 2 + j, panicMode || defenseOnly)),
+      // 行动值为 0 时 E.G.O 也不能用（它不是守备技能）
+      ...egoEntries.filter(e => e.item)
+        .map(e => defenseOnly ? octaSlotHtml(e.item, "", -1, true) : circleSlotHtml(e.item, e.grade)),
     ];
     const expandedHtml = expandedSlots.length ? `
       <div class="clash-pick-expanded" style="display:none;">
@@ -2493,9 +2509,11 @@ export class ClashManager {
           dlg.setPosition({ height: "auto" });
         });
 
-        // 恐慌时禁用槽点击提示
+        // 被禁用的槽：说明为什么点不了
         dlgHtml.on("click", ".clash-pick-disabled", () => {
-          ui.notifications.warn("【陷入恐慌】无法使用基础或守备技能！");
+          ui.notifications.warn(panicMode
+            ? "【陷入恐慌】无法使用基础或守备技能！"
+            : "行动值为 0：只能使用【守备技能】应战");
         });
 
         // 选中技能（携带 slotIdx 供后续推进战斗袋）
