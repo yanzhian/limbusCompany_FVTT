@@ -950,10 +950,10 @@ export class ClashManager {
     const foeIds   = inTeam1 ? team2Ids : inTeam2 ? team1Ids : [];
     const toActors = ids => ids.map(id => game.actors.get(id)).filter(Boolean);
 
-    // 至多人数：0 = 不限，超出时按队伍顺序取前 N 人（群体目标通用）
+    // 至多人数：0 = 不限；超出时随机抽 N 人——战场本来就乱，谁被顾上是随机的
     const capMulti = (list) => {
       const maxN = Math.max(0, meta?.targetTagMax ?? 0);
-      return maxN > 0 ? list.slice(0, maxN) : list;
+      return maxN > 0 ? ClashManager._pickRandom(list, maxN) : list;
     };
 
     if (targetType === "bgTag" || targetType === "bgTagOther") {
@@ -977,7 +977,7 @@ export class ClashManager {
         if (tags.includes(tagName)) matched.push(actor);
       }
       if (matched.length < minCount) return [];
-      return maxCount > 0 ? matched.slice(0, maxCount) : matched;
+      return maxCount > 0 ? ClashManager._pickRandom(matched, maxCount) : matched;
     }
 
     switch (targetType) {
@@ -988,6 +988,20 @@ export class ClashManager {
       case "allEnemyOther": return capMulti(toActors(foeIds.filter(id => id !== ownerId)));
       default:              return other ? [other] : [];
     }
+  }
+
+  /**
+   * 从候选里随机抽 n 个（Fisher-Yates 洗牌后取前 n）。
+   * n ≥ 候选数时原样返回。
+   */
+  static _pickRandom(list, n) {
+    if (!Array.isArray(list) || n >= list.length) return list;
+    const pool = [...list];
+    for (let i = pool.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [pool[i], pool[j]] = [pool[j], pool[i]];
+    }
+    return pool.slice(0, n);
   }
 
   /** 解析角色背景物品的标签数组（"/" 分隔），解析失败返回空数组 */

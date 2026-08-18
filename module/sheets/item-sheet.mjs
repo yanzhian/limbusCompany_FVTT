@@ -2334,7 +2334,7 @@ function _buildBgTagFields(prefix, obj) {
       <label title="最多对几人生效，0 = 不限">至多人数</label>
       <input class="ae-input-sm ${prefix}-bgtag-max" type="number"
              value="${obj?.targetTagMax ?? 0}" min="0" style="width:50px;"
-             title="最多对几人生效，0 = 不限（超出人数时按队伍顺序取前 N 人）">
+             title="最多对几人生效，0 = 不限（人数超出时随机抽取）">
     </span>`;
 }
 
