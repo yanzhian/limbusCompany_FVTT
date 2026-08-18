@@ -2345,7 +2345,14 @@ export class ClashManager {
       return;
     }
 
-    // 恐慌时只能用 EGO 响应；行动值不再是对抗门槛（它代表可承受的拼点失败次数）
+    // 行动值为 0：再也接不下任何一次拼点失败，因此无法进行对抗，只能承受。
+    // 注意这只挡"被动应战"这条路——自己回合主动使用技能不看行动值。
+    if ((defActor.system?.ap?.value ?? 0) <= 0) {
+      ui.notifications.warn(`${defActor.name} 行动值为 0，无法进行对抗（只能承受）`);
+      return;
+    }
+
+    // 恐慌时只能用 EGO 响应
     const isInPanic = !!ClashManager._getBuff(defActor, "panic");
     if (isInPanic) {
       const cfg    = CONFIG.LIMBUSCOMPANY ?? {};
