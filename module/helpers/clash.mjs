@@ -1173,7 +1173,31 @@ export class ClashManager {
       let _discardedItemId = null;
       for (const cost of costs) {
         if (!cost) continue;
-        if (cost.type === "discard") {
+        if (cost.type === "random") {
+          // 随机消耗：从候选池中随机抽一条可支付的候选来扣（每条候选各自指定 BUFF 与维度：层/级）
+          // 例：随机消耗 1 层 或 1 级【生蝶·亡蝶】= 两条候选，同 BUFF、维度分别为 stacks / intensity。
+          // 非强制：候选全都不足时整条消耗直接跳过，不阻断 Activity（与旧「可选消耗」一致）。
+          const pool = Array.isArray(cost.randomPool) ? cost.randomPool.filter(e => e?.buff) : [];
+          if (!pool.length) continue;
+          const costTgts = await ClashManager._resolveTargets(cost.target ?? "self", owner, other, cost);
+          for (const tgt of costTgts) {
+            const affordable = pool.filter(e => {
+              const type     = e.buff === "custom" ? (e.buffCustom || "custom") : e.buff;
+              const existing = ClashManager._getBuff(tgt, type);
+              const have     = e.dim === "intensity" ? (existing?.intensity ?? 0) : (existing?.stacks ?? 0);
+              return have >= Math.max(1, e.amount ?? 1);
+            });
+            if (!affordable.length) continue;
+            const pick     = affordable[Math.floor(Math.random() * affordable.length)];
+            const pickType = pick.buff === "custom" ? (pick.buffCustom || "custom") : pick.buff;
+            const amount   = Math.max(1, pick.amount ?? 1);
+            if (pick.dim === "intensity") {
+              await ClashManager._reduceBuffIntensity(tgt, pickType, amount);
+            } else {
+              await ClashManager._reduceBuffStacks(tgt, pickType, amount);
+            }
+          }
+        } else if (cost.type === "discard") {
           const ownerSheet = owner?.sheet;
           if (ownerSheet?._discardCombatSkill) {
             const mode  = cost.discardMode ?? "level";

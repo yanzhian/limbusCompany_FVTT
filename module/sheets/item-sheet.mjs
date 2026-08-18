@@ -2307,6 +2307,7 @@ function _buildCostRow(cost, idx, cfg) {
   const isAttr     = selType === "attribute";
   const isDiscard  = selType === "discard";
   const isPerStack = selType === "perStack";
+  const isRandom   = selType === "random";
   const costPerNDim = cost?.perNDim === "intensity" ? "intensity" : "stacks";
   const costPerNDimOpts = [
     ["stacks","层数"],["intensity","强度"],
@@ -2314,7 +2315,7 @@ function _buildCostRow(cost, idx, cfg) {
   const typeOpts = [
     ["perStack",  "每"],
     ["forced",    "强制消耗"],
-    ["optional",  "可选消耗"],
+    ["random",    "随机消耗"],
     ["attribute", "基础属性"],
     ["discard",   "丢弃"],
   ].map(([v, l]) => `<option value="${v}" ${selType === v ? "selected" : ""}>${l}</option>`).join("");
@@ -2350,7 +2351,7 @@ function _buildCostRow(cost, idx, cfg) {
           <option value="sin"   ${isSin   ? "selected" : ""}>罪孽资源</option>
         </select>
         ${_buildBgTagFields("cost", cost)}
-        <span class="ae-cost-field-sec" ${isField ? "" : 'style="display:none"'}>
+        <span class="ae-cost-field-sec" ${(isField && !isRandom) ? "" : 'style="display:none"'}>
           <label>场地名字</label>
           <input class="ae-input cost-field-name" type="text"
                  value="${_esc(cost?.fieldName ?? "")}" placeholder="如：血宴" style="width:90px;">
@@ -2358,7 +2359,7 @@ function _buildCostRow(cost, idx, cfg) {
           <input class="ae-input-sm cost-field-stacks" type="number" value="${cost?.stacks ?? 0}" min="0">
         </span>
         <!-- 罪孽资源：扣除全局七宗罪池的点数；【每】类型时为"每消耗 N 点"，可限制最大倍数 -->
-        <span class="ae-cost-sin-sec" ${isSin ? "" : 'style="display:none"'}>
+        <span class="ae-cost-sin-sec" ${(isSin && !isRandom) ? "" : 'style="display:none"'}>
           <label>罪孽</label>
           <select class="ae-sel cost-sin-type">${_buildSinOptions(cost?.sinType ?? "wrath")}</select>
           <label class="cost-sin-label">${isPerStack ? "每N点" : "点数"}</label>
@@ -2368,7 +2369,17 @@ function _buildCostRow(cost, idx, cfg) {
             <input class="ae-input-sm cost-sin-max-times" type="number" value="${cost?.maxTimes ?? 0}" min="0" placeholder="0=无限">
           </span>
         </span>
-        <span class="ae-cost-buff-sec" ${(isAttr || isDiscard || isField || isSin) ? 'style="display:none"' : ""}>
+        <!-- 随机消耗：从候选池中随机抽一条来扣（扣不起的候选自动排除；全都扣不起则整条消耗跳过，不阻断效果）
+             每条候选可分别指定按「层数」或按「强度(级)」扣除，
+             例：随机消耗 1 层 或 1 级【生蝶·亡蝶】= 两条候选，同一BUFF、维度分别为层/级 -->
+        <span class="ae-cost-random-sec" ${isRandom ? "" : 'style="display:none"'}>
+          <div class="ae-pool-list ae-cost-pool-list">
+            ${(cost?.randomPool?.length ? cost.randomPool : [{ buff: "", dim: "stacks", amount: 1 }])
+              .map(entry => _buildCostPoolRow(entry, cfg)).join("")}
+          </div>
+          <button type="button" class="ae-add-cost-pool ae-add-btn">＋ 添加候选</button>
+        </span>
+        <span class="ae-cost-buff-sec" ${(isAttr || isDiscard || isField || isSin || isRandom) ? 'style="display:none"' : ""}>
           <label>BUFF</label>
           <input class="ae-input cost-buff" type="text" list="ae-buff-dl"
                  placeholder="输入或选择BUFF…" autocomplete="off" style="width:100px;"
@@ -2584,6 +2595,26 @@ function _buildBuffPoolRow(entry, cfg) {
     </div>`;
 }
 
+/** 随机消耗候选单行：文本输入（datalist）+ 维度（层数/强度）+ 数量 + 删除 */
+function _buildCostPoolRow(entry, cfg) {
+  const buffLabel = _keyToLabel(entry?.buff ?? "", entry?.buffCustom ?? "");
+  const dim = entry?.dim === "intensity" ? "intensity" : "stacks";
+  const dimOpts = [
+    ["stacks",    "层"],
+    ["intensity", "级"],
+  ].map(([v, l]) => `<option value="${v}" ${dim === v ? "selected" : ""}>${l}</option>`).join("");
+  return `
+    <div class="ae-pool-row ae-cost-pool-row">
+      <label>消耗</label>
+      <input class="ae-input-sm ae-cost-pool-amount" type="number" value="${entry?.amount ?? 1}" min="1">
+      <select class="ae-sel ae-cost-pool-dim">${dimOpts}</select>
+      <input class="ae-input ae-cost-pool-buff" type="text" list="ae-buff-dl"
+             placeholder="输入或选择BUFF…" autocomplete="off" style="width:100px;"
+             value="${_esc(buffLabel)}">
+      <button type="button" class="ae-del-btn ae-del-cost-pool">×</button>
+    </div>`;
+}
+
 /** 设置 Dialog 动态交互事件 */
 function _setupAeDialog(html, cfg) {
   // 添加按钮
@@ -2614,6 +2645,12 @@ function _setupAeDialog(html, cfg) {
     _bindEffBuffAmplitude(html);
     _bindUseSkillSubtype(html);
     _bindTargetBgTag(html);
+  });
+  html.on("click", ".ae-add-cost-pool", function () {
+    const sec = $(this).closest(".ae-cost-random-sec");
+    sec.find(".ae-cost-pool-list").append(_buildCostPoolRow({}, cfg));
+    _bindDel(html);
+    _bindCondCostBuff(html);
   });
   html.on("click", ".ae-add-pool-buff", function () {
     const sec = $(this).closest(".ae-eff-random-sec");
@@ -2734,12 +2771,14 @@ function _bindCostType(html) {
     const isAttr      = val === "attribute";
     const isDiscard   = val === "discard";
     const isPerStack  = val === "perStack";
+    const isRandom    = val === "random";
     const perNDim     = row.find(".cost-pern-dim").val() === "intensity" ? "intensity" : "stacks";
-    row.find(".ae-cost-field-sec").toggle(isField);
-    row.find(".ae-cost-sin-sec").toggle(isSin);
-    row.find(".ae-cost-sin-max").toggle(isSin && isPerStack);
+    row.find(".ae-cost-random-sec").toggle(isRandom);
+    row.find(".ae-cost-field-sec").toggle(isField && !isRandom);
+    row.find(".ae-cost-sin-sec").toggle(isSin && !isRandom);
+    row.find(".ae-cost-sin-max").toggle(isSin && !isRandom && isPerStack);
     row.find(".cost-sin-label").text(isPerStack ? "每N点" : "点数");
-    row.find(".ae-cost-buff-sec").toggle(!isAttr && !isDiscard && !isField && !isSin);
+    row.find(".ae-cost-buff-sec").toggle(!isAttr && !isDiscard && !isField && !isSin && !isRandom);
     row.find(".ae-cost-attr-sec").toggle(isAttr);
     row.find(".ae-cost-discard-sec").toggle(isDiscard);
     row.find(".cost-stacks-label").text(isPerStack ? (perNDim === "intensity" ? "每N级" : "每N层") : "层数");
@@ -2791,6 +2830,9 @@ function _bindDel(html) {
   });
   html.find(".ae-del-pool-buff").off("click").on("click", function () {
     $(this).closest(".ae-pool-row").remove();
+  });
+  html.find(".ae-del-cost-pool").off("click").on("click", function () {
+    $(this).closest(".ae-cost-pool-row").remove();
   });
 }
 
@@ -2912,7 +2954,26 @@ function _readActivityForm(html, original) {
     const $r    = $(el);
     const type  = $r.find(".cost-type").val()   || "forced";
     const target = $r.find(".cost-target").val() || "self";
-    if (type === "attribute") {
+    if (type === "random") {
+      const randomPool = [];
+      $r.find(".ae-cost-pool-row").each((_, pr) => {
+        const $pr  = $(pr);
+        const buff = resolveKey($pr.find(".ae-cost-pool-buff").val());
+        if (!buff) return;
+        randomPool.push({
+          buff,
+          buffCustom: "",
+          dim:    $pr.find(".ae-cost-pool-dim").val() === "intensity" ? "intensity" : "stacks",
+          amount: Math.max(1, parseInt($pr.find(".ae-cost-pool-amount").val()) || 1),
+        });
+      });
+      costs.push({
+        type,
+        target,
+        randomPool,
+        ..._readBgTagMeta($r, "cost"),
+      });
+    } else if (type === "attribute") {
       costs.push({
         type,
         target,
