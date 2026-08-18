@@ -2315,6 +2315,10 @@ function _buildBgTagFields(prefix, obj) {
       <input class="ae-input-sm ${prefix}-bgtag-count" type="number"
              value="${obj?.targetTagCount ?? 1}" min="1" style="width:50px;"
              title="是「至少要有N人在场才触发」的门槛，不是「最多N人生效」的上限——只想不限人数就填1">
+      <label title="最多对几人生效，0 = 不限">至多人数</label>
+      <input class="ae-input-sm ${prefix}-bgtag-max" type="number"
+             value="${obj?.targetTagMax ?? 0}" min="0" style="width:50px;"
+             title="最多对几人生效，0 = 不限（超出人数时按队伍顺序取前 N 人）">
     </span>`;
 }
 
@@ -2323,6 +2327,7 @@ function _readBgTagMeta($r, prefix) {
   return {
     targetTag:      $r.find(`.${prefix}-bgtag-name`).val()?.trim() || "",
     targetTagCount: Math.max(1, parseInt($r.find(`.${prefix}-bgtag-count`).val()) || 1),
+    targetTagMax:   Math.max(0, parseInt($r.find(`.${prefix}-bgtag-max`).val()) || 0),
   };
 }
 

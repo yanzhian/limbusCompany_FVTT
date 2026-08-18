@@ -932,7 +932,8 @@ export class ClashManager {
    * @param {string} targetType
    * @param {Actor|null} owner
    * @param {Actor|null} other
-   * @param {{targetTag?:string, targetTagCount?:number}} [meta]  target==="bgTag" 时使用
+   * @param {{targetTag?:string, targetTagCount?:number, targetTagMax?:number}} [meta]
+   *        target==="bgTag" 时使用；targetTagMax=0 表示人数不限
    */
   static async _resolveTargets(targetType, owner, other, meta = {}) {
     if (targetType === "self")   return owner ? [owner] : [];
@@ -956,8 +957,10 @@ export class ClashManager {
       // "数量≥N"这个门槛也是排除自己之后、剩下的其他带标签队友数量来判定——
       // 如"为其他背景标签为X的友方（至少2个）恢复…"，指的是"除自己外还有
       // ≥2 个带该标签的队友"。
+      // targetTagMax：最多对几人生效，0 = 不限；超出时按队伍顺序取前 N 人
       const tagName = (meta?.targetTag ?? "").trim();
       const minCount = Math.max(1, meta?.targetTagCount ?? 1);
+      const maxCount = Math.max(0, meta?.targetTagMax ?? 0);
       if (!tagName) return [];
       const poolIds = myIds.length ? myIds : (ownerId ? [ownerId] : []);
       const filteredIds = targetType === "bgTagOther" ? poolIds.filter(id => id !== ownerId) : poolIds;
@@ -967,7 +970,8 @@ export class ClashManager {
         const tags = await ClashManager._getBackgroundTags(actor);
         if (tags.includes(tagName)) matched.push(actor);
       }
-      return matched.length >= minCount ? matched : [];
+      if (matched.length < minCount) return [];
+      return maxCount > 0 ? matched.slice(0, maxCount) : matched;
     }
 
     switch (targetType) {
