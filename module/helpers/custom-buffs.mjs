@@ -148,6 +148,22 @@ export const TREMOR_DEPENDENT_TYPES = ["amplitudeConvert", "amplitudeEntangle"];
 /* ─── 内置自定义 BUFF ───────────────────────────────────────────────────── */
 
 /**
+ * 【援护防御】
+ * 逻辑主体在 ClashManager（_checkCoverDefense / _performCoverDefense）里，
+ * 这里注册只为两件事：给它一个层数上限，以及让它出现在自定义 BUFF 名单中。
+ * 不挂 onRoundEnd —— 它要能跨回合攒着，否则后排永远用不上。
+ */
+registerCustomBuff("coverDefense", {
+  label:     "援护防御",
+  maxStacks: 3,
+  description: "友方被锁定为目标、且该友方行动值为 0 时：可消耗 1 层顶上去替他接下这次对抗\n"
+    + "· 使用背包里标有【援护防御】的专属技能（不需装备），瞬移到攻击者身旁的空位\n"
+    + "· 强制把攻击者的目标改为自己\n"
+    + "· 不会自动消失，可跨回合累积，最多 3 层",
+});
+
+
+/**
  * 【防御姿态】
  * - 最大值：4 层
  * - 获得层数时刷新（替换），不叠加
