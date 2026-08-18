@@ -2175,21 +2175,55 @@ export class ClashManager {
     await ClashManager._checkCoverDefense(msgId, initFlags);
   }
 
+  /** 调试日志（控制台里 ClashTotalFX.DEBUG = true 打开） */
+  static _coverLog(...args) {
+    if (globalThis.ClashTotalFX?.DEBUG) {
+      console.log("%c[援护防御]", "color:#6EC1E4;font-weight:bold", ...args);
+    }
+  }
+
+  /**
+   * 这个角色该由本客户端来弹窗吗？
+   * 有在线玩家拥有该角色 → 只让那位玩家弹；否则（NPC/离线）→ 交给 GM。
+   * 不这样分派的话，GM 对所有角色都是 owner，会和玩家各弹一次。
+   */
+  static _shouldPromptFor(actor) {
+    const playerOwners = game.users.filter(u => !u.isGM && u.active
+      && actor.testUserPermission?.(u, "OWNER"));
+    if (playerOwners.length) return !game.user.isGM && actor.isOwner;
+    return game.user.isGM;
+  }
+
+  /** 【援护防御】的 BUFF：按 type 找，找不到再按名字兜底（手动添加成自定义 BUFF 的情况） */
+  static _coverBuffOf(actor) {
+    return (actor?.system?.buffs ?? []).find(b =>
+      (b.type === "coverDefense" || b.name === "援护防御") && b.whenAdded !== "下回合") ?? null;
+  }
+
   /** 本机检查：自己控制的角色里有谁能援护 */
   static async _checkCoverDefense(msgId, initFlags) {
     const target = game.actors.get(initFlags?.targetActorId ?? "");
-    if (!target) return;
+    if (!target) { ClashManager._coverLog("没有指定目标，跳过"); return; }
     // 只有"目标已经扛不住了"才需要援护
-    if ((target.system?.ap?.value ?? 0) > 0) return;
+    if ((target.system?.ap?.value ?? 0) > 0) {
+      ClashManager._coverLog(`目标 ${target.name} 行动值 ${target.system?.ap?.value}，无需援护`);
+      return;
+    }
 
     for (const actor of game.actors.contents) {
-      if (actor.type !== "character" || !actor.isOwner) continue;
+      if (actor.type !== "character") continue;
       if (actor.id === target.id || actor.id === initFlags.attackerId) continue;
 
-      const buff = ClashManager._getBuff(actor, "coverDefense");
+      const buff = ClashManager._coverBuffOf(actor);
       if (!buff || (buff.stacks ?? 0) <= 0) continue;
 
+      if (!ClashManager._shouldPromptFor(actor)) {
+        ClashManager._coverLog(`${actor.name} 有【援护防御】，但该由其控制者弹窗，本机跳过`);
+        continue;
+      }
+
       const skills = actor.items.filter(i => i.type === "skill" && i.system?.coverDefense);
+      ClashManager._coverLog(`${actor.name}：${buff.stacks} 层，专属技能 ${skills.length} 个`);
       if (!skills.length) {
         ui.notifications?.warn(`${actor.name} 持有【援护防御】，但背包里没有标记为【援护防御】的专属技能`);
         continue;
@@ -2245,7 +2279,9 @@ export class ClashManager {
 
   /** 消耗层数 → 挪到攻击者身旁 → 改写指定目标 → 打开进行对抗弹窗 */
   static async _performCoverDefense(actor, skill, msgId, initFlags) {
-    await ClashManager._reduceBuffStacks(actor, "coverDefense", 1);
+    // 按实际存在的 type 扣层（手动添加成自定义 BUFF 时 type 可能不是 coverDefense）
+    const buff = ClashManager._coverBuffOf(actor);
+    await ClashManager._reduceBuffStacks(actor, buff?.type ?? "coverDefense", 1);
 
     const attacker = game.actors.get(initFlags.attackerId ?? "");
     if (attacker) await ClashKnockback.moveNextTo(actor, attacker);
