@@ -950,6 +950,12 @@ export class ClashManager {
     const foeIds   = inTeam1 ? team2Ids : inTeam2 ? team1Ids : [];
     const toActors = ids => ids.map(id => game.actors.get(id)).filter(Boolean);
 
+    // 至多人数：0 = 不限，超出时按队伍顺序取前 N 人（群体目标通用）
+    const capMulti = (list) => {
+      const maxN = Math.max(0, meta?.targetTagMax ?? 0);
+      return maxN > 0 ? list.slice(0, maxN) : list;
+    };
+
     if (targetType === "bgTag" || targetType === "bgTagOther") {
       // 背景标签：本队中"背景带有该标签"的角色数量 ≥ targetTagCount 时，
       // 这些角色均视为合法目标；数量不足则视为无目标（效果不生效）。
@@ -975,10 +981,11 @@ export class ClashManager {
     }
 
     switch (targetType) {
-      case "allTeam":       return toActors(myIds);
-      case "allTeamOther":  return toActors(myIds.filter(id => id !== ownerId));
-      case "allEnemy":      return toActors(foeIds);
-      case "allEnemyOther": return toActors(foeIds.filter(id => id !== ownerId));
+      // 群体目标同样支持「至多人数」上限（0 = 不限，超出时按队伍顺序取前 N 人）
+      case "allTeam":       return capMulti(toActors(myIds));
+      case "allTeamOther":  return capMulti(toActors(myIds.filter(id => id !== ownerId)));
+      case "allEnemy":      return capMulti(toActors(foeIds));
+      case "allEnemyOther": return capMulti(toActors(foeIds.filter(id => id !== ownerId)));
       default:              return other ? [other] : [];
     }
   }

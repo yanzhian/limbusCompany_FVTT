@@ -2310,8 +2310,15 @@ function _buildTargetOptions(selected) {
  * 数量不足则目标为空（效果不生效）。"背景标签(其他)"与"本队其他全部"同理，
  * 会先排除拥有者自己（自己不受益，数量门槛也按排除自己后的人数判定）。
  */
+/** 需要「至多人数」上限的群体目标 */
+const _MULTI_TARGETS = new Set([
+  "bgTag", "bgTagOther", "allTeam", "allTeamOther", "allEnemy", "allEnemyOther",
+]);
+
 function _buildBgTagFields(prefix, obj) {
-  const isBgTag = (obj?.target ?? "self") === "bgTag" || (obj?.target ?? "self") === "bgTagOther";
+  const target  = obj?.target ?? "self";
+  const isBgTag = target === "bgTag" || target === "bgTagOther";
+  const isMulti = _MULTI_TARGETS.has(target);
   return `
     <span class="ae-${prefix}-bgtag-sec" ${isBgTag ? "" : 'style="display:none"'}>
       <label>标签</label>
@@ -2321,6 +2328,9 @@ function _buildBgTagFields(prefix, obj) {
       <input class="ae-input-sm ${prefix}-bgtag-count" type="number"
              value="${obj?.targetTagCount ?? 1}" min="1" style="width:50px;"
              title="是「至少要有N人在场才触发」的门槛，不是「最多N人生效」的上限——只想不限人数就填1">
+    </span>
+    <!-- 至多人数：所有群体目标（背景标签 / 本队 / 敌对）通用，0 = 不限 -->
+    <span class="ae-${prefix}-max-sec" ${isMulti ? "" : 'style="display:none"'}>
       <label title="最多对几人生效，0 = 不限">至多人数</label>
       <input class="ae-input-sm ${prefix}-bgtag-max" type="number"
              value="${obj?.targetTagMax ?? 0}" min="0" style="width:50px;"
@@ -2872,7 +2882,9 @@ function _bindTargetBgTag(html) {
     const sel    = $(this);
     const prefix = sel.hasClass("cond-target") ? "cond" : sel.hasClass("cost-target") ? "cost" : "eff";
     const val = sel.val();
-    sel.closest(".ae-row-fields").find(`.ae-${prefix}-bgtag-sec`).toggle(val === "bgTag" || val === "bgTagOther");
+    const fields = sel.closest(".ae-row-fields");
+    fields.find(`.ae-${prefix}-bgtag-sec`).toggle(val === "bgTag" || val === "bgTagOther");
+    fields.find(`.ae-${prefix}-max-sec`).toggle(_MULTI_TARGETS.has(val));
   });
 }
 
