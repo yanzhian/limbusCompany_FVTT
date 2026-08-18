@@ -168,9 +168,6 @@ export class ClashKnockback {
                        approachFirst = false, onWallHit = null } = {}) {
     if (!this.active || !canvas?.ready) return;
 
-    const cells = this.cellsFor(winScore);
-    if (cells <= 0) return;
-
     const winTok  = this._tokenOf(winner);
     const loseTok = this._tokenOf(loser);
     if (!winTok || !loseTok) return;
@@ -178,10 +175,14 @@ export class ClashKnockback {
     // 面对面才有斥力，隔空对拼视为远程
     let facing = this._facing(winTok, loseTok);
     if (!facing && approachFirst) {
-      // 反击：被打退开了，反手扑回去
+      // 反击：被打退开了就反手扑回去——这一步与点数无关，够不够击退都要贴上去
       await this._wait(this.DELAY_CHASE);
       if (await this.approach(winTok, loseTok)) facing = this._facing(winTok, loseTok);
     }
+
+    // 点数不够就只是贴身，不产生击退
+    const cells = this.cellsFor(winScore);
+    if (cells <= 0) return;
     if (!facing) { this._log("双方并非贴身，跳过斥力"); return; }
 
     this._log(`斥力：点数 ${winScore} → 击退 ${cells} 格`);
