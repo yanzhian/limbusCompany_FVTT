@@ -582,7 +582,39 @@ registerCustomBuff("flameButterflyCoffin", {
 registerCustomBuff("dawnFire", {
   ...FLAME_SHARED,
   label:       "黎明之火",
-  description: `${FLAME_SHARED_DESC}\n[命中时]：若不低于 10 层，为目标添加 2 级【烧伤】\n[命中时]：若不低于 20 层，为目标添加 1 层【烧伤】`,
+  description: `${FLAME_SHARED_DESC}\n[回合开始时]：每有 5 层本效果，自身【烧伤】强度 +1；每有 10 层本效果，对自身施加 1 层【烧伤】\n[命中时]：若不低于 10 层，为目标添加 2 级【烧伤】\n[命中时]：若不低于 20 层，为目标添加 1 层【烧伤】`,
+
+  /**
+   * 回合开始：层数越高，自身烧得越旺。
+   * 每 5 层 +1 级烧伤强度，每 10 层 +1 层烧伤（向下取整，两者独立计算）。
+   * 与 onHit 同理，不能走 _addBuff——那条路径会把 0 层订正成 1 层，
+   * 而 5~9 层这一档只该加强度、不该凭空多出层数。
+   */
+  async onRoundStart(actor, buff) {
+    const stacks = buff.stacks ?? 0;
+    const addIntensity = Math.floor(stacks / 5);
+    const addStacks    = Math.floor(stacks / 10);
+    if (addIntensity <= 0 && addStacks <= 0) return;
+
+    const buffs = foundry.utils.deepClone(actor.system?.buffs ?? []);
+    const bi    = buffs.findIndex(b => b.type === "burn" && (b.whenAdded ?? "本回合") !== "下回合");
+    if (bi >= 0) {
+      buffs[bi].intensity = (buffs[bi].intensity ?? 0) + addIntensity;
+      buffs[bi].stacks    = Math.max(1, (buffs[bi].stacks ?? 0) + addStacks);
+    } else {
+      buffs.push({
+        id: foundry.utils.randomID(), type: "burn", name: "烧伤",
+        icon: "systems/limbusCompany_FVTT/assets/icons/Buff_icon/烧伤.webp",
+        intensity: addIntensity, stacks: Math.max(1, addStacks), whenAdded: "本回合",
+      });
+    }
+    await _safeUpdate(actor, { "system.buffs": buffs });
+
+    const parts = [];
+    if (addIntensity > 0) parts.push(`<strong>${addIntensity}</strong> 级`);
+    if (addStacks    > 0) parts.push(`<strong>${addStacks}</strong> 层`);
+    return `【黎明之火】（${stacks} 层）：自身获得 ${parts.join(" ")}【烧伤】。`;
+  },
 
   async onHit(actor, buff, ctx) {
     const target = ctx?.target;
