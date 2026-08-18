@@ -2541,6 +2541,26 @@ export class ClashManager {
         startDice: (side) => ClashManager._showDiceEach([
           { roll: _rollsFx[side], actor: side === "atk" ? atkActor : defActor },
         ]),
+        // 各方"当当当"结算完，紧接着就打出自己的击退
+        onSideDone: async (side) => {
+          if (side === "atk") {
+            // 反击：进攻方照常把守方打退；格挡：挡住了就不推，没挡住才推
+            if (defCategory === "block" && _atkEffFx <= _defEffFx) return;
+            _burstMid();
+            await ClashKnockback.repel({
+              winner: atkActor, loser: defActor, winScore: _atkEffFx, chase: false,
+              onWallHit: (a) => ClashManager.seismicBlast(a, 1, { attacker: atkActor }),
+            });
+          } else if (defCategory === "counter") {
+            // 反击方反手扑回来，再把进攻方打退
+            _burstMid();
+            await ClashKnockback.repel({
+              winner: defActor, loser: atkActor, winScore: _defEffFx,
+              chase: false, approachFirst: true,
+              onWallHit: (a) => ClashManager.seismicBlast(a, 1, { attacker: defActor }),
+            });
+          }
+        },
       });
     }
 
@@ -2568,17 +2588,6 @@ export class ClashManager {
       // 双方互相命中（攻方命中守方 + 守方反击命中攻方）
       await ClashManager._applyActivitiesAndEquip(atkItem,  "命中时", atkCtx);
       await ClashManager._applyActivitiesAndEquip(defItem,  "命中时", defCtx);
-      // 击退：进攻方先把守方打退；守方反手扑回来，再把进攻方打退
-      _burstMid();
-      await ClashKnockback.repel({
-        winner: atkActor, loser: defActor, winScore: _atkEffFx, chase: false,
-        onWallHit: (a) => ClashManager.seismicBlast(a, 1, { attacker: atkActor }),
-      });
-      await ClashKnockback.repel({
-        winner: defActor, loser: atkActor, winScore: _defEffFx,
-        chase: false, approachFirst: true,
-        onWallHit: (a) => ClashManager.seismicBlast(a, 1, { attacker: defActor }),
-      });
       await ClashManager._applyActivitiesAndEquip(atkItem,  "攻击后", atkCtx);
       await ClashManager._applyActivitiesAndEquip(defItem,  "攻击后", defCtx);
       await ClashManager._flushActMsgs(_actMsgs, atkActor);
@@ -2589,14 +2598,6 @@ export class ClashManager {
       await ClashManager._resolveDirectBlock(atkActor, defActor, effectiveInitFlags, defItem, defFinalRoll, defFinalFormula);
       // 格挡：攻方命中守方（守方未命中攻方）
       await ClashManager._applyActivitiesAndEquip(atkItem,  "命中时", atkCtx);
-      // 格挡成功（挡得住）不击退；没挡住才被推开一次，且攻方不追击
-      if (_atkEffFx > _defEffFx) {
-        _burstMid();
-        await ClashKnockback.repel({
-          winner: atkActor, loser: defActor, winScore: _atkEffFx, chase: false,
-          onWallHit: (a) => ClashManager.seismicBlast(a, 1, { attacker: atkActor }),
-        });
-      }
       await ClashManager._applyActivitiesAndEquip(atkItem,  "攻击后", atkCtx);
       await ClashManager._applyActivitiesAndEquip(defItem,  "攻击后", defCtx);
       await ClashManager._flushActMsgs(_actMsgs, atkActor);

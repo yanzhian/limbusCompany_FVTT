@@ -610,9 +610,12 @@ export class ClashTotalFX {
    * @param {string[]} opts.hitOn     哪几方揭示完毕后播命中声
    * @param {string}   opts.label     中央字样
    * @param {Function} opts.startDice (side) => 该方的骰子动画
+   * @param {Function} opts.onSideDone (side) => Promise，该方分段揭示完毕后调用；
+   *                                   击退动画就挂在这里，攻守各自"当当当"完各打各的
    */
   static async playSequence({ order = ["def", "atk"], parts = {}, diceType = {}, coins = {},
-                              hitOn = [], label = "", startDice = null, broadcast = true } = {}) {
+                              hitOn = [], label = "", startDice = null, onSideDone = null,
+                              broadcast = true } = {}) {
     if (!this._enabled()) { for (const side of order) startDice?.(side); return; }
 
     const fxId = this._nextFxId();
@@ -636,6 +639,8 @@ export class ClashTotalFX {
       await this._sleep(200);
       await this._revealParts(side, sideParts);
       if (hitOn.includes(side)) this._sfx(this._tremorPending ? "tremor" : "hit", 0.8);
+      // 该方结算完毕——击退等后续动作就在这一刻发生
+      if (typeof onSideDone === "function") await onSideDone(side);
       await this._sleep(300);
     }
 
