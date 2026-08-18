@@ -2074,14 +2074,17 @@ function _buildTriggerOpts(selected) {
 
 /** 前置条件行 HTML */
 function _buildCondRow(cond, idx, cfg) {
-  const condType   = ["perN","baseAttr","useSkill","buffCompare","category","fieldResource","sinResource","level","background","equipped"].includes(cond?.type) ? cond.type : "hasBuff";
+  // 旧的【使用等级】已并入【使用技能】：读到老数据就地转换，存回时便是新结构
+  if (cond?.type === "level") {
+    cond = { ...cond, type: "useSkill", skillLevel: cond.level ?? 1, skillNameOrTag: cond.skillNameOrTag ?? "" };
+  }
+  const condType   = ["perN","baseAttr","useSkill","buffCompare","category","fieldResource","sinResource","background","equipped"].includes(cond?.type) ? cond.type : "hasBuff";
   const isBuffSec  = condType === "hasBuff" || condType === "perN" || condType === "buffCompare";
   const isAttrSec  = condType === "baseAttr";
   const isSkillSec = condType === "useSkill";
   const isCatSec   = condType === "category";
   const isFieldSec = condType === "fieldResource";
   const isSinSec   = condType === "sinResource";
-  const isLevelSec = condType === "level";
   const isBgSec    = condType === "background";
   const isEquipSec = condType === "equipped";
   const isCompare  = condType === "buffCompare";
@@ -2089,10 +2092,6 @@ function _buildCondRow(cond, idx, cfg) {
   const perNDim    = cond?.perNDim === "intensity" ? "intensity" : "stacks";
   const selCats    = Array.isArray(cond?.categories) ? cond.categories : [];
   const stacksLbl  = isPerN ? (perNDim === "intensity" ? "每N级" : "每N层") : (isCompare ? "层数" : "层数≥");
-
-  const levelCmpOpts = [
-    ["gt","＞"],["gte","≥"],["lt","＜"],["lte","≤"],["eq","＝"],
-  ].map(([v,l]) => `<option value="${v}" ${(cond?.comparison ?? "eq") === v ? "selected":""}>${l}</option>`).join("");
 
   const stacksCmpOpts = [
     ["gt","＞"],["gte","≥"],["lt","＜"],["lte","≤"],["eq","＝"],
@@ -2133,13 +2132,12 @@ function _buildCondRow(cond, idx, cfg) {
           <option value="baseAttr"    ${condType === "baseAttr"    ? "selected" : ""}>基础属性</option>
           <option value="useSkill"    ${condType === "useSkill"    ? "selected" : ""}>使用技能</option>
           <option value="category"    ${condType === "category"    ? "selected" : ""}>使用分类</option>
-          <option value="level"       ${condType === "level"       ? "selected" : ""}>使用等级</option>
           <option value="background"  ${condType === "background"  ? "selected" : ""}>背景</option>
           <option value="equipped"    ${condType === "equipped"    ? "selected" : ""}>已装备</option>
           <option value="fieldResource" ${condType === "fieldResource" ? "selected" : ""}>公用场地</option>
           <option value="sinResource"   ${condType === "sinResource"   ? "selected" : ""}>罪孽资源</option>
         </select>
-        <span class="ae-cond-target-sec" ${(isCatSec || isFieldSec || isSinSec || isLevelSec) ? 'style="display:none"' : ""}>
+        <span class="ae-cond-target-sec" ${(isCatSec || isFieldSec || isSinSec) ? 'style="display:none"' : ""}>
           <label>目标</label>
           <select class="ae-sel cond-target">${_buildTargetOptions(cond?.target ?? "self")}</select>
           ${_buildBgTagFields("cond", cond)}
@@ -2175,16 +2173,18 @@ function _buildCondRow(cond, idx, cfg) {
           <input class="ae-input-sm cond-attr-value" type="text"
                  value="${_esc(cond?.attrValue ?? "")}" placeholder="50 或 5%">
         </span>
+        <!-- 使用技能：名称/标签 与 等级 均可选，填了的才检查、两个都填则需同时满足 -->
         <span class="ae-cond-skill-sec" ${isSkillSec ? "" : 'style="display:none"'}>
-          <label>技能UUID</label>
-          <input class="ae-input cond-skill-uuid" type="text"
-                 value="${_esc(cond?.skillUuid ?? "")}" placeholder="Item.xxx…（精确匹配，优先）" style="width:130px;">
-          <img class="ae-skill-preview" data-uuid-src="cond-skill-uuid"
-               src="${_esc(cond?.skillUuid ? "icons/svg/item-bag.svg" : "")}"
-               style="width:20px;height:20px;object-fit:cover;border-radius:3px;vertical-align:middle;${cond?.skillUuid ? "" : "display:none;"}">
-          <label>或 名称/标签</label>
+          <label>名称/标签</label>
           <input class="ae-input cond-skill-name-tag" type="text"
-                 value="${_esc(cond?.skillNameOrTag ?? "")}" placeholder="技能名称 或 标签，任一满足即可" style="width:130px;">
+                 value="${_esc(cond?.skillNameOrTag ?? "")}" placeholder="技能名称 或 标签（留空=不限）" style="width:150px;">
+          <label>等级</label>
+          <select class="ae-sel cond-skill-level">
+            <option value="0" ${(cond?.skillLevel ?? 0) === 0 ? "selected" : ""}>不限</option>
+            <option value="1" ${(cond?.skillLevel ?? 0) === 1 ? "selected" : ""}>Lv.1</option>
+            <option value="2" ${(cond?.skillLevel ?? 0) === 2 ? "selected" : ""}>Lv.2</option>
+            <option value="3" ${(cond?.skillLevel ?? 0) === 3 ? "selected" : ""}>Lv.3</option>
+          </select>
         </span>
         <span class="ae-cond-category-sec" ${isCatSec ? "" : 'style="display:none"'}>
           <label>分类（任一满足）</label>
@@ -2221,15 +2221,6 @@ function _buildCondRow(cond, idx, cfg) {
           <label>背景名/标签</label>
           <input class="ae-input cond-bg-name" type="text"
                  value="${_esc(cond?.bgName ?? "")}" placeholder="如：黎明事务所" style="width:130px;">
-        </span>
-        <span class="ae-cond-level-sec" ${isLevelSec ? "" : 'style="display:none"'}>
-          <label>等级</label>
-          <select class="ae-sel cond-level-cmp">${levelCmpOpts}</select>
-          <select class="ae-sel cond-level">
-            <option value="1" ${(cond?.level ?? 1) === 1 ? "selected" : ""}>Lv.1</option>
-            <option value="2" ${(cond?.level ?? 1) === 2 ? "selected" : ""}>Lv.2</option>
-            <option value="3" ${(cond?.level ?? 1) === 3 ? "selected" : ""}>Lv.3</option>
-          </select>
         </span>
         <span class="ae-cond-field-sec" ${isFieldSec ? "" : 'style="display:none"'}>
           <label>场地名字</label>
@@ -2776,7 +2767,6 @@ function _bindCondType(html) {
     const isCatSec   = type === "category";
     const isFieldSec = type === "fieldResource";
     const isSinSec   = type === "sinResource";
-    const isLevelSec = type === "level";
     const isBgSec    = type === "background";
     const isEquipSec = type === "equipped";
     const isCompare  = type === "buffCompare";
@@ -2789,10 +2779,9 @@ function _bindCondType(html) {
     row.find(".ae-cond-category-sec").toggle(isCatSec);
     row.find(".ae-cond-field-sec").toggle(isFieldSec);
     row.find(".ae-cond-sin-sec").toggle(isSinSec);
-    row.find(".ae-cond-level-sec").toggle(isLevelSec);
     row.find(".ae-cond-bg-sec").toggle(isBgSec);
     row.find(".ae-cond-equip-sec").toggle(isEquipSec);
-    row.find(".ae-cond-target-sec").toggle(!isCatSec && !isFieldSec && !isSinSec && !isLevelSec);
+    row.find(".ae-cond-target-sec").toggle(!isCatSec && !isFieldSec && !isSinSec);
     row.find(".ae-cond-pern-max").toggle(isPerN);
     row.find(".ae-cond-pern-dim-sec").toggle(isPerN);
     row.find(".ae-cond-intensity-sec").toggle(!isCompare && !isPerN);
@@ -2942,8 +2931,8 @@ function _readActivityForm(html, original) {
       preconditions.push({
         type:           "useSkill",
         target:         $r.find(".cond-target").val() || "self",
-        skillUuid:      $r.find(".cond-skill-uuid").val()?.trim() || "",
         skillNameOrTag: $r.find(".cond-skill-name-tag").val()?.trim() || "",
+        skillLevel:     parseInt($r.find(".cond-skill-level").val()) || 0,
         ..._readBgTagMeta($r, "cond"),
       });
     } else if (condType === "category") {
@@ -2965,12 +2954,6 @@ function _readActivityForm(html, original) {
         type:   "background",
         target: $r.find(".cond-target").val() || "self",
         bgName: $r.find(".cond-bg-name").val()?.trim() || "",
-      });
-    } else if (condType === "level") {
-      preconditions.push({
-        type:       "level",
-        comparison: $r.find(".cond-level-cmp").val() || "eq",
-        level:      parseInt($r.find(".cond-level").val()) || 1,
       });
     } else if (condType === "fieldResource") {
       preconditions.push({

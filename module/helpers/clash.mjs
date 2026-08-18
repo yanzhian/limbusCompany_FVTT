@@ -1055,8 +1055,8 @@ export class ClashManager {
           continue;
         }
 
-        // ── level 类型：检查"本次由 owner 实际使用的技能"的等级（1/2/3）──
-        // 与 category/useSkill 同理，优先取 ctx._currentItemId 指向的实际使用技能。
+        // ── level 类型（旧数据）：已并入 useSkill 的"等级"字段，保留兼容。
+        // 编辑器打开旧数据时会自动转成 useSkill，存一次就不再走这里。
         if (pre.type === "level") {
           const actingItem = (owner?.items?.get?.(ctx._currentItemId ?? "")) ?? item;
           const lvl = actingItem?.system?.level ?? 0;
@@ -4577,17 +4577,8 @@ export class ClashManager {
       if (!lastSkillUuid || !attacker) return false;
       const scope = await ClashManager._resolveTargets(pre.target ?? "self", actor, attacker, pre);
       if (!scope.some(a => a.id === attacker.id)) return false;
-      if (pre.skillUuid) return pre.skillUuid.trim() === lastSkillUuid.trim();
-      if (pre.skillNameOrTag) {
-        const val = pre.skillNameOrTag.trim();
-        if (!val) return false;
-        const skillItem = await fromUuid(lastSkillUuid).catch(() => null);
-        if (!skillItem) return false;
-        if (skillItem.name === val) return true;
-        const tags = String(skillItem.system?.tags ?? "").split("/").map(t => t.trim()).filter(Boolean);
-        return tags.includes(val);
-      }
-      return false;
+      const skillItem = await fromUuid(lastSkillUuid).catch(() => null);
+      return ClashManager._matchSkillIdentity(skillItem, pre);
     }
 
     if (type === "category") {
@@ -4601,7 +4592,7 @@ export class ClashManager {
     }
 
     if (type === "level") {
-      // 使用等级：检查本次对抗使用的技能（lastSkillUuid）等级是否满足比较条件
+      // 旧数据：使用等级已并入 useSkill 的"等级"字段，此分支仅作兼容
       if (!lastSkillUuid) return false;
       const skillItem = await fromUuid(lastSkillUuid).catch(() => null);
       if (!skillItem) return false;
@@ -4617,16 +4608,26 @@ export class ClashManager {
    * @param {Item} skillItem
    * @param {{skillUuid?:string, skillNameOrTag?:string}} pre
    */
+  /**
+   * 【使用技能】前置的匹配：名称/标签 与 技能等级 都是可选的，
+   * 填了的才检查，两个都填则需同时满足（如"标签「黑兽」的 Lv.3 技能"）。
+   * 两个都没填视为不成立，避免"任何技能都触发"的误配置。
+   * skillUuid 是旧数据字段，仍然兼容读取。
+   */
   static _matchSkillIdentity(skillItem, pre) {
     if (!skillItem) return false;
-    if (pre.skillUuid) return skillItem.uuid === pre.skillUuid.trim();
-    if (pre.skillNameOrTag) {
-      const val = pre.skillNameOrTag.trim();
-      if (!val) return false;
-      if (skillItem.name === val) return true;
-      return ClashManager._itemTags(skillItem).includes(val);
+
+    const val = String(pre.skillNameOrTag ?? "").trim();
+    const lvl = parseInt(pre.skillLevel) || 0;
+    const uuid = String(pre.skillUuid ?? "").trim();
+    if (!val && !lvl && !uuid) return false;
+
+    if (uuid && skillItem.uuid !== uuid) return false;
+    if (lvl && (skillItem.system?.level ?? 0) !== lvl) return false;
+    if (val) {
+      if (skillItem.name !== val && !ClashManager._itemTags(skillItem).includes(val)) return false;
     }
-    return false;
+    return true;
   }
 
   /** 读取技能物品的标签数组（system.tags 兼容数组与"标签1/标签2"字符串两种存法） */
