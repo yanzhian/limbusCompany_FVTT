@@ -2124,6 +2124,7 @@ function _buildCondRow(cond, idx, cfg) {
         <button type="button" class="ae-del-btn ae-del-precond">×</button>
       </div>
       <div class="ae-row-fields">
+        <div class="ae-line">
         <label>类型</label>
         <select class="ae-sel cond-type">
           <option value="hasBuff"     ${condType === "hasBuff"     ? "selected" : ""}>拥有</option>
@@ -2137,11 +2138,15 @@ function _buildCondRow(cond, idx, cfg) {
           <option value="fieldResource" ${condType === "fieldResource" ? "selected" : ""}>公用场地</option>
           <option value="sinResource"   ${condType === "sinResource"   ? "selected" : ""}>罪孽资源</option>
         </select>
+        </div>
+        <div class="ae-line">
         <span class="ae-cond-target-sec" ${(isCatSec || isFieldSec || isSinSec) ? 'style="display:none"' : ""}>
           <label>目标</label>
           <select class="ae-sel cond-target">${_buildTargetOptions(cond?.target ?? "self")}</select>
           ${_buildBgTagFields("cond", cond)}
         </span>
+        </div>
+        <div class="ae-line">
         <span class="ae-cond-buff-sec" ${isBuffSec ? "" : 'style="display:none"'}>
           <label>BUFF</label>
           <input class="ae-input cond-buff" type="text" list="ae-buff-dl"
@@ -2238,6 +2243,7 @@ function _buildCondRow(cond, idx, cfg) {
           <select class="ae-sel cond-sin-cmp">${fieldCmpOpts}</select>
           <input class="ae-input-sm cond-sin-value" type="number" value="${cond?.value ?? 0}" min="0">
         </span>
+        </div>
       </div>
     </div>`;
 }
@@ -2373,14 +2379,19 @@ function _buildCostRow(cost, idx, cfg) {
         <button type="button" class="ae-del-btn ae-del-cost">×</button>
       </div>
       <div class="ae-row-fields">
+        <div class="ae-line">
         <label>类型</label>
         <select class="ae-sel cost-type">${typeOpts}</select>
+        </div>
+        <div class="ae-line">
         <label>目标</label>
         <select class="ae-sel cost-target">${_buildTargetOptions(cost?.target ?? "self")}
           <option value="field" ${isField ? "selected" : ""}>公用场地</option>
           <option value="sin"   ${isSin   ? "selected" : ""}>罪孽资源</option>
         </select>
         ${_buildBgTagFields("cost", cost)}
+        </div>
+        <div class="ae-line">
         <span class="ae-cost-field-sec" ${(isField && !isRandom) ? "" : 'style="display:none"'}>
           <label>场地名字</label>
           <input class="ae-input cost-field-name" type="text"
@@ -2443,6 +2454,7 @@ function _buildCostRow(cost, idx, cfg) {
             <input class="ae-input-sm cost-discard-level" type="number" value="${cost?.discardLevel ?? 1}" min="1" max="3">
           </span>
         </span>
+        </div>
       </div>
     </div>`;
 }
@@ -2491,13 +2503,18 @@ function _buildEffectRow(eff, idx, cfg) {
         <button type="button" class="ae-del-btn ae-del-effect">×</button>
       </div>
       <div class="ae-row-fields">
+        <div class="ae-line">
         <label>类型</label>
         <select class="ae-sel ae-eff-type eff-type">${effOpts}</select>
+        </div>
+        <div class="ae-line">
         <span class="ae-eff-target-sec" ${(isUseSkill || isDiceTypeChg || isRelConvert || isFieldEff) ? 'style="display:none"' : ""}>
           <label>目标</label>
           <select class="ae-sel eff-target">${_buildTargetOptions(eff?.target ?? "self")}</select>
           ${_buildBgTagFields("eff", eff)}
         </span>
+        </div>
+        <div class="ae-line">
         <span class="ae-eff-field-sec" ${isFieldEff ? "" : 'style="display:none"'}>
           <label>场地名字</label>
           <input class="ae-input eff-field-name" type="text"
@@ -2613,6 +2630,7 @@ function _buildEffectRow(eff, idx, cfg) {
                  value="${_esc(eff?.relSkillName ?? "")}" placeholder="技能名字（在背包/技能列表中检索）" style="width:130px;" autocomplete="off">
           <span class="ae-eff-relconvert-hint">永久替换本技能在角色技能槽中的位置（在背包/技能列表按名字检索目标技能）</span>
         </span>
+        </div>
       </div>
     </div>`;
 }

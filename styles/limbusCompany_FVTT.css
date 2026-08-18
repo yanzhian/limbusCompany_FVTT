@@ -4702,7 +4702,7 @@ body.game .limbuscompany.app img {
 
 .ae-v2 .ae-body {
   padding: 8px 14px 10px; display: flex; flex-direction: column; gap: 6px;
-  max-height: 70vh; overflow-y: auto;
+  /* 不再自带滚动条：由对话框窗口统一滚动，避免出现内外两条 */
 }
 
 /* 名称行 */
@@ -4766,9 +4766,22 @@ body.game .limbuscompany.app img {
 .ae-v2 .ae-del-btn:hover { background: #8B2222; }
 
 .ae-v2 .ae-row-fields {
-  display: flex; flex-wrap: wrap; align-items: center; gap: 4px;
+  display: flex; flex-direction: column; align-items: stretch; gap: 3px;
   font-size: .72rem;
 }
+
+/* 行内一条：类型 / 目标+标签+在场+至多 / 其余字段，各占一行，能横着排就横着排 */
+.ae-v2 .ae-line {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 4px;
+  min-width: 0;
+}
+/* 该行没有任何可见内容时（如目标区被隐藏）不占高度 */
+.ae-v2 .ae-line:empty { display: none; }
+/* 分区壳子保持默认显示（jQuery 的显隐切换依赖它），
+   壳子内部的字段用小间距横排 */
+.ae-v2 .ae-line > span > * { margin-right: 3px; }
+/* 文本框不再抢占整行宽度 */
+.ae-v2 .ae-line .ae-input { flex: 0 1 auto; }
 .ae-v2 .ae-row-fields label {
   color: var(--text-sub); font-size: .68rem; white-space: nowrap;
 }
