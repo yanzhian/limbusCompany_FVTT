@@ -2522,6 +2522,10 @@ export class ClashManager {
       def: defItem?.system?.diceType ?? "default",
     };
     const _rollsFx = { atk: atkRollFx, def: defRollFx };
+    const _sumParts = (parts) => parts.reduce((a, p) => a + (p.value ?? 0), 0);
+    const _atkEffFx = _sumParts(_atkPartsFx);
+    const _defEffFx = _sumParts(_defPartsFx);
+    const _burstMid = () => ClashVFX.broadcastBurst(ClashVFX.midPoint(atkActor, defActor));
 
     // 反击 / 格挡不是交锋，而是一前一后各骰一次：
     // 【格挡】防守方先出（先挡），【反击】进攻方先出（后反击）；命中的一方带命中声
@@ -2564,6 +2568,17 @@ export class ClashManager {
       // 双方互相命中（攻方命中守方 + 守方反击命中攻方）
       await ClashManager._applyActivitiesAndEquip(atkItem,  "命中时", atkCtx);
       await ClashManager._applyActivitiesAndEquip(defItem,  "命中时", defCtx);
+      // 击退：进攻方先把守方打退；守方反手扑回来，再把进攻方打退
+      _burstMid();
+      await ClashKnockback.repel({
+        winner: atkActor, loser: defActor, winScore: _atkEffFx, chase: false,
+        onWallHit: (a) => ClashManager.seismicBlast(a, 1, { attacker: atkActor }),
+      });
+      await ClashKnockback.repel({
+        winner: defActor, loser: atkActor, winScore: _defEffFx,
+        chase: false, approachFirst: true,
+        onWallHit: (a) => ClashManager.seismicBlast(a, 1, { attacker: defActor }),
+      });
       await ClashManager._applyActivitiesAndEquip(atkItem,  "攻击后", atkCtx);
       await ClashManager._applyActivitiesAndEquip(defItem,  "攻击后", defCtx);
       await ClashManager._flushActMsgs(_actMsgs, atkActor);
@@ -2574,6 +2589,14 @@ export class ClashManager {
       await ClashManager._resolveDirectBlock(atkActor, defActor, effectiveInitFlags, defItem, defFinalRoll, defFinalFormula);
       // 格挡：攻方命中守方（守方未命中攻方）
       await ClashManager._applyActivitiesAndEquip(atkItem,  "命中时", atkCtx);
+      // 格挡成功（挡得住）不击退；没挡住才被推开一次，且攻方不追击
+      if (_atkEffFx > _defEffFx) {
+        _burstMid();
+        await ClashKnockback.repel({
+          winner: atkActor, loser: defActor, winScore: _atkEffFx, chase: false,
+          onWallHit: (a) => ClashManager.seismicBlast(a, 1, { attacker: atkActor }),
+        });
+      }
       await ClashManager._applyActivitiesAndEquip(atkItem,  "攻击后", atkCtx);
       await ClashManager._applyActivitiesAndEquip(defItem,  "攻击后", defCtx);
       await ClashManager._flushActMsgs(_actMsgs, atkActor);
@@ -2583,8 +2606,7 @@ export class ClashManager {
 
     // ── 闪避：双方同时出手，只拼一次，不消耗行动值也不碎硬币 ──────────
     if (defCategory === "dodge") {
-      const atkEffFx = _atkPartsFx.reduce((a, p) => a + (p.value ?? 0), 0);
-      const defEffFx = _defPartsFx.reduce((a, p) => a + (p.value ?? 0), 0);
+      const atkEffFx = _atkEffFx, defEffFx = _defEffFx;
       await ClashTotalFX.play({
         atkParts: _atkPartsFx, defParts: _defPartsFx,
         rerollSides: _rerollShow.map(e => e.side),
@@ -2598,6 +2620,14 @@ export class ClashManager {
           { roll: defRollFx, actor: defActor },
         ]),
       });
+      // 闪避成功不击退；没闪过才被推开一次，且攻方不追击
+      if (atkEffFx > defEffFx) {
+        _burstMid();
+        await ClashKnockback.repel({
+          winner: atkActor, loser: defActor, winScore: atkEffFx, chase: false,
+          onWallHit: (a) => ClashManager.seismicBlast(a, 1, { attacker: atkActor }),
+        });
+      }
     }
     // ── 连击：行动值决定还能输几次，输光了才由这一次的胜方结算伤害 ──────
     else {
@@ -3523,6 +3553,13 @@ export class ClashManager {
     if (_buffHookMsgs2.length) {
       _actMsgs2.push({ trigger: "受到伤害时", itemName: baseActor.name, msgs: _buffHookMsgs2 });
     }
+
+    // 单方面攻击（承受）：不拼点，只把对方打退一次，攻击方不追击
+    ClashVFX.broadcastBurst(ClashVFX.midPoint(atkActor, baseActor));
+    await ClashKnockback.repel({
+      winner: atkActor, loser: baseActor, winScore: step, chase: false,
+      onWallHit: (a) => ClashManager.seismicBlast(a, 1, { attacker: atkActor }),
+    });
 
     // [攻击后]：结算完毕
     await ClashManager._applyActivitiesAndEquip(atkItem2, "攻击后", atkCtx2);

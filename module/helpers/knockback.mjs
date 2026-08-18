@@ -114,15 +114,43 @@ export class ClashKnockback {
   static async _push(token, dx, dy, cells) {
     const gs = canvas.grid.size;
     let center = { ...token.center };
-    let moved = 0;
+    let moved = 0, hitWall = false;
     for (let i = 0; i < cells; i++) {
       const next = { x: center.x + dx * gs, y: center.y + dy * gs };
-      if (this._blocked(token, center, next)) return { hitWall: true, center };
+      // 撞上了就停在这儿——之前推的那几格照样算数（离墙 2 格却要退 3 格时，
+      // 应该退满 2 格再撞墙，而不是一格都不动）
+      if (this._blocked(token, center, next)) { hitWall = true; break; }
       center = next;
       moved++;
     }
     if (moved) await this._teleport(token, center);
-    return { hitWall: false, center };
+    return { hitWall, moved, center };
+  }
+
+  /** 从 from 指向 to 的主轴正交方向 */
+  static _dirTo(from, to) {
+    const dx = to.x - from.x, dy = to.y - from.y;
+    return Math.abs(dx) >= Math.abs(dy)
+      ? { dx: Math.sign(dx) || 1, dy: 0 }
+      : { dx: 0, dy: Math.sign(dy) || 1 };
+  }
+
+  /**
+   * 让 token 瞬移到 target 的旁边（贴身），带风线。
+   * @returns {boolean} 是否成功贴上
+   */
+  static async approach(token, target) {
+    const gs = canvas.grid.size;
+    const dir = this._dirTo(token.center, target.center);
+    const spot = {
+      x: target.center.x - dir.dx * gs,
+      y: target.center.y - dir.dy * gs,
+    };
+    if (Math.hypot(spot.x - token.center.x, spot.y - token.center.y) < gs * 0.5) return true;
+    if (this._blocked(token, token.center, spot)) { this._log("贴身路线被挡"); return false; }
+    ClashVFX.broadcastDash({ ...token.center }, spot);
+    await this._teleport(token, spot);
+    return true;
   }
 
   /**
@@ -133,9 +161,11 @@ export class ClashKnockback {
    * @param {Actor}   opts.loser     本次交锋的败方
    * @param {number}  opts.winScore  胜方点数（决定震退几格）
    * @param {boolean} opts.chase     胜方是否追击（【伤害计算】那一下传 false）
+   * @param {boolean} opts.approachFirst 不贴身时先扑过去再打（反击用）
    * @param {Function} opts.onWallHit 撞墙回调：(actor) => Promise，用来触发【震颤引爆】
    */
-  static async repel({ winner, loser, winScore = 0, chase = true, onWallHit = null } = {}) {
+  static async repel({ winner, loser, winScore = 0, chase = true,
+                       approachFirst = false, onWallHit = null } = {}) {
     if (!this.active || !canvas?.ready) return;
 
     const cells = this.cellsFor(winScore);
@@ -146,7 +176,12 @@ export class ClashKnockback {
     if (!winTok || !loseTok) return;
 
     // 面对面才有斥力，隔空对拼视为远程
-    const facing = this._facing(winTok, loseTok);
+    let facing = this._facing(winTok, loseTok);
+    if (!facing && approachFirst) {
+      // 反击：被打退开了，反手扑回去
+      await this._wait(this.DELAY_CHASE);
+      if (await this.approach(winTok, loseTok)) facing = this._facing(winTok, loseTok);
+    }
     if (!facing) { this._log("双方并非贴身，跳过斥力"); return; }
 
     this._log(`斥力：点数 ${winScore} → 击退 ${cells} 格`);
