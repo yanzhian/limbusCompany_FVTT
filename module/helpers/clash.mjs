@@ -181,9 +181,19 @@ export class ClashManager {
    */
   static _showDiceEach(entries = []) {
     if (!game.dice3d) return entries.map(() => Promise.resolve());
-    return entries.map(e => e?.roll
-      ? game.dice3d.showForRoll(e.roll, ClashManager._diceUserFor(e.actor), true, null, false).catch(() => {})
-      : Promise.resolve());
+    return entries.map(e => {
+      // 只有真正的 Roll 才喂给 DiceSoNice——委托 GM 结算时防守骰可能只是
+      // 一个 { total } 的替身对象，丢进去会在 DiceNotation 里炸
+      const roll = e?.roll;
+      if (!roll || !Array.isArray(roll.dice)) return Promise.resolve();
+      try {
+        return game.dice3d.showForRoll(roll, ClashManager._diceUserFor(e.actor), true, null, false)
+          .catch(() => {});
+      } catch (err) {
+        console.warn("[ClashManager] DiceSoNice 播放失败，已跳过:", err);
+        return Promise.resolve();
+      }
+    });
   }
 
   static _skillFrameIcon(item) {
@@ -2610,6 +2620,8 @@ export class ClashManager {
         defActorId:   defActor.id,
         defItemId:    defItem.id,
         defRollTotal: defRoll.total,
+        // 带上完整骰子数据，GM 端重建真 Roll 才能播 DiceSoNice
+        defRollData:  (typeof defRoll.toJSON === "function") ? defRoll.toJSON() : null,
         defFormula,
         initMsgId,
         initFlags,
@@ -5078,7 +5090,7 @@ export class ClashManager {
     console.log("[ClashManager] 收到 clashResolve socket 消息 | isGM:", game.user.isGM, "| data:", msg.data);
     if (!game.user.isGM) return;
     try {
-      const { defActorId, defItemId, defRollTotal, defFormula, initMsgId, initFlags, slotIdx } = msg.data;
+      const { defActorId, defItemId, defRollTotal, defRollData, defFormula, initMsgId, initFlags, slotIdx } = msg.data;
       const defActor = game.actors.get(defActorId);
       const defItem  = defActor?.items.get(defItemId);
       if (!defActor || !defItem) {
@@ -5088,7 +5100,12 @@ export class ClashManager {
       }
       console.log("[ClashManager] GM 开始执行对抗结算 | defActor:", defActor.name, "| defItem:", defItem.name);
       // 重建只含 total 的 roll 代理对象（结算流程仅使用 .total）
-      const defRoll = { total: defRollTotal };
+      // 有完整骰子数据就重建真 Roll（DiceSoNice 需要），否则退回只含 total 的替身
+      let defRoll = { total: defRollTotal };
+      if (defRollData) {
+        try { defRoll = Roll.fromJSON(JSON.stringify(defRollData)); }
+        catch (err) { console.warn("[ClashManager] 防守骰重建失败，退回替身对象:", err); }
+      }
       await ClashManager._sendResponseAndResolve(
         defActor, defItem, defRoll, defFormula, initMsgId, initFlags, slotIdx ?? -1
       );
