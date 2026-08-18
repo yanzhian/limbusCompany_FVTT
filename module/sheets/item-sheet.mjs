@@ -2074,7 +2074,7 @@ function _buildTriggerOpts(selected) {
 
 /** 前置条件行 HTML */
 function _buildCondRow(cond, idx, cfg) {
-  const condType   = ["perN","baseAttr","useSkill","buffCompare","category","fieldResource","sinResource","level","background"].includes(cond?.type) ? cond.type : "hasBuff";
+  const condType   = ["perN","baseAttr","useSkill","buffCompare","category","fieldResource","sinResource","level","background","equipped"].includes(cond?.type) ? cond.type : "hasBuff";
   const isBuffSec  = condType === "hasBuff" || condType === "perN" || condType === "buffCompare";
   const isAttrSec  = condType === "baseAttr";
   const isSkillSec = condType === "useSkill";
@@ -2083,6 +2083,7 @@ function _buildCondRow(cond, idx, cfg) {
   const isSinSec   = condType === "sinResource";
   const isLevelSec = condType === "level";
   const isBgSec    = condType === "background";
+  const isEquipSec = condType === "equipped";
   const isCompare  = condType === "buffCompare";
   const isPerN     = condType === "perN";
   const perNDim    = cond?.perNDim === "intensity" ? "intensity" : "stacks";
@@ -2134,6 +2135,7 @@ function _buildCondRow(cond, idx, cfg) {
           <option value="category"    ${condType === "category"    ? "selected" : ""}>使用分类</option>
           <option value="level"       ${condType === "level"       ? "selected" : ""}>使用等级</option>
           <option value="background"  ${condType === "background"  ? "selected" : ""}>背景</option>
+          <option value="equipped"    ${condType === "equipped"    ? "selected" : ""}>已装备</option>
           <option value="fieldResource" ${condType === "fieldResource" ? "selected" : ""}>公用场地</option>
           <option value="sinResource"   ${condType === "sinResource"   ? "selected" : ""}>罪孽资源</option>
         </select>
@@ -2189,6 +2191,30 @@ function _buildCondRow(cond, idx, cfg) {
           <label class="ae-cond-cat-cb"><input type="checkbox" class="cond-category-cb" value="slash"  ${selCats.includes("slash")  ? "checked" : ""}> 斩击</label>
           <label class="ae-cond-cat-cb"><input type="checkbox" class="cond-category-cb" value="blunt"  ${selCats.includes("blunt")  ? "checked" : ""}> 打击</label>
           <label class="ae-cond-cat-cb"><input type="checkbox" class="cond-category-cb" value="pierce" ${selCats.includes("pierce") ? "checked" : ""}> 突刺</label>
+        </span>
+        <!-- 已装备：数名称/标签/分类符合的装备件数；三个筛选可任意组合、留空即不限。
+             勾选"每"时，件数还会成为后续效果的倍数（每装备 1 件 → 加 3 层 …）-->
+        <span class="ae-cond-equip-sec" ${isEquipSec ? "" : 'style="display:none"'}>
+          <label>名称</label>
+          <input class="ae-input cond-equip-name" type="text" style="width:90px;"
+                 value="${_esc(cond?.equipName ?? "")}" placeholder="留空=不限">
+          <label>标签</label>
+          <input class="ae-input cond-equip-tag" type="text" style="width:90px;"
+                 value="${_esc(cond?.equipTag ?? "")}" placeholder="如：烙印工坊">
+          <label>分类</label>
+          <input class="ae-input cond-equip-category" type="text" style="width:90px;"
+                 value="${_esc(cond?.equipCategory ?? "")}" placeholder="如：狙击步枪">
+          <label>件数≥</label>
+          <input class="ae-input-sm cond-equip-count" type="number" min="1"
+                 value="${cond?.count ?? 1}">
+          <label title="勾选后，符合条件的件数会成为后续效果的倍数">
+            <input type="checkbox" class="cond-equip-pereach" ${cond?.perEach ? "checked" : ""}> 每
+          </label>
+          <span class="ae-cond-equip-max" ${cond?.perEach ? "" : 'style="display:none"'}>
+            <label>最大倍数</label>
+            <input class="ae-input-sm cond-equip-max" type="number" min="0"
+                   value="${cond?.maxTimes ?? 0}" placeholder="0=无限">
+          </span>
         </span>
         <!-- 背景：检查所选一方的背景名称或背景标签 -->
         <span class="ae-cond-bg-sec" ${isBgSec ? "" : 'style="display:none"'}>
@@ -2752,6 +2778,7 @@ function _bindCondType(html) {
     const isSinSec   = type === "sinResource";
     const isLevelSec = type === "level";
     const isBgSec    = type === "background";
+    const isEquipSec = type === "equipped";
     const isCompare  = type === "buffCompare";
     const isPerN     = type === "perN";
     const perNDim    = row.find(".cond-pern-dim").val() === "intensity" ? "intensity" : "stacks";
@@ -2764,12 +2791,16 @@ function _bindCondType(html) {
     row.find(".ae-cond-sin-sec").toggle(isSinSec);
     row.find(".ae-cond-level-sec").toggle(isLevelSec);
     row.find(".ae-cond-bg-sec").toggle(isBgSec);
+    row.find(".ae-cond-equip-sec").toggle(isEquipSec);
     row.find(".ae-cond-target-sec").toggle(!isCatSec && !isFieldSec && !isSinSec && !isLevelSec);
     row.find(".ae-cond-pern-max").toggle(isPerN);
     row.find(".ae-cond-pern-dim-sec").toggle(isPerN);
     row.find(".ae-cond-intensity-sec").toggle(!isCompare && !isPerN);
     row.find(".cond-stacks-label").toggle(!isCompare);
     row.find(".ae-cond-cmp-sec").toggle(isCompare);
+  });
+  html.find(".cond-equip-pereach").off("change").on("change", function () {
+    $(this).closest(".ae-cond-row").find(".ae-cond-equip-max").toggle(this.checked);
   });
   html.find(".cond-pern-dim").off("change").on("change", function () {
     const row   = $(this).closest(".ae-cond-row");
@@ -2918,6 +2949,17 @@ function _readActivityForm(html, original) {
     } else if (condType === "category") {
       const cats = $r.find(".cond-category-cb:checked").map((_, el) => el.value).get();
       preconditions.push({ type: "category", categories: cats });
+    } else if (condType === "equipped") {
+      preconditions.push({
+        type:          "equipped",
+        target:        $r.find(".cond-target").val() || "self",
+        equipName:     $r.find(".cond-equip-name").val()?.trim()     || "",
+        equipTag:      $r.find(".cond-equip-tag").val()?.trim()      || "",
+        equipCategory: $r.find(".cond-equip-category").val()?.trim() || "",
+        count:         Math.max(1, parseInt($r.find(".cond-equip-count").val()) || 1),
+        perEach:       $r.find(".cond-equip-pereach").is(":checked"),
+        maxTimes:      parseInt($r.find(".cond-equip-max").val()) || 0,
+      });
     } else if (condType === "background") {
       preconditions.push({
         type:   "background",

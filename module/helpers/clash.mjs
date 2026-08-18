@@ -375,6 +375,33 @@ export class ClashManager {
 
   /** 将 BUFF 类型键转换为中文显示名称。 */
   /** 返回 actor 装备格中所有已装入的物品（slot0–slot8）。 */
+  /**
+   * 「已装备」前置的匹配：名称 / 标签 / 分类三个筛选条件都是可选的，
+   * 填了的才检查，多个同时填则需全部命中（AND）。
+   * @param {Item}   item 装备格里的物品
+   * @param {object} pre  { equipName, equipTag, equipCategory }
+   */
+  static _matchEquipFilter(item, pre) {
+    if (!item) return false;
+    const name = String(pre?.equipName ?? "").trim();
+    const tag  = String(pre?.equipTag ?? "").trim();
+    const cat  = String(pre?.equipCategory ?? "").trim();
+    if (name && item.name !== name) return false;
+    if (cat  && String(item.system?.category ?? "").trim() !== cat) return false;
+    if (tag) {
+      const tags = String(item.system?.tags ?? "").split("/").map(t => t.trim()).filter(Boolean);
+      if (!tags.includes(tag)) return false;
+    }
+    // 三个都没填 = 只要装备格里有东西就算
+    return true;
+  }
+
+  /** 该角色装备格里符合条件的装备件数 */
+  static _countEquipped(actor, pre) {
+    return ClashManager._getEquippedItems(actor)
+      .filter(it => ClashManager._matchEquipFilter(it, pre)).length;
+  }
+
   static _getEquippedItems(actor) {
     if (!actor) return [];
     const eq = actor.system?.equipment ?? {};
@@ -1034,6 +1061,23 @@ export class ClashManager {
           const actingItem = (owner?.items?.get?.(ctx._currentItemId ?? "")) ?? item;
           const lvl = actingItem?.system?.level ?? 0;
           if (!ClashManager._cmp(lvl, pre.comparison ?? "eq", pre.level ?? 1)) { precondFail = true; break; }
+          continue;
+        }
+
+        // ── equipped 类型：检查装备格里符合条件的装备件数 ───────────────
+        // 名称/标签/分类三个筛选可任意组合；"每 N 件"模式下件数还会变成后续
+        // 效果的倍数（与 perN 共用 precondMultiplier）。
+        if (pre.type === "equipped") {
+          const precTgt = (pre.target ?? "self") === "self" ? owner : other;
+          if (!precTgt) { precondFail = true; break; }
+          const have = ClashManager._countEquipped(precTgt, pre);
+          const need = Math.max(1, pre.count ?? 1);
+          if (have < need) { precondFail = true; break; }
+          if (pre.perEach) {
+            let times = Math.floor(have / need);
+            if ((pre.maxTimes ?? 0) > 0) times = Math.min(times, pre.maxTimes);
+            precondMultiplier *= times;
+          }
           continue;
         }
 
@@ -4508,6 +4552,12 @@ export class ClashManager {
       const curVal = ClashManager._getAttrVal(targetActor, pre.attrType ?? "hp");
       const threshold = ClashManager._parseThreshold(pre.attrValue ?? "0", targetActor, pre.attrType ?? "hp");
       return ClashManager._cmp(curVal, pre.comparison ?? "lt", threshold);
+    }
+
+    if (type === "equipped") {
+      if (!targetActor) return false;
+      const have = ClashManager._countEquipped(targetActor, pre);
+      return have >= Math.max(1, pre.count ?? 1);
     }
 
     if (type === "background") {
