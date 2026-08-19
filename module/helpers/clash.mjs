@@ -1500,7 +1500,7 @@ export class ClashManager {
             const val = _scaleVal(rawVal, mode);
             const cur = item.system?.weight ?? 0;
             const nv  = mode === "absolute" ? Math.max(0, val) : Math.max(0, cur + val);
-            if (!eff.permanent) await ClashManager._stashItemMod(item, "system.weight");
+            await ClashManager._stashItemMod(item, "system.weight");
             await ClashManager._safeDocUpdate(item, { "system.weight": nv });
             descStr = mode === "absolute"
               ? `【${item.name}】攻击容量 调整为 ${nv}`
@@ -1513,7 +1513,7 @@ export class ClashManager {
             const val = _scaleVal(rawVal, mode);
             const cur = item.system?.diceCount ?? 1;
             const nv  = mode === "absolute" ? Math.max(1, val) : Math.max(1, cur + val);
-            if (!eff.permanent) await ClashManager._stashItemMod(item, "system.diceCount");
+            await ClashManager._stashItemMod(item, "system.diceCount");
             await ClashManager._safeDocUpdate(item, { "system.diceCount": nv });
             descStr = mode === "absolute"
               ? `【${item.name}】骰数 调整为 ${nv}d`
@@ -1526,7 +1526,7 @@ export class ClashManager {
             const val = _scaleVal(rawVal, mode);
             const cur = item.system?.diceFaces ?? 4;
             const nv  = mode === "absolute" ? Math.max(2, val) : Math.max(2, cur + val);
-            if (!eff.permanent) await ClashManager._stashItemMod(item, "system.diceFaces");
+            await ClashManager._stashItemMod(item, "system.diceFaces");
             await ClashManager._safeDocUpdate(item, { "system.diceFaces": nv });
             descStr = mode === "absolute"
               ? `【${item.name}】面数 d${cur} → d${nv}`
@@ -1539,7 +1539,7 @@ export class ClashManager {
             const val = _scaleVal(rawVal, mode);
             const cur = item.system?.baseValue ?? 0;
             const nv  = mode === "absolute" ? val : cur + val;
-            if (!eff.permanent) await ClashManager._stashItemMod(item, "system.baseValue");
+            await ClashManager._stashItemMod(item, "system.baseValue");
             await ClashManager._safeDocUpdate(item, { "system.baseValue": nv });
             descStr = mode === "absolute"
               ? `【${item.name}】基础值 调整为 ${nv}`
@@ -3598,8 +3598,8 @@ export class ClashManager {
   static TEMP_MOD_PATHS = ["system.diceCount", "system.diceFaces", "system.baseValue", "system.weight"];
 
   /**
-   * 改动前把原值记到物品 flag 上（同一次攻击里只记第一次的原值）。
-   * 效果勾了【永久】就不记，改动会一直留着。
+   * 改动前把原值记到物品 flag 上（同一次攻击里只记第一次的原值），
+   * 供 [攻击后] 结束时还原——这四个字段一律只在本次攻击内有效。
    */
   static async _stashItemMod(item, path) {
     if (!item) return;

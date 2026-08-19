@@ -2565,9 +2565,6 @@ function _buildTargetOptions(selected) {
  * 数量不足则目标为空（效果不生效）。"背景标签(其他)"与"本队其他全部"同理，
  * 会先排除拥有者自己（自己不受益，数量门槛也按排除自己后的人数判定）。
  */
-/** 会写回物品、因而支持「永久」勾选的效果类型（不勾则打完这一击自动还原） */
-const _PERMANENT_EFFECTS = new Set(["diceAdj", "diceFacesAdj", "baseValue", "weightAdj"]);
-
 /** 需要「至多人数」上限的群体目标 */
 const _MULTI_TARGETS = new Set([
   "bgTag", "bgTagOther", "allTeam", "allTeamOther", "allEnemy", "allEnemyOther",
@@ -2817,12 +2814,7 @@ function _buildEffectRow(eff, idx, cfg) {
           <input class="ae-input eff-value" type="text" placeholder="${_effValuePlaceholder(type)}"
                  value="${formulaVal}" style="width:110px;">
         </span>
-        <!-- 骰数/面数/基础值/攻击容量：默认打完这一击就还原，勾上才永久留在物品上 -->
-        <span class="ae-eff-perm-sec" ${_PERMANENT_EFFECTS.has(type) ? "" : 'style="display:none"'}>
-          <label class="ae-check" title="不勾：本次攻击结束后自动还原；勾上：永久写在物品上">
-            <input type="checkbox" class="eff-permanent" ${eff?.permanent ? "checked" : ""}>永久
-          </label>
-        </span>
+
         <span class="ae-eff-trig-sec" ${isTriggerBuff ? "" : 'style="display:none"'}>
           <label>BUFF</label>
           <input class="ae-input eff-trig-buff" type="text" list="ae-trig-buff-dl"
@@ -3198,7 +3190,6 @@ function _bindEffType(html) {
     row.find(".ae-eff-useskill-sec").toggle(isUseSkill);
     row.find(".ae-eff-dicetypechg-sec").toggle(isDiceTypeChg);
     row.find(".ae-eff-extradmg-sec").toggle(isExtraDamage);
-    row.find(".ae-eff-perm-sec").toggle(_PERMANENT_EFFECTS.has(type));
     row.find(".ae-eff-relconvert-sec").toggle(isRelConvert);
   });
 }
@@ -3455,7 +3446,6 @@ function _readActivityForm(html, original) {
       trigBuffCustom: "",
       trigStacks:     isTriggerBuff ? (parseInt($r.find(".eff-trig-stacks").val()) || 1) : 0,
       ..._readBgTagMeta($r, "eff"),
-      ...(_PERMANENT_EFFECTS.has(type) ? { permanent: $r.find(".eff-permanent").is(":checked") } : {}),
       ...(isExtraDamage ? {
         dmgCategory: $r.find(".eff-extradmg-category").val() || "",
         dmgSinType:  $r.find(".eff-extradmg-sin").val()      || "",
