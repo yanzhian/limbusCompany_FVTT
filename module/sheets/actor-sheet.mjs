@@ -2048,10 +2048,20 @@ export class LimbusActorSheet extends ActorSheet {
     const input  = event.currentTarget;
     const buffId = input.dataset.buffId;
     const field  = input.dataset.field;
-    const value  = parseInt(input.value) || 0;
-    const buffs  = (this.actor.system.buffs ?? []).map(b =>
-      b.id === buffId ? { ...b, [field]: value } : b
-    );
+    let   value  = parseInt(input.value) || 0;
+    const buffs  = (this.actor.system.buffs ?? []).map(b => {
+      if (b.id !== buffId) return b;
+      // 手改也守规矩：层数不得超过该 BUFF 注册的上限
+      if (field === "stacks") {
+        const max = resolveBuffHandler(b)?.maxStacks ?? Infinity;
+        if (Number.isFinite(max) && value > max) {
+          ui.notifications.info(`【${b.name ?? b.type}】最多 ${max} 层`);
+          value = max;
+          input.value = max;
+        }
+      }
+      return { ...b, [field]: value };
+    });
     await this.actor.update({ "system.buffs": buffs });
   }
 

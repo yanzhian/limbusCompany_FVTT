@@ -242,7 +242,44 @@ Hooks.once("ready", () => {
 
   // GM 在线时执行一次迁移：把所有现有角色及其场景 Token 改为 linked
   if (game.user.isGM) _migrateTokenLinks();
+
+  // GM 在线时校正一次超标的 BUFF 层数（规矩就是规矩）
+  if (game.user.isGM) _clampBuffStacks();
 });
+
+/**
+ * 加载时校正：把所有角色身上超过注册上限（maxStacks）的 BUFF 层数钳回上限。
+ *
+ * 上限此前因为「自定义 BUFF 以中文名当 type」而失效过，存量存档里可能留着
+ * 15 层上限却叠到 99 的 BUFF；这里在世界加载时一次性纠正，之后由 _addBuff 把关。
+ */
+async function _clampBuffStacks() {
+  let fixedActors = 0, fixedBuffs = 0;
+  for (const actor of game.actors) {
+    const buffs = actor.system?.buffs;
+    if (!Array.isArray(buffs) || !buffs.length) continue;
+
+    let changed = false;
+    const next = buffs.map(b => {
+      const max = resolveBuffHandler(b)?.maxStacks ?? Infinity;
+      if (!Number.isFinite(max) || (b.stacks ?? 0) <= max) return b;
+      changed = true; fixedBuffs++;
+      console.warn(`limbusCompany_FVTT | 【${b.name ?? b.type}】层数 ${b.stacks} → ${max}（${actor.name}）`);
+      return { ...b, stacks: max };
+    });
+    if (!changed) continue;
+
+    try {
+      await actor.update({ "system.buffs": next });
+      fixedActors++;
+    } catch (err) {
+      console.warn("limbusCompany_FVTT | BUFF 层数校正失败", actor.name, err);
+    }
+  }
+  if (fixedBuffs) {
+    ui.notifications.info(`已校正 ${fixedActors} 名角色的 ${fixedBuffs} 个超上限 BUFF 层数`);
+  }
+}
 
 // 画布每次就绪时再次确保双击补丁存在（重连/重载场景后仍生效）
 Hooks.on("canvasReady", () => {
