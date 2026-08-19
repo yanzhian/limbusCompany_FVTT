@@ -332,8 +332,40 @@ export function coerceValue(path, raw, itemType) {
     catch { return { error: `「${path}」的 JSON 解析失败` }; }
   }
 
-  // 其余（StringField / HTMLField / SchemaField 的叶子等）按字符串
+  // 富文本（效果 / 描述 / 简介）：换行转 <br>，没有换行时按触发时机自动断行
+  if (fields.HTMLField && field instanceof fields.HTMLField) {
+    return { value: richTextFromCsv(text) };
+  }
+
+  // 其余（StringField / SchemaField 的叶子等）按字符串
   return { value: text };
+}
+
+/**
+ * 把 CSV 单元格里的描述文本整理成物品卡上的富文本。
+ *
+ * · 单元格里本来就有换行（Excel 里 Alt+Enter）→ 逐行转 <br>
+ * · 全挤在一行 → 在每个 [触发时机] 前断行，例如
+ *   "…【广域乱射】 [攻击前]：… [攻击时]：…"
+ *   → "…【广域乱射】<br>[攻击前]：…<br>[攻击时]：…"
+ * @param {string} text
+ * @returns {string}
+ */
+export function richTextFromCsv(text = "") {
+  const raw = String(text).replace(/\r\n?/g, "\n").trim();
+  if (!raw) return "";
+
+  let lines;
+  if (raw.includes("\n")) {
+    lines = raw.split("\n");
+  } else {
+    // 在 “[xxx]：” 这种触发时机标记前断行（行首那个不断）
+    lines = raw
+      .replace(/\s*(?=[\[［][^\[\]［］]{1,12}[\]］][：:])/g, "\n")
+      .split("\n");
+  }
+
+  return lines.map(l => l.trim()).filter(Boolean).join("<br>");
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
