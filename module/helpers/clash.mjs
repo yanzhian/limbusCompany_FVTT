@@ -1700,6 +1700,7 @@ export class ClashManager {
           case "diceTypeChg": {
             const newDiceType = eff.diceTypeVal ?? "normal";
             if (item) {
+              await ClashManager._stashItemMod(item, "system.diceType");
               await ClashManager._safeDocUpdate(item, { "system.diceType": newDiceType });
               const label = newDiceType === "unbreakable" ? "不可摧毁" : "一般骰子";
               descStr = `【${item.name}】骰子类型变更为【${label}】`;
@@ -3607,7 +3608,10 @@ export class ClashManager {
   /* ─── 本次攻击内的临时骰面改动 ─────────────────────────────────────── */
 
   /** 会写回物品、因而需要打完还原的字段 */
-  static TEMP_MOD_PATHS = ["system.diceCount", "system.diceFaces", "system.baseValue", "system.weight"];
+  static TEMP_MOD_PATHS = [
+    "system.diceCount", "system.diceFaces", "system.baseValue",
+    "system.weight", "system.diceType",
+  ];
 
   /**
    * 改动前把原值记到物品 flag 上（同一次攻击里只记第一次的原值），
