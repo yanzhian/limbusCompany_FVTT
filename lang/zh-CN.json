@@ -135,7 +135,7 @@
       },
       "Skill": {
         "RelatedSkill":   "相关技能",
-        "Weight":         "加重值",
+        "Weight":         "攻击容量",
         "DiceFormula":    "骰子公式",
         "SinCost":        "罪孽消耗",
         "SanityCost":     "理智消耗",

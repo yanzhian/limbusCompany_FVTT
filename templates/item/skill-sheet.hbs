@@ -177,19 +177,17 @@
             </div>
           {{/if}}
 
-          {{!-- 加重值（非守备技能） --}}
-          {{#unless isDefense}}
-            <div class="weight-row">
-              {{#if (and isEditable (not isLocked))}}
-                <label class="skill-field-label">加重值</label>
-                <input type="number" name="{{fp}}weight" value="{{form.weight}}" class="weight-input" min="0" max="8" style="width:45px"/>
-              {{else}}
-                {{#each weightSquares}}
-                  <span class="weight-sq" title="加重值"></span>
-                {{/each}}
-              {{/if}}
-            </div>
-          {{/unless}}
+        {{!-- 攻击容量（守备技能也有：可拼点反击等能打出多次伤害） --}}
+          <div class="weight-row">
+            {{#if (and isEditable (not isLocked))}}
+              <label class="skill-field-label">攻击容量</label>
+              <input type="number" name="{{fp}}weight" value="{{form.weight}}" class="weight-input" min="0" max="8" style="width:45px"/>
+            {{else}}
+              {{#each weightSquares}}
+                <span class="weight-sq" title="攻击容量"></span>
+              {{/each}}
+            {{/if}}
+          </div>
 
         </div>{{!-- /equip-info-col --}}
       </div>{{!-- /equip-header --}}

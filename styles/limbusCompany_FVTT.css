@@ -4237,7 +4237,7 @@ body.game .limbuscompany.app img {
 }
 .limbuscompany .counter-type-label { color: var(--text-sub); font-size: .75rem; }
 
-/* 加重值行 */
+/* 攻击容量行 */
 .limbuscompany .weight-row {
   display: flex; align-items: center; gap: 3px; min-height: 20px;
 }

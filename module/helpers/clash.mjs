@@ -1391,7 +1391,7 @@ export class ClashManager {
 
       for (const eff of effects) {
         if (!eff?.type) continue;
-        // 连击的第 2 次交锋起：改写技能本身的效果（骰数/面数/基础值/加重值/
+        // 连击的第 2 次交锋起：改写技能本身的效果（骰数/面数/基础值/攻击容量/
         // 骰子类型）不再重复执行，否则每交锋一次就再加一遍，3d 会滚成 6d
         if (ctx._comboRound > 1 && ClashManager.COMBO_ONCE_EFFECTS.has(eff.type)) continue;
         const effTgts = await ClashManager._resolveTargets(eff.target ?? "self", owner, other, eff);
@@ -1498,8 +1498,8 @@ export class ClashManager {
             const nv  = mode === "absolute" ? Math.max(0, val) : Math.max(0, cur + val);
             await ClashManager._safeDocUpdate(item, { "system.weight": nv });
             descStr = mode === "absolute"
-              ? `【${item.name}】加重值 调整为 ${nv}`
-              : `【${item.name}】加重值 ${val >= 0 ? "+" : ""}${val}（${cur} → ${nv}）`;
+              ? `【${item.name}】攻击容量 调整为 ${nv}`
+              : `【${item.name}】攻击容量 ${val >= 0 ? "+" : ""}${val}（${cur} → ${nv}）`;
             break;
           }
           case "diceAdj": {
@@ -1913,7 +1913,7 @@ export class ClashManager {
     if (t === "hpAdj")    { const v = eff.value ?? eff.intensity ?? 0; return `${tgt}生命值 ${v >= 0 ? "+" : ""}${v}`; }
     if (t === "sanityAdj"){ const v = eff.value ?? eff.intensity ?? 0; return `${tgt}理智 ${v >= 0 ? "+" : ""}${v}`; }
     if (t === "apAdj")       { const v = eff.value ?? eff.intensity ?? 0; return `${tgt}行动值 ${v >= 0 ? "+" : ""}${v}`; }
-    if (t === "weightAdj")   { const v = eff.value ?? eff.intensity ?? 0; return `技能加重值 ${v >= 0 ? "+" : ""}${v}`; }
+    if (t === "weightAdj")   { const v = eff.value ?? eff.intensity ?? 0; return `技能攻击容量 ${v >= 0 ? "+" : ""}${v}`; }
     if (t === "diceAdj")     { const v = eff.value ?? eff.intensity ?? 0; return `技能骰数 ${v >= 0 ? "+" : ""}${v}`; }
     if (t === "diceFacesAdj"){ const v = eff.value ?? eff.intensity ?? 0; return `技能面数 → d${v}`; }
     if (t === "baseValue")   { const v = eff.value ?? eff.intensity ?? 0; return `技能基础值 ${v >= 0 ? "+" : ""}${v}`; }
@@ -2863,7 +2863,7 @@ export class ClashManager {
     }
 
     // 汇总 [攻击时/拼点时] 后所有可能被修改的攻击方字段，统一覆盖 initFlags
-    // 目前覆盖字段：rollTotal / formula（骰子公式变化重投）、weight（weightAdj 修改加重值）
+    // 目前覆盖字段：rollTotal / formula（骰子公式变化重投）、weight（weightAdj 修改攻击容量）
     const atkWeightCur = atkItem?.system?.weight ?? initFlags.weight;
     const effectiveInitFlags = (
       atkFinalTotal   !== initFlags.rollTotal ||
@@ -3437,8 +3437,10 @@ export class ClashManager {
       defItemId:   defItem?.id ?? "",
     } : null;
 
-    // 加重扩散信息：仅攻击方胜且非平局才携带
-    const weightSpread = atkWins && !isTie ? {
+    // 容量扩散信息：谁打出伤害就带谁的攻击容量。
+    // 攻击方获胜 → 用攻击技能；反击/可拼点反击获胜 → 用守备技能（守备技能同样有攻击容量）。
+    const isCounterWin = !atkWins && !isTie && (defCat === "counter" || defCat === "clashCounter");
+    const weightSpread = (atkWins && !isTie) ? {
       attackerId: atkActor?.id      ?? "",
       rollTotal:  initFlags.rollTotal ?? 0,
       category:   initFlags.category  ?? "",
@@ -3447,6 +3449,15 @@ export class ClashManager {
       itemId:     initFlags.itemId    ?? "",
       itemName:   initFlags.itemName  ?? "",
       itemImg:    initFlags.itemImg   ?? "",
+    } : isCounterWin ? {
+      attackerId: defActor?.id ?? "",
+      rollTotal:  res.defTotal ?? 0,
+      category:   defItem?.system?.counterType ?? defItem?.system?.category ?? "",
+      sinType:    defItem?.system?.sinType ?? "",
+      weight:     defItem?.system?.weight  ?? 1,
+      itemId:     defItem?.id   ?? "",
+      itemName:   defItemName   ?? "",
+      itemImg:    defItemImg    ?? "",
     } : null;
 
     const takeSection = isTie
@@ -3574,7 +3585,7 @@ export class ClashManager {
 
   /**
    * EGO 的两种形态：消耗理智的【觉醒】、陷入恐慌的【侵蚀】。
-   * 罪孽消耗与罪孽抗性两形态共用；类型 / 骰数 / 加重值 / 理智消耗 / 描述 /
+   * 罪孽消耗与罪孽抗性两形态共用；类型 / 骰数 / 攻击容量 / 理智消耗 / 描述 /
    * 激活效果各自独立，由 SkillData.prepareDerivedData 按持有者是否恐慌
    * 直接投影到 item.system 上，因此这里读 sys.* 拿到的已经是当前形态的值。
    *
@@ -3921,16 +3932,16 @@ export class ClashManager {
       await selActor.update({ "system.hp.value": Math.max(0, th - finalDamage) });
     }
 
-    // ── 加重扩散：weight>=2 时发出额外承受卡 ──────────────────────────────
+    // ── 容量扩散：weight>=2 时发出额外承受卡 ──────────────────────────────
     const weight = initFlags.weight ?? 1;
     if (weight >= 2) {
       await ClashManager._sendWeightSpreadCard(initFlags, atkActor);
     }
   }
 
-  /* ─── 加重扩散承受 ──────────────────────────────────────────────────────── */
+  /* ─── 容量扩散承受 ──────────────────────────────────────────────────────── */
 
-  /** 构建加重扩散卡 HTML（remainingUses 可变，复用于更新消息内容）。 */
+  /** 构建容量扩散卡 HTML（remainingUses 可变，复用于更新消息内容）。 */
   static _buildWeightSpreadContent(flags, remainingUses, atkActor) {
     const actor      = atkActor ?? game.actors.get(flags.attackerId);
     const btnDisabled = remainingUses <= 0;
@@ -3940,10 +3951,10 @@ export class ClashManager {
     const btnLabel   = btnDisabled ? "（已用尽）" : `承受（×${remainingUses}）`;
     return `
       <div class="limbus-clash-card" data-clash-type="weight-spread">
-        ${ClashManager._chatHeader(actor, "加重扩散")}
+        ${ClashManager._chatHeader(actor, "容量扩散")}
         ${ClashManager._goldDivider()}
         <div style="font-size:.85rem;color:#E8C9A2;margin:4px 0 6px;">
-          ⚔️ <strong>${flags.itemName ?? "技能"}</strong> 加重命中！<br>
+          ⚔️ <strong>${flags.itemName ?? "技能"}</strong> 容量命中！<br>
           <span style="color:#C9A84C;">扩散承受剩余：<strong>${remainingUses}</strong> 次</span>
         </div>
         <div style="margin-bottom:4px;">
@@ -3958,7 +3969,7 @@ export class ClashManager {
       </div>`;
   }
 
-  /** 发送加重扩散承受聊天卡。 */
+  /** 发送容量扩散承受聊天卡。 */
   static async _sendWeightSpreadCard(initFlags, atkActor) {
     const remainingUses = (initFlags.weight ?? 1) - 1;
     const spreadFlags = {
@@ -4039,7 +4050,7 @@ export class ClashManager {
     const finalDamage = Math.max(0, Math.round(adjustedAtk * physMult * sinMult));
 
     // 结算说明
-    const calcNotes = [`骰点结果：${rollTotal}（加重扩散）`];
+    const calcNotes = [`骰点结果：${rollTotal}（容量扩散）`];
     let step = rollTotal;
     if (atkDiceMod !== 0) {
       step += atkDiceMod;

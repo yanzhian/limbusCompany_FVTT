@@ -158,7 +158,7 @@ export class SkillData extends foundry.abstract.TypeDataModel {
       // 【觉醒】= 消耗理智的常态，数据就写在顶层字段上；
       // 【侵蚀】= 陷入恐慌时的形态，另一套数据放在 corrode 下。
       // 共用：名称 / 罪孽 / 等级 / 罪孽消耗 / 调整抗性
-      // 分开：类型（斩打突）/ 骰数 / 加重值 / 理智消耗 / 描述 / 激活效果
+      // 分开：类型（斩打突）/ 骰数 / 攻击容量 / 理智消耗 / 描述 / 激活效果
       //
       // egoForm 只影响物品卡"正在编辑/展示哪一套"，实战中用哪一套由角色是否
       // 【陷入恐慌】决定（见 prepareDerivedData）。
@@ -178,7 +178,7 @@ export class SkillData extends foundry.abstract.TypeDataModel {
         activities:  new fields.ArrayField(makeActivitySchema(), { required: true, initial: [] }),
       }),
 
-      // 加重值（守备技能无此字段，设为 0）
+      // 攻击容量（守备技能无此字段，设为 0）
       weight: new fields.NumberField({ required: true, integer: true, min: 0, initial: 1 }),
 
       // 骰子类型：normal / unbreakable / severing

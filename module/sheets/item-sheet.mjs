@@ -171,7 +171,7 @@ export class LimbusItemSheet extends ItemSheet {
       context.diceFormulaDisplay =
         `${context.formDiceCount}D${context.formDiceFaces}${_bv > 0 ? `+${_bv}` : ""}`;
 
-      // 加重值小方块
+      // 攻击容量小方块
       context.weightSquares = Array.from({ length: context.form.weight ?? 0 }, (_, i) => i);
 
       // 图标边框：与 HUD / 技能槽同一套（罪孽+等级空心框，EGO 为圆环）
@@ -1905,7 +1905,7 @@ function _buildItemTitleCard(item) {
         <span class="tc-formula">${(sys.diceFormula ?? "").toUpperCase()}</span>
         <span class="tc-tags">${tags.map(t => `<span class="tc-skill-tag">${t}</span>`).join("")}</span>
       </div>
-      ${weightCount > 0 ? `<div class="tc-weight"><span class="tc-weight-label">加重值</span>${Array.from({length: weightCount}, () => '<span class="tc-weight-sq"></span>').join("")}</div>` : ""}
+      ${weightCount > 0 ? `<div class="tc-weight"><span class="tc-weight-label">攻击容量</span>${Array.from({length: weightCount}, () => '<span class="tc-weight-sq"></span>').join("")}</div>` : ""}
       <div class="tc-gold-divider-skill"></div>
       <div class="tc-desc">${descText}</div>
       <div class="tc-gold-divider-skill"></div>
@@ -2026,7 +2026,7 @@ function _activityEffectLabels() {
     { value: "hpAdj",        label: "生命值调整" },
     { value: "sanityAdj",    label: "理智值调整" },
     { value: "apAdj",        label: "行动值" },
-    { value: "weightAdj",    label: "加重值" },
+    { value: "weightAdj",    label: "攻击容量" },
     { value: "diceAdj",      label: "骰数" },
     { value: "diceFacesAdj", label: "面数" },
     { value: "baseValue",    label: "基础值" },
