@@ -170,7 +170,6 @@ export class LimbusActorSheet extends ActorSheet {
         item:       egoItem,
         itemId:     system.skills?.ego?.[grade] ?? null,
         skillImg:   egoItem?.img ?? "",
-        hasRelated: !!(egoItem?.system?.relatedSkill?.itemUuid),
         frameImg:   this._resolveFrameImg(egoItem, "ego"),
       };
     });
@@ -613,9 +612,6 @@ export class LimbusActorSheet extends ActorSheet {
       setTimeout(() => this._renderCombatSlots(this.element), 80);
     }
 
-    // EGO 相关技能槽：恢复状态
-    setTimeout(() => this._applyEgoRelatedToDom(this.element), 90);
-
     // ── 非 GM/非编辑：只读分支结束 ────────────────────────────────────────
     if (!this.isEditable) return;
 
@@ -779,7 +775,6 @@ export class LimbusActorSheet extends ActorSheet {
     // EGO / 守备技能槽：data-item-id 由 HBS 模板直接写入，绑定时已存在
     html.find(".ego-combat-section .combat-skill-slot[data-item-id], .combat-defense-slot[data-item-id]")
       .on("click", this._onEgoSkillClick.bind(this));
-    html.find(".combat-skill-related-toggle").on("click", this._onRelatedSkillToggle.bind(this));
 
     // ── 战斗技能槽悬浮 Title 卡（事件委托，兼容动态写入的 data-item-id）────
     html.find(".tab[data-tab='战斗']")
@@ -1581,7 +1576,6 @@ export class LimbusActorSheet extends ActorSheet {
         equipped:    basicIds,          // 装备的6个技能 ID
         slots:       bag1.slice(0, 6), // 当前6个显示槽 [0..5]
         pool:        bag2,             // 预备池（下一轮抽取来源）
-        relatedMode: {},               // slotIndex → true 时显示相关技能
       };
     }
     this._renderCombatSlots(html);
@@ -1601,7 +1595,6 @@ export class LimbusActorSheet extends ActorSheet {
         $slot.attr("data-item-id", "");
         $slot.removeClass("slot-active slot-reserve slot-bag").addClass("slot-empty");
         $wrap.find(".slot-state-dot").removeClass("dot-active dot-reserve");
-        $wrap.find(".combat-skill-related-toggle").hide();
         $wrap.find(".combat-slot-name").text("");
       });
       return;
@@ -1613,7 +1606,6 @@ export class LimbusActorSheet extends ActorSheet {
       const $wrap   = $(wrap);
       const $slot   = $wrap.find(".combat-skill-slot");
       const $dot    = $wrap.find(".slot-state-dot");
-      const $toggle = $wrap.find(".combat-skill-related-toggle");
       const $name   = $wrap.find(".combat-slot-name");
       const id      = state.slots[i] ?? null;
 
@@ -1650,10 +1642,6 @@ export class LimbusActorSheet extends ActorSheet {
       // 罪孽色内发光（激活槽）
       const sinColor = CONFIG.LIMBUSCOMPANY?.SIN_COLORS?.[mainItem?.system?.sinType] ?? "";
       $slot.css("--slot-sin-color", (sinColor && i < 2) ? sinColor : "");
-
-      // 旧版"相关技能"单槽临时切换机制已废弃（改由④效果「相关技能转换」
-      // 永久替换技能槽位实现，见 clash.mjs relatedSkillConvert）
-      $toggle.hide().removeClass("related-active");
     });
   }
 
@@ -1871,95 +1859,10 @@ export class LimbusActorSheet extends ActorSheet {
     // EGO / 守备技能：直接发起对抗，不推进 bag，不消耗行动值
     const itemId = event.currentTarget.dataset.itemId;
     if (!itemId) return;
-    let item = this.actor.items.get(itemId);
+    const item = this.actor.items.get(itemId);
     if (!item) return;
 
-    // 若该 EGO 槽处于相关技能模式，使用相关技能
-    if (this._egoRelatedMode?.[itemId]) {
-      const uuid = item.system?.relatedSkill?.itemUuid;
-      if (uuid) {
-        const relItem = typeof fromUuidSync !== "undefined" ? fromUuidSync(uuid) : null;
-        if (relItem) item = relItem;
-      }
-    }
-
     this._showClashDialog(item, -1);  // slotIndex = -1 → 不触发 bag 动画/AP 消耗
-  }
-
-  _onRelatedSkillToggle(event) {
-    event.stopPropagation();
-    const $btn  = $(event.currentTarget);
-    const $wrap = $btn.closest(".combat-skill-slot-wrap");
-    const $slot = $wrap.find(".combat-skill-slot");
-
-    const slotIndexRaw = $slot.attr("data-slot-index");
-    const isBasicSlot  = slotIndexRaw !== undefined && slotIndexRaw !== "";
-
-    if (isBasicSlot) {
-      // ── 基础技能槽 ──────────────────────────────────────────────────────
-      const slotIndex = parseInt(slotIndexRaw);
-      const state = this._combatBagState;
-      if (!state) return;
-      if (!state.relatedMode) state.relatedMode = {};
-
-      const isNowRelated = !state.relatedMode[slotIndex];
-      state.relatedMode[slotIndex] = isNowRelated;
-      $btn.toggleClass("related-active", isNowRelated);
-
-      const mainId   = state.slots[slotIndex];
-      const mainItem = mainId ? this.actor.items.get(mainId) : null;
-      if (!mainItem) return;
-
-      let displayItem = mainItem;
-      if (isNowRelated) {
-        const relUuid = mainItem.system?.relatedSkill?.itemUuid;
-        const relItem = relUuid && typeof fromUuidSync !== "undefined" ? fromUuidSync(relUuid) : null;
-        if (relItem) displayItem = relItem;
-      }
-      $slot.find("img").attr("src", displayItem.img ?? "");
-      $wrap.find(".combat-slot-name").text(displayItem.name ?? "");
-
-    } else {
-      // ── EGO / 守备技能槽 ─────────────────────────────────────────────
-      const itemId = $slot.attr("data-item-id");
-      if (!itemId) return;
-      if (!this._egoRelatedMode) this._egoRelatedMode = {};
-
-      const isNowRelated = !this._egoRelatedMode[itemId];
-      this._egoRelatedMode[itemId] = isNowRelated;
-      $btn.toggleClass("related-active", isNowRelated);
-
-      const mainItem = this.actor.items.get(itemId);
-      if (!mainItem) return;
-
-      let displayItem = mainItem;
-      if (isNowRelated) {
-        const uuid = mainItem.system?.relatedSkill?.itemUuid;
-        const relItem = uuid && typeof fromUuidSync !== "undefined" ? fromUuidSync(uuid) : null;
-        if (relItem) displayItem = relItem;
-      }
-      $slot.find("img").attr("src", displayItem.img ?? "");
-    }
-  }
-
-  /** 将 _egoRelatedMode 状态同步到 DOM 中的 EGO 战斗槽 */
-  _applyEgoRelatedToDom(html) {
-    if (!this._egoRelatedMode || !html?.length) return;
-    html.find(".ego-combat-section .combat-skill-slot-wrap").each((_, wrap) => {
-      const $wrap  = $(wrap);
-      const $slot  = $wrap.find(".combat-skill-slot");
-      const $btn   = $wrap.find(".combat-skill-related-toggle");
-      const itemId = $slot.attr("data-item-id");
-      if (!itemId) return;
-      const isRelated = !!this._egoRelatedMode[itemId];
-      $btn.toggleClass("related-active", isRelated);
-      if (!isRelated) return;
-      const mainItem = this.actor.items.get(itemId);
-      if (!mainItem) return;
-      const uuid = mainItem.system?.relatedSkill?.itemUuid;
-      const relItem = uuid && typeof fromUuidSync !== "undefined" ? fromUuidSync(uuid) : null;
-      if (relItem) $slot.find("img").attr("src", relItem.img ?? "");
-    });
   }
 
   /* ─── 行动值（AP） ──────────────────────────────────────────────────────── */

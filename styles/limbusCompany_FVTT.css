@@ -3634,21 +3634,6 @@ body.game .limbuscompany.app img {
 /* 通用隐藏辅助类 */
 .hidden { display: none !important; }
 
-/* 相关技能切换按钮 */
-.limbuscompany .combat-skill-related-toggle {
-  background: none; border: 1px solid var(--border-gold);
-  color: var(--text-sub); font-size: .65rem; cursor: pointer;
-  border-radius: 50%; width: 16px; height: 16px;
-  display: flex; align-items: center; justify-content: center;
-  padding: 0; transition: all .15s;
-}
-.limbuscompany .combat-skill-related-toggle:hover { color: var(--gold-active); border-color: var(--gold-active); }
-/* 已切换为相关技能时：绿色高亮 */
-.limbuscompany .combat-skill-related-toggle.related-active {
-  color: #6EE06E; border-color: #6EE06E;
-  box-shadow: 0 0 4px 1px rgba(110,224,110,.5);
-}
-
 /* AP不足时激活槽：保留金框但降低不透明度 */
 .limbuscompany .combat-skill-slot.slot-active.slot-no-ap {
   opacity: .5;
@@ -6248,20 +6233,10 @@ body.game .limbuscompany.app img {
   line-height:      1.2;
 }
 
-/* EGO 槽包装容器（用于放置相关技能切换按钮） */
+/* EGO 槽包装容器 */
 .qa-ego-skill-wrap {
   position: relative;
   display:  inline-flex;
-}
-/* 快捷 HUD 上的 EGO 相关技能切换按钮（右上角） */
-.qa-ego-related-toggle {
-  position:  absolute;
-  top:       -5px;
-  right:     -5px;
-  z-index:   10;
-  width:     14px;
-  height:    14px;
-  font-size: .55rem;
 }
 
 /* ── 功能按钮 ─────────────────────────────────────────────── */

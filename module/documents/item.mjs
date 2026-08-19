@@ -111,20 +111,6 @@ export class SkillData extends foundry.abstract.TypeDataModel {
   static defineSchema() {
     const fields = foundry.data.fields;
 
-    const relatedSkillSchema = new fields.SchemaField({
-      // 已废弃：旧版"相关技能池"（UUID 数组），配合④效果「相关技能转换 · 随机/指定」使用。
-      // 已被"技能名字（背包检索）"方式取代（不再需要预先配置池，也不受 UUID 变化影响），
-      // 相关 UI/读写逻辑已移除，字段本身保留仅为兼容旧存档，不再新增/编辑。
-      pool: new fields.ArrayField(
-        new fields.SchemaField({
-          itemUuid: new fields.StringField({ required: false, nullable: true, initial: null }),
-        }),
-        { required: true, initial: [] }
-      ),
-      // 注：旧版 erodeUuid（恐慌时整卡替换成另一个"侵蚀"技能物品）已废弃并移除，
-      // 现在【觉醒】/【侵蚀】是同一张 EGO 卡内的两套数据（sinCost / corrodeSinCost 等）。
-    });
-
     // EGO 罪孽消耗条目
     // 注意：一个 DataField 实例只能挂在一个父字段下，【觉醒】/【侵蚀】两套数组
     // 必须各自 new 一份，因此这里用工厂函数而不是共用同一个实例。
@@ -189,9 +175,6 @@ export class SkillData extends foundry.abstract.TypeDataModel {
       diceFaces:  new fields.NumberField({ required: true, integer: true, min: 1, initial: 4 }),
       // diceFormula：便捷显示字符串，如 "2d4+3"（由 prepareDerivedData 生成）
       diceFormula: new fields.StringField({ required: false, initial: "1d4" }),
-
-      // 相关技能（可选，不占用6-bag槽）
-      relatedSkill: relatedSkillSchema,
 
       // 星芒费用（按等级自动推算，可手动覆盖）
       stellarCost: new fields.NumberField({ required: true, integer: true, min: 0, initial: 1 }),
@@ -571,11 +554,6 @@ export class LimbusItem extends Item {
     await roll.evaluate();
     return roll;
   }
-
-  // ─── 相关技能解析 ──────────────────────────────────────────────────────
-  // 注：旧版"相关技能池"（system.relatedSkill.pool，配合④效果「相关技能
-  // 转换 · 随机/指定」使用）已被"技能名字（背包检索）"方式取代并移除相关
-  // UI/逻辑，schema 字段本身保留（避免 world 需要重启），仅不再读写。
 
   // ─── Activity（效果触发）管理 ──────────────────────────────────────────
 

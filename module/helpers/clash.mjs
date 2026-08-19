@@ -1675,8 +1675,8 @@ export class ClashManager {
           }
           case "relatedSkillConvert": {
             // 相关技能转换：将"本骰"（item）永久替换为角色背包/技能列表中按名字检索到的技能。
-            // 旧版"随机/指定序号"（走 item.system.relatedSkill.pool 这个 UUID 池，需要互相
-            // 套娃预先配置）已移除，改为直接按名字检索已拥有的技能，无需任何预配置，
+            // 旧版"随机/指定序号"（需要在技能上预先配置一个 UUID 池、互相套娃）已移除，
+            // 改为直接按名字检索已拥有的技能，无需任何预配置，
             // 也不受合集包提取后 UUID 变化的影响。
             const relOwner = item?.parent ?? owner;
             if (!relOwner || !item) { descStr = "相关技能转换：找不到所属角色"; break; }
