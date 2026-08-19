@@ -14,6 +14,8 @@ import { ClashManager } from "../helpers/clash.mjs";
 import { CustomBuffRegistry, resolveBuffHandler, normalizeBuffType } from "../helpers/custom-buffs.mjs";
 import { getBagItems, packBagGrid } from "../helpers/bag-grid.mjs";
 import { buildItemTitleCard, closeTitleCardUnlessLocked, toggleTitleCardLock } from "./item-sheet.mjs";
+import { ClashVFX } from "../helpers/clash-vfx.mjs";
+import { QuickActionHUD } from "./quick-action-hud.mjs";
 
 /**
  * 以 actorId 为 key 的模块级战斗袋状态 Map。
@@ -1667,9 +1669,10 @@ export class LimbusActorSheet extends ActorSheet {
    * @param {"level"|"another"|"reserve"} mode
    * @param {number} level - 仅 mode==="level" 时有效
    * @param {string} currentItemId - 触发本次丢弃的技能 ID（永远排除）
+   * @param {string[]|null} declared - 宣言时的槽位快照（本次结算只认那两格）
    * @returns {{ discardedIds: string[] }} 被丢弃的技能 ID（按槽位升序）
    */
-  async _discardCombatSkill(mode, level, currentItemId) {
+  async _discardCombatSkill(mode, level, currentItemId, declared = null) {
     const state = this._combatBagState;
     if (!state) return { discardedIds: [] };
 
@@ -1677,7 +1680,7 @@ export class LimbusActorSheet extends ActorSheet {
     const slots = ClashManager._findDiscardSlots(
       this.actor, state.slots,
       { discardMode: mode, discardLevel: level },
-      currentItemId ?? ""
+      currentItemId ?? "", declared
     );
     if (!slots.length) return { discardedIds: [] };
 
@@ -1689,53 +1692,59 @@ export class LimbusActorSheet extends ActorSheet {
     return { discardedIds };
   }
 
-  // 丢弃动画：指定槽淡出并补充新牌
+  // 丢弃动画：破币特效 → 该槽碎裂消失 → 左侧不动、右侧左移、新牌从右边推进来
   async _animateDiscardSkill(slotIndex) {
     const state = this._combatBagState;
     if (!state) return;
 
     const _wraps = () => this.element?.find(".basic-combat-section .combat-skill-slot-wrap");
+
+    // 快捷 HUD 上也显示前 3 格，同步炸一下
+    const $hudSlot = (slotIndex <= 2)
+      ? QuickActionHUD.instance?.element?.find(`.qa-skill-slot[data-slot-index="${slotIndex}"]`)
+      : null;
+    if ($hudSlot?.length) {
+      ClashVFX.burstOnElement($hudSlot);
+      $hudSlot.addClass("qa-skill-slot--breaking");
+    }
+
     const $wraps = _wraps();
-    if (!$wraps?.length || slotIndex >= $wraps.length) {
-      // 无 DOM，直接更新状态
-      state.slots.splice(slotIndex, 1);
-      const nextId = this._drawNextFromPool();
-      state.slots.push(nextId);
+    const $slot  = $wraps?.eq(slotIndex).find(".combat-skill-slot");
+
+    // 角色卡没打开（或槽位不在 DOM 里）：只更新状态
+    if (!$slot?.length) {
+      this._advanceBagState(slotIndex);
       this._renderCombatSlots(this.element);
+      QuickActionHUD.instance?.render(false);
       return;
     }
 
-    return new Promise((resolve) => {
-      const $slot = $wraps.eq(slotIndex).find(".combat-skill-slot");
-      $slot.css({
-        transition: "opacity 0.25s ease, transform 0.25s ease",
-        opacity: "0",
-        transform: "scale(0.7)",
-      });
+    ClashVFX.burstOnElement($slot);
+    $slot.addClass("combat-skill-slot--breaking");
 
-      setTimeout(() => {
-        state.slots.splice(slotIndex, 1);
-        const nextId = this._drawNextFromPool();
-        state.slots.push(nextId);
+    await new Promise(r => setTimeout(r, 260));
 
-        const $w2 = _wraps();
-        $w2?.each((_, el) => {
-          $(el).css({ transition: "none", transform: "" });
-          $(el).find(".combat-skill-slot").css({ transition: "none", transform: "", opacity: "" });
-        });
-        this._renderCombatSlots(this.element);
+    state.slots.splice(slotIndex, 1);
+    state.slots.push(this._drawNextFromPool());
 
-        const $newSlot = _wraps()?.eq(5).find(".combat-skill-slot");
-        if ($newSlot?.length) {
-          $newSlot.css({ opacity: "0", transform: "scale(0.7)" });
-          requestAnimationFrame(() => requestAnimationFrame(() => {
-            $newSlot.css({ transition: "opacity 0.3s ease, transform 0.3s ease", opacity: "1", transform: "scale(1)" });
-            setTimeout(() => $newSlot.css({ transition: "", transform: "" }), 350);
-          }));
-        }
-        resolve();
-      }, 280);
+    // 重渲染前把上一轮残留的内联样式清掉
+    _wraps()?.each((_, el) => {
+      $(el).find(".combat-skill-slot")
+        .removeClass("combat-skill-slot--breaking")
+        .css({ transition: "none", transform: "", opacity: "" });
     });
+    this._renderCombatSlots(this.element);
+    QuickActionHUD.instance?.render(false);
+
+    // 被丢的那格右边所有牌左移一格，最右边补进来的新牌从右侧推入
+    const $after = _wraps();
+    $after?.each((i, el) => {
+      if (i < slotIndex) return;                        // 左侧的牌原地不动
+      const $s = $(el).find(".combat-skill-slot");
+      $s.addClass(i === 5 ? "combat-skill-slot--slide-in" : "combat-skill-slot--shift-left");
+      setTimeout(() => $s.removeClass("combat-skill-slot--slide-in combat-skill-slot--shift-left"), 400);
+    });
+    await new Promise(r => setTimeout(r, 120));
   }
 
   // 推进 bag 状态（无论角色卡是否打开都必须执行）

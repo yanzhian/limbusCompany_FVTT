@@ -32,8 +32,21 @@ export class ClashVFX {
     if (!hud) return null;
     const el = document.createElement("div");
     el.id = "limbus-clash-vfx-canvas";
+    el.className = "lcvfx-layer";
     hud.appendChild(el);
     this._canvasLayer = el;
+    return el;
+  }
+
+  /** 屏幕坐标层（角色卡 / 快捷 HUD 上的特效用，挂在 body 上） */
+  static _screenLayer = null;
+  static _uiLayer() {
+    if (this._screenLayer?.isConnected) return this._screenLayer;
+    const el = document.createElement("div");
+    el.id = "limbus-clash-vfx-screen";
+    el.className = "lcvfx-layer";
+    document.body.appendChild(el);
+    this._screenLayer = el;
     return el;
   }
 
@@ -84,6 +97,55 @@ export class ClashVFX {
     }
     layer.appendChild(box);
     setTimeout(() => box.remove(), 1600);
+  }
+
+  /**
+   * 在屏幕坐标处炸一朵（界面元素用，比如 6bag 里被丢弃的技能）。
+   * @param {number} x  clientX
+   * @param {number} y  clientY
+   * @param {number} size 圆环直径（px）
+   */
+  static burstAt(x, y, size = 90) {
+    if (!this.ENABLED) return;
+    const layer = this._uiLayer();
+    if (!layer) return;
+
+    for (const cls of ["lcvfx-ring", "lcvfx-ring lcvfx-ring--inner"]) {
+      const ring = document.createElement("div");
+      ring.className = cls;
+      ring.style.left = `${x}px`;
+      ring.style.top  = `${y}px`;
+      ring.style.width = ring.style.height = `${size}px`;
+      this._autoRemove(ring);
+      layer.appendChild(ring);
+    }
+
+    const n = this.SPARK_COUNT;
+    if (n <= 0) return;
+    const box = document.createElement("div");
+    box.className = "lcvfx-sparks";
+    box.style.left = `${x}px`;
+    box.style.top  = `${y}px`;
+    for (let i = 0; i < n; i++) {
+      const sp = document.createElement("div");
+      sp.className = "lcvfx-spark";
+      sp.style.setProperty("--a", `${(360 / n) * i + (Math.random() * 20 - 10)}deg`);
+      sp.style.setProperty("--d", `${size * 0.5 * (0.7 + Math.random() * 0.6)}px`);
+      sp.style.width = `${size * 0.32}px`;
+      sp.style.animationDelay = `${Math.random() * 60}ms`;
+      box.appendChild(sp);
+    }
+    layer.appendChild(box);
+    setTimeout(() => box.remove(), 1600);
+  }
+
+  /** 在某个 DOM 元素中心炸一朵（尺寸默认取元素外接尺寸的 1.4 倍） */
+  static burstOnElement(el, scale = 1.4) {
+    const node = el?.jquery ? el[0] : el;
+    if (!node?.getBoundingClientRect) return;
+    const r = node.getBoundingClientRect();
+    if (!r.width && !r.height) return;
+    this.burstAt(r.left + r.width / 2, r.top + r.height / 2, Math.max(r.width, r.height) * scale);
   }
 
   /** 火花数量 / 整体尺寸相对格子的倍数（其余参数在 CSS 变量里） */
