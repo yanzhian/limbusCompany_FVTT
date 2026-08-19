@@ -113,7 +113,8 @@ export class LimbusItemSheet extends ItemSheet {
 
     // ── 活动列表 ─────────────────────────────────────────────────────────
     // EGO 处于【侵蚀】编辑形态时，编辑的是 system.corrode.activities
-    context.activities = item.toObject().system?.[this._actField] ?? [];
+    // 注意 _actField 可能是 "corrode.activities" 这种带点路径，不能直接方括号取值
+    context.activities = foundry.utils.getProperty(item.toObject().system ?? {}, this._actField) ?? [];
 
     // ── 技能专用数据 ──────────────────────────────────────────────────────
     if (item.type === "skill") {
