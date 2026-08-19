@@ -1207,11 +1207,14 @@ export class ClashManager {
           if (!bagState) { forcedFail = true; break; }
           if (!discardSim) discardSim = { slots: [...bagState.slots], pool: [...(bagState.pool ?? [])] };
           const selfId = ctx._currentItemId ?? item?.id ?? "";
-          const idx = ClashManager._findDiscardSlot(owner, discardSim.slots, cost, selfId);
-          if (idx < 0) { forcedFail = true; break; }
-          // 模拟丢弃：左移一格，尾部补一张（预备池空了则补一张未知牌，不参与等级判定）
-          discardSim.slots.splice(idx, 1);
-          discardSim.slots.push(discardSim.pool.shift() ?? null);
+          const idxs = ClashManager._findDiscardSlots(owner, discardSim.slots, cost, selfId);
+          if (!idxs.length) { forcedFail = true; break; }
+          // 模拟丢弃：从后往前删，每删一张就在尾部补一张
+          //（预备池空了则补一张未知牌，不参与等级判定）
+          for (const idx of [...idxs].reverse()) {
+            discardSim.slots.splice(idx, 1);
+            discardSim.slots.push(discardSim.pool.shift() ?? null);
+          }
         } else if (cost.target === "field" && (cost.type === "forced" || cost.type === "perStack")) {
           // 公用场地：层数不足（每N层的 N）则跳过整条 Activity
           if (!cost.fieldName) { forcedFail = true; break; }
@@ -1273,9 +1276,10 @@ export class ClashManager {
             const mode  = cost.discardMode ?? "level";
             const level = cost.discardLevel ?? 1;
             const currentId = ctx._currentItemId ?? item?.id ?? "";
-            const { discardedId } = await ownerSheet._discardCombatSkill(mode, level, currentId);
+            const { discardedIds = [] } = await ownerSheet._discardCombatSkill(mode, level, currentId);
+            const discardedId = discardedIds[0] ?? null;
             _discardedItemId = discardedId;
-            // 触发被丢弃技能的【丢弃时】活动
+            // 触发被丢弃技能的【丢弃时】活动——两张一起丢时也只触发一次
             if (discardedId) {
               const discardedItem = owner.items.get(discardedId);
               if (discardedItem) {
@@ -3517,24 +3521,26 @@ export class ClashManager {
    *
    * 规则：只看激活槽 0/1（预备模式看槽 2）；触发这条消耗的技能永远不会丢弃自己，
    * 【等级】模式也只是判断"另一张"是不是该等级。
+   * 【等级】模式下 0/1 两格都符合时两张一起丢——但【丢弃时】只触发一次。
    *
-   * @returns {number} 槽位下标；-1 表示没有可丢的牌
+   * @returns {number[]} 命中的槽位下标（升序）；空数组表示没有可丢的牌
    */
-  static _findDiscardSlot(owner, slots = [], cost = {}, selfId = "") {
+  static _findDiscardSlots(owner, slots = [], cost = {}, selfId = "") {
     const mode = cost.discardMode ?? "level";
     if (mode === "reserve") {
       const id = slots[2];
-      return (id && id !== selfId) ? 2 : -1;
+      return (id && id !== selfId) ? [2] : [];
     }
     const level = cost.discardLevel ?? 1;
+    const hits  = [];
     for (let i = 0; i <= 1; i++) {
       const id = slots[i];
       if (!id || id === selfId) continue;          // 永远不丢自己
-      if (mode === "another") return i;
+      if (mode === "another") return [i];          // 【另一个】只丢一张
       const sk = owner?.items?.get(id);
-      if (sk && (sk.system?.level ?? 1) === level) return i;
+      if (sk && (sk.system?.level ?? 1) === level) hits.push(i);
     }
-    return -1;
+    return hits;
   }
 
   /* ─── EGO 罪孽抗性修改 ────────────────────────────────────────────────── */

@@ -1661,30 +1661,32 @@ export class LimbusActorSheet extends ActorSheet {
    *
    * 只会丢激活槽 0/1（预备模式丢槽 2）——6bag 里只可能有基础技能，装备/守备技能
    * 触发的丢弃也一样只作用于这两格。触发这条消耗的技能永远不会丢弃自己，
-   * 【等级】模式也只是判断"另一张"是不是该等级。
+   * 【等级】模式也只是判断"另一张"是不是该等级；0/1 两格都符合时两张一起丢
+   *（【丢弃时】由调用方只触发一次）。
    *
    * @param {"level"|"another"|"reserve"} mode
    * @param {number} level - 仅 mode==="level" 时有效
    * @param {string} currentItemId - 触发本次丢弃的技能 ID（永远排除）
-   * @returns {{ discardedId: string|null, slotIndex: number }} 被丢弃的技能 ID 及槽位
+   * @returns {{ discardedIds: string[] }} 被丢弃的技能 ID（按槽位升序）
    */
   async _discardCombatSkill(mode, level, currentItemId) {
     const state = this._combatBagState;
-    if (!state) return { discardedId: null, slotIndex: -1 };
+    if (!state) return { discardedIds: [] };
 
     // 与消耗预检查共用同一套定位规则，避免"检查通过但实际丢不掉"
-    const targetSlot = ClashManager._findDiscardSlot(
+    const slots = ClashManager._findDiscardSlots(
       this.actor, state.slots,
       { discardMode: mode, discardLevel: level },
       currentItemId ?? ""
     );
+    if (!slots.length) return { discardedIds: [] };
 
-    if (targetSlot === -1 || !state.slots[targetSlot]) return { discardedId: null, slotIndex: -1 };
-
-    const discardedId = state.slots[targetSlot];
-    // 执行丢弃动画（淡出），然后补充新牌
-    await this._animateDiscardSkill(targetSlot);
-    return { discardedId, slotIndex: targetSlot };
+    const discardedIds = slots.map(i => state.slots[i]).filter(Boolean);
+    // 从后往前丢，免得前一张的左移把后面的下标搞错
+    for (const idx of [...slots].reverse()) {
+      if (state.slots[idx]) await this._animateDiscardSkill(idx);
+    }
+    return { discardedIds };
   }
 
   // 丢弃动画：指定槽淡出并补充新牌
