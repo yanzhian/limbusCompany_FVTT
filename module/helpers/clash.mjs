@@ -1188,8 +1188,11 @@ export class ClashManager {
       // 同时冻结"宣言时"的槽位快照——本次结算只认宣言那一刻的激活槽，
       // 中途补位顶上来的牌不会被后面的丢弃消耗吃掉。
       let discardSim = null;
-      const bagDeclared = owner?.sheet?._combatBagState
-        ? [...owner.sheet._combatBagState.slots] : null;
+      // 宣言时可被丢弃的槽位下标（激活槽 0/1 + 预备槽 2）。牌是会重复的，
+      // 光记 id 认不出"补位顶上来的那张恰好同名"，所以按位置跟踪：
+      // 每丢掉一格，右边的下标整体 -1，尾部补进来的新牌永远不在表里。
+      let declaredIdx = [0, 1, 2];
+      let declaredIdxExec = [0, 1, 2];
       for (const cost of costs) {
         if (!cost) continue;
         if (cost.type === "attribute") {
@@ -1211,13 +1214,14 @@ export class ClashManager {
           if (!bagState) { forcedFail = true; break; }
           if (!discardSim) discardSim = { slots: [...bagState.slots], pool: [...(bagState.pool ?? [])] };
           const selfId = ctx._currentItemId ?? item?.id ?? "";
-          const idxs = ClashManager._findDiscardSlots(owner, discardSim.slots, cost, selfId, bagDeclared);
+          const idxs = ClashManager._findDiscardSlots(owner, discardSim.slots, cost, selfId, declaredIdx);
           if (!idxs.length) { forcedFail = true; break; }
           // 模拟丢弃：从后往前删，每删一张就在尾部补一张
           //（预备池空了则补一张未知牌，不参与等级判定）
           for (const idx of [...idxs].reverse()) {
             discardSim.slots.splice(idx, 1);
             discardSim.slots.push(discardSim.pool.shift() ?? null);
+            declaredIdx = ClashManager._shiftDeclaredIdx(declaredIdx, idx);
           }
         } else if (cost.target === "field" && (cost.type === "forced" || cost.type === "perStack")) {
           // 公用场地：层数不足（每N层的 N）则跳过整条 Activity
@@ -1280,8 +1284,11 @@ export class ClashManager {
             const mode  = cost.discardMode ?? "level";
             const level = cost.discardLevel ?? 1;
             const currentId = ctx._currentItemId ?? item?.id ?? "";
-            const { discardedIds = [] } =
-              await ownerSheet._discardCombatSkill(mode, level, currentId, bagDeclared);
+            const { discardedIds = [], slotIndices = [] } =
+              await ownerSheet._discardCombatSkill(mode, level, currentId, declaredIdxExec);
+            for (const idx of [...slotIndices].reverse()) {
+              declaredIdxExec = ClashManager._shiftDeclaredIdx(declaredIdxExec, idx);
+            }
             const discardedId = discardedIds[0] ?? null;
             _discardedItemId = discardedId;
             // 触发被丢弃技能的【丢弃时】活动——两张一起丢时也只触发一次
@@ -3521,6 +3528,11 @@ export class ClashManager {
     });
   }
 
+  /** 丢掉 removed 这一格之后，"宣言时就在场"的下标表怎么变（右边整体左移一格） */
+  static _shiftDeclaredIdx(list = [], removed = 0) {
+    return list.filter(i => i !== removed).map(i => (i > removed ? i - 1 : i));
+  }
+
   /**
    * 在战斗袋里定位这条【丢弃】消耗要丢的槽位。
    *
@@ -3528,25 +3540,23 @@ export class ClashManager {
    * 【等级】模式也只是判断"另一张"是不是该等级。
    * 【等级】模式下 0/1 两格都符合时两张一起丢——但【丢弃时】只触发一次。
    *
-   * @param {string[]|null} declared 宣言时的槽位快照。给了就只认那一刻的牌，
-   *        本次结算中途补位顶上来的新牌不会被后面的丢弃消耗吃掉。
+   * @param {number[]|null} declaredIdx 还剩哪些"宣言时就在场"的槽位下标。
+   *        给了就只认这些位置，本次结算中途补位顶上来的新牌不会被后面的消耗吃掉。
    * @returns {number[]} 命中的槽位下标（升序）；空数组表示没有可丢的牌
    */
-  static _findDiscardSlots(owner, slots = [], cost = {}, selfId = "", declared = null) {
+  static _findDiscardSlots(owner, slots = [], cost = {}, selfId = "", declaredIdx = null) {
+    const ok = (i) => !declaredIdx || declaredIdx.includes(i);
     const mode = cost.discardMode ?? "level";
     if (mode === "reserve") {
       const id = slots[2];
-      if (!id || id === selfId) return [];
-      if (declared && id !== declared[2]) return [];
-      return [2];
+      return (id && id !== selfId && ok(2)) ? [2] : [];
     }
-    const allow = declared ? new Set([declared[0], declared[1]].filter(Boolean)) : null;
     const level = cost.discardLevel ?? 1;
     const hits  = [];
     for (let i = 0; i <= 1; i++) {
       const id = slots[i];
       if (!id || id === selfId) continue;          // 永远不丢自己
-      if (allow && !allow.has(id)) continue;       // 宣言之后才顶上来的牌不算
+      if (!ok(i)) continue;                        // 宣言之后才顶上来的牌不算
       if (mode === "another") return [i];          // 【另一个】只丢一张
       const sk = owner?.items?.get(id);
       if (sk && (sk.system?.level ?? 1) === level) hits.push(i);

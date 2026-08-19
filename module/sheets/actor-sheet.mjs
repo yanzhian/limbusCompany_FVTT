@@ -1669,27 +1669,27 @@ export class LimbusActorSheet extends ActorSheet {
    * @param {"level"|"another"|"reserve"} mode
    * @param {number} level - 仅 mode==="level" 时有效
    * @param {string} currentItemId - 触发本次丢弃的技能 ID（永远排除）
-   * @param {string[]|null} declared - 宣言时的槽位快照（本次结算只认那两格）
-   * @returns {{ discardedIds: string[] }} 被丢弃的技能 ID（按槽位升序）
+   * @param {number[]|null} declaredIdx - 还剩哪些"宣言时就在场"的槽位下标
+   * @returns {{ discardedIds: string[], slotIndices: number[] }} 被丢弃的技能与槽位
    */
-  async _discardCombatSkill(mode, level, currentItemId, declared = null) {
+  async _discardCombatSkill(mode, level, currentItemId, declaredIdx = null) {
     const state = this._combatBagState;
-    if (!state) return { discardedIds: [] };
+    if (!state) return { discardedIds: [], slotIndices: [] };
 
     // 与消耗预检查共用同一套定位规则，避免"检查通过但实际丢不掉"
     const slots = ClashManager._findDiscardSlots(
       this.actor, state.slots,
       { discardMode: mode, discardLevel: level },
-      currentItemId ?? "", declared
+      currentItemId ?? "", declaredIdx
     );
-    if (!slots.length) return { discardedIds: [] };
+    if (!slots.length) return { discardedIds: [], slotIndices: [] };
 
     const discardedIds = slots.map(i => state.slots[i]).filter(Boolean);
     // 从后往前丢，免得前一张的左移把后面的下标搞错
     for (const idx of [...slots].reverse()) {
       if (state.slots[idx]) await this._animateDiscardSkill(idx);
     }
-    return { discardedIds };
+    return { discardedIds, slotIndices: slots };
   }
 
   // 丢弃动画：破币特效 → 该槽碎裂消失 → 左侧不动、右侧左移、新牌从右边推进来
