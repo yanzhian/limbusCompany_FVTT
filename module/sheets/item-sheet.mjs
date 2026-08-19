@@ -475,6 +475,7 @@ export class LimbusItemSheet extends ItemSheet {
     html.find(".activity-copy-btn").on("click",   this._onActivityCopy.bind(this));
     html.find(".activity-dupe-btn").on("click",   this._onActivityDuplicate.bind(this));
     html.find(".activity-paste-btn").on("click",  this._onActivityPaste.bind(this));
+    html.find(".activity-paste-json-btn").on("click", this._onActivityPasteJson.bind(this));
 
     if (!this.isEditable) return;
 
@@ -862,6 +863,73 @@ export class LimbusItemSheet extends ItemSheet {
   }
 
   /** 把剪贴板里的效果粘到当前列表末尾 */
+  /**
+   * 「粘贴 JSON」：把一整段效果 JSON 贴进来追加到本物品（给已有物品补效果用）。
+   * 接受单个对象、对象数组，或整个 { activities: [...] }。
+   */
+  async _onActivityPasteJson(event) {
+    event.preventDefault();
+    const content = `
+      <div style="font-size:.75rem;color:#9A8462;margin-bottom:6px;">
+        粘贴效果 JSON：可以是单条 <code>{...}</code>、数组 <code>[...]</code>，
+        或整个 <code>{ "activities": [...] }</code>。会<b>追加</b>到现有效果后面。
+      </div>
+      <textarea name="json" style="width:100%;height:220px;font-family:monospace;font-size:.72rem;"
+                placeholder='[{"name":"新效果","trigger":"攻击时","preconditions":[],"costs":[],"effects":[]}]'></textarea>`;
+
+    const raw = await new Promise(resolve => {
+      new Dialog({
+        title: "粘贴效果 JSON",
+        content,
+        buttons: {
+          ok:     { label: "粘贴", callback: (html) => resolve(html.find("[name='json']").val() ?? "") },
+          cancel: { label: "取消", callback: () => resolve(null) },
+        },
+        default: "ok",
+        render: (html) => setTimeout(() => html.find("[name='json']").trigger("focus"), 30),
+      }, { width: 520 }).render(true);
+    });
+    if (raw === null) return;
+
+    const text = String(raw).trim();
+    if (!text) { ui.notifications?.warn("没有内容可粘贴。"); return; }
+
+    let parsed;
+    try { parsed = JSON.parse(text); }
+    catch (err) { ui.notifications?.error(`JSON 解析失败：${err.message}`); return; }
+
+    // 兼容三种写法：单条对象 / 数组 / { activities: [...] }
+    let list = Array.isArray(parsed) ? parsed
+             : Array.isArray(parsed?.activities) ? parsed.activities
+             : (parsed && typeof parsed === "object") ? [parsed] : null;
+    if (!list?.length) { ui.notifications?.error("JSON 里没有找到效果条目。"); return; }
+
+    const acts = this._actList;
+    let added = 0;
+    for (const raw2 of list) {
+      if (!raw2 || typeof raw2 !== "object") continue;
+      acts.push({
+        id:            foundry.utils.randomID(),          // 一律重新发号，避免与现有条目撞 id
+        name:          String(raw2.name ?? "新效果"),
+        trigger:       String(raw2.trigger ?? "攻击时"),
+        preconditions: Array.isArray(raw2.preconditions) ? raw2.preconditions : [],
+        costs:         Array.isArray(raw2.costs)         ? raw2.costs         : [],
+        effects:       Array.isArray(raw2.effects)       ? raw2.effects       : [],
+        limit: {
+          type:  String(raw2.limit?.type ?? "unlimited"),
+          count: Number(raw2.limit?.count ?? 0) || 0,
+        },
+      });
+      added++;
+    }
+    if (!added) { ui.notifications?.error("JSON 里没有可用的效果条目。"); return; }
+
+    await this.item.update({ [this._actPath]: acts });
+    this._activitiesExpanded = true;
+    this.render(false);
+    ui.notifications?.info(`已粘贴 ${added} 条效果到【${this.item.name}】`);
+  }
+
   async _onActivityPaste(event) {
     event.preventDefault();
     if (!_activityClipboard) {

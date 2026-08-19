@@ -4427,6 +4427,13 @@ body.game .limbuscompany.app img {
 .limbuscompany .activity-copy-btn:hover,
 .limbuscompany .activity-dupe-btn:hover { color: var(--gold-active); border-color: var(--gold-active); }
 .limbuscompany .activity-add-row { display: flex; gap: 4px; }
+.limbuscompany .activity-paste-json-btn {
+  background: var(--bg-panel); border: 1px dashed var(--border-gold);
+  color: var(--text-sub); font-family: var(--font-main); font-size: .7rem;
+  padding: 3px 10px; cursor: pointer; border-radius: 2px;
+  flex: 0 0 auto; white-space: nowrap; transition: all .15s;
+}
+.limbuscompany .activity-paste-json-btn:hover { border-color: var(--gold-active); color: var(--gold-active); }
 .limbuscompany .activity-paste-btn {
   background: var(--bg-panel); border: 1px dashed var(--border-gold);
   color: var(--text-sub); font-family: var(--font-main); font-size: .7rem;
