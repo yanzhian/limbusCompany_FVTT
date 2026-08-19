@@ -1986,15 +1986,16 @@ export class ClashManager {
     if (isEgo) {
       const sinCost    = sys.sinCost    ?? [];
       const sanityCost = sys.sanityCost ?? 0;
-      // 恐慌时：罪孽资源 ×1.5，理智消耗豁免
-      const effectiveSinCost      = isInPanic ? sinCost.map(e => ({ ...e, amount: Math.ceil(e.amount * 1.5) })) : sinCost;
+      // 恐慌时：走【侵蚀】那一套罪孽消耗（未填则沿用【觉醒】×1.5），理智消耗豁免
+      const egoCost               = ClashManager._egoSinCost(sys, isInPanic);
+      const effectiveSinCost      = egoCost.cost;
       const effectiveSanityCost   = isInPanic ? 0 : sanityCost;
       const sinParts   = effectiveSinCost.map(({ sinType, amount }) => {
         const icon     = cfg.SIN_ICON_PATHS?.[sinType] ?? "";
         const cur      = SinResourceHUD.getSins()[sinType] ?? 0;
         const ok       = cur >= amount;
         const origAmt  = sinCost.find(e => e.sinType === sinType)?.amount ?? amount;
-        const suffix   = isInPanic && amount !== origAmt
+        const suffix   = egoCost.scaled && amount !== origAmt
           ? `<span style="font-size:.65rem;color:#E88844;"> ×1.5</span>` : "";
         return `<span style="display:inline-flex;align-items:center;gap:3px;margin-right:6px;
                               color:${ok ? "#C89E70" : "#E84444"};">
@@ -2012,7 +2013,8 @@ export class ClashManager {
              </span>`
           : "";
       const panicNote = isInPanic
-        ? `<div style="font-size:.7rem;color:#E8A444;margin-bottom:4px;">【陷入恐慌】罪孽消耗 ×1.5，侵蚀状态</div>`
+        ? `<div style="font-size:.7rem;color:#E8A444;margin-bottom:4px;">【陷入恐慌】E.G.O 进入【侵蚀】形态${
+            egoCost.scaled ? "（未设定侵蚀数据，沿用觉醒罪孽消耗 ×1.5）" : ""}</div>`
         : "";
       if (panicNote || sinParts || sanPart) {
         egoCostHtml = `<div style="margin-bottom:10px;padding:6px 8px;border-radius:3px;
@@ -2053,11 +2055,8 @@ export class ClashManager {
 
               // ── EGO 前置检查：罪孽资源 + 理智（恐慌时罪孽×1.5、免理智）──
               if (isEgo) {
-                const sinCost         = sys.sinCost ?? [];
                 const sanityCost      = sys.sanityCost ?? 0;
-                const effectiveSinCost = isInPanic
-                  ? sinCost.map(e => ({ ...e, amount: Math.ceil(e.amount * 1.5) }))
-                  : sinCost;
+                const effectiveSinCost = ClashManager._egoSinCost(sys, isInPanic).cost;
                 const effectiveSanityCost = isInPanic ? 0 : sanityCost;
                 if (!SinResourceHUD.canAffordSins(effectiveSinCost)) {
                   ui.notifications.warn("罪孽资源不足，无法使用此 EGO 技能！");
@@ -2085,7 +2084,7 @@ export class ClashManager {
 
               // EGO 技能使用后，将 egoResistanceAdj 应用到角色的罪孽抗性
               if (isEgo) {
-                await ClashManager._applyEgoResistanceChanges(actor, item);
+                await ClashManager._applyEgoResistanceChanges(actor, item, isInPanic);
               }
 
               // ── 技能使用后：获取对应罪孽资源 +1 ─────────────────────────
@@ -2349,6 +2348,18 @@ export class ClashManager {
     // 但仍可以用【守备技能】应战（闪避/格挡/反击等）。
     // 这只影响"被动应战"这条路——自己回合主动使用技能不看行动值。
     const apExhausted = (defActor.system?.ap?.value ?? 0) <= 0;
+
+    // 恐慌时只能用 EGO 响应
+    const isInPanic = !!ClashManager._getBuff(defActor, "panic");
+
+    // 恐慌 + 行动值为 0：恐慌把可用手段压缩成只剩 E.G.O，而行动值为 0 时对抗
+    // 用不了 E.G.O（只能用守备技能，恐慌又不给用），于是彻底接不下这一击。
+    // 注意：这只卡"被动应战"，自己回合主动出击照样能放 E.G.O。
+    if (isInPanic && apExhausted) {
+      ui.notifications.warn(`【陷入恐慌】${defActor.name} 行动值为 0，无法用 E.G.O 对抗，只能承受伤害！`);
+      return;
+    }
+
     if (apExhausted) {
       const defSkillId = defActor.system?.skills?.defense ?? null;
       if (!defSkillId || !defActor.items.get(defSkillId)) {
@@ -2357,8 +2368,6 @@ export class ClashManager {
       }
     }
 
-    // 恐慌时只能用 EGO 响应
-    const isInPanic = !!ClashManager._getBuff(defActor, "panic");
     if (isInPanic) {
       const cfg    = CONFIG.LIMBUSCOMPANY ?? {};
       const hasEgo = (cfg.EGO_GRADES ?? []).some(grade => {
@@ -2571,11 +2580,8 @@ export class ClashManager {
             callback: async (dlg) => {
               // ── 防守方使用 EGO 时的前置检查（含恐慌调整）────────────────
               if (isEgo) {
-                const sinCost          = sys.sinCost ?? [];
                 const sanityCost       = sys.sanityCost ?? 0;
-                const effectiveSinCost = isInPanic
-                  ? sinCost.map(e => ({ ...e, amount: Math.ceil(e.amount * 1.5) }))
-                  : sinCost;
+                const effectiveSinCost = ClashManager._egoSinCost(sys, isInPanic).cost;
                 const effectiveSanityCost = isInPanic ? 0 : sanityCost;
                 if (!SinResourceHUD.canAffordSins(effectiveSinCost)) {
                   ui.notifications.warn("罪孽资源不足，无法使用此 EGO 技能！");
@@ -3516,8 +3522,34 @@ export class ClashManager {
 
   /* ─── EGO 罪孽抗性修改 ────────────────────────────────────────────────── */
 
-  static async _applyEgoResistanceChanges(actor, item) {
-    const adj = item.system?.egoResistanceAdj;
+  /**
+   * EGO 的两种形态：消耗理智的【觉醒】、陷入恐慌的【侵蚀】。
+   * 两者的罪孽消耗与罪孽抗性各自独立（罪孽属性与等级共用）。
+   *
+   * 侵蚀那一套没填时退回旧行为：沿用觉醒的数值并 ×1.5（向上取整）。
+   * @returns {{cost: Array, corroded: boolean, scaled: boolean}}
+   */
+  static _egoSinCost(sys = {}, isInPanic = false) {
+    const awaken = sys.sinCost ?? [];
+    if (!isInPanic) return { cost: awaken, corroded: false, scaled: false };
+    const corrode = sys.corrodeSinCost ?? [];
+    if (corrode.length) return { cost: corrode, corroded: true, scaled: false };
+    return {
+      cost: awaken.map(e => ({ ...e, amount: Math.ceil(e.amount * 1.5) })),
+      corroded: true, scaled: true,
+    };
+  }
+
+  /** 当前形态下生效的罪孽抗性修正 */
+  static _egoResAdj(sys = {}, isInPanic = false) {
+    const corrode = sys.corrodeEgoResistanceAdj ?? [];
+    if (isInPanic && corrode.length) return corrode;
+    return sys.egoResistanceAdj ?? [];
+  }
+
+  static async _applyEgoResistanceChanges(actor, item, isInPanic = null) {
+    const panic = isInPanic ?? !!ClashManager._getBuff(actor, "panic");
+    const adj   = ClashManager._egoResAdj(item.system ?? {}, panic);
     if (!adj?.length) return;
     const VALID = CONFIG.LIMBUSCOMPANY?.RESISTANCE_VALUES ?? ["x0.5","x1.0","x2.0","x2.5","x3.0"];
     const update = {};

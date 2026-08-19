@@ -3750,6 +3750,19 @@ body.game .limbuscompany.app img {
 .limbuscompany .sheet-lock-icon.unlocked { color: var(--gold-active); }
 .limbuscompany .sheet-lock-icon:hover { color: var(--gold-active); }
 .limbuscompany .sheet-type-label { flex: 1; color: var(--text-sub); font-size: .75rem; }
+/* EGO 形态切换：标题栏右上角 60×25 */
+.limbuscompany .ego-form-toggle {
+  flex: 0 0 auto; width: 60px; height: 25px; margin-left: auto;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: .72rem; font-weight: 700; letter-spacing: 1px;
+  border: 1px solid var(--border-gold); border-radius: 2px;
+  cursor: pointer; user-select: none; transition: all .15s;
+}
+.limbuscompany .ego-form-toggle.awaken  { background: #1E3A4C; color: #9FD8F5; border-color: #4E8FB4; }
+.limbuscompany .ego-form-toggle.corrode { background: #3A1520; color: #F0A0B4; border-color: #A34E6B; }
+.limbuscompany .ego-form-toggle:hover   { filter: brightness(1.35); }
+.limbuscompany .ego-form-tag { margin-left: 3px; font-size: .62rem; color: var(--text-sub); opacity: .8; }
+
 .limbuscompany .related-skill-toggle {
   background: var(--bg-panel); border: 1px solid var(--border-gold);
   color: var(--text-sub); font-size: .65rem; padding: 1px 6px;

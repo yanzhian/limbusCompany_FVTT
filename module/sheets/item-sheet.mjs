@@ -86,8 +86,15 @@ export class LimbusItemSheet extends ItemSheet {
       // EGO 消耗行
       // 注意：schema 字段名为 sinCost[].sinType 和 egoResistanceAdj[].{sinType,multiplier}
       if (context.isEgo) {
-        context.sinCosts = sys.sinCost ?? [];
-        context.egoResChanges = sys.egoResistanceAdj ?? [];
+        // 【觉醒】/【侵蚀】两套数据，卡面按 system.egoForm 切换编辑哪一套
+        const corrode = sys.egoForm === "corrode";
+        context.egoForm      = corrode ? "corrode" : "awaken";
+        context.isCorrode    = corrode;
+        context.egoFormLabel = corrode ? "侵蚀" : "觉醒";
+        context.egoCostPath  = corrode ? "corrodeSinCost" : "sinCost";
+        context.egoResPath   = corrode ? "corrodeEgoResistanceAdj" : "egoResistanceAdj";
+        context.sinCosts      = (corrode ? sys.corrodeSinCost : sys.sinCost) ?? [];
+        context.egoResChanges = (corrode ? sys.corrodeEgoResistanceAdj : sys.egoResistanceAdj) ?? [];
       }
 
       // 攻击/守备类别选项：使用中文直接标签，避免模板渲染 i18n key 字符串
@@ -344,6 +351,7 @@ export class LimbusItemSheet extends ItemSheet {
 
     // ── 编辑锁切换 ────────────────────────────────────────────────────────
     html.find(".sheet-lock-icon").on("click", this._onToggleLock.bind(this));
+    html.find(".ego-form-toggle").on("click", this._onEgoFormToggle.bind(this));
 
     // ── 图标点击：锁定时查看插图，解锁时由 Foundry data-edit 处理 ─────────
     html.find(".item-sheet-icon").on("click", (event) => {
@@ -848,29 +856,48 @@ export class LimbusItemSheet extends ItemSheet {
 
   /* ─── EGO 罪孽消耗行 ────────────────────────────────────────────────────── */
 
+  /** 当前编辑的形态对应的字段名（【觉醒】/【侵蚀】各一套） */
+  get _egoCostPath() {
+    return this.item.system.egoForm === "corrode" ? "corrodeSinCost" : "sinCost";
+  }
+  get _egoResPath() {
+    return this.item.system.egoForm === "corrode" ? "corrodeEgoResistanceAdj" : "egoResistanceAdj";
+  }
+
+  /** 右上角 [觉醒/侵蚀] 切换 */
+  async _onEgoFormToggle(event) {
+    event.preventDefault();
+    const next = this.item.system.egoForm === "corrode" ? "awaken" : "corrode";
+    await this.item.update({ "system.egoForm": next });
+  }
+
   async _onSinCostAdd(event) {
-    const costs = foundry.utils.deepClone(this.item.system.sinCost ?? []);
+    const path  = this._egoCostPath;
+    const costs = foundry.utils.deepClone(this.item.system[path] ?? []);
     costs.push({ sinType: "wrath", amount: 1 }); // schema 字段名为 sinType
-    await this.item.update({ "system.sinCost": costs });
+    await this.item.update({ [`system.${path}`]: costs });
   }
 
   async _onSinCostRemove(event) {
     const idx   = parseInt(event.currentTarget.dataset.idx ?? -1);
-    const costs = foundry.utils.deepClone(this.item.system.sinCost ?? []);
-    if (idx >= 0) { costs.splice(idx, 1); await this.item.update({ "system.sinCost": costs }); }
+    const path  = this._egoCostPath;
+    const costs = foundry.utils.deepClone(this.item.system[path] ?? []);
+    if (idx >= 0) { costs.splice(idx, 1); await this.item.update({ [`system.${path}`]: costs }); }
   }
 
   async _onResChangeAdd(event) {
-    // schema 字段名为 egoResistanceAdj，条目属性为 {sinType, multiplier}
-    const changes = foundry.utils.deepClone(this.item.system.egoResistanceAdj ?? []);
+    // 条目属性为 {sinType, multiplier}
+    const path    = this._egoResPath;
+    const changes = foundry.utils.deepClone(this.item.system[path] ?? []);
     changes.push({ sinType: "wrath", multiplier: "x1.0" });
-    await this.item.update({ "system.egoResistanceAdj": changes });
+    await this.item.update({ [`system.${path}`]: changes });
   }
 
   async _onResChangeRemove(event) {
     const idx     = parseInt(event.currentTarget.dataset.idx ?? -1);
-    const changes = foundry.utils.deepClone(this.item.system.egoResistanceAdj ?? []);
-    if (idx >= 0) { changes.splice(idx, 1); await this.item.update({ "system.egoResistanceAdj": changes }); }
+    const path    = this._egoResPath;
+    const changes = foundry.utils.deepClone(this.item.system[path] ?? []);
+    if (idx >= 0) { changes.splice(idx, 1); await this.item.update({ [`system.${path}`]: changes }); }
   }
 
   /* ─── 星芒费用编辑 ──────────────────────────────────────────────────────── */

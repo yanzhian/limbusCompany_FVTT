@@ -7,6 +7,13 @@
       <i class="fas fa-{{#if isLocked}}lock{{else}}lock-open{{/if}}"></i>
     </span>
     <span class="sheet-type-label">技能</span>
+    {{#if isEgo}}
+      {{!-- 右上角 60×25：【觉醒】/【侵蚀】两套数据切换 --}}
+      <span class="ego-form-toggle {{#if isCorrode}}corrode{{else}}awaken{{/if}}"
+            title="切换 EGO 形态（觉醒 / 侵蚀）——两种形态的罪孽消耗与罪孽抗性各自独立">
+        {{egoFormLabel}}
+      </span>
+    {{/if}}
   </div>
 
   {{!-- ── 可滚动主体 ──────────────────────────────────────────────── --}}
@@ -192,17 +199,17 @@
 
         {{!-- 罪孽消耗 --}}
         <div class="ego-row-wrap">
-          <span class="ego-row-label">罪孽消耗</span>
+          <span class="ego-row-label">罪孽消耗<span class="ego-form-tag">[{{egoFormLabel}}]</span></span>
           <div class="ego-cost-block">
             {{#each sinCosts}}
               <div class="ego-cost-item">
                 {{#if (and ../isEditable (not ../isLocked))}}
-                  <select name="system.sinCost.{{@index}}.sinType" class="sin-cost-sel">
+                  <select name="system.{{@root.egoCostPath}}.{{@index}}.sinType" class="sin-cost-sel">
                     {{#each @root.config.SINS}}
                       <option value="{{this}}" {{#if (eq this ../sinType)}}selected{{/if}}>{{lookup @root.config.SIN_LABELS_ZH this}}</option>
                     {{/each}}
                   </select>
-                  <input type="number" name="system.sinCost.{{@index}}.amount" value="{{amount}}" class="sin-cost-input" min="0" style="width:40px"/>
+                  <input type="number" name="system.{{@root.egoCostPath}}.{{@index}}.amount" value="{{amount}}" class="sin-cost-input" min="0" style="width:40px"/>
                   <button type="button" class="sin-cost-remove-btn" data-idx="{{@index}}">×</button>
                 {{else}}
                   <img src="{{lookup @root.config.SIN_ICON_PATHS sinType}}" width="16" height="16" alt="{{sinType}}">
@@ -228,17 +235,17 @@
 
         {{!-- 调整罪孽抗性 --}}
         <div class="ego-row-wrap">
-          <span class="ego-row-label">调整罪孽抗性</span>
+          <span class="ego-row-label">调整罪孽抗性<span class="ego-form-tag">[{{egoFormLabel}}]</span></span>
           <div class="ego-resist-block">
             {{#each egoResChanges}}
               <div class="ego-resist-item">
                 {{#if (and ../isEditable (not ../isLocked))}}
-                  <select name="system.egoResistanceAdj.{{@index}}.sinType" class="sin-cost-sel">
+                  <select name="system.{{@root.egoResPath}}.{{@index}}.sinType" class="sin-cost-sel">
                     {{#each @root.config.SINS}}
                       <option value="{{this}}" {{#if (eq this ../sinType)}}selected{{/if}}>{{lookup @root.config.SIN_LABELS_ZH this}}</option>
                     {{/each}}
                   </select>
-                  <select name="system.egoResistanceAdj.{{@index}}.multiplier" class="sin-cost-sel">
+                  <select name="system.{{@root.egoResPath}}.{{@index}}.multiplier" class="sin-cost-sel">
                     {{#each @root.config.RESISTANCE_VALUES}}
                       <option value="{{this}}" {{#if (eq this ../multiplier)}}selected{{/if}}>{{this}}</option>
                     {{/each}}

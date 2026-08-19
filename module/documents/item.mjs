@@ -163,8 +163,16 @@ export class SkillData extends foundry.abstract.TypeDataModel {
       egoDiceRating: new fields.StringField({ required: false, nullable: true, initial: null,
         choices: [null, "ZAYIN", "TET", "HE", "WAW", "ALEPH"] }),
 
-      // EGO 罪孽抗性修正（使用后生效）
+      // EGO 罪孽抗性修正（使用后生效）——【觉醒】形态
       egoResistanceAdj: new fields.ArrayField(egoResistAdjSchema, { required: true, initial: [] }),
+
+      // EGO 罪孽抗性修正——【侵蚀】形态（陷入恐慌时使用）
+      corrodeEgoResistanceAdj: new fields.ArrayField(egoResistAdjSchema, { required: true, initial: [] }),
+
+      // 卡面当前正在编辑/展示的 EGO 形态：awaken（觉醒）/ corrode（侵蚀）
+      // 实战中用哪一套由角色是否【陷入恐慌】决定，此字段只影响物品卡的显示
+      egoForm: new fields.StringField({ required: false, initial: "awaken",
+        choices: ["awaken", "corrode"] }),
 
       // 加重值（守备技能无此字段，设为 0）
       weight: new fields.NumberField({ required: true, integer: true, min: 0, initial: 1 }),
@@ -206,8 +214,11 @@ export class SkillData extends foundry.abstract.TypeDataModel {
       // 效果描述（富文本）
       effectDesc: new fields.HTMLField({ required: false, initial: "" }),
 
-      // EGO 罪孽消耗（多种罪孽资源）
+      // EGO 罪孽消耗（多种罪孽资源）——【觉醒】形态
       sinCost: new fields.ArrayField(sinCostEntrySchema, { required: true, initial: [] }),
+
+      // EGO 罪孽消耗——【侵蚀】形态（陷入恐慌时使用）
+      corrodeSinCost: new fields.ArrayField(sinCostEntrySchema, { required: true, initial: [] }),
 
       // EGO 理智消耗
       sanityCost: new fields.NumberField({ required: true, integer: true, min: 0, initial: 0 }),
