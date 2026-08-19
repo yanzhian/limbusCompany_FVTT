@@ -182,7 +182,7 @@
             {{#if (and isEditable (not isLocked))}}
               <label class="skill-field-label">攻击容量</label>
               <input type="number" name="{{fp}}weight" value="{{form.weight}}" class="weight-input" min="0" max="8" style="width:45px"/>
-              {{!-- 攻击容量 > 2 才出现：扩散方式 + 范围（以格为半径） --}}
+              {{!-- 攻击容量 ≥ 2 才出现：扩散方式 + 范围（以格为半径） --}}
               <span class="spread-box{{#if showSpread}} on{{/if}}">
                 {{!-- 这两个控件不参与表单提交（不写 name），改由 JS 直接 update，
                       免得和骰数公式那套重写逻辑抢同一次提交 --}}

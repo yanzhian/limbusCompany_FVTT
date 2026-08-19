@@ -9063,7 +9063,7 @@ input.item-piles-quantity {
 .limbuscompany .combat-skill-slot--slide-in   { animation: limbus-slot-slide-in .32s ease-out backwards; }
 .limbuscompany .combat-skill-slot--shift-left { animation: limbus-slot-shift-left .3s ease-out backwards; }
 
-/* ── 技能卡：攻击容量 > 2 时的扩散设置 ───────────────────────────── */
+/* ── 技能卡：攻击容量 ≥ 2 时的扩散设置 ───────────────────────────── */
 .limbuscompany .spread-box { display: none; align-items: center; gap: 4px; margin-left: 6px; }
 .limbuscompany .spread-box.on { display: inline-flex; }
 .limbuscompany .spread-ft { font-size: .65rem; color: var(--text-sub); }

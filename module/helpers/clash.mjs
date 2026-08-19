@@ -3964,7 +3964,7 @@ export class ClashManager {
 
     const modeLabel = flags.spreadMode === "spray" ? "广域乱射" : "链式扩散";
     const ft        = ((flags.spreadRange ?? 1) * 5 + 2.5).toFixed(1);
-    const modeLine  = cap > 2
+    const modeLine  = cap >= 2
       ? `<span style="font-size:.62rem;color:#C9A84C;margin-left:6px;">${modeLabel} · ${ft}ft</span>`
       : "";
 
@@ -4005,7 +4005,7 @@ export class ClashManager {
             ${btnLabel}
           </button>
           <span style="font-size:.62rem;color:#6A5A48;">
-            ${cap > 2
+            ${cap >= 2
               ? (flags.spreadMode === "spray" ? "范围内随机抽取，可能重复命中" : "范围内逐个打过去，不重复")
               : "点击自动结算这一次扩散"}
           </span>
