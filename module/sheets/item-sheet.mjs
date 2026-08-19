@@ -15,6 +15,12 @@ import { SKILLBOOK_MAX_SLOTS } from "../documents/item.mjs";
 import { CustomBuffRegistry, normalizeBuffType } from "../helpers/custom-buffs.mjs";
 import { linkifyHtml } from "../helpers/linkify.mjs";
 
+/**
+ * 激活效果剪贴板（本次会话内共享，跨物品卡有效，刷新页面后清空）。
+ * 存的是去掉 id 的 activity 快照——粘贴时再补一个新 id。
+ */
+let _activityClipboard = null;
+
 export class LimbusItemSheet extends ItemSheet {
 
   /** 当前 sheet 绑定的所有 Title 卡 hover controller（activateListeners 时填充） */
@@ -115,6 +121,9 @@ export class LimbusItemSheet extends ItemSheet {
     // EGO 处于【侵蚀】编辑形态时，编辑的是 system.corrode.activities
     // 注意 _actField 可能是 "corrode.activities" 这种带点路径，不能直接方括号取值
     context.activities = foundry.utils.getProperty(item.toObject().system ?? {}, this._actField) ?? [];
+
+    // 剪贴板状态（供「粘贴效果」按钮显示名字）
+    context.clipboardActivityName = _activityClipboard?.name ?? "";
 
     // ── 技能专用数据 ──────────────────────────────────────────────────────
     if (item.type === "skill") {
@@ -463,6 +472,9 @@ export class LimbusItemSheet extends ItemSheet {
     html.find(".activity-add-btn").on("click",    this._onActivityAdd.bind(this));
     html.find(".activity-edit-btn").on("click",   this._onActivityEdit.bind(this));
     html.find(".activity-delete-btn").on("click", this._onActivityDelete.bind(this));
+    html.find(".activity-copy-btn").on("click",   this._onActivityCopy.bind(this));
+    html.find(".activity-dupe-btn").on("click",   this._onActivityDuplicate.bind(this));
+    html.find(".activity-paste-btn").on("click",  this._onActivityPaste.bind(this));
 
     if (!this.isEditable) return;
 
@@ -820,6 +832,49 @@ export class LimbusItemSheet extends ItemSheet {
     if (idx < 0 || idx >= acts.length) return;
     acts.splice(idx, 1);
     await this.item.update({ [this._actPath]: acts });
+  }
+
+  /** 复制一条效果到剪贴板（跨物品卡可粘贴） */
+  _onActivityCopy(event) {
+    event.preventDefault();
+    const idx  = parseInt(event.currentTarget.closest("[data-activity-idx]")?.dataset.activityIdx ?? -1);
+    const acts = this._actList;
+    if (idx < 0 || idx >= acts.length) return;
+
+    _activityClipboard = _normalizeActivity(acts[idx]);
+    ui.notifications?.info(`已复制效果「${_activityClipboard.name}」`);
+    this.render(false);
+  }
+
+  /** 就地复制一条效果（同一物品内再来一份） */
+  async _onActivityDuplicate(event) {
+    event.preventDefault();
+    const idx  = parseInt(event.currentTarget.closest("[data-activity-idx]")?.dataset.activityIdx ?? -1);
+    const acts = this._actList;
+    if (idx < 0 || idx >= acts.length) return;
+
+    const copy = _normalizeActivity(acts[idx]);   // 已带新 id
+    copy.name = `${copy.name}（副本）`;
+    acts.splice(idx + 1, 0, copy);          // 紧跟在原条目后面，方便对照着改
+    await this.item.update({ [this._actPath]: acts });
+    this._activitiesExpanded = true;
+    this.render(false);
+  }
+
+  /** 把剪贴板里的效果粘到当前列表末尾 */
+  async _onActivityPaste(event) {
+    event.preventDefault();
+    if (!_activityClipboard) {
+      ui.notifications?.warn("剪贴板里还没有效果——先在任意物品卡上点一条效果的「复制」。");
+      return;
+    }
+    const acts = this._actList;
+    const copy = foundry.utils.deepClone(_activityClipboard);
+    copy.id = foundry.utils.randomID();
+    acts.push(copy);
+    await this.item.update({ [this._actPath]: acts });
+    this._activitiesExpanded = true;
+    this.render(false);
   }
 
   async _showActivityEditor(acts, idx) {
@@ -2049,6 +2104,31 @@ function _parseResistanceChanges(egoResistanceChange) {
 /* ─── Activity 编辑器 V2 辅助函数 ────────────────────────────────────────── */
 
 function _esc(s) { return String(s ?? "").replace(/"/g, "&quot;"); }
+
+/**
+ * 把一条 activity 整理成当前 schema 的形状（顺带兼容旧的单对象字段），
+ * 返回深拷贝，供复制 / 粘贴使用。
+ * @param {object} act
+ * @returns {object}
+ */
+function _normalizeActivity(act = {}) {
+  const arr = (plural, singular) => Array.isArray(plural)
+    ? foundry.utils.deepClone(plural)
+    : (singular ? [foundry.utils.deepClone(singular)] : []);
+
+  return {
+    id:            foundry.utils.randomID(),
+    name:          act.name    ?? "新效果",
+    trigger:       act.trigger ?? "攻击时",
+    preconditions: arr(act.preconditions, act.precondition),
+    costs:         arr(act.costs,         act.cost),
+    effects:       arr(act.effects,       act.effect),
+    limit: {
+      type:  act.limit?.type  ?? "unlimited",
+      count: act.limit?.count ?? 0,
+    },
+  };
+}
 
 function _activityEffectLabels() {
   return [

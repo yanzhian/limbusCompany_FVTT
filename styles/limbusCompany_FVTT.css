@@ -4417,6 +4417,24 @@ body.game .limbuscompany.app img {
   transition: all .15s;
 }
 .limbuscompany .activity-add-btn:hover { border-color: var(--gold-active); color: var(--gold-active); }
+.limbuscompany .activity-copy-btn,
+.limbuscompany .activity-dupe-btn {
+  background: var(--bg-panel); border: 1px solid var(--border-gold);
+  color: var(--text-sub); font-size: .65rem; padding: 1px 5px;
+  cursor: pointer; border-radius: 2px; transition: all .15s; min-width: 32px;
+}
+.limbuscompany .activity-copy-btn:hover,
+.limbuscompany .activity-dupe-btn:hover { color: var(--gold-active); border-color: var(--gold-active); }
+.limbuscompany .activity-add-row { display: flex; gap: 4px; }
+.limbuscompany .activity-paste-btn {
+  background: var(--bg-panel); border: 1px dashed var(--border-gold);
+  color: var(--text-sub); font-family: var(--font-main); font-size: .7rem;
+  padding: 3px 10px; cursor: pointer; border-radius: 2px;
+  flex: 0 1 auto; max-width: 55%;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  transition: all .15s;
+}
+.limbuscompany .activity-paste-btn:hover { border-color: var(--gold-active); color: var(--gold-active); }
 
 /* ─── §3-O  Title 卡片（悬停弹出） ─────────────────────────────── */
 
