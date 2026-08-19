@@ -126,14 +126,16 @@ export class SkillData extends foundry.abstract.TypeDataModel {
     });
 
     // EGO 罪孽消耗条目
-    const sinCostEntrySchema = new fields.SchemaField({
+    // 注意：一个 DataField 实例只能挂在一个父字段下，【觉醒】/【侵蚀】两套数组
+    // 必须各自 new 一份，因此这里用工厂函数而不是共用同一个实例。
+    const sinCostEntrySchema = () => new fields.SchemaField({
       sinType: new fields.StringField({ required: true, initial: "wrath",
         choices: ["wrath", "lust", "sloth", "gluttony", "gloom", "pride", "envy"] }),
       amount:  new fields.NumberField({ required: true, integer: true, min: 0, initial: 1 }),
     });
 
     // EGO 罪孽抗性修正条目
-    const egoResistAdjSchema = new fields.SchemaField({
+    const egoResistAdjSchema = () => new fields.SchemaField({
       sinType:    new fields.StringField({ required: true, initial: "wrath" }),
       multiplier: new fields.StringField({ required: true, initial: "x1.0" }),
     });
@@ -164,10 +166,10 @@ export class SkillData extends foundry.abstract.TypeDataModel {
         choices: [null, "ZAYIN", "TET", "HE", "WAW", "ALEPH"] }),
 
       // EGO 罪孽抗性修正（使用后生效）——【觉醒】形态
-      egoResistanceAdj: new fields.ArrayField(egoResistAdjSchema, { required: true, initial: [] }),
+      egoResistanceAdj: new fields.ArrayField(egoResistAdjSchema(), { required: true, initial: [] }),
 
       // EGO 罪孽抗性修正——【侵蚀】形态（陷入恐慌时使用）
-      corrodeEgoResistanceAdj: new fields.ArrayField(egoResistAdjSchema, { required: true, initial: [] }),
+      corrodeEgoResistanceAdj: new fields.ArrayField(egoResistAdjSchema(), { required: true, initial: [] }),
 
       // 卡面当前正在编辑/展示的 EGO 形态：awaken（觉醒）/ corrode（侵蚀）
       // 实战中用哪一套由角色是否【陷入恐慌】决定，此字段只影响物品卡的显示
@@ -215,10 +217,10 @@ export class SkillData extends foundry.abstract.TypeDataModel {
       effectDesc: new fields.HTMLField({ required: false, initial: "" }),
 
       // EGO 罪孽消耗（多种罪孽资源）——【觉醒】形态
-      sinCost: new fields.ArrayField(sinCostEntrySchema, { required: true, initial: [] }),
+      sinCost: new fields.ArrayField(sinCostEntrySchema(), { required: true, initial: [] }),
 
       // EGO 罪孽消耗——【侵蚀】形态（陷入恐慌时使用）
-      corrodeSinCost: new fields.ArrayField(sinCostEntrySchema, { required: true, initial: [] }),
+      corrodeSinCost: new fields.ArrayField(sinCostEntrySchema(), { required: true, initial: [] }),
 
       // EGO 理智消耗
       sanityCost: new fields.NumberField({ required: true, integer: true, min: 0, initial: 0 }),
