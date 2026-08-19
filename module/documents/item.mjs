@@ -178,8 +178,13 @@ export class SkillData extends foundry.abstract.TypeDataModel {
         activities:  new fields.ArrayField(makeActivitySchema(), { required: true, initial: [] }),
       }),
 
-      // 攻击容量（守备技能无此字段，设为 0）
+      // 攻击容量：命中后还能往外扩散几个目标（守备技能同样可用）
       weight: new fields.NumberField({ required: true, integer: true, min: 0, initial: 1 }),
+
+      // 攻击容量 > 2 时的扩散方式与范围（范围以格为半径：1 → 7.5ft，2 → 12.5ft）
+      spreadMode:  new fields.StringField({ required: false, initial: "chain",
+        choices: ["chain", "spray"] }),
+      spreadRange: new fields.NumberField({ required: false, integer: true, min: 1, max: 6, initial: 1 }),
 
       // 骰子类型：normal / unbreakable / severing
       diceType: new fields.StringField({ required: true, initial: "normal",

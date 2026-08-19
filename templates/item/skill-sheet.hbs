@@ -182,10 +182,24 @@
             {{#if (and isEditable (not isLocked))}}
               <label class="skill-field-label">攻击容量</label>
               <input type="number" name="{{fp}}weight" value="{{form.weight}}" class="weight-input" min="0" max="8" style="width:45px"/>
+              {{!-- 攻击容量 > 2 才出现：扩散方式 + 范围（以格为半径） --}}
+              <span class="spread-box{{#if showSpread}} on{{/if}}">
+                <select name="system.spreadMode" class="equip-subtype-sel spread-mode-sel">
+                  <option value="chain" {{#eq system.spreadMode "chain"}}selected{{/eq}}>链式扩散</option>
+                  <option value="spray" {{#eq system.spreadMode "spray"}}selected{{/eq}}>广域乱射</option>
+                </select>
+                <input type="number" name="system.spreadRange" value="{{system.spreadRange}}"
+                       class="weight-input spread-range-input" min="1" max="6" style="width:38px"
+                       title="扩散范围（格）"/>
+                <span class="spread-ft">{{spreadFt}}</span>
+              </span>
             {{else}}
               {{#each weightSquares}}
                 <span class="weight-sq" title="攻击容量"></span>
               {{/each}}
+              {{#if showSpread}}
+                <span class="spread-badge">{{spreadModeLabel}} · {{spreadFt}}</span>
+              {{/if}}
             {{/if}}
           </div>
 

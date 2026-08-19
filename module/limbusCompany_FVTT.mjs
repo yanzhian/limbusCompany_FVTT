@@ -335,7 +335,10 @@ Hooks.on("renderChatMessage", (_message, html, _data) => {
       const ws = flags.weightSpread;
       if (ws && (ws.weight ?? 1) >= 2) {
         const atkActor = game.actors.get(ws.attackerId);
-        await ClashManager._sendWeightSpreadCard(ws, atkActor);
+        const tgt      = game.actors.get(targetActorId);
+        await ClashManager._sendWeightSpreadCard(ws, atkActor, tgt ? {
+          actorId: tgt.id, name: tgt.name, dmg: damage, note: "拼点命中",
+        } : null);
       }
     });
     html.find(".clash-btn-reroll").on("click", () => {
