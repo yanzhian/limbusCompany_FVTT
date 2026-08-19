@@ -56,22 +56,22 @@
           <div class="skill-cat-dice-row">
             {{#if (and isEditable (not isLocked))}}
               {{#if isDefense}}
-                <select name="system.category" class="equip-subtype-sel">
+                <select name="{{fp}}category" class="equip-subtype-sel">
                   {{#each defenseCategories}}
-                    <option value="{{@key}}" {{#eq @key ../system.category}}selected{{/eq}}>{{this}}</option>
+                    <option value="{{@key}}" {{#eq @key ../form.category}}selected{{/eq}}>{{this}}</option>
                   {{/each}}
                 </select>
               {{else}}
-                <select name="system.category" class="equip-subtype-sel">
+                <select name="{{fp}}category" class="equip-subtype-sel">
                   {{#each attackCategories}}
-                    <option value="{{@key}}" {{#eq @key ../system.category}}selected{{/eq}}>{{this}}</option>
+                    <option value="{{@key}}" {{#eq @key ../form.category}}selected{{/eq}}>{{this}}</option>
                   {{/each}}
                 </select>
               {{/if}}
-              <input type="text" name="system.diceFormula" value="{{diceFormulaDisplay}}" class="dice-formula-input" placeholder="1D4+2"/>
+              <input type="text" name="{{fp}}diceFormula" value="{{diceFormulaDisplay}}" class="dice-formula-input" placeholder="1D4+2"/>
             {{else}}
-              {{#if system.category}}
-                <img src="{{lookup @root.config.CATEGORY_ICON_PATHS system.category}}" class="category-icon" width="22" height="22" alt="{{system.category}}">
+              {{#if form.category}}
+                <img src="{{lookup @root.config.CATEGORY_ICON_PATHS form.category}}" class="category-icon" width="22" height="22" alt="{{form.category}}">
               {{/if}}
               <span class="dice-formula-display">{{diceFormulaDisplay}}</span>
               {{#if (eq system.diceType "unbreakable")}}
@@ -182,7 +182,7 @@
             <div class="weight-row">
               {{#if (and isEditable (not isLocked))}}
                 <label class="skill-field-label">加重值</label>
-                <input type="number" name="system.weight" value="{{system.weight}}" class="weight-input" min="0" max="8" style="width:45px"/>
+                <input type="number" name="{{fp}}weight" value="{{form.weight}}" class="weight-input" min="0" max="8" style="width:45px"/>
               {{else}}
                 {{#each weightSquares}}
                   <span class="weight-sq" title="加重值"></span>
@@ -199,17 +199,17 @@
 
         {{!-- 罪孽消耗 --}}
         <div class="ego-row-wrap">
-          <span class="ego-row-label">罪孽消耗<span class="ego-form-tag">[{{egoFormLabel}}]</span></span>
+          <span class="ego-row-label">罪孽消耗</span>
           <div class="ego-cost-block">
             {{#each sinCosts}}
               <div class="ego-cost-item">
                 {{#if (and ../isEditable (not ../isLocked))}}
-                  <select name="system.{{@root.egoCostPath}}.{{@index}}.sinType" class="sin-cost-sel">
+                  <select name="system.sinCost.{{@index}}.sinType" class="sin-cost-sel">
                     {{#each @root.config.SINS}}
                       <option value="{{this}}" {{#if (eq this ../sinType)}}selected{{/if}}>{{lookup @root.config.SIN_LABELS_ZH this}}</option>
                     {{/each}}
                   </select>
-                  <input type="number" name="system.{{@root.egoCostPath}}.{{@index}}.amount" value="{{amount}}" class="sin-cost-input" min="0" style="width:40px"/>
+                  <input type="number" name="system.sinCost.{{@index}}.amount" value="{{amount}}" class="sin-cost-input" min="0" style="width:40px"/>
                   <button type="button" class="sin-cost-remove-btn" data-idx="{{@index}}">×</button>
                 {{else}}
                   <img src="{{lookup @root.config.SIN_ICON_PATHS sinType}}" width="16" height="16" alt="{{sinType}}">
@@ -225,27 +225,27 @@
 
         {{!-- 理智消耗 --}}
         <div class="ego-row-wrap">
-          <span class="ego-row-label">理智消耗</span>
+          <span class="ego-row-label">理智消耗<span class="ego-form-tag">[{{egoFormLabel}}]</span></span>
           {{#if (and isEditable (not isLocked))}}
-            <input type="number" name="system.sanityCost" value="{{system.sanityCost}}" class="weight-input" min="0" style="width:50px"/>
+            <input type="number" name="{{fp}}sanityCost" value="{{form.sanityCost}}" class="weight-input" min="0" style="width:50px"/>
           {{else}}
-            <span class="ego-sanity-val">{{#if system.sanityCost}}-{{system.sanityCost}}{{else}}—{{/if}}</span>
+            <span class="ego-sanity-val">{{#if form.sanityCost}}-{{form.sanityCost}}{{else}}—{{/if}}</span>
           {{/if}}
         </div>
 
         {{!-- 调整罪孽抗性 --}}
         <div class="ego-row-wrap">
-          <span class="ego-row-label">调整罪孽抗性<span class="ego-form-tag">[{{egoFormLabel}}]</span></span>
+          <span class="ego-row-label">调整罪孽抗性</span>
           <div class="ego-resist-block">
             {{#each egoResChanges}}
               <div class="ego-resist-item">
                 {{#if (and ../isEditable (not ../isLocked))}}
-                  <select name="system.{{@root.egoResPath}}.{{@index}}.sinType" class="sin-cost-sel">
+                  <select name="system.egoResistanceAdj.{{@index}}.sinType" class="sin-cost-sel">
                     {{#each @root.config.SINS}}
                       <option value="{{this}}" {{#if (eq this ../sinType)}}selected{{/if}}>{{lookup @root.config.SIN_LABELS_ZH this}}</option>
                     {{/each}}
                   </select>
-                  <select name="system.{{@root.egoResPath}}.{{@index}}.multiplier" class="sin-cost-sel">
+                  <select name="system.egoResistanceAdj.{{@index}}.multiplier" class="sin-cost-sel">
                     {{#each @root.config.RESISTANCE_VALUES}}
                       <option value="{{this}}" {{#if (eq this ../multiplier)}}selected{{/if}}>{{this}}</option>
                     {{/each}}
@@ -284,9 +284,13 @@
       {{!-- ── 描述区 ──────────────────────────────────────────────── --}}
       <div class="item-desc-block">
         {{#if (and isEditable (not isLocked))}}
-          {{editor system.effectDesc target="system.effectDesc" button=false editable=true engine="prosemirror"}}
+          {{#if isCorrode}}
+            {{editor form.effectDesc target="system.corrode.effectDesc" button=false editable=true engine="prosemirror"}}
+          {{else}}
+            {{editor form.effectDesc target="system.effectDesc" button=false editable=true engine="prosemirror"}}
+          {{/if}}
         {{else}}
-          <div class="item-desc-display">{{{linkify system.effectDesc}}}</div>
+          <div class="item-desc-display">{{{linkify form.effectDesc}}}</div>
         {{/if}}
       </div>
 

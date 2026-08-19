@@ -56,6 +56,47 @@ export class LimbusItemSheet extends ItemSheet {
 
   get activitiesExpanded() { return this._activitiesExpanded ?? false; }
 
+  /* ─── E.G.O 形态（觉醒 / 侵蚀） ─────────────────────────────────────────── */
+
+  /** 当前编辑的是不是 EGO 的【侵蚀】形态 */
+  get _editCorrode() {
+    return this.item.type === "skill"
+      && this.item.system?.type === "ego"
+      && this.item.system?.egoForm === "corrode";
+  }
+  /** 激活效果所在的字段名（侵蚀形态另存一套） */
+  get _actField() { return this._editCorrode ? "corrode.activities" : "activities"; }
+  get _actPath()  { return `system.${this._actField}`; }
+  /** 当前形态的激活效果列表（原始存档值） */
+  get _actList() {
+    const src = this.item.toObject().system ?? {};
+    return foundry.utils.deepClone(
+      (this._editCorrode ? src.corrode?.activities : src.activities) ?? []
+    );
+  }
+
+  /** 右上角 [觉醒/侵蚀] 切换：首次切到侵蚀时用觉醒的数值打底 */
+  async _onEgoFormToggle(event) {
+    event.preventDefault();
+    const sys  = this.item.toObject().system ?? {};
+    const next = sys.egoForm === "corrode" ? "awaken" : "corrode";
+    const update = { "system.egoForm": next };
+    if (next === "corrode" && !sys.corrode?.initialized) {
+      Object.assign(update, {
+        "system.corrode.initialized": true,
+        "system.corrode.category":    sys.category    ?? "slash",
+        "system.corrode.baseValue":   sys.baseValue   ?? 0,
+        "system.corrode.diceCount":   sys.diceCount   ?? 1,
+        "system.corrode.diceFaces":   sys.diceFaces   ?? 4,
+        "system.corrode.weight":      sys.weight      ?? 1,
+        "system.corrode.sanityCost":  sys.sanityCost  ?? 0,
+        "system.corrode.effectDesc":  sys.effectDesc  ?? "",
+        "system.corrode.activities":  foundry.utils.deepClone(sys.activities ?? []),
+      });
+    }
+    await this.item.update(update);
+  }
+
   /* ─── 数据准备 ──────────────────────────────────────────────────────────── */
 
   async getData() {
@@ -71,7 +112,8 @@ export class LimbusItemSheet extends ItemSheet {
     context.activitiesExpanded = this.activitiesExpanded;
 
     // ── 活动列表 ─────────────────────────────────────────────────────────
-    context.activities = sys.activities ?? [];
+    // EGO 处于【侵蚀】编辑形态时，编辑的是 system.corrode.activities
+    context.activities = item.toObject().system?.[this._actField] ?? [];
 
     // ── 技能专用数据 ──────────────────────────────────────────────────────
     if (item.type === "skill") {
@@ -83,19 +125,34 @@ export class LimbusItemSheet extends ItemSheet {
       context.isCounterType = sys.type === "defense" &&
         (sys.category === "counter" || sys.category === "clashCounter");
 
-      // EGO 消耗行
+      // EGO 消耗行（罪孽消耗 / 调整抗性两形态共用）
       // 注意：schema 字段名为 sinCost[].sinType 和 egoResistanceAdj[].{sinType,multiplier}
       if (context.isEgo) {
-        // 【觉醒】/【侵蚀】两套数据，卡面按 system.egoForm 切换编辑哪一套
-        const corrode = sys.egoForm === "corrode";
-        context.egoForm      = corrode ? "corrode" : "awaken";
-        context.isCorrode    = corrode;
-        context.egoFormLabel = corrode ? "侵蚀" : "觉醒";
-        context.egoCostPath  = corrode ? "corrodeSinCost" : "sinCost";
-        context.egoResPath   = corrode ? "corrodeEgoResistanceAdj" : "egoResistanceAdj";
-        context.sinCosts      = (corrode ? sys.corrodeSinCost : sys.sinCost) ?? [];
-        context.egoResChanges = (corrode ? sys.corrodeEgoResistanceAdj : sys.egoResistanceAdj) ?? [];
+        context.sinCosts      = sys.sinCost ?? [];
+        context.egoResChanges = sys.egoResistanceAdj ?? [];
       }
+
+      // 【觉醒】/【侵蚀】：卡面按 system.egoForm 决定编辑/展示哪一套。
+      // 注意读的是 _source——持有者恐慌时 prepareDerivedData 会把侵蚀数据投影到
+      // 顶层字段上，编辑器必须看原始存档值，否则会把投影结果写回觉醒那一套。
+      const src   = item.toObject().system ?? {};
+      const corrode = context.isEgo && sys.egoForm === "corrode";
+      context.isCorrode    = corrode;
+      context.egoFormLabel = corrode ? "侵蚀" : "觉醒";
+      // 表单字段前缀：侵蚀形态下这些字段写进 system.corrode.*
+      context.fp = corrode ? "system.corrode." : "system.";
+      const cSrc = src.corrode ?? {};
+      const pick = (k) => (corrode && cSrc[k] !== null && cSrc[k] !== undefined) ? cSrc[k] : src[k];
+      // 当前形态下展示的那一套数值
+      context.form = {
+        category:   pick("category"),
+        weight:     pick("weight"),
+        sanityCost: pick("sanityCost"),
+        effectDesc: corrode ? (cSrc.effectDesc ?? "") : (src.effectDesc ?? ""),
+      };
+      context.formDiceCount = pick("diceCount") ?? 1;
+      context.formDiceFaces = pick("diceFaces") ?? 4;
+      context.formBaseValue = pick("baseValue") ?? 0;
 
       // 攻击/守备类别选项：使用中文直接标签，避免模板渲染 i18n key 字符串
       const _catZh = cfg.CATEGORY_LABELS_ZH ?? {};
@@ -108,11 +165,13 @@ export class LimbusItemSheet extends ItemSheet {
       // 罪孽类型：同样使用中文标签
       context.skillSinTypes = cfg.SIN_LABELS_ZH ?? {};
 
-      // 技能骰公式（格式化为大写）
-      context.diceFormulaDisplay = (sys.diceFormula ?? "").toUpperCase();
+      // 技能骰公式（格式化为大写）——按当前展示的形态生成
+      const _bv = context.formBaseValue;
+      context.diceFormulaDisplay =
+        `${context.formDiceCount}D${context.formDiceFaces}${_bv > 0 ? `+${_bv}` : ""}`;
 
       // 加重值小方块
-      context.weightSquares = Array.from({ length: sys.weight ?? 0 }, (_, i) => i);
+      context.weightSquares = Array.from({ length: context.form.weight ?? 0 }, (_, i) => i);
 
       // 图标边框：与 HUD / 技能槽同一套（罪孽+等级空心框，EGO 为圆环）
       context.skillFrame = ClashManager._skillFrameIcon(item);
@@ -533,24 +592,30 @@ export class LimbusItemSheet extends ItemSheet {
 
     // ── skill：将用户输入的 diceFormula 文本解析为真正的 schema 字段
     if (this.item.type === "skill") {
+      // 侵蚀形态编辑时，骰数写进 system.corrode.*
+      const corrode  = this._editCorrode;
+      const pre      = corrode ? "system.corrode." : "system.";
       const _isFlat  = !formData.system;
-      const rawFml   = _isFlat ? formData["system.diceFormula"] : formData.system?.diceFormula;
+      const nested   = () => (corrode ? formData.system?.corrode : formData.system) ?? {};
+      const rawFml   = _isFlat ? formData[`${pre}diceFormula`] : nested().diceFormula;
       if (rawFml !== undefined) {
         const parsed = _parseDiceFormula(String(rawFml));
         if (parsed) {
           if (_isFlat) {
-            formData["system.diceCount"]  = parsed.diceCount;
-            formData["system.diceFaces"]  = parsed.diceFaces;
-            formData["system.baseValue"]  = parsed.baseValue;
+            formData[`${pre}diceCount`] = parsed.diceCount;
+            formData[`${pre}diceFaces`] = parsed.diceFaces;
+            formData[`${pre}baseValue`] = parsed.baseValue;
           } else {
-            formData.system.diceCount  = parsed.diceCount;
-            formData.system.diceFaces  = parsed.diceFaces;
-            formData.system.baseValue  = parsed.baseValue;
+            Object.assign(nested(), {
+              diceCount: parsed.diceCount,
+              diceFaces: parsed.diceFaces,
+              baseValue: parsed.baseValue,
+            });
           }
         }
         // 无论解析成功与否都丢弃原始文本（prepareDerivedData 会重新生成）
-        if (_isFlat) delete formData["system.diceFormula"];
-        else         delete formData.system.diceFormula;
+        if (_isFlat) delete formData[`${pre}diceFormula`];
+        else         delete nested().diceFormula;
       }
     }
 
@@ -693,7 +758,7 @@ export class LimbusItemSheet extends ItemSheet {
   }
 
   async _onActivityAdd(event) {
-    const activities = foundry.utils.deepClone(this.item.system.activities ?? []);
+    const activities = this._actList;
     activities.push({
       id:            foundry.utils.randomID(),
       name:          "新效果",
@@ -703,14 +768,14 @@ export class LimbusItemSheet extends ItemSheet {
       effects:       [],
       limit:         { type: "unlimited", count: 0 },
     });
-    await this.item.update({ "system.activities": activities });
+    await this.item.update({ [this._actPath]: activities });
     this._activitiesExpanded = true;
     this.render(false);
   }
 
   async _onActivityEdit(event) {
     const idx  = parseInt(event.currentTarget.closest("[data-activity-idx]")?.dataset.activityIdx ?? -1);
-    const acts = foundry.utils.deepClone(this.item.system.activities ?? []);
+    const acts = this._actList;
     if (idx < 0 || idx >= acts.length) return;
 
     await this._showActivityEditor(acts, idx);
@@ -718,10 +783,10 @@ export class LimbusItemSheet extends ItemSheet {
 
   async _onActivityDelete(event) {
     const idx  = parseInt(event.currentTarget.closest("[data-activity-idx]")?.dataset.activityIdx ?? -1);
-    const acts = foundry.utils.deepClone(this.item.system.activities ?? []);
+    const acts = this._actList;
     if (idx < 0 || idx >= acts.length) return;
     acts.splice(idx, 1);
-    await this.item.update({ "system.activities": acts });
+    await this.item.update({ [this._actPath]: acts });
   }
 
   async _showActivityEditor(acts, idx) {
@@ -828,7 +893,7 @@ export class LimbusItemSheet extends ItemSheet {
             label: "保存",
             callback: async (html) => {
               acts[idx] = _readActivityForm(html, act);
-              await this.item.update({ "system.activities": acts });
+              await this.item.update({ [this._actPath]: acts });
               resolve(true);
             },
           },
@@ -856,48 +921,29 @@ export class LimbusItemSheet extends ItemSheet {
 
   /* ─── EGO 罪孽消耗行 ────────────────────────────────────────────────────── */
 
-  /** 当前编辑的形态对应的字段名（【觉醒】/【侵蚀】各一套） */
-  get _egoCostPath() {
-    return this.item.system.egoForm === "corrode" ? "corrodeSinCost" : "sinCost";
-  }
-  get _egoResPath() {
-    return this.item.system.egoForm === "corrode" ? "corrodeEgoResistanceAdj" : "egoResistanceAdj";
-  }
-
-  /** 右上角 [觉醒/侵蚀] 切换 */
-  async _onEgoFormToggle(event) {
-    event.preventDefault();
-    const next = this.item.system.egoForm === "corrode" ? "awaken" : "corrode";
-    await this.item.update({ "system.egoForm": next });
-  }
-
   async _onSinCostAdd(event) {
-    const path  = this._egoCostPath;
-    const costs = foundry.utils.deepClone(this.item.system[path] ?? []);
+    const costs = foundry.utils.deepClone(this.item.system.sinCost ?? []);
     costs.push({ sinType: "wrath", amount: 1 }); // schema 字段名为 sinType
-    await this.item.update({ [`system.${path}`]: costs });
+    await this.item.update({ "system.sinCost": costs });
   }
 
   async _onSinCostRemove(event) {
     const idx   = parseInt(event.currentTarget.dataset.idx ?? -1);
-    const path  = this._egoCostPath;
-    const costs = foundry.utils.deepClone(this.item.system[path] ?? []);
-    if (idx >= 0) { costs.splice(idx, 1); await this.item.update({ [`system.${path}`]: costs }); }
+    const costs = foundry.utils.deepClone(this.item.system.sinCost ?? []);
+    if (idx >= 0) { costs.splice(idx, 1); await this.item.update({ "system.sinCost": costs }); }
   }
 
   async _onResChangeAdd(event) {
     // 条目属性为 {sinType, multiplier}
-    const path    = this._egoResPath;
-    const changes = foundry.utils.deepClone(this.item.system[path] ?? []);
+    const changes = foundry.utils.deepClone(this.item.system.egoResistanceAdj ?? []);
     changes.push({ sinType: "wrath", multiplier: "x1.0" });
-    await this.item.update({ [`system.${path}`]: changes });
+    await this.item.update({ "system.egoResistanceAdj": changes });
   }
 
   async _onResChangeRemove(event) {
     const idx     = parseInt(event.currentTarget.dataset.idx ?? -1);
-    const path    = this._egoResPath;
-    const changes = foundry.utils.deepClone(this.item.system[path] ?? []);
-    if (idx >= 0) { changes.splice(idx, 1); await this.item.update({ [`system.${path}`]: changes }); }
+    const changes = foundry.utils.deepClone(this.item.system.egoResistanceAdj ?? []);
+    if (idx >= 0) { changes.splice(idx, 1); await this.item.update({ "system.egoResistanceAdj": changes }); }
   }
 
   /* ─── 星芒费用编辑 ──────────────────────────────────────────────────────── */

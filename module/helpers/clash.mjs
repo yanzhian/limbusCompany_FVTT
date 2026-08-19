@@ -1986,17 +1986,16 @@ export class ClashManager {
     if (isEgo) {
       const sinCost    = sys.sinCost    ?? [];
       const sanityCost = sys.sanityCost ?? 0;
-      // 恐慌时：走【侵蚀】那一套罪孽消耗（未填则沿用【觉醒】×1.5），理智消耗豁免
-      const egoCost               = ClashManager._egoSinCost(sys, isInPanic);
-      const effectiveSinCost      = egoCost.cost;
-      const effectiveSanityCost   = isInPanic ? 0 : sanityCost;
+      // 罪孽消耗两形态共用；理智消耗已按形态投影在 sys.sanityCost 上。
+      // 没配置侵蚀形态的旧 EGO 沿用老规矩：恐慌时免理智。
+      const hasCorrode            = ClashManager._hasCorrodeForm(sys);
+      const effectiveSinCost      = sinCost;
+      const effectiveSanityCost   = (isInPanic && !hasCorrode) ? 0 : sanityCost;
       const sinParts   = effectiveSinCost.map(({ sinType, amount }) => {
         const icon     = cfg.SIN_ICON_PATHS?.[sinType] ?? "";
         const cur      = SinResourceHUD.getSins()[sinType] ?? 0;
         const ok       = cur >= amount;
-        const origAmt  = sinCost.find(e => e.sinType === sinType)?.amount ?? amount;
-        const suffix   = egoCost.scaled && amount !== origAmt
-          ? `<span style="font-size:.65rem;color:#E88844;"> ×1.5</span>` : "";
+        const suffix   = "";
         return `<span style="display:inline-flex;align-items:center;gap:3px;margin-right:6px;
                               color:${ok ? "#C89E70" : "#E84444"};">
           ${icon ? `<img src="${icon}" style="width:16px;height:16px;border-radius:50%;vertical-align:middle;">` : ""}
@@ -2014,7 +2013,7 @@ export class ClashManager {
           : "";
       const panicNote = isInPanic
         ? `<div style="font-size:.7rem;color:#E8A444;margin-bottom:4px;">【陷入恐慌】E.G.O 进入【侵蚀】形态${
-            egoCost.scaled ? "（未设定侵蚀数据，沿用觉醒罪孽消耗 ×1.5）" : ""}</div>`
+            hasCorrode ? "" : "（本 E.G.O 未设定侵蚀数据，沿用觉醒形态并免除理智消耗）"}</div>`
         : "";
       if (panicNote || sinParts || sanPart) {
         egoCostHtml = `<div style="margin-bottom:10px;padding:6px 8px;border-radius:3px;
@@ -2056,8 +2055,9 @@ export class ClashManager {
               // ── EGO 前置检查：罪孽资源 + 理智（恐慌时罪孽×1.5、免理智）──
               if (isEgo) {
                 const sanityCost      = sys.sanityCost ?? 0;
-                const effectiveSinCost = ClashManager._egoSinCost(sys, isInPanic).cost;
-                const effectiveSanityCost = isInPanic ? 0 : sanityCost;
+                const effectiveSinCost = sys.sinCost ?? [];
+                const effectiveSanityCost =
+                  (isInPanic && !ClashManager._hasCorrodeForm(sys)) ? 0 : sanityCost;
                 if (!SinResourceHUD.canAffordSins(effectiveSinCost)) {
                   ui.notifications.warn("罪孽资源不足，无法使用此 EGO 技能！");
                   resolve(false);
@@ -2084,7 +2084,7 @@ export class ClashManager {
 
               // EGO 技能使用后，将 egoResistanceAdj 应用到角色的罪孽抗性
               if (isEgo) {
-                await ClashManager._applyEgoResistanceChanges(actor, item, isInPanic);
+                await ClashManager._applyEgoResistanceChanges(actor, item);
               }
 
               // ── 技能使用后：获取对应罪孽资源 +1 ─────────────────────────
@@ -2581,8 +2581,9 @@ export class ClashManager {
               // ── 防守方使用 EGO 时的前置检查（含恐慌调整）────────────────
               if (isEgo) {
                 const sanityCost       = sys.sanityCost ?? 0;
-                const effectiveSinCost = ClashManager._egoSinCost(sys, isInPanic).cost;
-                const effectiveSanityCost = isInPanic ? 0 : sanityCost;
+                const effectiveSinCost = sys.sinCost ?? [];
+                const effectiveSanityCost =
+                  (isInPanic && !ClashManager._hasCorrodeForm(sys)) ? 0 : sanityCost;
                 if (!SinResourceHUD.canAffordSins(effectiveSinCost)) {
                   ui.notifications.warn("罪孽资源不足，无法使用此 EGO 技能！");
                   resolve(false);
@@ -3524,32 +3525,18 @@ export class ClashManager {
 
   /**
    * EGO 的两种形态：消耗理智的【觉醒】、陷入恐慌的【侵蚀】。
-   * 两者的罪孽消耗与罪孽抗性各自独立（罪孽属性与等级共用）。
+   * 罪孽消耗与罪孽抗性两形态共用；类型 / 骰数 / 加重值 / 理智消耗 / 描述 /
+   * 激活效果各自独立，由 SkillData.prepareDerivedData 按持有者是否恐慌
+   * 直接投影到 item.system 上，因此这里读 sys.* 拿到的已经是当前形态的值。
    *
-   * 侵蚀那一套没填时退回旧行为：沿用觉醒的数值并 ×1.5（向上取整）。
-   * @returns {{cost: Array, corroded: boolean, scaled: boolean}}
+   * @returns {boolean} 该 EGO 是否配置了侵蚀形态数据
    */
-  static _egoSinCost(sys = {}, isInPanic = false) {
-    const awaken = sys.sinCost ?? [];
-    if (!isInPanic) return { cost: awaken, corroded: false, scaled: false };
-    const corrode = sys.corrodeSinCost ?? [];
-    if (corrode.length) return { cost: corrode, corroded: true, scaled: false };
-    return {
-      cost: awaken.map(e => ({ ...e, amount: Math.ceil(e.amount * 1.5) })),
-      corroded: true, scaled: true,
-    };
+  static _hasCorrodeForm(sys = {}) {
+    return !!sys.corrode?.initialized;
   }
 
-  /** 当前形态下生效的罪孽抗性修正 */
-  static _egoResAdj(sys = {}, isInPanic = false) {
-    const corrode = sys.corrodeEgoResistanceAdj ?? [];
-    if (isInPanic && corrode.length) return corrode;
-    return sys.egoResistanceAdj ?? [];
-  }
-
-  static async _applyEgoResistanceChanges(actor, item, isInPanic = null) {
-    const panic = isInPanic ?? !!ClashManager._getBuff(actor, "panic");
-    const adj   = ClashManager._egoResAdj(item.system ?? {}, panic);
+  static async _applyEgoResistanceChanges(actor, item) {
+    const adj = item.system?.egoResistanceAdj;
     if (!adj?.length) return;
     const VALID = CONFIG.LIMBUSCOMPANY?.RESISTANCE_VALUES ?? ["x0.5","x1.0","x2.0","x2.5","x3.0"];
     const update = {};

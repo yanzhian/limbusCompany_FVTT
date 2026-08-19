@@ -151,16 +151,32 @@ export class SkillData extends foundry.abstract.TypeDataModel {
       egoDiceRating: new fields.StringField({ required: false, nullable: true, initial: null,
         choices: [null, "ZAYIN", "TET", "HE", "WAW", "ALEPH"] }),
 
-      // EGO 罪孽抗性修正（使用后生效）——【觉醒】形态
+      // EGO 罪孽抗性修正（使用后生效）——两形态共用
       egoResistanceAdj: new fields.ArrayField(egoResistAdjSchema(), { required: true, initial: [] }),
 
-      // EGO 罪孽抗性修正——【侵蚀】形态（陷入恐慌时使用）
-      corrodeEgoResistanceAdj: new fields.ArrayField(egoResistAdjSchema(), { required: true, initial: [] }),
-
-      // 卡面当前正在编辑/展示的 EGO 形态：awaken（觉醒）/ corrode（侵蚀）
-      // 实战中用哪一套由角色是否【陷入恐慌】决定，此字段只影响物品卡的显示
+      // ── E.G.O 两种形态 ──────────────────────────────────────────────────
+      // 【觉醒】= 消耗理智的常态，数据就写在顶层字段上；
+      // 【侵蚀】= 陷入恐慌时的形态，另一套数据放在 corrode 下。
+      // 共用：名称 / 罪孽 / 等级 / 罪孽消耗 / 调整抗性
+      // 分开：类型（斩打突）/ 骰数 / 加重值 / 理智消耗 / 描述 / 激活效果
+      //
+      // egoForm 只影响物品卡"正在编辑/展示哪一套"，实战中用哪一套由角色是否
+      // 【陷入恐慌】决定（见 prepareDerivedData）。
       egoForm: new fields.StringField({ required: false, initial: "awaken",
         choices: ["awaken", "corrode"] }),
+
+      corrode: new fields.SchemaField({
+        // 是否已经写过侵蚀数据；false 时实战中一律沿用觉醒那一套
+        initialized: new fields.BooleanField({ required: false, initial: false }),
+        category:    new fields.StringField({ required: false, nullable: true, initial: null }),
+        baseValue:   new fields.NumberField({ required: false, nullable: true, integer: true, min: 0, initial: null }),
+        diceCount:   new fields.NumberField({ required: false, nullable: true, integer: true, min: 0, initial: null }),
+        diceFaces:   new fields.NumberField({ required: false, nullable: true, integer: true, min: 1, initial: null }),
+        weight:      new fields.NumberField({ required: false, nullable: true, integer: true, min: 0, initial: null }),
+        sanityCost:  new fields.NumberField({ required: false, nullable: true, integer: true, min: 0, initial: null }),
+        effectDesc:  new fields.HTMLField({ required: false, initial: "" }),
+        activities:  new fields.ArrayField(makeActivitySchema(), { required: true, initial: [] }),
+      }),
 
       // 加重值（守备技能无此字段，设为 0）
       weight: new fields.NumberField({ required: true, integer: true, min: 0, initial: 1 }),
@@ -199,11 +215,8 @@ export class SkillData extends foundry.abstract.TypeDataModel {
       // 效果描述（富文本）
       effectDesc: new fields.HTMLField({ required: false, initial: "" }),
 
-      // EGO 罪孽消耗（多种罪孽资源）——【觉醒】形态
+      // EGO 罪孽消耗（多种罪孽资源）——两形态共用
       sinCost: new fields.ArrayField(sinCostEntrySchema(), { required: true, initial: [] }),
-
-      // EGO 罪孽消耗——【侵蚀】形态（陷入恐慌时使用）
-      corrodeSinCost: new fields.ArrayField(sinCostEntrySchema(), { required: true, initial: [] }),
 
       // EGO 理智消耗
       sanityCost: new fields.NumberField({ required: true, integer: true, min: 0, initial: 0 }),
@@ -221,8 +234,27 @@ export class SkillData extends foundry.abstract.TypeDataModel {
     };
   }
 
-  /** @override 生成 diceFormula 显示字符串 */
+  /** 持有者当前是否【陷入恐慌】（EGO 侵蚀形态的触发条件） */
+  get _ownerInPanic() {
+    const actor = this.parent?.parent;
+    if (!actor) return false;
+    const buffs = actor.system?.buffs ?? actor._source?.system?.buffs ?? [];
+    return buffs.some(b => b?.type === "panic" && b?.whenAdded !== "下回合");
+  }
+
+  /** @override 投影当前 EGO 形态 + 生成 diceFormula 显示字符串 */
   prepareDerivedData() {
+    // 陷入恐慌 → E.G.O 切到【侵蚀】形态：把 corrode 里填了的字段盖到顶层，
+    // 没填的字段照旧沿用【觉醒】的数值。
+    if (this.type === "ego" && this.corrode?.initialized && this._ownerInPanic) {
+      const c = this.corrode;
+      for (const key of ["category", "baseValue", "diceCount", "diceFaces", "weight", "sanityCost"]) {
+        if (c[key] !== null && c[key] !== undefined) this[key] = c[key];
+      }
+      if (c.effectDesc) this.effectDesc = c.effectDesc;
+      if (c.activities?.length) this.activities = c.activities;
+    }
+
     const { diceCount, diceFaces, baseValue } = this;
     let formula = `${diceCount}d${diceFaces}`;
     if (baseValue > 0) formula += `+${baseValue}`;
