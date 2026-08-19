@@ -1658,40 +1658,26 @@ export class LimbusActorSheet extends ActorSheet {
 
   /**
    * 丢弃战斗槽中的技能
+   *
+   * 只会丢激活槽 0/1（预备模式丢槽 2）——6bag 里只可能有基础技能，装备/守备技能
+   * 触发的丢弃也一样只作用于这两格。触发这条消耗的技能永远不会丢弃自己，
+   * 【等级】模式也只是判断"另一张"是不是该等级。
+   *
    * @param {"level"|"another"|"reserve"} mode
    * @param {number} level - 仅 mode==="level" 时有效
-   * @param {string} currentItemId - 当前正在使用的技能 ID（用于排除"另一个"时避免丢弃自身）
+   * @param {string} currentItemId - 触发本次丢弃的技能 ID（永远排除）
    * @returns {{ discardedId: string|null, slotIndex: number }} 被丢弃的技能 ID 及槽位
    */
   async _discardCombatSkill(mode, level, currentItemId) {
     const state = this._combatBagState;
     if (!state) return { discardedId: null, slotIndex: -1 };
 
-    let targetSlot = -1;
-
-    if (mode === "level") {
-      // 在激活槽 0/1 中找第一个等于该等级的技能
-      for (let i = 0; i <= 1; i++) {
-        const id = state.slots[i];
-        if (!id) continue;
-        const sk = this.actor.items.get(id);
-        if (sk && (sk.system?.level ?? 1) === level) {
-          targetSlot = i;
-          break;
-        }
-      }
-    } else if (mode === "another") {
-      // 在激活槽 0/1 中找另一个（不是 currentItemId 的那个）
-      for (let i = 0; i <= 1; i++) {
-        if (state.slots[i] && state.slots[i] !== currentItemId) {
-          targetSlot = i;
-          break;
-        }
-      }
-    } else if (mode === "reserve") {
-      // 槽 2 是预备区
-      if (state.slots[2]) targetSlot = 2;
-    }
+    // 与消耗预检查共用同一套定位规则，避免"检查通过但实际丢不掉"
+    const targetSlot = ClashManager._findDiscardSlot(
+      this.actor, state.slots,
+      { discardMode: mode, discardLevel: level },
+      currentItemId ?? ""
+    );
 
     if (targetSlot === -1 || !state.slots[targetSlot]) return { discardedId: null, slotIndex: -1 };
 

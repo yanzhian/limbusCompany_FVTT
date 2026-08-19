@@ -1184,6 +1184,8 @@ export class ClashManager {
 
       // 强制消耗：先校验资源是否充足，不足则跳过整条 Activity
       let forcedFail = false;
+      // 丢弃消耗的预检查要按顺序模拟：两条【丢弃 Lv.1】不能靠同一张牌都判过
+      let discardSim = null;
       for (const cost of costs) {
         if (!cost) continue;
         if (cost.type === "attribute") {
@@ -1200,27 +1202,16 @@ export class ClashManager {
             if (have < need) { forcedFail = true; break; }
           }
         } else if (cost.type === "discard") {
-          // 验证丢弃目标是否存在于战斗槽
-          const ownerSheet = owner?.sheet;
-          const bagState = ownerSheet?._combatBagState;
+          // 验证丢弃目标是否存在于战斗槽（按顺序模拟，前一条丢掉的牌不能再被后一条算上）
+          const bagState = owner?.sheet?._combatBagState;
           if (!bagState) { forcedFail = true; break; }
-          const mode = cost.discardMode ?? "level";
-          if (mode === "level") {
-            const level = cost.discardLevel ?? 1;
-            const found = [0, 1].some(i => {
-              const id = bagState.slots[i];
-              if (!id) return false;
-              const sk = owner.items.get(id);
-              return sk && (sk.system?.level ?? 1) === level;
-            });
-            if (!found) { forcedFail = true; break; }
-          } else if (mode === "another") {
-            const currentId = ctx._currentItemId ?? "";
-            const found = [0, 1].some(i => bagState.slots[i] && bagState.slots[i] !== currentId);
-            if (!found) { forcedFail = true; break; }
-          } else if (mode === "reserve") {
-            if (!bagState.slots[2]) { forcedFail = true; break; }
-          }
+          if (!discardSim) discardSim = { slots: [...bagState.slots], pool: [...(bagState.pool ?? [])] };
+          const selfId = ctx._currentItemId ?? item?.id ?? "";
+          const idx = ClashManager._findDiscardSlot(owner, discardSim.slots, cost, selfId);
+          if (idx < 0) { forcedFail = true; break; }
+          // 模拟丢弃：左移一格，尾部补一张（预备池空了则补一张未知牌，不参与等级判定）
+          discardSim.slots.splice(idx, 1);
+          discardSim.slots.push(discardSim.pool.shift() ?? null);
         } else if (cost.target === "field" && (cost.type === "forced" || cost.type === "perStack")) {
           // 公用场地：层数不足（每N层的 N）则跳过整条 Activity
           if (!cost.fieldName) { forcedFail = true; break; }
@@ -3519,6 +3510,31 @@ export class ClashManager {
         },
       },
     });
+  }
+
+  /**
+   * 在战斗袋里定位这条【丢弃】消耗要丢的槽位。
+   *
+   * 规则：只看激活槽 0/1（预备模式看槽 2）；触发这条消耗的技能永远不会丢弃自己，
+   * 【等级】模式也只是判断"另一张"是不是该等级。
+   *
+   * @returns {number} 槽位下标；-1 表示没有可丢的牌
+   */
+  static _findDiscardSlot(owner, slots = [], cost = {}, selfId = "") {
+    const mode = cost.discardMode ?? "level";
+    if (mode === "reserve") {
+      const id = slots[2];
+      return (id && id !== selfId) ? 2 : -1;
+    }
+    const level = cost.discardLevel ?? 1;
+    for (let i = 0; i <= 1; i++) {
+      const id = slots[i];
+      if (!id || id === selfId) continue;          // 永远不丢自己
+      if (mode === "another") return i;
+      const sk = owner?.items?.get(id);
+      if (sk && (sk.system?.level ?? 1) === level) return i;
+    }
+    return -1;
   }
 
   /* ─── EGO 罪孽抗性修改 ────────────────────────────────────────────────── */
