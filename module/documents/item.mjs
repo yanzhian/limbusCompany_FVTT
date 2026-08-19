@@ -121,8 +121,8 @@ export class SkillData extends foundry.abstract.TypeDataModel {
         }),
         { required: true, initial: [] }
       ),
-      // EGO 技能：恐慌时替换为侵蚀形态 UUID（脱离恐慌后恢复，与技能池无关，独立机制，正常使用中）
-      erodeUuid: new fields.StringField({ required: false, nullable: true, initial: null }),
+      // 注：旧版 erodeUuid（恐慌时整卡替换成另一个"侵蚀"技能物品）已废弃并移除，
+      // 现在【觉醒】/【侵蚀】是同一张 EGO 卡内的两套数据（sinCost / corrodeSinCost 等）。
     });
 
     // EGO 罪孽消耗条目
@@ -577,17 +577,6 @@ export class LimbusItem extends Item {
   // 转换 · 随机/指定」使用）已被"技能名字（背包检索）"方式取代并移除相关
   // UI/逻辑，schema 字段本身保留（避免 world 需要重启），仅不再读写。
 
-  /**
-   * 获取侵蚀形态技能 Item 实例（EGO 专用，恐慌时使用）
-   * @returns {Promise<LimbusItem|null>}
-   */
-  async getErodeSkillItem() {
-    if (this.type !== "skill" || this.system.type !== "ego") return null;
-    const uuid = this.system.relatedSkill?.erodeUuid;
-    if (!uuid) return null;
-    return fromUuid(uuid).catch(() => null);
-  }
-
   // ─── Activity（效果触发）管理 ──────────────────────────────────────────
 
   /**
@@ -747,14 +736,6 @@ export class LimbusItem extends Item {
       await actor.createEmbeddedDocuments("Item", newSkillData);
     }
     await this.delete();
-  }
-
-  // ─── 辅助：判断此技能是否为侵蚀形态 ──────────────────────────────────
-
-  get isErodeForm() {
-    // 约定：若技能名称包含"侵蚀"或被其他技能的 erodeUuid 引用，则视为侵蚀形态
-    // 实际关系由 erodeUuid 引用确定，这里只做名称简单标记
-    return this.name?.includes("侵蚀") ?? false;
   }
 
 }

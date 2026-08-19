@@ -165,13 +165,11 @@ export class LimbusActorSheet extends ActorSheet {
 
     context.egoSkills = cfg.EGO_GRADES.map(grade => {
       const egoItem   = system.skills?.ego?.[grade] ? actor.items.get(system.skills.ego[grade]) : null;
-      const erodeUuid = egoItem?.system?.relatedSkill?.erodeUuid ?? null;
       return {
         grade,
         item:       egoItem,
         itemId:     system.skills?.ego?.[grade] ?? null,
         skillImg:   egoItem?.img ?? "",
-        erodeUuid,
         hasRelated: !!(egoItem?.system?.relatedSkill?.itemUuid),
         frameImg:   this._resolveFrameImg(egoItem, "ego"),
       };
@@ -615,8 +613,7 @@ export class LimbusActorSheet extends ActorSheet {
       setTimeout(() => this._renderCombatSlots(this.element), 80);
     }
 
-    // EGO 相关技能槽：恢复状态，并在陷入恐慌时自动激活侵蚀形态
-    this._autoActivateEgoPanicToggles();
+    // EGO 相关技能槽：恢复状态
     setTimeout(() => this._applyEgoRelatedToDom(this.element), 90);
 
     // ── 非 GM/非编辑：只读分支结束 ────────────────────────────────────────
@@ -1877,14 +1874,9 @@ export class LimbusActorSheet extends ActorSheet {
     let item = this.actor.items.get(itemId);
     if (!item) return;
 
-    // 若该 EGO 槽处于相关技能模式，使用相关技能（恐慌时用侵蚀形态）
+    // 若该 EGO 槽处于相关技能模式，使用相关技能
     if (this._egoRelatedMode?.[itemId]) {
-      const hasPanic = (this.actor.system.buffs ?? []).some(
-        b => b.type === "panic" && b.whenAdded !== "下回合"
-      );
-      const uuid = (hasPanic && item.system?.relatedSkill?.erodeUuid)
-        ? item.system.relatedSkill.erodeUuid
-        : item.system?.relatedSkill?.itemUuid;
+      const uuid = item.system?.relatedSkill?.itemUuid;
       if (uuid) {
         const relItem = typeof fromUuidSync !== "undefined" ? fromUuidSync(uuid) : null;
         if (relItem) item = relItem;
@@ -1940,14 +1932,9 @@ export class LimbusActorSheet extends ActorSheet {
       const mainItem = this.actor.items.get(itemId);
       if (!mainItem) return;
 
-      const hasPanic = (this.actor.system.buffs ?? []).some(
-        b => b.type === "panic" && b.whenAdded !== "下回合"
-      );
       let displayItem = mainItem;
       if (isNowRelated) {
-        const uuid = (hasPanic && mainItem.system?.relatedSkill?.erodeUuid)
-          ? mainItem.system.relatedSkill.erodeUuid
-          : mainItem.system?.relatedSkill?.itemUuid;
+        const uuid = mainItem.system?.relatedSkill?.itemUuid;
         const relItem = uuid && typeof fromUuidSync !== "undefined" ? fromUuidSync(uuid) : null;
         if (relItem) displayItem = relItem;
       }
@@ -1955,34 +1942,9 @@ export class LimbusActorSheet extends ActorSheet {
     }
   }
 
-  /**
-   * 若角色当前处于【陷入恐慌】，自动将所有拥有侵蚀形态（erodeUuid）的 EGO 技能
-   * 切换到相关技能模式。脱离恐慌后不自动还原（玩家手动切回）。
-   */
-  _autoActivateEgoPanicToggles() {
-    const hasPanic = (this.actor.system.buffs ?? []).some(
-      b => b.type === "panic" && b.whenAdded !== "下回合"
-    );
-    if (!hasPanic) return;
-    if (!this._egoRelatedMode) this._egoRelatedMode = {};
-    const cfg = CONFIG.LIMBUSCOMPANY;
-    const sys = this.actor.system;
-    for (const grade of (cfg.EGO_GRADES ?? [])) {
-      const itemId = sys.skills?.ego?.[grade];
-      if (!itemId) continue;
-      const egoItem = this.actor.items.get(itemId);
-      if (egoItem?.system?.relatedSkill?.erodeUuid) {
-        this._egoRelatedMode[itemId] = true;
-      }
-    }
-  }
-
   /** 将 _egoRelatedMode 状态同步到 DOM 中的 EGO 战斗槽 */
   _applyEgoRelatedToDom(html) {
     if (!this._egoRelatedMode || !html?.length) return;
-    const hasPanic = (this.actor.system.buffs ?? []).some(
-      b => b.type === "panic" && b.whenAdded !== "下回合"
-    );
     html.find(".ego-combat-section .combat-skill-slot-wrap").each((_, wrap) => {
       const $wrap  = $(wrap);
       const $slot  = $wrap.find(".combat-skill-slot");
@@ -1994,9 +1956,7 @@ export class LimbusActorSheet extends ActorSheet {
       if (!isRelated) return;
       const mainItem = this.actor.items.get(itemId);
       if (!mainItem) return;
-      const uuid = (hasPanic && mainItem.system?.relatedSkill?.erodeUuid)
-        ? mainItem.system.relatedSkill.erodeUuid
-        : mainItem.system?.relatedSkill?.itemUuid;
+      const uuid = mainItem.system?.relatedSkill?.itemUuid;
       const relItem = uuid && typeof fromUuidSync !== "undefined" ? fromUuidSync(uuid) : null;
       if (relItem) $slot.find("img").attr("src", relItem.img ?? "");
     });
