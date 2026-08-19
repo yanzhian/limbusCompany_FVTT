@@ -98,6 +98,7 @@ const V_LEVEL     = "__level";
 const V_RESIST    = "__resist";
 const V_WEAK      = "__weak";
 const V_SIN_COST  = "__sinCost";
+const V_SPREAD    = "__spread";
 const V_EGO_RES   = "__egoRes";
 
 /** 抗性 / 弱性列的倍率写法 */
@@ -154,6 +155,7 @@ export const COLUMN_ALIASES = {
   "骰类型": "system.diceType", "骰子类型": "system.diceType",
   "无法装备": "system.noEquip",
   "援护防御": "system.coverDefense",
+  "容量扩散": V_SPREAD, "扩散": V_SPREAD,   // "[链式扩散3]" / "广域乱射2"
   "理智消耗": "system.sanityCost",
   "罪孽资源消耗": V_SIN_COST,       // "暴怒2/嫉妒1"
   "抗性修改": V_EGO_RES,            // "暴怒x0.5/嫉妒x2.0"
@@ -476,6 +478,19 @@ function parseSinCost(text) {
 }
 
 /**
+ * 【容量扩散】列："[链式扩散3]" / "广域乱射2" / "链式扩散 3"
+ * 方括号、空格可有可无；数字是扩散范围（格），省略时按 1 格算。
+ */
+function parseSpread(text) {
+  if (isBlank(text)) return {};
+  const m = /(链式扩散|链式|广域乱射|乱射)\s*(\d+)?/.exec(String(text));
+  if (!m) return { __error: `容量扩散「${text}」无法解析（应形如 [链式扩散3] 或 广域乱射2）` };
+  const mode  = m[1].includes("乱射") ? "spray" : "chain";
+  const range = Math.min(6, Math.max(1, Number(m[2] ?? 1)));
+  return { "system.spreadMode": mode, "system.spreadRange": range };
+}
+
+/**
  * 【抗性修改】列："暴怒x0.5傲慢x0.5怠惰x2.0嫉妒x2.0"
  * 实际表里是不带分隔符连写的，同样用扫描式匹配。
  */
@@ -503,6 +518,7 @@ function parseVirtualColumn(marker, text, itemType) {
     case V_RESIST:   return parsePhysList(text, RESIST_MULT);
     case V_WEAK:     return parsePhysList(text, WEAK_MULT);
     case V_SIN_COST: return parseSinCost(text);
+    case V_SPREAD:   return parseSpread(text);
     case V_EGO_RES:  return parseEgoRes(text);
     case V_CAPACITY: {
       const r = parseWxH(text);
@@ -652,7 +668,7 @@ const TEMPLATE_COLUMNS = {
   equipment:  ["图标", "完成", "名称", "类型", "攻击等级", "防御等级", "速度",
                "抗性", "弱性", "分类", "星芒", "容量", "标签", "效果", "价格"],
   skill:      ["图标", "完成", "名称", "类型", "分类", "罪孽", "等级", "骰数",
-               "攻击容量", "骰类型", "无法装备", "援护防御", "标签", "效果",
+               "攻击容量", "容量扩散", "骰类型", "无法装备", "援护防御", "标签", "效果",
                "理智消耗", "罪孽资源消耗", "抗性修改"],
   consumable: ["图标", "完成", "名称", "类型", "分类", "可复用", "无限耐久", "星芒",
                "容量", "标签", "效果", "价格", "内部数量"],
@@ -671,7 +687,7 @@ const TEMPLATE_EXAMPLE = {
                 "弱性": "突", "分类": "西服-纹身", "星芒": "1", "容量": "2x3",
                 "标签": "手指/中指", "价格": "240" },
   skill:      { "名称": "七发魔弹", "类型": "E.G.O", "分类": "突刺", "罪孽": "傲慢",
-                "等级": "HE", "骰数": "1D2", "攻击容量": "1", "骰类型": "不可摧毁",
+                "等级": "HE", "骰数": "1D2", "攻击容量": "1", "容量扩散": "", "骰类型": "不可摧毁",
                 "标签": "E.G.O装备/脑叶公司", "理智消耗": "10",
                 "罪孽资源消耗": "暴怒2，怠惰2，傲慢4",
                 "抗性修改": "暴怒x0.5傲慢x0.5怠惰x2.0嫉妒x2.0" },
@@ -715,6 +731,7 @@ const COLUMN_NOTES = {
   "标签":     "用 / 或 、分隔",
   "罪孽资源消耗": "形如 暴怒2，怠惰2，傲慢4（分隔符可省）",
   "抗性修改": "形如 暴怒x0.5傲慢x0.5怠惰x2.0（分隔符可省）",
+  "容量扩散": "攻击容量≥2 时生效，形如 [链式扩散3] / 广域乱射2，数字为范围格数（留空=链式1格）",
   "无法装备": "填 是/否、TRUE/FALSE",
   "援护防御": "填 是/否、TRUE/FALSE；标记为【援护防御】专属技能",
   "可复用":   "填 是/否、TRUE/FALSE",
