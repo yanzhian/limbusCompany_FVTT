@@ -4429,16 +4429,18 @@ body.game .limbuscompany.app img {
 .limbuscompany .activity-add-row { display: flex; gap: 4px; }
 .limbuscompany .activity-paste-json-btn {
   background: var(--bg-panel); border: 1px dashed var(--border-gold);
-  color: var(--text-sub); font-family: var(--font-main); font-size: .7rem;
-  padding: 3px 10px; cursor: pointer; border-radius: 2px;
-  flex: 0 0 auto; white-space: nowrap; transition: all .15s;
+  color: var(--text-sub); font-family: var(--font-main); font-size: .65rem;
+  padding: 3px 6px; cursor: pointer; border-radius: 2px;
+  /* 只占自己那点宽度，别把「添加效果」挤没了 */
+  flex: 0 0 auto; width: 62px; white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis; transition: all .15s;
 }
 .limbuscompany .activity-paste-json-btn:hover { border-color: var(--gold-active); color: var(--gold-active); }
 .limbuscompany .activity-paste-btn {
   background: var(--bg-panel); border: 1px dashed var(--border-gold);
   color: var(--text-sub); font-family: var(--font-main); font-size: .7rem;
   padding: 3px 10px; cursor: pointer; border-radius: 2px;
-  flex: 0 1 auto; max-width: 55%;
+  flex: 0 1 auto; max-width: 40%;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   transition: all .15s;
 }
