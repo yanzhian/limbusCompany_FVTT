@@ -3957,58 +3957,58 @@ export class ClashManager {
     const used = cap - 1 - remainingUses;
     const sqs  = Array.from({ length: cap }, (_, i) => {
       const spent = i <= used;
-      return `<span style="display:inline-block;width:12px;height:12px;transform:rotate(45deg);
-        margin-right:5px;border:1px solid ${spent ? "#443A2A" : "#6B5822"};
+      return `<span style="display:inline-block;width:9px;height:9px;transform:rotate(45deg);
+        margin-right:4px;border:1px solid ${spent ? "#443A2A" : "#6B5822"};
         background:${spent ? "#2A2521" : "#C9A84C"};"></span>`;
     }).join("");
 
     const modeLabel = flags.spreadMode === "spray" ? "广域乱射" : "链式扩散";
     const ft        = ((flags.spreadRange ?? 1) * 5 + 2.5).toFixed(1);
     const modeLine  = cap > 2
-      ? `<span style="font-size:.7rem;color:#C9A84C;margin-left:6px;">${modeLabel} · ${ft}ft</span>`
+      ? `<span style="font-size:.62rem;color:#C9A84C;margin-left:6px;">${modeLabel} · ${ft}ft</span>`
       : "";
 
-    // 战果
+    // 战果：伤害卡只在这里记账（含陷入混乱）
     const hits = flags.hits ?? [];
     const rows = hits.map(h => `
-      <div style="display:flex;gap:6px;align-items:center;font-size:.76rem;line-height:1.8;">
+      <div style="display:flex;gap:5px;align-items:baseline;font-size:.7rem;line-height:1.55;">
         <span style="color:#E8C9A2;">${h.name}</span>
         <span style="color:#B84444;font-weight:bold;">-${h.dmg}</span>
-        <span style="color:#9A8462;font-size:.68rem;">${h.note ?? ""}</span>
+        ${h.hp ? `<span style="color:#6A5A48;font-size:.62rem;">${h.hp}</span>` : ""}
+        ${h.note ? `<span style="color:#9A8462;font-size:.62rem;">${h.note}</span>` : ""}
+        ${h.chaos ? `<span style="color:#E84444;font-weight:bold;font-size:.62rem;">【${h.chaos}】</span>` : ""}
       </div>`).join("");
     const total = hits.reduce((a2, h) => a2 + (h.dmg ?? 0), 0);
     const log = `
-      <div style="border-left:2px solid #8A7433;padding-left:8px;margin:6px 0 8px;">
-        ${rows || `<span style="color:#5B4F40;font-size:.72rem;font-style:italic;">尚无战果</span>`}
-        ${hits.length ? `<div style="border-top:1px solid #3A3227;margin-top:4px;padding-top:3px;
-            font-size:.72rem;color:#9A8462;">合计伤害
+      <div style="border-left:2px solid #8A7433;padding-left:6px;margin:4px 0 6px;">
+        ${rows || `<span style="color:#5B4F40;font-size:.65rem;font-style:italic;">尚无战果</span>`}
+        ${hits.length ? `<div style="border-top:1px solid #3A3227;margin-top:3px;padding-top:2px;
+            font-size:.65rem;color:#9A8462;">合计
             <span style="color:#B84444;font-weight:bold;">${total}</span> · 命中 ${hits.length} 次</div>` : ""}
       </div>`;
 
     return `
-      <div class="limbus-clash-card" data-clash-type="weight-spread">
+      <div class="limbus-clash-card" data-clash-type="weight-spread" style="font-size:.75rem;">
         ${ClashManager._chatHeader(actor, "容量扩散")}
         ${ClashManager._goldDivider()}
-        <div style="font-size:.85rem;color:#E8C9A2;margin:4px 0 6px;">
+        <div style="font-size:.72rem;color:#E8C9A2;margin:2px 0 4px;">
           ⚔️ <strong>${flags.itemName ?? "技能"}</strong> 容量命中！${modeLine}
         </div>
-        <div style="margin-bottom:4px;">
-          <span style="font-size:.7rem;color:#9A8462;margin-right:4px;">攻击容量</span>${sqs}
+        <div style="margin-bottom:3px;">
+          <span style="font-size:.62rem;color:#9A8462;margin-right:4px;">攻击容量</span>${sqs}
         </div>
         ${log}
-        <div style="margin-bottom:4px;">
+        <div style="display:flex;align-items:center;gap:8px;">
           <button class="clash-btn-weight-take"
-                  style="height:30px;padding:0 14px;${btnStyle}font-size:.85rem;border-radius:2px;"
+                  style="height:24px;padding:0 12px;${btnStyle}font-size:.72rem;border-radius:2px;"
                   ${btnDisabled ? "disabled" : ""}>
             ${btnLabel}
           </button>
-        </div>
-        <div style="font-size:.72rem;color:#9A8462;margin-top:2px;">
-          ${cap > 2
-            ? (flags.spreadMode === "spray"
-                ? "乱射：范围内随机抽取目标，可能重复命中同一人"
-                : "链式：范围内的敌人逐个打过去，不重复")
-            : "点击【承受】自动结算这一次扩散"}
+          <span style="font-size:.62rem;color:#6A5A48;">
+            ${cap > 2
+              ? (flags.spreadMode === "spray" ? "范围内随机抽取，可能重复命中" : "范围内逐个打过去，不重复")
+              : "点击自动结算这一次扩散"}
+          </span>
         </div>
         ${ClashManager._goldDivider()}
       </div>`;
@@ -4202,14 +4202,22 @@ export class ClashManager {
         ClashManager.SPREAD_TOTAL_MS, hits.length + 1);
       total += finalDamage;
 
-      // ④ 落账
-      await ClashManager._applyAndSendTake(tgtActor, finalDamage, {
-        calcNotes, attacker: atkActor, takeLabel: "容量扩散-承受",
+      // ④ 落账（静默：不发独立承受卡，结果记在扩散卡上）
+      const take = await ClashManager._applyAndSendTake(tgtActor, finalDamage, {
+        calcNotes, attacker: atkActor, takeLabel: "容量扩散-承受", silent: true,
         category: flags.category, sinType: flags.sinType,
         item: atkActor?.items?.get(flags.itemId ?? "") ?? null,
       });
-      hits.push({ actorId: tgtActor.id, name: tgtActor.name, dmg: finalDamage,
-                  note: `${mode === "spray" ? `骰 ${roll}` : ""}${resNote ? ` ${resNote}` : ""}`.trim() });
+      const extra = [];
+      if (take?.ruptureDmg)      extra.push(`破裂+${take.ruptureDmg}`);
+      if (take?.sinkingGloomDmg) extra.push(`沉沦+${take.sinkingGloomDmg}`);
+      if (take?.tremorTriggered) extra.push("震颤引爆");
+      hits.push({
+        actorId: tgtActor.id, name: tgtActor.name, dmg: finalDamage,
+        hp: `${take?.finalHp ?? 0}/${take?.maxHp ?? 0}`,
+        chaos: take?.chaosTriggered ? (take.chaosName ?? "陷入混乱") : "",
+        note: [mode === "spray" ? `骰 ${roll}` : "", resNote, ...extra].filter(Boolean).join(" · "),
+      });
       hitActorIds.add(tgtActor.id);
       if (mode === "chain") anchorId = tgtActor.id;     // 链式：锚点前移
       remaining--;
@@ -4345,7 +4353,7 @@ export class ClashManager {
    * @param {object} [opts]
    * @param {boolean} [opts.isSeismic=false]  是否为【震颤引爆】类型攻击
    */
-  static async _applyAndSendTake(actor, damage, { isSeismic = false, calcNotes = [], attacker = null, hookMsgs = null, takeLabel = "承受", category = "", sinType = "", item = null } = {}) {
+  static async _applyAndSendTake(actor, damage, { isSeismic = false, calcNotes = [], attacker = null, hookMsgs = null, takeLabel = "承受", category = "", sinType = "", item = null, silent = false } = {}) {
     const sys   = actor.system;
     const maxHp = sys.hp?.max ?? 1;
 
@@ -4479,8 +4487,13 @@ export class ClashManager {
     // 沉沦忧郁追加伤害发生在 HP 结算之后，需将最终 HP 一并传给聊天框显示
     // （生命值锁定时 sinkingGloomDmg 恒为 0，finalHp 与 newHp 一致，仍钉死为 hpLockValue）
     const finalHp = Math.max(0, newHp - sinkingGloomDmg);
-    await ClashManager._sendTakeMsg(actor, damage, oldHp, finalHp, maxHp, chaosTriggered,
-      { ruptureDmg, sanityDmg, sinkingGloomDmg, tremorTriggered, chaosName, calcNotes, takeLabel });
+    // silent：不发独立的承受卡，把结果交回调用方自己记账（容量扩散用）
+    if (!silent) {
+      await ClashManager._sendTakeMsg(actor, damage, oldHp, finalHp, maxHp, chaosTriggered,
+        { ruptureDmg, sanityDmg, sinkingGloomDmg, tremorTriggered, chaosName, calcNotes, takeLabel });
+    }
+    return { damage, oldHp, finalHp, maxHp, chaosTriggered, chaosName,
+             ruptureDmg, sanityDmg, sinkingGloomDmg, tremorTriggered };
   }
 
   static async _sendTakeMsg(actor, damage, oldHp, newHp, maxHp, chaosTriggered,
