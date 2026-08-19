@@ -1069,6 +1069,8 @@ export class ClashManager {
         : (act.precondition ? [act.precondition] : []);
       let precondFail = false;
       // 每类前置条件按 floor(层数/N) 计算倍数，传递给后续效果（与 cost.type==="perStack" 共用倍数变量）
+      // 多个「每」前置是 AND 关系：都要满足才触发，倍数取其中最小的那个
+      const perMultipliers = [];
       let precondMultiplier = 1;
       for (const pre of preconditions) {
         if (!pre) continue;
@@ -1115,7 +1117,7 @@ export class ClashManager {
           if (pre.perEach) {
             let times = Math.floor(have / need);
             if ((pre.maxTimes ?? 0) > 0) times = Math.min(times, pre.maxTimes);
-            precondMultiplier *= times;
+            perMultipliers.push(times);
           }
           continue;
         }
@@ -1171,7 +1173,7 @@ export class ClashManager {
           if (haveVal < n) { precondFail = true; break; }
           let times = Math.floor(haveVal / n);
           if ((pre.maxTimes ?? 0) > 0) times = Math.min(times, pre.maxTimes);
-          precondMultiplier *= times;
+          perMultipliers.push(times);
         } else if (pre.type === "noBuff") {
           // 【未拥有】：【拥有】的反面——目标满足"拥有"的条件时本条不成立
           const has = !!buff
@@ -1186,6 +1188,7 @@ export class ClashManager {
         }
       }
       if (precondFail) continue;
+      if (perMultipliers.length) precondMultiplier = Math.min(...perMultipliers);
 
       // ── 消耗（cost） ─────────────────────────────────────────────────
       // 兼容 V1（单对象 cost）和 V2（数组 costs）
@@ -1259,7 +1262,9 @@ export class ClashManager {
       }
       if (forcedFail) continue;
 
-      // 倍数默认取自每前置条件计算结果；若另有 perStack 消耗，会在下方覆盖为实际消耗层数
+      // 倍数默认取自「每」前置条件；若另有 perStack 消耗，消耗算出的倍数一并参与，
+      // 全部取最小——前置与消耗都是"必须同时成立"的条件，能跑几倍看最紧的那一个
+      const costMultipliers = [];
       let perStackMultiplier = precondMultiplier;
       let _discardedItemId = null;
       for (const cost of costs) {
@@ -1337,12 +1342,14 @@ export class ClashManager {
             // 每：与前置条件的"每"一致——维度可选层数（默认，向下兼容旧数据）或强度，
             // 每 N 为 1 倍，倍数 = floor(数值/N)，可选最大倍数上限（maxTimes，0=无限），
             // 只消耗 倍数×N（如"每消耗4级【呼吸法】"应选强度维度）
-            const tgt = costTgts[0];
-            if (tgt) {
-              const dim      = cost.perNDim === "intensity" ? "intensity" : "stacks";
+            // 群体目标时逐个扣（与预检查"人人都要够"保持一致），
+            // 倍数取所有目标里最小的那个——扣得最少的人决定这次能跑几倍
+            const dim = cost.perNDim === "intensity" ? "intensity" : "stacks";
+            const n   = Math.max(1, cost.stacks ?? 1);
+            const each = [];
+            for (const tgt of costTgts) {
               const existing = ClashManager._getBuff(tgt, costBuffType);
               const have     = dim === "intensity" ? (existing?.intensity ?? 0) : (existing?.stacks ?? 0);
-              const n        = Math.max(1, cost.stacks ?? 1);
               let   times    = Math.floor(have / n);
               if ((cost.maxTimes ?? 0) > 0) times = Math.min(times, cost.maxTimes);
               if (dim === "intensity") {
@@ -1350,8 +1357,9 @@ export class ClashManager {
               } else {
                 await ClashManager._reduceBuffStacks(tgt, costBuffType, times * n);
               }
-              perStackMultiplier = times;
+              each.push(times);
             }
+            if (each.length) costMultipliers.push(Math.min(...each));
           } else if (cost.type !== "none") {
             for (const tgt of costTgts) {
               await ClashManager._reduceBuffStacks(tgt, costBuffType, cost.stacks ?? 1);
@@ -1365,7 +1373,7 @@ export class ClashManager {
             let   times = Math.floor(have / n);
             if ((cost.maxTimes ?? 0) > 0) times = Math.min(times, cost.maxTimes);
             await SinResourceHUD.consumeFieldResourceStacks(cost.fieldName, times * n);
-            perStackMultiplier = times;
+            costMultipliers.push(times);
           } else if (cost.type !== "none") {
             await SinResourceHUD.consumeFieldResourceStacks(cost.fieldName, cost.stacks ?? 1);
           }
@@ -1380,12 +1388,16 @@ export class ClashManager {
             let   times = Math.floor(have / n);
             if ((cost.maxTimes ?? 0) > 0) times = Math.min(times, cost.maxTimes);
             await consume(times * n);
-            perStackMultiplier = times;
+            costMultipliers.push(times);
           } else if (cost.type !== "none") {
             const need = cost.value ?? 1;
             if (SinResourceHUD.getSinValue(cost.sinType) >= need) await consume(need);
           }
         }
+      }
+
+      if (costMultipliers.length) {
+        perStackMultiplier = Math.min(precondMultiplier, ...costMultipliers);
       }
 
       // ── 效果（effects）────────────────────────────────────────────────
