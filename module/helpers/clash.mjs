@@ -4172,6 +4172,9 @@ export class ClashManager {
 
     const foeIds      = ClashManager._foeIdsOf(atkActor?.id ?? "");
     let   started     = false;
+    // 扩散全程共用一份触发计数与消息表：次数限制按整次扩散算，消息最后统一发
+    const fireCounts  = {};
+    const actMsgs     = [];
     const hitActorIds = new Set(hits.map(h => h.actorId));
     let anchorId = flags.anchorId || hits[0]?.actorId || "";
 
@@ -4238,11 +4241,27 @@ export class ClashManager {
       });
       total += finalDamage;
 
-      // ④ 落账（静默：不发独立承受卡，结果记在扩散卡上）
+      // ④ 本骰的 [命中时] / [暴击命中时]：每一发扩散都算一次命中
+      const atkItem = atkActor?.items?.get(flags.itemId ?? "") ?? null;
+      if (atkItem) {
+        const hitCtx = {
+          atkActor, defActor: tgtActor, owner: atkActor, other: tgtActor,
+          _fireCounts: fireCounts, _actMsgs: actMsgs, _currentItemId: atkItem.id,
+        };
+        await ClashManager._applyActivitiesAndEquip(atkItem, "命中时", hitCtx);
+        // 【呼吸法】暴击判定：每层强度 5% 概率，触发后消耗 1 层
+        const breathe = ClashManager._getBuff(atkActor, "breathing");
+        if (breathe && (breathe.stacks ?? 0) > 0
+            && Math.random() < (breathe.intensity ?? 0) * 0.05) {
+          await ClashManager._reduceBuffStacks(atkActor, "breathing");
+          await ClashManager._applyActivitiesAndEquip(atkItem, "暴击命中时", hitCtx);
+        }
+      }
+
+      // ⑤ 落账（静默：不发独立承受卡，结果记在扩散卡上）
       const take = await ClashManager._applyAndSendTake(tgtActor, finalDamage, {
         calcNotes, attacker: atkActor, takeLabel: "容量扩散-承受", silent: true,
-        category: flags.category, sinType: flags.sinType,
-        item: atkActor?.items?.get(flags.itemId ?? "") ?? null,
+        category: flags.category, sinType: flags.sinType, item: atkItem,
       });
       const extra = [];
       if (take?.ruptureDmg)      extra.push(`破裂+${take.ruptureDmg}`);
@@ -4262,6 +4281,7 @@ export class ClashManager {
     }
 
     ClashTotalFX.spreadClose();
+    await ClashManager._flushActMsgs(actMsgs, atkActor);
     await setCard({ running: false, anchorId });
   }
 
