@@ -550,7 +550,11 @@ export class ClashManager {
     const buffs = foundry.utils.deepClone(actor.system?.buffs ?? []);
 
     // 查询自定义 BUFF 处理器（maxStacks / refreshOnGain）
-    const customHandler = CustomBuffRegistry.get(type);
+    // 注意：效果编辑器里的自定义 BUFF 是以中文名当 type 传进来的（如 "怨恨纹身"），
+    // 只按 type 精确查注册表会查不到，导致 maxStacks / maxGainPerRound 形同虚设。
+    // 这里补一次按显示名的回退匹配。
+    const customHandler = CustomBuffRegistry.get(type)
+      ?? resolveBuffHandler({ type, name: ClashManager._buffLabel(type) });
     const maxStacks     = customHandler?.maxStacks ?? Infinity;
     const refreshOnGain = customHandler?.refreshOnGain ?? false;
 
