@@ -423,9 +423,21 @@ export class LimbusItemSheet extends ItemSheet {
       const n = parseInt(ev.currentTarget.value) || 0;
       html.find(".spread-box").toggleClass("on", n > 2);
     });
+    // 扩散方式 / 范围：不走表单提交，直接写回物品（避免与其它提交逻辑互相覆盖）
+    html.find(".spread-mode-sel").on("change", async (ev) => {
+      ev.stopPropagation();
+      const v = ev.currentTarget.value === "spray" ? "spray" : "chain";
+      await this.item.update({ "system.spreadMode": v });
+    });
     html.find(".spread-range-input").on("input", (ev) => {
-      const n = Math.max(1, parseInt(ev.currentTarget.value) || 1);
+      const n = Math.min(6, Math.max(1, parseInt(ev.currentTarget.value) || 1));
       html.find(".spread-ft").text(`${(n * 5 + 2.5).toFixed(1)}ft`);
+    });
+    html.find(".spread-range-input").on("change", async (ev) => {
+      ev.stopPropagation();
+      const n = Math.min(6, Math.max(1, parseInt(ev.currentTarget.value) || 1));
+      ev.currentTarget.value = n;                      // 空值/越界时回填合法值
+      await this.item.update({ "system.spreadRange": n });
     });
 
     // ── 图标点击：锁定时查看插图，解锁时由 Foundry data-edit 处理 ─────────
