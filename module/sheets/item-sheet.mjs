@@ -2152,8 +2152,8 @@ function _buildCondRow(cond, idx, cfg) {
   if (cond?.type === "level") {
     cond = { ...cond, type: "useSkill", skillLevel: cond.level ?? 1, skillNameOrTag: cond.skillNameOrTag ?? "" };
   }
-  const condType   = ["perN","baseAttr","useSkill","buffCompare","category","fieldResource","sinResource","background","equipped"].includes(cond?.type) ? cond.type : "hasBuff";
-  const isBuffSec  = condType === "hasBuff" || condType === "perN" || condType === "buffCompare";
+  const condType   = ["perN","noBuff","baseAttr","useSkill","buffCompare","category","fieldResource","sinResource","background","equipped"].includes(cond?.type) ? cond.type : "hasBuff";
+  const isBuffSec  = condType === "hasBuff" || condType === "noBuff" || condType === "perN" || condType === "buffCompare";
   const isAttrSec  = condType === "baseAttr";
   const isSkillSec = condType === "useSkill";
   const isCatSec   = condType === "category";
@@ -2202,6 +2202,7 @@ function _buildCondRow(cond, idx, cfg) {
         <label>类型</label>
         <select class="ae-sel cond-type">
           <option value="hasBuff"     ${condType === "hasBuff"     ? "selected" : ""}>拥有</option>
+          <option value="noBuff"      ${condType === "noBuff"      ? "selected" : ""}>未拥有</option>
           <option value="perN"        ${condType === "perN"        ? "selected" : ""}>每</option>
           <option value="buffCompare" ${condType === "buffCompare" ? "selected" : ""}>比较值</option>
           <option value="baseAttr"    ${condType === "baseAttr"    ? "selected" : ""}>基础属性</option>
@@ -2868,7 +2869,7 @@ function _bindCondType(html) {
   html.find(".cond-type").off("change").on("change", function () {
     const row      = $(this).closest(".ae-cond-row");
     const type     = $(this).val();
-    const isBuffSec  = type === "hasBuff" || type === "perN" || type === "buffCompare";
+    const isBuffSec  = type === "hasBuff" || type === "noBuff" || type === "perN" || type === "buffCompare";
     const isAttrSec  = type === "baseAttr";
     const isSkillSec = type === "useSkill";
     const isCatSec   = type === "category";
@@ -3092,7 +3093,7 @@ function _readActivityForm(html, original) {
     } else {
       const isPerN = condType === "perN";
       preconditions.push({
-        type:       isPerN ? "perN" : "hasBuff",
+        type:       isPerN ? "perN" : (condType === "noBuff" ? "noBuff" : "hasBuff"),
         target:     $r.find(".cond-target").val()  || "self",
         buff:       resolveKey($r.find(".cond-buff").val()),
         buffCustom: "",

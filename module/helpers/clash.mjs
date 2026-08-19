@@ -1168,6 +1168,12 @@ export class ClashManager {
           let times = Math.floor(haveVal / n);
           if ((pre.maxTimes ?? 0) > 0) times = Math.min(times, pre.maxTimes);
           precondMultiplier *= times;
+        } else if (pre.type === "noBuff") {
+          // 【未拥有】：【拥有】的反面——目标满足"拥有"的条件时本条不成立
+          const has = !!buff
+            && !((pre.intensity ?? 0) > 0 && (buff.intensity ?? 0) < pre.intensity)
+            && !((pre.stacks    ?? 0) > 0 && (buff.stacks    ?? 0) < pre.stacks);
+          if (has) { precondFail = true; break; }
         } else {
           // 【拥有】（默认）：达到指定强度/层数阈值即满足
           if (!buff) { precondFail = true; break; }
@@ -4797,6 +4803,17 @@ export class ClashManager {
       if ((pre.intensity ?? 0) > 0 && (found.intensity ?? 0) < pre.intensity) return false;
       if ((pre.stacks   ?? 0) > 0 && (found.stacks   ?? 0) < pre.stacks)   return false;
       return true;
+    }
+
+    if (type === "noBuff") {
+      // 【未拥有】：【拥有】的反面
+      if (!targetActor || !pre.buff) return false;
+      const buffs = targetActor.system?.buffs ?? [];
+      const found = buffs.find(b => b.type === pre.buff || b.name === pre.buff);
+      if (!found) return true;
+      if ((pre.intensity ?? 0) > 0 && (found.intensity ?? 0) < pre.intensity) return true;
+      if ((pre.stacks    ?? 0) > 0 && (found.stacks    ?? 0) < pre.stacks)    return true;
+      return false;
     }
 
     if (type === "perN") {
