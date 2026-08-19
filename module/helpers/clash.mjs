@@ -1416,8 +1416,8 @@ export class ClashManager {
         for (const effTgt of effTgts) {
 
         // BUFF 型效果用 intensity/stacks；数值型效果用 value
-        // 若存在每前置条件/消耗，stacks 和 数值型 val 均乘以倍数
-        const intensity = Number(eff.intensity ?? eff.value ?? 1);
+        // 「每」的倍数对强度与层数一视同仁（两者都只是计数），数值型 val 同样放大
+        const intensity = Number(eff.intensity ?? eff.value ?? 1) * perStackMultiplier;
         const stacks    = Number(eff.stacks    ?? 1) * perStackMultiplier;
         const buffType  = eff.buff === "custom" ? (eff.buffCustom || "custom") : (eff.buff || "");
         // 数值型效果（非BUFF）的 perN 倍数：绝对值模式不放大，相对值模式放大
