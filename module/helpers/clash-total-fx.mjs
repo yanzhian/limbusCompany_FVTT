@@ -679,6 +679,10 @@ export class ClashTotalFX {
     if (!this._enabled()) return;
     if (broadcast) this._emit({ type: "clashFxSpread", act: "tick", from, to, ms, combo });
     if (combo) this._combo(combo);
+    // 命中声：每一发扩散都响一下（本地播放——tick 本身已广播，各端各响一次；
+    // 本次拼点发生过【震颤引爆】时按惯例静音，那一声由引爆声代表）
+    if (!this._tremorPending) this._sfx("hit", 0.8);
+    this._tremorPending = false;
     const numEl = this._band("atk").querySelector(".lcfx-num");
     const steps = Math.min(14, Math.max(1, to - from));
     for (let i = 1; i <= steps; i++) {
