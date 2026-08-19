@@ -224,67 +224,7 @@ export class ClashVFX {
 
   /* ─── 容量扩散：累计 TOTAL 与 +N ────────────────────────────────────── */
 
-  /** 常驻 TOTAL 数字（屏幕顶部中央），累计本次扩散打出的总伤害 */
-  static _totalEl = null;
-  static _totalBox() {
-    if (this._totalEl?.isConnected) return this._totalEl;
-    const layer = this._uiLayer();
-    if (!layer) return null;
-    const box = document.createElement("div");
-    box.className = "lcvfx-totalbar";
-    box.innerHTML = `<span class="k">TOTAL</span><span class="v">0</span><span class="combo"></span>`;
-    layer.appendChild(box);
-    this._totalEl = box;
-    return box;
-  }
-
-  /** 显示 TOTAL（起始值 = 拼点那一击的伤害） */
-  static totalShow(value = 0, hits = 1) {
-    const box = this._totalBox();
-    if (!box) return;
-    box.classList.add("on");
-    box.querySelector(".v").textContent = value;
-    this._totalGlow(hits);
-  }
-
-  /** 辉光 / 连击徽标随命中次数增强（2 连开始亮，5 连拉满） */
-  static _totalGlow(hits = 1) {
-    const box = this._totalEl;
-    if (!box) return;
-    const g = Math.min(1, Math.max(0, (hits - 1) / 4));
-    box.querySelector(".v").style.setProperty("--glow", g.toFixed(2));
-    const c = box.querySelector(".combo");
-    c.textContent = hits > 1 ? `${hits} 连击` : "";
-    c.classList.toggle("on", hits > 1);
-  }
-
-  /** TOTAL 从 from 累加到 to（逐格往上走，不随机跳动） */
-  static async totalTick(from, to, ms = 200, hits = 1) {
-    const box = this._totalBox();
-    if (!box) return;
-    box.classList.add("on");
-    const el = box.querySelector(".v");
-    this._totalGlow(hits);
-    el.classList.add("tick");
-    const steps = Math.min(14, Math.max(1, to - from));
-    for (let i = 1; i <= steps; i++) {
-      el.textContent = Math.round(from + (to - from) * (i / steps));
-      await new Promise(r => setTimeout(r, ms / steps));
-    }
-    el.textContent = to;
-    setTimeout(() => el.classList.remove("tick"), 90);
-  }
-
-  /** 打完定格：闪一下白，随后淡出 */
-  static totalFinish(holdMs = 1400) {
-    const box = this._totalEl;
-    if (!box) return;
-    const el = box.querySelector(".v");
-    el.classList.remove("finish");
-    void el.offsetWidth;                 // 强制重排，动画可重复播放
-    el.classList.add("finish");
-    setTimeout(() => box.classList.remove("on"), holdMs);
-  }
+  // 注：累计 TOTAL 改用 ClashTotalFX 的左下角黑条（与拼点演出同一套），此处不再重复实现。
 
   /** 目标处飘出 +N（画布坐标） */
   static plus(point, value) {
@@ -304,18 +244,6 @@ export class ClashVFX {
   static broadcastPlus(point, value) {
     this.plus(point, value);
     this._emit({ type: "clashVfx", kind: "plus", point, value });
-  }
-  static broadcastTotalShow(value, hits) {
-    this.totalShow(value, hits);
-    this._emit({ type: "clashVfx", kind: "totalShow", value, hits });
-  }
-  static broadcastTotalTick(from, to, ms, hits) {
-    this._emit({ type: "clashVfx", kind: "totalTick", from, to, ms, hits });
-    return this.totalTick(from, to, ms, hits);
-  }
-  static broadcastTotalFinish() {
-    this.totalFinish();
-    this._emit({ type: "clashVfx", kind: "totalFinish" });
   }
 
   /* ─── 镜头 ────────────────────────────────────────────────────────────── */
@@ -349,8 +277,5 @@ export class ClashVFX {
     else if (msg.kind === "dash") this.dash(msg.from, msg.to);
     else if (msg.kind === "pan") this.panTo(msg.point);
     else if (msg.kind === "plus") this.plus(msg.point, msg.value);
-    else if (msg.kind === "totalShow") this.totalShow(msg.value, msg.hits);
-    else if (msg.kind === "totalTick") this.totalTick(msg.from, msg.to, msg.ms, msg.hits);
-    else if (msg.kind === "totalFinish") this.totalFinish();
   }
 }

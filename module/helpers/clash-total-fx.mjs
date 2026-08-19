@@ -135,6 +135,13 @@ export class ClashTotalFX {
       else this._settledEarly.add(`${msg.fxId}:${msg.side}`);
       return;
     }
+    // 容量扩散：黑条常驻 + TOTAL 累加（不进播放队列，实时跟播）
+    if (msg?.type === "clashFxSpread") {
+      if (msg.act === "open")  return void this.spreadOpen({ label: msg.label, total: msg.total, broadcast: false });
+      if (msg.act === "tick")  return void this.spreadTick({ from: msg.from, to: msg.to, ms: msg.ms, combo: msg.combo, broadcast: false });
+      if (msg.act === "close") return void this.spreadClose({ broadcast: false });
+      return;
+    }
     if (msg?.type !== "clashFxStart") return;
 
     // 排队播放：一次连击会连着广播好几段，必须一段播完再播下一段
@@ -657,6 +664,37 @@ export class ClashTotalFX {
    * @param {boolean}  opts.reroll    是否标记【公式重投】
    * @param {Function} opts.startDice 返回 [该方 DiceSoNice 动画的 Promise]
    */
+  /* ─── 容量扩散：黑条常驻，TOTAL 逐次累加 ──────────────────────────────── */
+
+  /** 扩散开始：左下角黑条入场，TOTAL 设为拼点那一击的伤害 */
+  static async spreadOpen({ label = "容量扩散", total = 0, broadcast = true } = {}) {
+    if (!this._enabled()) return;
+    if (broadcast) this._emit({ type: "clashFxSpread", act: "open", label, total });
+    await this._enterExchange(["atk"], { label });
+    this._bump(this._band("atk").querySelector(".lcfx-num"), total);
+  }
+
+  /** 每命中一个目标：TOTAL 从 from 逐格加到 to，并甩一个「N 连击」 */
+  static async spreadTick({ from = 0, to = 0, ms = 200, combo = "", broadcast = true } = {}) {
+    if (!this._enabled()) return;
+    if (broadcast) this._emit({ type: "clashFxSpread", act: "tick", from, to, ms, combo });
+    if (combo) this._combo(combo);
+    const numEl = this._band("atk").querySelector(".lcfx-num");
+    const steps = Math.min(14, Math.max(1, to - from));
+    for (let i = 1; i <= steps; i++) {
+      numEl.textContent = Math.round(from + (to - from) * (i / steps));
+      await new Promise(r => setTimeout(r, ms / steps));
+    }
+    this._bump(numEl, to);
+  }
+
+  /** 扩散结束：走正常的连击退场窗口 */
+  static spreadClose({ broadcast = true } = {}) {
+    if (!this._enabled()) return;
+    if (broadcast) this._emit({ type: "clashFxSpread", act: "close" });
+    this._exitExchange();
+  }
+
   static async playSolo({ side = "atk", parts = [], reroll = false, label = "",
                           diceType = "default", coins = 0,
                           startDice = null, broadcast = true } = {}) {

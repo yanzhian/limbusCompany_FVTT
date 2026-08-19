@@ -4112,6 +4112,21 @@ export class ClashManager {
     return list.find(t => t.controlled) ?? list[0] ?? null;
   }
 
+  /**
+   * 某个角色的敌对阵营 actor id 列表（与效果编辑器【敌对全部】同一套：
+   * 走世界设定里的小队编成 squadTeam1 / squadTeam2）。
+   * @returns {string[]|null} null 表示没配小队，调用方退回 token 阵营判断
+   */
+  static _foeIdsOf(actorId) {
+    let t1 = [], t2 = [];
+    try { t1 = game.settings.get("limbusCompany_FVTT", "squadTeam1") ?? []; } catch { /* 未注册 */ }
+    try { t2 = game.settings.get("limbusCompany_FVTT", "squadTeam2") ?? []; } catch { /* 未注册 */ }
+    if (!t1.length && !t2.length) return null;
+    if (t1.includes(actorId)) return t2;
+    if (t2.includes(actorId)) return t1;
+    return null;
+  }
+
   /** 切比雪夫格距（1 格 = 5ft；半径 N → N×5+2.5 ft） */
   static _cellDist(a, b) {
     const gs = canvas?.grid?.size ?? 100;
@@ -4153,8 +4168,10 @@ export class ClashManager {
     // 镜头给攻击方 + 亮出当前累计 TOTAL
     let total = hits.reduce((a, h) => a + (h.dmg ?? 0), 0);
     ClashVFX.broadcastPan({ ...atkTok.center });
-    ClashVFX.broadcastTotalShow(total, hits.length);
+    await ClashTotalFX.spreadOpen({ label: "容量扩散", total });
 
+    const foeIds      = ClashManager._foeIdsOf(atkActor?.id ?? "");
+    let   started     = false;
     const hitActorIds = new Set(hits.map(h => h.actorId));
     let anchorId = flags.anchorId || hits[0]?.actorId || "";
 
@@ -4165,14 +4182,30 @@ export class ClashManager {
         : anchorTok;
 
       const cands = (canvas.tokens?.placeables ?? []).filter(t => {
-        if (!t.actor || t.id === atkTok.id) return false;
+        if (!t.actor || t.id === atkTok.id || t.actor.id === atkActor?.id) return false;
         if ((t.actor.system?.hp?.value ?? 0) <= 0) return false;
-        if (t.document.disposition === atkTok.document.disposition) return false;  // 只打敌对
+        // 敌对判定：优先用小队编成，没配小队才退回 token 阵营
+        if (foeIds) { if (!foeIds.includes(t.actor.id)) return false; }
+        else if (t.document.disposition === atkTok.document.disposition) return false;
         if (ClashManager._cellDist(centerTok, t) > rng) return false;
         if (mode === "chain" && hitActorIds.has(t.actor.id)) return false;          // 链式不重复
         return true;
       });
-      if (!cands.length) break;
+      if (!cands.length) {
+        console.warn("[容量扩散] 范围内没有可打的目标", {
+          模式: mode, 范围格数: rng, 中心: centerTok?.actor?.name,
+          敌对名单: foeIds, 场上Token: (canvas.tokens?.placeables ?? []).map(t => ({
+            名字: t.actor?.name, id: t.actor?.id, 格距: ClashManager._cellDist(centerTok, t),
+          })),
+        });
+        if (!started) {
+          ui.notifications.info(foeIds
+            ? `容量扩散：范围内（${rng} 格）没有其他敌对目标`
+            : "容量扩散：未编成小队，改用 Token 阵营判断，范围内没有敌对目标");
+        }
+        break;
+      }
+      started = true;
 
       const tgtTok = (mode === "spray")
         ? cands[Math.floor(Math.random() * cands.length)]
@@ -4198,8 +4231,10 @@ export class ClashManager {
       // ③ TOTAL 累加 + 目标处 +N
       ClashVFX.broadcastPlus({ ...tgtTok.center }, finalDamage);
       ClashVFX.broadcastBurst({ ...tgtTok.center });
-      await ClashVFX.broadcastTotalTick(total, total + finalDamage,
-        ClashManager.SPREAD_TOTAL_MS, hits.length + 1);
+      await ClashTotalFX.spreadTick({
+        from: total, to: total + finalDamage, ms: ClashManager.SPREAD_TOTAL_MS,
+        combo: `${hits.length + 1} 连击`,
+      });
       total += finalDamage;
 
       // ④ 落账（静默：不发独立承受卡，结果记在扩散卡上）
@@ -4225,7 +4260,7 @@ export class ClashManager {
       await new Promise(r => setTimeout(r, 90));
     }
 
-    ClashVFX.broadcastTotalFinish();
+    ClashTotalFX.spreadClose();
     await setCard({ running: false, anchorId });
   }
 
