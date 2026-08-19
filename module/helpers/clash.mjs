@@ -1500,6 +1500,7 @@ export class ClashManager {
             const val = _scaleVal(rawVal, mode);
             const cur = item.system?.weight ?? 0;
             const nv  = mode === "absolute" ? Math.max(0, val) : Math.max(0, cur + val);
+            if (!eff.permanent) await ClashManager._stashItemMod(item, "system.weight");
             await ClashManager._safeDocUpdate(item, { "system.weight": nv });
             descStr = mode === "absolute"
               ? `【${item.name}】攻击容量 调整为 ${nv}`
@@ -1512,6 +1513,7 @@ export class ClashManager {
             const val = _scaleVal(rawVal, mode);
             const cur = item.system?.diceCount ?? 1;
             const nv  = mode === "absolute" ? Math.max(1, val) : Math.max(1, cur + val);
+            if (!eff.permanent) await ClashManager._stashItemMod(item, "system.diceCount");
             await ClashManager._safeDocUpdate(item, { "system.diceCount": nv });
             descStr = mode === "absolute"
               ? `【${item.name}】骰数 调整为 ${nv}d`
@@ -1524,6 +1526,7 @@ export class ClashManager {
             const val = _scaleVal(rawVal, mode);
             const cur = item.system?.diceFaces ?? 4;
             const nv  = mode === "absolute" ? Math.max(2, val) : Math.max(2, cur + val);
+            if (!eff.permanent) await ClashManager._stashItemMod(item, "system.diceFaces");
             await ClashManager._safeDocUpdate(item, { "system.diceFaces": nv });
             descStr = mode === "absolute"
               ? `【${item.name}】面数 d${cur} → d${nv}`
@@ -1536,6 +1539,7 @@ export class ClashManager {
             const val = _scaleVal(rawVal, mode);
             const cur = item.system?.baseValue ?? 0;
             const nv  = mode === "absolute" ? val : cur + val;
+            if (!eff.permanent) await ClashManager._stashItemMod(item, "system.baseValue");
             await ClashManager._safeDocUpdate(item, { "system.baseValue": nv });
             descStr = mode === "absolute"
               ? `【${item.name}】基础值 调整为 ${nv}`
@@ -2892,6 +2896,7 @@ export class ClashManager {
       await ClashManager._applyActivitiesAndEquip(defItem,  "命中时", defCtx);
       await ClashManager._applyActivitiesAndEquip(atkItem,  "攻击后", atkCtx);
       await ClashManager._applyActivitiesAndEquip(defItem,  "攻击后", defCtx);
+      await ClashManager._restoreAllItemMods(atkItem, defItem);
       await ClashManager._flushActMsgs(_actMsgs, atkActor);
       await ClashManager._broadcastAndCheckReactions({ lastSkillUuid: atkItem?.uuid ?? null, attacker: atkActor, defender: defActor });
       return;
@@ -2902,6 +2907,7 @@ export class ClashManager {
       await ClashManager._applyActivitiesAndEquip(atkItem,  "命中时", atkCtx);
       await ClashManager._applyActivitiesAndEquip(atkItem,  "攻击后", atkCtx);
       await ClashManager._applyActivitiesAndEquip(defItem,  "攻击后", defCtx);
+      await ClashManager._restoreAllItemMods(atkItem, defItem);
       await ClashManager._flushActMsgs(_actMsgs, atkActor);
       await ClashManager._broadcastAndCheckReactions({ lastSkillUuid: atkItem?.uuid ?? null, attacker: atkActor, defender: defActor });
       return;
@@ -3049,6 +3055,7 @@ export class ClashManager {
     // ── [攻击后]：结算完对抗结果后触发 ────────────────────────────────
     await ClashManager._applyActivitiesAndEquip(atkItem, "攻击后", atkCtx);
     await ClashManager._applyActivitiesAndEquip(defItem,  "攻击后", defCtx);
+    await ClashManager._restoreAllItemMods(atkItem, defItem);
 
     // 统一发出本次对抗所有 activity 通知（汇总为一条，避免并发清理竞态）
     await ClashManager._flushActMsgs(_actMsgs, atkActor);
@@ -3585,6 +3592,48 @@ export class ClashManager {
     return hits;
   }
 
+  /* ─── 本次攻击内的临时骰面改动 ─────────────────────────────────────── */
+
+  /** 会写回物品、因而需要打完还原的字段 */
+  static TEMP_MOD_PATHS = ["system.diceCount", "system.diceFaces", "system.baseValue", "system.weight"];
+
+  /**
+   * 改动前把原值记到物品 flag 上（同一次攻击里只记第一次的原值）。
+   * 效果勾了【永久】就不记，改动会一直留着。
+   */
+  static async _stashItemMod(item, path) {
+    if (!item) return;
+    const cur = item.getFlag?.("limbusCompany_FVTT", "tempMods") ?? {};
+    if (Object.prototype.hasOwnProperty.call(cur, path)) return;   // 已经记过原值
+    const orig = foundry.utils.getProperty(item, path);
+    await ClashManager._safeDocUpdate(item, {
+      [`flags.limbusCompany_FVTT.tempMods`]: { ...cur, [path]: orig },
+    });
+  }
+
+  /** 一次攻击结束：把临时改动过的骰数/面数/基础值/攻击容量还原回去 */
+  static async _restoreItemMods(item) {
+    if (!item) return;
+    const mods = item.getFlag?.("limbusCompany_FVTT", "tempMods");
+    if (!mods || !Object.keys(mods).length) return;
+    const update = { "flags.limbusCompany_FVTT.-=tempMods": null };
+    for (const [path, orig] of Object.entries(mods)) {
+      if (ClashManager.TEMP_MOD_PATHS.includes(path)) update[path] = orig;
+    }
+    await ClashManager._safeDocUpdate(item, update);
+  }
+
+  /** 攻防双方的技能与装备格物品一起还原 */
+  static async _restoreAllItemMods(...items) {
+    for (const item of items) {
+      if (!item) continue;
+      await ClashManager._restoreItemMods(item);
+      for (const eq of ClashManager._getEquippedItems(item.parent ?? null)) {
+        await ClashManager._restoreItemMods(eq);
+      }
+    }
+  }
+
   /* ─── EGO 罪孽抗性修改 ────────────────────────────────────────────────── */
 
   /**
@@ -3925,6 +3974,7 @@ export class ClashManager {
 
     // [攻击后]：结算完毕
     await ClashManager._applyActivitiesAndEquip(atkItem2, "攻击后", atkCtx2);
+    await ClashManager._restoreAllItemMods(atkItem2);
 
     // 统一发出本次承受所有 activity 通知
     await ClashManager._flushActMsgs(_actMsgs2, atkActor);

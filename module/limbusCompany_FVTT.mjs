@@ -245,7 +245,32 @@ Hooks.once("ready", () => {
 
   // GM 在线时校正一次超标的 BUFF 层数（规矩就是规矩）
   if (game.user.isGM) _clampBuffStacks();
+
+  // GM 在线时还原一次残留的临时骰面改动（上次对抗中途断线/刷新留下的）
+  if (game.user.isGM) _restoreItemTempMods();
 });
+
+/**
+ * 加载时兜底：把上次攻击没来得及还原的骰数/面数/基础值/攻击容量改回原值。
+ *
+ * 正常流程会在 [攻击后] 之后还原（见 ClashManager._restoreAllItemMods），
+ * 中途刷新页面或断线时可能留下 flags.limbusCompany_FVTT.tempMods，这里补一刀。
+ */
+async function _restoreItemTempMods() {
+  const { ClashManager } = await import("./helpers/clash.mjs");
+  let fixed = 0;
+  const scan = async (items) => {
+    for (const item of items ?? []) {
+      const mods = item.getFlag?.("limbusCompany_FVTT", "tempMods");
+      if (!mods || !Object.keys(mods).length) continue;
+      try { await ClashManager._restoreItemMods(item); fixed++; }
+      catch (err) { console.warn("limbusCompany_FVTT | 临时骰面还原失败", item.name, err); }
+    }
+  };
+  await scan(game.items);
+  for (const actor of game.actors) await scan(actor.items);
+  if (fixed) console.log(`limbusCompany_FVTT | 已还原 ${fixed} 件物品的临时骰面改动`);
+}
 
 /**
  * 加载时校正：把所有角色身上超过注册上限（maxStacks）的 BUFF 层数钳回上限。
