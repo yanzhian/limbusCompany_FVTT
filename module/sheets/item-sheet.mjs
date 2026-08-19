@@ -174,8 +174,8 @@ export class LimbusItemSheet extends ItemSheet {
       // 攻击容量小方块
       context.weightSquares = Array.from({ length: context.form.weight ?? 0 }, (_, i) => i);
 
-      // 攻击容量 > 2 时才给扩散方式 / 范围（1 格 = 5ft，半径 N → N×5+2.5 ft）
-      context.showSpread      = (context.form.weight ?? 0) > 2;
+      // 攻击容量 >= 2 时才给扩散方式 / 范围（1 格 = 5ft，半径 N → N×5+2.5 ft）
+      context.showSpread      = (context.form.weight ?? 0) >= 2;
       context.spreadModeLabel = sys.spreadMode === "spray" ? "广域乱射" : "链式扩散";
       context.spreadFt        = `${((sys.spreadRange ?? 1) * 5 + 2.5).toFixed(1)}ft`;
 
@@ -421,7 +421,7 @@ export class LimbusItemSheet extends ItemSheet {
     // 攻击容量输入时即时切换扩散设置的显隐（不等重渲染）
     html.find(".weight-input[name$='weight']").on("input", (ev) => {
       const n = parseInt(ev.currentTarget.value) || 0;
-      html.find(".spread-box").toggleClass("on", n > 2);
+      html.find(".spread-box").toggleClass("on", n >= 2);
     });
     // 扩散方式 / 范围：不走表单提交，直接写回物品（避免与其它提交逻辑互相覆盖）
     html.find(".spread-mode-sel").on("change", async (ev) => {
