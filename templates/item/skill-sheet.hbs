@@ -177,15 +177,15 @@
             </div>
           {{/if}}
 
-          {{!-- 加重值（非守备技能） --}}
+          {{!-- 攻击容量（非守备技能） --}}
           {{#unless isDefense}}
             <div class="weight-row">
               {{#if (and isEditable (not isLocked))}}
-                <label class="skill-field-label">加重值</label>
+                <label class="skill-field-label">攻击容量</label>
                 <input type="number" name="{{fp}}weight" value="{{form.weight}}" class="weight-input" min="0" max="8" style="width:45px"/>
               {{else}}
                 {{#each weightSquares}}
-                  <span class="weight-sq" title="加重值"></span>
+                  <span class="weight-sq" title="攻击容量"></span>
                 {{/each}}
               {{/if}}
             </div>

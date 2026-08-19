@@ -1391,7 +1391,7 @@ export class ClashManager {
 
       for (const eff of effects) {
         if (!eff?.type) continue;
-        // 连击的第 2 次交锋起：改写技能本身的效果（骰数/面数/基础值/加重值/
+        // 连击的第 2 次交锋起：改写技能本身的效果（骰数/面数/基础值/攻击容量/
         // 骰子类型）不再重复执行，否则每交锋一次就再加一遍，3d 会滚成 6d
         if (ctx._comboRound > 1 && ClashManager.COMBO_ONCE_EFFECTS.has(eff.type)) continue;
         const effTgts = await ClashManager._resolveTargets(eff.target ?? "self", owner, other, eff);
@@ -1498,8 +1498,8 @@ export class ClashManager {
             const nv  = mode === "absolute" ? Math.max(0, val) : Math.max(0, cur + val);
             await ClashManager._safeDocUpdate(item, { "system.weight": nv });
             descStr = mode === "absolute"
-              ? `【${item.name}】加重值 调整为 ${nv}`
-              : `【${item.name}】加重值 ${val >= 0 ? "+" : ""}${val}（${cur} → ${nv}）`;
+              ? `【${item.name}】攻击容量 调整为 ${nv}`
+              : `【${item.name}】攻击容量 ${val >= 0 ? "+" : ""}${val}（${cur} → ${nv}）`;
             break;
           }
           case "diceAdj": {
@@ -1913,7 +1913,7 @@ export class ClashManager {
     if (t === "hpAdj")    { const v = eff.value ?? eff.intensity ?? 0; return `${tgt}生命值 ${v >= 0 ? "+" : ""}${v}`; }
     if (t === "sanityAdj"){ const v = eff.value ?? eff.intensity ?? 0; return `${tgt}理智 ${v >= 0 ? "+" : ""}${v}`; }
     if (t === "apAdj")       { const v = eff.value ?? eff.intensity ?? 0; return `${tgt}行动值 ${v >= 0 ? "+" : ""}${v}`; }
-    if (t === "weightAdj")   { const v = eff.value ?? eff.intensity ?? 0; return `技能加重值 ${v >= 0 ? "+" : ""}${v}`; }
+    if (t === "weightAdj")   { const v = eff.value ?? eff.intensity ?? 0; return `技能攻击容量 ${v >= 0 ? "+" : ""}${v}`; }
     if (t === "diceAdj")     { const v = eff.value ?? eff.intensity ?? 0; return `技能骰数 ${v >= 0 ? "+" : ""}${v}`; }
     if (t === "diceFacesAdj"){ const v = eff.value ?? eff.intensity ?? 0; return `技能面数 → d${v}`; }
     if (t === "baseValue")   { const v = eff.value ?? eff.intensity ?? 0; return `技能基础值 ${v >= 0 ? "+" : ""}${v}`; }
@@ -2863,7 +2863,7 @@ export class ClashManager {
     }
 
     // 汇总 [攻击时/拼点时] 后所有可能被修改的攻击方字段，统一覆盖 initFlags
-    // 目前覆盖字段：rollTotal / formula（骰子公式变化重投）、weight（weightAdj 修改加重值）
+    // 目前覆盖字段：rollTotal / formula（骰子公式变化重投）、weight（weightAdj 修改攻击容量）
     const atkWeightCur = atkItem?.system?.weight ?? initFlags.weight;
     const effectiveInitFlags = (
       atkFinalTotal   !== initFlags.rollTotal ||
@@ -3574,7 +3574,7 @@ export class ClashManager {
 
   /**
    * EGO 的两种形态：消耗理智的【觉醒】、陷入恐慌的【侵蚀】。
-   * 罪孽消耗与罪孽抗性两形态共用；类型 / 骰数 / 加重值 / 理智消耗 / 描述 /
+   * 罪孽消耗与罪孽抗性两形态共用；类型 / 骰数 / 攻击容量 / 理智消耗 / 描述 /
    * 激活效果各自独立，由 SkillData.prepareDerivedData 按持有者是否恐慌
    * 直接投影到 item.system 上，因此这里读 sys.* 拿到的已经是当前形态的值。
    *
