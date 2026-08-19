@@ -318,7 +318,7 @@ Hooks.on("renderChatMessage", (_message, html, _data) => {
     });
   }
 
-  // ── 加重扩散承受聊天框 ──
+  // ── 容量扩散承受聊天框 ──
   if (flags.type === "clash-weight-spread") {
     html.find(".clash-btn-weight-take").on("click", () => {
       ClashManager.handleWeightTake(_message.id, flags);
@@ -331,7 +331,7 @@ Hooks.on("renderChatMessage", (_message, html, _data) => {
       const targetActorId = e.currentTarget.dataset.targetActorId ?? flags.targetActorId;
       const damage        = parseInt(e.currentTarget.dataset.damage ?? flags.damage) || 0;
       await ClashManager.handleApplyDamage(targetActorId, damage);
-      // 加重扩散：攻击方赢且 weight>=2 时，在扣血后发出扩散承受卡
+      // 容量扩散：打出伤害的一方攻击容量 >=2 时，在扣血后发出扩散承受卡
       const ws = flags.weightSpread;
       if (ws && (ws.weight ?? 1) >= 2) {
         const atkActor = game.actors.get(ws.attackerId);

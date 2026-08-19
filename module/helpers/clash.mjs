@@ -3437,8 +3437,10 @@ export class ClashManager {
       defItemId:   defItem?.id ?? "",
     } : null;
 
-    // 加重扩散信息：仅攻击方胜且非平局才携带
-    const weightSpread = atkWins && !isTie ? {
+    // 容量扩散信息：谁打出伤害就带谁的攻击容量。
+    // 攻击方获胜 → 用攻击技能；反击/可拼点反击获胜 → 用守备技能（守备技能同样有攻击容量）。
+    const isCounterWin = !atkWins && !isTie && (defCat === "counter" || defCat === "clashCounter");
+    const weightSpread = (atkWins && !isTie) ? {
       attackerId: atkActor?.id      ?? "",
       rollTotal:  initFlags.rollTotal ?? 0,
       category:   initFlags.category  ?? "",
@@ -3447,6 +3449,15 @@ export class ClashManager {
       itemId:     initFlags.itemId    ?? "",
       itemName:   initFlags.itemName  ?? "",
       itemImg:    initFlags.itemImg   ?? "",
+    } : isCounterWin ? {
+      attackerId: defActor?.id ?? "",
+      rollTotal:  res.defTotal ?? 0,
+      category:   defItem?.system?.counterType ?? defItem?.system?.category ?? "",
+      sinType:    defItem?.system?.sinType ?? "",
+      weight:     defItem?.system?.weight  ?? 1,
+      itemId:     defItem?.id   ?? "",
+      itemName:   defItemName   ?? "",
+      itemImg:    defItemImg    ?? "",
     } : null;
 
     const takeSection = isTie
@@ -3921,16 +3932,16 @@ export class ClashManager {
       await selActor.update({ "system.hp.value": Math.max(0, th - finalDamage) });
     }
 
-    // ── 加重扩散：weight>=2 时发出额外承受卡 ──────────────────────────────
+    // ── 容量扩散：weight>=2 时发出额外承受卡 ──────────────────────────────
     const weight = initFlags.weight ?? 1;
     if (weight >= 2) {
       await ClashManager._sendWeightSpreadCard(initFlags, atkActor);
     }
   }
 
-  /* ─── 加重扩散承受 ──────────────────────────────────────────────────────── */
+  /* ─── 容量扩散承受 ──────────────────────────────────────────────────────── */
 
-  /** 构建加重扩散卡 HTML（remainingUses 可变，复用于更新消息内容）。 */
+  /** 构建容量扩散卡 HTML（remainingUses 可变，复用于更新消息内容）。 */
   static _buildWeightSpreadContent(flags, remainingUses, atkActor) {
     const actor      = atkActor ?? game.actors.get(flags.attackerId);
     const btnDisabled = remainingUses <= 0;
@@ -3940,10 +3951,10 @@ export class ClashManager {
     const btnLabel   = btnDisabled ? "（已用尽）" : `承受（×${remainingUses}）`;
     return `
       <div class="limbus-clash-card" data-clash-type="weight-spread">
-        ${ClashManager._chatHeader(actor, "加重扩散")}
+        ${ClashManager._chatHeader(actor, "容量扩散")}
         ${ClashManager._goldDivider()}
         <div style="font-size:.85rem;color:#E8C9A2;margin:4px 0 6px;">
-          ⚔️ <strong>${flags.itemName ?? "技能"}</strong> 加重命中！<br>
+          ⚔️ <strong>${flags.itemName ?? "技能"}</strong> 容量命中！<br>
           <span style="color:#C9A84C;">扩散承受剩余：<strong>${remainingUses}</strong> 次</span>
         </div>
         <div style="margin-bottom:4px;">
@@ -3958,7 +3969,7 @@ export class ClashManager {
       </div>`;
   }
 
-  /** 发送加重扩散承受聊天卡。 */
+  /** 发送容量扩散承受聊天卡。 */
   static async _sendWeightSpreadCard(initFlags, atkActor) {
     const remainingUses = (initFlags.weight ?? 1) - 1;
     const spreadFlags = {
@@ -4039,7 +4050,7 @@ export class ClashManager {
     const finalDamage = Math.max(0, Math.round(adjustedAtk * physMult * sinMult));
 
     // 结算说明
-    const calcNotes = [`骰点结果：${rollTotal}（加重扩散）`];
+    const calcNotes = [`骰点结果：${rollTotal}（容量扩散）`];
     let step = rollTotal;
     if (atkDiceMod !== 0) {
       step += atkDiceMod;
