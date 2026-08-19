@@ -139,17 +139,23 @@ export class ClashKnockback {
    * 让 token 瞬移到 target 的旁边（贴身），带风线。
    * @returns {boolean} 是否成功贴上
    */
-  static async approach(token, target) {
+  static async approach(token, target, { behind = false } = {}) {
     const gs = canvas.grid.size;
     const dir = this._dirTo(token.center, target.center);
-    // 首选正对着来的那一格，被占了就绕到目标身边其他空位
-    const spots = [
-      { x: target.center.x - dir.dx * gs, y: target.center.y - dir.dy * gs },
+    // 默认：首选正对着来的那一格；behind=true：绕到目标背后（自己这一侧的反面），
+    // 免得站在人堆中间原地不动地挥刀，看着发呆
+    const near = { x: target.center.x - dir.dx * gs, y: target.center.y - dir.dy * gs };
+    const far  = { x: target.center.x + dir.dx * gs, y: target.center.y + dir.dy * gs };
+    const side = [
       { x: target.center.x - gs, y: target.center.y },
       { x: target.center.x + gs, y: target.center.y },
       { x: target.center.x, y: target.center.y - gs },
       { x: target.center.x, y: target.center.y + gs },
-    ];
+    ].filter(p => Math.hypot(p.x - near.x, p.y - near.y) > gs * 0.5
+               && Math.hypot(p.x - far.x,  p.y - far.y)  > gs * 0.5);
+    // 侧面两格随机先后，连着打同一个人时不会每次都绕同一边
+    if (side.length > 1 && Math.random() < 0.5) side.reverse();
+    const spots = behind ? [far, ...side, near] : [near, ...side, far];
     for (const spot of spots) {
       if (Math.hypot(spot.x - token.center.x, spot.y - token.center.y) < gs * 0.5) return true;
       if (this._blocked(token, token.center, spot)) continue;

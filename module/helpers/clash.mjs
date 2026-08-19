@@ -4213,7 +4213,8 @@ export class ClashManager {
       const tgtActor = tgtTok.actor;
 
       // ① 瞬移到目标身边（风线由 approach 负责）
-      await ClashKnockback.approach(atkTok, tgtTok);
+      // 乱射：绕到目标背后，一发一发换位置；链式：正面扑上去
+      await ClashKnockback.approach(atkTok, tgtTok, { behind: mode === "spray" });
       await new Promise(r => setTimeout(r, ClashManager.SPREAD_STEP_MS));
 
       // ② 伤害计算（乱射每发重投，链式沿用拼点骰点）
