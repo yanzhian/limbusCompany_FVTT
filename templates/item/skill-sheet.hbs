@@ -83,6 +83,9 @@
               {{#if system.coverDefense}}
                 <span class="dice-type-badge cover-defense-badge">援护防御</span>
               {{/if}}
+              {{#if system.noClash}}
+                <span class="dice-type-badge no-clash-badge">无法拼点</span>
+              {{/if}}
             {{/if}}
           </div>
 
@@ -105,6 +108,11 @@
               <label class="no-equip-toggle" title="【援护防御】专属技能：队友被锁定为目标且行动值为 0 时，可用它替队友接下这次对抗">
                 <input type="checkbox" name="system.coverDefense" {{#if system.coverDefense}}checked{{/if}}>
                 援护防御
+              </label>
+              {{!-- 无法拼点：被锁定的目标只能【承受】，连守备技能都不能对抗 --}}
+              <label class="no-equip-toggle" title="被这张技能锁定的目标只能【承受】：不能对抗，也不会询问【援护防御】">
+                <input type="checkbox" name="system.noClash" {{#if system.noClash}}checked{{/if}}>
+                无法拼点
               </label>
             </div>
           {{/if}}

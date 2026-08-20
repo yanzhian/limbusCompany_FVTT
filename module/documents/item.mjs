@@ -211,6 +211,10 @@ export class SkillData extends foundry.abstract.TypeDataModel {
       // 持有【援护防御】的角色可以用它顶上去替队友接下这次对抗
       coverDefense: new fields.BooleanField({ required: false, initial: false }),
 
+      // 无法拼点：被这张技能锁定的目标只能【承受】，连守备技能都不能对抗。
+      // 优先级最高——【援护防御】也不会被询问（顶上去也只是换个人承受）
+      noClash: new fields.BooleanField({ required: false, initial: false }),
+
       // 标签
       tags: new fields.ArrayField(
         new fields.StringField({ required: true }),

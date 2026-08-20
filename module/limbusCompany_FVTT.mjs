@@ -411,6 +411,11 @@ Hooks.on("renderChatMessage", (_message, html, _data) => {
   // ── 发起对抗聊天框：对抗 / 承受 ──
   if (flags.type === "clash-initiate") {
     html.find(".clash-btn-clash").on("click", () => {
+      // 【无法拼点】：兜底拦截（按钮本身已不渲染，旧卡或手动调用仍可能走到这里）
+      if (flags.noClash) {
+        ui.notifications?.warn("这张技能【无法拼点】，只能承受。");
+        return;
+      }
       ClashManager.showRespondDialog(_message.id, flags);
     });
     html.find(".clash-btn-take").on("click", () => {

@@ -2211,6 +2211,8 @@ export class ClashManager {
     const sys        = item.system ?? {};
     const effectDesc = ClashManager._effectDesc(item);
     const targetName = targetActorId ? (game.actors.get(targetActorId)?.name ?? "") : "";
+    // 【无法拼点】：被锁定的目标只能【承受】——不渲染【对抗】按钮，也不问【援护防御】
+    const noClash    = !!sys.noClash;
 
     const content = `
       <div class="limbus-clash-card" data-clash-type="initiate">
@@ -2220,10 +2222,13 @@ export class ClashManager {
         ${targetName ? `<div style="font-size:.78rem;color:#B43822;margin-top:6px;">
           ⊘ 已指定目标：<strong>${targetName}</strong>（其他角色无法对抗/承受）
         </div>` : ""}
+        ${noClash ? `<div style="font-size:.78rem;color:#B43822;margin-top:6px;">
+          ⊘ 本技能【无法拼点】：只能承受，守备技能与【援护防御】均不可对抗
+        </div>` : ""}
         <div class="clash-action-row" style="display:flex;gap:8px;margin-top:8px;margin-bottom:4px;">
-          <button class="clash-btn-clash"
+          ${noClash ? "" : `<button class="clash-btn-clash"
                   style="width:50px;height:30px;background:#5F3E22;color:#E8C9A2;
-                         cursor:pointer;font-size:.85rem;border-radius:2px;">对抗</button>
+                         cursor:pointer;font-size:.85rem;border-radius:2px;">对抗</button>`}
           <button class="clash-btn-take"
                   style="width:50px;height:30px;background:#B84444;color:#fff;
                          border:none;cursor:pointer;font-size:.85rem;border-radius:2px;">承受</button>
@@ -2250,6 +2255,7 @@ export class ClashManager {
           category:    sys.category ?? "",
           sinType:     sys.sinType  ?? "",
           weight:      sys.weight   ?? 1,
+          noClash,
           effectDesc,
           slotIndex,
           targetActorId,
@@ -2264,7 +2270,10 @@ export class ClashManager {
     }
 
     // 【援护防御】：被锁定的目标行动值为 0 时，问问队友要不要顶上来
-    await ClashManager._offerCoverDefense(msg?.id ?? "", msg?.flags?.limbusCompany_FVTT ?? {});
+    // （【无法拼点】优先级最高：顶上去也只是换个人承受，因此直接不问）
+    if (!noClash) {
+      await ClashManager._offerCoverDefense(msg?.id ?? "", msg?.flags?.limbusCompany_FVTT ?? {});
+    }
   }
 
   /* ─── 【援护防御】：替队友接下这次对抗 ─────────────────────────────────
@@ -2306,6 +2315,8 @@ export class ClashManager {
 
   /** 本机检查：自己控制的角色里有谁能援护 */
   static async _checkCoverDefense(msgId, initFlags) {
+    // 【无法拼点】兜底：socket 广播过来的也要拦（顶上去也只是换个人承受）
+    if (initFlags?.noClash) return;
     const target = game.actors.get(initFlags?.targetActorId ?? "");
     if (!target) { ClashManager._coverLog("没有指定目标，跳过"); return; }
     // 只有"目标已经扛不住了"才需要援护
@@ -2415,6 +2426,11 @@ export class ClashManager {
   /* ─── 阶段三：进行对抗技能选择弹窗（玩家B） ─────────────────────────── */
 
   static showRespondDialog(msgId, initFlags) {
+    // 【无法拼点】：兜底——任何路径进来都拦住，只能走【承受】
+    if (initFlags?.noClash) {
+      ui.notifications?.warn("这张技能【无法拼点】，只能承受。");
+      return;
+    }
     // 防守方：当前用户控制的角色
     const defActor =
       game.user.character ??
