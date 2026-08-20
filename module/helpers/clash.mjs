@@ -1623,7 +1623,8 @@ export class ClashManager {
           }
           case "seismicBlast": {
             // 对目标触发【震颤引爆】N 次（N = eff.value），具体规则见 ClashManager.seismicBlast
-            const blastCount = Math.max(1, Math.round(Number(eff.value ?? 1)));
+            // 次数同样吃「每」的倍数（"每 2 级【光札】引爆 1 次"）
+            const blastCount = Math.max(1, Math.round(Number(eff.value ?? 1) * perStackMultiplier));
             const { blasts, msgs: blastMsgs } =
               await ClashManager.seismicBlast(effTgt, blastCount, { attacker: owner });
             for (const line of blastMsgs) msgs.push(line);
