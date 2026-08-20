@@ -2714,7 +2714,7 @@ function _buildCostRow(cost, idx, cfg) {
             <input class="ae-input-sm cost-sin-max-times" type="number" value="${cost?.maxTimes ?? 0}" min="0" placeholder="0=无限">
           </span>
         </span>
-        <!-- 随机消耗：从候选池中随机抽一条来扣（扣不起的候选自动排除；全都扣不起则整条消耗跳过，不阻断效果）
+        <!-- 随机消耗：从候选池中随机抽一条来扣（扣不起的候选自动排除；全都扣不起则整条 Activity 不成立，与强制消耗一致）
              每条候选可分别指定按「层数」或按「强度(级)」扣除，
              例：随机消耗 1 层 或 1 级【生蝶·亡蝶】= 两条候选，同一BUFF、维度分别为层/级 -->
         <span class="ae-cost-random-sec" ${isRandom ? "" : 'style="display:none"'}>
