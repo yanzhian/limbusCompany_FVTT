@@ -522,17 +522,18 @@ registerCustomBuff("lightCard", {
 
 /**
  * 【动力：鬼怪之火】
- * - 最大值：20 层
+ * - 最大值：20 层，每回合最多获得 10 层
  * - 回合开始时：每有 4 层 → 自己 1 层【攻击等级提升】+ 1 层【防御等级降低】
  * - 回合结束时：每有 5 层 → 下回合自己 1 层【迅捷】（最多 3 层）
  * 层数本身不自然衰减，靠技能自己加减。
  */
 registerCustomBuff("driveGhostFire", {
   label:       "动力：鬼怪之火",
-  description: "- 最大值：20 层\n"
+  description: "- 最大值：20 层，每回合最多获得 10 层\n"
     + "- 回合开始时：每有 4 层为自己添加 1 层【攻击等级提升】和 1 层【防御等级降低】\n"
     + "- 回合结束时：每有 5 层，下回合为自己添加 1 层【迅捷】（最大值 3）",
-  maxStacks:   20,
+  maxStacks:       20,
+  maxGainPerRound: 10,
 
   /** 回合开始：每 4 层 → 攻击等级提升 / 防御等级降低 各 1 层 */
   async onRoundStart(actor, buff) {
