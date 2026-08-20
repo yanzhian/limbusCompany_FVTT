@@ -263,15 +263,16 @@ export class ClashManager {
    * 安全更新文档：若当前用户无权限，通过 socket 委托 GM 执行。
    * 用于跨所有权的 Actor/Item 更新（如攻击方客户端更新防御方 Actor/Item）。
    */
-  static async _safeDocUpdate(doc, data) {
+  static async _safeDocUpdate(doc, data, options = {}) {
     if (!doc) return;
     if (doc.canUserModify?.(game.user, "update")) {
-      return doc.update(data);
+      return doc.update(data, options);
     }
     game.socket?.emit("system.limbusCompany_FVTT", {
       type: "gmDocUpdate",
       uuid: doc.uuid,
       data,
+      options,
     });
   }
 
@@ -5422,7 +5423,7 @@ export class ClashManager {
       if (!game.user.isGM) return;
       try {
         const doc = msg.uuid ? await fromUuid(msg.uuid) : null;
-        if (doc) await doc.update(msg.data);
+        if (doc) await doc.update(msg.data, msg.options ?? {});
       } catch (err) {
         console.error("[ClashManager] gmDocUpdate 失败:", err);
       }

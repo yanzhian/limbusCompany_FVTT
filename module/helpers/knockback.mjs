@@ -94,12 +94,15 @@ export class ClashKnockback {
       x: Math.round(center.x - token.w / 2),
       y: Math.round(center.y - token.h / 2),
     };
+    // animate:false 只在本机生效，其他客户端仍会做补间——必须同时给 teleport:true，
+    // 这个选项会随更新广播出去，各端都按"瞬移"处理，不再看到慢慢滑过去
+    const opts = { animate: false, teleport: true };
     const doc = token.document;
     if (doc.canUserModify?.(game.user, "update")) {
-      return doc.update(data, { animate: false });
+      return doc.update(data, opts);
     }
     game.socket?.emit("system.limbusCompany_FVTT", {
-      type: "gmDocUpdate", uuid: doc.uuid, data,
+      type: "gmDocUpdate", uuid: doc.uuid, data, options: opts,
     });
     // 委托出去之后本地拿不到结果，给远端留一点应用时间
     await new Promise(r => setTimeout(r, 120));
