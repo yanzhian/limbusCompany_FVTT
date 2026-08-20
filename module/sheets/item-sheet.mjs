@@ -2899,12 +2899,13 @@ function _buildEffectRow(eff, idx, cfg) {
             <input class="ae-input eff-skill-name" type="text" list="ae-owned-skill-dl"
                    value="${_esc(eff?.skillName ?? "")}" placeholder="技能名字（在背包/技能列表中检索）" style="width:130px;" autocomplete="off">
           </span>
-          <!-- [反应] 里用这个技能打谁：默认打"触发者攻击的那个目标"（补刀），
-               其余触发时机下该选项不起作用 -->
-          <label>[反应]对谁</label>
+          <!-- 用这个技能打谁：预先锁定对抗卡的目标。任何触发时机都生效——
+               [反应] 里"触发者"＝引发反应的那次对抗的攻/守方；
+               其余时机里则是本次结算的攻击方 / 防守方（如 [拼点失败] 选"攻击方"＝反打赢了自己的人） -->
+          <label title="预先锁定这次对抗打谁；选「不指定」则由玩家在对抗卡上自行响应">对谁使用</label>
           <select class="ae-sel eff-react-target">
-            <option value="defender" ${(eff?.reactTarget ?? "defender") === "defender" ? "selected" : ""}>触发者的目标</option>
-            <option value="attacker" ${eff?.reactTarget === "attacker" ? "selected" : ""}>触发者本人</option>
+            <option value="defender" ${(eff?.reactTarget ?? "defender") === "defender" ? "selected" : ""}>防守方（触发者的目标）</option>
+            <option value="attacker" ${eff?.reactTarget === "attacker" ? "selected" : ""}>攻击方（触发者本人）</option>
             <option value="none"     ${eff?.reactTarget === "none"     ? "selected" : ""}>不指定</option>
           </select>
         </span>

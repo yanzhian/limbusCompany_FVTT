@@ -267,7 +267,7 @@
 // 相关技能转换（永久换卡，形态切换用）
 { "type": "relatedSkillConvert", "relMode": "byName", "relSkillName": "守护者" }
 
-// 使用技能（反应常用）
+// 使用技能（[反应] 常用，其余触发时机同样可用）
 { "type": "useSkill", "target": "self", "skillRef": "name",
   "skillName": "联合", "skillTag": "", "skillLevel": 0,
   "reactTarget": "defender", ... }
@@ -278,7 +278,10 @@
 { "type": "fieldResource", "fieldName": "血宴", "value": "1" }
 ```
 
-`useSkill` 的 `reactTarget`：`defender`（触发者的目标）/ `attacker`（触发者本人）/ `none`（不指定）。
+`useSkill` 的 `target` 是**由谁来使用这个技能**（不是打谁），一般填 `self`。
+打谁由 `reactTarget` 决定，**所有触发时机都生效**：`defender`（本次结算的防守方 / 触发者的目标）、
+`attacker`（本次结算的攻击方 / 触发者本人，如 [拼点失败] 反打赢了自己的那个人）、`none`（不指定，谁都能响应）。
+省略该字段时按 `none` 处理，但编辑器保存时默认写入 `defender`。
 
 ---
 

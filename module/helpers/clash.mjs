@@ -1806,7 +1806,17 @@ export class ClashManager {
               // 非守备技能 → 弹出对抗发起窗口（仅限有 AP 的场景，AP 不足则跳过）
               const curAP = useTgt?.system?.ap?.value ?? 0;
               if (useTgt && curAP <= 0) await ClashManager._safeDocUpdate(useTgt, { "system.ap.value": 1 });
-              await ClashManager.showInitiateDialog(useTgt, skillItem, -2);
+              // reactTarget 预锁这次对抗打谁（与 _applyReactionEff 同名同义）：
+              //   attacker ＝本次结算的攻击方（如 [拼点失败] 时反打赢了自己的那个人）
+              //   defender ＝本次结算的防守方（补刀友方正在打的目标）
+              //   none / 不填 ＝不指定，谁都能响应
+              const rt = eff.reactTarget ?? "none";
+              let tgtId = "";
+              if      (rt === "attacker") tgtId = ctx.atkActor?.id ?? "";
+              else if (rt === "defender") tgtId = ctx.defActor?.id ?? "";
+              // 指定目标不能是自己，否则发出的对抗卡没人能响应
+              if (tgtId === useTgt?.id) tgtId = "";
+              await ClashManager.showInitiateDialog(useTgt, skillItem, -2, tgtId);
               descStr = `【${useTgt?.name ?? ""}】发起对抗：【${skillItem.name}】`;
             }
             break;
