@@ -2588,6 +2588,7 @@ function _buildTargetOptions(selected) {
   return [
     ["self",          "自己"],
     ["target",        "目标"],
+    ["covered",       "被援护的队友"],
     ["allTeam",       "本队全部"],
     ["allTeamOther",  "本队其他全部"],
     ["allEnemy",      "敌对全部"],

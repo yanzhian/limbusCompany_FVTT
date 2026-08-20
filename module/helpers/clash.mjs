@@ -951,10 +951,13 @@ export class ClashManager {
    * @param {Actor|null} other
    * @param {{targetTag?:string, targetTagCount?:number, targetTagMax?:number}} [meta]
    *        target==="bgTag" 时使用；targetTagMax=0 表示人数不限
+   * @param {object|null} [ctx] Activity 上下文，target==="covered" 时用来取被援护的队友
    */
-  static async _resolveTargets(targetType, owner, other, meta = {}) {
+  static async _resolveTargets(targetType, owner, other, meta = {}, ctx = null) {
     if (targetType === "self")   return owner ? [owner] : [];
     if (targetType === "target") return other ? [other] : [];
+    // 【援护防御】顶上来时，被自己替下的那个队友（没走援护流程时无目标）
+    if (targetType === "covered") return ctx?.coveredForActor ? [ctx.coveredForActor] : [];
 
     const ownerId = owner?.id;
     let team1Ids = [], team2Ids = [];
@@ -1224,7 +1227,7 @@ export class ClashManager {
         if (!cost) continue;
         if (cost.type === "attribute") {
           // 基础属性消耗：始终视为强制
-          const costTgts = await ClashManager._resolveTargets(cost.target ?? "self", owner, other, cost);
+          const costTgts = await ClashManager._resolveTargets(cost.target ?? "self", owner, other, cost, ctx);
           if (costTgts.length === 0) { forcedFail = true; break; }
           const need = cost.value ?? 1;
           for (const tgt of costTgts) {
@@ -1254,7 +1257,7 @@ export class ClashManager {
           // 随机消耗：与强制消耗同级——候选池里一条都付不起就跳过整条 Activity
           const pool = Array.isArray(cost.randomPool) ? cost.randomPool.filter(e => e?.buff) : [];
           if (!pool.length) { forcedFail = true; break; }
-          const costTgts = await ClashManager._resolveTargets(cost.target ?? "self", owner, other, cost);
+          const costTgts = await ClashManager._resolveTargets(cost.target ?? "self", owner, other, cost, ctx);
           if (costTgts.length === 0) { forcedFail = true; break; }
           for (const tgt of costTgts) {
             const ok = pool.some(e => {
@@ -1281,7 +1284,7 @@ export class ClashManager {
           // ·【每】：只看一个维度（perNDim），门槛是每 N 的那个 N
           // ·【强制消耗】：层数与强度分别校验——填了哪个就要够哪个
           const costBuffType = cost.buff === "custom" ? (cost.buffCustom || "custom") : cost.buff;
-          const costTgts = await ClashManager._resolveTargets(cost.target ?? "self", owner, other, cost);
+          const costTgts = await ClashManager._resolveTargets(cost.target ?? "self", owner, other, cost, ctx);
           if (costTgts.length === 0) { forcedFail = true; break; }
           for (const tgt of costTgts) {
             const existing = ClashManager._getBuff(tgt, costBuffType);
@@ -1317,7 +1320,7 @@ export class ClashManager {
           // 强制：候选全都不足时整条 Activity 不成立（已在上面的预检查里拦下）。
           const pool = Array.isArray(cost.randomPool) ? cost.randomPool.filter(e => e?.buff) : [];
           if (!pool.length) continue;
-          const costTgts = await ClashManager._resolveTargets(cost.target ?? "self", owner, other, cost);
+          const costTgts = await ClashManager._resolveTargets(cost.target ?? "self", owner, other, cost, ctx);
           for (const tgt of costTgts) {
             const affordable = pool.filter(e => {
               const type     = e.buff === "custom" ? (e.buffCustom || "custom") : e.buff;
@@ -1365,7 +1368,7 @@ export class ClashManager {
           continue;
         } else if (cost.type === "attribute") {
           // 消耗基础属性
-          const costTgts = await ClashManager._resolveTargets(cost.target ?? "self", owner, other, cost);
+          const costTgts = await ClashManager._resolveTargets(cost.target ?? "self", owner, other, cost, ctx);
           const need = cost.value ?? 1;
           for (const tgt of costTgts) {
             const sys = tgt.system;
@@ -1379,7 +1382,7 @@ export class ClashManager {
           }
         } else if (cost.buff) {
           const costBuffType = cost.buff === "custom" ? (cost.buffCustom || "custom") : cost.buff;
-          const costTgts = await ClashManager._resolveTargets(cost.target ?? "self", owner, other, cost);
+          const costTgts = await ClashManager._resolveTargets(cost.target ?? "self", owner, other, cost, ctx);
           if (cost.type === "perStack") {
             // 每：与前置条件的"每"一致——维度可选层数（默认，向下兼容旧数据）或强度，
             // 每 N 为 1 倍，倍数 = floor(数值/N)，可选最大倍数上限（maxTimes，0=无限），
@@ -1457,7 +1460,7 @@ export class ClashManager {
         // 连击的第 2 次交锋起：改写技能本身的效果（骰数/面数/基础值/攻击容量/
         // 骰子类型）不再重复执行，否则每交锋一次就再加一遍，3d 会滚成 6d
         if (ctx._comboRound > 1 && ClashManager.COMBO_ONCE_EFFECTS.has(eff.type)) continue;
-        const effTgts = await ClashManager._resolveTargets(eff.target ?? "self", owner, other, eff);
+        const effTgts = await ClashManager._resolveTargets(eff.target ?? "self", owner, other, eff, ctx);
         if (effTgts.length === 0) continue;
 
         for (const effTgt of effTgts) {
@@ -2812,8 +2815,10 @@ export class ClashManager {
     // _actMsgs：汇总本次对抗所有 activity 消息，结束时统一发一条，避免并发 create 导致 Foundry 清理竞态
     const _fc      = {};
     const _actMsgs = [];
-    const atkCtx = { atkActor, defActor, owner: atkActor, other: defActor, _fireCounts: _fc, _actMsgs, _currentItemId: atkItem?.id ?? "" };
-    const defCtx = { atkActor, defActor, owner: defActor, other: atkActor, _fireCounts: _fc, _actMsgs, _currentItemId: defItem?.id ?? "" };
+    // 【援护防御】顶上来时被替下的那个队友（target:"covered" 用它）
+    const coveredForActor = initFlags.coveredForId ? (game.actors.get(initFlags.coveredForId) ?? null) : null;
+    const atkCtx = { atkActor, defActor, owner: atkActor, other: defActor, coveredForActor, _fireCounts: _fc, _actMsgs, _currentItemId: atkItem?.id ?? "" };
+    const defCtx = { atkActor, defActor, owner: defActor, other: atkActor, coveredForActor, _fireCounts: _fc, _actMsgs, _currentItemId: defItem?.id ?? "" };
 
     // 在任何 activity 触发前，记录攻守双方当前骰子公式（用于之后检测公式变化后重投）
     const atkBaseFormulaOrig = initFlags.baseFormula ?? initFlags.formula;
@@ -3809,8 +3814,9 @@ export class ClashManager {
 
     const _fc2      = {};
     const _actMsgs2 = [];
-    const atkCtx2 = { atkActor, defActor, owner: atkActor, other: defActor, _fireCounts: _fc2, _actMsgs: _actMsgs2, _currentItemId: atkItemDoc?.id ?? "" };
-    const defCtx2 = { atkActor, defActor, owner: defActor, other: atkActor, _fireCounts: _fc2, _actMsgs: _actMsgs2, _currentItemId: defItemDoc?.id ?? "" };
+    const coveredForActor = initFlags.coveredForId ? (game.actors.get(initFlags.coveredForId) ?? null) : null;
+    const atkCtx2 = { atkActor, defActor, owner: atkActor, other: defActor, coveredForActor, _fireCounts: _fc2, _actMsgs: _actMsgs2, _currentItemId: atkItemDoc?.id ?? "" };
+    const defCtx2 = { atkActor, defActor, owner: defActor, other: atkActor, coveredForActor, _fireCounts: _fc2, _actMsgs: _actMsgs2, _currentItemId: defItemDoc?.id ?? "" };
 
     let _unbreakableCounterArgs2 = null;
     if (atkWins) {
@@ -3919,8 +3925,9 @@ export class ClashManager {
       ?? null;
     const _fc2      = {};
     const _actMsgs2 = [];
-    const atkCtx2 = { atkActor, defActor: baseActor, owner: atkActor, other: baseActor, _fireCounts: _fc2, _actMsgs: _actMsgs2, _currentItemId: atkItem2?.id ?? "" };
-    const defCtx2 = { atkActor, defActor: baseActor, owner: baseActor, other: atkActor, _fireCounts: _fc2, _actMsgs: _actMsgs2, _currentItemId: "" };
+    const coveredForActor = initFlags.coveredForId ? (game.actors.get(initFlags.coveredForId) ?? null) : null;
+    const atkCtx2 = { atkActor, defActor: baseActor, owner: atkActor, other: baseActor, coveredForActor, _fireCounts: _fc2, _actMsgs: _actMsgs2, _currentItemId: atkItem2?.id ?? "" };
+    const defCtx2 = { atkActor, defActor: baseActor, owner: baseActor, other: atkActor, coveredForActor, _fireCounts: _fc2, _actMsgs: _actMsgs2, _currentItemId: "" };
 
     // 记录触发前原始公式，用于检测变化后重投
     const atkBaseFormulaOrig2 = initFlags.baseFormula ?? initFlags.formula;
