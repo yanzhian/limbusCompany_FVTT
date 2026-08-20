@@ -13,7 +13,7 @@
  *     refreshOnGain: true,       // 可选：获得时刷新（不叠加层数，直接替换）
  *     keepAtZero:    true,       // 可选：层数减至 0 时不自动清除（仍以 0 层留在状态栏，
  *                                //       需手动 removeBuff 或其他效果移除）
- *     onRoundEnd(actor, buff) {},           // 回合结束时回调 → 返回 Promise
+ *     onRoundEnd(actor, buff) {},           // 回合结束时回调；返回字符串则并入「回合结束时」折叠汇总消息
  *     onRoundStart(actor, buff) {},         // 回合开始时回调（在同一轮的 onRoundEnd 之后执行，
  *                                             // 因此回合结束时被移除的 BUFF 不会再触发）；
  *                                             // 返回字符串则并入「回合开始时」折叠汇总消息
@@ -518,6 +518,40 @@ registerCustomBuff("lightCard", {
   maxStacks:    3,
   maxIntensity: 5,
   keepAtZero:   true,
+});
+
+/**
+ * 【动力：鬼怪之火】
+ * - 最大值：20 层
+ * - 回合开始时：每有 4 层 → 自己 1 层【攻击等级提升】+ 1 层【防御等级降低】
+ * - 回合结束时：每有 5 层 → 下回合自己 1 层【迅捷】（最多 3 层）
+ * 层数本身不自然衰减，靠技能自己加减。
+ */
+registerCustomBuff("driveGhostFire", {
+  label:       "动力：鬼怪之火",
+  description: "- 最大值：20 层\n"
+    + "- 回合开始时：每有 4 层为自己添加 1 层【攻击等级提升】和 1 层【防御等级降低】\n"
+    + "- 回合结束时：每有 5 层，下回合为自己添加 1 层【迅捷】（最大值 3）",
+  maxStacks:   20,
+
+  /** 回合开始：每 4 层 → 攻击等级提升 / 防御等级降低 各 1 层 */
+  async onRoundStart(actor, buff) {
+    const times = Math.floor((buff.stacks ?? 0) / 4);
+    if (times <= 0) return;
+    const { ClashManager } = await import("./clash.mjs");
+    await ClashManager._addBuff(actor, "atkLevelUp",   0, times, "本回合");
+    await ClashManager._addBuff(actor, "defLevelDown", 0, times, "本回合");
+    return `获得 <strong>${times}</strong> 层【攻击等级提升】与 <strong>${times}</strong> 层【防御等级降低】。`;
+  },
+
+  /** 回合结束：每 5 层 → 下回合 1 层【迅捷】，最多 3 层 */
+  async onRoundEnd(actor, buff) {
+    const times = Math.min(Math.floor((buff.stacks ?? 0) / 5), 3);
+    if (times <= 0) return;
+    const { ClashManager } = await import("./clash.mjs");
+    await ClashManager._addBuff(actor, "swift", 0, times, "下回合");
+    return `下回合获得 <strong>${times}</strong> 层【迅捷】。`;
+  },
 });
 
 /**

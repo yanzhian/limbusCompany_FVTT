@@ -783,8 +783,11 @@ Hooks.on("updateCombat", async (combat, changed) => {
     const customBuffsSnapshot = [...(actor.system?.buffs ?? [])];
     for (const buff of customBuffsSnapshot) {
       const handler = resolveBuffHandler(buff);
-      if (typeof handler?.onRoundEnd === "function") {
-        await handler.onRoundEnd(actor, buff);
+      if (typeof handler?.onRoundEnd !== "function") continue;
+      // 与 onRoundStart 对称：返回字符串则并入「回合结束时」折叠汇总消息
+      const msg = await handler.onRoundEnd(actor, buff);
+      if (typeof msg === "string" && msg) {
+        endMsgs.push({ trigger: "回合结束时", itemName: handler.label ?? buff.name ?? buff.type, msgs: [msg] });
       }
     }
 
