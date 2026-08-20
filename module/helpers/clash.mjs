@@ -1250,6 +1250,22 @@ export class ClashManager {
             discardSim.slots.push(discardSim.pool.shift() ?? null);
             declaredIdx = ClashManager._shiftDeclaredIdx(declaredIdx, idx);
           }
+        } else if (cost.type === "random") {
+          // 随机消耗：与强制消耗同级——候选池里一条都付不起就跳过整条 Activity
+          const pool = Array.isArray(cost.randomPool) ? cost.randomPool.filter(e => e?.buff) : [];
+          if (!pool.length) { forcedFail = true; break; }
+          const costTgts = await ClashManager._resolveTargets(cost.target ?? "self", owner, other, cost);
+          if (costTgts.length === 0) { forcedFail = true; break; }
+          for (const tgt of costTgts) {
+            const ok = pool.some(e => {
+              const type     = e.buff === "custom" ? (e.buffCustom || "custom") : e.buff;
+              const existing = ClashManager._getBuff(tgt, type);
+              const have     = e.dim === "intensity" ? (existing?.intensity ?? 0) : (existing?.stacks ?? 0);
+              return have >= Math.max(1, e.amount ?? 1);
+            });
+            if (!ok) { forcedFail = true; break; }
+          }
+          if (forcedFail) break;
         } else if (cost.target === "field" && (cost.type === "forced" || cost.type === "perStack")) {
           // 公用场地：层数不足（每N层的 N）则跳过整条 Activity
           if (!cost.fieldName) { forcedFail = true; break; }
@@ -1298,7 +1314,7 @@ export class ClashManager {
         if (cost.type === "random") {
           // 随机消耗：从候选池中随机抽一条可支付的候选来扣（每条候选各自指定 BUFF 与维度：层/级）
           // 例：随机消耗 1 层 或 1 级【生蝶·亡蝶】= 两条候选，同 BUFF、维度分别为 stacks / intensity。
-          // 非强制：候选全都不足时整条消耗直接跳过，不阻断 Activity（与旧「可选消耗」一致）。
+          // 强制：候选全都不足时整条 Activity 不成立（已在上面的预检查里拦下）。
           const pool = Array.isArray(cost.randomPool) ? cost.randomPool.filter(e => e?.buff) : [];
           if (!pool.length) continue;
           const costTgts = await ClashManager._resolveTargets(cost.target ?? "self", owner, other, cost);

@@ -182,7 +182,7 @@
 |---|---|
 | `attribute` | `attrType`（hp/sanity/ap）、`value` |
 | `discard` | `discardMode`（`level`/`another`/`reserve`）、`discardLevel` |
-| `random` | `randomPool: [{ buff, dim: "stacks"\|"intensity", amount }]` |
+| `random` | `randomPool: [{ buff, dim: "stacks"\|"intensity", amount }]`；从**付得起**的候选里随机抽一条来扣。与强制消耗同级：一条都付不起则整条 Activity 跳过 |
 | target `field` | `fieldName`、`stacks` |
 | target `sin` | `sinType`、`value` |
 
