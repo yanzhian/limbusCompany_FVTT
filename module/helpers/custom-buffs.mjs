@@ -514,7 +514,7 @@ registerCustomBuff("indigoSakura", makeFlowerCard({ label: "青染樱", color: "
  */
 registerCustomBuff("lightCard", {
   label:        "光札",
-  description:  "- 纯计数资源\n- 最大 3 层、强度上限 5 级",
+  description:  "- 最大 3 层、强度上限 5 级",
   maxStacks:    3,
   maxIntensity: 5,
 });
