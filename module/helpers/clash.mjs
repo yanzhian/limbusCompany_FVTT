@@ -1248,15 +1248,27 @@ export class ClashManager {
           const have = SinResourceHUD.getSinValue(cost.sinType);
           if (have < Math.max(1, cost.value ?? 1)) { forcedFail = true; break; }
         } else if (cost.buff && (cost.type === "forced" || cost.type === "perStack")) {
-          // 强制消耗 / 每：数值不足（每N的 N，维度可选层数/强度）则跳过整条 Activity
+          // 强制消耗 / 每：数值不足则跳过整条 Activity
+          // ·【每】：只看一个维度（perNDim），门槛是每 N 的那个 N
+          // ·【强制消耗】：层数与强度分别校验——填了哪个就要够哪个
           const costBuffType = cost.buff === "custom" ? (cost.buffCustom || "custom") : cost.buff;
-          const costDim = cost.type === "perStack" && cost.perNDim === "intensity" ? "intensity" : "stacks";
           const costTgts = await ClashManager._resolveTargets(cost.target ?? "self", owner, other, cost);
           if (costTgts.length === 0) { forcedFail = true; break; }
           for (const tgt of costTgts) {
             const existing = ClashManager._getBuff(tgt, costBuffType);
-            const haveVal  = costDim === "intensity" ? (existing?.intensity ?? 0) : (existing?.stacks ?? 0);
-            if (haveVal < Math.max(1, cost.stacks ?? 1)) { forcedFail = true; break; }
+            const haveS = existing?.stacks    ?? 0;
+            const haveI = existing?.intensity ?? 0;
+            if (cost.type === "perStack") {
+              const haveVal = cost.perNDim === "intensity" ? haveI : haveS;
+              if (haveVal < Math.max(1, cost.stacks ?? 1)) { forcedFail = true; break; }
+            } else {
+              const needS = cost.stacks    ?? 0;
+              const needI = cost.intensity ?? 0;
+              // 两个都没填时按老规矩当作"扣 1 层"
+              if (!needS && !needI) { if (haveS < 1) { forcedFail = true; break; } }
+              if (needS > 0 && haveS < needS) { forcedFail = true; break; }
+              if (needI > 0 && haveI < needI) { forcedFail = true; break; }
+            }
           }
         }
         if (forcedFail) break;
@@ -1362,8 +1374,13 @@ export class ClashManager {
             }
             if (each.length) costMultipliers.push(Math.min(...each));
           } else if (cost.type !== "none") {
+            // 强制消耗：层数与强度分别扣，填了哪个扣哪个（都没填按扣 1 层）
+            const needS = cost.stacks    ?? 0;
+            const needI = cost.intensity ?? 0;
             for (const tgt of costTgts) {
-              await ClashManager._reduceBuffStacks(tgt, costBuffType, cost.stacks ?? 1);
+              if (needI > 0) await ClashManager._reduceBuffIntensity(tgt, costBuffType, needI);
+              if (needS > 0) await ClashManager._reduceBuffStacks(tgt, costBuffType, needS);
+              if (!needS && !needI) await ClashManager._reduceBuffStacks(tgt, costBuffType, 1);
             }
           }
         } else if (cost.target === "field" && cost.fieldName) {
