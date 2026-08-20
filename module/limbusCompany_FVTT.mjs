@@ -560,7 +560,7 @@ Hooks.on("combatStart", (combat) => {
         const bgUuid = actor?.system?.background?.uuid;
         if (!bgUuid) continue;
         const bgItem = await fromUuid(bgUuid).catch(() => null);
-        for (const t of String(bgItem?.system?.tags ?? "").split("/")) {
+        for (const t of ClashManager._itemTags(bgItem)) {
           const trimmed = t.trim();
           if (trimmed) tagSet.add(trimmed);
         }
@@ -1077,9 +1077,19 @@ Hooks.once("init", () => {
 
   /** 分割字符串为数组（SafeString 安全）*/
   Handlebars.registerHelper("split", (str, sep) => {
+    // tags 这类字段有的类型存数组、有的存 "标签1/标签2" 字符串，两种都要认——
+    // 数组直接用，否则才按分隔符切（数组走 String() 会被拼成 "a,b"，切不出来）
+    if (Array.isArray(str)) return str.map(t => String(t).trim()).filter(Boolean);
     const s    = str instanceof Handlebars.SafeString ? str.toString() : String(str ?? "");
     const sep2 = sep instanceof Handlebars.SafeString ? sep.toString() : String(sep ?? "/");
-    return s.split(sep2).filter(Boolean);
+    return s.split(sep2).map(t => t.trim()).filter(Boolean);
+  });
+
+  /** 数组 → "a/b" 文本（输入框回显用；字符串原样返回） */
+  Handlebars.registerHelper("join", (arr, sep) => {
+    const sep2 = sep instanceof Handlebars.SafeString ? sep.toString() : String(sep ?? "/");
+    if (Array.isArray(arr)) return arr.map(t => String(t).trim()).filter(Boolean).join(sep2);
+    return String(arr ?? "");
   });
 
   /** 去除字符串首尾空格 */

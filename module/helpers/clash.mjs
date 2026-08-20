@@ -400,8 +400,7 @@ export class ClashManager {
     if (name && item.name !== name) return false;
     if (cat  && String(item.system?.category ?? "").trim() !== cat) return false;
     if (tag) {
-      const tags = String(item.system?.tags ?? "").split("/").map(t => t.trim()).filter(Boolean);
-      if (!tags.includes(tag)) return false;
+      if (!ClashManager._itemTags(item).includes(tag)) return false;
     }
     // 三个都没填 = 只要装备格里有东西就算
     return true;
@@ -1024,7 +1023,7 @@ export class ClashManager {
     const bgUuid = actor?.system?.background?.uuid;
     if (!bgUuid) return [];
     const bg = await fromUuid(bgUuid).catch(() => null);
-    return String(bg?.system?.tags ?? "").split("/").map(t => t.trim()).filter(Boolean);
+    return ClashManager._itemTags(bg);
   }
 
   /**

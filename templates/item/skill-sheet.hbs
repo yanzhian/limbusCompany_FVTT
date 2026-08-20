@@ -283,7 +283,7 @@
       {{!-- ── 标签行 ──────────────────────────────────────────────── --}}
       <div class="skill-tags-row">
         {{#if (and isEditable (not isLocked))}}
-          <input type="text" name="system.tags" value="{{system.tags}}" class="tags-input" placeholder="标签1/标签2"/>
+          <input type="text" name="system.tags" value="{{join system.tags '/'}}" class="tags-input" placeholder="标签1/标签2"/>
         {{else}}
           <div class="skill-tags">
             {{#each (split system.tags '/')}}

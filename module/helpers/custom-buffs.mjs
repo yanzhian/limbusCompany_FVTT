@@ -931,8 +931,10 @@ registerFieldResource("血宴", {
     const bgUuid = ctx.actor?.system?.background?.uuid ?? "";
     if (!bgUuid) return;
     const bgItem = await fromUuid(bgUuid).catch(() => null);
-    const tags = String(bgItem?.system?.tags ?? "")
-      .split("/").map(t => t.trim()).filter(Boolean);
+    // tags 可能是数组也可能是 "a/b" 字符串，两种都要认
+    const rawTags = bgItem?.system?.tags;
+    const tags = (Array.isArray(rawTags) ? rawTags : String(rawTags ?? "").split("/"))
+      .map(t => String(t).trim()).filter(Boolean);
     if (!tags.some(t => this.roundStartTags.includes(t))) return;
     await ctx.addBuff("bleed",      5, 1, "本回合");
     await ctx.addBuff("atkLevelUp", 0, 3, "本回合");

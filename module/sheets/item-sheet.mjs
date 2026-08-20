@@ -636,6 +636,22 @@ export class LimbusItemSheet extends ItemSheet {
       }
     }
 
+    // ── 标签：输入框里是 "标签1/标签2"，schema 若是数组字段就切成数组 ──────
+    // （不切的话数组字段会拿到一整串字符串，回显时又被 String() 拼成 "a,b"）
+    {
+      const flat = !formData.system;
+      const raw  = flat ? formData["system.tags"] : formData.system?.tags;
+      if (typeof raw === "string") {
+        const field = this.item.system?.schema?.getField?.("tags");
+        const isArr = field instanceof foundry.data.fields.ArrayField;
+        if (isArr) {
+          const list = raw.split(/[\/,，;；]/).map(t => t.trim()).filter(Boolean);
+          if (flat) formData["system.tags"] = list;
+          else      formData.system.tags   = list;
+        }
+      }
+    }
+
     // ── skill：将用户输入的 diceFormula 文本解析为真正的 schema 字段
     if (this.item.type === "skill") {
       // 侵蚀形态编辑时，骰数写进 system.corrode.*
