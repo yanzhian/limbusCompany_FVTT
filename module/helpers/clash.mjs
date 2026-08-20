@@ -1088,6 +1088,17 @@ export class ClashManager {
           continue;
         }
 
+        // ── useSin 类型：检查"本次实际打出的骰"的罪孽属性 ─────────────────
+        // 与 category 同理：装备格触发时要看 ctx._currentItemId 指向的技能，
+        // 取不到才退回 item 自身（如技能卡自己写的效果）。
+        if (pre.type === "useSin") {
+          const actingItem = (owner?.items?.get?.(ctx._currentItemId ?? "")) ?? item;
+          const sins = Array.isArray(pre.sinTypes) ? pre.sinTypes
+                     : (pre.sinType ? [pre.sinType] : []);
+          if (!sins.length || !sins.includes(actingItem?.system?.sinType)) { precondFail = true; break; }
+          continue;
+        }
+
         // ── useSkill 类型：检查"本次由 owner 实际使用的技能"的名称/标签/UUID ──
         // 同上，优先取 ctx._currentItemId 指向的实际使用技能，取不到时退回 item 自身。
         if (pre.type === "useSkill") {
@@ -5092,6 +5103,14 @@ export class ClashManager {
       if ((pre.intensity ?? 0) > 0 && (found.intensity ?? 0) < pre.intensity) return false;
       if ((pre.stacks   ?? 0) > 0 && (found.stacks   ?? 0) < pre.stacks)   return false;
       return true;
+    }
+
+    if (type === "useSin") {
+      // 反应链路：lastSkillUuid 指向触发者刚打出的那张骰
+      const sins = Array.isArray(pre.sinTypes) ? pre.sinTypes : (pre.sinType ? [pre.sinType] : []);
+      if (!sins.length) return false;
+      const skill = lastSkillUuid ? await fromUuid(lastSkillUuid).catch(() => null) : null;
+      return sins.includes(skill?.system?.sinType);
     }
 
     if (type === "noBuff") {

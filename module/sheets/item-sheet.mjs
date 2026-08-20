@@ -2356,8 +2356,11 @@ function _buildCondRow(cond, idx, cfg) {
   if (cond?.type === "level") {
     cond = { ...cond, type: "useSkill", skillLevel: cond.level ?? 1, skillNameOrTag: cond.skillNameOrTag ?? "" };
   }
-  const condType   = ["perN","noBuff","baseAttr","useSkill","buffCompare","category","fieldResource","sinResource","background","equipped"].includes(cond?.type) ? cond.type : "hasBuff";
+  const condType   = ["perN","noBuff","baseAttr","useSkill","buffCompare","category","useSin","fieldResource","sinResource","background","equipped"].includes(cond?.type) ? cond.type : "hasBuff";
   const isBuffSec  = condType === "hasBuff" || condType === "noBuff" || condType === "perN" || condType === "buffCompare";
+  const isUseSinSec = condType === "useSin";
+  const selSins    = Array.isArray(cond?.sinTypes) ? cond.sinTypes
+                   : (cond?.sinType ? [cond.sinType] : []);
   const isAttrSec  = condType === "baseAttr";
   const isSkillSec = condType === "useSkill";
   const isCatSec   = condType === "category";
@@ -2412,6 +2415,7 @@ function _buildCondRow(cond, idx, cfg) {
           <option value="baseAttr"    ${condType === "baseAttr"    ? "selected" : ""}>基础属性</option>
           <option value="useSkill"    ${condType === "useSkill"    ? "selected" : ""}>使用技能</option>
           <option value="category"    ${condType === "category"    ? "selected" : ""}>使用分类</option>
+          <option value="useSin"      ${condType === "useSin"      ? "selected" : ""}>使用罪孽</option>
           <option value="background"  ${condType === "background"  ? "selected" : ""}>背景</option>
           <option value="equipped"    ${condType === "equipped"    ? "selected" : ""}>已装备</option>
           <option value="fieldResource" ${condType === "fieldResource" ? "selected" : ""}>公用场地</option>
@@ -2475,6 +2479,17 @@ function _buildCondRow(cond, idx, cfg) {
           <label class="ae-cond-cat-cb"><input type="checkbox" class="cond-category-cb" value="slash"  ${selCats.includes("slash")  ? "checked" : ""}> 斩击</label>
           <label class="ae-cond-cat-cb"><input type="checkbox" class="cond-category-cb" value="blunt"  ${selCats.includes("blunt")  ? "checked" : ""}> 打击</label>
           <label class="ae-cond-cat-cb"><input type="checkbox" class="cond-category-cb" value="pierce" ${selCats.includes("pierce") ? "checked" : ""}> 突刺</label>
+        </span>
+        <!-- 使用罪孽：本次实际打出的骰的罪孽属性（任一满足） -->
+        <span class="ae-cond-usesin-sec" ${isUseSinSec ? "" : 'style="display:none"'}>
+          <label>罪孽（任一满足）</label>
+          <label class="ae-cond-cat-cb"><input type="checkbox" class="cond-usesin-cb" value="wrath" ${selSins.includes("wrath") ? "checked" : ""}> 暴怒</label>
+          <label class="ae-cond-cat-cb"><input type="checkbox" class="cond-usesin-cb" value="lust" ${selSins.includes("lust") ? "checked" : ""}> 色欲</label>
+          <label class="ae-cond-cat-cb"><input type="checkbox" class="cond-usesin-cb" value="sloth" ${selSins.includes("sloth") ? "checked" : ""}> 怠惰</label>
+          <label class="ae-cond-cat-cb"><input type="checkbox" class="cond-usesin-cb" value="gluttony" ${selSins.includes("gluttony") ? "checked" : ""}> 暴食</label>
+          <label class="ae-cond-cat-cb"><input type="checkbox" class="cond-usesin-cb" value="gloom" ${selSins.includes("gloom") ? "checked" : ""}> 忧郁</label>
+          <label class="ae-cond-cat-cb"><input type="checkbox" class="cond-usesin-cb" value="pride" ${selSins.includes("pride") ? "checked" : ""}> 傲慢</label>
+          <label class="ae-cond-cat-cb"><input type="checkbox" class="cond-usesin-cb" value="envy" ${selSins.includes("envy") ? "checked" : ""}> 嫉妒</label>
         </span>
         <!-- 已装备：数名称/标签/分类符合的装备件数；三个筛选可任意组合、留空即不限。
              勾选"每"时，件数还会成为后续效果的倍数（每装备 1 件 → 加 3 层 …）-->
@@ -3090,11 +3105,12 @@ function _bindCondType(html) {
     row.find(".ae-cond-attr-sec").toggle(isAttrSec);
     row.find(".ae-cond-skill-sec").toggle(isSkillSec);
     row.find(".ae-cond-category-sec").toggle(isCatSec);
+    row.find(".ae-cond-usesin-sec").toggle(type === "useSin");
     row.find(".ae-cond-field-sec").toggle(isFieldSec);
     row.find(".ae-cond-sin-sec").toggle(isSinSec);
     row.find(".ae-cond-bg-sec").toggle(isBgSec);
     row.find(".ae-cond-equip-sec").toggle(isEquipSec);
-    row.find(".ae-cond-target-sec").toggle(!isCatSec && !isFieldSec && !isSinSec);
+    row.find(".ae-cond-target-sec").toggle(!isCatSec && !isFieldSec && !isSinSec && type !== "useSin");
     row.find(".ae-cond-pern-max").toggle(isPerN);
     row.find(".ae-cond-pern-dim-sec").toggle(isPerN);
     row.find(".ae-cond-intensity-sec").toggle(!isCompare && !isPerN);
@@ -3253,6 +3269,9 @@ function _readActivityForm(html, original) {
     } else if (condType === "category") {
       const cats = $r.find(".cond-category-cb:checked").map((_, el) => el.value).get();
       preconditions.push({ type: "category", categories: cats });
+    } else if (condType === "useSin") {
+      const sins = $r.find(".cond-usesin-cb:checked").map((_, el) => el.value).get();
+      preconditions.push({ type: "useSin", sinTypes: sins });
     } else if (condType === "equipped") {
       preconditions.push({
         type:          "equipped",

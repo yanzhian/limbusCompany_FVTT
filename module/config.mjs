@@ -175,6 +175,11 @@ LIMBUSCOMPANY.BUFF_TYPES = {
   defensiveStance: "防御姿态",
   butterfly:       "蝶",
   piercingArrow:   "刺入之矢",
+  // 花札三色 + 光札（定事务所）
+  craneOnPine:     "松上鹤",
+  moonOnSusuki:    "芒上月",
+  indigoSakura:    "青染樱",
+  lightCard:       "光札",
 };
 
 /** 分组，用于 BUFF 下拉菜单 */
@@ -183,7 +188,8 @@ LIMBUSCOMPANY.BUFF_GROUPS = {
   negative: ["weak", "breach", "bind", "fragile", "clashPowerDown", "atkLevelDown", "defLevelDown"],
   special:  ["burn", "bleed", "tremor", "rupture", "sinking", "breathing", "charge", "chaos", "panic", "lowMorale"],
   other:    ["custom"],
-  custom:   ["defensiveStance", "butterfly", "piercingArrow"],
+  custom:   ["defensiveStance", "butterfly", "piercingArrow",
+             "craneOnPine", "moonOnSusuki", "indigoSakura", "lightCard"],
 };
 
 /**
