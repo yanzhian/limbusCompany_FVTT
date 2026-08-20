@@ -2755,7 +2755,9 @@ function _buildCostRow(cost, idx, cfg) {
           <select class="ae-sel cost-discard-mode">${discardModeOpts}</select>
           <span class="ae-cost-discard-level-sec" ${discardModeIsLevel ? "" : 'style="display:none"'}>
             <label>Lv.</label>
-            <input class="ae-input-sm cost-discard-level" type="number" value="${cost?.discardLevel ?? 1}" min="1" max="3">
+            <!-- 多个等级用 "/" 分隔表示"或"，例：2/3 = 丢弃 Lv.2 或 Lv.3 -->
+            <input class="ae-input-sm cost-discard-level" type="text" value="${Array.isArray(cost?.discardLevel) ? cost.discardLevel.join("/") : (cost?.discardLevel ?? 1)}"
+                   placeholder="2 或 2/3" title="单个等级填数字；多个等级用 / 分隔表示「或」">
           </span>
         </span>
         </div>
@@ -3369,7 +3371,10 @@ function _readActivityForm(html, original) {
       costs.push({
         type,
         discardMode,
-        ...(discardMode === "level" ? { discardLevel: parseInt($r.find(".cost-discard-level").val()) || 1 } : {}),
+        // 等级可以是 "2" 或 "2/3"（或），统一存成数组
+        ...(discardMode === "level"
+          ? { discardLevel: ClashManager._parseDiscardLevels($r.find(".cost-discard-level").val()) }
+          : {}),
       });
     } else if (target === "field") {
       costs.push({

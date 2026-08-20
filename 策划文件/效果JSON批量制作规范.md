@@ -181,7 +181,7 @@
 | type / target | 字段 |
 |---|---|
 | `attribute` | `attrType`（hp/sanity/ap）、`value` |
-| `discard` | `discardMode`（`level`/`another`/`reserve`）、`discardLevel` |
+| `discard` | `discardMode`（`level`/`another`/`reserve`）、`discardLevel`（数字，或写 `[2,3]` / `"2/3"` 表示「Lv.2 或 Lv.3」，任一命中即丢） |
 | `random` | `randomPool: [{ buff, dim: "stacks"\|"intensity", amount }]`；从**付得起**的候选里随机抽一条来扣。与强制消耗同级：一条都付不起则整条 Activity 跳过 |
 | target `field` | `fieldName`、`stacks` |
 | target `sin` | `sinType`、`value` |

@@ -3627,6 +3627,7 @@ export class ClashManager {
    * 规则：只看激活槽 0/1（预备模式看槽 2）；触发这条消耗的技能永远不会丢弃自己，
    * 【等级】模式也只是判断"另一张"是不是该等级。
    * 【等级】模式下 0/1 两格都符合时两张一起丢——但【丢弃时】只触发一次。
+   * 【等级】可以写成多个（"2/3" 或 [2,3]），表示"Lv.2 或 Lv.3"，任一命中即丢。
    *
    * @param {number[]|null} declaredIdx 还剩哪些"宣言时就在场"的槽位下标。
    *        给了就只认这些位置，本次结算中途补位顶上来的新牌不会被后面的消耗吃掉。
@@ -3639,17 +3640,28 @@ export class ClashManager {
       const id = slots[2];
       return (id && id !== selfId && ok(2)) ? [2] : [];
     }
-    const level = cost.discardLevel ?? 1;
-    const hits  = [];
+    const levels = ClashManager._parseDiscardLevels(cost.discardLevel);
+    const hits   = [];
     for (let i = 0; i <= 1; i++) {
       const id = slots[i];
       if (!id || id === selfId) continue;          // 永远不丢自己
       if (!ok(i)) continue;                        // 宣言之后才顶上来的牌不算
       if (mode === "another") return [i];          // 【另一个】只丢一张
       const sk = owner?.items?.get(id);
-      if (sk && (sk.system?.level ?? 1) === level) hits.push(i);
+      if (sk && levels.includes(sk.system?.level ?? 1)) hits.push(i);
     }
     return hits;
+  }
+
+  /**
+   * 【丢弃·等级】的等级值解析。
+   * 单个等级写数字（2）；"或"关系写成 "2/3"（也接受 "、"「,」空格 分隔）或数组 [2,3]。
+   * @returns {number[]} 至少含一个等级；解析不出东西时退回 [1]
+   */
+  static _parseDiscardLevels(raw) {
+    const list = Array.isArray(raw) ? raw : String(raw ?? 1).split(/[^0-9]+/);
+    const out  = list.map(v => parseInt(v)).filter(v => Number.isInteger(v) && v > 0);
+    return out.length ? [...new Set(out)] : [1];
   }
 
   /* ─── 本次攻击内的临时骰面改动 ─────────────────────────────────────── */
