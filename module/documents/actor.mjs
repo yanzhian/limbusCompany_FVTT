@@ -1036,7 +1036,8 @@ export class LimbusActor extends Actor {
 
     // 已有同类型（且同回合、自定义 BUFF 还需同名）则叠加，否则新增
     // ——与 ClashManager._addBuff 保持一致，避免同一个 BUFF 在状态栏里裂成多条
-    const maxStacks     = handler?.maxStacks ?? Infinity;
+    const maxStacks     = handler?.maxStacks    ?? Infinity;
+    const maxIntensity  = handler?.maxIntensity ?? Infinity;
     const refreshOnGain = handler?.refreshOnGain ?? false;
     const whenAdded     = buffData.whenAdded ?? "本回合";
     const idx = buffs.findIndex(b =>
@@ -1046,12 +1047,13 @@ export class LimbusActor extends Actor {
 
     if (idx >= 0) {
       if (refreshOnGain) {
-        buffs[idx] = { ...buffs[idx], stacks: Math.min(rawStacks, maxStacks), intensity: rawIntensity };
+        buffs[idx] = { ...buffs[idx], stacks: Math.min(rawStacks, maxStacks),
+                       intensity: Math.min(rawIntensity, maxIntensity) };
       } else {
         buffs[idx] = {
           ...buffs[idx],
           stacks:    Math.min((buffs[idx].stacks ?? 0) + rawStacks, maxStacks),
-          intensity: (buffs[idx].intensity ?? 0) + rawIntensity,
+          intensity: Math.min((buffs[idx].intensity ?? 0) + rawIntensity, maxIntensity),
         };
       }
     } else {
@@ -1060,7 +1062,7 @@ export class LimbusActor extends Actor {
         type,
         name,
         icon:      buffData.icon ?? "",
-        intensity: rawIntensity,
+        intensity: Math.min(rawIntensity, maxIntensity),
         stacks:    Math.min(rawStacks, maxStacks),
         whenAdded,
       });

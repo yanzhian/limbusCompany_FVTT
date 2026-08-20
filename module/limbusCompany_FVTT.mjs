@@ -317,11 +317,18 @@ async function _clampBuffStacks() {
 
     let changed = false;
     const next = buffs.map(b => {
-      const max = resolveBuffHandler(b)?.maxStacks ?? Infinity;
-      if (!Number.isFinite(max) || (b.stacks ?? 0) <= max) return b;
+      const h      = resolveBuffHandler(b);
+      const maxS   = h?.maxStacks    ?? Infinity;
+      const maxI   = h?.maxIntensity ?? Infinity;
+      const overS  = Number.isFinite(maxS) && (b.stacks    ?? 0) > maxS;
+      const overI  = Number.isFinite(maxI) && (b.intensity ?? 0) > maxI;
+      if (!overS && !overI) return b;
       changed = true; fixedBuffs++;
-      console.warn(`limbusCompany_FVTT | 【${b.name ?? b.type}】层数 ${b.stacks} → ${max}（${actor.name}）`);
-      return { ...b, stacks: max };
+      const parts = [];
+      if (overS) parts.push(`层数 ${b.stacks} → ${maxS}`);
+      if (overI) parts.push(`强度 ${b.intensity} → ${maxI}`);
+      console.warn(`limbusCompany_FVTT | 【${b.name ?? b.type}】${parts.join("，")}（${actor.name}）`);
+      return { ...b, ...(overS ? { stacks: maxS } : {}), ...(overI ? { intensity: maxI } : {}) };
     });
     if (!changed) continue;
 
@@ -333,7 +340,7 @@ async function _clampBuffStacks() {
     }
   }
   if (fixedBuffs) {
-    ui.notifications.info(`已校正 ${fixedActors} 名角色的 ${fixedBuffs} 个超上限 BUFF 层数`);
+    ui.notifications.info(`已校正 ${fixedActors} 名角色的 ${fixedBuffs} 个超上限 BUFF`);
   }
 }
 

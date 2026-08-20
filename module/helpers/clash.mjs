@@ -454,6 +454,8 @@ export class ClashManager {
         const hitMsg = await handler.onHit(owner, buff, {
           item,
           category: item?.system?.category ?? "",
+          // 本次实际打出的那张骰的罪孽（花札三色靠它判色）
+          sinType:  item?.system?.sinType ?? "",
           target:   ctx.other ?? null,
           addBuff:  (type, intensity, stacks, whenAdded) => ClashManager._addBuff(owner, type, intensity, stacks, whenAdded),
           // 给指定角色（通常是命中目标）加 BUFF，走 _safeDocUpdate 以支持跨所有权写入
@@ -555,7 +557,8 @@ export class ClashManager {
     // 这里补一次按显示名的回退匹配。
     const customHandler = CustomBuffRegistry.get(type)
       ?? resolveBuffHandler({ type, name: ClashManager._buffLabel(type) });
-    const maxStacks     = customHandler?.maxStacks ?? Infinity;
+    const maxStacks     = customHandler?.maxStacks    ?? Infinity;
+    const maxIntensity  = customHandler?.maxIntensity ?? Infinity;
     const refreshOnGain = customHandler?.refreshOnGain ?? false;
 
     // maxGainPerRound：本回合累计可获得的层数上限（与 maxStacks 无关，后者是同时存在的上限）。
@@ -580,10 +583,10 @@ export class ClashManager {
       if (refreshOnGain) {
         // 刷新：层数替换（不叠加），强度也替换
         buffs[idx].stacks    = Math.min(stacks, maxStacks);
-        buffs[idx].intensity = intensity;
+        buffs[idx].intensity = Math.min(intensity, maxIntensity);
       } else {
         buffs[idx].stacks    = Math.min((buffs[idx].stacks ?? 0) + stacks, maxStacks);
-        buffs[idx].intensity = (buffs[idx].intensity ?? 0) + intensity;
+        buffs[idx].intensity = Math.min((buffs[idx].intensity ?? 0) + intensity, maxIntensity);
       }
       if (!buffs[idx].name) buffs[idx].name = ClashManager._buffLabel(type);
     } else {
@@ -600,7 +603,7 @@ export class ClashManager {
         type,
         name:      iconName,
         icon,
-        intensity,
+        intensity: Math.min(intensity, maxIntensity),
         stacks:    Math.min(stacks, maxStacks),
         whenAdded,
       });

@@ -7,6 +7,7 @@
  *   registerCustomBuff("myBuff", {
  *     label:         "显示名称",
  *     maxStacks:     4,          // 可选：最大层数上限（超出则截断）
+ *     maxIntensity:  5,          // 可选：最大强度上限（超出则截断）
  *     maxGainPerRound: 20,       // 可选：本回合累计可获得的层数上限（与 maxStacks 无关；
  *                                //       计数记在 actor flag buffRoundGain 上，每轮结束清空）
  *     refreshOnGain: true,       // 可选：获得时刷新（不叠加层数，直接替换）
@@ -484,36 +485,38 @@ registerCustomBuff("bloodFlame", {
 });
 
 /* ─── 花札三色：【松上鹤】/【芒上月】/【青染樱】────────────────────────────
- * 定事务所的核心资源。三张牌各对应一种颜色与罪孽，打出同色罪孽的骰时
- * 给【光札】+1 级——这个判定由效果编辑器的前置【使用罪孽】负责，
- * 具体写在武器（定事务所-打刀）的 [攻击时] 里，此处只登记名称与说明。
+ * 定事务所的核心资源。三张牌各对应一种颜色与罪孽，命中时打出的骰若是同色罪孽，
+ * 就给自己的【光札】+1 级。三张牌本身只是"手里握着哪张花札"，不叠层。
  * ───────────────────────────────────────────────────────────────────────── */
 
-/** 【松上鹤】红 · 暴怒 */
-registerCustomBuff("craneOnPine", {
-  label:       "松上鹤",
-  description: "- 花札·红\n- 打出【暴怒】骰时，为自己的【光札】+1 级",
-  maxStacks:   1,
-});
+/** 花札通用：命中时若本骰罪孽对上颜色 → 光札 +1 级 */
+function makeFlowerCard({ label, color, sin, sinLabel }) {
+  return {
+    label,
+    description: `- 花札·${color}\n- 命中时若本骰为【${sinLabel}】，为自己的【光札】强度 +1`,
+    maxStacks: 1,
+    async onHit(actor, buff, ctx) {
+      if (ctx?.sinType !== sin) return "";
+      await ctx.addBuff("光札", 1, 0, "本回合");
+      return `【${label}】对上【${sinLabel}】——【光札】强度 +1`;
+    },
+  };
+}
 
-/** 【芒上月】黄 · 怠惰 */
-registerCustomBuff("moonOnSusuki", {
-  label:       "芒上月",
-  description: "- 花札·黄\n- 打出【怠惰】骰时，为自己的【光札】+1 级",
-  maxStacks:   1,
-});
+registerCustomBuff("craneOnPine",  makeFlowerCard({ label: "松上鹤", color: "红", sin: "gluttony", sinLabel: "暴食" }));
+registerCustomBuff("moonOnSusuki", makeFlowerCard({ label: "芒上月", color: "黄", sin: "sloth",    sinLabel: "怠惰" }));
+registerCustomBuff("indigoSakura", makeFlowerCard({ label: "青染樱", color: "蓝", sin: "gloom",    sinLabel: "忧郁" }));
 
-/** 【青染樱】蓝 · 忧郁 */
-registerCustomBuff("indigoSakura", {
-  label:       "青染樱",
-  description: "- 花札·蓝\n- 打出【忧郁】骰时，为自己的【光札】+1 级",
-  maxStacks:   1,
-});
-
-/** 【光札】纯计数：三张花札对上罪孽时累积的强度 */
+/**
+ * 【光札】
+ * - 纯计数资源：最大 3 层、强度最高 5 级
+ * - 用效果编辑器写成自定义 BUFF「光札」也会命中这条上限（按名称回退匹配）
+ */
 registerCustomBuff("lightCard", {
-  label:       "光札",
-  description: "- 纯计数资源\n- 花札对上同色罪孽时 +1 级",
+  label:        "光札",
+  description:  "- 纯计数资源\n- 最大 3 层、强度上限 5 级",
+  maxStacks:    3,
+  maxIntensity: 5,
 });
 
 /**
