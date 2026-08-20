@@ -7,6 +7,13 @@
       <i class="fas fa-{{#if isLocked}}lock{{else}}lock-open{{/if}}"></i>
     </span>
     <span class="sheet-type-label">技能</span>
+    {{#if isEgo}}
+      {{!-- 右上角 60×25：【觉醒】/【侵蚀】两套数据切换 --}}
+      <span class="ego-form-toggle {{#if isCorrode}}corrode{{else}}awaken{{/if}}"
+            title="切换 EGO 形态（觉醒 / 侵蚀）——两种形态的罪孽消耗与罪孽抗性各自独立">
+        {{egoFormLabel}}
+      </span>
+    {{/if}}
   </div>
 
   {{!-- ── 可滚动主体 ──────────────────────────────────────────────── --}}
@@ -49,20 +56,40 @@
           <div class="skill-cat-dice-row">
             {{#if (and isEditable (not isLocked))}}
               {{#if isDefense}}
-                <select name="system.category" class="equip-subtype-sel">
+                <select name="{{fp}}category" class="equip-subtype-sel">
                   {{#each defenseCategories}}
-                    <option value="{{@key}}" {{#eq @key ../system.category}}selected{{/eq}}>{{this}}</option>
+                    <option value="{{@key}}" {{#eq @key ../form.category}}selected{{/eq}}>{{this}}</option>
                   {{/each}}
                 </select>
               {{else}}
-                <select name="system.category" class="equip-subtype-sel">
+                <select name="{{fp}}category" class="equip-subtype-sel">
                   {{#each attackCategories}}
-                    <option value="{{@key}}" {{#eq @key ../system.category}}selected{{/eq}}>{{this}}</option>
+                    <option value="{{@key}}" {{#eq @key ../form.category}}selected{{/eq}}>{{this}}</option>
                   {{/each}}
                 </select>
               {{/if}}
-              <input type="text" name="system.diceFormula" value="{{diceFormulaDisplay}}" class="dice-formula-input" placeholder="1D4+2"/>
-              {{!-- 骰子类型：普通 / 不可摧毁 --}}
+              <input type="text" name="{{fp}}diceFormula" value="{{diceFormulaDisplay}}" class="dice-formula-input" placeholder="1D4+2"/>
+            {{else}}
+              {{#if form.category}}
+                <img src="{{lookup @root.config.CATEGORY_ICON_PATHS form.category}}" class="category-icon" width="22" height="22" alt="{{form.category}}">
+              {{/if}}
+              <span class="dice-formula-display">{{diceFormulaDisplay}}</span>
+              {{#if (eq system.diceType "unbreakable")}}
+                <span class="dice-type-badge unbreakable-badge">不可摧毁</span>
+              {{/if}}
+              {{#if system.noEquip}}
+                <span class="dice-type-badge no-equip-badge">无法装备</span>
+              {{/if}}
+              {{#if system.coverDefense}}
+                <span class="dice-type-badge cover-defense-badge">援护防御</span>
+              {{/if}}
+            {{/if}}
+          </div>
+
+          {{!-- 解锁时：骰子类型与各种标记单独占一行，免得把骰子公式挤没了；
+                锁上后它们会以徽章形式回到上面那一行 --}}
+          {{#if (and isEditable (not isLocked))}}
+            <div class="skill-flag-row">
               {{#unless isDefense}}
                 <select name="system.diceType" class="equip-subtype-sel dice-type-sel" title="骰子类型">
                   <option value="normal"      {{#eq system.diceType "normal"}}selected{{/eq}}>一般骰子</option>
@@ -74,19 +101,13 @@
                 <input type="checkbox" name="system.noEquip" {{#if system.noEquip}}checked{{/if}}>
                 无法装备
               </label>
-            {{else}}
-              {{#if system.category}}
-                <img src="{{lookup @root.config.CATEGORY_ICON_PATHS system.category}}" class="category-icon" width="22" height="22" alt="{{system.category}}">
-              {{/if}}
-              <span class="dice-formula-display">{{diceFormulaDisplay}}</span>
-              {{#if (eq system.diceType "unbreakable")}}
-                <span class="dice-type-badge unbreakable-badge">不可摧毁</span>
-              {{/if}}
-              {{#if system.noEquip}}
-                <span class="dice-type-badge no-equip-badge">无法装备</span>
-              {{/if}}
-            {{/if}}
-          </div>
+              {{!-- 援护防御：队友被锁定且行动值为 0 时，可用本技能顶上去接下对抗 --}}
+              <label class="no-equip-toggle" title="【援护防御】专属技能：队友被锁定为目标且行动值为 0 时，可用它替队友接下这次对抗">
+                <input type="checkbox" name="system.coverDefense" {{#if system.coverDefense}}checked{{/if}}>
+                援护防御
+              </label>
+            </div>
+          {{/if}}
 
           {{!-- 反击伤害类型（守备且为反击/可拼点反击） --}}
           {{#if isCounterType}}
@@ -122,14 +143,15 @@
                   <option value="{{@key}}" {{#if (eq @key ../system.sinType)}}selected{{/if}}>{{this}}</option>
                 {{/each}}
               </select>
-              {{#if isBasic}}
+              {{!-- 基础与守备技能都有 Lv.1~3；E.G.O 用评级 --}}
+              {{#unless isEgo}}
                 <label>等级</label>
                 <select name="system.level" class="equip-subtype-sel">
                   <option value="1" {{#if (eq system.level 1)}}selected{{/if}}>1</option>
                   <option value="2" {{#if (eq system.level 2)}}selected{{/if}}>2</option>
                   <option value="3" {{#if (eq system.level 3)}}selected{{/if}}>3</option>
                 </select>
-              {{/if}}
+              {{/unless}}
               {{#if isEgo}}
                 <label>等级</label>
                 <select name="system.egoDiceRating" class="equip-subtype-sel">
@@ -147,28 +169,42 @@
               {{#if system.sinType}}
                 <img src="{{lookup @root.config.SIN_ICON_PATHS system.sinType}}" width="14" height="14" alt="{{system.sinType}}" class="sin-type-icon">
               {{/if}}
-              {{#if isBasic}}
+              {{#unless isEgo}}
                 <span class="skill-level-badge">Lv{{system.level}}</span>
-              {{/if}}
+              {{/unless}}
               {{#if isEgo}}
                 <span class="skill-level-badge">{{system.egoDiceRating}}</span>
               {{/if}}
             </div>
           {{/if}}
 
-          {{!-- 加重值（非守备技能） --}}
-          {{#unless isDefense}}
-            <div class="weight-row">
-              {{#if (and isEditable (not isLocked))}}
-                <label class="skill-field-label">加重值</label>
-                <input type="number" name="system.weight" value="{{system.weight}}" class="weight-input" min="0" max="8" style="width:45px"/>
-              {{else}}
-                {{#each weightSquares}}
-                  <span class="weight-sq" title="加重值"></span>
-                {{/each}}
+        {{!-- 攻击容量（守备技能也有：可拼点反击等能打出多次伤害） --}}
+          <div class="weight-row">
+            {{#if (and isEditable (not isLocked))}}
+              <label class="skill-field-label">攻击容量</label>
+              <input type="number" name="{{fp}}weight" value="{{form.weight}}" class="weight-input" min="0" max="8" style="width:45px"/>
+              {{!-- 攻击容量 ≥ 2 才出现：扩散方式 + 范围（以格为半径） --}}
+              <span class="spread-box{{#if showSpread}} on{{/if}}">
+                {{!-- 这两个控件不参与表单提交（不写 name），改由 JS 直接 update，
+                      免得和骰数公式那套重写逻辑抢同一次提交 --}}
+                <select class="equip-subtype-sel spread-mode-sel">
+                  <option value="chain" {{#eq system.spreadMode "chain"}}selected{{/eq}}>链式扩散</option>
+                  <option value="spray" {{#eq system.spreadMode "spray"}}selected{{/eq}}>广域乱射</option>
+                </select>
+                <input type="number" value="{{system.spreadRange}}"
+                       class="weight-input spread-range-input" min="1" max="6" style="width:38px"
+                       title="扩散范围（格）"/>
+                <span class="spread-ft">{{spreadFt}}</span>
+              </span>
+            {{else}}
+              {{#each weightSquares}}
+                <span class="weight-sq" title="攻击容量"></span>
+              {{/each}}
+              {{#if showSpread}}
+                <span class="spread-badge">{{spreadModeLabel}} · {{spreadFt}}</span>
               {{/if}}
-            </div>
-          {{/unless}}
+            {{/if}}
+          </div>
 
         </div>{{!-- /equip-info-col --}}
       </div>{{!-- /equip-header --}}
@@ -204,11 +240,11 @@
 
         {{!-- 理智消耗 --}}
         <div class="ego-row-wrap">
-          <span class="ego-row-label">理智消耗</span>
+          <span class="ego-row-label">理智消耗<span class="ego-form-tag">[{{egoFormLabel}}]</span></span>
           {{#if (and isEditable (not isLocked))}}
-            <input type="number" name="system.sanityCost" value="{{system.sanityCost}}" class="weight-input" min="0" style="width:50px"/>
+            <input type="number" name="{{fp}}sanityCost" value="{{form.sanityCost}}" class="weight-input" min="0" style="width:50px"/>
           {{else}}
-            <span class="ego-sanity-val">{{#if system.sanityCost}}-{{system.sanityCost}}{{else}}—{{/if}}</span>
+            <span class="ego-sanity-val">{{#if form.sanityCost}}-{{form.sanityCost}}{{else}}—{{/if}}</span>
           {{/if}}
         </div>
 
@@ -263,9 +299,13 @@
       {{!-- ── 描述区 ──────────────────────────────────────────────── --}}
       <div class="item-desc-block">
         {{#if (and isEditable (not isLocked))}}
-          {{editor system.effectDesc target="system.effectDesc" button=false editable=true engine="prosemirror"}}
+          {{#if isCorrode}}
+            {{editor form.effectDesc target="system.corrode.effectDesc" button=false editable=true engine="prosemirror"}}
+          {{else}}
+            {{editor form.effectDesc target="system.effectDesc" button=false editable=true engine="prosemirror"}}
+          {{/if}}
         {{else}}
-          <div class="item-desc-display">{{{linkify system.effectDesc}}}</div>
+          <div class="item-desc-display">{{{linkify form.effectDesc}}}</div>
         {{/if}}
       </div>
 

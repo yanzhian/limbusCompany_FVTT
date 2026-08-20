@@ -181,9 +181,19 @@ export class ClashManager {
    */
   static _showDiceEach(entries = []) {
     if (!game.dice3d) return entries.map(() => Promise.resolve());
-    return entries.map(e => e?.roll
-      ? game.dice3d.showForRoll(e.roll, ClashManager._diceUserFor(e.actor), true, null, false).catch(() => {})
-      : Promise.resolve());
+    return entries.map(e => {
+      // 只有真正的 Roll 才喂给 DiceSoNice——委托 GM 结算时防守骰可能只是
+      // 一个 { total } 的替身对象，丢进去会在 DiceNotation 里炸
+      const roll = e?.roll;
+      if (!roll || !Array.isArray(roll.dice)) return Promise.resolve();
+      try {
+        return game.dice3d.showForRoll(roll, ClashManager._diceUserFor(e.actor), true, null, false)
+          .catch(() => {});
+      } catch (err) {
+        console.warn("[ClashManager] DiceSoNice 播放失败，已跳过:", err);
+        return Promise.resolve();
+      }
+    });
   }
 
   static _skillFrameIcon(item) {
@@ -253,15 +263,16 @@ export class ClashManager {
    * 安全更新文档：若当前用户无权限，通过 socket 委托 GM 执行。
    * 用于跨所有权的 Actor/Item 更新（如攻击方客户端更新防御方 Actor/Item）。
    */
-  static async _safeDocUpdate(doc, data) {
+  static async _safeDocUpdate(doc, data, options = {}) {
     if (!doc) return;
     if (doc.canUserModify?.(game.user, "update")) {
-      return doc.update(data);
+      return doc.update(data, options);
     }
     game.socket?.emit("system.limbusCompany_FVTT", {
       type: "gmDocUpdate",
       uuid: doc.uuid,
       data,
+      options,
     });
   }
 
@@ -375,6 +386,33 @@ export class ClashManager {
 
   /** 将 BUFF 类型键转换为中文显示名称。 */
   /** 返回 actor 装备格中所有已装入的物品（slot0–slot8）。 */
+  /**
+   * 「已装备」前置的匹配：名称 / 标签 / 分类三个筛选条件都是可选的，
+   * 填了的才检查，多个同时填则需全部命中（AND）。
+   * @param {Item}   item 装备格里的物品
+   * @param {object} pre  { equipName, equipTag, equipCategory }
+   */
+  static _matchEquipFilter(item, pre) {
+    if (!item) return false;
+    const name = String(pre?.equipName ?? "").trim();
+    const tag  = String(pre?.equipTag ?? "").trim();
+    const cat  = String(pre?.equipCategory ?? "").trim();
+    if (name && item.name !== name) return false;
+    if (cat  && String(item.system?.category ?? "").trim() !== cat) return false;
+    if (tag) {
+      const tags = String(item.system?.tags ?? "").split("/").map(t => t.trim()).filter(Boolean);
+      if (!tags.includes(tag)) return false;
+    }
+    // 三个都没填 = 只要装备格里有东西就算
+    return true;
+  }
+
+  /** 该角色装备格里符合条件的装备件数 */
+  static _countEquipped(actor, pre) {
+    return ClashManager._getEquippedItems(actor)
+      .filter(it => ClashManager._matchEquipFilter(it, pre)).length;
+  }
+
   static _getEquippedItems(actor) {
     if (!actor) return [];
     const eq = actor.system?.equipment ?? {};
@@ -513,7 +551,11 @@ export class ClashManager {
     const buffs = foundry.utils.deepClone(actor.system?.buffs ?? []);
 
     // 查询自定义 BUFF 处理器（maxStacks / refreshOnGain）
-    const customHandler = CustomBuffRegistry.get(type);
+    // 注意：效果编辑器里的自定义 BUFF 是以中文名当 type 传进来的（如 "怨恨纹身"），
+    // 只按 type 精确查注册表会查不到，导致 maxStacks / maxGainPerRound 形同虚设。
+    // 这里补一次按显示名的回退匹配。
+    const customHandler = CustomBuffRegistry.get(type)
+      ?? resolveBuffHandler({ type, name: ClashManager._buffLabel(type) });
     const maxStacks     = customHandler?.maxStacks ?? Infinity;
     const refreshOnGain = customHandler?.refreshOnGain ?? false;
 
@@ -905,7 +947,8 @@ export class ClashManager {
    * @param {string} targetType
    * @param {Actor|null} owner
    * @param {Actor|null} other
-   * @param {{targetTag?:string, targetTagCount?:number}} [meta]  target==="bgTag" 时使用
+   * @param {{targetTag?:string, targetTagCount?:number, targetTagMax?:number}} [meta]
+   *        target==="bgTag" 时使用；targetTagMax=0 表示人数不限
    */
   static async _resolveTargets(targetType, owner, other, meta = {}) {
     if (targetType === "self")   return owner ? [owner] : [];
@@ -922,6 +965,12 @@ export class ClashManager {
     const foeIds   = inTeam1 ? team2Ids : inTeam2 ? team1Ids : [];
     const toActors = ids => ids.map(id => game.actors.get(id)).filter(Boolean);
 
+    // 至多人数：0 = 不限；超出时随机抽 N 人——战场本来就乱，谁被顾上是随机的
+    const capMulti = (list) => {
+      const maxN = Math.max(0, meta?.targetTagMax ?? 0);
+      return maxN > 0 ? ClashManager._pickRandom(list, maxN) : list;
+    };
+
     if (targetType === "bgTag" || targetType === "bgTagOther") {
       // 背景标签：本队中"背景带有该标签"的角色数量 ≥ targetTagCount 时，
       // 这些角色均视为合法目标；数量不足则视为无目标（效果不生效）。
@@ -929,8 +978,10 @@ export class ClashManager {
       // "数量≥N"这个门槛也是排除自己之后、剩下的其他带标签队友数量来判定——
       // 如"为其他背景标签为X的友方（至少2个）恢复…"，指的是"除自己外还有
       // ≥2 个带该标签的队友"。
+      // targetTagMax：最多对几人生效，0 = 不限；超出时按队伍顺序取前 N 人
       const tagName = (meta?.targetTag ?? "").trim();
       const minCount = Math.max(1, meta?.targetTagCount ?? 1);
+      const maxCount = Math.max(0, meta?.targetTagMax ?? 0);
       if (!tagName) return [];
       const poolIds = myIds.length ? myIds : (ownerId ? [ownerId] : []);
       const filteredIds = targetType === "bgTagOther" ? poolIds.filter(id => id !== ownerId) : poolIds;
@@ -940,16 +991,32 @@ export class ClashManager {
         const tags = await ClashManager._getBackgroundTags(actor);
         if (tags.includes(tagName)) matched.push(actor);
       }
-      return matched.length >= minCount ? matched : [];
+      if (matched.length < minCount) return [];
+      return maxCount > 0 ? ClashManager._pickRandom(matched, maxCount) : matched;
     }
 
     switch (targetType) {
-      case "allTeam":       return toActors(myIds);
-      case "allTeamOther":  return toActors(myIds.filter(id => id !== ownerId));
-      case "allEnemy":      return toActors(foeIds);
-      case "allEnemyOther": return toActors(foeIds.filter(id => id !== ownerId));
+      // 群体目标同样支持「至多人数」上限（0 = 不限，超出时按队伍顺序取前 N 人）
+      case "allTeam":       return capMulti(toActors(myIds));
+      case "allTeamOther":  return capMulti(toActors(myIds.filter(id => id !== ownerId)));
+      case "allEnemy":      return capMulti(toActors(foeIds));
+      case "allEnemyOther": return capMulti(toActors(foeIds.filter(id => id !== ownerId)));
       default:              return other ? [other] : [];
     }
+  }
+
+  /**
+   * 从候选里随机抽 n 个（Fisher-Yates 洗牌后取前 n）。
+   * n ≥ 候选数时原样返回。
+   */
+  static _pickRandom(list, n) {
+    if (!Array.isArray(list) || n >= list.length) return list;
+    const pool = [...list];
+    for (let i = pool.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [pool[i], pool[j]] = [pool[j], pool[i]];
+    }
+    return pool.slice(0, n);
   }
 
   /** 解析角色背景物品的标签数组（"/" 分隔），解析失败返回空数组 */
@@ -1003,6 +1070,8 @@ export class ClashManager {
         : (act.precondition ? [act.precondition] : []);
       let precondFail = false;
       // 每类前置条件按 floor(层数/N) 计算倍数，传递给后续效果（与 cost.type==="perStack" 共用倍数变量）
+      // 多个「每」前置是 AND 关系：都要满足才触发，倍数取其中最小的那个
+      const perMultipliers = [];
       let precondMultiplier = 1;
       for (const pre of preconditions) {
         if (!pre) continue;
@@ -1028,12 +1097,29 @@ export class ClashManager {
           continue;
         }
 
-        // ── level 类型：检查"本次由 owner 实际使用的技能"的等级（1/2/3）──
-        // 与 category/useSkill 同理，优先取 ctx._currentItemId 指向的实际使用技能。
+        // ── level 类型（旧数据）：已并入 useSkill 的"等级"字段，保留兼容。
+        // 编辑器打开旧数据时会自动转成 useSkill，存一次就不再走这里。
         if (pre.type === "level") {
           const actingItem = (owner?.items?.get?.(ctx._currentItemId ?? "")) ?? item;
           const lvl = actingItem?.system?.level ?? 0;
           if (!ClashManager._cmp(lvl, pre.comparison ?? "eq", pre.level ?? 1)) { precondFail = true; break; }
+          continue;
+        }
+
+        // ── equipped 类型：检查装备格里符合条件的装备件数 ───────────────
+        // 名称/标签/分类三个筛选可任意组合；"每 N 件"模式下件数还会变成后续
+        // 效果的倍数（与 perN 共用 precondMultiplier）。
+        if (pre.type === "equipped") {
+          const precTgt = (pre.target ?? "self") === "self" ? owner : other;
+          if (!precTgt) { precondFail = true; break; }
+          const have = ClashManager._countEquipped(precTgt, pre);
+          const need = Math.max(1, pre.count ?? 1);
+          if (have < need) { precondFail = true; break; }
+          if (pre.perEach) {
+            let times = Math.floor(have / need);
+            if ((pre.maxTimes ?? 0) > 0) times = Math.min(times, pre.maxTimes);
+            perMultipliers.push(times);
+          }
           continue;
         }
 
@@ -1088,7 +1174,13 @@ export class ClashManager {
           if (haveVal < n) { precondFail = true; break; }
           let times = Math.floor(haveVal / n);
           if ((pre.maxTimes ?? 0) > 0) times = Math.min(times, pre.maxTimes);
-          precondMultiplier *= times;
+          perMultipliers.push(times);
+        } else if (pre.type === "noBuff") {
+          // 【未拥有】：【拥有】的反面——目标满足"拥有"的条件时本条不成立
+          const has = !!buff
+            && !((pre.intensity ?? 0) > 0 && (buff.intensity ?? 0) < pre.intensity)
+            && !((pre.stacks    ?? 0) > 0 && (buff.stacks    ?? 0) < pre.stacks);
+          if (has) { precondFail = true; break; }
         } else {
           // 【拥有】（默认）：达到指定强度/层数阈值即满足
           if (!buff) { precondFail = true; break; }
@@ -1097,6 +1189,7 @@ export class ClashManager {
         }
       }
       if (precondFail) continue;
+      if (perMultipliers.length) precondMultiplier = Math.min(...perMultipliers);
 
       // ── 消耗（cost） ─────────────────────────────────────────────────
       // 兼容 V1（单对象 cost）和 V2（数组 costs）
@@ -1105,6 +1198,15 @@ export class ClashManager {
 
       // 强制消耗：先校验资源是否充足，不足则跳过整条 Activity
       let forcedFail = false;
+      // 丢弃消耗的预检查要按顺序模拟：两条【丢弃 Lv.1】不能靠同一张牌都判过。
+      // 同时冻结"宣言时"的槽位快照——本次结算只认宣言那一刻的激活槽，
+      // 中途补位顶上来的牌不会被后面的丢弃消耗吃掉。
+      let discardSim = null;
+      // 宣言时可被丢弃的槽位下标（激活槽 0/1 + 预备槽 2）。牌是会重复的，
+      // 光记 id 认不出"补位顶上来的那张恰好同名"，所以按位置跟踪：
+      // 每丢掉一格，右边的下标整体 -1，尾部补进来的新牌永远不在表里。
+      let declaredIdx = [0, 1, 2];
+      let declaredIdxExec = [0, 1, 2];
       for (const cost of costs) {
         if (!cost) continue;
         if (cost.type === "attribute") {
@@ -1121,26 +1223,19 @@ export class ClashManager {
             if (have < need) { forcedFail = true; break; }
           }
         } else if (cost.type === "discard") {
-          // 验证丢弃目标是否存在于战斗槽
-          const ownerSheet = owner?.sheet;
-          const bagState = ownerSheet?._combatBagState;
+          // 验证丢弃目标是否存在于战斗槽（按顺序模拟，前一条丢掉的牌不能再被后一条算上）
+          const bagState = owner?.sheet?._combatBagState;
           if (!bagState) { forcedFail = true; break; }
-          const mode = cost.discardMode ?? "level";
-          if (mode === "level") {
-            const level = cost.discardLevel ?? 1;
-            const found = [0, 1].some(i => {
-              const id = bagState.slots[i];
-              if (!id) return false;
-              const sk = owner.items.get(id);
-              return sk && (sk.system?.level ?? 1) === level;
-            });
-            if (!found) { forcedFail = true; break; }
-          } else if (mode === "another") {
-            const currentId = ctx._currentItemId ?? "";
-            const found = [0, 1].some(i => bagState.slots[i] && bagState.slots[i] !== currentId);
-            if (!found) { forcedFail = true; break; }
-          } else if (mode === "reserve") {
-            if (!bagState.slots[2]) { forcedFail = true; break; }
+          if (!discardSim) discardSim = { slots: [...bagState.slots], pool: [...(bagState.pool ?? [])] };
+          const selfId = ctx._currentItemId ?? item?.id ?? "";
+          const idxs = ClashManager._findDiscardSlots(owner, discardSim.slots, cost, selfId, declaredIdx);
+          if (!idxs.length) { forcedFail = true; break; }
+          // 模拟丢弃：从后往前删，每删一张就在尾部补一张
+          //（预备池空了则补一张未知牌，不参与等级判定）
+          for (const idx of [...idxs].reverse()) {
+            discardSim.slots.splice(idx, 1);
+            discardSim.slots.push(discardSim.pool.shift() ?? null);
+            declaredIdx = ClashManager._shiftDeclaredIdx(declaredIdx, idx);
           }
         } else if (cost.target === "field" && (cost.type === "forced" || cost.type === "perStack")) {
           // 公用场地：层数不足（每N层的 N）则跳过整条 Activity
@@ -1153,35 +1248,78 @@ export class ClashManager {
           const have = SinResourceHUD.getSinValue(cost.sinType);
           if (have < Math.max(1, cost.value ?? 1)) { forcedFail = true; break; }
         } else if (cost.buff && (cost.type === "forced" || cost.type === "perStack")) {
-          // 强制消耗 / 每：数值不足（每N的 N，维度可选层数/强度）则跳过整条 Activity
+          // 强制消耗 / 每：数值不足则跳过整条 Activity
+          // ·【每】：只看一个维度（perNDim），门槛是每 N 的那个 N
+          // ·【强制消耗】：层数与强度分别校验——填了哪个就要够哪个
           const costBuffType = cost.buff === "custom" ? (cost.buffCustom || "custom") : cost.buff;
-          const costDim = cost.type === "perStack" && cost.perNDim === "intensity" ? "intensity" : "stacks";
           const costTgts = await ClashManager._resolveTargets(cost.target ?? "self", owner, other, cost);
           if (costTgts.length === 0) { forcedFail = true; break; }
           for (const tgt of costTgts) {
             const existing = ClashManager._getBuff(tgt, costBuffType);
-            const haveVal  = costDim === "intensity" ? (existing?.intensity ?? 0) : (existing?.stacks ?? 0);
-            if (haveVal < Math.max(1, cost.stacks ?? 1)) { forcedFail = true; break; }
+            const haveS = existing?.stacks    ?? 0;
+            const haveI = existing?.intensity ?? 0;
+            if (cost.type === "perStack") {
+              const haveVal = cost.perNDim === "intensity" ? haveI : haveS;
+              if (haveVal < Math.max(1, cost.stacks ?? 1)) { forcedFail = true; break; }
+            } else {
+              const needS = cost.stacks    ?? 0;
+              const needI = cost.intensity ?? 0;
+              // 两个都没填时按老规矩当作"扣 1 层"
+              if (!needS && !needI) { if (haveS < 1) { forcedFail = true; break; } }
+              if (needS > 0 && haveS < needS) { forcedFail = true; break; }
+              if (needI > 0 && haveI < needI) { forcedFail = true; break; }
+            }
           }
         }
         if (forcedFail) break;
       }
       if (forcedFail) continue;
 
-      // 倍数默认取自每前置条件计算结果；若另有 perStack 消耗，会在下方覆盖为实际消耗层数
+      // 倍数默认取自「每」前置条件；若另有 perStack 消耗，消耗算出的倍数一并参与，
+      // 全部取最小——前置与消耗都是"必须同时成立"的条件，能跑几倍看最紧的那一个
+      const costMultipliers = [];
       let perStackMultiplier = precondMultiplier;
       let _discardedItemId = null;
       for (const cost of costs) {
         if (!cost) continue;
-        if (cost.type === "discard") {
+        if (cost.type === "random") {
+          // 随机消耗：从候选池中随机抽一条可支付的候选来扣（每条候选各自指定 BUFF 与维度：层/级）
+          // 例：随机消耗 1 层 或 1 级【生蝶·亡蝶】= 两条候选，同 BUFF、维度分别为 stacks / intensity。
+          // 非强制：候选全都不足时整条消耗直接跳过，不阻断 Activity（与旧「可选消耗」一致）。
+          const pool = Array.isArray(cost.randomPool) ? cost.randomPool.filter(e => e?.buff) : [];
+          if (!pool.length) continue;
+          const costTgts = await ClashManager._resolveTargets(cost.target ?? "self", owner, other, cost);
+          for (const tgt of costTgts) {
+            const affordable = pool.filter(e => {
+              const type     = e.buff === "custom" ? (e.buffCustom || "custom") : e.buff;
+              const existing = ClashManager._getBuff(tgt, type);
+              const have     = e.dim === "intensity" ? (existing?.intensity ?? 0) : (existing?.stacks ?? 0);
+              return have >= Math.max(1, e.amount ?? 1);
+            });
+            if (!affordable.length) continue;
+            const pick     = affordable[Math.floor(Math.random() * affordable.length)];
+            const pickType = pick.buff === "custom" ? (pick.buffCustom || "custom") : pick.buff;
+            const amount   = Math.max(1, pick.amount ?? 1);
+            if (pick.dim === "intensity") {
+              await ClashManager._reduceBuffIntensity(tgt, pickType, amount);
+            } else {
+              await ClashManager._reduceBuffStacks(tgt, pickType, amount);
+            }
+          }
+        } else if (cost.type === "discard") {
           const ownerSheet = owner?.sheet;
           if (ownerSheet?._discardCombatSkill) {
             const mode  = cost.discardMode ?? "level";
             const level = cost.discardLevel ?? 1;
             const currentId = ctx._currentItemId ?? item?.id ?? "";
-            const { discardedId } = await ownerSheet._discardCombatSkill(mode, level, currentId);
+            const { discardedIds = [], slotIndices = [] } =
+              await ownerSheet._discardCombatSkill(mode, level, currentId, declaredIdxExec);
+            for (const idx of [...slotIndices].reverse()) {
+              declaredIdxExec = ClashManager._shiftDeclaredIdx(declaredIdxExec, idx);
+            }
+            const discardedId = discardedIds[0] ?? null;
             _discardedItemId = discardedId;
-            // 触发被丢弃技能的【丢弃时】活动
+            // 触发被丢弃技能的【丢弃时】活动——两张一起丢时也只触发一次
             if (discardedId) {
               const discardedItem = owner.items.get(discardedId);
               if (discardedItem) {
@@ -1217,12 +1355,14 @@ export class ClashManager {
             // 每：与前置条件的"每"一致——维度可选层数（默认，向下兼容旧数据）或强度，
             // 每 N 为 1 倍，倍数 = floor(数值/N)，可选最大倍数上限（maxTimes，0=无限），
             // 只消耗 倍数×N（如"每消耗4级【呼吸法】"应选强度维度）
-            const tgt = costTgts[0];
-            if (tgt) {
-              const dim      = cost.perNDim === "intensity" ? "intensity" : "stacks";
+            // 群体目标时逐个扣（与预检查"人人都要够"保持一致），
+            // 倍数取所有目标里最小的那个——扣得最少的人决定这次能跑几倍
+            const dim = cost.perNDim === "intensity" ? "intensity" : "stacks";
+            const n   = Math.max(1, cost.stacks ?? 1);
+            const each = [];
+            for (const tgt of costTgts) {
               const existing = ClashManager._getBuff(tgt, costBuffType);
               const have     = dim === "intensity" ? (existing?.intensity ?? 0) : (existing?.stacks ?? 0);
-              const n        = Math.max(1, cost.stacks ?? 1);
               let   times    = Math.floor(have / n);
               if ((cost.maxTimes ?? 0) > 0) times = Math.min(times, cost.maxTimes);
               if (dim === "intensity") {
@@ -1230,11 +1370,17 @@ export class ClashManager {
               } else {
                 await ClashManager._reduceBuffStacks(tgt, costBuffType, times * n);
               }
-              perStackMultiplier = times;
+              each.push(times);
             }
+            if (each.length) costMultipliers.push(Math.min(...each));
           } else if (cost.type !== "none") {
+            // 强制消耗：层数与强度分别扣，填了哪个扣哪个（都没填按扣 1 层）
+            const needS = cost.stacks    ?? 0;
+            const needI = cost.intensity ?? 0;
             for (const tgt of costTgts) {
-              await ClashManager._reduceBuffStacks(tgt, costBuffType, cost.stacks ?? 1);
+              if (needI > 0) await ClashManager._reduceBuffIntensity(tgt, costBuffType, needI);
+              if (needS > 0) await ClashManager._reduceBuffStacks(tgt, costBuffType, needS);
+              if (!needS && !needI) await ClashManager._reduceBuffStacks(tgt, costBuffType, 1);
             }
           }
         } else if (cost.target === "field" && cost.fieldName) {
@@ -1245,7 +1391,7 @@ export class ClashManager {
             let   times = Math.floor(have / n);
             if ((cost.maxTimes ?? 0) > 0) times = Math.min(times, cost.maxTimes);
             await SinResourceHUD.consumeFieldResourceStacks(cost.fieldName, times * n);
-            perStackMultiplier = times;
+            costMultipliers.push(times);
           } else if (cost.type !== "none") {
             await SinResourceHUD.consumeFieldResourceStacks(cost.fieldName, cost.stacks ?? 1);
           }
@@ -1260,12 +1406,16 @@ export class ClashManager {
             let   times = Math.floor(have / n);
             if ((cost.maxTimes ?? 0) > 0) times = Math.min(times, cost.maxTimes);
             await consume(times * n);
-            perStackMultiplier = times;
+            costMultipliers.push(times);
           } else if (cost.type !== "none") {
             const need = cost.value ?? 1;
             if (SinResourceHUD.getSinValue(cost.sinType) >= need) await consume(need);
           }
         }
+      }
+
+      if (costMultipliers.length) {
+        perStackMultiplier = Math.min(precondMultiplier, ...costMultipliers);
       }
 
       // ── 效果（effects）────────────────────────────────────────────────
@@ -1275,7 +1425,7 @@ export class ClashManager {
 
       for (const eff of effects) {
         if (!eff?.type) continue;
-        // 连击的第 2 次交锋起：改写技能本身的效果（骰数/面数/基础值/加重值/
+        // 连击的第 2 次交锋起：改写技能本身的效果（骰数/面数/基础值/攻击容量/
         // 骰子类型）不再重复执行，否则每交锋一次就再加一遍，3d 会滚成 6d
         if (ctx._comboRound > 1 && ClashManager.COMBO_ONCE_EFFECTS.has(eff.type)) continue;
         const effTgts = await ClashManager._resolveTargets(eff.target ?? "self", owner, other, eff);
@@ -1284,8 +1434,8 @@ export class ClashManager {
         for (const effTgt of effTgts) {
 
         // BUFF 型效果用 intensity/stacks；数值型效果用 value
-        // 若存在每前置条件/消耗，stacks 和 数值型 val 均乘以倍数
-        const intensity = Number(eff.intensity ?? eff.value ?? 1);
+        // 「每」的倍数对强度与层数一视同仁（两者都只是计数），数值型 val 同样放大
+        const intensity = Number(eff.intensity ?? eff.value ?? 1) * perStackMultiplier;
         const stacks    = Number(eff.stacks    ?? 1) * perStackMultiplier;
         const buffType  = eff.buff === "custom" ? (eff.buffCustom || "custom") : (eff.buff || "");
         // 数值型效果（非BUFF）的 perN 倍数：绝对值模式不放大，相对值模式放大
@@ -1380,10 +1530,11 @@ export class ClashManager {
             const val = _scaleVal(rawVal, mode);
             const cur = item.system?.weight ?? 0;
             const nv  = mode === "absolute" ? Math.max(0, val) : Math.max(0, cur + val);
+            await ClashManager._stashItemMod(item, "system.weight");
             await ClashManager._safeDocUpdate(item, { "system.weight": nv });
             descStr = mode === "absolute"
-              ? `【${item.name}】加重值 调整为 ${nv}`
-              : `【${item.name}】加重值 ${val >= 0 ? "+" : ""}${val}（${cur} → ${nv}）`;
+              ? `【${item.name}】攻击容量 调整为 ${nv}`
+              : `【${item.name}】攻击容量 ${val >= 0 ? "+" : ""}${val}（${cur} → ${nv}）`;
             break;
           }
           case "diceAdj": {
@@ -1392,6 +1543,7 @@ export class ClashManager {
             const val = _scaleVal(rawVal, mode);
             const cur = item.system?.diceCount ?? 1;
             const nv  = mode === "absolute" ? Math.max(1, val) : Math.max(1, cur + val);
+            await ClashManager._stashItemMod(item, "system.diceCount");
             await ClashManager._safeDocUpdate(item, { "system.diceCount": nv });
             descStr = mode === "absolute"
               ? `【${item.name}】骰数 调整为 ${nv}d`
@@ -1404,6 +1556,7 @@ export class ClashManager {
             const val = _scaleVal(rawVal, mode);
             const cur = item.system?.diceFaces ?? 4;
             const nv  = mode === "absolute" ? Math.max(2, val) : Math.max(2, cur + val);
+            await ClashManager._stashItemMod(item, "system.diceFaces");
             await ClashManager._safeDocUpdate(item, { "system.diceFaces": nv });
             descStr = mode === "absolute"
               ? `【${item.name}】面数 d${cur} → d${nv}`
@@ -1416,6 +1569,7 @@ export class ClashManager {
             const val = _scaleVal(rawVal, mode);
             const cur = item.system?.baseValue ?? 0;
             const nv  = mode === "absolute" ? val : cur + val;
+            await ClashManager._stashItemMod(item, "system.baseValue");
             await ClashManager._safeDocUpdate(item, { "system.baseValue": nv });
             descStr = mode === "absolute"
               ? `【${item.name}】基础值 调整为 ${nv}`
@@ -1564,6 +1718,7 @@ export class ClashManager {
           case "diceTypeChg": {
             const newDiceType = eff.diceTypeVal ?? "normal";
             if (item) {
+              await ClashManager._stashItemMod(item, "system.diceType");
               await ClashManager._safeDocUpdate(item, { "system.diceType": newDiceType });
               const label = newDiceType === "unbreakable" ? "不可摧毁" : "一般骰子";
               descStr = `【${item.name}】骰子类型变更为【${label}】`;
@@ -1572,8 +1727,8 @@ export class ClashManager {
           }
           case "relatedSkillConvert": {
             // 相关技能转换：将"本骰"（item）永久替换为角色背包/技能列表中按名字检索到的技能。
-            // 旧版"随机/指定序号"（走 item.system.relatedSkill.pool 这个 UUID 池，需要互相
-            // 套娃预先配置）已移除，改为直接按名字检索已拥有的技能，无需任何预配置，
+            // 旧版"随机/指定序号"（需要在技能上预先配置一个 UUID 池、互相套娃）已移除，
+            // 改为直接按名字检索已拥有的技能，无需任何预配置，
             // 也不受合集包提取后 UUID 变化的影响。
             const relOwner = item?.parent ?? owner;
             if (!relOwner || !item) { descStr = "相关技能转换：找不到所属角色"; break; }
@@ -1797,7 +1952,7 @@ export class ClashManager {
     if (t === "hpAdj")    { const v = eff.value ?? eff.intensity ?? 0; return `${tgt}生命值 ${v >= 0 ? "+" : ""}${v}`; }
     if (t === "sanityAdj"){ const v = eff.value ?? eff.intensity ?? 0; return `${tgt}理智 ${v >= 0 ? "+" : ""}${v}`; }
     if (t === "apAdj")       { const v = eff.value ?? eff.intensity ?? 0; return `${tgt}行动值 ${v >= 0 ? "+" : ""}${v}`; }
-    if (t === "weightAdj")   { const v = eff.value ?? eff.intensity ?? 0; return `技能加重值 ${v >= 0 ? "+" : ""}${v}`; }
+    if (t === "weightAdj")   { const v = eff.value ?? eff.intensity ?? 0; return `技能攻击容量 ${v >= 0 ? "+" : ""}${v}`; }
     if (t === "diceAdj")     { const v = eff.value ?? eff.intensity ?? 0; return `技能骰数 ${v >= 0 ? "+" : ""}${v}`; }
     if (t === "diceFacesAdj"){ const v = eff.value ?? eff.intensity ?? 0; return `技能面数 → d${v}`; }
     if (t === "baseValue")   { const v = eff.value ?? eff.intensity ?? 0; return `技能基础值 ${v >= 0 ? "+" : ""}${v}`; }
@@ -1883,16 +2038,16 @@ export class ClashManager {
     if (isEgo) {
       const sinCost    = sys.sinCost    ?? [];
       const sanityCost = sys.sanityCost ?? 0;
-      // 恐慌时：罪孽资源 ×1.5，理智消耗豁免
-      const effectiveSinCost      = isInPanic ? sinCost.map(e => ({ ...e, amount: Math.ceil(e.amount * 1.5) })) : sinCost;
-      const effectiveSanityCost   = isInPanic ? 0 : sanityCost;
+      // 罪孽消耗两形态共用；理智消耗已按形态投影在 sys.sanityCost 上。
+      // 没配置侵蚀形态的旧 EGO 沿用老规矩：恐慌时免理智。
+      const hasCorrode            = ClashManager._hasCorrodeForm(sys);
+      const effectiveSinCost      = sinCost;
+      const effectiveSanityCost   = (isInPanic && !hasCorrode) ? 0 : sanityCost;
       const sinParts   = effectiveSinCost.map(({ sinType, amount }) => {
         const icon     = cfg.SIN_ICON_PATHS?.[sinType] ?? "";
         const cur      = SinResourceHUD.getSins()[sinType] ?? 0;
         const ok       = cur >= amount;
-        const origAmt  = sinCost.find(e => e.sinType === sinType)?.amount ?? amount;
-        const suffix   = isInPanic && amount !== origAmt
-          ? `<span style="font-size:.65rem;color:#E88844;"> ×1.5</span>` : "";
+        const suffix   = "";
         return `<span style="display:inline-flex;align-items:center;gap:3px;margin-right:6px;
                               color:${ok ? "#C89E70" : "#E84444"};">
           ${icon ? `<img src="${icon}" style="width:16px;height:16px;border-radius:50%;vertical-align:middle;">` : ""}
@@ -1909,7 +2064,8 @@ export class ClashManager {
              </span>`
           : "";
       const panicNote = isInPanic
-        ? `<div style="font-size:.7rem;color:#E8A444;margin-bottom:4px;">【陷入恐慌】罪孽消耗 ×1.5，侵蚀状态</div>`
+        ? `<div style="font-size:.7rem;color:#E8A444;margin-bottom:4px;">【陷入恐慌】E.G.O 进入【侵蚀】形态${
+            hasCorrode ? "" : "（本 E.G.O 未设定侵蚀数据，沿用觉醒形态并免除理智消耗）"}</div>`
         : "";
       if (panicNote || sinParts || sanPart) {
         egoCostHtml = `<div style="margin-bottom:10px;padding:6px 8px;border-radius:3px;
@@ -1950,12 +2106,10 @@ export class ClashManager {
 
               // ── EGO 前置检查：罪孽资源 + 理智（恐慌时罪孽×1.5、免理智）──
               if (isEgo) {
-                const sinCost         = sys.sinCost ?? [];
                 const sanityCost      = sys.sanityCost ?? 0;
-                const effectiveSinCost = isInPanic
-                  ? sinCost.map(e => ({ ...e, amount: Math.ceil(e.amount * 1.5) }))
-                  : sinCost;
-                const effectiveSanityCost = isInPanic ? 0 : sanityCost;
+                const effectiveSinCost = sys.sinCost ?? [];
+                const effectiveSanityCost =
+                  (isInPanic && !ClashManager._hasCorrodeForm(sys)) ? 0 : sanityCost;
                 if (!SinResourceHUD.canAffordSins(effectiveSinCost)) {
                   ui.notifications.warn("罪孽资源不足，无法使用此 EGO 技能！");
                   resolve(false);
@@ -2065,6 +2219,154 @@ export class ClashManager {
       const sheet = actor.sheet;
       if (sheet?._combatBagState) sheet._animateCombatSkillUse?.(slotIndex);
     }
+
+    // 【援护防御】：被锁定的目标行动值为 0 时，问问队友要不要顶上来
+    await ClashManager._offerCoverDefense(msg?.id ?? "", msg?.flags?.limbusCompany_FVTT ?? {});
+  }
+
+  /* ─── 【援护防御】：替队友接下这次对抗 ─────────────────────────────────
+     指定了目标、且该目标行动值为 0（自己已经无法再接下任何一次拼点失败）时，
+     持有【援护防御】的队友可以消耗 1 层，用背包里标了【援护防御】的专属技能
+     顶上去——挪到攻击者身旁的空位，并把这次对抗的指定目标改成自己。      */
+
+  /** 广播询问（各客户端只处理自己拥有控制权的角色，避免多端重复弹框） */
+  static async _offerCoverDefense(msgId, initFlags) {
+    if (!msgId || !initFlags?.targetActorId) return;
+    game.socket?.emit("system.limbusCompany_FVTT", { type: "coverOffer", msgId, initFlags });
+    await ClashManager._checkCoverDefense(msgId, initFlags);
+  }
+
+  /** 调试日志（控制台里 ClashTotalFX.DEBUG = true 打开） */
+  static _coverLog(...args) {
+    if (globalThis.ClashTotalFX?.DEBUG) {
+      console.log("%c[援护防御]", "color:#6EC1E4;font-weight:bold", ...args);
+    }
+  }
+
+  /**
+   * 这个角色该由本客户端来弹窗吗？
+   * 有在线玩家拥有该角色 → 只让那位玩家弹；否则（NPC/离线）→ 交给 GM。
+   * 不这样分派的话，GM 对所有角色都是 owner，会和玩家各弹一次。
+   */
+  static _shouldPromptFor(actor) {
+    const playerOwners = game.users.filter(u => !u.isGM && u.active
+      && actor.testUserPermission?.(u, "OWNER"));
+    if (playerOwners.length) return !game.user.isGM && actor.isOwner;
+    return game.user.isGM;
+  }
+
+  /** 【援护防御】的 BUFF：按 type 找，找不到再按名字兜底（手动添加成自定义 BUFF 的情况） */
+  static _coverBuffOf(actor) {
+    return (actor?.system?.buffs ?? []).find(b =>
+      (b.type === "coverDefense" || b.name === "援护防御") && b.whenAdded !== "下回合") ?? null;
+  }
+
+  /** 本机检查：自己控制的角色里有谁能援护 */
+  static async _checkCoverDefense(msgId, initFlags) {
+    const target = game.actors.get(initFlags?.targetActorId ?? "");
+    if (!target) { ClashManager._coverLog("没有指定目标，跳过"); return; }
+    // 只有"目标已经扛不住了"才需要援护
+    if ((target.system?.ap?.value ?? 0) > 0) {
+      ClashManager._coverLog(`目标 ${target.name} 行动值 ${target.system?.ap?.value}，无需援护`);
+      return;
+    }
+
+    for (const actor of game.actors.contents) {
+      if (actor.type !== "character") continue;
+      if (actor.id === target.id || actor.id === initFlags.attackerId) continue;
+
+      const buff = ClashManager._coverBuffOf(actor);
+      if (!buff || (buff.stacks ?? 0) <= 0) continue;
+
+      if (!ClashManager._shouldPromptFor(actor)) {
+        ClashManager._coverLog(`${actor.name} 有【援护防御】，但该由其控制者弹窗，本机跳过`);
+        continue;
+      }
+
+      const skills = actor.items.filter(i => i.type === "skill" && i.system?.coverDefense);
+      ClashManager._coverLog(`${actor.name}：${buff.stacks} 层，专属技能 ${skills.length} 个`);
+      if (!skills.length) {
+        ui.notifications?.warn(`${actor.name} 持有【援护防御】，但背包里没有标记为【援护防御】的专属技能`);
+        continue;
+      }
+
+      const picked = await ClashManager._pickCoverSkill(actor, target, skills);
+      if (!picked) continue;
+
+      await ClashManager._performCoverDefense(actor, picked, msgId, initFlags);
+      return;   // 一次对抗只允许一个人顶上
+    }
+  }
+
+  /** 选技能弹窗：列出背包里所有【援护防御】专属技能 */
+  static async _pickCoverSkill(actor, target, skills) {
+    const rows = skills.map(sk => `
+      <label style="display:flex;align-items:center;gap:8px;padding:4px 6px;cursor:pointer;">
+        <input type="radio" name="cover-skill" value="${sk.id}">
+        <img src="${sk.img}" style="width:32px;height:32px;object-fit:cover;border-radius:3px;" alt="">
+        <span style="flex:1;">
+          <span style="color:#E8C9A2;">${sk.name}</span>
+          <span style="color:#9A8462;font-size:.75rem;"> ${(sk.system?.diceFormula ?? "").toUpperCase()}</span>
+        </span>
+      </label>`).join("");
+
+    return new Promise(resolve => {
+      new Dialog({
+        title: "【援护防御】触发",
+        content: `<div class="limbuscompany">
+          <div style="font-size:.85rem;color:#E8C9A2;margin-bottom:6px;">
+            <strong>${target.name}</strong> 行动值已耗尽且被锁定为目标。
+          </div>
+          <div style="font-size:.8rem;color:#9A8462;margin-bottom:8px;">
+            <strong>${actor.name}</strong> 可消耗 1 层【援护防御】顶上去，选择要使用的专属技能：
+          </div>
+          ${rows}
+        </div>`,
+        buttons: {
+          ok: {
+            label: "援护",
+            callback: (html) => {
+              const id = html.find("input[name='cover-skill']:checked").val();
+              resolve(id ? actor.items.get(id) : null);
+            },
+          },
+          cancel: { label: "不援护", callback: () => resolve(null) },
+        },
+        default: "ok",
+        close: () => resolve(null),
+      }).render(true);
+    });
+  }
+
+  /** 消耗层数 → 挪到攻击者身旁 → 改写指定目标 → 打开进行对抗弹窗 */
+  static async _performCoverDefense(actor, skill, msgId, initFlags) {
+    // 按实际存在的 type 扣层（手动添加成自定义 BUFF 时 type 可能不是 coverDefense）
+    const buff = ClashManager._coverBuffOf(actor);
+    await ClashManager._reduceBuffStacks(actor, buff?.type ?? "coverDefense", 1);
+
+    const attacker = game.actors.get(initFlags.attackerId ?? "");
+    if (attacker) await ClashKnockback.moveNextTo(actor, attacker);
+
+    // 强制改写这次对抗的指定目标：后续所有校验都以聊天卡的 flags 为准
+    const newFlags = { ...initFlags, targetActorId: actor.id, coveredForId: initFlags.targetActorId };
+    const msg = game.messages.get(msgId);
+    if (msg) {
+      await ClashManager._safeDocUpdate(msg, {
+        "flags.limbusCompany_FVTT.targetActorId": actor.id,
+        "flags.limbusCompany_FVTT.coveredForId": initFlags.targetActorId,
+      });
+    }
+
+    const covered = game.actors.get(initFlags.targetActorId ?? "");
+    await ClashManager._safeChatCreate({
+      speaker: ChatMessage.getSpeaker({ actor }),
+      content: `<div class="limbuscompany chat-clash">
+        <strong>${actor.name}</strong> 发动【援护防御】，替 <strong>${covered?.name ?? "队友"}</strong>
+        接下这次对抗（使用 <strong>${skill.name}</strong>）。
+      </div>`,
+    });
+
+    await ClashManager.showPerformDialog(actor, skill, msgId, newFlags, -1);
   }
 
   /* ─── 阶段三：进行对抗技能选择弹窗（玩家B） ─────────────────────────── */
@@ -2094,8 +2396,30 @@ export class ClashManager {
       return;
     }
 
-    // 恐慌时只能用 EGO 响应；行动值不再是对抗门槛（它代表可承受的拼点失败次数）
+    // 行动值为 0：再也接不下任何一次拼点失败，因此不能再用普通技能硬拼，
+    // 但仍可以用【守备技能】应战（闪避/格挡/反击等）。
+    // 这只影响"被动应战"这条路——自己回合主动使用技能不看行动值。
+    const apExhausted = (defActor.system?.ap?.value ?? 0) <= 0;
+
+    // 恐慌时只能用 EGO 响应
     const isInPanic = !!ClashManager._getBuff(defActor, "panic");
+
+    // 恐慌 + 行动值为 0：恐慌把可用手段压缩成只剩 E.G.O，而行动值为 0 时对抗
+    // 用不了 E.G.O（只能用守备技能，恐慌又不给用），于是彻底接不下这一击。
+    // 注意：这只卡"被动应战"，自己回合主动出击照样能放 E.G.O。
+    if (isInPanic && apExhausted) {
+      ui.notifications.warn(`【陷入恐慌】${defActor.name} 行动值为 0，无法用 E.G.O 对抗，只能承受伤害！`);
+      return;
+    }
+
+    if (apExhausted) {
+      const defSkillId = defActor.system?.skills?.defense ?? null;
+      if (!defSkillId || !defActor.items.get(defSkillId)) {
+        ui.notifications.warn(`${defActor.name} 行动值为 0 且没有装备守备技能，只能承受伤害`);
+        return;
+      }
+    }
+
     if (isInPanic) {
       const cfg    = CONFIG.LIMBUSCOMPANY ?? {};
       const hasEgo = (cfg.EGO_GRADES ?? []).some(grade => {
@@ -2110,10 +2434,15 @@ export class ClashManager {
 
     ClashManager._buildPickerDialog(defActor, (chosenItem, slotIdx) => {
       ClashManager.showPerformDialog(defActor, chosenItem, msgId, initFlags, slotIdx);
-    }, isInPanic);
+    }, isInPanic, apExhausted);
   }
 
-  static _buildPickerDialog(actor, onPick, panicMode = false) {
+  /**
+   * 技能选择弹窗。
+   * @param {boolean} panicMode     陷入恐慌：只能选 E.G.O
+   * @param {boolean} defenseOnly   行动值为 0：只能选守备技能
+   */
+  static _buildPickerDialog(actor, onPick, panicMode = false, defenseOnly = false) {
     const sheet    = actor.sheet;
     const bagState = sheet?._combatBagState;
     const sys      = actor.system;
@@ -2174,6 +2503,10 @@ export class ClashManager {
       ? `<div style="font-size:.75rem;color:#E8A444;text-align:center;padding:4px 0 6px;font-style:italic;">
            【陷入恐慌】只能使用 E.G.O 技能
          </div>`
+      : defenseOnly
+      ? `<div style="font-size:.75rem;color:#6EC1E4;text-align:center;padding:4px 0 6px;font-style:italic;">
+           行动值为 0：只能使用【守备技能】应战
+         </div>`
       : "";
 
     // 顶部：两个已激活技能 + 守备技能，上下各一条金色渐变分割线
@@ -2181,8 +2514,8 @@ export class ClashManager {
       ${panicNotice}
       ${ClashManager._goldDivider()}
       <div class="clash-pick-row">
-        ${octaSlotHtml(active0, "clash-pick-active", 0, panicMode)}
-        ${octaSlotHtml(active1, "clash-pick-active", 1, panicMode)}
+        ${octaSlotHtml(active0, "clash-pick-active", 0, panicMode || defenseOnly)}
+        ${octaSlotHtml(active1, "clash-pick-active", 1, panicMode || defenseOnly)}
         ${octaSlotHtml(defItem, "", -1, panicMode)}
       </div>
       ${ClashManager._goldDivider()}`;
@@ -2190,8 +2523,10 @@ export class ClashManager {
     // 展开区：6-bag 剩余技能 + EGO 技能，统一按固定 3 列排布。
     // EGO 空等级不渲染（与快捷 HUD 的处理一致）。
     const expandedSlots = [
-      ...restItems.map((it, j) => octaSlotHtml(it, "", 2 + j, panicMode)),
-      ...egoEntries.filter(e => e.item).map(e => circleSlotHtml(e.item, e.grade)),
+      ...restItems.map((it, j) => octaSlotHtml(it, "", 2 + j, panicMode || defenseOnly)),
+      // 行动值为 0 时 E.G.O 也不能用（它不是守备技能）
+      ...egoEntries.filter(e => e.item)
+        .map(e => defenseOnly ? octaSlotHtml(e.item, "", -1, true) : circleSlotHtml(e.item, e.grade)),
     ];
     const expandedHtml = expandedSlots.length ? `
       <div class="clash-pick-expanded" style="display:none;">
@@ -2235,9 +2570,11 @@ export class ClashManager {
           dlg.setPosition({ height: "auto" });
         });
 
-        // 恐慌时禁用槽点击提示
+        // 被禁用的槽：说明为什么点不了
         dlgHtml.on("click", ".clash-pick-disabled", () => {
-          ui.notifications.warn("【陷入恐慌】无法使用基础或守备技能！");
+          ui.notifications.warn(panicMode
+            ? "【陷入恐慌】无法使用基础或守备技能！"
+            : "行动值为 0：只能使用【守备技能】应战");
         });
 
         // 选中技能（携带 slotIdx 供后续推进战斗袋）
@@ -2295,12 +2632,10 @@ export class ClashManager {
             callback: async (dlg) => {
               // ── 防守方使用 EGO 时的前置检查（含恐慌调整）────────────────
               if (isEgo) {
-                const sinCost          = sys.sinCost ?? [];
                 const sanityCost       = sys.sanityCost ?? 0;
-                const effectiveSinCost = isInPanic
-                  ? sinCost.map(e => ({ ...e, amount: Math.ceil(e.amount * 1.5) }))
-                  : sinCost;
-                const effectiveSanityCost = isInPanic ? 0 : sanityCost;
+                const effectiveSinCost = sys.sinCost ?? [];
+                const effectiveSanityCost =
+                  (isInPanic && !ClashManager._hasCorrodeForm(sys)) ? 0 : sanityCost;
                 if (!SinResourceHUD.canAffordSins(effectiveSinCost)) {
                   ui.notifications.warn("罪孽资源不足，无法使用此 EGO 技能！");
                   resolve(false);
@@ -2369,6 +2704,8 @@ export class ClashManager {
         defActorId:   defActor.id,
         defItemId:    defItem.id,
         defRollTotal: defRoll.total,
+        // 带上完整骰子数据，GM 端重建真 Roll 才能播 DiceSoNice
+        defRollData:  (typeof defRoll.toJSON === "function") ? defRoll.toJSON() : null,
         defFormula,
         initMsgId,
         initFlags,
@@ -2522,6 +2859,10 @@ export class ClashManager {
       def: defItem?.system?.diceType ?? "default",
     };
     const _rollsFx = { atk: atkRollFx, def: defRollFx };
+    const _sumParts = (parts) => parts.reduce((a, p) => a + (p.value ?? 0), 0);
+    const _atkEffFx = _sumParts(_atkPartsFx);
+    const _defEffFx = _sumParts(_defPartsFx);
+    const _burstMid = () => ClashVFX.broadcastBurst(ClashVFX.midPoint(atkActor, defActor));
 
     // 反击 / 格挡不是交锋，而是一前一后各骰一次：
     // 【格挡】防守方先出（先挡），【反击】进攻方先出（后反击）；命中的一方带命中声
@@ -2537,11 +2878,31 @@ export class ClashManager {
         startDice: (side) => ClashManager._showDiceEach([
           { roll: _rollsFx[side], actor: side === "atk" ? atkActor : defActor },
         ]),
+        // 各方"当当当"结算完，紧接着就打出自己的击退
+        onSideDone: async (side) => {
+          if (side === "atk") {
+            // 反击：进攻方照常把守方打退；格挡：挡住了就不推，没挡住才推
+            if (defCategory === "block" && _atkEffFx <= _defEffFx) return;
+            _burstMid();
+            await ClashKnockback.repel({
+              winner: atkActor, loser: defActor, winScore: _atkEffFx, chase: false,
+              onWallHit: (a) => ClashManager.seismicBlast(a, 1, { attacker: atkActor }),
+            });
+          } else if (defCategory === "counter") {
+            // 反击方反手扑回来，再把进攻方打退
+            _burstMid();
+            await ClashKnockback.repel({
+              winner: defActor, loser: atkActor, winScore: _defEffFx,
+              chase: false, approachFirst: true,
+              onWallHit: (a) => ClashManager.seismicBlast(a, 1, { attacker: defActor }),
+            });
+          }
+        },
       });
     }
 
     // 汇总 [攻击时/拼点时] 后所有可能被修改的攻击方字段，统一覆盖 initFlags
-    // 目前覆盖字段：rollTotal / formula（骰子公式变化重投）、weight（weightAdj 修改加重值）
+    // 目前覆盖字段：rollTotal / formula（骰子公式变化重投）、weight（weightAdj 修改攻击容量）
     const atkWeightCur = atkItem?.system?.weight ?? initFlags.weight;
     const effectiveInitFlags = (
       atkFinalTotal   !== initFlags.rollTotal ||
@@ -2566,6 +2927,7 @@ export class ClashManager {
       await ClashManager._applyActivitiesAndEquip(defItem,  "命中时", defCtx);
       await ClashManager._applyActivitiesAndEquip(atkItem,  "攻击后", atkCtx);
       await ClashManager._applyActivitiesAndEquip(defItem,  "攻击后", defCtx);
+      await ClashManager._restoreAllItemMods(atkItem, defItem);
       await ClashManager._flushActMsgs(_actMsgs, atkActor);
       await ClashManager._broadcastAndCheckReactions({ lastSkillUuid: atkItem?.uuid ?? null, attacker: atkActor, defender: defActor });
       return;
@@ -2576,6 +2938,7 @@ export class ClashManager {
       await ClashManager._applyActivitiesAndEquip(atkItem,  "命中时", atkCtx);
       await ClashManager._applyActivitiesAndEquip(atkItem,  "攻击后", atkCtx);
       await ClashManager._applyActivitiesAndEquip(defItem,  "攻击后", defCtx);
+      await ClashManager._restoreAllItemMods(atkItem, defItem);
       await ClashManager._flushActMsgs(_actMsgs, atkActor);
       await ClashManager._broadcastAndCheckReactions({ lastSkillUuid: atkItem?.uuid ?? null, attacker: atkActor, defender: defActor });
       return;
@@ -2583,8 +2946,7 @@ export class ClashManager {
 
     // ── 闪避：双方同时出手，只拼一次，不消耗行动值也不碎硬币 ──────────
     if (defCategory === "dodge") {
-      const atkEffFx = _atkPartsFx.reduce((a, p) => a + (p.value ?? 0), 0);
-      const defEffFx = _defPartsFx.reduce((a, p) => a + (p.value ?? 0), 0);
+      const atkEffFx = _atkEffFx, defEffFx = _defEffFx;
       await ClashTotalFX.play({
         atkParts: _atkPartsFx, defParts: _defPartsFx,
         rerollSides: _rerollShow.map(e => e.side),
@@ -2598,6 +2960,14 @@ export class ClashManager {
           { roll: defRollFx, actor: defActor },
         ]),
       });
+      // 闪避成功不击退；没闪过才被推开一次，且攻方不追击
+      if (atkEffFx > defEffFx) {
+        _burstMid();
+        await ClashKnockback.repel({
+          winner: atkActor, loser: defActor, winScore: atkEffFx, chase: false,
+          onWallHit: (a) => ClashManager.seismicBlast(a, 1, { attacker: atkActor }),
+        });
+      }
     }
     // ── 连击：行动值决定还能输几次，输光了才由这一次的胜方结算伤害 ──────
     else {
@@ -2716,6 +3086,7 @@ export class ClashManager {
     // ── [攻击后]：结算完对抗结果后触发 ────────────────────────────────
     await ClashManager._applyActivitiesAndEquip(atkItem, "攻击后", atkCtx);
     await ClashManager._applyActivitiesAndEquip(defItem,  "攻击后", defCtx);
+    await ClashManager._restoreAllItemMods(atkItem, defItem);
 
     // 统一发出本次对抗所有 activity 通知（汇总为一条，避免并发清理竞态）
     await ClashManager._flushActMsgs(_actMsgs, atkActor);
@@ -3108,8 +3479,10 @@ export class ClashManager {
       defItemId:   defItem?.id ?? "",
     } : null;
 
-    // 加重扩散信息：仅攻击方胜且非平局才携带
-    const weightSpread = atkWins && !isTie ? {
+    // 容量扩散信息：谁打出伤害就带谁的攻击容量。
+    // 攻击方获胜 → 用攻击技能；反击/可拼点反击获胜 → 用守备技能（守备技能同样有攻击容量）。
+    const isCounterWin = !atkWins && !isTie && (defCat === "counter" || defCat === "clashCounter");
+    const weightSpread = (atkWins && !isTie) ? {
       attackerId: atkActor?.id      ?? "",
       rollTotal:  initFlags.rollTotal ?? 0,
       category:   initFlags.category  ?? "",
@@ -3118,6 +3491,15 @@ export class ClashManager {
       itemId:     initFlags.itemId    ?? "",
       itemName:   initFlags.itemName  ?? "",
       itemImg:    initFlags.itemImg   ?? "",
+    } : isCounterWin ? {
+      attackerId: defActor?.id ?? "",
+      rollTotal:  res.defTotal ?? 0,
+      category:   defItem?.system?.counterType ?? defItem?.system?.category ?? "",
+      sinType:    defItem?.system?.sinType ?? "",
+      weight:     defItem?.system?.weight  ?? 1,
+      itemId:     defItem?.id   ?? "",
+      itemName:   defItemName   ?? "",
+      itemImg:    defItemImg    ?? "",
     } : null;
 
     const takeSection = isTie
@@ -3205,7 +3587,100 @@ export class ClashManager {
     });
   }
 
+  /** 丢掉 removed 这一格之后，"宣言时就在场"的下标表怎么变（右边整体左移一格） */
+  static _shiftDeclaredIdx(list = [], removed = 0) {
+    return list.filter(i => i !== removed).map(i => (i > removed ? i - 1 : i));
+  }
+
+  /**
+   * 在战斗袋里定位这条【丢弃】消耗要丢的槽位。
+   *
+   * 规则：只看激活槽 0/1（预备模式看槽 2）；触发这条消耗的技能永远不会丢弃自己，
+   * 【等级】模式也只是判断"另一张"是不是该等级。
+   * 【等级】模式下 0/1 两格都符合时两张一起丢——但【丢弃时】只触发一次。
+   *
+   * @param {number[]|null} declaredIdx 还剩哪些"宣言时就在场"的槽位下标。
+   *        给了就只认这些位置，本次结算中途补位顶上来的新牌不会被后面的消耗吃掉。
+   * @returns {number[]} 命中的槽位下标（升序）；空数组表示没有可丢的牌
+   */
+  static _findDiscardSlots(owner, slots = [], cost = {}, selfId = "", declaredIdx = null) {
+    const ok = (i) => !declaredIdx || declaredIdx.includes(i);
+    const mode = cost.discardMode ?? "level";
+    if (mode === "reserve") {
+      const id = slots[2];
+      return (id && id !== selfId && ok(2)) ? [2] : [];
+    }
+    const level = cost.discardLevel ?? 1;
+    const hits  = [];
+    for (let i = 0; i <= 1; i++) {
+      const id = slots[i];
+      if (!id || id === selfId) continue;          // 永远不丢自己
+      if (!ok(i)) continue;                        // 宣言之后才顶上来的牌不算
+      if (mode === "another") return [i];          // 【另一个】只丢一张
+      const sk = owner?.items?.get(id);
+      if (sk && (sk.system?.level ?? 1) === level) hits.push(i);
+    }
+    return hits;
+  }
+
+  /* ─── 本次攻击内的临时骰面改动 ─────────────────────────────────────── */
+
+  /** 会写回物品、因而需要打完还原的字段 */
+  static TEMP_MOD_PATHS = [
+    "system.diceCount", "system.diceFaces", "system.baseValue",
+    "system.weight", "system.diceType",
+  ];
+
+  /**
+   * 改动前把原值记到物品 flag 上（同一次攻击里只记第一次的原值），
+   * 供 [攻击后] 结束时还原——这四个字段一律只在本次攻击内有效。
+   */
+  static async _stashItemMod(item, path) {
+    if (!item) return;
+    const cur = item.getFlag?.("limbusCompany_FVTT", "tempMods") ?? {};
+    if (Object.prototype.hasOwnProperty.call(cur, path)) return;   // 已经记过原值
+    const orig = foundry.utils.getProperty(item, path);
+    await ClashManager._safeDocUpdate(item, {
+      [`flags.limbusCompany_FVTT.tempMods`]: { ...cur, [path]: orig },
+    });
+  }
+
+  /** 一次攻击结束：把临时改动过的骰数/面数/基础值/攻击容量还原回去 */
+  static async _restoreItemMods(item) {
+    if (!item) return;
+    const mods = item.getFlag?.("limbusCompany_FVTT", "tempMods");
+    if (!mods || !Object.keys(mods).length) return;
+    const update = { "flags.limbusCompany_FVTT.-=tempMods": null };
+    for (const [path, orig] of Object.entries(mods)) {
+      if (ClashManager.TEMP_MOD_PATHS.includes(path)) update[path] = orig;
+    }
+    await ClashManager._safeDocUpdate(item, update);
+  }
+
+  /** 攻防双方的技能与装备格物品一起还原 */
+  static async _restoreAllItemMods(...items) {
+    for (const item of items) {
+      if (!item) continue;
+      await ClashManager._restoreItemMods(item);
+      for (const eq of ClashManager._getEquippedItems(item.parent ?? null)) {
+        await ClashManager._restoreItemMods(eq);
+      }
+    }
+  }
+
   /* ─── EGO 罪孽抗性修改 ────────────────────────────────────────────────── */
+
+  /**
+   * EGO 的两种形态：消耗理智的【觉醒】、陷入恐慌的【侵蚀】。
+   * 罪孽消耗与罪孽抗性两形态共用；类型 / 骰数 / 攻击容量 / 理智消耗 / 描述 /
+   * 激活效果各自独立，由 SkillData.prepareDerivedData 按持有者是否恐慌
+   * 直接投影到 item.system 上，因此这里读 sys.* 拿到的已经是当前形态的值。
+   *
+   * @returns {boolean} 该 EGO 是否配置了侵蚀形态数据
+   */
+  static _hasCorrodeForm(sys = {}) {
+    return !!sys.corrode?.initialized;
+  }
 
   static async _applyEgoResistanceChanges(actor, item) {
     const adj = item.system?.egoResistanceAdj;
@@ -3524,8 +3999,16 @@ export class ClashManager {
       _actMsgs2.push({ trigger: "受到伤害时", itemName: baseActor.name, msgs: _buffHookMsgs2 });
     }
 
+    // 单方面攻击（承受）：不拼点，只把对方打退一次，攻击方不追击
+    ClashVFX.broadcastBurst(ClashVFX.midPoint(atkActor, baseActor));
+    await ClashKnockback.repel({
+      winner: atkActor, loser: baseActor, winScore: step, chase: false,
+      onWallHit: (a) => ClashManager.seismicBlast(a, 1, { attacker: atkActor }),
+    });
+
     // [攻击后]：结算完毕
     await ClashManager._applyActivitiesAndEquip(atkItem2, "攻击后", atkCtx2);
+    await ClashManager._restoreAllItemMods(atkItem2);
 
     // 统一发出本次承受所有 activity 通知
     await ClashManager._flushActMsgs(_actMsgs2, atkActor);
@@ -3537,46 +4020,92 @@ export class ClashManager {
       await selActor.update({ "system.hp.value": Math.max(0, th - finalDamage) });
     }
 
-    // ── 加重扩散：weight>=2 时发出额外承受卡 ──────────────────────────────
+    // ── 容量扩散：攻击容量 >=2 时发出额外承受卡 ────────────────────────────
     const weight = initFlags.weight ?? 1;
     if (weight >= 2) {
-      await ClashManager._sendWeightSpreadCard(initFlags, atkActor);
+      await ClashManager._sendWeightSpreadCard(initFlags, atkActor, {
+        actorId: baseActor.id, name: baseActor.name, dmg: finalDamage, note: "拼点命中",
+      });
     }
   }
 
-  /* ─── 加重扩散承受 ──────────────────────────────────────────────────────── */
+  /* ─── 容量扩散承受 ──────────────────────────────────────────────────────── */
 
-  /** 构建加重扩散卡 HTML（remainingUses 可变，复用于更新消息内容）。 */
+  /** 构建容量扩散卡 HTML（remainingUses / hits 变化时复用于更新消息内容）。 */
   static _buildWeightSpreadContent(flags, remainingUses, atkActor) {
-    const actor      = atkActor ?? game.actors.get(flags.attackerId);
-    const btnDisabled = remainingUses <= 0;
-    const btnStyle   = btnDisabled
+    const actor       = atkActor ?? game.actors.get(flags.attackerId);
+    const btnDisabled = remainingUses <= 0 || !!flags.running;
+    const btnStyle    = btnDisabled
       ? "background:#555;color:#888;border:none;cursor:not-allowed;opacity:.6;"
       : "background:#B84444;color:#fff;border:none;cursor:pointer;";
-    const btnLabel   = btnDisabled ? "（已用尽）" : `承受（×${remainingUses}）`;
+    const btnLabel    = flags.running ? "扩散中…" : remainingUses <= 0 ? "（已用尽）" : `承受（×${remainingUses}）`;
+
+    // 容量方块：拼点那一击本身占 1 点
+    const cap  = flags.weight ?? 1;
+    const used = cap - 1 - remainingUses;
+    const sqs  = Array.from({ length: cap }, (_, i) => {
+      const spent = i <= used;
+      return `<span style="display:inline-block;width:9px;height:9px;transform:rotate(45deg);
+        margin-right:4px;border:1px solid ${spent ? "#443A2A" : "#6B5822"};
+        background:${spent ? "#2A2521" : "#C9A84C"};"></span>`;
+    }).join("");
+
+    const modeLabel = flags.spreadMode === "spray" ? "广域乱射" : "链式扩散";
+    const ft        = ((flags.spreadRange ?? 1) * 5 + 2.5).toFixed(1);
+    const modeLine  = cap >= 2
+      ? `<span style="font-size:.62rem;color:#C9A84C;margin-left:6px;">${modeLabel} · ${ft}ft</span>`
+      : "";
+
+    // 战果：伤害卡只在这里记账（含陷入混乱）
+    const hits = flags.hits ?? [];
+    const rows = hits.map(h => `
+      <div style="display:flex;gap:5px;align-items:baseline;font-size:.7rem;line-height:1.55;">
+        <span style="color:#E8C9A2;">${h.name}</span>
+        <span style="color:#B84444;font-weight:bold;">-${h.dmg}</span>
+        ${h.hp ? `<span style="color:#6A5A48;font-size:.62rem;">${h.hp}</span>` : ""}
+        ${h.note ? `<span style="color:#9A8462;font-size:.62rem;">${h.note}</span>` : ""}
+        ${h.chaos ? `<span style="color:#E84444;font-weight:bold;font-size:.62rem;">【${h.chaos}】</span>` : ""}
+      </div>`).join("");
+    const total = hits.reduce((a2, h) => a2 + (h.dmg ?? 0), 0);
+    const log = `
+      <div style="border-left:2px solid #8A7433;padding-left:6px;margin:4px 0 6px;">
+        ${rows || `<span style="color:#5B4F40;font-size:.65rem;font-style:italic;">尚无战果</span>`}
+        ${hits.length ? `<div style="border-top:1px solid #3A3227;margin-top:3px;padding-top:2px;
+            font-size:.65rem;color:#9A8462;">合计
+            <span style="color:#B84444;font-weight:bold;">${total}</span> · 命中 ${hits.length} 次</div>` : ""}
+      </div>`;
+
     return `
-      <div class="limbus-clash-card" data-clash-type="weight-spread">
-        ${ClashManager._chatHeader(actor, "加重扩散")}
+      <div class="limbus-clash-card" data-clash-type="weight-spread" style="font-size:.75rem;">
+        ${ClashManager._chatHeader(actor, "容量扩散")}
         ${ClashManager._goldDivider()}
-        <div style="font-size:.85rem;color:#E8C9A2;margin:4px 0 6px;">
-          ⚔️ <strong>${flags.itemName ?? "技能"}</strong> 加重命中！<br>
-          <span style="color:#C9A84C;">扩散承受剩余：<strong>${remainingUses}</strong> 次</span>
+        <div style="font-size:.72rem;color:#E8C9A2;margin:2px 0 4px;">
+          ⚔️ <strong>${flags.itemName ?? "技能"}</strong> 容量命中！${modeLine}
         </div>
-        <div style="margin-bottom:4px;">
+        <div style="margin-bottom:3px;">
+          <span style="font-size:.62rem;color:#9A8462;margin-right:4px;">攻击容量</span>${sqs}
+        </div>
+        ${log}
+        <div style="display:flex;align-items:center;gap:8px;">
           <button class="clash-btn-weight-take"
-                  style="height:30px;padding:0 14px;${btnStyle}font-size:.85rem;border-radius:2px;"
+                  style="height:24px;padding:0 12px;${btnStyle}font-size:.72rem;border-radius:2px;"
                   ${btnDisabled ? "disabled" : ""}>
             ${btnLabel}
           </button>
+          <span style="font-size:.62rem;color:#6A5A48;">
+            ${cap >= 2
+              ? (flags.spreadMode === "spray" ? "范围内随机抽取，可能重复命中" : "范围内逐个打过去，不重复")
+              : "点击自动结算这一次扩散"}
+          </span>
         </div>
-        <div style="font-size:.72rem;color:#9A8462;margin-top:2px;">选中目标 Token 后点击按钮进行扩散承受</div>
         ${ClashManager._goldDivider()}
       </div>`;
   }
 
-  /** 发送加重扩散承受聊天卡。 */
-  static async _sendWeightSpreadCard(initFlags, atkActor) {
+  /** 发送容量扩散承受聊天卡。 */
+  static async _sendWeightSpreadCard(initFlags, atkActor, firstHit = null) {
     const remainingUses = (initFlags.weight ?? 1) - 1;
+    const atkItem = atkActor?.items?.get(initFlags.itemId ?? "") ?? null;
     const spreadFlags = {
       type:          "clash-weight-spread",
       attackerId:    initFlags.attackerId,
@@ -3586,6 +4115,11 @@ export class ClashManager {
       rollTotal:     initFlags.rollTotal,
       category:      initFlags.category,
       sinType:       initFlags.sinType,
+      weight:        initFlags.weight ?? 1,
+      spreadMode:    atkItem?.system?.spreadMode  ?? "chain",
+      spreadRange:   atkItem?.system?.spreadRange ?? 1,
+      anchorId:      firstHit?.actorId ?? initFlags.firstTargetId ?? "",
+      hits:          firstHit ? [firstHit] : [],
       remainingUses,
     };
     await ClashManager._safeChatCreate({
@@ -3595,67 +4129,40 @@ export class ClashManager {
     });
   }
 
-  /** 玩家选中 Token 后点击扩散卡承受按钮的处理逻辑。 */
-  static async handleWeightTake(msgId, flags) {
-    if ((flags.remainingUses ?? 0) <= 0) {
-      ui.notifications.warn("扩散承受次数已用尽");
-      return;
-    }
-
-    const selActor = game.user.character ?? canvas.tokens?.controlled?.[0]?.actor ?? null;
-    if (!selActor) {
-      ui.notifications.warn("请先选中承受伤害的 Token");
-      return;
-    }
-    if (selActor.id === flags.attackerId) {
-      ui.notifications.warn("发起对抗的角色不能承受自己的攻击");
-      return;
-    }
-
-    const atkActor = game.actors.get(flags.attackerId);
-    const defActor = game.actors.get(selActor.id) ?? selActor;
-
-    const rollTotal = flags.rollTotal ?? 0;
-    const category  = flags.category  ?? "";
-    const sinType   = flags.sinType   ?? "";
+  /**
+   * 单个扩散目标的伤害计算（与拼点伤害同一套：强壮/虚弱 → 等级差 → 易损/守护 → 抗性）
+   * @returns {{ finalDamage: number, calcNotes: string[], resNote: string }}
+   */
+  static _spreadDamage(atkActor, defActor, { rollTotal = 0, category = "", sinType = "" } = {}) {
     const PHYS_CATS   = ["slash", "blunt", "pierce"];
     const SIN_TYPES   = ["wrath","lust","sloth","gluttony","gloom","pride","envy"];
     const PHYS_LABELS = { slash: "斩击", blunt: "打击", pierce: "突刺" };
     const SIN_LABELS  = { wrath:"暴怒", lust:"色欲", sloth:"怠惰",
                           gluttony:"暴食", gloom:"忧郁", pride:"傲慢", envy:"嫉妒" };
-
     const gs = (actor, type) => ClashManager._getBuffVal(actor, type).stacks;
 
-    // 攻击方 BUFF 修正
     const strong     = atkActor ? gs(atkActor, "strong") : 0;
     const weak       = atkActor ? gs(atkActor, "weak")   : 0;
     const atkDiceMod = strong - weak;
 
-    // 等级差
     const atkLv   = atkActor ? ClashManager._effAtkLv(atkActor) : 0;
     const defLv   = ClashManager._effDefLv(defActor);
     const lvBonus = Math.floor(Math.max(0, atkLv - defLv) / 3);
 
-    // 有效骰数
     const effectiveAtk = rollTotal + atkDiceMod + lvBonus;
+    const guard        = gs(defActor, "guard");
+    const fragile      = gs(defActor, "fragile");
+    const adjustedAtk  = Math.max(0, effectiveAtk + fragile - guard);
 
-    // 守护 / 易损
-    const guard       = gs(defActor, "guard");
-    const fragile     = gs(defActor, "fragile");
-    const adjustedAtk = Math.max(0, effectiveAtk + fragile - guard);
-
-    // 物理抗性 & 罪孽抗性
     const effRes     = ClashManager._getEffectiveResistances(defActor);
     const physResStr = PHYS_CATS.includes(category) ? (effRes[category] ?? "x1.0") : "x1.0";
     const sinResStr  = SIN_TYPES.includes(sinType)
       ? (defActor.system?.egoResistances?.[sinType] ?? "x1.0") : "x1.0";
     const physMult   = ClashManager._parseResistance(physResStr);
     const sinMult    = ClashManager._parseResistance(sinResStr);
-
     const finalDamage = Math.max(0, Math.round(adjustedAtk * physMult * sinMult));
 
-    // 结算说明
-    const calcNotes = [`骰点结果：${rollTotal}（加重扩散）`];
+    const calcNotes = [`骰点结果：${rollTotal}（容量扩散）`];
     let step = rollTotal;
     if (atkDiceMod !== 0) {
       step += atkDiceMod;
@@ -3667,46 +4174,208 @@ export class ClashManager {
     if (lvBonus > 0) {
       step += lvBonus;
       calcNotes.push(`等级差（攻Lv${atkLv} vs 防Lv${defLv}，差${atkLv - defLv}，+${lvBonus}）→ ${step}`);
-    } else if (defLv > atkLv) {
-      calcNotes.push(`等级差：防御等级${defLv} > 攻击等级${atkLv}，无加成`);
     }
     if (fragile > 0 || guard > 0) {
-      const prev  = step;
+      const prev = step;
       step = adjustedAtk;
       const parts = [];
       if (fragile > 0) parts.push(`易损+${fragile}`);
       if (guard   > 0) parts.push(`守护-${guard}`);
       calcNotes.push(`${parts.join("，")}：${prev} → ${step}`);
     }
-    if (physMult !== 1.0 || sinMult !== 1.0) {
-      const resParts = [];
-      if (physMult !== 1.0) resParts.push(`${PHYS_LABELS[category] ?? category}抗性${physResStr}`);
-      if (sinMult  !== 1.0) resParts.push(`${SIN_LABELS[sinType]  ?? sinType}罪孽抗性${sinResStr}`);
-      calcNotes.push(`${resParts.join(" × ")}：${step} → ${finalDamage}`);
-    }
+    const resParts = [];
+    if (physMult !== 1.0) resParts.push(`${PHYS_LABELS[category] ?? category}抗性${physResStr}`);
+    if (sinMult  !== 1.0) resParts.push(`${SIN_LABELS[sinType]  ?? sinType}罪孽抗性${sinResStr}`);
+    if (resParts.length) calcNotes.push(`${resParts.join(" × ")}：${step} → ${finalDamage}`);
 
-    const _buffHookMsgsCl = [];
-    await ClashManager._applyAndSendTake(defActor, finalDamage, { calcNotes, attacker: atkActor, hookMsgs: _buffHookMsgsCl, category, sinType,
-      item: atkActor?.items?.get(flags.itemId ?? "") ?? null });
-    if (_buffHookMsgsCl.length) {
-      _actMsgs2.push({ trigger: "受到伤害时", itemName: defActor.name, msgs: _buffHookMsgsCl });
-    }
-
-    // 若是非 linked token，额外同步 HP
-    if (selActor !== defActor && selActor.isToken) {
-      const cur = selActor.system?.hp?.value ?? 0;
-      await selActor.update({ "system.hp.value": Math.max(0, cur - finalDamage) });
-    }
-
-    // 更新扩散卡剩余次数
-    const newRemaining = (flags.remainingUses ?? 1) - 1;
-    const message = game.messages.get(msgId);
-    if (message) {
-      const newFlags  = { ...flags, remainingUses: newRemaining };
-      const newContent = ClashManager._buildWeightSpreadContent(newFlags, newRemaining, atkActor);
-      await message.update({ flags: { limbusCompany_FVTT: newFlags }, content: newContent });
-    }
+    return { finalDamage, calcNotes, resNote: resParts.join(" × ") };
   }
+
+  /* ─── 容量扩散：自动连续结算 ─────────────────────────────────────────── */
+
+  /** 攻击方 token（优先控制中的那一个） */
+  static _tokenOfActor(actor) {
+    if (!actor || !canvas?.ready) return null;
+    const list = canvas.tokens?.placeables?.filter(t => t.actor?.id === actor.id) ?? [];
+    return list.find(t => t.controlled) ?? list[0] ?? null;
+  }
+
+  /**
+   * 某个角色的敌对阵营 actor id 列表（与效果编辑器【敌对全部】同一套：
+   * 走世界设定里的小队编成 squadTeam1 / squadTeam2）。
+   * @returns {string[]|null} null 表示没配小队，调用方退回 token 阵营判断
+   */
+  static _foeIdsOf(actorId) {
+    let t1 = [], t2 = [];
+    try { t1 = game.settings.get("limbusCompany_FVTT", "squadTeam1") ?? []; } catch { /* 未注册 */ }
+    try { t2 = game.settings.get("limbusCompany_FVTT", "squadTeam2") ?? []; } catch { /* 未注册 */ }
+    if (!t1.length && !t2.length) return null;
+    if (t1.includes(actorId)) return t2;
+    if (t2.includes(actorId)) return t1;
+    return null;
+  }
+
+  /** 切比雪夫格距（1 格 = 5ft；半径 N → N×5+2.5 ft） */
+  static _cellDist(a, b) {
+    const gs = canvas?.grid?.size ?? 100;
+    return Math.max(
+      Math.round(Math.abs(a.center.x - b.center.x) / gs),
+      Math.round(Math.abs(a.center.y - b.center.y) / gs),
+    );
+  }
+
+  /**
+   * 点击【承受】：按技能配置的扩散方式自动连续结算，直到打满攻击容量。
+   *  链式扩散：以上一个受害者为中心，范围内不重复的敌人逐个打
+   *  广域乱射：以拼点对手为中心，范围内随机抽（可能重复）
+   * 每一发：攻击方瞬移到目标身边空位 → TOTAL 累加（无骰子动画）→ 结算伤害
+   */
+  static async handleWeightTake(msgId, flags) {
+    let remaining = flags.remainingUses ?? 0;
+    if (remaining <= 0) { ui.notifications.warn("扩散承受次数已用尽"); return; }
+    if (flags.running)  return;
+
+    const atkActor = game.actors.get(flags.attackerId);
+    const atkTok   = ClashManager._tokenOfActor(atkActor);
+    if (!atkTok) { ui.notifications.warn("找不到攻击方 Token，无法进行容量扩散"); return; }
+
+    const msg  = game.messages.get(msgId);
+    const mode = flags.spreadMode  ?? "chain";
+    const rng  = Math.max(1, flags.spreadRange ?? 1);
+    const hits = [...(flags.hits ?? [])];
+    const setCard = async (extra = {}) => {
+      if (!msg) return;
+      const f = { ...flags, hits, remainingUses: remaining, ...extra };
+      await ClashManager._safeDocUpdate(msg, {
+        flags: { limbusCompany_FVTT: f },
+        content: ClashManager._buildWeightSpreadContent(f, remaining, atkActor),
+      });
+    };
+    await setCard({ running: true });
+
+    // 镜头给攻击方 + 亮出当前累计 TOTAL
+    let total = hits.reduce((a, h) => a + (h.dmg ?? 0), 0);
+    ClashVFX.broadcastPan({ ...atkTok.center });
+    await ClashTotalFX.spreadOpen({ label: "容量扩散", total });
+
+    const foeIds      = ClashManager._foeIdsOf(atkActor?.id ?? "");
+    let   started     = false;
+    // 扩散全程共用一份触发计数与消息表：次数限制按整次扩散算，消息最后统一发
+    const fireCounts  = {};
+    const actMsgs     = [];
+    const hitActorIds = new Set(hits.map(h => h.actorId));
+    let anchorId = flags.anchorId || hits[0]?.actorId || "";
+
+    while (remaining > 0) {
+      const anchorTok = ClashManager._tokenOfActor(game.actors.get(anchorId)) ?? atkTok;
+      const centerTok = (mode === "spray")
+        ? (ClashManager._tokenOfActor(game.actors.get(flags.hits?.[0]?.actorId ?? anchorId)) ?? anchorTok)
+        : anchorTok;
+
+      const cands = (canvas.tokens?.placeables ?? []).filter(t => {
+        if (!t.actor || t.id === atkTok.id || t.actor.id === atkActor?.id) return false;
+        if ((t.actor.system?.hp?.value ?? 0) <= 0) return false;
+        // 敌对判定：优先用小队编成，没配小队才退回 token 阵营
+        if (foeIds) { if (!foeIds.includes(t.actor.id)) return false; }
+        else if (t.document.disposition === atkTok.document.disposition) return false;
+        if (ClashManager._cellDist(centerTok, t) > rng) return false;
+        if (mode === "chain" && hitActorIds.has(t.actor.id)) return false;          // 链式不重复
+        return true;
+      });
+      if (!cands.length) {
+        console.warn("[容量扩散] 范围内没有可打的目标", {
+          模式: mode, 范围格数: rng, 中心: centerTok?.actor?.name,
+          敌对名单: foeIds, 场上Token: (canvas.tokens?.placeables ?? []).map(t => ({
+            名字: t.actor?.name, id: t.actor?.id, 格距: ClashManager._cellDist(centerTok, t),
+          })),
+        });
+        if (!started) {
+          ui.notifications.info(foeIds
+            ? `容量扩散：范围内（${rng} 格）没有其他敌对目标`
+            : "容量扩散：未编成小队，改用 Token 阵营判断，范围内没有敌对目标");
+        }
+        break;
+      }
+      started = true;
+
+      const tgtTok = (mode === "spray")
+        ? cands[Math.floor(Math.random() * cands.length)]
+        : cands[0];
+      const tgtActor = tgtTok.actor;
+
+      // ① 瞬移到目标身边（风线由 approach 负责）
+      // 乱射：绕到目标背后，一发一发换位置；链式：正面扑上去
+      await ClashKnockback.approach(atkTok, tgtTok, { behind: mode === "spray" });
+      await new Promise(r => setTimeout(r, ClashManager.SPREAD_STEP_MS));
+
+      // ② 伤害计算（乱射每发重投，链式沿用拼点骰点）
+      let roll = flags.rollTotal ?? 0;
+      if (mode === "spray") {
+        const item = atkActor?.items?.get(flags.itemId ?? "");
+        const fml  = item?.system?.diceFormula;
+        if (fml) { const r = new Roll(fml); await r.evaluate(); roll = r.total; }
+      }
+      const { finalDamage, calcNotes, resNote } =
+        ClashManager._spreadDamage(atkActor, tgtActor, {
+          rollTotal: roll, category: flags.category, sinType: flags.sinType,
+        });
+
+      // ③ TOTAL 累加 + 目标处 +N
+      ClashVFX.broadcastPlus({ ...tgtTok.center }, finalDamage);
+      ClashVFX.broadcastBurst({ ...tgtTok.center });
+      await ClashTotalFX.spreadTick({
+        from: total, to: total + finalDamage, ms: ClashManager.SPREAD_TOTAL_MS,
+        combo: `${hits.length + 1} 连击`,
+      });
+      total += finalDamage;
+
+      // ④ 本骰的 [命中时] / [暴击命中时]：每一发扩散都算一次命中
+      const atkItem = atkActor?.items?.get(flags.itemId ?? "") ?? null;
+      if (atkItem) {
+        const hitCtx = {
+          atkActor, defActor: tgtActor, owner: atkActor, other: tgtActor,
+          _fireCounts: fireCounts, _actMsgs: actMsgs, _currentItemId: atkItem.id,
+        };
+        await ClashManager._applyActivitiesAndEquip(atkItem, "命中时", hitCtx);
+        // 【呼吸法】暴击判定：每层强度 5% 概率，触发后消耗 1 层
+        const breathe = ClashManager._getBuff(atkActor, "breathing");
+        if (breathe && (breathe.stacks ?? 0) > 0
+            && Math.random() < (breathe.intensity ?? 0) * 0.05) {
+          await ClashManager._reduceBuffStacks(atkActor, "breathing");
+          await ClashManager._applyActivitiesAndEquip(atkItem, "暴击命中时", hitCtx);
+        }
+      }
+
+      // ⑤ 落账（静默：不发独立承受卡，结果记在扩散卡上）
+      const take = await ClashManager._applyAndSendTake(tgtActor, finalDamage, {
+        calcNotes, attacker: atkActor, takeLabel: "容量扩散-承受", silent: true,
+        category: flags.category, sinType: flags.sinType, item: atkItem,
+      });
+      const extra = [];
+      if (take?.ruptureDmg)      extra.push(`破裂+${take.ruptureDmg}`);
+      if (take?.sinkingGloomDmg) extra.push(`沉沦+${take.sinkingGloomDmg}`);
+      if (take?.tremorTriggered) extra.push("震颤引爆");
+      hits.push({
+        actorId: tgtActor.id, name: tgtActor.name, dmg: finalDamage,
+        hp: `${take?.finalHp ?? 0}/${take?.maxHp ?? 0}`,
+        chaos: take?.chaosTriggered ? (take.chaosName ?? "陷入混乱") : "",
+        note: [mode === "spray" ? `骰 ${roll}` : "", resNote, ...extra].filter(Boolean).join(" · "),
+      });
+      hitActorIds.add(tgtActor.id);
+      if (mode === "chain") anchorId = tgtActor.id;     // 链式：锚点前移
+      remaining--;
+      await setCard({ running: remaining > 0 });
+      await new Promise(r => setTimeout(r, 90));
+    }
+
+    ClashTotalFX.spreadClose();
+    await ClashManager._flushActMsgs(actMsgs, atkActor);
+    await setCard({ running: false, anchorId });
+  }
+
+  /** 容量扩散的节奏（ms）：瞬移到位后的停顿 / TOTAL 累加时长 */
+  static SPREAD_STEP_MS  = 220;
+  static SPREAD_TOTAL_MS = 200;
 
   /* ─── 【不可摧毁】拼点失败触发反击 ──────────────────────────────────── */
 
@@ -3828,7 +4497,7 @@ export class ClashManager {
    * @param {object} [opts]
    * @param {boolean} [opts.isSeismic=false]  是否为【震颤引爆】类型攻击
    */
-  static async _applyAndSendTake(actor, damage, { isSeismic = false, calcNotes = [], attacker = null, hookMsgs = null, takeLabel = "承受", category = "", sinType = "", item = null } = {}) {
+  static async _applyAndSendTake(actor, damage, { isSeismic = false, calcNotes = [], attacker = null, hookMsgs = null, takeLabel = "承受", category = "", sinType = "", item = null, silent = false } = {}) {
     const sys   = actor.system;
     const maxHp = sys.hp?.max ?? 1;
 
@@ -3962,8 +4631,13 @@ export class ClashManager {
     // 沉沦忧郁追加伤害发生在 HP 结算之后，需将最终 HP 一并传给聊天框显示
     // （生命值锁定时 sinkingGloomDmg 恒为 0，finalHp 与 newHp 一致，仍钉死为 hpLockValue）
     const finalHp = Math.max(0, newHp - sinkingGloomDmg);
-    await ClashManager._sendTakeMsg(actor, damage, oldHp, finalHp, maxHp, chaosTriggered,
-      { ruptureDmg, sanityDmg, sinkingGloomDmg, tremorTriggered, chaosName, calcNotes, takeLabel });
+    // silent：不发独立的承受卡，把结果交回调用方自己记账（容量扩散用）
+    if (!silent) {
+      await ClashManager._sendTakeMsg(actor, damage, oldHp, finalHp, maxHp, chaosTriggered,
+        { ruptureDmg, sanityDmg, sinkingGloomDmg, tremorTriggered, chaosName, calcNotes, takeLabel });
+    }
+    return { damage, oldHp, finalHp, maxHp, chaosTriggered, chaosName,
+             ruptureDmg, sanityDmg, sinkingGloomDmg, tremorTriggered };
   }
 
   static async _sendTakeMsg(actor, damage, oldHp, newHp, maxHp, chaosTriggered,
@@ -4376,6 +5050,9 @@ export class ClashManager {
             defaultYes: false,
           });
           if (!confirmed) continue;
+          // 先记账再执行：效果里可能又发起一次对抗，届时会重新走一遍反应检查，
+          // 不先扣次数就会自己触发自己
+          await ClashManager._bumpLimit(act, item, actor);
           // 执行效果
           for (const eff of (act.effects ?? [])) {
             await ClashManager._applyReactionEff(eff, item, actor, attacker, defender);
@@ -4418,6 +5095,17 @@ export class ClashManager {
       return true;
     }
 
+    if (type === "noBuff") {
+      // 【未拥有】：【拥有】的反面
+      if (!targetActor || !pre.buff) return false;
+      const buffs = targetActor.system?.buffs ?? [];
+      const found = buffs.find(b => b.type === pre.buff || b.name === pre.buff);
+      if (!found) return true;
+      if ((pre.intensity ?? 0) > 0 && (found.intensity ?? 0) < pre.intensity) return true;
+      if ((pre.stacks    ?? 0) > 0 && (found.stacks    ?? 0) < pre.stacks)    return true;
+      return false;
+    }
+
     if (type === "perN") {
       if (!targetActor || !pre.buff) return false;
       const buffs = targetActor.system?.buffs ?? [];
@@ -4445,22 +5133,31 @@ export class ClashManager {
       return ClashManager._cmp(curVal, pre.comparison ?? "lt", threshold);
     }
 
+    if (type === "equipped") {
+      if (!targetActor) return false;
+      const have = ClashManager._countEquipped(targetActor, pre);
+      return have >= Math.max(1, pre.count ?? 1);
+    }
+
+    if (type === "background") {
+      // 背景：检查所选一方的"背景名称"或"背景标签"是否匹配
+      const want = String(pre.bgName ?? "").trim();
+      if (!want || !targetActor) return false;
+      const bgUuid = targetActor.system?.background?.uuid;
+      const bg = bgUuid ? await fromUuid(bgUuid).catch(() => null) : null;
+      if (!bg) return false;
+      if (bg.name === want) return true;
+      const tags = await ClashManager._getBackgroundTags(targetActor);
+      return tags.includes(want);
+    }
+
     if (type === "useSkill") {
       // lastSkillUuid 恒来自攻击方技能（广播时固定传 atkItem.uuid），故施放者视为 attacker
       if (!lastSkillUuid || !attacker) return false;
       const scope = await ClashManager._resolveTargets(pre.target ?? "self", actor, attacker, pre);
       if (!scope.some(a => a.id === attacker.id)) return false;
-      if (pre.skillUuid) return pre.skillUuid.trim() === lastSkillUuid.trim();
-      if (pre.skillNameOrTag) {
-        const val = pre.skillNameOrTag.trim();
-        if (!val) return false;
-        const skillItem = await fromUuid(lastSkillUuid).catch(() => null);
-        if (!skillItem) return false;
-        if (skillItem.name === val) return true;
-        const tags = String(skillItem.system?.tags ?? "").split("/").map(t => t.trim()).filter(Boolean);
-        return tags.includes(val);
-      }
-      return false;
+      const skillItem = await fromUuid(lastSkillUuid).catch(() => null);
+      return ClashManager._matchSkillIdentity(skillItem, pre);
     }
 
     if (type === "category") {
@@ -4474,7 +5171,7 @@ export class ClashManager {
     }
 
     if (type === "level") {
-      // 使用等级：检查本次对抗使用的技能（lastSkillUuid）等级是否满足比较条件
+      // 旧数据：使用等级已并入 useSkill 的"等级"字段，此分支仅作兼容
       if (!lastSkillUuid) return false;
       const skillItem = await fromUuid(lastSkillUuid).catch(() => null);
       if (!skillItem) return false;
@@ -4490,16 +5187,26 @@ export class ClashManager {
    * @param {Item} skillItem
    * @param {{skillUuid?:string, skillNameOrTag?:string}} pre
    */
+  /**
+   * 【使用技能】前置的匹配：名称/标签 与 技能等级 都是可选的，
+   * 填了的才检查，两个都填则需同时满足（如"标签「黑兽」的 Lv.3 技能"）。
+   * 两个都没填视为不成立，避免"任何技能都触发"的误配置。
+   * skillUuid 是旧数据字段，仍然兼容读取。
+   */
   static _matchSkillIdentity(skillItem, pre) {
     if (!skillItem) return false;
-    if (pre.skillUuid) return skillItem.uuid === pre.skillUuid.trim();
-    if (pre.skillNameOrTag) {
-      const val = pre.skillNameOrTag.trim();
-      if (!val) return false;
-      if (skillItem.name === val) return true;
-      return ClashManager._itemTags(skillItem).includes(val);
+
+    const val = String(pre.skillNameOrTag ?? "").trim();
+    const lvl = parseInt(pre.skillLevel) || 0;
+    const uuid = String(pre.skillUuid ?? "").trim();
+    if (!val && !lvl && !uuid) return false;
+
+    if (uuid && skillItem.uuid !== uuid) return false;
+    if (lvl && (skillItem.system?.level ?? 0) !== lvl) return false;
+    if (val) {
+      if (skillItem.name !== val && !ClashManager._itemTags(skillItem).includes(val)) return false;
     }
-    return false;
+    return true;
   }
 
   /** 读取技能物品的标签数组（system.tags 兼容数组与"标签1/标签2"字符串两种存法） */
@@ -4561,10 +5268,39 @@ export class ClashManager {
   }
 
   /** 检查 Activity 次数限制（不计数，仅检查） */
+  /** 活动的计数键——与 _applyActivities 保持一致，两边共用同一份计数 */
+  static _actCountKey(item, act, trigger = "反应") {
+    return `${item?.id}_${act?.name ?? trigger}`;
+  }
+
+  /**
+   * 次数限制检查（perTurn / perEncounter）。
+   * 反应走的是 _checkAndOfferReactions 这条独立路径，不经过 _applyActivities，
+   * 因此计数必须在这里自己读、自己写（写在 _bumpLimit）。
+   */
   static _checkLimit(act, item, actor) {
-    if (!act.limit || act.limit.type === "unlimited") return true;
-    // 简单起见：如果没有火次计数存储，始终允许（计数由 _applyActivities 管理）
-    return true;
+    const limitType  = act?.limit?.type;
+    const limitCount = act?.limit?.count ?? 0;
+    if (!limitType || limitType === "unlimited" || limitCount <= 0) return true;
+    const flagKey = limitType === "perTurn" ? "turnFireCounts"
+                  : limitType === "perEncounter" ? "encounterFireCounts" : null;
+    if (!flagKey) return true;
+    const counts = actor?.getFlag?.("limbusCompany_FVTT", flagKey) ?? {};
+    return (counts[ClashManager._actCountKey(item, act)] ?? 0) < limitCount;
+  }
+
+  /** 记录一次触发（与 _applyActivities 写的是同一份 flag） */
+  static async _bumpLimit(act, item, actor) {
+    const limitType  = act?.limit?.type;
+    const limitCount = act?.limit?.count ?? 0;
+    if (!limitType || limitType === "unlimited" || limitCount <= 0 || !actor) return;
+    const flagKey = limitType === "perTurn" ? "turnFireCounts"
+                  : limitType === "perEncounter" ? "encounterFireCounts" : null;
+    if (!flagKey) return;
+    const counts = foundry.utils.deepClone(actor.getFlag?.("limbusCompany_FVTT", flagKey) ?? {});
+    const key    = ClashManager._actCountKey(item, act);
+    counts[key]  = (counts[key] ?? 0) + 1;
+    await ClashManager._safeDocUpdate(actor, { [`flags.limbusCompany_FVTT.${flagKey}`]: counts });
   }
 
   /**
@@ -4643,9 +5379,19 @@ export class ClashManager {
         return;
       }
       // 非守备技能：发起对抗（反应触发，不消耗行动值：临时置 AP 为足够大再还原）
+      // reactTarget 决定这一击打谁：
+      //   defender（默认）＝触发者攻击的那个目标（例如友方打谁我就补刀谁）
+      //   attacker        ＝触发这次反应的人本身
+      //   none            ＝不指定，谁都能响应
       const curAP = actor.system?.ap?.value ?? 0;
       if (curAP <= 0) await ClashManager._safeDocUpdate(actor, { "system.ap.value": 1 });
-      await ClashManager.showInitiateDialog(actor, skillItem, -2);
+      const reactTarget = eff?.reactTarget ?? "defender";
+      let tgtId = "";
+      if (reactTarget === "defender") tgtId = defender?.id ?? "";
+      else if (reactTarget === "attacker") tgtId = attacker?.id ?? "";
+      // 指定目标不能是自己，否则发出的对抗卡没人能响应
+      if (tgtId === actor.id) tgtId = "";
+      await ClashManager.showInitiateDialog(actor, skillItem, -2, tgtId);
       return;
     }
     // 其他效果类型：构造只含此效果的临时活动，走 _applyActivities 路径
@@ -4676,6 +5422,11 @@ export class ClashManager {
   /** 处理 socket 消息（clashResolve / activityActivate / reactionCheck） */
   static async handleSocketMsg(msg) {
     // 反应检查广播：所有客户端均处理，各自只弹出自己拥有控制权的 actor 的对话框
+    if (msg.type === "coverOffer") {
+      await ClashManager._checkCoverDefense(msg.msgId, msg.initFlags);
+      return;
+    }
+
     if (msg.type === "reactionCheck") {
       const { lastSkillUuid, attackerId, defenderId } = msg.data ?? {};
       const attacker = attackerId ? game.actors.get(attackerId) : null;
@@ -4689,7 +5440,7 @@ export class ClashManager {
       if (!game.user.isGM) return;
       try {
         const doc = msg.uuid ? await fromUuid(msg.uuid) : null;
-        if (doc) await doc.update(msg.data);
+        if (doc) await doc.update(msg.data, msg.options ?? {});
       } catch (err) {
         console.error("[ClashManager] gmDocUpdate 失败:", err);
       }
@@ -4733,7 +5484,7 @@ export class ClashManager {
     console.log("[ClashManager] 收到 clashResolve socket 消息 | isGM:", game.user.isGM, "| data:", msg.data);
     if (!game.user.isGM) return;
     try {
-      const { defActorId, defItemId, defRollTotal, defFormula, initMsgId, initFlags, slotIdx } = msg.data;
+      const { defActorId, defItemId, defRollTotal, defRollData, defFormula, initMsgId, initFlags, slotIdx } = msg.data;
       const defActor = game.actors.get(defActorId);
       const defItem  = defActor?.items.get(defItemId);
       if (!defActor || !defItem) {
@@ -4743,7 +5494,12 @@ export class ClashManager {
       }
       console.log("[ClashManager] GM 开始执行对抗结算 | defActor:", defActor.name, "| defItem:", defItem.name);
       // 重建只含 total 的 roll 代理对象（结算流程仅使用 .total）
-      const defRoll = { total: defRollTotal };
+      // 有完整骰子数据就重建真 Roll（DiceSoNice 需要），否则退回只含 total 的替身
+      let defRoll = { total: defRollTotal };
+      if (defRollData) {
+        try { defRoll = Roll.fromJSON(JSON.stringify(defRollData)); }
+        catch (err) { console.warn("[ClashManager] 防守骰重建失败，退回替身对象:", err); }
+      }
       await ClashManager._sendResponseAndResolve(
         defActor, defItem, defRoll, defFormula, initMsgId, initFlags, slotIdx ?? -1
       );

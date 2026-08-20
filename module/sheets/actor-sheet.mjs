@@ -14,6 +14,8 @@ import { ClashManager } from "../helpers/clash.mjs";
 import { CustomBuffRegistry, resolveBuffHandler, normalizeBuffType } from "../helpers/custom-buffs.mjs";
 import { getBagItems, packBagGrid } from "../helpers/bag-grid.mjs";
 import { buildItemTitleCard, closeTitleCardUnlessLocked, toggleTitleCardLock } from "./item-sheet.mjs";
+import { ClashVFX } from "../helpers/clash-vfx.mjs";
+import { QuickActionHUD } from "./quick-action-hud.mjs";
 
 /**
  * 以 actorId 为 key 的模块级战斗袋状态 Map。
@@ -165,14 +167,11 @@ export class LimbusActorSheet extends ActorSheet {
 
     context.egoSkills = cfg.EGO_GRADES.map(grade => {
       const egoItem   = system.skills?.ego?.[grade] ? actor.items.get(system.skills.ego[grade]) : null;
-      const erodeUuid = egoItem?.system?.relatedSkill?.erodeUuid ?? null;
       return {
         grade,
         item:       egoItem,
         itemId:     system.skills?.ego?.[grade] ?? null,
         skillImg:   egoItem?.img ?? "",
-        erodeUuid,
-        hasRelated: !!(egoItem?.system?.relatedSkill?.itemUuid),
         frameImg:   this._resolveFrameImg(egoItem, "ego"),
       };
     });
@@ -615,10 +614,6 @@ export class LimbusActorSheet extends ActorSheet {
       setTimeout(() => this._renderCombatSlots(this.element), 80);
     }
 
-    // EGO 相关技能槽：恢复状态，并在陷入恐慌时自动激活侵蚀形态
-    this._autoActivateEgoPanicToggles();
-    setTimeout(() => this._applyEgoRelatedToDom(this.element), 90);
-
     // ── 非 GM/非编辑：只读分支结束 ────────────────────────────────────────
     if (!this.isEditable) return;
 
@@ -782,7 +777,6 @@ export class LimbusActorSheet extends ActorSheet {
     // EGO / 守备技能槽：data-item-id 由 HBS 模板直接写入，绑定时已存在
     html.find(".ego-combat-section .combat-skill-slot[data-item-id], .combat-defense-slot[data-item-id]")
       .on("click", this._onEgoSkillClick.bind(this));
-    html.find(".combat-skill-related-toggle").on("click", this._onRelatedSkillToggle.bind(this));
 
     // ── 战斗技能槽悬浮 Title 卡（事件委托，兼容动态写入的 data-item-id）────
     html.find(".tab[data-tab='战斗']")
@@ -1584,7 +1578,6 @@ export class LimbusActorSheet extends ActorSheet {
         equipped:    basicIds,          // 装备的6个技能 ID
         slots:       bag1.slice(0, 6), // 当前6个显示槽 [0..5]
         pool:        bag2,             // 预备池（下一轮抽取来源）
-        relatedMode: {},               // slotIndex → true 时显示相关技能
       };
     }
     this._renderCombatSlots(html);
@@ -1604,7 +1597,6 @@ export class LimbusActorSheet extends ActorSheet {
         $slot.attr("data-item-id", "");
         $slot.removeClass("slot-active slot-reserve slot-bag").addClass("slot-empty");
         $wrap.find(".slot-state-dot").removeClass("dot-active dot-reserve");
-        $wrap.find(".combat-skill-related-toggle").hide();
         $wrap.find(".combat-slot-name").text("");
       });
       return;
@@ -1616,7 +1608,6 @@ export class LimbusActorSheet extends ActorSheet {
       const $wrap   = $(wrap);
       const $slot   = $wrap.find(".combat-skill-slot");
       const $dot    = $wrap.find(".slot-state-dot");
-      const $toggle = $wrap.find(".combat-skill-related-toggle");
       const $name   = $wrap.find(".combat-slot-name");
       const id      = state.slots[i] ?? null;
 
@@ -1653,10 +1644,6 @@ export class LimbusActorSheet extends ActorSheet {
       // 罪孽色内发光（激活槽）
       const sinColor = CONFIG.LIMBUSCOMPANY?.SIN_COLORS?.[mainItem?.system?.sinType] ?? "";
       $slot.css("--slot-sin-color", (sinColor && i < 2) ? sinColor : "");
-
-      // 旧版"相关技能"单槽临时切换机制已废弃（改由④效果「相关技能转换」
-      // 永久替换技能槽位实现，见 clash.mjs relatedSkillConvert）
-      $toggle.hide().removeClass("related-active");
     });
   }
 
@@ -1673,96 +1660,91 @@ export class LimbusActorSheet extends ActorSheet {
 
   /**
    * 丢弃战斗槽中的技能
+   *
+   * 只会丢激活槽 0/1（预备模式丢槽 2）——6bag 里只可能有基础技能，装备/守备技能
+   * 触发的丢弃也一样只作用于这两格。触发这条消耗的技能永远不会丢弃自己，
+   * 【等级】模式也只是判断"另一张"是不是该等级；0/1 两格都符合时两张一起丢
+   *（【丢弃时】由调用方只触发一次）。
+   *
    * @param {"level"|"another"|"reserve"} mode
    * @param {number} level - 仅 mode==="level" 时有效
-   * @param {string} currentItemId - 当前正在使用的技能 ID（用于排除"另一个"时避免丢弃自身）
-   * @returns {{ discardedId: string|null, slotIndex: number }} 被丢弃的技能 ID 及槽位
+   * @param {string} currentItemId - 触发本次丢弃的技能 ID（永远排除）
+   * @param {number[]|null} declaredIdx - 还剩哪些"宣言时就在场"的槽位下标
+   * @returns {{ discardedIds: string[], slotIndices: number[] }} 被丢弃的技能与槽位
    */
-  async _discardCombatSkill(mode, level, currentItemId) {
+  async _discardCombatSkill(mode, level, currentItemId, declaredIdx = null) {
     const state = this._combatBagState;
-    if (!state) return { discardedId: null, slotIndex: -1 };
+    if (!state) return { discardedIds: [], slotIndices: [] };
 
-    let targetSlot = -1;
+    // 与消耗预检查共用同一套定位规则，避免"检查通过但实际丢不掉"
+    const slots = ClashManager._findDiscardSlots(
+      this.actor, state.slots,
+      { discardMode: mode, discardLevel: level },
+      currentItemId ?? "", declaredIdx
+    );
+    if (!slots.length) return { discardedIds: [], slotIndices: [] };
 
-    if (mode === "level") {
-      // 在激活槽 0/1 中找第一个等于该等级的技能
-      for (let i = 0; i <= 1; i++) {
-        const id = state.slots[i];
-        if (!id) continue;
-        const sk = this.actor.items.get(id);
-        if (sk && (sk.system?.level ?? 1) === level) {
-          targetSlot = i;
-          break;
-        }
-      }
-    } else if (mode === "another") {
-      // 在激活槽 0/1 中找另一个（不是 currentItemId 的那个）
-      for (let i = 0; i <= 1; i++) {
-        if (state.slots[i] && state.slots[i] !== currentItemId) {
-          targetSlot = i;
-          break;
-        }
-      }
-    } else if (mode === "reserve") {
-      // 槽 2 是预备区
-      if (state.slots[2]) targetSlot = 2;
+    const discardedIds = slots.map(i => state.slots[i]).filter(Boolean);
+    // 从后往前丢，免得前一张的左移把后面的下标搞错
+    for (const idx of [...slots].reverse()) {
+      if (state.slots[idx]) await this._animateDiscardSkill(idx);
     }
-
-    if (targetSlot === -1 || !state.slots[targetSlot]) return { discardedId: null, slotIndex: -1 };
-
-    const discardedId = state.slots[targetSlot];
-    // 执行丢弃动画（淡出），然后补充新牌
-    await this._animateDiscardSkill(targetSlot);
-    return { discardedId, slotIndex: targetSlot };
+    return { discardedIds, slotIndices: slots };
   }
 
-  // 丢弃动画：指定槽淡出并补充新牌
+  // 丢弃动画：破币特效 → 该槽碎裂消失 → 左侧不动、右侧左移、新牌从右边推进来
   async _animateDiscardSkill(slotIndex) {
     const state = this._combatBagState;
     if (!state) return;
 
     const _wraps = () => this.element?.find(".basic-combat-section .combat-skill-slot-wrap");
+
+    // 快捷 HUD 上也显示前 3 格，同步炸一下
+    const $hudSlot = (slotIndex <= 2)
+      ? QuickActionHUD.instance?.element?.find(`.qa-skill-slot[data-slot-index="${slotIndex}"]`)
+      : null;
+    if ($hudSlot?.length) {
+      ClashVFX.burstOnElement($hudSlot);
+      $hudSlot.addClass("qa-skill-slot--breaking");
+    }
+
     const $wraps = _wraps();
-    if (!$wraps?.length || slotIndex >= $wraps.length) {
-      // 无 DOM，直接更新状态
-      state.slots.splice(slotIndex, 1);
-      const nextId = this._drawNextFromPool();
-      state.slots.push(nextId);
+    const $slot  = $wraps?.eq(slotIndex).find(".combat-skill-slot");
+
+    // 角色卡没打开（或槽位不在 DOM 里）：只更新状态
+    if (!$slot?.length) {
+      this._advanceBagState(slotIndex);
       this._renderCombatSlots(this.element);
+      QuickActionHUD.instance?.render(false);
       return;
     }
 
-    return new Promise((resolve) => {
-      const $slot = $wraps.eq(slotIndex).find(".combat-skill-slot");
-      $slot.css({
-        transition: "opacity 0.25s ease, transform 0.25s ease",
-        opacity: "0",
-        transform: "scale(0.7)",
-      });
+    ClashVFX.burstOnElement($slot);
+    $slot.addClass("combat-skill-slot--breaking");
 
-      setTimeout(() => {
-        state.slots.splice(slotIndex, 1);
-        const nextId = this._drawNextFromPool();
-        state.slots.push(nextId);
+    await new Promise(r => setTimeout(r, 260));
 
-        const $w2 = _wraps();
-        $w2?.each((_, el) => {
-          $(el).css({ transition: "none", transform: "" });
-          $(el).find(".combat-skill-slot").css({ transition: "none", transform: "", opacity: "" });
-        });
-        this._renderCombatSlots(this.element);
+    state.slots.splice(slotIndex, 1);
+    state.slots.push(this._drawNextFromPool());
 
-        const $newSlot = _wraps()?.eq(5).find(".combat-skill-slot");
-        if ($newSlot?.length) {
-          $newSlot.css({ opacity: "0", transform: "scale(0.7)" });
-          requestAnimationFrame(() => requestAnimationFrame(() => {
-            $newSlot.css({ transition: "opacity 0.3s ease, transform 0.3s ease", opacity: "1", transform: "scale(1)" });
-            setTimeout(() => $newSlot.css({ transition: "", transform: "" }), 350);
-          }));
-        }
-        resolve();
-      }, 280);
+    // 重渲染前把上一轮残留的内联样式清掉
+    _wraps()?.each((_, el) => {
+      $(el).find(".combat-skill-slot")
+        .removeClass("combat-skill-slot--breaking")
+        .css({ transition: "none", transform: "", opacity: "" });
     });
+    this._renderCombatSlots(this.element);
+    QuickActionHUD.instance?.render(false);
+
+    // 被丢的那格右边所有牌左移一格，最右边补进来的新牌从右侧推入
+    const $after = _wraps();
+    $after?.each((i, el) => {
+      if (i < slotIndex) return;                        // 左侧的牌原地不动
+      const $s = $(el).find(".combat-skill-slot");
+      $s.addClass(i === 5 ? "combat-skill-slot--slide-in" : "combat-skill-slot--shift-left");
+      setTimeout(() => $s.removeClass("combat-skill-slot--slide-in combat-skill-slot--shift-left"), 400);
+    });
+    await new Promise(r => setTimeout(r, 120));
   }
 
   // 推进 bag 状态（无论角色卡是否打开都必须执行）
@@ -1874,132 +1856,10 @@ export class LimbusActorSheet extends ActorSheet {
     // EGO / 守备技能：直接发起对抗，不推进 bag，不消耗行动值
     const itemId = event.currentTarget.dataset.itemId;
     if (!itemId) return;
-    let item = this.actor.items.get(itemId);
+    const item = this.actor.items.get(itemId);
     if (!item) return;
 
-    // 若该 EGO 槽处于相关技能模式，使用相关技能（恐慌时用侵蚀形态）
-    if (this._egoRelatedMode?.[itemId]) {
-      const hasPanic = (this.actor.system.buffs ?? []).some(
-        b => b.type === "panic" && b.whenAdded !== "下回合"
-      );
-      const uuid = (hasPanic && item.system?.relatedSkill?.erodeUuid)
-        ? item.system.relatedSkill.erodeUuid
-        : item.system?.relatedSkill?.itemUuid;
-      if (uuid) {
-        const relItem = typeof fromUuidSync !== "undefined" ? fromUuidSync(uuid) : null;
-        if (relItem) item = relItem;
-      }
-    }
-
     this._showClashDialog(item, -1);  // slotIndex = -1 → 不触发 bag 动画/AP 消耗
-  }
-
-  _onRelatedSkillToggle(event) {
-    event.stopPropagation();
-    const $btn  = $(event.currentTarget);
-    const $wrap = $btn.closest(".combat-skill-slot-wrap");
-    const $slot = $wrap.find(".combat-skill-slot");
-
-    const slotIndexRaw = $slot.attr("data-slot-index");
-    const isBasicSlot  = slotIndexRaw !== undefined && slotIndexRaw !== "";
-
-    if (isBasicSlot) {
-      // ── 基础技能槽 ──────────────────────────────────────────────────────
-      const slotIndex = parseInt(slotIndexRaw);
-      const state = this._combatBagState;
-      if (!state) return;
-      if (!state.relatedMode) state.relatedMode = {};
-
-      const isNowRelated = !state.relatedMode[slotIndex];
-      state.relatedMode[slotIndex] = isNowRelated;
-      $btn.toggleClass("related-active", isNowRelated);
-
-      const mainId   = state.slots[slotIndex];
-      const mainItem = mainId ? this.actor.items.get(mainId) : null;
-      if (!mainItem) return;
-
-      let displayItem = mainItem;
-      if (isNowRelated) {
-        const relUuid = mainItem.system?.relatedSkill?.itemUuid;
-        const relItem = relUuid && typeof fromUuidSync !== "undefined" ? fromUuidSync(relUuid) : null;
-        if (relItem) displayItem = relItem;
-      }
-      $slot.find("img").attr("src", displayItem.img ?? "");
-      $wrap.find(".combat-slot-name").text(displayItem.name ?? "");
-
-    } else {
-      // ── EGO / 守备技能槽 ─────────────────────────────────────────────
-      const itemId = $slot.attr("data-item-id");
-      if (!itemId) return;
-      if (!this._egoRelatedMode) this._egoRelatedMode = {};
-
-      const isNowRelated = !this._egoRelatedMode[itemId];
-      this._egoRelatedMode[itemId] = isNowRelated;
-      $btn.toggleClass("related-active", isNowRelated);
-
-      const mainItem = this.actor.items.get(itemId);
-      if (!mainItem) return;
-
-      const hasPanic = (this.actor.system.buffs ?? []).some(
-        b => b.type === "panic" && b.whenAdded !== "下回合"
-      );
-      let displayItem = mainItem;
-      if (isNowRelated) {
-        const uuid = (hasPanic && mainItem.system?.relatedSkill?.erodeUuid)
-          ? mainItem.system.relatedSkill.erodeUuid
-          : mainItem.system?.relatedSkill?.itemUuid;
-        const relItem = uuid && typeof fromUuidSync !== "undefined" ? fromUuidSync(uuid) : null;
-        if (relItem) displayItem = relItem;
-      }
-      $slot.find("img").attr("src", displayItem.img ?? "");
-    }
-  }
-
-  /**
-   * 若角色当前处于【陷入恐慌】，自动将所有拥有侵蚀形态（erodeUuid）的 EGO 技能
-   * 切换到相关技能模式。脱离恐慌后不自动还原（玩家手动切回）。
-   */
-  _autoActivateEgoPanicToggles() {
-    const hasPanic = (this.actor.system.buffs ?? []).some(
-      b => b.type === "panic" && b.whenAdded !== "下回合"
-    );
-    if (!hasPanic) return;
-    if (!this._egoRelatedMode) this._egoRelatedMode = {};
-    const cfg = CONFIG.LIMBUSCOMPANY;
-    const sys = this.actor.system;
-    for (const grade of (cfg.EGO_GRADES ?? [])) {
-      const itemId = sys.skills?.ego?.[grade];
-      if (!itemId) continue;
-      const egoItem = this.actor.items.get(itemId);
-      if (egoItem?.system?.relatedSkill?.erodeUuid) {
-        this._egoRelatedMode[itemId] = true;
-      }
-    }
-  }
-
-  /** 将 _egoRelatedMode 状态同步到 DOM 中的 EGO 战斗槽 */
-  _applyEgoRelatedToDom(html) {
-    if (!this._egoRelatedMode || !html?.length) return;
-    const hasPanic = (this.actor.system.buffs ?? []).some(
-      b => b.type === "panic" && b.whenAdded !== "下回合"
-    );
-    html.find(".ego-combat-section .combat-skill-slot-wrap").each((_, wrap) => {
-      const $wrap  = $(wrap);
-      const $slot  = $wrap.find(".combat-skill-slot");
-      const $btn   = $wrap.find(".combat-skill-related-toggle");
-      const itemId = $slot.attr("data-item-id");
-      if (!itemId) return;
-      const isRelated = !!this._egoRelatedMode[itemId];
-      $btn.toggleClass("related-active", isRelated);
-      if (!isRelated) return;
-      const mainItem = this.actor.items.get(itemId);
-      if (!mainItem) return;
-      const uuid = (hasPanic && mainItem.system?.relatedSkill?.erodeUuid)
-        ? mainItem.system.relatedSkill.erodeUuid
-        : mainItem.system?.relatedSkill?.itemUuid;
-      const relItem = uuid && typeof fromUuidSync !== "undefined" ? fromUuidSync(uuid) : null;
-      if (relItem) $slot.find("img").attr("src", relItem.img ?? "");
-    });
   }
 
   /* ─── 行动值（AP） ──────────────────────────────────────────────────────── */
@@ -2188,10 +2048,20 @@ export class LimbusActorSheet extends ActorSheet {
     const input  = event.currentTarget;
     const buffId = input.dataset.buffId;
     const field  = input.dataset.field;
-    const value  = parseInt(input.value) || 0;
-    const buffs  = (this.actor.system.buffs ?? []).map(b =>
-      b.id === buffId ? { ...b, [field]: value } : b
-    );
+    let   value  = parseInt(input.value) || 0;
+    const buffs  = (this.actor.system.buffs ?? []).map(b => {
+      if (b.id !== buffId) return b;
+      // 手改也守规矩：层数不得超过该 BUFF 注册的上限
+      if (field === "stacks") {
+        const max = resolveBuffHandler(b)?.maxStacks ?? Infinity;
+        if (Number.isFinite(max) && value > max) {
+          ui.notifications.info(`【${b.name ?? b.type}】最多 ${max} 层`);
+          value = max;
+          input.value = max;
+        }
+      }
+      return { ...b, [field]: value };
+    });
     await this.actor.update({ "system.buffs": buffs });
   }
 

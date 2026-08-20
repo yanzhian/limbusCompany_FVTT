@@ -94,12 +94,15 @@ export class ClashKnockback {
       x: Math.round(center.x - token.w / 2),
       y: Math.round(center.y - token.h / 2),
     };
+    // animate:false 只在本机生效，其他客户端仍会做补间——必须同时给 teleport:true，
+    // 这个选项会随更新广播出去，各端都按"瞬移"处理，不再看到慢慢滑过去
+    const opts = { animate: false, teleport: true };
     const doc = token.document;
     if (doc.canUserModify?.(game.user, "update")) {
-      return doc.update(data, { animate: false });
+      return doc.update(data, opts);
     }
     game.socket?.emit("system.limbusCompany_FVTT", {
-      type: "gmDocUpdate", uuid: doc.uuid, data,
+      type: "gmDocUpdate", uuid: doc.uuid, data, options: opts,
     });
     // 委托出去之后本地拿不到结果，给远端留一点应用时间
     await new Promise(r => setTimeout(r, 120));
@@ -114,15 +117,69 @@ export class ClashKnockback {
   static async _push(token, dx, dy, cells) {
     const gs = canvas.grid.size;
     let center = { ...token.center };
-    let moved = 0;
+    let moved = 0, hitWall = false;
     for (let i = 0; i < cells; i++) {
       const next = { x: center.x + dx * gs, y: center.y + dy * gs };
-      if (this._blocked(token, center, next)) return { hitWall: true, center };
+      // 撞上了就停在这儿——之前推的那几格照样算数（离墙 2 格却要退 3 格时，
+      // 应该退满 2 格再撞墙，而不是一格都不动）
+      if (this._blocked(token, center, next)) { hitWall = true; break; }
       center = next;
       moved++;
     }
     if (moved) await this._teleport(token, center);
-    return { hitWall: false, center };
+    return { hitWall, moved, center };
+  }
+
+  /** 从 from 指向 to 的主轴正交方向 */
+  static _dirTo(from, to) {
+    const dx = to.x - from.x, dy = to.y - from.y;
+    return Math.abs(dx) >= Math.abs(dy)
+      ? { dx: Math.sign(dx) || 1, dy: 0 }
+      : { dx: 0, dy: Math.sign(dy) || 1 };
+  }
+
+  /**
+   * 让 token 瞬移到 target 的旁边（贴身），带风线。
+   * @returns {boolean} 是否成功贴上
+   */
+  static async approach(token, target, { behind = false } = {}) {
+    const gs = canvas.grid.size;
+    const dir = this._dirTo(token.center, target.center);
+    // 默认：首选正对着来的那一格；behind=true：绕到目标背后（自己这一侧的反面），
+    // 免得站在人堆中间原地不动地挥刀，看着发呆
+    const near = { x: target.center.x - dir.dx * gs, y: target.center.y - dir.dy * gs };
+    const far  = { x: target.center.x + dir.dx * gs, y: target.center.y + dir.dy * gs };
+    const side = [
+      { x: target.center.x - gs, y: target.center.y },
+      { x: target.center.x + gs, y: target.center.y },
+      { x: target.center.x, y: target.center.y - gs },
+      { x: target.center.x, y: target.center.y + gs },
+    ].filter(p => Math.hypot(p.x - near.x, p.y - near.y) > gs * 0.5
+               && Math.hypot(p.x - far.x,  p.y - far.y)  > gs * 0.5);
+    // 侧面两格随机先后，连着打同一个人时不会每次都绕同一边
+    if (side.length > 1 && Math.random() < 0.5) side.reverse();
+    const spots = behind ? [far, ...side, near] : [near, ...side, far];
+    for (const spot of spots) {
+      if (Math.hypot(spot.x - token.center.x, spot.y - token.center.y) < gs * 0.5) return true;
+      if (this._blocked(token, token.center, spot)) continue;
+      ClashVFX.broadcastDash({ ...token.center }, spot);
+      await this._teleport(token, spot);
+      return true;
+    }
+    this._log("贴身路线被挡，目标周围没有空位");
+    return false;
+  }
+
+  /**
+   * 【援护防御】等场合：把 actor 的 token 挪到 target 身旁的空位。
+   * 与击退模式无关，因此不看世界设定，始终可用。
+   */
+  static async moveNextTo(actor, target) {
+    if (!canvas?.ready) return false;
+    const tok = this._tokenOf(actor);
+    const tgt = this._tokenOf(target);
+    if (!tok || !tgt) return false;
+    return this.approach(tok, tgt);
   }
 
   /**
@@ -133,20 +190,28 @@ export class ClashKnockback {
    * @param {Actor}   opts.loser     本次交锋的败方
    * @param {number}  opts.winScore  胜方点数（决定震退几格）
    * @param {boolean} opts.chase     胜方是否追击（【伤害计算】那一下传 false）
+   * @param {boolean} opts.approachFirst 不贴身时先扑过去再打（反击用）
    * @param {Function} opts.onWallHit 撞墙回调：(actor) => Promise，用来触发【震颤引爆】
    */
-  static async repel({ winner, loser, winScore = 0, chase = true, onWallHit = null } = {}) {
+  static async repel({ winner, loser, winScore = 0, chase = true,
+                       approachFirst = false, onWallHit = null } = {}) {
     if (!this.active || !canvas?.ready) return;
-
-    const cells = this.cellsFor(winScore);
-    if (cells <= 0) return;
 
     const winTok  = this._tokenOf(winner);
     const loseTok = this._tokenOf(loser);
     if (!winTok || !loseTok) return;
 
     // 面对面才有斥力，隔空对拼视为远程
-    const facing = this._facing(winTok, loseTok);
+    let facing = this._facing(winTok, loseTok);
+    if (!facing && approachFirst) {
+      // 反击：被打退开了就反手扑回去——这一步与点数无关，够不够击退都要贴上去
+      await this._wait(this.DELAY_CHASE);
+      if (await this.approach(winTok, loseTok)) facing = this._facing(winTok, loseTok);
+    }
+
+    // 点数不够就只是贴身，不产生击退
+    const cells = this.cellsFor(winScore);
+    if (cells <= 0) return;
     if (!facing) { this._log("双方并非贴身，跳过斥力"); return; }
 
     this._log(`斥力：点数 ${winScore} → 击退 ${cells} 格`);

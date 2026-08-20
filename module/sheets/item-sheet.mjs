@@ -15,6 +15,12 @@ import { SKILLBOOK_MAX_SLOTS } from "../documents/item.mjs";
 import { CustomBuffRegistry, normalizeBuffType } from "../helpers/custom-buffs.mjs";
 import { linkifyHtml } from "../helpers/linkify.mjs";
 
+/**
+ * 激活效果剪贴板（本次会话内共享，跨物品卡有效，刷新页面后清空）。
+ * 存的是去掉 id 的 activity 快照——粘贴时再补一个新 id。
+ */
+let _activityClipboard = null;
+
 export class LimbusItemSheet extends ItemSheet {
 
   /** 当前 sheet 绑定的所有 Title 卡 hover controller（activateListeners 时填充） */
@@ -56,6 +62,47 @@ export class LimbusItemSheet extends ItemSheet {
 
   get activitiesExpanded() { return this._activitiesExpanded ?? false; }
 
+  /* ─── E.G.O 形态（觉醒 / 侵蚀） ─────────────────────────────────────────── */
+
+  /** 当前编辑的是不是 EGO 的【侵蚀】形态 */
+  get _editCorrode() {
+    return this.item.type === "skill"
+      && this.item.system?.type === "ego"
+      && this.item.system?.egoForm === "corrode";
+  }
+  /** 激活效果所在的字段名（侵蚀形态另存一套） */
+  get _actField() { return this._editCorrode ? "corrode.activities" : "activities"; }
+  get _actPath()  { return `system.${this._actField}`; }
+  /** 当前形态的激活效果列表（原始存档值） */
+  get _actList() {
+    const src = this.item.toObject().system ?? {};
+    return foundry.utils.deepClone(
+      (this._editCorrode ? src.corrode?.activities : src.activities) ?? []
+    );
+  }
+
+  /** 右上角 [觉醒/侵蚀] 切换：首次切到侵蚀时用觉醒的数值打底 */
+  async _onEgoFormToggle(event) {
+    event.preventDefault();
+    const sys  = this.item.toObject().system ?? {};
+    const next = sys.egoForm === "corrode" ? "awaken" : "corrode";
+    const update = { "system.egoForm": next };
+    if (next === "corrode" && !sys.corrode?.initialized) {
+      Object.assign(update, {
+        "system.corrode.initialized": true,
+        "system.corrode.category":    sys.category    ?? "slash",
+        "system.corrode.baseValue":   sys.baseValue   ?? 0,
+        "system.corrode.diceCount":   sys.diceCount   ?? 1,
+        "system.corrode.diceFaces":   sys.diceFaces   ?? 4,
+        "system.corrode.weight":      sys.weight      ?? 1,
+        "system.corrode.sanityCost":  sys.sanityCost  ?? 0,
+        "system.corrode.effectDesc":  sys.effectDesc  ?? "",
+        "system.corrode.activities":  foundry.utils.deepClone(sys.activities ?? []),
+      });
+    }
+    await this.item.update(update);
+  }
+
   /* ─── 数据准备 ──────────────────────────────────────────────────────────── */
 
   async getData() {
@@ -71,7 +118,12 @@ export class LimbusItemSheet extends ItemSheet {
     context.activitiesExpanded = this.activitiesExpanded;
 
     // ── 活动列表 ─────────────────────────────────────────────────────────
-    context.activities = sys.activities ?? [];
+    // EGO 处于【侵蚀】编辑形态时，编辑的是 system.corrode.activities
+    // 注意 _actField 可能是 "corrode.activities" 这种带点路径，不能直接方括号取值
+    context.activities = foundry.utils.getProperty(item.toObject().system ?? {}, this._actField) ?? [];
+
+    // 剪贴板状态（供「粘贴效果」按钮显示名字）
+    context.clipboardActivityName = _activityClipboard?.name ?? "";
 
     // ── 技能专用数据 ──────────────────────────────────────────────────────
     if (item.type === "skill") {
@@ -83,12 +135,34 @@ export class LimbusItemSheet extends ItemSheet {
       context.isCounterType = sys.type === "defense" &&
         (sys.category === "counter" || sys.category === "clashCounter");
 
-      // EGO 消耗行
+      // EGO 消耗行（罪孽消耗 / 调整抗性两形态共用）
       // 注意：schema 字段名为 sinCost[].sinType 和 egoResistanceAdj[].{sinType,multiplier}
       if (context.isEgo) {
-        context.sinCosts = sys.sinCost ?? [];
+        context.sinCosts      = sys.sinCost ?? [];
         context.egoResChanges = sys.egoResistanceAdj ?? [];
       }
+
+      // 【觉醒】/【侵蚀】：卡面按 system.egoForm 决定编辑/展示哪一套。
+      // 注意读的是 _source——持有者恐慌时 prepareDerivedData 会把侵蚀数据投影到
+      // 顶层字段上，编辑器必须看原始存档值，否则会把投影结果写回觉醒那一套。
+      const src   = item.toObject().system ?? {};
+      const corrode = context.isEgo && sys.egoForm === "corrode";
+      context.isCorrode    = corrode;
+      context.egoFormLabel = corrode ? "侵蚀" : "觉醒";
+      // 表单字段前缀：侵蚀形态下这些字段写进 system.corrode.*
+      context.fp = corrode ? "system.corrode." : "system.";
+      const cSrc = src.corrode ?? {};
+      const pick = (k) => (corrode && cSrc[k] !== null && cSrc[k] !== undefined) ? cSrc[k] : src[k];
+      // 当前形态下展示的那一套数值
+      context.form = {
+        category:   pick("category"),
+        weight:     pick("weight"),
+        sanityCost: pick("sanityCost"),
+        effectDesc: corrode ? (cSrc.effectDesc ?? "") : (src.effectDesc ?? ""),
+      };
+      context.formDiceCount = pick("diceCount") ?? 1;
+      context.formDiceFaces = pick("diceFaces") ?? 4;
+      context.formBaseValue = pick("baseValue") ?? 0;
 
       // 攻击/守备类别选项：使用中文直接标签，避免模板渲染 i18n key 字符串
       const _catZh = cfg.CATEGORY_LABELS_ZH ?? {};
@@ -101,11 +175,21 @@ export class LimbusItemSheet extends ItemSheet {
       // 罪孽类型：同样使用中文标签
       context.skillSinTypes = cfg.SIN_LABELS_ZH ?? {};
 
-      // 技能骰公式（格式化为大写）
-      context.diceFormulaDisplay = (sys.diceFormula ?? "").toUpperCase();
+      // 技能骰公式（格式化为大写）——按当前展示的形态生成
+      const _bv = context.formBaseValue;
+      context.diceFormulaDisplay =
+        `${context.formDiceCount}D${context.formDiceFaces}${_bv > 0 ? `+${_bv}` : ""}`;
 
-      // 加重值小方块
-      context.weightSquares = Array.from({ length: sys.weight ?? 0 }, (_, i) => i);
+      // 攻击容量小方块
+      context.weightSquares = Array.from({ length: context.form.weight ?? 0 }, (_, i) => i);
+
+      // 攻击容量 >= 2 时才给扩散方式 / 范围（1 格 = 5ft，半径 N → N×5+2.5 ft）。
+      // 基础容量只有 1、靠效果临时增容的技能也可能需要指定方式，因此只要已经
+      // 设过非默认值（广域乱射 / 范围 >1），这一栏就一直显示出来可编辑。
+      const spreadSet = sys.spreadMode === "spray" || (sys.spreadRange ?? 1) > 1;
+      context.showSpread      = (context.form.weight ?? 0) >= 2 || spreadSet;
+      context.spreadModeLabel = sys.spreadMode === "spray" ? "广域乱射" : "链式扩散";
+      context.spreadFt        = `${((sys.spreadRange ?? 1) * 5 + 2.5).toFixed(1)}ft`;
 
       // 图标边框：与 HUD / 技能槽同一套（罪孽+等级空心框，EGO 为圆环）
       context.skillFrame = ClashManager._skillFrameIcon(item);
@@ -344,6 +428,31 @@ export class LimbusItemSheet extends ItemSheet {
 
     // ── 编辑锁切换 ────────────────────────────────────────────────────────
     html.find(".sheet-lock-icon").on("click", this._onToggleLock.bind(this));
+    html.find(".ego-form-toggle").on("click", this._onEgoFormToggle.bind(this));
+
+    // 攻击容量输入时即时切换扩散设置的显隐（不等重渲染）
+    html.find(".weight-input[name$='weight']").on("input", (ev) => {
+      const n = parseInt(ev.currentTarget.value) || 0;
+      const set = this.item.system?.spreadMode === "spray"
+               || (this.item.system?.spreadRange ?? 1) > 1;
+      html.find(".spread-box").toggleClass("on", n >= 2 || set);
+    });
+    // 扩散方式 / 范围：不走表单提交，直接写回物品（避免与其它提交逻辑互相覆盖）
+    html.find(".spread-mode-sel").on("change", async (ev) => {
+      ev.stopPropagation();
+      const v = ev.currentTarget.value === "spray" ? "spray" : "chain";
+      await this.item.update({ "system.spreadMode": v });
+    });
+    html.find(".spread-range-input").on("input", (ev) => {
+      const n = Math.min(6, Math.max(1, parseInt(ev.currentTarget.value) || 1));
+      html.find(".spread-ft").text(`${(n * 5 + 2.5).toFixed(1)}ft`);
+    });
+    html.find(".spread-range-input").on("change", async (ev) => {
+      ev.stopPropagation();
+      const n = Math.min(6, Math.max(1, parseInt(ev.currentTarget.value) || 1));
+      ev.currentTarget.value = n;                      // 空值/越界时回填合法值
+      await this.item.update({ "system.spreadRange": n });
+    });
 
     // ── 图标点击：锁定时查看插图，解锁时由 Foundry data-edit 处理 ─────────
     html.find(".item-sheet-icon").on("click", (event) => {
@@ -363,6 +472,10 @@ export class LimbusItemSheet extends ItemSheet {
     html.find(".activity-add-btn").on("click",    this._onActivityAdd.bind(this));
     html.find(".activity-edit-btn").on("click",   this._onActivityEdit.bind(this));
     html.find(".activity-delete-btn").on("click", this._onActivityDelete.bind(this));
+    html.find(".activity-copy-btn").on("click",   this._onActivityCopy.bind(this));
+    html.find(".activity-dupe-btn").on("click",   this._onActivityDuplicate.bind(this));
+    html.find(".activity-paste-btn").on("click",  this._onActivityPaste.bind(this));
+    html.find(".activity-paste-json-btn").on("click", this._onActivityPasteJson.bind(this));
 
     if (!this.isEditable) return;
 
@@ -525,24 +638,30 @@ export class LimbusItemSheet extends ItemSheet {
 
     // ── skill：将用户输入的 diceFormula 文本解析为真正的 schema 字段
     if (this.item.type === "skill") {
+      // 侵蚀形态编辑时，骰数写进 system.corrode.*
+      const corrode  = this._editCorrode;
+      const pre      = corrode ? "system.corrode." : "system.";
       const _isFlat  = !formData.system;
-      const rawFml   = _isFlat ? formData["system.diceFormula"] : formData.system?.diceFormula;
+      const nested   = () => (corrode ? formData.system?.corrode : formData.system) ?? {};
+      const rawFml   = _isFlat ? formData[`${pre}diceFormula`] : nested().diceFormula;
       if (rawFml !== undefined) {
         const parsed = _parseDiceFormula(String(rawFml));
         if (parsed) {
           if (_isFlat) {
-            formData["system.diceCount"]  = parsed.diceCount;
-            formData["system.diceFaces"]  = parsed.diceFaces;
-            formData["system.baseValue"]  = parsed.baseValue;
+            formData[`${pre}diceCount`] = parsed.diceCount;
+            formData[`${pre}diceFaces`] = parsed.diceFaces;
+            formData[`${pre}baseValue`] = parsed.baseValue;
           } else {
-            formData.system.diceCount  = parsed.diceCount;
-            formData.system.diceFaces  = parsed.diceFaces;
-            formData.system.baseValue  = parsed.baseValue;
+            Object.assign(nested(), {
+              diceCount: parsed.diceCount,
+              diceFaces: parsed.diceFaces,
+              baseValue: parsed.baseValue,
+            });
           }
         }
         // 无论解析成功与否都丢弃原始文本（prepareDerivedData 会重新生成）
-        if (_isFlat) delete formData["system.diceFormula"];
-        else         delete formData.system.diceFormula;
+        if (_isFlat) delete formData[`${pre}diceFormula`];
+        else         delete nested().diceFormula;
       }
     }
 
@@ -685,7 +804,7 @@ export class LimbusItemSheet extends ItemSheet {
   }
 
   async _onActivityAdd(event) {
-    const activities = foundry.utils.deepClone(this.item.system.activities ?? []);
+    const activities = this._actList;
     activities.push({
       id:            foundry.utils.randomID(),
       name:          "新效果",
@@ -695,14 +814,14 @@ export class LimbusItemSheet extends ItemSheet {
       effects:       [],
       limit:         { type: "unlimited", count: 0 },
     });
-    await this.item.update({ "system.activities": activities });
+    await this.item.update({ [this._actPath]: activities });
     this._activitiesExpanded = true;
     this.render(false);
   }
 
   async _onActivityEdit(event) {
     const idx  = parseInt(event.currentTarget.closest("[data-activity-idx]")?.dataset.activityIdx ?? -1);
-    const acts = foundry.utils.deepClone(this.item.system.activities ?? []);
+    const acts = this._actList;
     if (idx < 0 || idx >= acts.length) return;
 
     await this._showActivityEditor(acts, idx);
@@ -710,10 +829,120 @@ export class LimbusItemSheet extends ItemSheet {
 
   async _onActivityDelete(event) {
     const idx  = parseInt(event.currentTarget.closest("[data-activity-idx]")?.dataset.activityIdx ?? -1);
-    const acts = foundry.utils.deepClone(this.item.system.activities ?? []);
+    const acts = this._actList;
     if (idx < 0 || idx >= acts.length) return;
     acts.splice(idx, 1);
-    await this.item.update({ "system.activities": acts });
+    await this.item.update({ [this._actPath]: acts });
+  }
+
+  /** 复制一条效果到剪贴板（跨物品卡可粘贴） */
+  _onActivityCopy(event) {
+    event.preventDefault();
+    const idx  = parseInt(event.currentTarget.closest("[data-activity-idx]")?.dataset.activityIdx ?? -1);
+    const acts = this._actList;
+    if (idx < 0 || idx >= acts.length) return;
+
+    _activityClipboard = _normalizeActivity(acts[idx]);
+    ui.notifications?.info(`已复制效果「${_activityClipboard.name}」`);
+    this.render(false);
+  }
+
+  /** 就地复制一条效果（同一物品内再来一份） */
+  async _onActivityDuplicate(event) {
+    event.preventDefault();
+    const idx  = parseInt(event.currentTarget.closest("[data-activity-idx]")?.dataset.activityIdx ?? -1);
+    const acts = this._actList;
+    if (idx < 0 || idx >= acts.length) return;
+
+    const copy = _normalizeActivity(acts[idx]);   // 已带新 id
+    copy.name = `${copy.name}（副本）`;
+    acts.splice(idx + 1, 0, copy);          // 紧跟在原条目后面，方便对照着改
+    await this.item.update({ [this._actPath]: acts });
+    this._activitiesExpanded = true;
+    this.render(false);
+  }
+
+  /** 把剪贴板里的效果粘到当前列表末尾 */
+  /**
+   * 「粘贴 JSON」：把一整段效果 JSON 贴进来追加到本物品（给已有物品补效果用）。
+   * 接受单个对象、对象数组，或整个 { activities: [...] }。
+   */
+  async _onActivityPasteJson(event) {
+    event.preventDefault();
+    const content = `
+      <div style="font-size:.75rem;color:#9A8462;margin-bottom:6px;">
+        粘贴效果 JSON：可以是单条 <code>{...}</code>、数组 <code>[...]</code>，
+        或整个 <code>{ "activities": [...] }</code>。会<b>追加</b>到现有效果后面。
+      </div>
+      <textarea name="json" style="width:100%;height:220px;font-family:monospace;font-size:.72rem;"
+                placeholder='[{"name":"新效果","trigger":"攻击时","preconditions":[],"costs":[],"effects":[]}]'></textarea>`;
+
+    const raw = await new Promise(resolve => {
+      new Dialog({
+        title: "粘贴效果 JSON",
+        content,
+        buttons: {
+          ok:     { label: "粘贴", callback: (html) => resolve(html.find("[name='json']").val() ?? "") },
+          cancel: { label: "取消", callback: () => resolve(null) },
+        },
+        default: "ok",
+        render: (html) => setTimeout(() => html.find("[name='json']").trigger("focus"), 30),
+      }, { width: 520 }).render(true);
+    });
+    if (raw === null) return;
+
+    const text = String(raw).trim();
+    if (!text) { ui.notifications?.warn("没有内容可粘贴。"); return; }
+
+    let parsed;
+    try { parsed = JSON.parse(text); }
+    catch (err) { ui.notifications?.error(`JSON 解析失败：${err.message}`); return; }
+
+    // 兼容三种写法：单条对象 / 数组 / { activities: [...] }
+    let list = Array.isArray(parsed) ? parsed
+             : Array.isArray(parsed?.activities) ? parsed.activities
+             : (parsed && typeof parsed === "object") ? [parsed] : null;
+    if (!list?.length) { ui.notifications?.error("JSON 里没有找到效果条目。"); return; }
+
+    const acts = this._actList;
+    let added = 0;
+    for (const raw2 of list) {
+      if (!raw2 || typeof raw2 !== "object") continue;
+      acts.push({
+        id:            foundry.utils.randomID(),          // 一律重新发号，避免与现有条目撞 id
+        name:          String(raw2.name ?? "新效果"),
+        trigger:       String(raw2.trigger ?? "攻击时"),
+        preconditions: Array.isArray(raw2.preconditions) ? raw2.preconditions : [],
+        costs:         Array.isArray(raw2.costs)         ? raw2.costs         : [],
+        effects:       Array.isArray(raw2.effects)       ? raw2.effects       : [],
+        limit: {
+          type:  String(raw2.limit?.type ?? "unlimited"),
+          count: Number(raw2.limit?.count ?? 0) || 0,
+        },
+      });
+      added++;
+    }
+    if (!added) { ui.notifications?.error("JSON 里没有可用的效果条目。"); return; }
+
+    await this.item.update({ [this._actPath]: acts });
+    this._activitiesExpanded = true;
+    this.render(false);
+    ui.notifications?.info(`已粘贴 ${added} 条效果到【${this.item.name}】`);
+  }
+
+  async _onActivityPaste(event) {
+    event.preventDefault();
+    if (!_activityClipboard) {
+      ui.notifications?.warn("剪贴板里还没有效果——先在任意物品卡上点一条效果的「复制」。");
+      return;
+    }
+    const acts = this._actList;
+    const copy = foundry.utils.deepClone(_activityClipboard);
+    copy.id = foundry.utils.randomID();
+    acts.push(copy);
+    await this.item.update({ [this._actPath]: acts });
+    this._activitiesExpanded = true;
+    this.render(false);
   }
 
   async _showActivityEditor(acts, idx) {
@@ -820,7 +1049,7 @@ export class LimbusItemSheet extends ItemSheet {
             label: "保存",
             callback: async (html) => {
               acts[idx] = _readActivityForm(html, act);
-              await this.item.update({ "system.activities": acts });
+              await this.item.update({ [this._actPath]: acts });
               resolve(true);
             },
           },
@@ -861,7 +1090,7 @@ export class LimbusItemSheet extends ItemSheet {
   }
 
   async _onResChangeAdd(event) {
-    // schema 字段名为 egoResistanceAdj，条目属性为 {sinType, multiplier}
+    // 条目属性为 {sinType, multiplier}
     const changes = foundry.utils.deepClone(this.item.system.egoResistanceAdj ?? []);
     changes.push({ sinType: "wrath", multiplier: "x1.0" });
     await this.item.update({ "system.egoResistanceAdj": changes });
@@ -1831,7 +2060,7 @@ function _buildItemTitleCard(item) {
         <span class="tc-formula">${(sys.diceFormula ?? "").toUpperCase()}</span>
         <span class="tc-tags">${tags.map(t => `<span class="tc-skill-tag">${t}</span>`).join("")}</span>
       </div>
-      ${weightCount > 0 ? `<div class="tc-weight"><span class="tc-weight-label">加重值</span>${Array.from({length: weightCount}, () => '<span class="tc-weight-sq"></span>').join("")}</div>` : ""}
+      ${weightCount > 0 ? `<div class="tc-weight"><span class="tc-weight-label">攻击容量</span>${Array.from({length: weightCount}, () => '<span class="tc-weight-sq"></span>').join("")}</div>` : ""}
       <div class="tc-gold-divider-skill"></div>
       <div class="tc-desc">${descText}</div>
       <div class="tc-gold-divider-skill"></div>
@@ -1944,6 +2173,31 @@ function _parseResistanceChanges(egoResistanceChange) {
 
 function _esc(s) { return String(s ?? "").replace(/"/g, "&quot;"); }
 
+/**
+ * 把一条 activity 整理成当前 schema 的形状（顺带兼容旧的单对象字段），
+ * 返回深拷贝，供复制 / 粘贴使用。
+ * @param {object} act
+ * @returns {object}
+ */
+function _normalizeActivity(act = {}) {
+  const arr = (plural, singular) => Array.isArray(plural)
+    ? foundry.utils.deepClone(plural)
+    : (singular ? [foundry.utils.deepClone(singular)] : []);
+
+  return {
+    id:            foundry.utils.randomID(),
+    name:          act.name    ?? "新效果",
+    trigger:       act.trigger ?? "攻击时",
+    preconditions: arr(act.preconditions, act.precondition),
+    costs:         arr(act.costs,         act.cost),
+    effects:       arr(act.effects,       act.effect),
+    limit: {
+      type:  act.limit?.type  ?? "unlimited",
+      count: act.limit?.count ?? 0,
+    },
+  };
+}
+
 function _activityEffectLabels() {
   return [
     { value: "addBuff",      label: "添加BUFF" },
@@ -1952,7 +2206,7 @@ function _activityEffectLabels() {
     { value: "hpAdj",        label: "生命值调整" },
     { value: "sanityAdj",    label: "理智值调整" },
     { value: "apAdj",        label: "行动值" },
-    { value: "weightAdj",    label: "加重值" },
+    { value: "weightAdj",    label: "攻击容量" },
     { value: "diceAdj",      label: "骰数" },
     { value: "diceFacesAdj", label: "面数" },
     { value: "baseValue",    label: "基础值" },
@@ -2074,23 +2328,24 @@ function _buildTriggerOpts(selected) {
 
 /** 前置条件行 HTML */
 function _buildCondRow(cond, idx, cfg) {
-  const condType   = ["perN","baseAttr","useSkill","buffCompare","category","fieldResource","sinResource","level"].includes(cond?.type) ? cond.type : "hasBuff";
-  const isBuffSec  = condType === "hasBuff" || condType === "perN" || condType === "buffCompare";
+  // 旧的【使用等级】已并入【使用技能】：读到老数据就地转换，存回时便是新结构
+  if (cond?.type === "level") {
+    cond = { ...cond, type: "useSkill", skillLevel: cond.level ?? 1, skillNameOrTag: cond.skillNameOrTag ?? "" };
+  }
+  const condType   = ["perN","noBuff","baseAttr","useSkill","buffCompare","category","fieldResource","sinResource","background","equipped"].includes(cond?.type) ? cond.type : "hasBuff";
+  const isBuffSec  = condType === "hasBuff" || condType === "noBuff" || condType === "perN" || condType === "buffCompare";
   const isAttrSec  = condType === "baseAttr";
   const isSkillSec = condType === "useSkill";
   const isCatSec   = condType === "category";
   const isFieldSec = condType === "fieldResource";
   const isSinSec   = condType === "sinResource";
-  const isLevelSec = condType === "level";
+  const isBgSec    = condType === "background";
+  const isEquipSec = condType === "equipped";
   const isCompare  = condType === "buffCompare";
   const isPerN     = condType === "perN";
   const perNDim    = cond?.perNDim === "intensity" ? "intensity" : "stacks";
   const selCats    = Array.isArray(cond?.categories) ? cond.categories : [];
   const stacksLbl  = isPerN ? (perNDim === "intensity" ? "每N级" : "每N层") : (isCompare ? "层数" : "层数≥");
-
-  const levelCmpOpts = [
-    ["gt","＞"],["gte","≥"],["lt","＜"],["lte","≤"],["eq","＝"],
-  ].map(([v,l]) => `<option value="${v}" ${(cond?.comparison ?? "eq") === v ? "selected":""}>${l}</option>`).join("");
 
   const stacksCmpOpts = [
     ["gt","＞"],["gte","≥"],["lt","＜"],["lte","≤"],["eq","＝"],
@@ -2123,23 +2378,30 @@ function _buildCondRow(cond, idx, cfg) {
         <button type="button" class="ae-del-btn ae-del-precond">×</button>
       </div>
       <div class="ae-row-fields">
+        <div class="ae-line">
         <label>类型</label>
         <select class="ae-sel cond-type">
           <option value="hasBuff"     ${condType === "hasBuff"     ? "selected" : ""}>拥有</option>
+          <option value="noBuff"      ${condType === "noBuff"      ? "selected" : ""}>未拥有</option>
           <option value="perN"        ${condType === "perN"        ? "selected" : ""}>每</option>
           <option value="buffCompare" ${condType === "buffCompare" ? "selected" : ""}>比较值</option>
           <option value="baseAttr"    ${condType === "baseAttr"    ? "selected" : ""}>基础属性</option>
           <option value="useSkill"    ${condType === "useSkill"    ? "selected" : ""}>使用技能</option>
           <option value="category"    ${condType === "category"    ? "selected" : ""}>使用分类</option>
-          <option value="level"       ${condType === "level"       ? "selected" : ""}>使用等级</option>
+          <option value="background"  ${condType === "background"  ? "selected" : ""}>背景</option>
+          <option value="equipped"    ${condType === "equipped"    ? "selected" : ""}>已装备</option>
           <option value="fieldResource" ${condType === "fieldResource" ? "selected" : ""}>公用场地</option>
           <option value="sinResource"   ${condType === "sinResource"   ? "selected" : ""}>罪孽资源</option>
         </select>
-        <span class="ae-cond-target-sec" ${(isCatSec || isFieldSec || isSinSec || isLevelSec) ? 'style="display:none"' : ""}>
+        </div>
+        <div class="ae-line">
+        <span class="ae-cond-target-sec" ${(isCatSec || isFieldSec || isSinSec) ? 'style="display:none"' : ""}>
           <label>目标</label>
           <select class="ae-sel cond-target">${_buildTargetOptions(cond?.target ?? "self")}</select>
           ${_buildBgTagFields("cond", cond)}
         </span>
+        </div>
+        <div class="ae-line">
         <span class="ae-cond-buff-sec" ${isBuffSec ? "" : 'style="display:none"'}>
           <label>BUFF</label>
           <input class="ae-input cond-buff" type="text" list="ae-buff-dl"
@@ -2171,16 +2433,18 @@ function _buildCondRow(cond, idx, cfg) {
           <input class="ae-input-sm cond-attr-value" type="text"
                  value="${_esc(cond?.attrValue ?? "")}" placeholder="50 或 5%">
         </span>
+        <!-- 使用技能：名称/标签 与 等级 均可选，填了的才检查、两个都填则需同时满足 -->
         <span class="ae-cond-skill-sec" ${isSkillSec ? "" : 'style="display:none"'}>
-          <label>技能UUID</label>
-          <input class="ae-input cond-skill-uuid" type="text"
-                 value="${_esc(cond?.skillUuid ?? "")}" placeholder="Item.xxx…（精确匹配，优先）" style="width:130px;">
-          <img class="ae-skill-preview" data-uuid-src="cond-skill-uuid"
-               src="${_esc(cond?.skillUuid ? "icons/svg/item-bag.svg" : "")}"
-               style="width:20px;height:20px;object-fit:cover;border-radius:3px;vertical-align:middle;${cond?.skillUuid ? "" : "display:none;"}">
-          <label>或 名称/标签</label>
+          <label>名称/标签</label>
           <input class="ae-input cond-skill-name-tag" type="text"
-                 value="${_esc(cond?.skillNameOrTag ?? "")}" placeholder="技能名称 或 标签，任一满足即可" style="width:130px;">
+                 value="${_esc(cond?.skillNameOrTag ?? "")}" placeholder="技能名称 或 标签（留空=不限）" style="width:150px;">
+          <label>等级</label>
+          <select class="ae-sel cond-skill-level">
+            <option value="0" ${(cond?.skillLevel ?? 0) === 0 ? "selected" : ""}>不限</option>
+            <option value="1" ${(cond?.skillLevel ?? 0) === 1 ? "selected" : ""}>Lv.1</option>
+            <option value="2" ${(cond?.skillLevel ?? 0) === 2 ? "selected" : ""}>Lv.2</option>
+            <option value="3" ${(cond?.skillLevel ?? 0) === 3 ? "selected" : ""}>Lv.3</option>
+          </select>
         </span>
         <span class="ae-cond-category-sec" ${isCatSec ? "" : 'style="display:none"'}>
           <label>分类（任一满足）</label>
@@ -2188,14 +2452,35 @@ function _buildCondRow(cond, idx, cfg) {
           <label class="ae-cond-cat-cb"><input type="checkbox" class="cond-category-cb" value="blunt"  ${selCats.includes("blunt")  ? "checked" : ""}> 打击</label>
           <label class="ae-cond-cat-cb"><input type="checkbox" class="cond-category-cb" value="pierce" ${selCats.includes("pierce") ? "checked" : ""}> 突刺</label>
         </span>
-        <span class="ae-cond-level-sec" ${isLevelSec ? "" : 'style="display:none"'}>
-          <label>等级</label>
-          <select class="ae-sel cond-level-cmp">${levelCmpOpts}</select>
-          <select class="ae-sel cond-level">
-            <option value="1" ${(cond?.level ?? 1) === 1 ? "selected" : ""}>Lv.1</option>
-            <option value="2" ${(cond?.level ?? 1) === 2 ? "selected" : ""}>Lv.2</option>
-            <option value="3" ${(cond?.level ?? 1) === 3 ? "selected" : ""}>Lv.3</option>
-          </select>
+        <!-- 已装备：数名称/标签/分类符合的装备件数；三个筛选可任意组合、留空即不限。
+             勾选"每"时，件数还会成为后续效果的倍数（每装备 1 件 → 加 3 层 …）-->
+        <span class="ae-cond-equip-sec" ${isEquipSec ? "" : 'style="display:none"'}>
+          <label>名称</label>
+          <input class="ae-input cond-equip-name" type="text" style="width:90px;"
+                 value="${_esc(cond?.equipName ?? "")}" placeholder="留空=不限">
+          <label>标签</label>
+          <input class="ae-input cond-equip-tag" type="text" style="width:90px;"
+                 value="${_esc(cond?.equipTag ?? "")}" placeholder="如：烙印工坊">
+          <label>分类</label>
+          <input class="ae-input cond-equip-category" type="text" style="width:90px;"
+                 value="${_esc(cond?.equipCategory ?? "")}" placeholder="如：狙击步枪">
+          <label>件数≥</label>
+          <input class="ae-input-sm cond-equip-count" type="number" min="1"
+                 value="${cond?.count ?? 1}">
+          <label title="勾选后，符合条件的件数会成为后续效果的倍数">
+            <input type="checkbox" class="cond-equip-pereach" ${cond?.perEach ? "checked" : ""}> 每
+          </label>
+          <span class="ae-cond-equip-max" ${cond?.perEach ? "" : 'style="display:none"'}>
+            <label>最大倍数</label>
+            <input class="ae-input-sm cond-equip-max" type="number" min="0"
+                   value="${cond?.maxTimes ?? 0}" placeholder="0=无限">
+          </span>
+        </span>
+        <!-- 背景：检查所选一方的背景名称或背景标签 -->
+        <span class="ae-cond-bg-sec" ${isBgSec ? "" : 'style="display:none"'}>
+          <label>背景名/标签</label>
+          <input class="ae-input cond-bg-name" type="text"
+                 value="${_esc(cond?.bgName ?? "")}" placeholder="如：黎明事务所" style="width:130px;">
         </span>
         <span class="ae-cond-field-sec" ${isFieldSec ? "" : 'style="display:none"'}>
           <label>场地名字</label>
@@ -2213,6 +2498,7 @@ function _buildCondRow(cond, idx, cfg) {
           <select class="ae-sel cond-sin-cmp">${fieldCmpOpts}</select>
           <input class="ae-input-sm cond-sin-value" type="number" value="${cond?.value ?? 0}" min="0">
         </span>
+        </div>
       </div>
     </div>`;
 }
@@ -2279,8 +2565,15 @@ function _buildTargetOptions(selected) {
  * 数量不足则目标为空（效果不生效）。"背景标签(其他)"与"本队其他全部"同理，
  * 会先排除拥有者自己（自己不受益，数量门槛也按排除自己后的人数判定）。
  */
+/** 需要「至多人数」上限的群体目标 */
+const _MULTI_TARGETS = new Set([
+  "bgTag", "bgTagOther", "allTeam", "allTeamOther", "allEnemy", "allEnemyOther",
+]);
+
 function _buildBgTagFields(prefix, obj) {
-  const isBgTag = (obj?.target ?? "self") === "bgTag" || (obj?.target ?? "self") === "bgTagOther";
+  const target  = obj?.target ?? "self";
+  const isBgTag = target === "bgTag" || target === "bgTagOther";
+  const isMulti = _MULTI_TARGETS.has(target);
   return `
     <span class="ae-${prefix}-bgtag-sec" ${isBgTag ? "" : 'style="display:none"'}>
       <label>标签</label>
@@ -2290,6 +2583,13 @@ function _buildBgTagFields(prefix, obj) {
       <input class="ae-input-sm ${prefix}-bgtag-count" type="number"
              value="${obj?.targetTagCount ?? 1}" min="1" style="width:50px;"
              title="是「至少要有N人在场才触发」的门槛，不是「最多N人生效」的上限——只想不限人数就填1">
+    </span>
+    <!-- 至多人数：所有群体目标（背景标签 / 本队 / 敌对）通用，0 = 不限 -->
+    <span class="ae-${prefix}-max-sec" ${isMulti ? "" : 'style="display:none"'}>
+      <label title="最多对几人生效，0 = 不限">至多人数</label>
+      <input class="ae-input-sm ${prefix}-bgtag-max" type="number"
+             value="${obj?.targetTagMax ?? 0}" min="0" style="width:50px;"
+             title="最多对几人生效，0 = 不限（人数超出时随机抽取）">
     </span>`;
 }
 
@@ -2298,6 +2598,7 @@ function _readBgTagMeta($r, prefix) {
   return {
     targetTag:      $r.find(`.${prefix}-bgtag-name`).val()?.trim() || "",
     targetTagCount: Math.max(1, parseInt($r.find(`.${prefix}-bgtag-count`).val()) || 1),
+    targetTagMax:   Math.max(0, parseInt($r.find(`.${prefix}-bgtag-max`).val()) || 0),
   };
 }
 
@@ -2307,6 +2608,7 @@ function _buildCostRow(cost, idx, cfg) {
   const isAttr     = selType === "attribute";
   const isDiscard  = selType === "discard";
   const isPerStack = selType === "perStack";
+  const isRandom   = selType === "random";
   const costPerNDim = cost?.perNDim === "intensity" ? "intensity" : "stacks";
   const costPerNDimOpts = [
     ["stacks","层数"],["intensity","强度"],
@@ -2314,7 +2616,7 @@ function _buildCostRow(cost, idx, cfg) {
   const typeOpts = [
     ["perStack",  "每"],
     ["forced",    "强制消耗"],
-    ["optional",  "可选消耗"],
+    ["random",    "随机消耗"],
     ["attribute", "基础属性"],
     ["discard",   "丢弃"],
   ].map(([v, l]) => `<option value="${v}" ${selType === v ? "selected" : ""}>${l}</option>`).join("");
@@ -2342,15 +2644,20 @@ function _buildCostRow(cost, idx, cfg) {
         <button type="button" class="ae-del-btn ae-del-cost">×</button>
       </div>
       <div class="ae-row-fields">
+        <div class="ae-line">
         <label>类型</label>
         <select class="ae-sel cost-type">${typeOpts}</select>
+        </div>
+        <div class="ae-line">
         <label>目标</label>
         <select class="ae-sel cost-target">${_buildTargetOptions(cost?.target ?? "self")}
           <option value="field" ${isField ? "selected" : ""}>公用场地</option>
           <option value="sin"   ${isSin   ? "selected" : ""}>罪孽资源</option>
         </select>
         ${_buildBgTagFields("cost", cost)}
-        <span class="ae-cost-field-sec" ${isField ? "" : 'style="display:none"'}>
+        </div>
+        <div class="ae-line">
+        <span class="ae-cost-field-sec" ${(isField && !isRandom) ? "" : 'style="display:none"'}>
           <label>场地名字</label>
           <input class="ae-input cost-field-name" type="text"
                  value="${_esc(cost?.fieldName ?? "")}" placeholder="如：血宴" style="width:90px;">
@@ -2358,7 +2665,7 @@ function _buildCostRow(cost, idx, cfg) {
           <input class="ae-input-sm cost-field-stacks" type="number" value="${cost?.stacks ?? 0}" min="0">
         </span>
         <!-- 罪孽资源：扣除全局七宗罪池的点数；【每】类型时为"每消耗 N 点"，可限制最大倍数 -->
-        <span class="ae-cost-sin-sec" ${isSin ? "" : 'style="display:none"'}>
+        <span class="ae-cost-sin-sec" ${(isSin && !isRandom) ? "" : 'style="display:none"'}>
           <label>罪孽</label>
           <select class="ae-sel cost-sin-type">${_buildSinOptions(cost?.sinType ?? "wrath")}</select>
           <label class="cost-sin-label">${isPerStack ? "每N点" : "点数"}</label>
@@ -2368,7 +2675,17 @@ function _buildCostRow(cost, idx, cfg) {
             <input class="ae-input-sm cost-sin-max-times" type="number" value="${cost?.maxTimes ?? 0}" min="0" placeholder="0=无限">
           </span>
         </span>
-        <span class="ae-cost-buff-sec" ${(isAttr || isDiscard || isField || isSin) ? 'style="display:none"' : ""}>
+        <!-- 随机消耗：从候选池中随机抽一条来扣（扣不起的候选自动排除；全都扣不起则整条消耗跳过，不阻断效果）
+             每条候选可分别指定按「层数」或按「强度(级)」扣除，
+             例：随机消耗 1 层 或 1 级【生蝶·亡蝶】= 两条候选，同一BUFF、维度分别为层/级 -->
+        <span class="ae-cost-random-sec" ${isRandom ? "" : 'style="display:none"'}>
+          <div class="ae-pool-list ae-cost-pool-list">
+            ${(cost?.randomPool?.length ? cost.randomPool : [{ buff: "", dim: "stacks", amount: 1 }])
+              .map(entry => _buildCostPoolRow(entry, cfg)).join("")}
+          </div>
+          <button type="button" class="ae-add-cost-pool ae-add-btn">＋ 添加候选</button>
+        </span>
+        <span class="ae-cost-buff-sec" ${(isAttr || isDiscard || isField || isSin || isRandom) ? 'style="display:none"' : ""}>
           <label>BUFF</label>
           <input class="ae-input cost-buff" type="text" list="ae-buff-dl"
                  placeholder="输入或选择BUFF…" autocomplete="off" style="width:100px;"
@@ -2402,6 +2719,7 @@ function _buildCostRow(cost, idx, cfg) {
             <input class="ae-input-sm cost-discard-level" type="number" value="${cost?.discardLevel ?? 1}" min="1" max="3">
           </span>
         </span>
+        </div>
       </div>
     </div>`;
 }
@@ -2450,13 +2768,18 @@ function _buildEffectRow(eff, idx, cfg) {
         <button type="button" class="ae-del-btn ae-del-effect">×</button>
       </div>
       <div class="ae-row-fields">
+        <div class="ae-line">
         <label>类型</label>
         <select class="ae-sel ae-eff-type eff-type">${effOpts}</select>
+        </div>
+        <div class="ae-line">
         <span class="ae-eff-target-sec" ${(isUseSkill || isDiceTypeChg || isRelConvert || isFieldEff) ? 'style="display:none"' : ""}>
           <label>目标</label>
           <select class="ae-sel eff-target">${_buildTargetOptions(eff?.target ?? "self")}</select>
           ${_buildBgTagFields("eff", eff)}
         </span>
+        </div>
+        <div class="ae-line">
         <span class="ae-eff-field-sec" ${isFieldEff ? "" : 'style="display:none"'}>
           <label>场地名字</label>
           <input class="ae-input eff-field-name" type="text"
@@ -2491,6 +2814,7 @@ function _buildEffectRow(eff, idx, cfg) {
           <input class="ae-input eff-value" type="text" placeholder="${_effValuePlaceholder(type)}"
                  value="${formulaVal}" style="width:110px;">
         </span>
+
         <span class="ae-eff-trig-sec" ${isTriggerBuff ? "" : 'style="display:none"'}>
           <label>BUFF</label>
           <input class="ae-input eff-trig-buff" type="text" list="ae-trig-buff-dl"
@@ -2534,6 +2858,14 @@ function _buildEffectRow(eff, idx, cfg) {
             <input class="ae-input eff-skill-name" type="text" list="ae-owned-skill-dl"
                    value="${_esc(eff?.skillName ?? "")}" placeholder="技能名字（在背包/技能列表中检索）" style="width:130px;" autocomplete="off">
           </span>
+          <!-- [反应] 里用这个技能打谁：默认打"触发者攻击的那个目标"（补刀），
+               其余触发时机下该选项不起作用 -->
+          <label>[反应]对谁</label>
+          <select class="ae-sel eff-react-target">
+            <option value="defender" ${(eff?.reactTarget ?? "defender") === "defender" ? "selected" : ""}>触发者的目标</option>
+            <option value="attacker" ${eff?.reactTarget === "attacker" ? "selected" : ""}>触发者本人</option>
+            <option value="none"     ${eff?.reactTarget === "none"     ? "selected" : ""}>不指定</option>
+          </select>
         </span>
         <span class="ae-eff-dicetypechg-sec" ${isDiceTypeChg ? "" : 'style="display:none"'}>
           <label>骰子类型</label>
@@ -2564,6 +2896,7 @@ function _buildEffectRow(eff, idx, cfg) {
                  value="${_esc(eff?.relSkillName ?? "")}" placeholder="技能名字（在背包/技能列表中检索）" style="width:130px;" autocomplete="off">
           <span class="ae-eff-relconvert-hint">永久替换本技能在角色技能槽中的位置（在背包/技能列表按名字检索目标技能）</span>
         </span>
+        </div>
       </div>
     </div>`;
 }
@@ -2581,6 +2914,26 @@ function _buildBuffPoolRow(entry, cfg) {
       <label>层数</label>
       <input class="ae-input-sm ae-pool-stacks" type="number" value="${entry?.stacks ?? 1}" min="1">
       <button type="button" class="ae-del-btn ae-del-pool-buff">×</button>
+    </div>`;
+}
+
+/** 随机消耗候选单行：文本输入（datalist）+ 维度（层数/强度）+ 数量 + 删除 */
+function _buildCostPoolRow(entry, cfg) {
+  const buffLabel = _keyToLabel(entry?.buff ?? "", entry?.buffCustom ?? "");
+  const dim = entry?.dim === "intensity" ? "intensity" : "stacks";
+  const dimOpts = [
+    ["stacks",    "层"],
+    ["intensity", "级"],
+  ].map(([v, l]) => `<option value="${v}" ${dim === v ? "selected" : ""}>${l}</option>`).join("");
+  return `
+    <div class="ae-pool-row ae-cost-pool-row">
+      <label>消耗</label>
+      <input class="ae-input-sm ae-cost-pool-amount" type="number" value="${entry?.amount ?? 1}" min="1">
+      <select class="ae-sel ae-cost-pool-dim">${dimOpts}</select>
+      <input class="ae-input ae-cost-pool-buff" type="text" list="ae-buff-dl"
+             placeholder="输入或选择BUFF…" autocomplete="off" style="width:100px;"
+             value="${_esc(buffLabel)}">
+      <button type="button" class="ae-del-btn ae-del-cost-pool">×</button>
     </div>`;
 }
 
@@ -2614,6 +2967,12 @@ function _setupAeDialog(html, cfg) {
     _bindEffBuffAmplitude(html);
     _bindUseSkillSubtype(html);
     _bindTargetBgTag(html);
+  });
+  html.on("click", ".ae-add-cost-pool", function () {
+    const sec = $(this).closest(".ae-cost-random-sec");
+    sec.find(".ae-cost-pool-list").append(_buildCostPoolRow({}, cfg));
+    _bindDel(html);
+    _bindCondCostBuff(html);
   });
   html.on("click", ".ae-add-pool-buff", function () {
     const sec = $(this).closest(".ae-eff-random-sec");
@@ -2691,13 +3050,14 @@ function _bindCondType(html) {
   html.find(".cond-type").off("change").on("change", function () {
     const row      = $(this).closest(".ae-cond-row");
     const type     = $(this).val();
-    const isBuffSec  = type === "hasBuff" || type === "perN" || type === "buffCompare";
+    const isBuffSec  = type === "hasBuff" || type === "noBuff" || type === "perN" || type === "buffCompare";
     const isAttrSec  = type === "baseAttr";
     const isSkillSec = type === "useSkill";
     const isCatSec   = type === "category";
     const isFieldSec = type === "fieldResource";
     const isSinSec   = type === "sinResource";
-    const isLevelSec = type === "level";
+    const isBgSec    = type === "background";
+    const isEquipSec = type === "equipped";
     const isCompare  = type === "buffCompare";
     const isPerN     = type === "perN";
     const perNDim    = row.find(".cond-pern-dim").val() === "intensity" ? "intensity" : "stacks";
@@ -2708,13 +3068,17 @@ function _bindCondType(html) {
     row.find(".ae-cond-category-sec").toggle(isCatSec);
     row.find(".ae-cond-field-sec").toggle(isFieldSec);
     row.find(".ae-cond-sin-sec").toggle(isSinSec);
-    row.find(".ae-cond-level-sec").toggle(isLevelSec);
-    row.find(".ae-cond-target-sec").toggle(!isCatSec && !isFieldSec && !isSinSec && !isLevelSec);
+    row.find(".ae-cond-bg-sec").toggle(isBgSec);
+    row.find(".ae-cond-equip-sec").toggle(isEquipSec);
+    row.find(".ae-cond-target-sec").toggle(!isCatSec && !isFieldSec && !isSinSec);
     row.find(".ae-cond-pern-max").toggle(isPerN);
     row.find(".ae-cond-pern-dim-sec").toggle(isPerN);
     row.find(".ae-cond-intensity-sec").toggle(!isCompare && !isPerN);
     row.find(".cond-stacks-label").toggle(!isCompare);
     row.find(".ae-cond-cmp-sec").toggle(isCompare);
+  });
+  html.find(".cond-equip-pereach").off("change").on("change", function () {
+    $(this).closest(".ae-cond-row").find(".ae-cond-equip-max").toggle(this.checked);
   });
   html.find(".cond-pern-dim").off("change").on("change", function () {
     const row   = $(this).closest(".ae-cond-row");
@@ -2734,12 +3098,14 @@ function _bindCostType(html) {
     const isAttr      = val === "attribute";
     const isDiscard   = val === "discard";
     const isPerStack  = val === "perStack";
+    const isRandom    = val === "random";
     const perNDim     = row.find(".cost-pern-dim").val() === "intensity" ? "intensity" : "stacks";
-    row.find(".ae-cost-field-sec").toggle(isField);
-    row.find(".ae-cost-sin-sec").toggle(isSin);
-    row.find(".ae-cost-sin-max").toggle(isSin && isPerStack);
+    row.find(".ae-cost-random-sec").toggle(isRandom);
+    row.find(".ae-cost-field-sec").toggle(isField && !isRandom);
+    row.find(".ae-cost-sin-sec").toggle(isSin && !isRandom);
+    row.find(".ae-cost-sin-max").toggle(isSin && !isRandom && isPerStack);
     row.find(".cost-sin-label").text(isPerStack ? "每N点" : "点数");
-    row.find(".ae-cost-buff-sec").toggle(!isAttr && !isDiscard && !isField && !isSin);
+    row.find(".ae-cost-buff-sec").toggle(!isAttr && !isDiscard && !isField && !isSin && !isRandom);
     row.find(".ae-cost-attr-sec").toggle(isAttr);
     row.find(".ae-cost-discard-sec").toggle(isDiscard);
     row.find(".cost-stacks-label").text(isPerStack ? (perNDim === "intensity" ? "每N级" : "每N层") : "层数");
@@ -2772,7 +3138,9 @@ function _bindTargetBgTag(html) {
     const sel    = $(this);
     const prefix = sel.hasClass("cond-target") ? "cond" : sel.hasClass("cost-target") ? "cost" : "eff";
     const val = sel.val();
-    sel.closest(".ae-row-fields").find(`.ae-${prefix}-bgtag-sec`).toggle(val === "bgTag" || val === "bgTagOther");
+    const fields = sel.closest(".ae-row-fields");
+    fields.find(`.ae-${prefix}-bgtag-sec`).toggle(val === "bgTag" || val === "bgTagOther");
+    fields.find(`.ae-${prefix}-max-sec`).toggle(_MULTI_TARGETS.has(val));
   });
 }
 
@@ -2791,6 +3159,9 @@ function _bindDel(html) {
   });
   html.find(".ae-del-pool-buff").off("click").on("click", function () {
     $(this).closest(".ae-pool-row").remove();
+  });
+  html.find(".ae-del-cost-pool").off("click").on("click", function () {
+    $(this).closest(".ae-cost-pool-row").remove();
   });
 }
 
@@ -2851,18 +3222,29 @@ function _readActivityForm(html, original) {
       preconditions.push({
         type:           "useSkill",
         target:         $r.find(".cond-target").val() || "self",
-        skillUuid:      $r.find(".cond-skill-uuid").val()?.trim() || "",
         skillNameOrTag: $r.find(".cond-skill-name-tag").val()?.trim() || "",
+        skillLevel:     parseInt($r.find(".cond-skill-level").val()) || 0,
         ..._readBgTagMeta($r, "cond"),
       });
     } else if (condType === "category") {
       const cats = $r.find(".cond-category-cb:checked").map((_, el) => el.value).get();
       preconditions.push({ type: "category", categories: cats });
-    } else if (condType === "level") {
+    } else if (condType === "equipped") {
       preconditions.push({
-        type:       "level",
-        comparison: $r.find(".cond-level-cmp").val() || "eq",
-        level:      parseInt($r.find(".cond-level").val()) || 1,
+        type:          "equipped",
+        target:        $r.find(".cond-target").val() || "self",
+        equipName:     $r.find(".cond-equip-name").val()?.trim()     || "",
+        equipTag:      $r.find(".cond-equip-tag").val()?.trim()      || "",
+        equipCategory: $r.find(".cond-equip-category").val()?.trim() || "",
+        count:         Math.max(1, parseInt($r.find(".cond-equip-count").val()) || 1),
+        perEach:       $r.find(".cond-equip-pereach").is(":checked"),
+        maxTimes:      parseInt($r.find(".cond-equip-max").val()) || 0,
+      });
+    } else if (condType === "background") {
+      preconditions.push({
+        type:   "background",
+        target: $r.find(".cond-target").val() || "self",
+        bgName: $r.find(".cond-bg-name").val()?.trim() || "",
       });
     } else if (condType === "fieldResource") {
       preconditions.push({
@@ -2892,7 +3274,7 @@ function _readActivityForm(html, original) {
     } else {
       const isPerN = condType === "perN";
       preconditions.push({
-        type:       isPerN ? "perN" : "hasBuff",
+        type:       isPerN ? "perN" : (condType === "noBuff" ? "noBuff" : "hasBuff"),
         target:     $r.find(".cond-target").val()  || "self",
         buff:       resolveKey($r.find(".cond-buff").val()),
         buffCustom: "",
@@ -2912,7 +3294,26 @@ function _readActivityForm(html, original) {
     const $r    = $(el);
     const type  = $r.find(".cost-type").val()   || "forced";
     const target = $r.find(".cost-target").val() || "self";
-    if (type === "attribute") {
+    if (type === "random") {
+      const randomPool = [];
+      $r.find(".ae-cost-pool-row").each((_, pr) => {
+        const $pr  = $(pr);
+        const buff = resolveKey($pr.find(".ae-cost-pool-buff").val());
+        if (!buff) return;
+        randomPool.push({
+          buff,
+          buffCustom: "",
+          dim:    $pr.find(".ae-cost-pool-dim").val() === "intensity" ? "intensity" : "stacks",
+          amount: Math.max(1, parseInt($pr.find(".ae-cost-pool-amount").val()) || 1),
+        });
+      });
+      costs.push({
+        type,
+        target,
+        randomPool,
+        ..._readBgTagMeta($r, "cost"),
+      });
+    } else if (type === "attribute") {
       costs.push({
         type,
         target,
@@ -3002,6 +3403,7 @@ function _readActivityForm(html, original) {
         skillTag:   skillRef === "tag"  ? ($r.find(".eff-skill-tag").val()?.trim()  || "") : "",
         skillLevel: skillRef === "tag"  ? (parseInt($r.find(".eff-skill-level").val()) || 0) : 0,
         skillName:  skillRef === "name" ? ($r.find(".eff-skill-name").val()?.trim() || "") : "",
+        reactTarget: $r.find(".eff-react-target").val() || "defender",
         ..._readBgTagMeta($r, "eff"),
       });
       return;

@@ -135,6 +135,13 @@ export class ClashTotalFX {
       else this._settledEarly.add(`${msg.fxId}:${msg.side}`);
       return;
     }
+    // 容量扩散：黑条常驻 + TOTAL 累加（不进播放队列，实时跟播）
+    if (msg?.type === "clashFxSpread") {
+      if (msg.act === "open")  return void this.spreadOpen({ label: msg.label, total: msg.total, broadcast: false });
+      if (msg.act === "tick")  return void this.spreadTick({ from: msg.from, to: msg.to, ms: msg.ms, combo: msg.combo, broadcast: false });
+      if (msg.act === "close") return void this.spreadClose({ broadcast: false });
+      return;
+    }
     if (msg?.type !== "clashFxStart") return;
 
     // 排队播放：一次连击会连着广播好几段，必须一段播完再播下一段
@@ -610,9 +617,12 @@ export class ClashTotalFX {
    * @param {string[]} opts.hitOn     哪几方揭示完毕后播命中声
    * @param {string}   opts.label     中央字样
    * @param {Function} opts.startDice (side) => 该方的骰子动画
+   * @param {Function} opts.onSideDone (side) => Promise，该方分段揭示完毕后调用；
+   *                                   击退动画就挂在这里，攻守各自"当当当"完各打各的
    */
   static async playSequence({ order = ["def", "atk"], parts = {}, diceType = {}, coins = {},
-                              hitOn = [], label = "", startDice = null, broadcast = true } = {}) {
+                              hitOn = [], label = "", startDice = null, onSideDone = null,
+                              broadcast = true } = {}) {
     if (!this._enabled()) { for (const side of order) startDice?.(side); return; }
 
     const fxId = this._nextFxId();
@@ -636,6 +646,8 @@ export class ClashTotalFX {
       await this._sleep(200);
       await this._revealParts(side, sideParts);
       if (hitOn.includes(side)) this._sfx(this._tremorPending ? "tremor" : "hit", 0.8);
+      // 该方结算完毕——击退等后续动作就在这一刻发生
+      if (typeof onSideDone === "function") await onSideDone(side);
       await this._sleep(300);
     }
 
@@ -652,6 +664,41 @@ export class ClashTotalFX {
    * @param {boolean}  opts.reroll    是否标记【公式重投】
    * @param {Function} opts.startDice 返回 [该方 DiceSoNice 动画的 Promise]
    */
+  /* ─── 容量扩散：黑条常驻，TOTAL 逐次累加 ──────────────────────────────── */
+
+  /** 扩散开始：左下角黑条入场，TOTAL 设为拼点那一击的伤害 */
+  static async spreadOpen({ label = "容量扩散", total = 0, broadcast = true } = {}) {
+    if (!this._enabled()) return;
+    if (broadcast) this._emit({ type: "clashFxSpread", act: "open", label, total });
+    await this._enterExchange(["atk"], { label });
+    this._bump(this._band("atk").querySelector(".lcfx-num"), total);
+  }
+
+  /** 每命中一个目标：TOTAL 从 from 逐格加到 to，并甩一个「N 连击」 */
+  static async spreadTick({ from = 0, to = 0, ms = 200, combo = "", broadcast = true } = {}) {
+    if (!this._enabled()) return;
+    if (broadcast) this._emit({ type: "clashFxSpread", act: "tick", from, to, ms, combo });
+    if (combo) this._combo(combo);
+    // 命中声：每一发扩散都响一下（本地播放——tick 本身已广播，各端各响一次；
+    // 本次拼点发生过【震颤引爆】时按惯例静音，那一声由引爆声代表）
+    if (!this._tremorPending) this._sfx("hit", 0.8);
+    this._tremorPending = false;
+    const numEl = this._band("atk").querySelector(".lcfx-num");
+    const steps = Math.min(14, Math.max(1, to - from));
+    for (let i = 1; i <= steps; i++) {
+      numEl.textContent = Math.round(from + (to - from) * (i / steps));
+      await new Promise(r => setTimeout(r, ms / steps));
+    }
+    this._bump(numEl, to);
+  }
+
+  /** 扩散结束：走正常的连击退场窗口 */
+  static spreadClose({ broadcast = true } = {}) {
+    if (!this._enabled()) return;
+    if (broadcast) this._emit({ type: "clashFxSpread", act: "close" });
+    this._exitExchange();
+  }
+
   static async playSolo({ side = "atk", parts = [], reroll = false, label = "",
                           diceType = "default", coins = 0,
                           startDice = null, broadcast = true } = {}) {

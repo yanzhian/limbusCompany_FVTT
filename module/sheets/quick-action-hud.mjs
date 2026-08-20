@@ -676,7 +676,6 @@ export class QuickActionHUD extends Application {
       equipped:    basicIds,
       slots:       bag1.slice(0, 6),
       pool:        bag2,
-      relatedMode: {},
     };
   }
 

@@ -111,29 +111,17 @@ export class SkillData extends foundry.abstract.TypeDataModel {
   static defineSchema() {
     const fields = foundry.data.fields;
 
-    const relatedSkillSchema = new fields.SchemaField({
-      // 已废弃：旧版"相关技能池"（UUID 数组），配合④效果「相关技能转换 · 随机/指定」使用。
-      // 已被"技能名字（背包检索）"方式取代（不再需要预先配置池，也不受 UUID 变化影响），
-      // 相关 UI/读写逻辑已移除，字段本身保留仅为兼容旧存档，不再新增/编辑。
-      pool: new fields.ArrayField(
-        new fields.SchemaField({
-          itemUuid: new fields.StringField({ required: false, nullable: true, initial: null }),
-        }),
-        { required: true, initial: [] }
-      ),
-      // EGO 技能：恐慌时替换为侵蚀形态 UUID（脱离恐慌后恢复，与技能池无关，独立机制，正常使用中）
-      erodeUuid: new fields.StringField({ required: false, nullable: true, initial: null }),
-    });
-
     // EGO 罪孽消耗条目
-    const sinCostEntrySchema = new fields.SchemaField({
+    // 注意：一个 DataField 实例只能挂在一个父字段下，【觉醒】/【侵蚀】两套数组
+    // 必须各自 new 一份，因此这里用工厂函数而不是共用同一个实例。
+    const sinCostEntrySchema = () => new fields.SchemaField({
       sinType: new fields.StringField({ required: true, initial: "wrath",
         choices: ["wrath", "lust", "sloth", "gluttony", "gloom", "pride", "envy"] }),
       amount:  new fields.NumberField({ required: true, integer: true, min: 0, initial: 1 }),
     });
 
     // EGO 罪孽抗性修正条目
-    const egoResistAdjSchema = new fields.SchemaField({
+    const egoResistAdjSchema = () => new fields.SchemaField({
       sinType:    new fields.StringField({ required: true, initial: "wrath" }),
       multiplier: new fields.StringField({ required: true, initial: "x1.0" }),
     });
@@ -163,11 +151,40 @@ export class SkillData extends foundry.abstract.TypeDataModel {
       egoDiceRating: new fields.StringField({ required: false, nullable: true, initial: null,
         choices: [null, "ZAYIN", "TET", "HE", "WAW", "ALEPH"] }),
 
-      // EGO 罪孽抗性修正（使用后生效）
-      egoResistanceAdj: new fields.ArrayField(egoResistAdjSchema, { required: true, initial: [] }),
+      // EGO 罪孽抗性修正（使用后生效）——两形态共用
+      egoResistanceAdj: new fields.ArrayField(egoResistAdjSchema(), { required: true, initial: [] }),
 
-      // 加重值（守备技能无此字段，设为 0）
+      // ── E.G.O 两种形态 ──────────────────────────────────────────────────
+      // 【觉醒】= 消耗理智的常态，数据就写在顶层字段上；
+      // 【侵蚀】= 陷入恐慌时的形态，另一套数据放在 corrode 下。
+      // 共用：名称 / 罪孽 / 等级 / 罪孽消耗 / 调整抗性
+      // 分开：类型（斩打突）/ 骰数 / 攻击容量 / 理智消耗 / 描述 / 激活效果
+      //
+      // egoForm 只影响物品卡"正在编辑/展示哪一套"，实战中用哪一套由角色是否
+      // 【陷入恐慌】决定（见 prepareDerivedData）。
+      egoForm: new fields.StringField({ required: false, initial: "awaken",
+        choices: ["awaken", "corrode"] }),
+
+      corrode: new fields.SchemaField({
+        // 是否已经写过侵蚀数据；false 时实战中一律沿用觉醒那一套
+        initialized: new fields.BooleanField({ required: false, initial: false }),
+        category:    new fields.StringField({ required: false, nullable: true, initial: null }),
+        baseValue:   new fields.NumberField({ required: false, nullable: true, integer: true, min: 0, initial: null }),
+        diceCount:   new fields.NumberField({ required: false, nullable: true, integer: true, min: 0, initial: null }),
+        diceFaces:   new fields.NumberField({ required: false, nullable: true, integer: true, min: 1, initial: null }),
+        weight:      new fields.NumberField({ required: false, nullable: true, integer: true, min: 0, initial: null }),
+        sanityCost:  new fields.NumberField({ required: false, nullable: true, integer: true, min: 0, initial: null }),
+        effectDesc:  new fields.HTMLField({ required: false, initial: "" }),
+        activities:  new fields.ArrayField(makeActivitySchema(), { required: true, initial: [] }),
+      }),
+
+      // 攻击容量：命中后还能往外扩散几个目标（守备技能同样可用）
       weight: new fields.NumberField({ required: true, integer: true, min: 0, initial: 1 }),
+
+      // 攻击容量 > 2 时的扩散方式与范围（范围以格为半径：1 → 7.5ft，2 → 12.5ft）
+      spreadMode:  new fields.StringField({ required: false, initial: "chain",
+        choices: ["chain", "spray"] }),
+      spreadRange: new fields.NumberField({ required: false, integer: true, min: 1, max: 6, initial: 1 }),
 
       // 骰子类型：normal / unbreakable / severing
       diceType: new fields.StringField({ required: true, initial: "normal",
@@ -180,9 +197,6 @@ export class SkillData extends foundry.abstract.TypeDataModel {
       // diceFormula：便捷显示字符串，如 "2d4+3"（由 prepareDerivedData 生成）
       diceFormula: new fields.StringField({ required: false, initial: "1d4" }),
 
-      // 相关技能（可选，不占用6-bag槽）
-      relatedSkill: relatedSkillSchema,
-
       // 星芒费用（按等级自动推算，可手动覆盖）
       stellarCost: new fields.NumberField({ required: true, integer: true, min: 0, initial: 1 }),
 
@@ -193,6 +207,10 @@ export class SkillData extends foundry.abstract.TypeDataModel {
       // 只能由【相关技能转换】把已装备的技能替换成它
       noEquip: new fields.BooleanField({ required: false, initial: false }),
 
+      // 援护防御：标记为【援护防御】专属技能——队友被锁定且行动值为 0 时，
+      // 持有【援护防御】的角色可以用它顶上去替队友接下这次对抗
+      coverDefense: new fields.BooleanField({ required: false, initial: false }),
+
       // 标签
       tags: new fields.ArrayField(
         new fields.StringField({ required: true }),
@@ -202,8 +220,8 @@ export class SkillData extends foundry.abstract.TypeDataModel {
       // 效果描述（富文本）
       effectDesc: new fields.HTMLField({ required: false, initial: "" }),
 
-      // EGO 罪孽消耗（多种罪孽资源）
-      sinCost: new fields.ArrayField(sinCostEntrySchema, { required: true, initial: [] }),
+      // EGO 罪孽消耗（多种罪孽资源）——两形态共用
+      sinCost: new fields.ArrayField(sinCostEntrySchema(), { required: true, initial: [] }),
 
       // EGO 理智消耗
       sanityCost: new fields.NumberField({ required: true, integer: true, min: 0, initial: 0 }),
@@ -221,8 +239,27 @@ export class SkillData extends foundry.abstract.TypeDataModel {
     };
   }
 
-  /** @override 生成 diceFormula 显示字符串 */
+  /** 持有者当前是否【陷入恐慌】（EGO 侵蚀形态的触发条件） */
+  get _ownerInPanic() {
+    const actor = this.parent?.parent;
+    if (!actor) return false;
+    const buffs = actor.system?.buffs ?? actor._source?.system?.buffs ?? [];
+    return buffs.some(b => b?.type === "panic" && b?.whenAdded !== "下回合");
+  }
+
+  /** @override 投影当前 EGO 形态 + 生成 diceFormula 显示字符串 */
   prepareDerivedData() {
+    // 陷入恐慌 → E.G.O 切到【侵蚀】形态：把 corrode 里填了的字段盖到顶层，
+    // 没填的字段照旧沿用【觉醒】的数值。
+    if (this.type === "ego" && this.corrode?.initialized && this._ownerInPanic) {
+      const c = this.corrode;
+      for (const key of ["category", "baseValue", "diceCount", "diceFaces", "weight", "sanityCost"]) {
+        if (c[key] !== null && c[key] !== undefined) this[key] = c[key];
+      }
+      if (c.effectDesc) this.effectDesc = c.effectDesc;
+      if (c.activities?.length) this.activities = c.activities;
+    }
+
     const { diceCount, diceFaces, baseValue } = this;
     let formula = `${diceCount}d${diceFaces}`;
     if (baseValue > 0) formula += `+${baseValue}`;
@@ -555,22 +592,6 @@ export class LimbusItem extends Item {
     return roll;
   }
 
-  // ─── 相关技能解析 ──────────────────────────────────────────────────────
-  // 注：旧版"相关技能池"（system.relatedSkill.pool，配合④效果「相关技能
-  // 转换 · 随机/指定」使用）已被"技能名字（背包检索）"方式取代并移除相关
-  // UI/逻辑，schema 字段本身保留（避免 world 需要重启），仅不再读写。
-
-  /**
-   * 获取侵蚀形态技能 Item 实例（EGO 专用，恐慌时使用）
-   * @returns {Promise<LimbusItem|null>}
-   */
-  async getErodeSkillItem() {
-    if (this.type !== "skill" || this.system.type !== "ego") return null;
-    const uuid = this.system.relatedSkill?.erodeUuid;
-    if (!uuid) return null;
-    return fromUuid(uuid).catch(() => null);
-  }
-
   // ─── Activity（效果触发）管理 ──────────────────────────────────────────
 
   /**
@@ -730,14 +751,6 @@ export class LimbusItem extends Item {
       await actor.createEmbeddedDocuments("Item", newSkillData);
     }
     await this.delete();
-  }
-
-  // ─── 辅助：判断此技能是否为侵蚀形态 ──────────────────────────────────
-
-  get isErodeForm() {
-    // 约定：若技能名称包含"侵蚀"或被其他技能的 erodeUuid 引用，则视为侵蚀形态
-    // 实际关系由 erodeUuid 引用确定，这里只做名称简单标记
-    return this.name?.includes("侵蚀") ?? false;
   }
 
 }

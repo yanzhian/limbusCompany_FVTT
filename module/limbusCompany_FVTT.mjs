@@ -242,7 +242,69 @@ Hooks.once("ready", () => {
 
   // GM 在线时执行一次迁移：把所有现有角色及其场景 Token 改为 linked
   if (game.user.isGM) _migrateTokenLinks();
+
+  // GM 在线时校正一次超标的 BUFF 层数（规矩就是规矩）
+  if (game.user.isGM) _clampBuffStacks();
+
+  // GM 在线时还原一次残留的临时骰面改动（上次对抗中途断线/刷新留下的）
+  if (game.user.isGM) _restoreItemTempMods();
 });
+
+/**
+ * 加载时兜底：把上次攻击没来得及还原的骰数/面数/基础值/攻击容量改回原值。
+ *
+ * 正常流程会在 [攻击后] 之后还原（见 ClashManager._restoreAllItemMods），
+ * 中途刷新页面或断线时可能留下 flags.limbusCompany_FVTT.tempMods，这里补一刀。
+ */
+async function _restoreItemTempMods() {
+  const { ClashManager } = await import("./helpers/clash.mjs");
+  let fixed = 0;
+  const scan = async (items) => {
+    for (const item of items ?? []) {
+      const mods = item.getFlag?.("limbusCompany_FVTT", "tempMods");
+      if (!mods || !Object.keys(mods).length) continue;
+      try { await ClashManager._restoreItemMods(item); fixed++; }
+      catch (err) { console.warn("limbusCompany_FVTT | 临时骰面还原失败", item.name, err); }
+    }
+  };
+  await scan(game.items);
+  for (const actor of game.actors) await scan(actor.items);
+  if (fixed) console.log(`limbusCompany_FVTT | 已还原 ${fixed} 件物品的临时骰面改动`);
+}
+
+/**
+ * 加载时校正：把所有角色身上超过注册上限（maxStacks）的 BUFF 层数钳回上限。
+ *
+ * 上限此前因为「自定义 BUFF 以中文名当 type」而失效过，存量存档里可能留着
+ * 15 层上限却叠到 99 的 BUFF；这里在世界加载时一次性纠正，之后由 _addBuff 把关。
+ */
+async function _clampBuffStacks() {
+  let fixedActors = 0, fixedBuffs = 0;
+  for (const actor of game.actors) {
+    const buffs = actor.system?.buffs;
+    if (!Array.isArray(buffs) || !buffs.length) continue;
+
+    let changed = false;
+    const next = buffs.map(b => {
+      const max = resolveBuffHandler(b)?.maxStacks ?? Infinity;
+      if (!Number.isFinite(max) || (b.stacks ?? 0) <= max) return b;
+      changed = true; fixedBuffs++;
+      console.warn(`limbusCompany_FVTT | 【${b.name ?? b.type}】层数 ${b.stacks} → ${max}（${actor.name}）`);
+      return { ...b, stacks: max };
+    });
+    if (!changed) continue;
+
+    try {
+      await actor.update({ "system.buffs": next });
+      fixedActors++;
+    } catch (err) {
+      console.warn("limbusCompany_FVTT | BUFF 层数校正失败", actor.name, err);
+    }
+  }
+  if (fixedBuffs) {
+    ui.notifications.info(`已校正 ${fixedActors} 名角色的 ${fixedBuffs} 个超上限 BUFF 层数`);
+  }
+}
 
 // 画布每次就绪时再次确保双击补丁存在（重连/重载场景后仍生效）
 Hooks.on("canvasReady", () => {
@@ -318,7 +380,7 @@ Hooks.on("renderChatMessage", (_message, html, _data) => {
     });
   }
 
-  // ── 加重扩散承受聊天框 ──
+  // ── 容量扩散承受聊天框 ──
   if (flags.type === "clash-weight-spread") {
     html.find(".clash-btn-weight-take").on("click", () => {
       ClashManager.handleWeightTake(_message.id, flags);
@@ -331,11 +393,14 @@ Hooks.on("renderChatMessage", (_message, html, _data) => {
       const targetActorId = e.currentTarget.dataset.targetActorId ?? flags.targetActorId;
       const damage        = parseInt(e.currentTarget.dataset.damage ?? flags.damage) || 0;
       await ClashManager.handleApplyDamage(targetActorId, damage);
-      // 加重扩散：攻击方赢且 weight>=2 时，在扣血后发出扩散承受卡
+      // 容量扩散：打出伤害的一方攻击容量 >=2 时，在扣血后发出扩散承受卡
       const ws = flags.weightSpread;
       if (ws && (ws.weight ?? 1) >= 2) {
         const atkActor = game.actors.get(ws.attackerId);
-        await ClashManager._sendWeightSpreadCard(ws, atkActor);
+        const tgt      = game.actors.get(targetActorId);
+        await ClashManager._sendWeightSpreadCard(ws, atkActor, tgt ? {
+          actorId: tgt.id, name: tgt.name, dmg: damage, note: "拼点命中",
+        } : null);
       }
     });
     html.find(".clash-btn-reroll").on("click", () => {

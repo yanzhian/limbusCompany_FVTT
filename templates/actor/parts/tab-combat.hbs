@@ -80,8 +80,6 @@
             <div class="combat-slot-name"></div>
             {{!-- 激活/预备状态指示点 --}}
             <div class="slot-state-dot"></div>
-            {{!-- 相关技能切换按钮（有绑定相关技能时才显示） --}}
-            <button class="combat-skill-related-toggle" style="display:none" title="切换相关技能">↺</button>
           </div>
         {{/each}}
       </div>
@@ -107,7 +105,6 @@
                  title="{{#if item}}{{item.name}}{{else}}{{grade}}{{/if}}">
               <img src="{{skillImg}}" class="combat-skill-img" alt="{{grade}}">
             </div>
-            <button class="combat-skill-related-toggle{{#unless hasRelated}} hidden{{/unless}}" title="切换相关技能">↺</button>
           </div>
         {{/each}}
 
@@ -121,7 +118,6 @@
                title="{{#if defenseSkill.item}}{{defenseSkill.item.name}}{{else}}守备技能{{/if}}">
             <img src="{{defenseSkill.skillImg}}" class="combat-skill-img" alt="守备">
           </div>
-          <button class="combat-skill-related-toggle" style="display:none" title="切换相关技能">↺</button>
         </div>
 
       </div>{{!-- /combat-skill-slots-row --}}

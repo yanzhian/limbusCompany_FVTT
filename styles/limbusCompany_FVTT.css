@@ -383,6 +383,12 @@
 }
 .limbuscompany .no-equip-toggle input { margin: 0; }
 
+/* 援护防御：【援护防御】专属技能标记（队友被锁定且行动值为 0 时可顶上去） */
+.limbuscompany .cover-defense-badge {
+  background: #2A5F7A;
+  color: #D8EEFA;
+}
+
 /* 技能卡大图标：图片保持原始尺寸（60px 就显示 60px，不放大以免发糊），
    外面叠一层罪孽/等级边框。--skill-frame-scale 控制边框相对槽位的大小，
    调整外框松紧改这一个值即可。 */
@@ -3628,21 +3634,6 @@ body.game .limbuscompany.app img {
 /* 通用隐藏辅助类 */
 .hidden { display: none !important; }
 
-/* 相关技能切换按钮 */
-.limbuscompany .combat-skill-related-toggle {
-  background: none; border: 1px solid var(--border-gold);
-  color: var(--text-sub); font-size: .65rem; cursor: pointer;
-  border-radius: 50%; width: 16px; height: 16px;
-  display: flex; align-items: center; justify-content: center;
-  padding: 0; transition: all .15s;
-}
-.limbuscompany .combat-skill-related-toggle:hover { color: var(--gold-active); border-color: var(--gold-active); }
-/* 已切换为相关技能时：绿色高亮 */
-.limbuscompany .combat-skill-related-toggle.related-active {
-  color: #6EE06E; border-color: #6EE06E;
-  box-shadow: 0 0 4px 1px rgba(110,224,110,.5);
-}
-
 /* AP不足时激活槽：保留金框但降低不透明度 */
 .limbuscompany .combat-skill-slot.slot-active.slot-no-ap {
   opacity: .5;
@@ -3744,6 +3735,19 @@ body.game .limbuscompany.app img {
 .limbuscompany .sheet-lock-icon.unlocked { color: var(--gold-active); }
 .limbuscompany .sheet-lock-icon:hover { color: var(--gold-active); }
 .limbuscompany .sheet-type-label { flex: 1; color: var(--text-sub); font-size: .75rem; }
+/* EGO 形态切换：标题栏右上角 60×25 */
+.limbuscompany .ego-form-toggle {
+  flex: 0 0 auto; width: 60px; height: 25px; margin-left: auto;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: .72rem; font-weight: 700; letter-spacing: 1px;
+  border: 1px solid var(--border-gold); border-radius: 2px;
+  cursor: pointer; user-select: none; transition: all .15s;
+}
+.limbuscompany .ego-form-toggle.awaken  { background: #1E3A4C; color: #9FD8F5; border-color: #4E8FB4; }
+.limbuscompany .ego-form-toggle.corrode { background: #3A1520; color: #F0A0B4; border-color: #A34E6B; }
+.limbuscompany .ego-form-toggle:hover   { filter: brightness(1.35); }
+.limbuscompany .ego-form-tag { margin-left: 3px; font-size: .62rem; color: var(--text-sub); opacity: .8; }
+
 .limbuscompany .related-skill-toggle {
   background: var(--bg-panel); border: 1px solid var(--border-gold);
   color: var(--text-sub); font-size: .65rem; padding: 1px 6px;
@@ -4193,6 +4197,13 @@ body.game .limbuscompany.app img {
   display: flex; align-items: center; gap: 6px; font-size: .8rem;
 }
 .limbuscompany .category-icon { object-fit: contain; flex-shrink: 0; }
+/* 解锁态的第二行：骰子类型 + 无法装备 / 援护防御 等开关
+   （锁上后它们变回徽章，回到 skill-cat-dice-row 里） */
+.limbuscompany .skill-flag-row {
+  display: flex; align-items: center; flex-wrap: wrap;
+  gap: 6px; margin-top: 3px; font-size: .8rem;
+}
+.limbuscompany .skill-flag-row .dice-type-sel { max-width: 96px; }
 .limbuscompany .dice-formula-display {
   font-size: .9rem; font-weight: bold; color: var(--text-main);
 }
@@ -4226,7 +4237,7 @@ body.game .limbuscompany.app img {
 }
 .limbuscompany .counter-type-label { color: var(--text-sub); font-size: .75rem; }
 
-/* 加重值行 */
+/* 攻击容量行 */
 .limbuscompany .weight-row {
   display: flex; align-items: center; gap: 3px; min-height: 20px;
 }
@@ -4406,6 +4417,34 @@ body.game .limbuscompany.app img {
   transition: all .15s;
 }
 .limbuscompany .activity-add-btn:hover { border-color: var(--gold-active); color: var(--gold-active); }
+.limbuscompany .activity-copy-btn,
+.limbuscompany .activity-dupe-btn {
+  background: var(--bg-panel);
+   /* border: 1px solid var(--border-gold); */
+  color: var(--text-sub); font-size: .65rem; padding: 1px 5px;
+  cursor: pointer; border-radius: 2px; transition: all .15s; min-width: 32px;
+}
+.limbuscompany .activity-copy-btn:hover,
+.limbuscompany .activity-dupe-btn:hover { color: var(--gold-active); border-color: var(--gold-active); }
+.limbuscompany .activity-add-row { display: flex; gap: 4px; }
+.limbuscompany .activity-paste-json-btn {
+  background: var(--bg-panel); border: 1px dashed var(--border-gold);
+  color: var(--text-sub); font-family: var(--font-main); font-size: .65rem;
+  padding: 3px 6px; cursor: pointer; border-radius: 2px;
+  /* 只占自己那点宽度，别把「添加效果」挤没了 */
+  flex: 0 0 auto; width: 62px; white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis; transition: all .15s;
+}
+.limbuscompany .activity-paste-json-btn:hover { border-color: var(--gold-active); color: var(--gold-active); }
+.limbuscompany .activity-paste-btn {
+  background: var(--bg-panel); border: 1px dashed var(--border-gold);
+  color: var(--text-sub); font-family: var(--font-main); font-size: .7rem;
+  padding: 3px 10px; cursor: pointer; border-radius: 2px;
+  flex: 0 1 auto; max-width: 40%;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  transition: all .15s;
+}
+.limbuscompany .activity-paste-btn:hover { border-color: var(--gold-active); color: var(--gold-active); }
 
 /* ─── §3-O  Title 卡片（悬停弹出） ─────────────────────────────── */
 
@@ -4702,7 +4741,7 @@ body.game .limbuscompany.app img {
 
 .ae-v2 .ae-body {
   padding: 8px 14px 10px; display: flex; flex-direction: column; gap: 6px;
-  max-height: 70vh; overflow-y: auto;
+  /* 不再自带滚动条：由对话框窗口统一滚动，避免出现内外两条 */
 }
 
 /* 名称行 */
@@ -4766,9 +4805,22 @@ body.game .limbuscompany.app img {
 .ae-v2 .ae-del-btn:hover { background: #8B2222; }
 
 .ae-v2 .ae-row-fields {
-  display: flex; flex-wrap: wrap; align-items: center; gap: 4px;
+  display: flex; flex-direction: column; align-items: stretch; gap: 3px;
   font-size: .72rem;
 }
+
+/* 行内一条：类型 / 目标+标签+在场+至多 / 其余字段，各占一行，能横着排就横着排 */
+.ae-v2 .ae-line {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 4px;
+  min-width: 0;
+}
+/* 该行没有任何可见内容时（如目标区被隐藏）不占高度 */
+.ae-v2 .ae-line:empty { display: none; }
+/* 分区壳子保持默认显示（jQuery 的显隐切换依赖它），
+   壳子内部的字段用小间距横排 */
+.ae-v2 .ae-line > span > * { margin-right: 3px; }
+/* 文本框不再抢占整行宽度 */
+.ae-v2 .ae-line .ae-input { flex: 0 1 auto; }
 .ae-v2 .ae-row-fields label {
   color: var(--text-sub); font-size: .68rem; white-space: nowrap;
 }
@@ -6209,20 +6261,10 @@ body.game .limbuscompany.app img {
   line-height:      1.2;
 }
 
-/* EGO 槽包装容器（用于放置相关技能切换按钮） */
+/* EGO 槽包装容器 */
 .qa-ego-skill-wrap {
   position: relative;
   display:  inline-flex;
-}
-/* 快捷 HUD 上的 EGO 相关技能切换按钮（右上角） */
-.qa-ego-related-toggle {
-  position:  absolute;
-  top:       -5px;
-  right:     -5px;
-  z-index:   10;
-  width:     14px;
-  height:    14px;
-  font-size: .55rem;
 }
 
 /* ── 功能按钮 ─────────────────────────────────────────────── */
@@ -9025,12 +9067,58 @@ input.item-piles-quantity {
   100% { opacity: 0; }
 }
 
+/* ── 6bag 丢弃：碎裂 + 补位（角色卡战斗页 / 快捷 HUD） ─────────────── */
+@keyframes limbus-slot-break {
+  0%   { opacity: 1; transform: scale(1)    rotate(0deg); filter: brightness(1); }
+  35%  { opacity: 1; transform: scale(1.12) rotate(-4deg); filter: brightness(2.2); }
+  100% { opacity: 0; transform: scale(.62)  rotate(6deg);  filter: brightness(.6); }
+}
+.limbuscompany .combat-skill-slot--breaking,
+.qa-skill-slot--breaking {
+  animation: limbus-slot-break .26s cubic-bezier(.3,.1,.6,1) forwards;
+  pointer-events: none;
+}
+
+/* 新牌从右边推进来；右侧的牌整体左移一格 */
+@keyframes limbus-slot-slide-in {
+  0%   { opacity: 0; transform: translateX(34px) scale(.85); }
+  100% { opacity: 1; transform: translateX(0)    scale(1); }
+}
+@keyframes limbus-slot-shift-left {
+  0%   { transform: translateX(34px); }
+  100% { transform: translateX(0); }
+}
+.limbuscompany .combat-skill-slot--slide-in   { animation: limbus-slot-slide-in .32s ease-out backwards; }
+.limbuscompany .combat-skill-slot--shift-left { animation: limbus-slot-shift-left .3s ease-out backwards; }
+
+/* ── 技能卡：攻击容量 ≥ 2 时的扩散设置 ───────────────────────────── */
+.limbuscompany .spread-box { display: none; align-items: center; gap: 4px; margin-left: 6px; }
+.limbuscompany .spread-box.on { display: inline-flex; }
+.limbuscompany .spread-ft { font-size: .65rem; color: var(--text-sub); }
+.limbuscompany .spread-badge {
+  margin-left: 6px; font-size: .62rem; padding: 1px 5px; border-radius: 2px;
+  background: #33291A; color: #E8C9A2; border: 1px solid var(--border-gold);
+}
+
+/* ── 容量扩散：目标处的 +N（累计 TOTAL 走拼点那套左下角黑条） ──────── */
+.lcvfx-layer .lcvfx-plus {
+  position: absolute; transform: translate(-50%, -50%);
+  font-size: 1.4rem; font-weight: 900; color: #FFD98A;
+  text-shadow: 0 0 10px rgba(255, 200, 110, .9), 0 2px 3px #000;
+  pointer-events: none; animation: lcvfx-plus-fly .6s ease-out forwards;
+}
+@keyframes lcvfx-plus-fly {
+  0%   { opacity: 0; transform: translate(-50%, -50%)  scale(.5); }
+  30%  { opacity: 1; transform: translate(-50%, -80%)  scale(1.1); }
+  100% { opacity: 0; transform: translate(-50%, -180%) scale(.9); }
+}
+
 /* ═══════════════════════════════════════════════════════════════
    拼点小特效（破币 / 瞬移）
    破币画在屏幕坐标层，瞬移画在 #hud 的画布坐标层。
    ═══════════════════════════════════════════════════════════════ */
 
-#limbus-clash-vfx-canvas {
+.lcvfx-layer {
   --lcvfx-ring-w:      6px;     /* 圆环粗细 */
   --lcvfx-ring-ms:     520ms;   /* 扩散时长 */
   --lcvfx-ring-color:  #ffe9a8;
@@ -9042,17 +9130,22 @@ input.item-piles-quantity {
   --lcvfx-ghost-ms:    420ms;
 }
 
-#limbus-clash-vfx-canvas { pointer-events: none; }
+.lcvfx-layer { pointer-events: none; }
+
+/* 屏幕坐标层：给角色卡 / 快捷 HUD 这类界面元素上的特效用（如丢弃技能的破币） */
+#limbus-clash-vfx-screen {
+  position: fixed; inset: 0; z-index: 10000; overflow: hidden;
+}
 
 /* ── 破币：空心圆 + 火花 ─────────────────────────────────────────── */
-#limbus-clash-vfx-canvas .lcvfx-ring {
+.lcvfx-layer .lcvfx-ring {
   position: absolute;
   transform: translate(-50%, -50%);
   border: var(--lcvfx-ring-w) solid var(--lcvfx-ring-color);
   border-radius: 50%;
   animation: lcvfx-ring-out var(--lcvfx-ring-ms) cubic-bezier(.2, .7, .3, 1) forwards;
 }
-#limbus-clash-vfx-canvas .lcvfx-ring--inner {
+.lcvfx-layer .lcvfx-ring--inner {
   animation-duration: calc(var(--lcvfx-ring-ms) * 1.35);
   border-width: calc(var(--lcvfx-ring-w) / 2);
   opacity: .7;
@@ -9063,8 +9156,8 @@ input.item-piles-quantity {
   100% { opacity: 0;  transform: translate(-50%, -50%) scale(1);   filter: brightness(1); }
 }
 
-#limbus-clash-vfx-canvas .lcvfx-sparks { position: absolute; transform: translate(-50%, -50%); }
-#limbus-clash-vfx-canvas .lcvfx-spark {
+.lcvfx-layer .lcvfx-sparks { position: absolute; transform: translate(-50%, -50%); }
+.lcvfx-layer .lcvfx-spark {
   position: absolute;
   left: 0; top: 0;
   height: 2px;
@@ -9079,12 +9172,12 @@ input.item-piles-quantity {
 }
 
 /* ── 瞬移：风线 + 残影 ───────────────────────────────────────────── */
-#limbus-clash-vfx-canvas .lcvfx-dash {
+.lcvfx-layer .lcvfx-dash {
   position: absolute;
   transform-origin: 0 50%;
   height: 0;
 }
-#limbus-clash-vfx-canvas .lcvfx-wind {
+.lcvfx-layer .lcvfx-wind {
   position: absolute;
   left: 0;
   height: var(--lcvfx-wind-thick);
@@ -9098,7 +9191,7 @@ input.item-piles-quantity {
   25%  { opacity: 1; }
   100% { opacity: 0; transform: translateX(20%) scaleX(1); }
 }
-#limbus-clash-vfx-canvas .lcvfx-ghost {
+.lcvfx-layer .lcvfx-ghost {
   position: absolute;
   transform: translate(-50%, -50%);
   border-radius: 50%;
