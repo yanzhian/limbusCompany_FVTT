@@ -142,7 +142,7 @@
                 data-item-name="{{name}}"
                 data-type="{{system.type}}"
                 data-subtype="{{system.sinType}}"
-                data-tags="{{system.tags}}">
+                data-tags="{{join system.tags '/'}}">
               <span class="col-icon">
                 <img src="{{skillIcon}}" class="item-icon" data-item-id="{{_id}}" alt="{{name}}">
               </span>

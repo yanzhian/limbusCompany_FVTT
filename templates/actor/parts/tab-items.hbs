@@ -115,7 +115,7 @@
                 data-item-name="{{name}}"
                 data-type="{{type}}"
                 data-subtype="{{system.subtype}}"
-                data-tags="{{system.tags}}">
+                data-tags="{{join system.tags '/'}}">
               {{!-- 图标 --}}
               <span class="col-icon">
                 <img src="{{img}}" class="item-icon" data-item-id="{{_id}}" alt="{{name}}">

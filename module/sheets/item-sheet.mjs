@@ -721,7 +721,7 @@ export class LimbusItemSheet extends ItemSheet {
           <div class="card-title" style="background:${sinColor}">${item.name}</div>
           <div class="card-body">
             <div><img src="${_getCategoryIcon(sys.category)}" width="16" alt=""> ${(sys.diceFormula ?? "").toUpperCase()}</div>
-            <div style="color:var(--text-sub);font-size:.75rem">${sys.tags ?? ""}</div>
+            <div style="color:var(--text-sub);font-size:.75rem">${ClashManager._itemTags(item).join(" / ")}</div>
             <div style="margin-top:4px">${sys.description ?? sys.effectDesc ?? ""}</div>
           </div>
         </div>`;
