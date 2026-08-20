@@ -1056,7 +1056,7 @@ export class ClashManager {
       // ── 次数限制（perTurn / perEncounter）────────────────────────────────
       const limitType  = act.limit?.type;
       const limitCount = act.limit?.count ?? 0;
-      const actKey     = `${item.id}_${act.name ?? trigger}`;
+      const actKey     = ClashManager._actCountKey(item, act, trigger);
       if (limitType === "perTurn" && limitCount > 0) {
         const counts = owner?.getFlag?.("limbusCompany_FVTT", "turnFireCounts") ?? {};
         if ((counts[actKey] ?? 0) >= limitCount) continue;
@@ -5317,10 +5317,15 @@ export class ClashManager {
     return false;
   }
 
-  /** 检查 Activity 次数限制（不计数，仅检查） */
-  /** 活动的计数键——与 _applyActivities 保持一致，两边共用同一份计数 */
+  /**
+   * 活动的计数键——所有读写计数的地方都走这里，保证共用同一份计数。
+   *
+   * 按**物品名**而非 item.id 计数：同名的两张牌 / 两件装备共用一份次数，
+   * 「一回合 1 次」才是名副其实的"这个技能一回合 1 次"，而不是"每张牌各 1 次"。
+   * 代价是不同物品若起了同名效果会互相抢次数——起名时注意区分即可。
+   */
   static _actCountKey(item, act, trigger = "反应") {
-    return `${item?.id}_${act?.name ?? trigger}`;
+    return `${item?.name ?? ""}_${act?.name ?? trigger}`;
   }
 
   /**
@@ -5370,7 +5375,7 @@ export class ClashManager {
       const limitCount = act.limit?.count ?? 0;
       if (!limitType || limitType === "unlimited" || limitCount <= 0) continue;
 
-      const actKey = `${item.id}_${act.name ?? trigger}`;
+      const actKey = ClashManager._actCountKey(item, act, trigger);
       if (limitType === "perTurn") {
         const counts = actor?.getFlag?.("limbusCompany_FVTT", "turnFireCounts") ?? {};
         if ((counts[actKey] ?? 0) >= limitCount) {
