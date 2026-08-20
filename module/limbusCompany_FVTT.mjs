@@ -248,7 +248,38 @@ Hooks.once("ready", () => {
 
   // GM 在线时还原一次残留的临时骰面改动（上次对抗中途断线/刷新留下的）
   if (game.user.isGM) _restoreItemTempMods();
+
+  // GM 在线时把粘连在一起的标签拆开（历史数据修复）
+  if (game.user.isGM) _normalizeItemTags();
 });
+
+/**
+ * 加载时修复：把 ["收尾人/黎明事务所"] 这种粘连在一起的标签拆成多个。
+ *
+ * 数组型 tags 曾经被整串写进一个元素（输入框里的 "a/b" 直接塞给 ArrayField），
+ * 导致卡面上两个标签连成一个、标签匹配也对不上。这里在世界加载时统一拆开。
+ */
+async function _normalizeItemTags() {
+  const SEP = /[\/,，;；]/;
+  let fixed = 0;
+  const scan = async (items) => {
+    for (const item of items ?? []) {
+      const raw = item.system?.tags;
+      if (!Array.isArray(raw) || !raw.some(t => SEP.test(String(t)))) continue;
+      const list = raw.flatMap(t => String(t).split(SEP)).map(t => t.trim()).filter(Boolean);
+      try {
+        await item.update({ "system.tags": list });
+        fixed++;
+        console.log(`limbusCompany_FVTT | 标签拆分：${item.name} → ${list.join(" / ")}`);
+      } catch (err) {
+        console.warn("limbusCompany_FVTT | 标签拆分失败", item.name, err);
+      }
+    }
+  };
+  await scan(game.items);
+  for (const actor of game.actors) await scan(actor.items);
+  if (fixed) ui.notifications.info(`已拆分 ${fixed} 件物品里粘连的标签`);
+}
 
 /**
  * 加载时兜底：把上次攻击没来得及还原的骰数/面数/基础值/攻击容量改回原值。

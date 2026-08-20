@@ -636,18 +636,26 @@ export class LimbusItemSheet extends ItemSheet {
       }
     }
 
-    // ── 标签：输入框里是 "标签1/标签2"，schema 若是数组字段就切成数组 ──────
-    // （不切的话数组字段会拿到一整串字符串，回显时又被 String() 拼成 "a,b"）
+    // ── 标签：输入框里是 "标签1/标签2"，数组型字段要先切成数组再写库 ────────
+    // 不切的话 ArrayField 会把整串当成一个元素（["标签1/标签2"]），
+    // 卡面上就成了一个连在一起的标签。
     {
-      const flat = !formData.system;
-      const raw  = flat ? formData["system.tags"] : formData.system?.tags;
-      if (typeof raw === "string") {
+      const splitTags = (raw) => String(raw)
+        .split(/[\/,，;；]/).map(t => t.trim()).filter(Boolean);
+      // 该物品的 tags 是不是数组字段：优先看 schema，其次看当前存的值
+      let isArr = Array.isArray(this.item.system?.tags);
+      try {
         const field = this.item.system?.schema?.getField?.("tags");
-        const isArr = field instanceof foundry.data.fields.ArrayField;
-        if (isArr) {
-          const list = raw.split(/[\/,，;；]/).map(t => t.trim()).filter(Boolean);
-          if (flat) formData["system.tags"] = list;
-          else      formData.system.tags   = list;
+        if (field) isArr = field instanceof foundry.data.fields.ArrayField;
+      } catch { /* schema 取不到就沿用上面的判断 */ }
+
+      if (isArr) {
+        // 扁平 / 嵌套两种提交形态都要处理（同一次提交里可能只出现其中一种）
+        if (typeof formData["system.tags"] === "string") {
+          formData["system.tags"] = splitTags(formData["system.tags"]);
+        }
+        if (typeof formData.system?.tags === "string") {
+          formData.system.tags = splitTags(formData.system.tags);
         }
       }
     }
