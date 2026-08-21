@@ -32,7 +32,11 @@ export class ClashFlowEdge {
 
   /** canvas 覆盖的宽度（vmax）。屏幕最宽 100vmax，留足旋转后的余量 */
   static FLOW_SPAN = 120;
-  /** canvas 相对黑条左端的偏移（vmax）。黑条 left:-60vmax，宽 260vmax */
+  /**
+   * canvas 相对黑条**自身锚点**的偏移（vmax）。见 CSS 里的 .lcfx-flow：
+   * 攻方黑条 left:-60vmax → canvas 也用 left 锚；
+   * 守方黑条 right:-60vmax → canvas 必须用 right 锚，否则右半屏没有流体。
+   */
   static FLOW_LEFT = 52;
 
   static _states = new Map();   // side → { canvas, ctx, w, h, dpr }

@@ -8967,12 +8967,17 @@ input.item-piles-quantity {
    高度要容得下 粗细 + 起伏 + 撕裂 的总幅度，不够就会被裁掉边缘。 */
 #limbus-clash-fx .lcfx-flow {
   position: absolute;
-  left: 52vmax;
   width: 120vmax;
   height: 64px;
   pointer-events: none;
   z-index: 1;                    /* 压在文字下面，不挡 TOTAL 数字 */
 }
+/* 横向锚点必须跟黑条自身的锚点一致，否则可见段对不上：
+   攻方 left:-60vmax → 可见段在局部 60~160vmax，从左锚 52vmax 起算刚好罩住；
+   守方 right:-60vmax → 可见段在局部 100~200vmax，必须从右锚 52vmax 起算。
+   只写 left 的话守方右侧会露出一截没有流体。 */
+#limbus-clash-fx .lcfx-band--atk .lcfx-flow { left:  52vmax; }
+#limbus-clash-fx .lcfx-band--def .lcfx-flow { right: 52vmax; }
 /* 攻方在画面下方 → 内侧是它的上沿；守方在上方 → 内侧是下沿 */
 #limbus-clash-fx .lcfx-band--atk .lcfx-flow { top: -32px; }
 #limbus-clash-fx .lcfx-band--def .lcfx-flow { bottom: -32px; }
