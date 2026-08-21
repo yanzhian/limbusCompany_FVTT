@@ -2342,6 +2342,7 @@ function _buildTriggerOpts(selected) {
     { label: "── 反应 ──",  values: ["反应"] },
     { label: "── 丢弃 ──",  values: ["丢弃时"] },
     { label: "── 恐慌 ──",  values: ["恐慌触发时", "坚定触发时"] },
+    { label: "── 混乱 ──",  values: ["陷入混乱时"] },
   ];
   return groups.map(g =>
     `<optgroup label="${g.label}">${g.values.map(v =>

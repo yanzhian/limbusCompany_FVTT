@@ -912,8 +912,8 @@ export class LimbusActor extends Actor {
     if (burnedIdxs.length === 0) return;
 
     // 混乱等级：0=无 1=陷入混乱 2=陷入混乱+ 3=陷入混乱++
-    const CHAOS_TYPES = ["chaos", "chaos_plus", "chaos_double_plus"];
-    const CHAOS_NAMES = ["陷入混乱", "陷入混乱+", "陷入混乱++"];
+    const CHAOS_TYPES = CONFIG.LIMBUSCOMPANY?.CHAOS_TYPES ?? ["chaos", "chaos_plus", "chaos_double_plus"];
+    const CHAOS_NAMES = CONFIG.LIMBUSCOMPANY?.CHAOS_NAMES ?? ["陷入混乱", "陷入混乱+", "陷入混乱++"];
 
     const existingChaos = (this.system.buffs ?? []).find(b => CHAOS_TYPES.includes(b.type));
     const currentLevel  = existingChaos ? (CHAOS_TYPES.indexOf(existingChaos.type) + 1) : 0;
@@ -942,6 +942,10 @@ export class LimbusActor extends Actor {
     // 混乱阈值被击穿：全场都该听见
     const { ClashTotalFX } = await import("../helpers/clash-total-fx.mjs");
     ClashTotalFX.broadcastSfx("chaos");
+
+    // ── [陷入混乱时] Activity ────────────────────────────────────────────
+    // 已装备的技能 + 装备格物品都参与；升级（混乱→混乱+）同样算一次触发
+    await this.triggerChaosActivities();
 
     // silent=true 时调用方已在取血消息中展示混乱触发信息，无需再创建独立消息
     if (!silent) {
@@ -1262,6 +1266,31 @@ export class LimbusActor extends Actor {
     if (fear >= 3 || resolve >= 3) {
       await this._safeUpdateSelf({ "system.panicCounters.fear": 0, "system.panicCounters.resolve": 0 });
     }
+  }
+
+  /**
+   * 触发 [陷入混乱时] 的 activities。
+   * 混乱本身是纯负面状态（物理抗性被强制翻倍、行动值清零），这个时机是留给
+   * "被打进混乱时反打一下"这类翻盘效果的。已装备技能 + 装备格物品都参与；
+   * 混乱升级（混乱 → 混乱+）同样算一次触发。
+   */
+  async triggerChaosActivities() {
+    const { ClashManager } = await import("../helpers/clash.mjs");
+    const sys  = this.system ?? {};
+    const ctx  = { owner: this, atkActor: this, defActor: null, _fireCounts: {}, _actMsgs: [] };
+    const skillIds = [
+      ...(sys.skills?.basic ?? []),
+      sys.skills?.defense ?? null,
+      ...Object.values(sys.skills?.ego ?? {}),
+    ].filter(Boolean);
+    for (const id of skillIds) {
+      const item = this.items.get(id);
+      if (item) await ClashManager._applyActivities(item, "陷入混乱时", ctx);
+    }
+    for (const eq of ClashManager._getEquippedItems(this)) {
+      await ClashManager._applyActivities(eq, "陷入混乱时", ctx);
+    }
+    if (ctx._actMsgs.length) await ClashManager._flushActMsgs(ctx._actMsgs, this);
   }
 
   /**

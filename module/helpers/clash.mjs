@@ -2014,8 +2014,8 @@ export class ClashManager {
     const newHp = ClashManager.applyHpFloor(oldHp, oldHp - dmg, _bleedMods.hpFloor);
 
     const maxHpForBleed      = actor.system.hp?.max ?? 1;
-    const _BC_TYPES          = ["chaos", "chaos_plus", "chaos_double_plus"];
-    const _BC_NAMES          = ["陷入混乱", "陷入混乱+", "陷入混乱++"];
+    const _BC_TYPES          = CONFIG.LIMBUSCOMPANY?.CHAOS_TYPES ?? ["chaos", "chaos_plus", "chaos_double_plus"];
+    const _BC_NAMES          = CONFIG.LIMBUSCOMPANY?.CHAOS_NAMES ?? ["陷入混乱", "陷入混乱+", "陷入混乱++"];
     const bleedChaosCount    = (actor.system.chaosThresholds ?? []).filter(
       t => !t.triggered && newHp <= maxHpForBleed * t.percent / 100
     ).length;
@@ -4727,8 +4727,8 @@ export class ClashManager {
     const newHp    = hpLockValue != null ? hpLockValue : Math.max(0, oldHp - totalDmg);
 
     // 提前判断混乱阈值（用于聊天框显示，含升级逻辑）
-    const _CHAOS_TYPES  = ["chaos", "chaos_plus", "chaos_double_plus"];
-    const _CHAOS_NAMES  = ["陷入混乱", "陷入混乱+", "陷入混乱++"];
+    const _CHAOS_TYPES  = CONFIG.LIMBUSCOMPANY?.CHAOS_TYPES ?? ["chaos", "chaos_plus", "chaos_double_plus"];
+    const _CHAOS_NAMES  = CONFIG.LIMBUSCOMPANY?.CHAOS_NAMES ?? ["陷入混乱", "陷入混乱+", "陷入混乱++"];
     const thresholds    = sys.chaosThresholds ?? [];
     const chaosCount    = thresholds.filter(t => !t.triggered && newHp <= maxHp * t.percent / 100).length;
     const chaosTriggered = chaosCount > 0;
