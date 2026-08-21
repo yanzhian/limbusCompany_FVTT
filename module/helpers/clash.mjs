@@ -425,6 +425,37 @@ export class ClashManager {
   }
 
   /**
+   * 【体力伤害】的队伍广播：任一友方（含受伤者自己）掉血时，通知**本队所有人**
+   * 身上带 onAllyHpDamage 钩子的 BUFF。
+   *
+   * 与 onTakeDamage 的区别：onTakeDamage 只通知受伤者自己身上的 BUFF，
+   * 这个通知的是整队——用于「友方受伤时我获得…」这类挂在别人身上也生效的 BUFF。
+   *
+   * @param {Actor} victim   实际掉血的人
+   * @param {number} amount  实际掉的血量（0 或负数不广播）
+   * @param {Actor|null} attacker 伤害来源（跳动伤害为 null）
+   * @param {string} source  "clash" | "burn" | "bleed" | "rupture" | …
+   */
+  static async _dispatchAllyHpDamage(victim, amount, attacker = null, source = "clash") {
+    if (!victim || !(amount > 0)) return;
+    const team = await ClashManager._resolveTargets("allTeam", victim, null);
+    // 不在任何小队里时至少通知受伤者自己
+    const scope = team.length ? team : [victim];
+    for (const ally of scope) {
+      for (const buff of foundry.utils.deepClone(ally.system?.buffs ?? [])) {
+        const handler = resolveBuffHandler(buff);
+        if (typeof handler?.onAllyHpDamage !== "function") continue;
+        await handler.onAllyHpDamage(ally, buff, {
+          victim, amount, attacker, source,
+          addBuff:   (type, i, st, when) => ClashManager._addBuff(ally, type, i, st, when),
+          addBuffTo: (tgt, type, i, st, when) => ClashManager._addBuff(tgt, type, i, st, when),
+          getBuff:   (type) => ClashManager._getBuff(ally, type),
+        });
+      }
+    }
+  }
+
+  /**
    * [受到伤害时] 的统一派发：受伤者的技能 + 装备格物品的 Activity，
    * 外加自定义 BUFF 的 onTakeDamage 钩子（返回字符串则并入本次结算的活动消息）。
    * @param {Item}  item     受伤方本次用的技能（可能为 null）
@@ -1984,6 +2015,7 @@ export class ClashManager {
     const bleedNewLevel      = Math.min(3, bleedCurrentLevel + bleedChaosCount);
     const bleedChaosName     = _BC_NAMES[bleedNewLevel - 1] ?? "陷入混乱";
     await ClashManager._safeDocUpdate(actor, { "system.hp.value": newHp });
+    await ClashManager._dispatchAllyHpDamage(actor, oldHp - newHp, null, "bleed");
     await ClashManager._reduceBuffStacks(actor, "bleed");
     await ClashManager._tickFieldResources("bleed", dmg, 1);
     if (actor.checkAndTriggerChaos) await actor.checkAndTriggerChaos(newHp, oldHp, { silent: true });
@@ -4700,6 +4732,7 @@ export class ClashManager {
     // 更新 HP —— 承受方可能不属于当前玩家（如攻击方客户端结算反击伤害），
     // 必须走 _safeDocUpdate 由 GM 代理，否则会抛 lacks permission
     await ClashManager._safeDocUpdate(actor, { "system.hp.value": newHp });
+    await ClashManager._dispatchAllyHpDamage(actor, oldHp - newHp, attacker, "clash");
 
     // 沉沦：更新理智值（setSanity 内部会检查恐慌状态）；
     // 若理智因此跌至下限 5，额外造成【沉沦】强度等级的【忧郁】罪孽伤害（按目标忧郁抗性结算）
