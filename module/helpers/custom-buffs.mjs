@@ -41,6 +41,12 @@
  *     modifyOutgoingDamage(actor, buff, ctx) {}, // 自己打出伤害前调用（与 modifyIncomingDamage 对称），
  *                                             // ctx = { damage, target, category, sinType, item }；
  *                                             // 返回 { damage?, note? }
+ *     onTakeDamage(actor, buff, ctx) {},     // 自己 [受到伤害时] 调用（异步），
+ *                                             // ctx = { attacker,
+ *                                             //          addBuff(type,intensity,stacks,whenAdded),
+ *                                             //          addBuffTo(targetActor,...),
+ *                                             //          getBuff(type) }
+ *                                             // 返回字符串则并入本次结算的活动消息
  *     onHit(actor, buff, ctx) {},            // 自己任意技能/装备 [命中时] 结算后调用（异步），
  *                                             // ctx = { item, category, target,
  *                                             //          addBuff(type,intensity,stacks,whenAdded),
@@ -552,6 +558,33 @@ registerCustomBuff("driveGhostFire", {
     const { ClashManager } = await import("./clash.mjs");
     await ClashManager._addBuff(actor, "swift", 0, times, "下回合");
     return `下回合获得 <strong>${times}</strong> 层【迅捷】。`;
+  },
+});
+
+/**
+ * 【红梅】
+ * - 最大值：10 层
+ * - 受到伤害时：消耗 1 层，为自己添加「当前层数」级【流血】，为攻击者添加 1 级【呼吸法】
+ *   （层数按扣除前的读数算——只剩 1 层时仍能给出 1 级【流血】）
+ */
+registerCustomBuff("redPlum", {
+  label:       "红梅",
+  description: "- 最大值：10 层\n"
+    + "- 受到伤害时，消耗 1 层，为自己添加「本层数」级【流血】，为攻击者添加 1 级【呼吸法】",
+  maxStacks:   10,
+
+  async onTakeDamage(actor, buff, ctx) {
+    const stacks = buff.stacks ?? 0;
+    if (stacks <= 0) return;
+    const { ClashManager } = await import("./clash.mjs");
+    await ClashManager._reduceBuffStacks(actor, buff.type ?? "redPlum", 1);
+    await ctx.addBuff("bleed", stacks, 0, "本回合");
+    let note = `消耗 1 层，自身获得 <strong>${stacks}</strong> 级【流血】`;
+    if (ctx.attacker) {
+      await ctx.addBuffTo(ctx.attacker, "breathing", 1, 0, "本回合");
+      note += `，<strong>${ctx.attacker.name}</strong> 获得 1 级【呼吸法】`;
+    }
+    return note + "。";
   },
 });
 

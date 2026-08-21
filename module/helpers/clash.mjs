@@ -425,6 +425,37 @@ export class ClashManager {
   }
 
   /**
+   * [受到伤害时] 的统一派发：受伤者的技能 + 装备格物品的 Activity，
+   * 外加自定义 BUFF 的 onTakeDamage 钩子（返回字符串则并入本次结算的活动消息）。
+   * @param {Item}  item     受伤方本次用的技能（可能为 null）
+   * @param {Actor} actor    受伤的人
+   * @param {Actor} attacker 打伤他的人
+   */
+  static async _dispatchTakeDamage(item, actor, attacker, ctx) {
+    if (item) await ClashManager._applyActivities(item, "受到伤害时", ctx);
+    for (const eq of ClashManager._getEquippedItems(actor)) {
+      await ClashManager._applyActivities(eq, "受到伤害时", ctx);
+    }
+    for (const buff of foundry.utils.deepClone(actor?.system?.buffs ?? [])) {
+      const handler = resolveBuffHandler(buff);
+      if (typeof handler?.onTakeDamage !== "function") continue;
+      const note = await handler.onTakeDamage(actor, buff, {
+        attacker,
+        addBuff:   (type, i, st, when) => ClashManager._addBuff(actor, type, i, st, when),
+        addBuffTo: (tgt, type, i, st, when) => ClashManager._addBuff(tgt, type, i, st, when),
+        getBuff:   (type) => ClashManager._getBuff(actor, type),
+      });
+      if (typeof note === "string" && note) {
+        (ctx?._actMsgs ?? []).push({
+          trigger: "受到伤害时",
+          itemName: handler.label ?? buff.name ?? buff.type,
+          msgs: [note],
+        });
+      }
+    }
+  }
+
+  /**
    * 该物品此刻是否"在场上生效"——决定它的 [反应] 要不要参与检查。
    *
    * · 装备：必须在装备格（slot0~8）里，背包里躺着的不算
@@ -3098,10 +3129,7 @@ export class ClashManager {
             await ClashManager._applyActivitiesAndEquip(atkItem, "暴击命中时", atkCtx);
           }
           // 防守方受到伤害（技能 + 装备格物品）
-          await ClashManager._applyActivities(defItem, "受到伤害时", defCtx);
-          for (const eq of ClashManager._getEquippedItems(defActor)) {
-            await ClashManager._applyActivities(eq, "受到伤害时", defCtx);
-          }
+          await ClashManager._dispatchTakeDamage(defItem, defActor, atkActor, defCtx);
         }
       } else {
         // 防守方拼点胜（攻击方落败）
@@ -3115,10 +3143,7 @@ export class ClashManager {
         if (!dodgeWin) {
           await ClashManager._applyActivitiesAndEquip(defItem, "命中时", defCtx);
           // 攻击方受到伤害（技能 + 装备格物品）
-          await ClashManager._applyActivities(atkItem, "受到伤害时", atkCtx);
-          for (const eq of ClashManager._getEquippedItems(atkActor)) {
-            await ClashManager._applyActivities(eq, "受到伤害时", atkCtx);
-          }
+          await ClashManager._dispatchTakeDamage(atkItem, atkActor, defActor, atkCtx);
         }
       }
 
@@ -3863,10 +3888,7 @@ export class ClashManager {
         if (breatheCrit) {
           await ClashManager._applyActivitiesAndEquip(atkItemDoc, "暴击命中时", atkCtx2);
         }
-        await ClashManager._applyActivities(defItemDoc, "受到伤害时", defCtx2);
-        for (const eq of ClashManager._getEquippedItems(defActor)) {
-          await ClashManager._applyActivities(eq, "受到伤害时", defCtx2);
-        }
+        await ClashManager._dispatchTakeDamage(defItemDoc, defActor, atkActor, defCtx2);
       }
     } else {
       await ClashManager._applyActivitiesAndEquip(atkItemDoc, "拼点失败", atkCtx2);
@@ -3877,10 +3899,7 @@ export class ClashManager {
       }
       if (!dodgeWin) {
         await ClashManager._applyActivitiesAndEquip(defItemDoc, "命中时", defCtx2);
-        await ClashManager._applyActivities(atkItemDoc, "受到伤害时", atkCtx2);
-        for (const eq of ClashManager._getEquippedItems(atkActor)) {
-          await ClashManager._applyActivities(eq, "受到伤害时", atkCtx2);
-        }
+        await ClashManager._dispatchTakeDamage(atkItemDoc, atkActor, defActor, atkCtx2);
       }
     }
 
@@ -4078,11 +4097,8 @@ export class ClashManager {
       }
     }
 
-    // [受到伤害时]：承受方受伤（技能 + 装备格物品）
-    await ClashManager._applyActivities(atkItem2, "受到伤害时", defCtx2);
-    for (const eq of ClashManager._getEquippedItems(baseActor)) {
-      await ClashManager._applyActivities(eq, "受到伤害时", defCtx2);
-    }
+    // [受到伤害时]：承受方受伤（技能 + 装备格物品 + BUFF 的 onTakeDamage）
+    await ClashManager._dispatchTakeDamage(atkItem2, baseActor, atkActor, defCtx2);
 
     const _buffHookMsgs2 = [];
     await ClashManager._applyAndSendTake(baseActor, finalDamage, { calcNotes, attacker: atkActor, hookMsgs: _buffHookMsgs2, category, sinType, item: atkItem2 });
