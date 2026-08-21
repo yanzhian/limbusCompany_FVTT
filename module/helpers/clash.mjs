@@ -427,25 +427,15 @@ export class ClashManager {
   /**
    * 该物品此刻是否"在场上生效"——决定它的 [反应] 要不要参与检查。
    *
-   * · 装备：必须在装备格（slot0~8）里
-   * · 技能：必须在技能槽里（6 个基础 + 守备 + EGO）
-   * · 其他类型（恐慌卡等）：不作限制，维持原样
-   *
-   * 背包里躺着的装备/技能不该弹反应框——不然谁包里有一件，谁就被问一次。
+   * · 装备：必须在装备格（slot0~8）里，背包里躺着的不算
+   *   （不然谁包里有一件，谁就被问一次）
+   * · 技能与其他类型：不作限制。技能不一定装在槽里——【援护防御】专属技能、
+   *   由反应/效果调用的衍生技能都是搁在技能列表里备用的，照样要能触发。
    */
   static _isItemInPlay(actor, item) {
     if (!actor || !item) return false;
     if (item.type === "equipment") {
       return ClashManager._getEquippedItems(actor).some(it => it.id === item.id);
-    }
-    if (item.type === "skill") {
-      const sk = actor.system?.skills ?? {};
-      const ids = [
-        ...(sk.basic ?? []),
-        sk.defense ?? null,
-        ...Object.values(sk.ego ?? {}),
-      ].filter(Boolean);
-      return ids.includes(item.id);
     }
     return true;
   }
@@ -5127,8 +5117,8 @@ export class ClashManager {
       // 只处理当前用户拥有控制权的 actor，避免多端重复弹框
       if (!actor.isOwner) continue;
       for (const item of actor.items) {
-        // 反应只认"正在场上生效"的物品：装备格里的装备、技能槽里的技能。
-        // 否则背包里躺着的任何一件同类物品都会跟着弹框（连没装备的人也会被问）
+        // 反应只认"正在场上生效"的物品：装备必须真的装上了。
+        // 否则背包里躺着的任何一件装备都会跟着弹框（连没装备的人也会被问）
         if (!ClashManager._isItemInPlay(actor, item)) continue;
         const activities = item.system?.activities ?? [];
         for (const act of activities) {
