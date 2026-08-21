@@ -8961,6 +8961,25 @@ input.item-piles-quantity {
 #limbus-clash-fx .lcfx-band--atk::after { top: 100%; }
 #limbus-clash-fx .lcfx-band--def::after { bottom: 100%; }
 
+/* ── 流动边框：贴在黑条朝屏幕中心的那条长边上 ──────────────────────────
+   黑条是 260vmax 宽且旋转过的，两端都在屏幕外，canvas 只覆盖可见的那一段
+   （left/width 与 ClashFlowEdge.FLOW_LEFT / FLOW_SPAN 保持一致）。
+   高度要容得下 粗细 + 起伏 + 撕裂 的总幅度，不够就会被裁掉边缘。 */
+#limbus-clash-fx .lcfx-flow {
+  position: absolute;
+  left: 52vmax;
+  width: 120vmax;
+  height: 64px;
+  pointer-events: none;
+  z-index: 1;                    /* 压在文字下面，不挡 TOTAL 数字 */
+}
+/* 攻方在画面下方 → 内侧是它的上沿；守方在上方 → 内侧是下沿 */
+#limbus-clash-fx .lcfx-band--atk .lcfx-flow { top: -32px; }
+#limbus-clash-fx .lcfx-band--def .lcfx-flow { bottom: -32px; }
+/* 黑条的 ::after 填角块会盖住外侧，这里把流体抬到它上面 */
+#limbus-clash-fx .lcfx-band::after { z-index: 0; }
+#limbus-clash-fx .lcfx-band .lcfx-col { position: relative; z-index: 2; }
+
 #limbus-clash-fx .lcfx-band.is-in  { animation: lcfx-in  .42s cubic-bezier(.16, .9, .3, 1) forwards; }
 #limbus-clash-fx .lcfx-band.is-out { animation: lcfx-out .58s cubic-bezier(.45, 0, .7, .35) forwards; }
 

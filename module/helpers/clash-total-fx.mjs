@@ -24,6 +24,8 @@
  * 演出层挂在 body 上、pointer-events:none，不拦截任何操作。
  */
 
+import { ClashFlowEdge } from "./clash-flow-edge.mjs";
+
 /** 分段：{ name: 显示名, value: 数值 } */
 export class ClashTotalFX {
 
@@ -304,7 +306,10 @@ export class ClashTotalFX {
     for (const side of sides) {
       const band = this._band(side);
       band.classList.remove("win", "lose");
-      if (!keepIn) band.classList.remove("is-in", "is-out", "is-active");
+      if (!keepIn) {
+        band.classList.remove("is-in", "is-out", "is-active");
+        ClashFlowEdge.stop(side);
+      }
       band.querySelector(".lcfx-num").textContent = "0";
       band.querySelector(".lcfx-parts").replaceChildren();
       if (!keepIn) band.querySelector(".lcfx-dice").replaceChildren();
@@ -317,6 +322,7 @@ export class ClashTotalFX {
       if (i > 0) await this._sleep(90);
       const band = this._band(side);
       band.classList.add("is-active", "is-in");
+      ClashFlowEdge.start(side, band);          // 流动边框随黑条一起出场
     }
     await this._sleep(420);
   }
@@ -329,7 +335,10 @@ export class ClashTotalFX {
       band.classList.add("is-out");
     }
     await this._sleep(360);
-    for (const side of sides) this._band(side).classList.remove("is-active");
+    for (const side of sides) {
+      this._band(side).classList.remove("is-active");
+      ClashFlowEdge.stop(side);
+    }
   }
 
   /** 一直乱跳，直到 signal 兑现（骰子动画播完）才定格在 finalValue */
@@ -390,6 +399,8 @@ export class ClashTotalFX {
     this._log(`碎硬币 ${side}：${alive.length + (die ? 1 : 0)} 枚 → ${alive.length} 枚`);
     if (!die) return false;
     this._sfx("break");
+    ClashFlowEdge.burst();                      // 破币瞬间：流速拉高、流体收细
+
     die.classList.add("is-shatter");
     setTimeout(() => {
       die.classList.remove("is-shatter");
