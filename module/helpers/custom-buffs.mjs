@@ -41,11 +41,14 @@
  *     modifyOutgoingDamage(actor, buff, ctx) {}, // 自己打出伤害前调用（与 modifyIncomingDamage 对称），
  *                                             // ctx = { damage, target, category, sinType, item }；
  *                                             // 返回 { damage?, note? }
- *     onAllyHpDamage(carrier, buff, ctx) {}, // **本队任一单位**（含自己）掉体力时调用（异步）；
+ *     onAllyHpDamage(carrier, buff, ctx) {}, // **本队任一单位**（含自己）被攻击掉体力时调用（异步）；
  *                                             // 与 onTakeDamage 不同，它通知的是整队，
- *                                             // 因此"友方受伤时我获得…"这类效果挂在自己身上即可
- *                                             // ctx = { victim, amount, attacker, source,
+ *                                             // 因此"友方受到攻击时我获得…"挂在自己身上即可。
+ *                                             // 只认攻击伤害（对抗/反击/承受/容量扩散/追加伤害），
+ *                                             // 烧伤流血破裂等跳动伤害不触发。
+ *                                             // ctx = { victim, amount, attacker,
  *                                             //          addBuff, addBuffTo, getBuff }
+ *                                             // amount = 实际掉血量（护盾/下限保护之后）
  *     onTakeDamage(actor, buff, ctx) {},     // 自己 [受到伤害时] 调用（异步），
  *                                             // ctx = { attacker,
  *                                             //          addBuff(type,intensity,stacks,whenAdded),
@@ -604,12 +607,13 @@ registerCustomBuff("pentUpGrudge", {
 
 /**
  * 【寄宿怨恨的剑鞘】
- * - 包括自身在内的友方单位受到体力伤害时，使自身获得层数相当于伤害量的【郁积的怨结】
- * 用整队广播钩子 onAllyHpDamage 实现：谁掉血都会通知到本队每个人身上的这条 BUFF。
+ * - 包括自身在内的友方单位[受到攻击时]，使自身获得层数相当于伤害量的【郁积的怨结】
+ * 用整队广播钩子 onAllyHpDamage 实现：谁被打掉血都会通知到本队每个人身上的这条 BUFF。
+ * 只认攻击伤害，烧伤/流血这类跳动伤害不算。
  */
 registerCustomBuff("grudgeSheath", {
   label:       "寄宿怨恨的剑鞘",
-  description: "- 包括自身在内的友方单位受到体力伤害时，使自身获得层数相当于伤害量的【郁积的怨结】",
+  description: "- 包括自身在内的友方单位[受到攻击时]，使自身获得层数相当于伤害量的【郁积的怨结】",
 
   async onAllyHpDamage(carrier, _buff, ctx) {
     const amount = Math.max(0, Math.round(ctx?.amount ?? 0));
