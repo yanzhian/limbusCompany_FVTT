@@ -623,19 +623,60 @@ registerCustomBuff("redPlum", {
 });
 
 /**
+ * 【本国剑-传授真意】
+ * - 最大值：1 层
+ * - 攻击时：每有 1 层，为自己添加 3 层【斩击威力提升】（每回合 1 次）
+ * - 命中时：为自己添加 3 级【呼吸法】，为目标添加 3 级【流血】（不限次）
+ * - 回合结束时：清除本 BUFF
+ */
+registerCustomBuff("nativeSwordTruth", {
+  label:       "本国剑-传授真意",
+  description: "- 最大值：1 层\n"
+    + "- 攻击时：每有 1 层为自己添加 3 层【斩击威力提升】（每回合 1 次）\n"
+    + "- 命中时：为自己添加 3 级【呼吸法】，为目标添加 3 级【流血】\n"
+    + "- 回合结束时：清除本 BUFF",
+  maxStacks:   1,
+
+  async onAttack(actor, buff, ctx) {
+    const stacks = buff.stacks ?? 0;
+    if (stacks <= 0) return;
+    if (!await _consumeRoundUse(actor, "nativeSwordTruth")) return;
+    const add = stacks * 3;
+    await ctx.addBuff("slashPowerUp", 0, add, "本回合");
+    return `转化为 <strong>${add}</strong> 层【斩击威力提升】。`;
+  },
+
+  /** 命中时不限次：每一次命中（含容量扩散的每一发）都会各触发一次 */
+  async onHit(actor, buff, ctx) {
+    if ((buff.stacks ?? 0) <= 0) return;
+    await ctx.addBuff("breathing", 3, 0, "本回合");
+    const target = ctx?.target;
+    if (target) await ctx.addBuffTo(target, "bleed", 3, 0, "本回合");
+    return `自身获得 3 级【呼吸法】`
+      + (target ? `，<strong>${target.name}</strong> 获得 3 级【流血】` : "") + "。";
+  },
+
+  async onRoundEnd(actor, buff) {
+    const { ClashManager } = await import("./clash.mjs");
+    await ClashManager._removeBuff(actor, buff.type ?? "nativeSwordTruth");
+  },
+});
+
+/**
  * 【郁积的怨结】
  * 纯计数资源，由【寄宿怨恨的剑鞘】按伤害量累积。上限未定，先不封顶。
  */
 registerCustomBuff("pentUpGrudge", {
   label:       "郁积的怨结",
   description: "- 最大值：99 层\n"
-    + "- 攻击时：每拥有 10 层，为自己添加 1 层【斩击威力提升】（最多 3 层）",
+    + "- 攻击时：每拥有 10 层，为自己添加 1 层【斩击威力提升】（最多 3 层，每回合 1 次）",
   maxStacks:   99,
 
   async onAttack(actor, buff, ctx) {
     // 每 10 层换 1 层，最多 3 层（即 30 层封顶，多出来的层数不再转化）
     const times = Math.min(Math.floor((buff.stacks ?? 0) / 10), 3);
     if (times <= 0) return;
+    if (!await _consumeRoundUse(actor, "pentUpGrudge")) return;
     await ctx.addBuff("slashPowerUp", 0, times, "本回合");
     return `每 10 层【郁积的怨结】→ 共 <strong>${times}</strong> 层【斩击威力提升】。`;
   },
@@ -644,14 +685,14 @@ registerCustomBuff("pentUpGrudge", {
 /**
  * 【寄宿怨恨的剑鞘】
  * - 包括自身在内的友方单位[受到攻击时]，使自身获得层数相当于伤害量的【郁积的怨结】
- * - 回合开始时：为本队其他"背景带有剑契组"的友方各添加 1 层【本国剑-传授洗法】
+ * - 回合开始时：为本队其他"背景带有剑契组"的友方各添加 1 层【本国剑-传授真意】
  * 用整队广播钩子 onAllyHpDamage 实现：谁被打掉血都会通知到本队每个人身上的这条 BUFF。
  * 只认攻击伤害，烧伤/流血这类跳动伤害不算。
  */
 registerCustomBuff("grudgeSheath", {
   label:       "寄宿怨恨的剑鞘",
   description: "- 包括自身在内的友方单位[受到攻击时]，使自身获得层数相当于伤害量的【郁积的怨结】\n"
-    + "- 回合开始时：为你其他所有背景带有「剑契组」的友方添加 1 层【本国剑-传授洗法】",
+    + "- 回合开始时：为你其他所有背景带有「剑契组」的友方添加 1 层【本国剑-传授真意】",
 
   async onAllyHpDamage(carrier, _buff, ctx) {
     const amount = Math.max(0, Math.round(ctx?.amount ?? 0));
@@ -670,11 +711,11 @@ registerCustomBuff("grudgeSheath", {
       const bgUuid = ally.system?.background?.uuid;
       const bg = bgUuid ? await fromUuid(bgUuid).catch(() => null) : null;
       if (!tags.includes("剑契组") && bg?.name !== "剑契组") continue;
-      await ClashManager._addBuff(ally, "nativeSwordTeaching", 0, 1, "本回合");
+      await ClashManager._addBuff(ally, "nativeSwordTruth", 0, 1, "本回合");
       names.push(ally.name);
     }
     if (!names.length) return;
-    return `为 <strong>${names.join("、")}</strong> 各添加 1 层【本国剑-传授洗法】。`;
+    return `为 <strong>${names.join("、")}</strong> 各添加 1 层【本国剑-传授真意】。`;
   },
 });
 
