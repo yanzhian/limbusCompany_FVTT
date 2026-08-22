@@ -325,6 +325,7 @@
 | `bloodFlame` | 血炎 | `resentmentTattoo` | 怨恨纹身 |
 | `vengeanceLedger` | 复仇账簿 | `flameButterflyCoffin` | 炎蝶之棺 |
 | `dawnFire` | 黎明之火 | `greetTheDawn` | 迎接黎明 |
+| `memorialWine` | 追悼酒 | | |
 
 **没注册过的自定义计数**（如【过热的棺】）这样写：
 

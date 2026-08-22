@@ -629,6 +629,33 @@ registerCustomBuff("redPlum", {
 });
 
 /**
+ * 【追悼酒】
+ * - 最大值：4 层
+ * - 命中时：每有 1 层，为自己恢复 1D2 点生命值（层数不消耗）
+ * 由【追悼酒】那件装备在[陷入混乱时]解除混乱后累积；
+ * [反应] 里 HP 归零时会被整包消耗掉换成大量回复。
+ */
+registerCustomBuff("memorialWine", {
+  label:       "追悼酒",
+  description: "- 最大值：4 层\n- 命中时：每有 1 层，为自己恢复 1D2 点生命值",
+  maxStacks:   4,
+
+  async onHit(actor, buff, _ctx) {
+    const stacks = buff.stacks ?? 0;
+    if (stacks <= 0) return;
+    const roll = new Roll(`${stacks}d2`);
+    await roll.evaluate();
+    const heal = roll.total;
+    const cur  = actor.system?.hp?.value ?? 0;
+    const max  = actor.system?.hp?.max   ?? cur;
+    const next = Math.min(max, cur + heal);
+    if (next === cur) return;
+    await _safeUpdate(actor, { "system.hp.value": next });
+    return `每层【追悼酒】恢复 1D2 —— 共回复 <strong>${next - cur}</strong> 点生命值（${cur} → ${next}）。`;
+  },
+});
+
+/**
  * 【本国剑-传授真意】
  * - 最大值：1 层
  * - 攻击时：每有 1 层，为自己添加 3 层【斩击威力提升】（每回合 1 次）
