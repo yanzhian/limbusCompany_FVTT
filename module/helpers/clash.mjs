@@ -141,7 +141,8 @@ export class ClashManager {
    * @returns {{name:string, value:number}[]}
    */
   static _buildTotalParts({ actor, opponent, rollTotal = 0, bonus = 0, baseFormula = "",
-                            category = "", isDefender = false, includeClashPower = true }) {
+                            category = "", counterType = "", sinType = "",
+                            isDefender = false, includeClashPower = true }) {
     const gs = (a, t) => ClashManager._getBuffVal(a, t).stacks;
     const parts = [{ name: baseFormula || "骰值", value: (rollTotal ?? 0) - (bonus ?? 0) }];
     if (bonus) parts.push({ name: "加值", value: bonus });
@@ -162,6 +163,11 @@ export class ClashManager {
     }
     // 承受（单方面攻击）不拼点，拼点威力↑↓不计入
     if (includeClashPower) push("拼点威力", gs(actor, "clashPowerUp") - gs(actor, "clashPowerDown"));
+
+    // 条件威力（斩/打/突 + 七宗罪各一对）：本骰对得上才计入，攻守骰都吃
+    for (const p of ClashManager._condPowerParts(actor, { category, counterType, sinType })) {
+      parts.push(p);
+    }
 
     // 等级差：每 3 级 +1，仅高的一方获得
     if (opponent) {
@@ -300,6 +306,44 @@ export class ClashManager {
         console.error(`ClashManager: 场地资源【${name}】onStatusTick 执行出错`, err);
       }
     }
+  }
+
+  /**
+   * 本骰的**物理分类**（斩/打/突）。
+   * 攻击骰直接看 category；守备骰里只有【反击】【可拼点反击】带物理类型，
+   * 看 counterType；闪避与格挡没有物理类型，返回空串。
+   */
+  static _physCatOf({ category = "", counterType = "" } = {}) {
+    if (["slash", "blunt", "pierce"].includes(category)) return category;
+    if (category === "counter" || category === "clashCounter") return counterType || "";
+    return "";
+  }
+
+  /**
+   * 【条件威力】BUFF 的有效骰数修正：与强壮/虚弱同为每层 ±1，
+   * 但只有本骰的物理分类 / 罪孽对得上才计入（见 config 的 COND_POWER_BUFFS）。
+   * 攻击骰与守备骰都吃，含反击与可拼点反击。
+   * @returns {{name:string, value:number}[]} 明细（供 TOTAL 分段展示，无修正则为空数组）
+   */
+  static _condPowerParts(actor, meta = {}) {
+    if (!actor) return [];
+    const M = CONFIG.LIMBUSCOMPANY?.COND_POWER_BUFFS ?? {};
+    const gs = (t) => ClashManager._getBuffVal(actor, t).stacks;
+    const keys = [ClashManager._physCatOf(meta), meta.sinType ?? ""];
+    const parts = [];
+    for (const key of keys) {
+      const d = M[key];
+      if (!d) continue;
+      const up = gs(d.up), down = gs(d.down);
+      if (up)   parts.push({ name: `${d.label}威力提升`, value:  up });
+      if (down) parts.push({ name: `${d.label}威力降低`, value: -down });
+    }
+    return parts;
+  }
+
+  /** 上面那些明细的合计值（结算用） */
+  static _condPowerMod(actor, meta = {}) {
+    return ClashManager._condPowerParts(actor, meta).reduce((s, p) => s + p.value, 0);
   }
 
   static _getBuffVal(actor, type) {
@@ -2990,12 +3034,14 @@ export class ClashManager {
       actor: atkActor, opponent: defActor,
       rollTotal: atkFinalTotal ?? 0, bonus: atkBonusVal,
       baseFormula: atkFinalBase ?? "", category: initFlags.category ?? "",
+      sinType: initFlags.sinType ?? "",
       isDefender: false,
     });
     const _defPartsFx = ClashManager._buildTotalParts({
       actor: defActor, opponent: atkActor,
       rollTotal: defFinalTotal ?? 0, bonus: defBonusVal,
       baseFormula: defFinalBase ?? "", category: defItem?.system?.category ?? "",
+      counterType: defItem?.system?.counterType ?? "", sinType: defItem?.system?.sinType ?? "",
       isDefender: true,
     });
     const _coinsFx = {
@@ -3142,6 +3188,7 @@ export class ClashManager {
       defActor,    defTotal:    defFinalTotal,          defFormula:  defFinalFormula,
       defItemName: defItem.name,       defItemImg: defItem.img,
       defCategory,                                     defSinType:  sys.sinType ?? "",
+      defCounterType: sys.counterType ?? "",
     });
 
     // 呼吸暴击触发：层数-1
@@ -3265,10 +3312,15 @@ export class ClashManager {
     const partsOf = (side, total) => (side === "atk")
       ? ClashManager._buildTotalParts({
           actor: atkActor, opponent: defActor, rollTotal: total, bonus: atkBonus,
-          baseFormula: atkFormula, category: atkCategory, isDefender: false })
+          baseFormula: atkFormula, category: atkCategory,
+          sinType: atkItem?.system?.sinType ?? "",
+          isDefender: false })
       : ClashManager._buildTotalParts({
           actor: defActor, opponent: atkActor, rollTotal: total, bonus: defBonus,
-          baseFormula: defFormula, category: defCategory, isDefender: true });
+          baseFormula: defFormula, category: defCategory,
+          counterType: defItem?.system?.counterType ?? "",
+          sinType:     defItem?.system?.sinType     ?? "",
+          isDefender: true });
     const sum   = (parts) => parts.reduce((a, p) => a + (p.value ?? 0), 0);
     const apOf  = (actor) => actor?.system?.ap?.value ?? 0;
 
@@ -3396,7 +3448,8 @@ export class ClashManager {
   /* ─── 阶段五b：拼点结算逻辑 ────────────────────────────────────────────── */
 
   static _computeResolution({ atkActor, atkTotal, atkFormula, atkItemName, atkItemImg, atkCategory, atkSinType,
-                               defActor, defTotal, defFormula, defItemName, defItemImg, defCategory, defSinType }) {
+                               defActor, defTotal, defFormula, defItemName, defItemImg, defCategory, defSinType,
+                               atkCounterType = "", defCounterType = "" }) {
 
     // ── 技能分类分组 ──────────────────────────────────────────────────────
     // 守备技能（全部）→ 使用忍耐/破绽调整骰数
@@ -3423,13 +3476,17 @@ export class ClashManager {
     // ── 各方有效骰数（骰子结果 + BUFF 修正 + 等级差加值）────────────────
     // 攻击方（基础/EGO 技能）：强壮/虚弱 + 拼点威力提升/降低 + 等级差
     const atkDiceMod = gs(atkActor, "strong")       - gs(atkActor, "weak")
-                     + gs(atkActor, "clashPowerUp")  - gs(atkActor, "clashPowerDown");
+                     + gs(atkActor, "clashPowerUp")  - gs(atkActor, "clashPowerDown")
+                     + ClashManager._condPowerMod(atkActor, {
+                         category: atkCategory, counterType: atkCounterType, sinType: atkSinType });
 
     // 防守方：守备技能 → 忍耐/破绽；基础/EGO → 强壮/虚弱；两者都再加拼点威力 + 等级差
     const defIsDefCat = ALL_DEF_CATS.has(defCategory);
-    const defDiceMod  = defIsDefCat
+    const defDiceMod  = (defIsDefCat
       ? (gs(defActor, "endure")  - gs(defActor, "breach"))
-      : (gs(defActor, "strong")  - gs(defActor, "weak"));
+      : (gs(defActor, "strong")  - gs(defActor, "weak")))
+      + ClashManager._condPowerMod(defActor, {
+          category: defCategory, counterType: defCounterType, sinType: defSinType });
     const defPwrMod   = gs(defActor, "clashPowerUp") - gs(defActor, "clashPowerDown");
 
     const atkEffective = atkTotal + atkDiceMod + atkLvBonus;
@@ -3618,6 +3675,7 @@ export class ClashManager {
       defItemName, defItemImg,
       defCategory: defCat,
       defSinType:  defItem?.system?.sinType ?? "",
+      defCounterType: defItem?.system?.counterType ?? "",
       defItemId:   defItem?.id ?? "",
     } : null;
 
@@ -3855,6 +3913,7 @@ export class ClashManager {
     const {
       atkActorId, atkFormula, atkItemName, atkItemImg, atkCategory, atkSinType,
       defActorId, defFormula, defItemName, defItemImg, defCategory, defSinType,
+      defCounterType = "",
     } = rerollData;
 
     const atkActor = game.actors.get(atkActorId);
@@ -3874,6 +3933,7 @@ export class ClashManager {
       atkItemName, atkItemImg,  atkCategory,    atkSinType,
       defActor,    defTotal:    defRoll.total,  defFormula,
       defItemName, defItemImg,  defCategory,    defSinType,
+      defCounterType,
     });
 
     // 呼吸暴击（再次骰掷后也检查）
@@ -3990,6 +4050,7 @@ export class ClashManager {
           actor: atkActor, opponent: selActor,
           rollTotal: initFlags.rollTotal ?? 0, bonus: takeBonus,
           baseFormula: takeBase, category: initFlags.category ?? "",
+          sinType: initFlags.sinType ?? "",
           isDefender: false, includeClashPower: false,
         }),
         startDice: () => ClashManager._showDiceEach([{ roll: takeRoll, actor: atkActor }]),
@@ -4046,6 +4107,7 @@ export class ClashManager {
             actor: atkActor, opponent: baseActor,
             rollTotal: rerollAtk.total, bonus: parseInt(bonusPart) || 0,
             baseFormula: newAtkBase, category: initFlags.category ?? "",
+            sinType: initFlags.sinType ?? "",
             isDefender: false, includeClashPower: false,
           }),
           startDice: () => ClashManager._showDiceEach([{ roll: rerollAtk, actor: atkActor }]),
@@ -4064,7 +4126,10 @@ export class ClashManager {
     // ── 攻击方 BUFF 修正（承受不拼点，拼点威力↑↓不计入）──────────────────
     const strong  = atkActor ? gs(atkActor, "strong") : 0;
     const weak    = atkActor ? gs(atkActor, "weak")   : 0;
-    const atkDiceMod = strong - weak;
+    const atkDiceMod = strong - weak
+      + ClashManager._condPowerMod(atkActor, {
+          category: atkItem2?.system?.category ?? initFlags.category ?? "",
+          sinType:  atkItem2?.system?.sinType  ?? initFlags.sinType  ?? "" });
 
     // ── 等级差加值（防御等级 > 攻击等级时无加成）──────────────────────────
     const atkLv   = atkActor ? ClashManager._effAtkLv(atkActor) : 0;
@@ -4290,7 +4355,8 @@ export class ClashManager {
 
     const strong     = atkActor ? gs(atkActor, "strong") : 0;
     const weak       = atkActor ? gs(atkActor, "weak")   : 0;
-    const atkDiceMod = strong - weak;
+    const atkDiceMod = strong - weak
+      + ClashManager._condPowerMod(atkActor, { category, sinType });
 
     const atkLv   = atkActor ? ClashManager._effAtkLv(atkActor) : 0;
     const defLv   = ClashManager._effDefLv(defActor);
@@ -4559,7 +4625,11 @@ export class ClashManager {
     const gs = (actor, type) => ClashManager._getBuffVal(actor, type).stacks;
     const strong  = gs(loserActor, "strong");
     const weak    = gs(loserActor, "weak");
-    const buffMod = strong - weak;
+    const buffMod = strong - weak
+      + ClashManager._condPowerMod(loserActor, {
+          category:    loserItem.system?.category    ?? "",
+          counterType: loserItem.system?.counterType ?? "",
+          sinType:     loserItem.system?.sinType     ?? "" });
     const adjusted = rollBase + buffMod;
 
     // 目标（胜利方）的守护/易损 + 物理/罪孽抗性
@@ -4871,12 +4941,18 @@ export class ClashManager {
     const defLvBonus = Math.floor(Math.max(0, defLv - atkLv) / 3);
 
     // ── BUFF 修正 ─────────────────────────────────────────────────────────
-    // 攻击方：强壮/虚弱 + 拼点威力
+    // 攻击方：强壮/虚弱 + 拼点威力 + 条件威力
     const atkDiceMod = gs(atkActor, "strong") - gs(atkActor, "weak")
-                     + gs(atkActor, "clashPowerUp") - gs(atkActor, "clashPowerDown");
-    // 防守方（反击视为守备技能）：忍耐/破绽 + 拼点威力
+                     + gs(atkActor, "clashPowerUp") - gs(atkActor, "clashPowerDown")
+                     + ClashManager._condPowerMod(atkActor, {
+                         category: initFlags.category ?? "", sinType: initFlags.sinType ?? "" });
+    // 防守方（反击视为守备技能）：忍耐/破绽 + 拼点威力 + 条件威力（物理类型看 counterType）
     const defDiceMod = gs(defActor, "endure") - gs(defActor, "breach")
-                     + gs(defActor, "clashPowerUp") - gs(defActor, "clashPowerDown");
+                     + gs(defActor, "clashPowerUp") - gs(defActor, "clashPowerDown")
+                     + ClashManager._condPowerMod(defActor, {
+                         category:    defItem.system?.category    ?? "",
+                         counterType: defItem.system?.counterType ?? "",
+                         sinType:     defItem.system?.sinType     ?? "" });
 
     const atkEffective = initFlags.rollTotal + atkDiceMod + atkLvBonus;
     const defEffective = defRoll.total       + defDiceMod + defLvBonus;
@@ -5024,12 +5100,19 @@ export class ClashManager {
     const defLvBonus = Math.floor(Math.max(0, defLv - atkLv) / 3);
 
     // ── BUFF 修正 ─────────────────────────────────────────────────────────
-    // 攻击方：强壮/虚弱 + 拼点威力
+    // 攻击方：强壮/虚弱 + 拼点威力 + 条件威力
     const atkDiceMod = gs(atkActor, "strong") - gs(atkActor, "weak")
-                     + gs(atkActor, "clashPowerUp") - gs(atkActor, "clashPowerDown");
-    // 防守方：忍耐/破绽（格挡是守备技能）+ 拼点威力
+                     + gs(atkActor, "clashPowerUp") - gs(atkActor, "clashPowerDown")
+                     + ClashManager._condPowerMod(atkActor, {
+                         category: initFlags.category ?? "", sinType: initFlags.sinType ?? "" });
+    // 防守方：忍耐/破绽（格挡是守备技能）+ 拼点威力 + 条件威力
+    // 格挡没有物理类型，所以这里只可能吃到罪孽那 7 条
     const defDiceMod = gs(defActor, "endure") - gs(defActor, "breach")
-                     + gs(defActor, "clashPowerUp") - gs(defActor, "clashPowerDown");
+                     + gs(defActor, "clashPowerUp") - gs(defActor, "clashPowerDown")
+                     + ClashManager._condPowerMod(defActor, {
+                         category:    defItem.system?.category    ?? "",
+                         counterType: defItem.system?.counterType ?? "",
+                         sinType:     defItem.system?.sinType     ?? "" });
 
     const atkEffective = initFlags.rollTotal + atkDiceMod + atkLvBonus;
     const defEffective = defRoll.total       + defDiceMod + defLvBonus;
