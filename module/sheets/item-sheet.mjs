@@ -15,6 +15,9 @@ import { SKILLBOOK_MAX_SLOTS } from "../documents/item.mjs";
 import { CustomBuffRegistry, normalizeBuffType } from "../helpers/custom-buffs.mjs";
 import { linkifyHtml } from "../helpers/linkify.mjs";
 
+/** 背景的等级物品不收这三类（背景由向导指定、恐慌卡走 panicSlots、技能走技能书） */
+const BG_ITEM_BLOCKED_TYPES = ["background", "panic", "skill"];
+
 /**
  * 激活效果剪贴板（本次会话内共享，跨物品卡有效，刷新页面后清空）。
  * 存的是去掉 id 的 activity 快照——粘贴时再补一个新 id。
@@ -1509,6 +1512,14 @@ export class LimbusItemSheet extends ItemSheet {
     if (!itemData) {
       return void ui.notifications.warn("无法解析拖入的物品（既取不到 UUID，也没有物品数据）。");
     }
+    // 背景的等级物品只收"实物"：背景本身、恐慌卡、技能这三类不能作为奖励物品发放
+    // （背景由创建向导指定，恐慌卡走 panicSlots 嵌入，技能靠技能书或直接授予）。
+    const droppedType = dropped?.type ?? itemData.type ?? "";
+    if (BG_ITEM_BLOCKED_TYPES.includes(droppedType)) {
+      const zh = { background: "背景", panic: "恐慌卡", skill: "技能" }[droppedType] ?? droppedType;
+      return void ui.notifications.warn(`背景的等级物品不能放入${zh}（技能请改用技能书）。`);
+    }
+
     delete itemData._id;
     const entry = { id: foundry.utils.randomID(), uuid: dropped?.uuid ?? "", itemData };
 
