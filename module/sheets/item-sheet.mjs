@@ -35,6 +35,8 @@ export class LimbusItemSheet extends ItemSheet {
       height:   500,
       tabs:     [],
       resizable: true,
+      // 卡内任意改动都会重渲染，需保留正文滚动位置，否则会回滚置顶
+      scrollY:  [".equip-body"],
     });
   }
 
