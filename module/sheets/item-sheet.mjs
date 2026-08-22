@@ -159,6 +159,8 @@ export class LimbusItemSheet extends ItemSheet {
         weight:     pick("weight"),
         sanityCost: pick("sanityCost"),
         effectDesc: corrode ? (cSrc.effectDesc ?? "") : (src.effectDesc ?? ""),
+        // 【无差别攻击】：侵蚀形态可以单独开（null = 沿用觉醒）
+        indiscriminate: !!(pick("indiscriminate") ?? false),
       };
       context.formDiceCount = pick("diceCount") ?? 1;
       context.formDiceFaces = pick("diceFaces") ?? 4;

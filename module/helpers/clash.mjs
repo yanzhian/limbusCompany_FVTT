@@ -4332,9 +4332,12 @@ export class ClashManager {
 
     const modeLabel = flags.spreadMode === "spray" ? "广域乱射" : "链式扩散";
     const ft        = ((flags.spreadRange ?? 1) * 5 + 2.5).toFixed(1);
-    const modeLine  = cap >= 2
-      ? `<span style="font-size:.62rem;color:#C9A84C;margin-left:6px;">${modeLabel} · ${ft}ft</span>`
+    const indisLabel = flags.indiscriminate
+      ? `<span style="font-size:.62rem;color:#B84444;margin-left:6px;font-weight:bold;">无差别攻击</span>`
       : "";
+    const modeLine  = cap >= 2
+      ? `<span style="font-size:.62rem;color:#C9A84C;margin-left:6px;">${modeLabel} · ${ft}ft</span>${indisLabel}`
+      : indisLabel;
 
     // 战果：伤害卡只在这里记账（含陷入混乱）
     const hits = flags.hits ?? [];
@@ -4398,6 +4401,7 @@ export class ClashManager {
       weight:        initFlags.weight ?? 1,
       spreadMode:    atkItem?.system?.spreadMode  ?? "chain",
       spreadRange:   atkItem?.system?.spreadRange ?? 1,
+      indiscriminate: !!atkItem?.system?.indiscriminate,
       anchorId:      firstHit?.actorId ?? initFlags.firstTargetId ?? "",
       hits:          firstHit ? [firstHit] : [],
       remainingUses,
@@ -4539,7 +4543,9 @@ export class ClashManager {
     ClashVFX.broadcastPan({ ...atkTok.center });
     await ClashTotalFX.spreadOpen({ label: "容量扩散", total });
 
-    const foeIds      = ClashManager._foeIdsOf(atkActor?.id ?? "");
+    // 【无差别攻击】：敌我不分，范围内所有人（含友方）都算候选目标，只排除攻击者自己
+    const indiscriminate = !!flags.indiscriminate;
+    const foeIds      = indiscriminate ? null : ClashManager._foeIdsOf(atkActor?.id ?? "");
     let   started     = false;
     // 扩散全程共用一份触发计数与消息表：次数限制按整次扩散算，消息最后统一发
     const fireCounts  = {};
@@ -4557,8 +4563,10 @@ export class ClashManager {
         if (!t.actor || t.id === atkTok.id || t.actor.id === atkActor?.id) return false;
         if ((t.actor.system?.hp?.value ?? 0) <= 0) return false;
         // 敌对判定：优先用小队编成，没配小队才退回 token 阵营
-        if (foeIds) { if (!foeIds.includes(t.actor.id)) return false; }
-        else if (t.document.disposition === atkTok.document.disposition) return false;
+        if (!indiscriminate) {
+          if (foeIds) { if (!foeIds.includes(t.actor.id)) return false; }
+          else if (t.document.disposition === atkTok.document.disposition) return false;
+        }
         if (ClashManager._cellDist(centerTok, t) > rng) return false;
         if (mode === "chain" && hitActorIds.has(t.actor.id)) return false;          // 链式不重复
         return true;
@@ -4571,9 +4579,11 @@ export class ClashManager {
           })),
         });
         if (!started) {
-          ui.notifications.info(foeIds
-            ? `容量扩散：范围内（${rng} 格）没有其他敌对目标`
-            : "容量扩散：未编成小队，改用 Token 阵营判断，范围内没有敌对目标");
+          ui.notifications.info(indiscriminate
+            ? `容量扩散（无差别攻击）：范围内（${rng} 格）没有其他可打的单位`
+            : foeIds
+              ? `容量扩散：范围内（${rng} 格）没有其他敌对目标`
+              : "容量扩散：未编成小队，改用 Token 阵营判断，范围内没有敌对目标");
         }
         break;
       }

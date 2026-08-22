@@ -86,6 +86,9 @@
               {{#if system.noClash}}
                 <span class="dice-type-badge no-clash-badge">无法拼点</span>
               {{/if}}
+              {{#if form.indiscriminate}}
+                <span class="dice-type-badge indiscriminate-badge">无差别攻击</span>
+              {{/if}}
             {{/if}}
           </div>
 
@@ -113,6 +116,11 @@
               <label class="no-equip-toggle" title="被这张技能锁定的目标只能【承受】：不能对抗，也不会询问【援护防御】">
                 <input type="checkbox" name="system.noClash" {{#if system.noClash}}checked{{/if}}>
                 无法拼点
+              </label>
+              {{!-- 无差别攻击：容量扩散敌我不分，友方同样会被打到（常见于 EGO 侵蚀形态） --}}
+              <label class="no-equip-toggle" title="【无差别攻击】：容量扩散时敌我不分，范围内的友方也会被打到（自己除外）">
+                <input type="checkbox" name="{{fp}}indiscriminate" {{#if form.indiscriminate}}checked{{/if}}>
+                无差别攻击
               </label>
             </div>
           {{/if}}

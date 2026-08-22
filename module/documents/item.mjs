@@ -184,6 +184,8 @@ export class SkillData extends foundry.abstract.TypeDataModel {
         diceFaces:   new fields.NumberField({ required: false, nullable: true, integer: true, min: 1, initial: null }),
         // 侵蚀形态可以自己是负面骰（null = 沿用觉醒形态的设置）
         negativeDice: new fields.BooleanField({ required: false, nullable: true, initial: null }),
+        // 侵蚀形态可以单独开【无差别攻击】（null = 沿用觉醒形态的设置）
+        indiscriminate: new fields.BooleanField({ required: false, nullable: true, initial: null }),
         weight:      new fields.NumberField({ required: false, nullable: true, integer: true, min: 0, initial: null }),
         sanityCost:  new fields.NumberField({ required: false, nullable: true, integer: true, min: 0, initial: null }),
         effectDesc:  new fields.HTMLField({ required: false, initial: "" }),
@@ -197,6 +199,10 @@ export class SkillData extends foundry.abstract.TypeDataModel {
       spreadMode:  new fields.StringField({ required: false, initial: "chain",
         choices: ["chain", "spray"] }),
       spreadRange: new fields.NumberField({ required: false, integer: true, min: 1, max: 6, initial: 1 }),
+
+      // 【无差别攻击】：容量扩散时敌我不分，范围内的友方（含队友）同样会被打到。
+      // 常见于 E.G.O 的侵蚀形态。自己永远不会打到自己。
+      indiscriminate: new fields.BooleanField({ required: false, initial: false }),
 
       // 骰子类型：normal / unbreakable / severing
       diceType: new fields.StringField({ required: true, initial: "normal",
@@ -275,7 +281,7 @@ export class SkillData extends foundry.abstract.TypeDataModel {
     // 没填的字段照旧沿用【觉醒】的数值。
     if (this.type === "ego" && this.corrode?.initialized && this._ownerInPanic) {
       const c = this.corrode;
-      for (const key of ["category", "baseValue", "diceCount", "diceFaces", "weight", "sanityCost", "negativeDice"]) {
+      for (const key of ["category", "baseValue", "diceCount", "diceFaces", "weight", "sanityCost", "negativeDice", "indiscriminate"]) {
         if (c[key] !== null && c[key] !== undefined) this[key] = c[key];
       }
       if (c.effectDesc) this.effectDesc = c.effectDesc;
