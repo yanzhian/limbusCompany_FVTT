@@ -42,6 +42,7 @@
  *                                             // ctx = { damage, target, category, sinType, item }；
  *                                             // 返回 { damage?, note? }
  *     onAttack(actor, buff, ctx) {},         // 自己 [攻击时] 调用（异步，与同名 Activity 同一时点）；
+ *                                             // 每回合限次用本文件的 _consumeRoundUse(actor, key, max)
  *                                             // ctx = { item, category, counterType, sinType,
  *                                             //          addBuff, addBuffTo, getBuff }
  *                                             // 返回字符串则并入本次结算的活动消息
@@ -131,6 +132,27 @@ async function _safeUpdate(doc, data) {
   if (!doc) return;
   const { ClashManager } = await import("./clash.mjs");
   return ClashManager._safeDocUpdate(doc, data);
+}
+
+/**
+ * BUFF 钩子的「每回合 N 次」闸门。
+ *
+ * 复用 Activity 次数限制那份 flag（`turnFireCounts`）——它在每轮的回合结束处理里
+ * 会被 unset，所以不需要自己再管清空。key 统一加 `buff:` 前缀，避免和
+ * Activity 的 `物品名_效果名` 撞车。
+ *
+ * @returns {Promise<boolean>} 本次是否放行（true = 可以执行）
+ */
+async function _consumeRoundUse(actor, key, max = 1) {
+  if (!actor) return false;
+  const flagKey = `buff:${key}`;
+  const counts  = actor.getFlag?.("limbusCompany_FVTT", "turnFireCounts") ?? {};
+  const used    = counts[flagKey] ?? 0;
+  if (used >= max) return false;
+  await _safeUpdate(actor, {
+    [`flags.limbusCompany_FVTT.turnFireCounts.${flagKey}`]: used + 1,
+  });
+  return true;
 }
 
 /* ─── 震颤族（普通震颤 + 特殊震颤） ─────────────────────────────────────── */
@@ -635,13 +657,15 @@ registerCustomBuff("grudgeSheath", {
 registerCustomBuff("nativeSwordTeaching", {
   label:       "本国剑-传授洗法",
   description: "- 最大值：3 层\n"
-    + "- 攻击时：每有 1 层为自己添加 1 层【斩击威力提升】\n"
+    + "- 攻击时：每有 1 层为自己添加 1 层【斩击威力提升】（每回合 1 次）\n"
     + "- 回合结束时：清除本 BUFF",
   maxStacks:   3,
 
   async onAttack(actor, buff, ctx) {
     const stacks = buff.stacks ?? 0;
     if (stacks <= 0) return;
+    // 每回合只转化一次：一回合里打两下不会给到双份
+    if (!await _consumeRoundUse(actor, "nativeSwordTeaching")) return;
     await ctx.addBuff("slashPowerUp", 0, stacks, "本回合");
     return `转化为 <strong>${stacks}</strong> 层【斩击威力提升】。`;
   },
