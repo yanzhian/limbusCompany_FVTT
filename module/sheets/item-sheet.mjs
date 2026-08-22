@@ -163,6 +163,7 @@ export class LimbusItemSheet extends ItemSheet {
       context.formDiceCount = pick("diceCount") ?? 1;
       context.formDiceFaces = pick("diceFaces") ?? 4;
       context.formBaseValue = pick("baseValue") ?? 0;
+      context.formNegDice   = !!(pick("negativeDice") ?? false);
 
       // 攻击/守备类别选项：使用中文直接标签，避免模板渲染 i18n key 字符串
       const _catZh = cfg.CATEGORY_LABELS_ZH ?? {};
@@ -175,10 +176,13 @@ export class LimbusItemSheet extends ItemSheet {
       // 罪孽类型：同样使用中文标签
       context.skillSinTypes = cfg.SIN_LABELS_ZH ?? {};
 
-      // 技能骰公式（格式化为大写）——按当前展示的形态生成
+      // 技能骰公式（格式化为大写）——按当前展示的形态生成。
+      // 这里是独立于 prepareDerivedData 的一份拼装（要区分觉醒/侵蚀形态），
+      // 负面骰的方向必须在这里也照顾到，否则填 20-1D8 会被显示回 1D8+20。
       const _bv = context.formBaseValue;
-      context.diceFormulaDisplay =
-        `${context.formDiceCount}D${context.formDiceFaces}${_bv > 0 ? `+${_bv}` : ""}`;
+      context.diceFormulaDisplay = context.formNegDice
+        ? `${_bv}-${context.formDiceCount}D${context.formDiceFaces}`
+        : `${context.formDiceCount}D${context.formDiceFaces}${_bv > 0 ? `+${_bv}` : ""}`;
 
       // 攻击容量小方块
       context.weightSquares = Array.from({ length: context.form.weight ?? 0 }, (_, i) => i);

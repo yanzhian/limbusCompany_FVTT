@@ -36,6 +36,16 @@ function makeActivitySchema() {
 //  EquipmentData — 装备数据模型
 // ═══════════════════════════════════════════════════════════════════════════
 
+/**
+ * 由三个数字字段拼出骰子公式字符串。**唯一的拼装口径**——
+ * 负面骰（negativeDice）时基础值在前、骰作为减项（20-1d8），否则 NdF+B。
+ * 全仓凡是要生成这个字符串的地方都必须走这里，否则方向会各写各的。
+ */
+export function buildDiceFormula({ diceCount = 1, diceFaces = 4, baseValue = 0, negativeDice = false } = {}) {
+  if (negativeDice) return `${baseValue}-${diceCount}d${diceFaces}`;
+  return `${diceCount}d${diceFaces}` + (baseValue > 0 ? `+${baseValue}` : "");
+}
+
 export class EquipmentData extends foundry.abstract.TypeDataModel {
   static defineSchema() {
     const fields = foundry.data.fields;
@@ -272,16 +282,7 @@ export class SkillData extends foundry.abstract.TypeDataModel {
       if (c.activities?.length) this.activities = c.activities;
     }
 
-    const { diceCount, diceFaces, baseValue } = this;
-    // 负面骰：基础值在前、骰子作为减项（20-1D8）
-    let formula;
-    if (this.negativeDice) {
-      formula = `${baseValue}-${diceCount}d${diceFaces}`;
-    } else {
-      formula = `${diceCount}d${diceFaces}`;
-      if (baseValue > 0) formula += `+${baseValue}`;
-    }
-    this.diceFormula = formula;
+    this.diceFormula = buildDiceFormula(this);
 
     // 若 EGO 技能且 stellarCost 未手动修改，则按 egoDiceRating 自动推算
     if (this.type === "ego" && this.egoDiceRating) {
@@ -549,12 +550,7 @@ export class LimbusItem extends Item {
   _prepareSkillData() {
     const sys = this.system;
     // 确保骰子公式字符串已生成（TypeDataModel.prepareDerivedData 可能已处理）
-    if (!sys.diceFormula) {
-      const { diceCount, diceFaces, baseValue } = sys;
-      let formula = `${diceCount}d${diceFaces}`;
-      if (baseValue > 0) formula += `+${baseValue}`;
-      sys.diceFormula = formula;
-    }
+    if (!sys.diceFormula) sys.diceFormula = buildDiceFormula(sys);
   }
 
   // ─── 装备派生数据 ──────────────────────────────────────────────────────
@@ -592,10 +588,7 @@ export class LimbusItem extends Item {
    */
   getDiceFormula() {
     if (this.type !== "skill") return "";
-    const { diceCount, diceFaces, baseValue } = this.system;
-    let formula = `${diceCount}d${diceFaces}`;
-    if (baseValue > 0) formula += `+${baseValue}`;
-    return formula;
+    return buildDiceFormula(this.system);
   }
 
   /**
