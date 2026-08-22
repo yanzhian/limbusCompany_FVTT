@@ -167,6 +167,12 @@ async function _consumeRoundUse(actor, key, max = 1) {
  *             getBuff(type),                                     // 读 target 身上的 BUFF
  *             addBuff(type, intensity, stacks, whenAdded),       // 给 target 加 BUFF
  *             dealDamage(targetActor, category, formula, sinType) }
+ *
+ *   ⚠ 这里的 dealDamage 走的是**跳动通道**（与烧伤/流血同级）：抗性照常结算、
+ *     照常判混乱阈值，但**不**触发【破裂】【沉沦】，也不计入"受到攻击"的统计
+ *     （如【寄宿怨恨的剑鞘】）。因为【震颤】本身就是一种 DOT，只是触发条件是
+ *     "被引爆"——DOT 不该再去触发别的 DOT。
+ *     onHit 里的 dealDamage 则相反，走攻击通道。
  */
 export const TREMOR_BASE_TYPE = "tremor";
 

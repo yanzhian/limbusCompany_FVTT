@@ -469,6 +469,32 @@ export class ClashManager {
   }
 
   /**
+   * 【跳动伤害】的统一落地（与烧伤/流血同一条道）。
+   *
+   * 与 _applyAndSendTake（攻击伤害）的区别——这才是"DOT 不触发 DOT"的落点：
+   *   · **不**吃护盾，**不**触发【破裂】【沉沦】，**不**发独立的承受聊天卡
+   *   · **不**广播 onAllyHpDamage（那条只认"承受结算"出来的攻击伤害）
+   *   · 仍走 applyTickDamageMods（BUFF 的伤害修正 / 生命值下限保护）
+   *   · 仍检查混乱阈值 —— 与烧伤、流血保持一致
+   *
+   * @param {string} source 伤害来源标识，透传给 modifyIncomingDamage / beforeChaos
+   * @returns {Promise<number>} 实际掉的血量
+   */
+  static async _applyTickDamage(actor, amount, { source = "tick" } = {}) {
+    if (!actor || !(amount > 0)) return 0;
+    const mods  = ClashManager.applyTickDamageMods(actor, amount, source);
+    const dmg   = Math.max(0, Math.round(mods.damage));
+    if (dmg <= 0) return 0;
+    const oldHp = actor.system?.hp?.value ?? 0;
+    const newHp = ClashManager.applyHpFloor(oldHp, oldHp - dmg, mods.hpFloor);
+    await ClashManager._safeDocUpdate(actor, { "system.hp.value": newHp });
+    if (actor.checkAndTriggerChaos) {
+      await actor.checkAndTriggerChaos(newHp, oldHp, { silent: true, source });
+    }
+    return oldHp - newHp;
+  }
+
+  /**
    * 【受到攻击】的队伍广播：任一友方（含受伤者自己）被打掉体力时，通知**本队所有人**
    * 身上带 onAllyHpDamage 钩子的 BUFF。
    *
@@ -1023,6 +1049,9 @@ export class ClashManager {
           getBuff:    (type) => ClashManager._getBuff(target, type),
           addBuff:    (type, intensity, stacks, whenAdded) =>
             ClashManager._addBuff(target, type, intensity, stacks, whenAdded),
+          // 【震颤】是一种特殊 DOT（触发条件是"被引爆"），因此它打出来的伤害
+          // 走**跳动通道**而非承受结算：不触发【破裂】【沉沦】，也不计入
+          // 【寄宿怨恨的剑鞘】那类"受到攻击"的统计。抗性照常结算。
           dealDamage: async (tgtActor, category, formula, sinType = "") => {
             if (!tgtActor) return 0;
             const roll = new Roll(String(formula));
@@ -1034,8 +1063,7 @@ export class ClashManager {
               ? ClashManager._parseResistance(tgtActor.system?.egoResistances?.[sinType] ?? "x1.0")
               : 1.0;
             const dmg = Math.max(0, Math.round(roll.total * physMult * sinMult));
-            await ClashManager._applyAndSendTake(tgtActor, dmg, { attacker, takeLabel: "震颤引爆-承受", category, sinType });
-            return dmg;
+            return ClashManager._applyTickDamage(tgtActor, dmg, { source: "tremor" });
           },
         });
         if (typeof line === "string" && line) msgs.push(line);
