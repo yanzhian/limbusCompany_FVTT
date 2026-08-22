@@ -100,6 +100,8 @@ const V_WEAK      = "__weak";
 const V_SIN_COST  = "__sinCost";
 const V_SPREAD    = "__spread";
 const V_EGO_RES   = "__egoRes";
+/** 「完成」列：值为真时整行跳过（已经导入过的条目不再重复导入） */
+const V_DONE      = "__done";
 
 /** 抗性 / 弱性列的倍率写法 */
 const RESIST_MULT = "x0.5";
@@ -113,7 +115,9 @@ const WEAK_MULT   = "x2.0";
  */
 export const COLUMN_ALIASES = {
   // ── 仅供表格自己看的列，导入时忽略 ────────────────────────────────────
-  "图标": IGNORE, "完成": IGNORE, "备注": IGNORE,
+  "图标": IGNORE, "备注": IGNORE,
+  // 「完成」列填 是/TRUE/√ 等真值时，整行跳过不导入
+  "完成": V_DONE, "已完成": V_DONE, "done": V_DONE,
   "区域1": IGNORE, "区域2": IGNORE, "区域3": IGNORE,
   "区域4": IGNORE, "区域5": IGNORE, "区域6": IGNORE,
 
@@ -379,6 +383,19 @@ export function richTextFromCsv(text = "") {
 const isBlank = (t) => t === "" || t === "-" || t === "—" || t === "/";
 
 /**
+ * 「完成」列的真值判定。
+ * 认这些写法（大小写、全半角都认）：是 / 真 / 已完成 / 完成 / OK / ✓ / √ / v / y / yes / true / 1
+ * 空、"-"、否、false、0 等一律视为未完成。
+ */
+const DONE_TRUE = new Set([
+  "是", "真", "已完成", "完成", "ok", "✓", "✔", "√", "v", "y", "yes", "true", "t", "1",
+]);
+function isDoneMark(text) {
+  if (isBlank(String(text ?? "").trim())) return false;
+  return DONE_TRUE.has(String(text).trim().toLowerCase());
+}
+
+/**
  * 【分类】列。
  * - 攻击类技能：斩击 / 打击 / 突刺
  * - 守备类技能：闪避 / 格挡 / 反击-打击 / 可拼点反击-斩击
@@ -590,10 +607,17 @@ export function buildItemData(rows, defaultType) {
   const validTypes = Object.keys(CONFIG?.Item?.dataModels ?? {});
   const unknownReported = new Set();
   const typeIdx = paths.indexOf("type");
+  const doneIdx = paths.indexOf(V_DONE);
+  let   skipped = 0;                     // 因「完成」而跳过的行数
 
   for (let r = 1; r < rows.length; r++) {
     const row    = rows[r];
     const lineNo = r + 1;
+
+    // ── 「完成」列为真 → 整行跳过 ────────────────────────────────────────
+    // 放在最前面：已完成的行不参与类型判定，也不逐列解析，
+    // 因此这行即便有解析不了的内容也不会报错。
+    if (doneIdx >= 0 && isDoneMark(row[doneIdx])) { skipped++; continue; }
 
     // ── 先定类型：中文写法（基础技能 / 上装 / 消耗品…）映射到物品类型，
     //    并带出随类型固定的字段（技能的 system.type、装备的 system.subtype）──
@@ -674,6 +698,10 @@ export function buildItemData(rows, defaultType) {
     items.push(data);
   }
 
+  if (skipped > 0) {
+    warnings.push(`「完成」列已标记的 ${skipped} 行已跳过，未导入。`);
+  }
+
   return { items, errors, warnings };
 }
 
@@ -681,7 +709,8 @@ export function buildItemData(rows, defaultType) {
 //  模板 CSV 生成
 // ═══════════════════════════════════════════════════════════════════════════
 
-/** 各类型的模板列（与实际编辑用的表格布局一致；「图标/完成/区域N」为表格自用，导入时忽略） */
+/** 各类型的模板列（与实际编辑用的表格布局一致；「图标/区域N」为表格自用，导入时忽略；
+    「完成」列填真值时整行跳过，见 isDoneMark） */
 const TEMPLATE_COLUMNS = {
   equipment:  ["图标", "完成", "名称", "类型", "攻击等级", "防御等级", "速度",
                "抗性", "弱性", "分类", "星芒", "容量", "标签", "效果", "价格"],
@@ -756,6 +785,7 @@ const COLUMN_NOTES = {
   "可复用":   "填 是/否、TRUE/FALSE",
   "无限耐久": "填 是/否、TRUE/FALSE",
   "图标":     "表格自用，导入时忽略",
+  "完成":     "填 是/TRUE/√ 等真值时**整行跳过**，用来避免重复导入已完成的条目；留空则正常导入",
   "完成":     "表格自用，导入时忽略",
 };
 
