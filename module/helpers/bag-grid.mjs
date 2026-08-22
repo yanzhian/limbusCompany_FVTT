@@ -7,7 +7,7 @@
  */
 
 /** 计入背包容量的物品类型 */
-export const BAG_ITEM_TYPES = ["equipment", "consumable", "material", "container", "skillbook"];
+export const BAG_ITEM_TYPES = ["equipment", "consumable", "material", "container", "skillbook", "background"];
 
 /**
  * 返回 actor 的背包物品（排除已放入容器内的物品）。

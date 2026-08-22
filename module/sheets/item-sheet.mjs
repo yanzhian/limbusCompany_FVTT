@@ -1498,14 +1498,19 @@ export class LimbusItemSheet extends ItemSheet {
     let raw;
     try { raw = JSON.parse(event.originalEvent.dataTransfer.getData("text/plain")); }
     catch { return; }
-    if (raw.type !== "Item") return;
+    if (raw.type !== "Item") {
+      return void ui.notifications.warn(`这里只接受物品（收到的是 ${raw.type ?? "未知内容"}）。`);
+    }
 
-    const dropped = await Item.fromDropData(raw).catch(() => null);
-    if (!dropped) { ui.notifications.warn("无法解析拖入的物品。"); return; }
-
-    const itemData = dropped.toObject();
+    // 容器内物品等来源没有可解析的 UUID，只带 itemData 快照——这类同样收下，
+    // 只是没有 uuid 就无法跟随源物品更新，只能用快照。
+    const dropped  = await Item.fromDropData(raw).catch(() => null);
+    const itemData = dropped ? dropped.toObject() : foundry.utils.deepClone(raw.itemData ?? null);
+    if (!itemData) {
+      return void ui.notifications.warn("无法解析拖入的物品（既取不到 UUID，也没有物品数据）。");
+    }
     delete itemData._id;
-    const entry = { id: foundry.utils.randomID(), uuid: dropped.uuid ?? "", itemData };
+    const entry = { id: foundry.utils.randomID(), uuid: dropped?.uuid ?? "", itemData };
 
     if (levelId) {
       const rewards = foundry.utils.deepClone(this.item.system.levelRewards ?? []);

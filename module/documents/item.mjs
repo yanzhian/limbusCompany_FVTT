@@ -529,6 +529,15 @@ export class BackgroundData extends foundry.abstract.TypeDataModel {
       // 势力/阵营标签（斜杠分隔，如"拉曼却/血魔"）：多个背景可共享同一标签，
       // 供场地资源（FieldResourceRegistry）等按 tag 匹配的玩法逻辑使用
       tags: new fields.StringField({ required: false, initial: "" }),
+
+      // 物品容量（背景卡本身占用背包/容器格数）：背景虽然是"模板"物品，
+      // 但也要能作为实物放进背包和容器里，所以和其余可携带物品一样有容量。
+      capacity: new fields.SchemaField({
+        w: new fields.NumberField({ required: true, integer: true, min: 1, max: 10, initial: 1 }),
+        h: new fields.NumberField({ required: true, integer: true, min: 1, max: 10, initial: 1 }),
+      }),
+
+      favorited: new fields.BooleanField({ required: true, initial: false }),
     };
   }
 }
