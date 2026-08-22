@@ -299,6 +299,16 @@
 | `swift` | 迅捷 | `bind` | 束缚 |
 | `guard` | 守护 | `fragile` | 易损 |
 | `clashPowerUp` | 拼点威力提升 | `clashPowerDown` | 拼点威力降低 |
+| `slashPowerUp` | 斩击威力提升 | `slashPowerDown` | 斩击威力降低 |
+| `bluntPowerUp` | 打击威力提升 | `bluntPowerDown` | 打击威力降低 |
+| `piercePowerUp` | 突刺威力提升 | `piercePowerDown` | 突刺威力降低 |
+| `wrathPowerUp` | 暴怒威力提升 | `wrathPowerDown` | 暴怒威力降低 |
+| `lustPowerUp` | 色欲威力提升 | `lustPowerDown` | 色欲威力降低 |
+| `slothPowerUp` | 怠惰威力提升 | `slothPowerDown` | 怠惰威力降低 |
+| `gluttonyPowerUp` | 暴食威力提升 | `gluttonyPowerDown` | 暴食威力降低 |
+| `pridePowerUp` | 傲慢威力提升 | `pridePowerDown` | 傲慢威力降低 |
+| `gloomPowerUp` | 忧郁威力提升 | `gloomPowerDown` | 忧郁威力降低 |
+| `envyPowerUp` | 嫉妒威力提升 | `envyPowerDown` | 嫉妒威力降低 |
 | `atkLevelUp` | 攻击等级提升 | `atkLevelDown` | 攻击等级降低 |
 | `defLevelUp` | 防御等级提升 | `defLevelDown` | 防御等级降低 |
 | `burn` | 烧伤 | `bleed` | 流血 |
@@ -321,6 +331,11 @@
 "buff": "custom", "buffCustom": "过热的棺"
 ```
 
+> **条件威力那 20 条**（`*PowerUp` / `*PowerDown`）与【强壮/虚弱】同为"每层 ±1 有效骰数"，
+> 但只有**本骰对得上**才计入：物理三条看本骰分类（守备骰看反击类型，闪避/格挡没有物理
+> 类型故吃不到），罪孽七条看本骰罪孽。攻击骰与守备骰都吃，含反击与可拼点反击。
+> 与强壮/虚弱一样回合结束自动清除。
+>
 > 注册过的 BUFF 才有最大层数、回合钩子等特性；纯计数用 `custom` 即可。
 > 新的注册键以 `module/helpers/custom-buffs.mjs` 里的 `registerCustomBuff("键", ...)` 为准。
 
