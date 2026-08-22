@@ -2379,7 +2379,7 @@ function _buildCondRow(cond, idx, cfg) {
   if (cond?.type === "level") {
     cond = { ...cond, type: "useSkill", skillLevel: cond.level ?? 1, skillNameOrTag: cond.skillNameOrTag ?? "" };
   }
-  const condType   = ["perN","noBuff","baseAttr","useSkill","buffCompare","category","useSin","fieldResource","sinResource","background","equipped"].includes(cond?.type) ? cond.type : "hasBuff";
+  const condType   = ["perN","noBuff","baseAttr","useSkill","buffCompare","category","useSin","fieldResource","sinResource","background","equipped","allyTag"].includes(cond?.type) ? cond.type : "hasBuff";
   const isBuffSec  = condType === "hasBuff" || condType === "noBuff" || condType === "perN" || condType === "buffCompare";
   const isUseSinSec = condType === "useSin";
   const selSins    = Array.isArray(cond?.sinTypes) ? cond.sinTypes
@@ -2441,6 +2441,7 @@ function _buildCondRow(cond, idx, cfg) {
           <option value="useSin"      ${condType === "useSin"      ? "selected" : ""}>使用罪孽</option>
           <option value="background"  ${condType === "background"  ? "selected" : ""}>背景</option>
           <option value="equipped"    ${condType === "equipped"    ? "selected" : ""}>已装备</option>
+          <option value="allyTag"     ${condType === "allyTag"     ? "selected" : ""}>友方存在</option>
           <option value="fieldResource" ${condType === "fieldResource" ? "selected" : ""}>公用场地</option>
           <option value="sinResource"   ${condType === "sinResource"   ? "selected" : ""}>罪孽资源</option>
         </select>
@@ -3309,6 +3310,13 @@ function _readActivityForm(html, original) {
         count:         Math.max(1, parseInt($r.find(".cond-equip-count").val()) || 1),
         perEach:       $r.find(".cond-equip-pereach").is(":checked"),
         maxTimes:      parseInt($r.find(".cond-equip-max").val()) || 0,
+      });
+    } else if (condType === "allyTag") {
+      // 友方存在：目标选 bgTag / bgTagOther 等群体目标，人数门槛用「至少人数」
+      preconditions.push({
+        type:   "allyTag",
+        target: $r.find(".cond-target").val() || "bgTagOther",
+        ..._readBgTagMeta($r, "cond"),
       });
     } else if (condType === "background") {
       preconditions.push({

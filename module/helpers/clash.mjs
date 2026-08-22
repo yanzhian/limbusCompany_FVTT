@@ -1338,6 +1338,23 @@ export class ClashManager {
           continue;
         }
 
+        // ── allyTag 类型：检查"场上有没有符合条件的友方"────────────────
+        // 用于「若有其他背景带有X的友方 → …」这类条件：目标沿用同一套群体
+        // 目标（bgTag / bgTagOther / allTeamOther…），人数门槛复用 targetTagCount。
+        // _resolveTargets 在人数不足时本就返回空数组，所以这里只需判空。
+        if (pre.type === "allyTag") {
+          const allies = await ClashManager._resolveTargets(
+            pre.target ?? "bgTagOther", owner, other, pre, ctx);
+          if (!allies.length) { precondFail = true; break; }
+          // 「每有 1 名符合条件的友方」也可以当倍数用
+          if (pre.perEach) {
+            let times = allies.length;
+            if ((pre.maxTimes ?? 0) > 0) times = Math.min(times, pre.maxTimes);
+            perMultipliers.push(times);
+          }
+          continue;
+        }
+
         // ── fieldResource 类型：检查公用场地当前层数（只读，不消耗）────
         if (pre.type === "fieldResource") {
           if (!pre.fieldName) { precondFail = true; break; }
