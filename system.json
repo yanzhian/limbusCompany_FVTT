@@ -2,7 +2,7 @@
   "id": "limbusCompany_FVTT",
   "title": "边狱巴士都市规则",
   "description": "灵感源自《边狱公司》（Limbus Company）宇宙的 Foundry VTT 自定义游戏系统。",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "compatibility": {
     "minimum": "13",
     "verified": "13"
