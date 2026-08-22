@@ -224,6 +224,8 @@ export function resolveColumnPath(header) {
   if (!raw) return null;
   const alias = COLUMN_ALIASES[raw] ?? COLUMN_ALIASES[raw.toLowerCase()];
   if (alias) return alias;   // 可能是 IGNORE 或 __xxx 虚拟列标记
+  // 「完成」列的列头写法很多（是否完成 / 完成？ / 完成情况…），含「完成」二字就认
+  if (raw.includes("完成")) return V_DONE;
   // 已经是路径形式（system.xxx / flags.xxx / 根字段）
   if (raw.startsWith("system.") || raw.startsWith("flags.")) return raw;
   if (["name", "img", "folder", "type"].includes(raw)) return raw;
@@ -383,16 +385,19 @@ export function richTextFromCsv(text = "") {
 const isBlank = (t) => t === "" || t === "-" || t === "—" || t === "/";
 
 /**
- * 「完成」列的真值判定。
- * 认这些写法（大小写、全半角都认）：是 / 真 / 已完成 / 完成 / OK / ✓ / √ / v / y / yes / true / 1
- * 空、"-"、否、false、0 等一律视为未完成。
+ * 「完成」列的真值判定 —— 反向白名单。
+ * 只有这些写法（大小写、全半角都认）算「未完成」：
+ *   空 / - / — / / / 否 / 假 / 未 / 未完成 / 没有 / no / n / false / f / 0 / x / × / ✗ / ✘
+ * 其余任何非空内容（TRUE、是、√、已导入、日期、备注…）一律视为已完成，整行跳过。
+ * 这样写是因为表格里这一列的写法五花八门，漏判会导致重复导入。
  */
-const DONE_TRUE = new Set([
-  "是", "真", "已完成", "完成", "ok", "✓", "✔", "√", "v", "y", "yes", "true", "t", "1",
+const DONE_FALSE = new Set([
+  "否", "假", "未", "未完成", "没有", "no", "n", "false", "f", "0", "x", "×", "✗", "✘",
 ]);
 function isDoneMark(text) {
-  if (isBlank(String(text ?? "").trim())) return false;
-  return DONE_TRUE.has(String(text).trim().toLowerCase());
+  const t = String(text ?? "").trim();
+  if (isBlank(t)) return false;
+  return !DONE_FALSE.has(t.toLowerCase());
 }
 
 /**
