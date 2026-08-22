@@ -371,7 +371,7 @@ registerCustomBuff("indomitable", {
 });
 
 /**
- * 【故土剑术】
+ * 【本国剑术】
  * - 最大值：2 层
  * - 获得层数时刷新（替换），不叠加
  * - 回合结束时层数减少 1，归零时移除
@@ -379,7 +379,7 @@ registerCustomBuff("indomitable", {
  *   之后每有 5 级【呼吸法】强度，对目标造成 1D4 的斩击伤害（最多 2 次）
  */
 registerCustomBuff("nativeSwordArt", {
-  label:         "故土剑术",
+  label:         "本国剑术",
   description:   "- 最大值：2 层\n- 获得层数时刷新（替换），不叠加\n- 回合结束时层数减少 1，归零时移除\n- 自己\"斩击\"类型的骰子[命中时]：为自己添加 5 级【呼吸法】，每有 5 级【呼吸法】对目标造成 1D4 的斩击伤害（最多2次）",
   maxStacks:     2,
   refreshOnGain: true,

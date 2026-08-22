@@ -629,7 +629,7 @@ export class ClashManager {
       await ClashManager._applyActivities(eq, trigger, ctx);
     }
 
-    // ── 自定义 BUFF onHit 钩子（如【故土剑术】）─────────────────────────
+    // ── 自定义 BUFF onHit 钩子（如【本国剑术】）─────────────────────────
     // 每次 [命中时] 结算（无论走哪条对抗路径，均汇聚于本方法）触发一次，
     // 按本次实际使用的 item 分类（斩击/打击/突刺）判断是否命中该 BUFF 的条件。
     // ClashManager 内部方法不直接暴露给 custom-buffs.mjs（避免循环 import），

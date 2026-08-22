@@ -320,7 +320,7 @@
 | `tremorCollapse` | 震颤-崩坏 | `amplitudeConvert` | 振幅转换 |
 | `amplitudeEntangle` | 振幅纠缠 | `defensiveStance` | 防御姿态 |
 | `butterfly` | 蝶 | `piercingArrow` | 刺入之矢 |
-| `indomitable` | 百折不挠 | `nativeSwordArt` | 故土剑术 |
+| `indomitable` | 百折不挠 | `nativeSwordArt` | 本国剑术 |
 | `bloodFlame` | 血炎 | `resentmentTattoo` | 怨恨纹身 |
 | `vengeanceLedger` | 复仇账簿 | `flameButterflyCoffin` | 炎蝶之棺 |
 | `dawnFire` | 黎明之火 | `greetTheDawn` | 迎接黎明 |
