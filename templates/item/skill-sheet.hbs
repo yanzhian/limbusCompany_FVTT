@@ -68,7 +68,7 @@
                   {{/each}}
                 </select>
               {{/if}}
-              <input type="text" name="{{fp}}diceFormula" value="{{diceFormulaDisplay}}" class="dice-formula-input" placeholder="1D4+2"/>
+              <input type="text" name="{{fp}}diceFormula" value="{{diceFormulaDisplay}}" class="dice-formula-input" placeholder="1D4+2 或 20-1D8"/>
             {{else}}
               {{#if form.category}}
                 <img src="{{lookup @root.config.CATEGORY_ICON_PATHS form.category}}" class="category-icon" width="22" height="22" alt="{{form.category}}">

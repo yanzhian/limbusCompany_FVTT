@@ -150,7 +150,7 @@ export const COLUMN_ALIASES = {
   // ── 技能 ──────────────────────────────────────────────────────────────
   "罪孽": "system.sinType", "罪孽属性": "system.sinType",
   "等级": V_LEVEL,               // 基础/守备写数字；EGO 写 ZAYIN/TET/HE/WAW/ALEPH
-  "骰数": V_DICE,                   // "1D4+2" → diceCount / diceFaces / baseValue
+  "骰数": V_DICE,                   // "1D4+2" / "20-1D8"（负面骰）→ diceCount / diceFaces / baseValue
   "攻击容量": "system.weight", "加重值": "system.weight", "加重": "system.weight",
   "骰类型": "system.diceType", "骰子类型": "system.diceType",
   "无法装备": "system.noEquip",
@@ -400,22 +400,39 @@ function parseCategory(text, itemType) {
   return atk ? { "system.category": atk } : { "system.category": text };
 }
 
-/** 【骰数】列："1D4+2" / "1d10" / "-" → diceCount / diceFaces / baseValue */
+/**
+ * 【骰数】列："1D4+2" / "1d10" / "20-1D8"（负面骰）/ "-" 空
+ * → diceCount / diceFaces / baseValue / negativeDice
+ * 正负面骰自动识别，不需要额外开一列。
+ */
 function parseDice(text) {
   if (isBlank(text)) return { "system.diceCount": 0 };
+
+  // 负面骰：基础值在前、骰作为减项（骰数省略视为 1）
+  const neg = /^\s*(\d+)\s*-\s*(\d*)\s*[dD]\s*(\d+)\s*$/.exec(text);
+  if (neg) {
+    return {
+      "system.diceCount":    neg[2] === "" ? 1 : Number(neg[2]),
+      "system.diceFaces":    Number(neg[3]),
+      "system.baseValue":    Number(neg[1]),
+      "system.negativeDice": true,
+    };
+  }
+
   const m = /^\s*(\d*)\s*[dD]\s*(\d+)\s*(?:([+-])\s*(\d+))?\s*$/.exec(text);
   if (!m) {
     // 没有骰子、只有一个数字时视为纯基础值
     const n = Number(text);
     if (!Number.isNaN(n)) return { "system.diceCount": 0, "system.baseValue": Math.round(n) };
-    return { __error: `骰数「${text}」无法解析（应形如 1D4 或 1D4+2）` };
+    return { __error: `骰数「${text}」无法解析（应形如 1D4、1D4+2，或负面骰 20-1D8）` };
   }
   const [, count, faces, sign, bonus] = m;
   const base = bonus ? (sign === "-" ? -Number(bonus) : Number(bonus)) : 0;
   return {
-    "system.diceCount": count === "" ? 1 : Number(count),
-    "system.diceFaces": Number(faces),
-    "system.baseValue": Math.max(0, base),
+    "system.diceCount":    count === "" ? 1 : Number(count),
+    "system.diceFaces":    Number(faces),
+    "system.baseValue":    Math.max(0, base),
+    "system.negativeDice": false,
   };
 }
 
@@ -723,7 +740,7 @@ const COLUMN_NOTES = {
   "类型":     "决定物品类型：基础技能/守备技能/E.G.O/上装/下装/武器/饰品/消耗品/材料/容器",
   "分类":     "技能：斩击、打击、突刺；守备可写 反击-打击、可拼点反击-斩击；其余类型为自由文本",
   "等级":     "基础/守备填数字；E.G.O 填 ZAYIN/TET/HE/WAW/ALEPH",
-  "骰数":     "形如 1D4、1D4+2；留空或 - 表示无",
+  "骰数":     "形如 1D4、1D4+2；负面骰写成 20-1D8（基础值在前）；留空或 - 表示无",
   "骰类型":   "留空=一般骰子；可填 不可摧毁 / 斩断",
   "抗性":     "斩/打/突，记 x0.5，可多写",
   "弱性":     "斩/打/突，记 x2.0，可多写",

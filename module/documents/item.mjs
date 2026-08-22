@@ -172,6 +172,8 @@ export class SkillData extends foundry.abstract.TypeDataModel {
         baseValue:   new fields.NumberField({ required: false, nullable: true, integer: true, min: 0, initial: null }),
         diceCount:   new fields.NumberField({ required: false, nullable: true, integer: true, min: 0, initial: null }),
         diceFaces:   new fields.NumberField({ required: false, nullable: true, integer: true, min: 1, initial: null }),
+        // 侵蚀形态可以自己是负面骰（null = 沿用觉醒形态的设置）
+        negativeDice: new fields.BooleanField({ required: false, nullable: true, initial: null }),
         weight:      new fields.NumberField({ required: false, nullable: true, integer: true, min: 0, initial: null }),
         sanityCost:  new fields.NumberField({ required: false, nullable: true, integer: true, min: 0, initial: null }),
         effectDesc:  new fields.HTMLField({ required: false, initial: "" }),
@@ -194,6 +196,12 @@ export class SkillData extends foundry.abstract.TypeDataModel {
       baseValue:  new fields.NumberField({ required: true, integer: true, min: 0, initial: 0 }),
       diceCount:  new fields.NumberField({ required: true, integer: true, min: 0, initial: 1 }),
       diceFaces:  new fields.NumberField({ required: true, integer: true, min: 1, initial: 4 }),
+
+      // 负面骰：公式写成「基础值 - 骰」（如 20-1D8），常见于 EGO 侵蚀形态。
+      // 三个数字字段的含义不变，只是骰子项取负 —— 于是「骰数+1」自然变成 20-2D8、
+      // 「基础值+1」变成 21-1D8，所有既有效果无需特殊处理。
+      // 该标记由骰数栏的公式文本自动推断（见 item-sheet.mjs 的 _parseDiceFormula）。
+      negativeDice: new fields.BooleanField({ required: false, initial: false }),
       // diceFormula：便捷显示字符串，如 "2d4+3"（由 prepareDerivedData 生成）
       diceFormula: new fields.StringField({ required: false, initial: "1d4" }),
 
@@ -257,7 +265,7 @@ export class SkillData extends foundry.abstract.TypeDataModel {
     // 没填的字段照旧沿用【觉醒】的数值。
     if (this.type === "ego" && this.corrode?.initialized && this._ownerInPanic) {
       const c = this.corrode;
-      for (const key of ["category", "baseValue", "diceCount", "diceFaces", "weight", "sanityCost"]) {
+      for (const key of ["category", "baseValue", "diceCount", "diceFaces", "weight", "sanityCost", "negativeDice"]) {
         if (c[key] !== null && c[key] !== undefined) this[key] = c[key];
       }
       if (c.effectDesc) this.effectDesc = c.effectDesc;
@@ -265,8 +273,14 @@ export class SkillData extends foundry.abstract.TypeDataModel {
     }
 
     const { diceCount, diceFaces, baseValue } = this;
-    let formula = `${diceCount}d${diceFaces}`;
-    if (baseValue > 0) formula += `+${baseValue}`;
+    // 负面骰：基础值在前、骰子作为减项（20-1D8）
+    let formula;
+    if (this.negativeDice) {
+      formula = `${baseValue}-${diceCount}d${diceFaces}`;
+    } else {
+      formula = `${diceCount}d${diceFaces}`;
+      if (baseValue > 0) formula += `+${baseValue}`;
+    }
     this.diceFormula = formula;
 
     // 若 EGO 技能且 stellarCost 未手动修改，则按 egoDiceRating 自动推算

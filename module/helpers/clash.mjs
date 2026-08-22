@@ -3034,6 +3034,7 @@ export class ClashManager {
       const newAtkFull = newAtkBase + atkBonusPart;
       const rerollAtk  = new Roll(newAtkFull);
       await rerollAtk.evaluate();
+      ClashManager.applyDiceRollMods(atkActor, rerollAtk, { item: atkItem, isDefense: false });
       atkFinalTotal   = rerollAtk.total;
       atkFinalFormula = newAtkFull;
       atkFinalBase    = newAtkBase;
@@ -3049,6 +3050,7 @@ export class ClashManager {
       const newDefFull = newDefBase + defBonusPart0;
       const rerollDef    = new Roll(newDefFull);
       await rerollDef.evaluate();
+      ClashManager.applyDiceRollMods(defActor, rerollDef, { item: defItem, isDefense: true });
       defFinalTotal   = rerollDef.total;
       defFinalFormula = newDefFull;
       defFinalBase    = newDefBase;
@@ -3959,6 +3961,10 @@ export class ClashManager {
     const defRoll = new Roll(defFormula);
     await atkRoll.evaluate();
     await defRoll.evaluate();
+    // 与首次投骰一致：过一遍 BUFF 的 modifyDiceRoll，并夹住 0 下限
+    // （负面骰如 20-1D8 在极端情况下会掷出负数）
+    ClashManager.applyDiceRollMods(atkActor, atkRoll, { isDefense: false });
+    ClashManager.applyDiceRollMods(defActor, defRoll, { isDefense: true });
 
     const resolution = ClashManager._computeResolution({
       atkActor,    atkTotal:    atkRoll.total,  atkFormula,
@@ -4130,6 +4136,7 @@ export class ClashManager {
         const newAtkFull = newAtkBase + bonusPart;
         const rerollAtk  = new Roll(newAtkFull);
         await rerollAtk.evaluate();
+        ClashManager.applyDiceRollMods(atkActor, rerollAtk, { item: atkItem2, isDefense: false });
         finalRollTotal = rerollAtk.total;
         // 重投同样走单条 TOTAL 演出，带【公式重投】标记
         await ClashTotalFX.playSolo({

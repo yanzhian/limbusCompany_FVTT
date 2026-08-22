@@ -672,14 +672,16 @@ export class LimbusItemSheet extends ItemSheet {
         const parsed = _parseDiceFormula(String(rawFml));
         if (parsed) {
           if (_isFlat) {
-            formData[`${pre}diceCount`] = parsed.diceCount;
-            formData[`${pre}diceFaces`] = parsed.diceFaces;
-            formData[`${pre}baseValue`] = parsed.baseValue;
+            formData[`${pre}diceCount`]    = parsed.diceCount;
+            formData[`${pre}diceFaces`]    = parsed.diceFaces;
+            formData[`${pre}baseValue`]    = parsed.baseValue;
+            formData[`${pre}negativeDice`] = parsed.negativeDice;
           } else {
             Object.assign(nested(), {
-              diceCount: parsed.diceCount,
-              diceFaces: parsed.diceFaces,
-              baseValue: parsed.baseValue,
+              diceCount:    parsed.diceCount,
+              diceFaces:    parsed.diceFaces,
+              baseValue:    parsed.baseValue,
+              negativeDice: parsed.negativeDice,
             });
           }
         }
@@ -1743,19 +1745,33 @@ export class LimbusItemSheet extends ItemSheet {
 /* ─── 模块级辅助函数 ─────────────────────────────────────────────────────── */
 
 /**
- * 将 "2d6+3" / "1D4" 风格的骰子公式字符串解析为 schema 实际字段值。
- * 支持格式：NdF、NdF+B（大小写均可，忽略空格）。
- * 解析失败返回 null，调用方应保留旧值。
+ * 将骰子公式字符串解析为 schema 实际字段值。**正/负面骰自动识别**，无需额外开关：
+ *   "2d6+3" / "1D4"  → 普通骰（negativeDice: false）
+ *   "20-1D8" / "30-d6" → 负面骰（negativeDice: true，基础值 20、1 个 d8 作减项）
+ * 大小写均可，忽略空格。解析失败返回 null，调用方应保留旧值。
  */
 function _parseDiceFormula(formula) {
   if (!formula) return null;
-  const m = String(formula).toLowerCase().replace(/\s+/g, "")
-    .match(/^(\d+)d(\d+)(?:\+(\d+))?$/);
+  const t = String(formula).toLowerCase().replace(/\s+/g, "");
+
+  // 负面骰：基础值在前，骰子作为减项（骰数省略时视为 1）
+  const neg = t.match(/^(\d+)-(\d*)d(\d+)$/);
+  if (neg) {
+    return {
+      diceCount:    Math.max(0, parseInt(neg[2] === "" ? "1" : neg[2]) || 0),
+      diceFaces:    Math.max(1, parseInt(neg[3]) || 4),
+      baseValue:    Math.max(0, parseInt(neg[1]) || 0),
+      negativeDice: true,
+    };
+  }
+
+  const m = t.match(/^(\d+)d(\d+)(?:\+(\d+))?$/);
   if (!m) return null;
   return {
-    diceCount: Math.max(0, parseInt(m[1]) || 0),
-    diceFaces: Math.max(1, parseInt(m[2]) || 4),
-    baseValue: Math.max(0, parseInt(m[3] ?? 0) || 0),
+    diceCount:    Math.max(0, parseInt(m[1]) || 0),
+    diceFaces:    Math.max(1, parseInt(m[2]) || 4),
+    baseValue:    Math.max(0, parseInt(m[3] ?? 0) || 0),
+    negativeDice: false,
   };
 }
 
