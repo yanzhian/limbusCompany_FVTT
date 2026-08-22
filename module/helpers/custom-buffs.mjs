@@ -628,23 +628,53 @@ registerCustomBuff("redPlum", {
  */
 registerCustomBuff("pentUpGrudge", {
   label:       "郁积的怨结",
-  description: "- 纯计数资源",
+  description: "- 最大值：99 层\n"
+    + "- 攻击时：每拥有 10 层，为自己添加 1 层【斩击威力提升】（最多 3 层）",
+  maxStacks:   99,
+
+  async onAttack(actor, buff, ctx) {
+    // 每 10 层换 1 层，最多 3 层（即 30 层封顶，多出来的层数不再转化）
+    const times = Math.min(Math.floor((buff.stacks ?? 0) / 10), 3);
+    if (times <= 0) return;
+    await ctx.addBuff("slashPowerUp", 0, times, "本回合");
+    return `每 10 层【郁积的怨结】→ 共 <strong>${times}</strong> 层【斩击威力提升】。`;
+  },
 });
 
 /**
  * 【寄宿怨恨的剑鞘】
  * - 包括自身在内的友方单位[受到攻击时]，使自身获得层数相当于伤害量的【郁积的怨结】
+ * - 回合开始时：为本队其他"背景带有剑契组"的友方各添加 1 层【本国剑-传授洗法】
  * 用整队广播钩子 onAllyHpDamage 实现：谁被打掉血都会通知到本队每个人身上的这条 BUFF。
  * 只认攻击伤害，烧伤/流血这类跳动伤害不算。
  */
 registerCustomBuff("grudgeSheath", {
   label:       "寄宿怨恨的剑鞘",
-  description: "- 包括自身在内的友方单位[受到攻击时]，使自身获得层数相当于伤害量的【郁积的怨结】",
+  description: "- 包括自身在内的友方单位[受到攻击时]，使自身获得层数相当于伤害量的【郁积的怨结】\n"
+    + "- 回合开始时：为你其他所有背景带有「剑契组」的友方添加 1 层【本国剑-传授洗法】",
 
   async onAllyHpDamage(carrier, _buff, ctx) {
     const amount = Math.max(0, Math.round(ctx?.amount ?? 0));
     if (amount <= 0) return;
     await ctx.addBuff("pentUpGrudge", 0, amount, "本回合");
+  },
+
+  /** 回合开始时：给本队其他"背景带有剑契组"的友方各 1 层【本国剑-传授洗法】 */
+  async onRoundStart(actor, _buff) {
+    const { ClashManager } = await import("./clash.mjs");
+    const allies = await ClashManager._resolveTargets("allTeamOther", actor, null);
+    const names = [];
+    for (const ally of allies) {
+      // 背景名或背景标签命中都算（与 background 前置条件的判定口径一致）
+      const tags = await ClashManager._getBackgroundTags(ally);
+      const bgUuid = ally.system?.background?.uuid;
+      const bg = bgUuid ? await fromUuid(bgUuid).catch(() => null) : null;
+      if (!tags.includes("剑契组") && bg?.name !== "剑契组") continue;
+      await ClashManager._addBuff(ally, "nativeSwordTeaching", 0, 1, "本回合");
+      names.push(ally.name);
+    }
+    if (!names.length) return;
+    return `为 <strong>${names.join("、")}</strong> 各添加 1 层【本国剑-传授洗法】。`;
   },
 });
 
