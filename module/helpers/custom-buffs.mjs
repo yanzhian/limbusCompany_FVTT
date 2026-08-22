@@ -41,6 +41,10 @@
  *     modifyOutgoingDamage(actor, buff, ctx) {}, // 自己打出伤害前调用（与 modifyIncomingDamage 对称），
  *                                             // ctx = { damage, target, category, sinType, item }；
  *                                             // 返回 { damage?, note? }
+ *     onAttack(actor, buff, ctx) {},         // 自己 [攻击时] 调用（异步，与同名 Activity 同一时点）；
+ *                                             // ctx = { item, category, counterType, sinType,
+ *                                             //          addBuff, addBuffTo, getBuff }
+ *                                             // 返回字符串则并入本次结算的活动消息
  *     onAllyHpDamage(carrier, buff, ctx) {}, // **本队任一单位**（含自己）被攻击掉体力时调用（异步）；
  *                                             // 与 onTakeDamage 不同，它通知的是整队，
  *                                             // 因此"友方受到攻击时我获得…"挂在自己身上即可。
@@ -619,6 +623,32 @@ registerCustomBuff("grudgeSheath", {
     const amount = Math.max(0, Math.round(ctx?.amount ?? 0));
     if (amount <= 0) return;
     await ctx.addBuff("pentUpGrudge", 0, amount, "本回合");
+  },
+});
+
+/**
+ * 【本国剑-传授洗法】
+ * - 最大值：3 层
+ * - 攻击时：每有 1 层，为自己添加 1 层【斩击威力提升】
+ * - 回合结束时：清除本 BUFF（不是减层，是整条移除）
+ */
+registerCustomBuff("nativeSwordTeaching", {
+  label:       "本国剑-传授洗法",
+  description: "- 最大值：3 层\n"
+    + "- 攻击时：每有 1 层为自己添加 1 层【斩击威力提升】\n"
+    + "- 回合结束时：清除本 BUFF",
+  maxStacks:   3,
+
+  async onAttack(actor, buff, ctx) {
+    const stacks = buff.stacks ?? 0;
+    if (stacks <= 0) return;
+    await ctx.addBuff("slashPowerUp", 0, stacks, "本回合");
+    return `转化为 <strong>${stacks}</strong> 层【斩击威力提升】。`;
+  },
+
+  async onRoundEnd(actor, buff) {
+    const { ClashManager } = await import("./clash.mjs");
+    await ClashManager._removeBuff(actor, buff.type ?? "nativeSwordTeaching");
   },
 });
 

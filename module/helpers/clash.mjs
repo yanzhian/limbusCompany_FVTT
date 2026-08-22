@@ -509,6 +509,36 @@ export class ClashManager {
   }
 
   /**
+   * [攻击时] 的 BUFF 钩子派发（与 `[攻击时]` Activity 同一时点）。
+   * 用于"攻击时把自己转成别的 BUFF"这类效果；返回字符串则并入活动消息。
+   * @param {Actor} actor 出这一骰的人
+   * @param {Item}  item  本次使用的技能/物品
+   */
+  static async _dispatchOnAttack(actor, item, ctx) {
+    if (!actor) return;
+    for (const buff of foundry.utils.deepClone(actor.system?.buffs ?? [])) {
+      const handler = resolveBuffHandler(buff);
+      if (typeof handler?.onAttack !== "function") continue;
+      const note = await handler.onAttack(actor, buff, {
+        item,
+        category:    item?.system?.category    ?? "",
+        counterType: item?.system?.counterType ?? "",
+        sinType:     item?.system?.sinType     ?? "",
+        addBuff:   (type, i, st, when) => ClashManager._addBuff(actor, type, i, st, when),
+        addBuffTo: (tgt, type, i, st, when) => ClashManager._addBuff(tgt, type, i, st, when),
+        getBuff:   (type) => ClashManager._getBuff(actor, type),
+      });
+      if (typeof note === "string" && note) {
+        (ctx?._actMsgs ?? []).push({
+          trigger: "攻击时",
+          itemName: handler.label ?? buff.name ?? buff.type,
+          msgs: [note],
+        });
+      }
+    }
+  }
+
+  /**
    * [受到伤害时] 的统一派发：受伤者的技能 + 装备格物品的 Activity，
    * 外加自定义 BUFF 的 onTakeDamage 钩子（返回字符串则并入本次结算的活动消息）。
    * @param {Item}  item     受伤方本次用的技能（可能为 null）
@@ -2979,6 +3009,8 @@ export class ClashManager {
     // 【流血】挂在 [攻击时] 与 [拼点时] 上，因此连击时每次交锋都会再发作一次
     await ClashManager._applyActivitiesAndEquip(atkItem, "攻击时", atkCtx);
     await ClashManager._applyActivitiesAndEquip(defItem,  "攻击时", defCtx);
+    await ClashManager._dispatchOnAttack(atkActor, atkItem, atkCtx);
+    await ClashManager._dispatchOnAttack(defActor, defItem, defCtx);
     await ClashManager._processBleed(atkActor);
     await ClashManager._processBleed(defActor);
     await ClashManager._applyActivitiesAndEquip(atkItem, "拼点时", atkCtx);
@@ -4087,6 +4119,7 @@ export class ClashManager {
     // [攻击前] [攻击时]
     await ClashManager._applyActivitiesAndEquip(atkItem2, "攻击前", atkCtx2);
     await ClashManager._applyActivitiesAndEquip(atkItem2, "攻击时", atkCtx2);
+    await ClashManager._dispatchOnAttack(atkActor, atkItem2, atkCtx2);
 
     // [攻击时] 可能修改骰子公式（diceAdj/diceFacesAdj/baseValue），检测并重投
     let finalRollTotal = rollTotal;
