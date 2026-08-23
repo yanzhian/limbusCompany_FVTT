@@ -45,7 +45,8 @@
         {{!-- 类型 + 可复用 + 分类 --}}
         <div class="equip-type-row">
           {{#if (and isEditable (not isLocked))}}
-            <input type="text" name="system.typeName" value="{{system.typeName}}" class="equip-subtype-sel" placeholder="{{typeLabel}}"/>
+            {{!-- 类型（消耗品 / 材料）在创建时就定死了，这里只展示不可改 --}}
+            <span class="equip-subtype-label">{{typeLabel}}</span>
             <label class="reusable-label" title="可复用道具：数量归零时不会从背包移除">
               <input type="checkbox" name="system.reusable" {{#if system.reusable}}checked{{/if}}/>
               可复用
