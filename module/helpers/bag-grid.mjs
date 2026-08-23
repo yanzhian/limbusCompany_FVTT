@@ -3,11 +3,15 @@
  *
  * 背包摆放坐标持久化在 `actor.system.bagLayout`（玩家拖过的物品才有记录）。
  * 本工具把有记录的按原位落位、没记录的按容量（capacity.w × capacity.h）
- * 首适应补进 6 列网格。
+ * 首适应补进 5 列网格。
  * 供 camp-sheet（营地左栏角色面板）与 actor-sheet（物品 Tab 网格视图）共用。
  */
 
 import { autoPlace, buildCells, canPlace, markOccupied } from "./grid-layout.mjs";
+
+/** 背包网格尺寸：横 5 格 × 竖 8 格（营地左栏与角色卡物品 Tab 共用） */
+export const BAG_COLS = 5;
+export const BAG_ROWS = 8;
 
 /** 计入背包容量的物品类型 */
 export const BAG_ITEM_TYPES = ["equipment", "consumable", "material", "container", "skillbook", "background"];
@@ -40,13 +44,13 @@ const PACK_ROW_LIMIT = 200;
  * 放置算法复用 helpers/grid-layout.mjs（与容器 / 营地仓库同一套碰撞与旋转规则），
  * 区别是背包行数不设上限（按内容自然增长）。
  * @param {Item[]} items
- * @param {number} cols     列数（默认 6）
- * @param {number} minRows  最少行数（默认 6）
+ * @param {number} cols     列数（默认 BAG_COLS）
+ * @param {number} minRows  最少行数（默认 BAG_ROWS）
  * @param {object[]} layout  持久化摆放记录 actor.system.bagLayout
  * @returns {{ tiles: object[], rows: number, cells: object[], usedCells: number }}
  *   tiles: { id, uuid, name, img, quantity, isContainer, x, y, w, h, col, row }
  */
-export function packBagGrid(items, cols = 6, minRows = 6, layout = []) {
+export function packBagGrid(items, cols = BAG_COLS, minRows = BAG_ROWS, layout = []) {
   const placements = [];   // { x, y, w, h } —— 供 autoPlace 做碰撞检测
   const tiles      = [];
   const occupied   = new Set();

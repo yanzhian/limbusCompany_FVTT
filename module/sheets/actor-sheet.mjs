@@ -12,7 +12,7 @@
 
 import { ClashManager } from "../helpers/clash.mjs";
 import { CustomBuffRegistry, resolveBuffHandler, normalizeBuffType } from "../helpers/custom-buffs.mjs";
-import { getBagItems, packBagGrid } from "../helpers/bag-grid.mjs";
+import { BAG_COLS, BAG_ROWS, getBagItems, packBagGrid } from "../helpers/bag-grid.mjs";
 import { GridDnD } from "../helpers/grid-dnd.mjs";
 import { autoPlace, canPlace, makeLockedSet } from "../helpers/grid-layout.mjs";
 import { buildItemTitleCard, closeTitleCardUnlessLocked, toggleTitleCardLock } from "./item-sheet.mjs";
@@ -181,7 +181,7 @@ export class LimbusActorSheet extends ActorSheet {
     // ── 物品分组（物品 Tab） ───────────────────────────────────────────────
     context.itemGroups  = this._groupEquipmentItems();
     // ── 背包容量（物品 Tab） ───────────────────────────────────────────────
-    const INVENTORY_MAX = 36; // 角色固定 6×6
+    const INVENTORY_MAX = BAG_COLS * BAG_ROWS; // 角色背包固定 5×8
     const inventoryUsed = this._calcInventoryCapacity();
     context.inventoryMax  = INVENTORY_MAX;
     context.inventoryUsed = inventoryUsed;
@@ -189,7 +189,9 @@ export class LimbusActorSheet extends ActorSheet {
     // 物品 Tab 网格视图（工具栏切换按钮）
     context.itemGridView = this._itemGridView ?? false;
     if (context.itemGridView) {
-      context.bagGrid = packBagGrid(getBagItems(actor), 6, 6, actor.system?.bagLayout ?? []);
+      context.bagGrid = packBagGrid(getBagItems(actor), BAG_COLS, BAG_ROWS,
+                                    actor.system?.bagLayout ?? []);
+      context.bagGrid.cols = BAG_COLS;
       // GridDnD 的碰撞检测直接读这份渲染结果，免得再算一遍
       this._bagGridCache = context.bagGrid;
       // 没有坐标记录的物品（新捡到的、刚从容器里拿出来的）本次是自动补位的，
@@ -760,8 +762,8 @@ export class LimbusActorSheet extends ActorSheet {
       const grid = this._bagGridCache ?? null;
       GridDnD.register(bagRoot, {
         key:        `bag:${this.actor.uuid}`,
-        cols:       6,
-        rows:       grid?.rows ?? 6,
+        cols:       BAG_COLS,
+        rows:       grid?.rows ?? BAG_ROWS,
         editable:   () => this.isEditable,
         placements: () => (grid?.tiles ?? []).map(t => ({ x: t.x, y: t.y, w: t.w, h: t.h })),
         payloadFor: (tile) => {
@@ -2306,9 +2308,9 @@ export class LimbusActorSheet extends ActorSheet {
     const item   = this.actor.items.get(itemId);
     if (!item) return;
 
-    const grid = this._bagGridCache ?? { tiles: [], rows: 6 };
-    const cols = 6;
-    const rows = grid.rows ?? 6;
+    const grid = this._bagGridCache ?? { tiles: [], rows: BAG_ROWS };
+    const cols = BAG_COLS;
+    const rows = grid.rows ?? BAG_ROWS;
 
     const layout  = foundry.utils.deepClone(this.actor.system.bagLayout ?? []);
     const entry   = layout.find(e => e.itemId === itemId) ?? null;

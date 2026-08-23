@@ -11,7 +11,7 @@
  *   玩家 → 查看仓库、右键取出物品、查看可见配方、点击制作
  *         （玩家操作通过 socket 委托 GM 执行）
  */
-import { getBagItems, packBagGrid } from "../helpers/bag-grid.mjs";
+import { BAG_COLS, BAG_ROWS, getBagItems, packBagGrid } from "../helpers/bag-grid.mjs";
 import { buildPlacementGrid, canPlace, autoPlace, makeLockedSet } from "../helpers/grid-layout.mjs";
 import { GridDnD } from "../helpers/grid-dnd.mjs";
 import { buildItemTitleCard, closeTitleCardUnlessLocked, toggleTitleCardLock } from "./item-sheet.mjs";
@@ -29,6 +29,39 @@ export class LimbusCampSheet extends ActorSheet {
       // 重渲染时保持这些容器的滚动位置（拖动仓库物品后不回顶）
       scrollY:   [".camp-warehouse-grid-wrap", ".camp-char-grid-wrap", ".camp-recipe-list"],
     });
+  }
+
+  /**
+   * 左栏角色背包的实时刷新。
+   * 营地卡渲染的是**另一个 Actor**（玩家自己的角色）的背包，Foundry 只会在
+   * 营地 Actor 自己变化时重渲染本卡，所以角色在别处（角色卡、容器里）整理
+   * 背包时这边不会动。这里挂一组文档钩子，凡是牵动那个角色的物品或 bagLayout
+   * 就重画一次。关卡时统一摘掉。
+   */
+  _registerCharWatch() {
+    if (this._charWatchIds) return;
+    const rerender = (doc) => {
+      const charId = this._charGridCache?.actorId;
+      if (!charId) return;
+      // 物品：看它属于谁；Actor：看是不是那个角色
+      const ownerId = doc?.parent?.id ?? doc?.id;
+      if (ownerId !== charId) return;
+      if (GridDnD.dragging) return;          // 拖动中不打断，松手后自然会渲染
+      this.render(false);
+    };
+    this._charWatchIds = {
+      updateActor:  Hooks.on("updateActor",  rerender),
+      createItem:   Hooks.on("createItem",   rerender),
+      deleteItem:   Hooks.on("deleteItem",   rerender),
+      updateItem:   Hooks.on("updateItem",   rerender),
+    };
+  }
+
+  /** @override */
+  async close(options = {}) {
+    for (const [hook, id] of Object.entries(this._charWatchIds ?? {})) Hooks.off(hook, id);
+    this._charWatchIds = null;
+    return super.close(options);
   }
 
   /* ─── 状态 ──────────────────────────────────────────────────────────── */
@@ -131,15 +164,15 @@ export class LimbusCampSheet extends ActorSheet {
     if (myChar) {
       const bagItems = getBagItems(myChar);
       const { tiles, rows, cells, usedCells } =
-        packBagGrid(bagItems, 6, 6, myChar.system?.bagLayout ?? []);
+        packBagGrid(bagItems, BAG_COLS, BAG_ROWS, myChar.system?.bagLayout ?? []);
       this._charGridCache = { tiles, rows, actorId: myChar.id };
       ctx.myChar = {
         id:    myChar.id,
         name:  myChar.name,
         img:   myChar.img,
-        tiles, rows, cells,
+        tiles, rows, cells, cols: BAG_COLS,
         used:  usedCells,
-        max:   36,
+        max:   BAG_COLS * BAG_ROWS,
       };
     } else {
       ctx.myChar = null;
@@ -321,6 +354,7 @@ export class LimbusCampSheet extends ActorSheet {
     });
     charPanel.on("dragleave", () => charPanel.removeClass("cg-drag-over"));
     charPanel.on("drop", this._onCharPanelDrop.bind(this));
+    this._registerCharWatch();
 
     // 左栏角色背包也注册进 GridDnD：否则从仓库拖过来时这边不是合法落点，
     // 松手会被当作"落在网格外"直接取消（= 只能背包→仓库，反过来不行）
@@ -332,8 +366,8 @@ export class LimbusCampSheet extends ActorSheet {
       html.find(".camp-char-cg .cg-cell").on("drop", this._onCharGridDrop.bind(this));
       GridDnD.register(charRoot, {
         key:        `bag:${charActor?.uuid ?? charGrid.actorId}`,
-        cols:       6,
-        rows:       charGrid.rows ?? 6,
+        cols:       BAG_COLS,
+        rows:       charGrid.rows ?? BAG_ROWS,
         editable:   () => !!charActor?.isOwner,
         placements: () => (charGrid.tiles ?? []).map(t => ({ x: t.x, y: t.y, w: t.w, h: t.h })),
         payloadFor: (tile) => {
@@ -423,7 +457,7 @@ export class LimbusCampSheet extends ActorSheet {
       const h = Math.max(1, newRot ? (cap.w ?? 1) : (cap.h ?? 1));
       const others = (grid.tiles ?? []).filter(t => t.id !== itemId)
         .map(t => ({ x: t.x, y: t.y, w: t.w, h: t.h }));
-      if (!canPlace(others, x, y, w, h, 6, grid.rows ?? 6)) {
+      if (!canPlace(others, x, y, w, h, BAG_COLS, grid.rows ?? BAG_ROWS)) {
         return void ui.notifications.warn("此位置无法放置（超出背包边界或与其他物品重叠）");
       }
       if (entry) { entry.x = x; entry.y = y; entry.rotated = newRot; }

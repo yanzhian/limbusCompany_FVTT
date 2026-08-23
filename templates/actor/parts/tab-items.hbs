@@ -68,7 +68,7 @@
     {{#if itemGridView}}
     {{!-- ── 网格视图（6×N 自动打包，仅显示） ──────────────────────── --}}
     <div class="bag-grid-wrap">
-      <div class="cg-wrap bag-cg" style="--grid-cols:6; --grid-rows:{{bagGrid.rows}}">
+      <div class="cg-wrap bag-cg" style="--grid-cols:{{bagGrid.cols}}; --grid-rows:{{bagGrid.rows}}">
         {{#each bagGrid.cells}}
           <div class="cg-cell {{#if occupied}}cg-occupied{{/if}}"
                style="grid-column:{{col}}; grid-row:{{row}}"
