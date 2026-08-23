@@ -4001,20 +4001,31 @@ body.game .limbuscompany.app img {
 .limbuscompany .container-avail-max { color: var(--text-main); }
 .limbuscompany .container-avail-sep { color: var(--text-dim); }
 
-/* 存放限制：并入剩余容量行，字号与颜色一律继承该行 */
-.limbuscompany .container-avail-row { flex-wrap: wrap; }
-.limbuscompany .container-limit-sep { color: var(--text-dim); }
+/* 存放限制行：紧跟在剩余容量行下面，字号与之一致；
+   「存放限制」四个字沿用该行的副文本色，类型/分类的值用深色 #0F0B0A */
+.limbuscompany .container-limit-row {
+  display: flex; align-items: center; gap: 4px; flex-wrap: wrap;
+  font-size: .72rem; color: var(--text-sub);
+}
+.limbuscompany .container-limit-label { color: inherit; white-space: nowrap; }
 .limbuscompany .container-limit-input {
-  width: 78px;
-  background: rgba(0,0,0,.25);
+  width: 82px;
+  background: #C9A84C;
   border: 1px solid var(--border-gold);
   border-radius: 2px;
   padding: 0 4px;
   font-size: inherit;
-  color: inherit;
+  color: #0F0B0A;
 }
-.limbuscompany .container-limit-badge { color: inherit; }
-.limbuscompany .container-limit-none  { color: var(--text-dim); font-style: italic; }
+.limbuscompany .container-limit-input::placeholder { color: rgba(15,11,10,.55); }
+.limbuscompany .container-limit-badge {
+  background: #C9A84C;
+  border-radius: 2px;
+  padding: 0 5px;
+  color: #0F0B0A;
+}
+.limbuscompany .container-limit-none { color: var(--text-dim); font-style: italic; }
+
 
 /* ═══ 容器网格（Diablo 风格二层布局）═══════════════════════════════ */
 .limbuscompany .cg-wrap {
