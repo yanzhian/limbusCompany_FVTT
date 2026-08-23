@@ -177,7 +177,9 @@ function _beginDrag() {
   const tile  = _drag.tile;
   const rect  = tile.getBoundingClientRect();
   const ghost = tile.cloneNode(true);
-  ghost.classList.add("cg-drag-ghost");
+  // 系统样式全部写在 .limbuscompany 作用域下；幽灵挂在 body 上，
+  // 不带这个类的话名称、数量这些子元素会丢掉全部样式（只剩图片）
+  ghost.classList.add("cg-drag-ghost", "limbuscompany");
   ghost.classList.remove("cg-hidden");
   ghost.style.width  = `${rect.width}px`;
   ghost.style.height = `${rect.height}px`;
@@ -211,6 +213,16 @@ function _updateHover(clientX, clientY) {
   const { root, adapter } = hit;
   if (adapter.editable?.() === false) { _drag.hover = null; return; }
 
+  // 容器图块：整块视为一个"存进去"的投放点（自动寻位由接收端负责），
+  // 不参与格子碰撞——否则永远压在容器自己身上，判成红色放不进去。
+  const overTile = document.elementFromPoint(clientX, clientY)
+    ?.closest?.(".cg-item-tile.cg-tile-container");
+  if (overTile && overTile !== _drag.tile && _drag.payload.uuid) {
+    _drag.hover = { root, adapter, tileEl: overTile, ok: true };
+    _drawTilePreview(overTile);
+    return;
+  }
+
   const cellPos = _cellAt(root, clientX, clientY);
   if (!cellPos) { _drag.hover = null; return; }     // 缝隙：没有落点
 
@@ -224,6 +236,16 @@ function _updateHover(clientX, clientY) {
 
   _drag.hover = { root, adapter, x, y, ok };
   _drawPreview(root, x, y, ok, adapter.cols);
+}
+
+/** 容器图块上的"存入"提示：直接罩在这块图块上（金色） */
+function _drawTilePreview(tileEl) {
+  const el = document.createElement("div");
+  el.className = "cg-drop-preview cg-into";
+  el.style.gridColumn = tileEl.style.gridColumn;
+  el.style.gridRow    = tileEl.style.gridRow;
+  tileEl.parentElement?.appendChild(el);
+  _drag.preview = el;
 }
 
 function _drawPreview(root, x, y, ok, cols) {
@@ -285,7 +307,9 @@ function _onPointerUp(ev) {
   // 投给**落点左上角**那个格子，而不是光标底下那个：payload 里的抓取偏移
   // 统一写死为 0，接收端 `nx = targetX - offX` 才会正好等于 hover.x。
   // （抓大件物品时按住的多半是中间某一格，投错格子就会整体右下偏移。）
-  const cell = hover.root.querySelector(
+  // 目标是容器图块时直接投给它（接收端会在容器里自动寻位），
+  // 否则投给落点左上角那个格子。
+  const cell = hover.tileEl ?? hover.root.querySelector(
     `.cg-cell[data-x="${hover.x}"][data-y="${hover.y}"]`);
   if (!cell) return;
 

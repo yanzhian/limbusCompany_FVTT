@@ -246,7 +246,10 @@ export class LimbusCampSheet extends ActorSheet {
         key:        `campWarehouse:${this.actor.uuid}`,
         cols:       this.actor.system.warehouseSize?.width  ?? 7,
         rows:       this.actor.system.warehouseSize?.height ?? 7,
-        editable:   () => this.isEditable,
+        // 玩家对营地 Actor 通常只有"查看"权限，isEditable 恒为 false；
+        // 但仓库存取本来就是设计给玩家用的（写操作走 GM socket 代执行），
+        // 所以这里不能拿 isEditable 当闸门，否则玩家端整个拖不动。
+        editable:   () => true,
         placements: () => this.actor.system.warehouseContents ?? [],
         payloadFor: (tile) => {
           const idx = parseInt(tile.dataset.placementIdx ?? "-1");

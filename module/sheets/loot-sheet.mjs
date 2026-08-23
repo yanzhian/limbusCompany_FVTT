@@ -230,7 +230,9 @@ export class LimbusLootSheet extends ActorSheet {
         key:        `loot:${this.actor.uuid}`,
         cols:       this.actor.system.gridSize?.width  ?? 5,
         rows:       this.actor.system.gridSize?.height ?? 5,
-        editable:   () => this.isEditable,
+        // 与营地同理：玩家对战利品 Actor 多半只有"查看"权限，
+        // 拾取/挪动本就走 GM socket 代执行，闸门不能挂在 isEditable 上
+        editable:   () => true,
         placements: () => this.actor.system.lootContents ?? [],
         payloadFor: (tile) => {
           const idx = parseInt(tile.dataset.placementIdx ?? -1);
