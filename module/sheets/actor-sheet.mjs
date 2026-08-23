@@ -15,6 +15,7 @@ import { CustomBuffRegistry, resolveBuffHandler, normalizeBuffType } from "../he
 import { BAG_COLS, BAG_ROWS, getBagItems, packBagGrid } from "../helpers/bag-grid.mjs";
 import { GridDnD } from "../helpers/grid-dnd.mjs";
 import { autoPlace, canPlace, makeLockedSet } from "../helpers/grid-layout.mjs";
+import { canContainerAccept, wouldNest } from "../helpers/container-rules.mjs";
 import { buildItemTitleCard, closeTitleCardUnlessLocked, toggleTitleCardLock } from "./item-sheet.mjs";
 import { ClashVFX } from "../helpers/clash-vfx.mjs";
 import { QuickActionHUD } from "./quick-action-hud.mjs";
@@ -2358,9 +2359,11 @@ export class LimbusActorSheet extends ActorSheet {
     event.preventDefault();
     event.stopPropagation();
 
-    if (dragged.type === "container") {
-      ui.notifications.warn("容器不能存放容器。");
-      return;
+    // 存放限制（类型 AND 分类；容器套容器也由类型限制决定）+ 环检测
+    const verdict = canContainerAccept(container, dragged);
+    if (!verdict.ok) return void ui.notifications.warn(verdict.reason);
+    if (await wouldNest(container, dragged)) {
+      return void ui.notifications.warn("不能把容器放进它自己或它内部的容器里。");
     }
 
     // 容器内自动寻位（首适应 + 旋转）

@@ -410,6 +410,12 @@ export class ContainerData extends foundry.abstract.TypeDataModel {
       stock:  new fields.NumberField({ required: true, integer: true, min: -1, initial: -1 }),
       hidden: new fields.BooleanField({ required: true, initial: false }),
 
+      // ── 存放限制（两条 AND，留空 = 不限制）────────────────────────────
+      // 都用 `/` 分隔多个可选值，判定见 helpers/container-rules.mjs
+      // 例：医疗箱 allowTypes「消耗品/材料」+ allowCategories「医疗」
+      allowTypes:      new fields.StringField({ required: false, initial: "" }),
+      allowCategories: new fields.StringField({ required: false, initial: "" }),
+
       // 锁定格：禁止放置物品的格子坐标列表
       lockedCells: new fields.ArrayField(
         new fields.SchemaField({

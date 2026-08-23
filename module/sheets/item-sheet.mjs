@@ -15,6 +15,7 @@ import { SKILLBOOK_MAX_SLOTS } from "../documents/item.mjs";
 import { CustomBuffRegistry, normalizeBuffType } from "../helpers/custom-buffs.mjs";
 import { linkifyHtml } from "../helpers/linkify.mjs";
 import { GridDnD } from "../helpers/grid-dnd.mjs";
+import { canContainerAccept, wouldNest } from "../helpers/container-rules.mjs";
 import { buildPlacementGrid, canPlace, autoPlace, makeLockedSet } from "../helpers/grid-layout.mjs";
 
 /** 背景的等级物品不收这三类（背景由向导指定、恐慌卡走 panicSlots、技能走技能书） */
@@ -1244,7 +1245,9 @@ export class LimbusItemSheet extends ItemSheet {
     if (raw.type === "Item" && raw.itemData && raw.fromContainer
         && raw.fromContainer.containerId !== this.item.id) {
       const itemDataSrc = raw.itemData;
-      if (itemDataSrc.type === "container") return;           // 禁止容器嵌套
+      // 存放限制（类型 AND 分类；容器套容器由类型限制决定）
+      const vaultVerdict = canContainerAccept(this.item, itemDataSrc);
+      if (!vaultVerdict.ok) return void ui.notifications.warn(vaultVerdict.reason);
 
       const cap  = itemDataSrc.system?.capacity ?? { w: 1, h: 1 };
       const rot0 = !!raw.rotatePending;                        // GridDnD 的待定旋转
@@ -1294,8 +1297,14 @@ export class LimbusItemSheet extends ItemSheet {
 
     // ── 从物品列表或其他容器拖入 ────────────────────────────────────────
     const dropped = await Item.fromDropData(raw).catch(() => null);
-    if (!dropped || dropped.type === "container") return;
+    if (!dropped) return;
     if (dropped.uuid === this.item.uuid) return;            // 禁止自引用
+    // 存放限制（类型 AND 分类）+ 环检测（容器不能装进自己或自己的后代）
+    const verdict = canContainerAccept(this.item, dropped);
+    if (!verdict.ok) return void ui.notifications.warn(verdict.reason);
+    if (await wouldNest(this.item, dropped)) {
+      return void ui.notifications.warn("不能把容器放进它自己或它内部的容器里。");
+    }
 
     // 玩家把营地仓库物品拖入营地自身的容器：全程需 GM 权限，走 socket
     if (raw.fromCampWarehouse && !game.user.isGM
