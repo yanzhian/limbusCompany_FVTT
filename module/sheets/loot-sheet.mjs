@@ -385,7 +385,6 @@ export class LimbusLootSheet extends ActorSheet {
       });
 
       // 旋转按钮
-      html.find(".cg-rotate-btn").on("click", this._onTileRotate.bind(this));
     }
 
     // 填充货币按钮

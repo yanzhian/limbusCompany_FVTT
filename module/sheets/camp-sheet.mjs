@@ -385,7 +385,6 @@ export class LimbusCampSheet extends ActorSheet {
     }
 
     // 仓库图块：旋转（GM 解锁时显示）
-    html.find(".cg-rotate-btn").on("click", this._onCgTileRotate.bind(this));
 
     // GM：解锁时给网格加编辑样式
     if (game.user.isGM && this._editUnlocked) {

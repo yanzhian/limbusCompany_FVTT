@@ -283,6 +283,22 @@ export class ClashManager {
   }
 
   /**
+   * 安全删除文档：若当前用户无权限，通过 socket 委托 GM 执行。
+   * 与 _safeDocUpdate 成对——玩家把营地容器里的物品取走时，
+   * 源物品属于营地 Actor，玩家删不掉，只能请 GM 代劳。
+   */
+  static async _safeDocDelete(doc) {
+    if (!doc) return;
+    if (doc.canUserModify?.(game.user, "delete")) {
+      return doc.delete();
+    }
+    game.socket?.emit("system.limbusCompany_FVTT", {
+      type: "gmDocDelete",
+      uuid: doc.uuid,
+    });
+  }
+
+  /**
    * 广播【流血/烧伤/破裂/沉沦/震颤】跳动伤害事件给所有已注册的场地资源。
    * 由 _processBleed / triggerBuff 效果分支 / 承伤结算中破裂沉沦震颤三处调用。
    * @param {string} buffType        跳动的状态 type（bleed/burn/rupture/sinking/tremor）
@@ -5774,6 +5790,18 @@ export class ClashManager {
       const attacker = attackerId ? game.actors.get(attackerId) : null;
       const defender = defenderId ? game.actors.get(defenderId) : null;
       await ClashManager._checkAndOfferReactions({ lastSkillUuid, attacker, defender });
+      return;
+    }
+
+    // 玩家无权限时委托 GM 执行文档删除（与 gmDocUpdate 成对）
+    if (msg.type === "gmDocDelete") {
+      if (!game.user.isGM) return;
+      try {
+        const doc = msg.uuid ? await fromUuid(msg.uuid) : null;
+        if (doc) await doc.delete();
+      } catch (err) {
+        console.error("[ClashManager] gmDocDelete 失败:", err);
+      }
       return;
     }
 

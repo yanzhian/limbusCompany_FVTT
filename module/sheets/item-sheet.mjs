@@ -407,6 +407,62 @@ export class LimbusItemSheet extends ItemSheet {
     });
   }
 
+  /**
+   * 容器网格的全部交互绑定。
+   *
+   * **必须在 `if (!this.isEditable) return;` 之前调用**：容器可能挂在别人的
+   * Actor 上（营地仓库里的箱子最典型），玩家对它只有"查看"权限，isEditable
+   * 恒为 false——绑定要是排在那道闸门后面，玩家端连拖动、右键菜单都不会挂上，
+   * 表现就是"什么都点不动"。真正的权限判定不在这里，而在写入那一步：
+   * `_containerUpdate()` 会在权限不足时转交在线 GM 代执行。
+   */
+  _bindContainerGrid(html) {
+    html.find(".cg-cell").on("dragover",  this._onCgCellDragOver.bind(this));
+    html.find(".cg-cell").on("dragleave", this._onCgCellDragLeave.bind(this));
+    html.find(".cg-cell").on("drop",      this._onCgCellDrop.bind(this));
+    html.find(".cg-cell").on("click",     this._onCgCellClick.bind(this));
+    html.find(".cg-item-tile").on("dragstart",   this._onCgTileDragStart.bind(this));
+    html.find(".cg-item-tile").on("contextmenu", this._onCgTileMenu.bind(this));
+    // pointer 自绘拖放：图块的拖动交给 GridDnD（幽灵块 / 落点预览 / R 旋转），
+    // 格子上的原生 drop 监听保留不动——侧边栏、合集包拖进来仍走原生 DnD，
+    // GridDnD 松手时也是合成一个原生 drop 事件投给格子，复用同一套转移逻辑。
+    const cgRoot = html.find(".cg-wrap")[0];
+    if (cgRoot && this.item.type === "container") {
+      this._registerContainerWatch();
+      GridDnD.register(cgRoot, {
+        key:        `container:${this.item.uuid}`,
+        cols:       this.item.system.gridSize?.width  ?? 3,
+        rows:       this.item.system.gridSize?.height ?? 3,
+        // 容器可能挂在营地等"只读"Actor 上：写操作会转交 GM 代执行，
+        // 所以只要有在线 GM 就允许拖动，不能拿 isEditable 一票否决
+        editable:   () => this.isEditable || _hasActiveGM(),
+        placements: () => this.item.system.contents ?? [],
+        lockedSet:  () => makeLockedSet(this.item.system.lockedCells ?? []),
+        payloadFor: (tile) => {
+          const idx = parseInt(tile.dataset.placementIdx ?? -1);
+          const p   = this.item.system.contents?.[idx];
+          if (!p) return null;
+          const payload = {
+            type: "Item",
+            x: p.x, y: p.y, w: p.w ?? 1, h: p.h ?? 1,
+            placementIdx: idx,
+            fromContainer: {
+              isWorldContainer: !this.item.parent,
+              actorId:          this.item.parent?.id ?? null,
+              containerId:      this.item.id,
+              placementIdx:     idx,
+              offX: 0, offY: 0,
+            },
+          };
+          if (p.uuid)     payload.uuid     = p.uuid;
+          if (p.itemData) payload.itemData = p.itemData;
+          return payload;
+        },
+      });
+    }
+
+  }
+
   /* ─── 事件绑定 ──────────────────────────────────────────────────────────── */
 
   activateListeners(html) {
@@ -419,6 +475,9 @@ export class LimbusItemSheet extends ItemSheet {
     html.find(".item-use-btn").on("click",    this._onUseItem.bind(this));
 
     // ── 编辑锁切换 ────────────────────────────────────────────────────────
+    // 容器网格：放在只读段里绑定——权限判定交给写入时的 GM 代执行通道
+    this._bindContainerGrid(html);
+
     html.find(".sheet-lock-icon").on("click", this._onToggleLock.bind(this));
     html.find(".ego-form-toggle").on("click", this._onEgoFormToggle.bind(this));
 
@@ -513,52 +572,6 @@ export class LimbusItemSheet extends ItemSheet {
 
     // ── 容器搜索 ──────────────────────────────────────────────────────────
     html.find(".container-search").on("input", this._onContainerSearch.bind(this));
-
-    // ── 容器网格（新）─────────────────────────────────────────────────────
-    html.find(".cg-cell").on("dragover",  this._onCgCellDragOver.bind(this));
-    html.find(".cg-cell").on("dragleave", this._onCgCellDragLeave.bind(this));
-    html.find(".cg-cell").on("drop",      this._onCgCellDrop.bind(this));
-    html.find(".cg-cell").on("click",     this._onCgCellClick.bind(this));
-    html.find(".cg-item-tile").on("dragstart",   this._onCgTileDragStart.bind(this));
-    html.find(".cg-item-tile").on("contextmenu", this._onCgTileMenu.bind(this));
-    html.find(".cg-rotate-btn").on("click",      this._onCgTileRotate.bind(this));
-    // pointer 自绘拖放：图块的拖动交给 GridDnD（幽灵块 / 落点预览 / R 旋转），
-    // 格子上的原生 drop 监听保留不动——侧边栏、合集包拖进来仍走原生 DnD，
-    // GridDnD 松手时也是合成一个原生 drop 事件投给格子，复用同一套转移逻辑。
-    const cgRoot = html.find(".cg-wrap")[0];
-    if (cgRoot && this.item.type === "container") {
-      this._registerContainerWatch();
-      GridDnD.register(cgRoot, {
-        key:        `container:${this.item.uuid}`,
-        cols:       this.item.system.gridSize?.width  ?? 3,
-        rows:       this.item.system.gridSize?.height ?? 3,
-        // 容器可能挂在营地等"只读"Actor 上：写操作会转交 GM 代执行，
-        // 所以只要有在线 GM 就允许拖动，不能拿 isEditable 一票否决
-        editable:   () => this.isEditable || _hasActiveGM(),
-        placements: () => this.item.system.contents ?? [],
-        lockedSet:  () => makeLockedSet(this.item.system.lockedCells ?? []),
-        payloadFor: (tile) => {
-          const idx = parseInt(tile.dataset.placementIdx ?? -1);
-          const p   = this.item.system.contents?.[idx];
-          if (!p) return null;
-          const payload = {
-            type: "Item",
-            x: p.x, y: p.y, w: p.w ?? 1, h: p.h ?? 1,
-            placementIdx: idx,
-            fromContainer: {
-              isWorldContainer: !this.item.parent,
-              actorId:          this.item.parent?.id ?? null,
-              containerId:      this.item.id,
-              placementIdx:     idx,
-              offX: 0, offY: 0,
-            },
-          };
-          if (p.uuid)     payload.uuid     = p.uuid;
-          if (p.itemData) payload.itemData = p.itemData;
-          return payload;
-        },
-      });
-    }
 
     // 解锁状态下，空格子显示 pointer 光标（提示可点击锁定）
     if (!this.isLocked && this.item.type === "container") {
@@ -1753,6 +1766,9 @@ export class LimbusItemSheet extends ItemSheet {
             const newData = srcItem.toObject();
             delete newData._id;
             await Item.create(newData, { parent: character });
+            // 源物品属于别人（营地/世界容器）：搬走就得删掉原件，
+            // 否则会凭空多出一份。没权限时交给在线 GM 代删。
+            await ClashManager._safeDocDelete(srcItem);
           }
         }
         contents.splice(idx, 1);
