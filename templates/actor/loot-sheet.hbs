@@ -75,7 +75,6 @@
               <span class="cg-tile-name">{{item.name}}</span>
               {{#if item.quantity}}<span class="cg-tile-qty">×{{item.quantity}}</span>{{/if}}
               {{#if (and ../isGM ../editUnlocked)}}
-                <button type="button" class="cg-rotate-btn" data-placement-idx="{{idx}}" title="旋转">↻</button>
               {{/if}}
             </div>
           {{/each}}
