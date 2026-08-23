@@ -1119,6 +1119,12 @@ Hooks.once("init", () => {
   /** 逻辑非（子表达式用：(not a)） */
   Handlebars.registerHelper("not", (a) => !a);
 
+  /** 逻辑或：任意个参数，任一为真即真（末位的 options 对象自动忽略） */
+  Handlebars.registerHelper("or", (...args) => {
+    args.pop();                       // Handlebars 总会在末尾塞一个 options
+    return args.some(Boolean);
+  });
+
   /** 分割字符串为数组（SafeString 安全）*/
   Handlebars.registerHelper("split", (str, sep) => {
     // tags 这类字段有的类型存数组、有的存 "标签1/标签2" 字符串，两种都要认——

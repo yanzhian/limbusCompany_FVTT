@@ -57,7 +57,9 @@
           <span class="container-avail-unit">格可用</span>
         </div>
 
-        {{!-- 存放限制：类型 AND 分类，留空 = 不限制（多个用 / 分隔） --}}
+        {{!-- 存放限制：类型 AND 分类，留空 = 不限制（多个用 / 分隔）
+              锁定态下两条都为空时整行隐藏，不占版面 --}}
+        {{#if (or (and isEditable (not isLocked)) system.allowTypes system.allowCategories)}}
         <div class="container-limit-row">
           <span class="container-limit-label">存放限制</span>
           {{#if (and isEditable (not isLocked))}}
@@ -70,11 +72,9 @@
           {{else}}
             {{#if system.allowTypes}}<span class="container-limit-badge">{{system.allowTypes}}</span>{{/if}}
             {{#if system.allowCategories}}<span class="container-limit-badge">{{system.allowCategories}}</span>{{/if}}
-            {{#unless system.allowTypes}}{{#unless system.allowCategories}}
-              <span class="container-limit-none">无</span>
-            {{/unless}}{{/unless}}
           {{/if}}
         </div>
+        {{/if}}
 
       </div>
     </div>
