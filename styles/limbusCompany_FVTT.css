@@ -7595,6 +7595,42 @@ input.item-piles-quantity {
   color:        #FFD700;
   flex-shrink:  0;
 }
+/* 图标按钮（配方的隐藏/编辑/删除、面板标题栏的 +）
+   原先没有任何样式，直接吃 Foundry 的默认 button：一片黑底，还会被
+   flex 容器拉长（标题栏那个 + 尤其明显）。这里统一成小方块图标钮。 */
+.limbuscompany .icon-btn {
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  min-width: 0;
+  padding: 0;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(95,62,33,.35);
+  border: 1px solid var(--border-gold);
+  border-radius: 2px;
+  color: var(--text-main);
+  font-size: .72rem;
+  cursor: pointer;
+  transition: background .15s, color .15s, border-color .15s;
+}
+.limbuscompany .icon-btn:hover {
+  background: rgba(229,186,37,.25);
+  border-color: var(--gold-active);
+  color: var(--gold-active);
+}
+.limbuscompany .icon-btn > i { margin: 0; }
+/* 删除键单独给个警示色 */
+.limbuscompany .camp-recipe-delete:hover {
+  background: rgba(184,68,68,.3);
+  border-color: #B84444;
+  color: #E8A0A0;
+}
+/* 面板标题栏里的 + 靠右，不跟着标题一起铺满 */
+.limbuscompany .camp-panel-header .icon-btn { margin-left: auto; }
+
 .camp-recipe-btns {
   display:     flex;
   align-items: center;
