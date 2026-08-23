@@ -1903,10 +1903,19 @@ const TITLE_CARD_Z = 99990;
 
 /** 定位规则：贴在触发元素左侧，不够则右侧（与既有各处 hover 定位逻辑一致） */
 function _positionTitleCard(card, anchorEl) {
-  const rect  = anchorEl.getBoundingClientRect();
+  // 网格里的物品图块：贴**整扇窗口**的外侧，而不是图块自己的左边——
+  // 否则卡片会盖在网格上，正好挡住旁边那些格子，拖放时非常碍事。
+  const gridWrap = anchorEl.closest?.(".cg-wrap");
+  const winEl    = gridWrap ? anchorEl.closest(".app, .window-app, .application") : null;
+  const rect     = (winEl ?? anchorEl).getBoundingClientRect();
+
   const cardW = 280, cardH = 500;
   let left = rect.left - cardW - 8;
   if (left < 8) left = rect.right + 8;
+  // 右侧也放不下（窗口贴着屏幕右缘）时，夹回可视区内
+  if (left + cardW > window.innerWidth - 8) {
+    left = Math.max(8, window.innerWidth - cardW - 8);
+  }
   const top = Math.max(8, Math.min(rect.top, window.innerHeight - cardH - 8));
 
   // 层级：
