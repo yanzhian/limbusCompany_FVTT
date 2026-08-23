@@ -282,9 +282,11 @@ function _onPointerUp(ev) {
 
   // 把落点换算成目标格子元素，合成一个原生 drop 事件投过去——
   // 转移规则一律沿用各 Sheet 既有的 drop 处理器，本模块不重复实现。
+  // 投给**落点左上角**那个格子，而不是光标底下那个：payload 里的抓取偏移
+  // 统一写死为 0，接收端 `nx = targetX - offX` 才会正好等于 hover.x。
+  // （抓大件物品时按住的多半是中间某一格，投错格子就会整体右下偏移。）
   const cell = hover.root.querySelector(
-    `.cg-cell[data-x="${hover.x + drag.offX}"][data-y="${hover.y + drag.offY}"]`)
-    ?? hover.root.querySelector(`.cg-cell[data-x="${hover.x}"][data-y="${hover.y}"]`);
+    `.cg-cell[data-x="${hover.x}"][data-y="${hover.y}"]`);
   if (!cell) return;
 
   // dropX/dropY = 已经算好抓取偏移与旋转的落点左上角。
