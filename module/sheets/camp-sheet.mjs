@@ -12,6 +12,7 @@
  *         （玩家操作通过 socket 委托 GM 执行）
  */
 import { getBagItems, packBagGrid } from "../helpers/bag-grid.mjs";
+import { buildPlacementGrid, canPlace, autoPlace } from "../helpers/grid-layout.mjs";
 import { buildItemTitleCard, closeTitleCardUnlessLocked, toggleTitleCardLock } from "./item-sheet.mjs";
 
 export class LimbusCampSheet extends ActorSheet {
@@ -144,105 +145,41 @@ export class LimbusCampSheet extends ActorSheet {
     return ctx;
   }
 
-  /* ─── 仓库网格构建（与容器 _buildContainerGrid 同逻辑） ─────────────── */
+  /* ─── 仓库网格构建（算法见 helpers/grid-layout.mjs，与容器共用） ────── */
 
   async _buildWarehouseGrid(placements, cols, rows) {
-    const placedItems     = [];
-    const occupied        = new Set(); // "x,y"
-    const q               = (this._warehouseSearch ?? "").toLowerCase();
-    const orphanedIndices = [];
-
-    for (let idx = 0; idx < placements.length; idx++) {
-      const p    = placements[idx];
-      let   item = null;
-      if (p?.uuid) item = await fromUuid(p.uuid).catch(() => null);
-
-      const w = Math.max(1, p.w ?? 1);
-      const h = Math.max(1, p.h ?? 1);
-      const inBounds = p.x >= 0 && p.y >= 0 && p.x + w <= cols && p.y + h <= rows;
-
-      if (!item) {
-        // 孤儿条目（物品已被删除但放置记录残留）：
-        // 仍然标记格子为占用，保持视觉与碰撞一致；同时收集待清理索引。
-        if (inBounds) {
-          for (let dy = 0; dy < h; dy++)
-            for (let dx = 0; dx < w; dx++)
-              occupied.add(`${p.x + dx},${p.y + dy}`);
-        }
-        orphanedIndices.push(idx);
-        continue;
-      }
-
-      if (!inBounds) continue;
-
-      for (let dy = 0; dy < h; dy++)
-        for (let dx = 0; dx < w; dx++)
-          occupied.add(`${p.x + dx},${p.y + dy}`);
-
-      const show = !q || item.name.toLowerCase().includes(q);
-      placedItems.push({
-        idx,
-        uuid:    p.uuid,
-        x: p.x, y: p.y, w, h,
-        col:     p.x + 1,
-        row:     p.y + 1,
-        rotated: p.rotated ?? false,
-        show,
-        isContainer: item.type === "container",
-        item: { _id: item.id, name: item.name, img: item.img,
-                quantity: item.system?.quantity ?? 1 },
-      });
-    }
+    const { placedItems, allCells, orphanedIndices } = await buildPlacementGrid(placements, {
+      cols, rows,
+      search: this._warehouseSearch ?? "",
+      // 孤儿条目（物品已删除但放置记录残留）仍标记占用，保持视觉与碰撞一致
+      keepOrphanOccupancy: true,
+    });
 
     // GM 端：延迟自动清理孤儿条目（defer 出当前 getData 调用栈，避免重入渲染循环）
     if (orphanedIndices.length > 0 && game.user.isGM) {
+      const orphanSet = new Set(orphanedIndices);
       setTimeout(async () => {
         const cur     = this.actor.system.warehouseContents ?? [];
-        const cleaned = cur.filter((_, i) => !orphanedIndices.includes(i));
+        const cleaned = cur.filter((_, i) => !orphanSet.has(i));
         await this.actor.update({ "system.warehouseContents": cleaned });
       }, 0);
     }
 
-    const allCells = [];
-    for (let r = 0; r < rows; r++) {
-      for (let c = 0; c < cols; c++) {
-        allCells.push({ x: c, y: r, col: c + 1, row: r + 1,
-          occupied: occupied.has(`${c},${r}`) });
-      }
-    }
     return { placedItems, allCells };
   }
 
   /* ─── 碰撞检测 ──────────────────────────────────────────────────────── */
 
   _whCanPlace(x, y, w, h, cols, rows, excludeIdx = -1) {
-    if (x < 0 || y < 0 || x + w > cols || y + h > rows) return false;
-    const contents = this.actor.system.warehouseContents ?? [];
-    for (let i = 0; i < contents.length; i++) {
-      if (i === excludeIdx) continue;
-      const p = contents[i];
-      const pw = p.w ?? 1, ph = p.h ?? 1;
-      for (let dy = 0; dy < h; dy++)
-        for (let dx = 0; dx < w; dx++)
-          if (p.x <= x + dx && x + dx < p.x + pw &&
-              p.y <= y + dy && y + dy < p.y + ph) return false;
-    }
-    return true;
+    return canPlace(this.actor.system.warehouseContents ?? [], x, y, w, h, cols, rows, { excludeIdx });
   }
 
   _whAutoPlace(w, h) {
-    const sys  = this.actor.system;
-    const cols = sys.warehouseSize?.width  ?? 7;
-    const rows = sys.warehouseSize?.height ?? 7;
-    for (let y = 0; y < rows; y++) {
-      for (let x = 0; x < cols; x++) {
-        if (this._whCanPlace(x, y, w, h, cols, rows))
-          return { x, y, w, h, rotated: false };
-        if (w !== h && this._whCanPlace(x, y, h, w, cols, rows))
-          return { x, y, w: h, h: w, rotated: true };
-      }
-    }
-    return null;
+    const sys = this.actor.system;
+    return autoPlace(
+      sys.warehouseContents ?? [], w, h,
+      sys.warehouseSize?.width ?? 7, sys.warehouseSize?.height ?? 7
+    );
   }
 
   /* ─── 配方检查 ──────────────────────────────────────────────────────── */

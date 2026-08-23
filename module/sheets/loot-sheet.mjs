@@ -13,6 +13,7 @@
  *                lootMoveItem / lootRevealItem
  */
 import { buildItemTitleCard, closeTitleCardUnlessLocked, toggleTitleCardLock } from "./item-sheet.mjs";
+import { buildPlacementGrid, canPlace, autoPlace } from "../helpers/grid-layout.mjs";
 
 export class LimbusLootSheet extends ActorSheet {
 
@@ -150,70 +151,37 @@ export class LimbusLootSheet extends ActorSheet {
     return ctx;
   }
 
-  /* ─── 网格构建 ─────────────────────────────────────────────────────────── */
+  /* ─── 网格构建（算法见 helpers/grid-layout.mjs，与容器 / 仓库共用） ──── */
 
   async _buildGrid(placements, cols, rows) {
-    const placedItems     = [];
-    const occupied        = new Set();
-    const orphanedIndices = [];
-
-    for (let idx = 0; idx < placements.length; idx++) {
-      const p    = placements[idx];
-      let   item = null;
-      if (p?.uuid) item = await fromUuid(p.uuid).catch(() => null);
-
-      const w        = Math.max(1, p.w ?? 1);
-      const h        = Math.max(1, p.h ?? 1);
-      const inBounds = p.x >= 0 && p.y >= 0 && p.x + w <= cols && p.y + h <= rows;
-
-      if (!item) {
-        if (inBounds) {
-          for (let dy = 0; dy < h; dy++)
-            for (let dx = 0; dx < w; dx++)
-              occupied.add(`${p.x + dx},${p.y + dy}`);
-        }
-        orphanedIndices.push(idx);
-        continue;
-      }
-      if (!inBounds) continue;
-
-      for (let dy = 0; dy < h; dy++)
-        for (let dx = 0; dx < w; dx++)
-          occupied.add(`${p.x + dx},${p.y + dy}`);
-
+    const { placedItems, allCells, orphanedIndices } = await buildPlacementGrid(placements, {
+      cols, rows,
+      // 孤儿条目仍占格，保持视觉与碰撞一致
+      keepOrphanOccupancy: true,
       // 玩家视角：未揭晓的物品遮蔽名称/图标/数量（剪影 + ???）
-      const revealed = p.revealed ?? false;
-      const masked   = !revealed && !game.user.isGM;
-      placedItems.push({
-        uuid: p.uuid, idx,
-        item: masked
+      decorate: ({ entry, placement, item }) => {
+        const revealed = placement.revealed ?? false;
+        const masked   = !revealed && !game.user.isGM;
+        entry.revealed = revealed;
+        entry.masked   = masked;
+        entry.rotated  = placement.rotated && entry.w !== entry.h;
+        entry.item     = masked
           ? { id: item.id, name: "???", img: "icons/svg/mystery-man.svg", quantity: null }
           : { id: item.id, name: item.name, img: item.img,
-              quantity: item.system?.quantity ?? null },
-        x: p.x, y: p.y, w, h,
-        col: p.x + 1, row: p.y + 1,
-        rotated: p.rotated && w !== h,
-        revealed,
-        masked,
-        show: true,
-      });
-    }
+              quantity: item.system?.quantity ?? null };
+      },
+    });
 
     // 孤儿条目自动清理（GM 端延迟执行，避免 getData 重入）
     if (orphanedIndices.length > 0 && game.user.isGM) {
+      const orphanSet = new Set(orphanedIndices);
       setTimeout(async () => {
         const fresh   = foundry.utils.deepClone(this.actor.system.lootContents ?? []);
-        const cleaned = fresh.filter((_, i) => !orphanedIndices.includes(i));
+        const cleaned = fresh.filter((_, i) => !orphanSet.has(i));
         if (cleaned.length !== fresh.length)
           await this.actor.update({ "system.lootContents": cleaned });
       }, 0);
     }
-
-    const allCells = [];
-    for (let r = 0; r < rows; r++)
-      for (let c = 0; c < cols; c++)
-        allCells.push({ x: c, y: r, col: c + 1, row: r + 1,
-                        occupied: occupied.has(`${c},${r}`) });
 
     return { placedItems, allCells };
   }
@@ -221,32 +189,15 @@ export class LimbusLootSheet extends ActorSheet {
   /* ─── 放置检测辅助 ─────────────────────────────────────────────────────── */
 
   _canPlace(x, y, w, h, cols, rows, excludeIdx = -1) {
-    if (x < 0 || y < 0 || x + w > cols || y + h > rows) return false;
-    const contents = this.actor.system.lootContents ?? [];
-    for (let i = 0; i < contents.length; i++) {
-      if (i === excludeIdx) continue;
-      const p = contents[i];
-      const pw = p.w ?? 1, ph = p.h ?? 1;
-      for (let dy = 0; dy < h; dy++)
-        for (let dx = 0; dx < w; dx++)
-          if (p.x <= x + dx && x + dx < p.x + pw &&
-              p.y <= y + dy && y + dy < p.y + ph) return false;
-    }
-    return true;
+    return canPlace(this.actor.system.lootContents ?? [], x, y, w, h, cols, rows, { excludeIdx });
   }
 
   _autoPlace(w, h) {
-    const sys  = this.actor.system;
-    const cols = sys.gridSize?.width  ?? 5;
-    const rows = sys.gridSize?.height ?? 5;
-    for (let y = 0; y < rows; y++)
-      for (let x = 0; x < cols; x++) {
-        if (this._canPlace(x, y, w, h, cols, rows))
-          return { x, y, w, h, rotated: false };
-        if (w !== h && this._canPlace(x, y, h, w, cols, rows))
-          return { x, y, w: h, h: w, rotated: true };
-      }
-    return null;
+    const sys = this.actor.system;
+    return autoPlace(
+      sys.lootContents ?? [], w, h,
+      sys.gridSize?.width ?? 5, sys.gridSize?.height ?? 5
+    );
   }
 
   /* ─── activateListeners ────────────────────────────────────────────────── */

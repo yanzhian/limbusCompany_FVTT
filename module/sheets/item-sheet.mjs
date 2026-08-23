@@ -14,6 +14,7 @@ import { ClashManager } from "../helpers/clash.mjs";
 import { SKILLBOOK_MAX_SLOTS } from "../documents/item.mjs";
 import { CustomBuffRegistry, normalizeBuffType } from "../helpers/custom-buffs.mjs";
 import { linkifyHtml } from "../helpers/linkify.mjs";
+import { buildPlacementGrid, canPlace, autoPlace, makeLockedSet } from "../helpers/grid-layout.mjs";
 
 /** 背景的等级物品不收这三类（背景由向导指定、恐慌卡走 panicSlots、技能走技能书） */
 const BG_ITEM_BLOCKED_TYPES = ["background", "panic", "skill"];
@@ -283,54 +284,16 @@ export class LimbusItemSheet extends ItemSheet {
   /* ─── 容器网格构建 ──────────────────────────────────────────────────────── */
 
   /**
-   * 将 contents 放置记录解析为模板所需数据。
-   * @returns {{ placedItems: Array, allCells: Array }}
+   * 将 contents 放置记录解析为模板所需数据（算法见 helpers/grid-layout.mjs）。
+   * @returns {Promise<{ placedItems: Array, allCells: Array }>}
    */
   async _buildContainerGrid(placements, cols, rows, lockedCells = []) {
-    const placedItems = [];
-    const occupied    = new Set(); // "x,y"
-    const lockedSet   = new Set(lockedCells.map(c => `${c.x},${c.y}`));
-
-    for (let idx = 0; idx < placements.length; idx++) {
-      const p = placements[idx];
-      // 世界金库物品：无 UUID，改用 itemData 显示
-      let item = null;
-      if (p?.uuid) {
-        item = await fromUuid(p.uuid).catch(() => null);
-      } else if (p?.itemData) {
-        item = { id: null, name: p.itemData.name ?? "未知物品", img: p.itemData.img ?? "icons/svg/item-bag.svg" };
-      }
-      if (!item) continue;
-
-      const w = Math.max(1, p.w ?? 1);
-      const h = Math.max(1, p.h ?? 1);
-      if (p.x + w > cols || p.y + h > rows || p.x < 0 || p.y < 0) continue;
-
-      for (let dy = 0; dy < h; dy++)
-        for (let dx = 0; dx < w; dx++)
-          occupied.add(`${p.x + dx},${p.y + dy}`);
-
-      const q = (this._containerSearch ?? "").toLowerCase();
-      const show = !q || item.name.toLowerCase().includes(q);
-
-      placedItems.push({
-        idx, uuid: p.uuid ?? "",
-        x: p.x, y: p.y, w, h,
-        col: p.x + 1, row: p.y + 1,   // CSS grid 1-indexed
-        rotated: p.rotated ?? false,
-        show,
-        item: { _id: item.id, name: item.name, img: item.img },
-      });
-    }
-
-    const allCells = [];
-    for (let r = 0; r < rows; r++) {
-      for (let c = 0; c < cols; c++) {
-        allCells.push({ x: c, y: r, col: c + 1, row: r + 1,
-          occupied: occupied.has(`${c},${r}`),
-          locked: lockedSet.has(`${c},${r}`) });
-      }
-    }
+    const { placedItems, allCells } = await buildPlacementGrid(placements, {
+      cols, rows, lockedCells,
+      search: this._containerSearch ?? "",
+      // 容器内孤儿记录直接忽略（不占格），与既有行为一致
+      keepOrphanOccupancy: false,
+    });
     return { placedItems, allCells };
   }
 
@@ -386,44 +349,24 @@ export class LimbusItemSheet extends ItemSheet {
 
   /**
    * 自动扫描容器，找到第一个可放入的位置。
-   * 按行优先顺序扫描：先以原始尺寸尝试，找不到则以旋转尺寸再次扫描。
    * @param {number} w @param {number} h @param {number} [excludeIdx=-1]
    * @returns {{ x:number, y:number, w:number, h:number, rotated:boolean }|null}
    */
   _cgAutoPlace(w, h, excludeIdx = -1) {
-    const sys  = this.item.system;
-    const cols = sys.gridSize?.width  ?? 3;
-    const rows = sys.gridSize?.height ?? 3;
-    for (let y = 0; y < rows; y++) {
-      for (let x = 0; x < cols; x++) {
-        if (this._cgCanPlace(x, y, w, h, cols, rows, excludeIdx))
-          return { x, y, w, h, rotated: false };
-        if (w !== h && this._cgCanPlace(x, y, h, w, cols, rows, excludeIdx))
-          return { x, y, w: h, h: w, rotated: true };
-      }
-    }
-    return null;
+    const sys = this.item.system;
+    return autoPlace(
+      sys.contents ?? [], w, h,
+      sys.gridSize?.width ?? 3, sys.gridSize?.height ?? 3,
+      { excludeIdx, lockedSet: makeLockedSet(sys.lockedCells ?? []) }
+    );
   }
 
   /** 同步碰撞检测（使用已持久化的 w/h，同时检查锁定格）。 */
   _cgCanPlace(x, y, w, h, cols, rows, excludeIdx = -1) {
-    if (x < 0 || y < 0 || x + w > cols || y + h > rows) return false;
-    const contents    = this.item.system.contents ?? [];
-    const lockedCells = this.item.system.lockedCells ?? [];
-    const lockedSet   = new Set(lockedCells.map(c => `${c.x},${c.y}`));
-    // 检查是否覆盖锁定格
-    for (let dy = 0; dy < h; dy++)
-      for (let dx = 0; dx < w; dx++)
-        if (lockedSet.has(`${x + dx},${y + dy}`)) return false;
-    // 检查与已有物品的碰撞
-    for (let i = 0; i < contents.length; i++) {
-      if (i === excludeIdx) continue;
-      const p = contents[i];
-      const pw = p.w ?? 1, ph = p.h ?? 1;
-      const noOverlap = x + w <= p.x || p.x + pw <= x || y + h <= p.y || p.y + ph <= y;
-      if (!noOverlap) return false;
-    }
-    return true;
+    const sys = this.item.system;
+    return canPlace(sys.contents ?? [], x, y, w, h, cols, rows, {
+      excludeIdx, lockedSet: makeLockedSet(sys.lockedCells ?? []),
+    });
   }
 
   /* ─── 事件绑定 ──────────────────────────────────────────────────────────── */

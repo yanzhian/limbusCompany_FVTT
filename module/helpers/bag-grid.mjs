@@ -6,6 +6,8 @@
  * 供 camp-sheet（营地左栏角色面板）与 actor-sheet（物品 Tab 网格视图）共用。
  */
 
+import { autoPlace, buildCells, markOccupied } from "./grid-layout.mjs";
+
 /** 计入背包容量的物品类型 */
 export const BAG_ITEM_TYPES = ["equipment", "consumable", "material", "container", "skillbook", "background"];
 
@@ -29,48 +31,37 @@ export function getBagItems(actor) {
   );
 }
 
+/** 首适应扫描的行数安全上限 */
+const PACK_ROW_LIMIT = 200;
+
 /**
  * 将物品首适应打包进 cols 列网格。
+ * 放置算法复用 helpers/grid-layout.mjs（与容器 / 营地仓库同一套碰撞与旋转规则），
+ * 区别是背包没有持久化坐标，行数不设上限、每次渲染重新打包。
  * @param {Item[]} items
  * @param {number} cols     列数（默认 6）
  * @param {number} minRows  最少行数（默认 6）
- * @returns {{ tiles: object[], rows: number, usedCells: number }}
- *   tiles: { id, uuid, name, img, quantity, x, y, w, h, col, row }
+ * @returns {{ tiles: object[], rows: number, cells: object[], usedCells: number }}
+ *   tiles: { id, uuid, name, img, quantity, isContainer, x, y, w, h, col, row }
  */
 export function packBagGrid(items, cols = 6, minRows = 6) {
-  const occupied = new Set(); // "x,y"
-  const tiles    = [];
-  let   maxRow   = 0;
-
-  const fits = (x, y, w, h) => {
-    if (x + w > cols) return false;
-    for (let dy = 0; dy < h; dy++)
-      for (let dx = 0; dx < w; dx++)
-        if (occupied.has(`${x + dx},${y + dy}`)) return false;
-    return true;
-  };
+  const placements = [];   // { x, y, w, h } —— 供 autoPlace 做碰撞检测
+  const tiles      = [];
+  const occupied   = new Set();
+  let   maxRow     = 0;
 
   for (const item of items) {
     const cap = item.system?.capacity ?? {};
-    let w = Math.max(1, Math.min(cols, cap.w ?? 1));
-    let h = Math.max(1, cap.h ?? 1);
+    const w = Math.max(1, Math.min(cols, cap.w ?? 1));
+    const h = Math.max(1, cap.h ?? 1);
 
-    // 首适应扫描（行数不设上限，放不下就往下扩展）
-    let place = null;
-    for (let y = 0; place === null; y++) {
-      for (let x = 0; x < cols; x++) {
-        if (fits(x, y, w, h))          { place = { x, y, w, h };          break; }
-        if (w !== h && fits(x, y, h, w)) { place = { x, y, w: h, h: w }; break; }
-      }
-      if (y > 200) break; // 安全上限
-    }
+    const place = autoPlace(placements, w, h, cols, PACK_ROW_LIMIT);
     if (!place) continue;
 
-    for (let dy = 0; dy < place.h; dy++)
-      for (let dx = 0; dx < place.w; dx++)
-        occupied.add(`${place.x + dx},${place.y + dy}`);
-
+    placements.push(place);
+    markOccupied(occupied, place.x, place.y, place.w, place.h);
     maxRow = Math.max(maxRow, place.y + place.h);
+
     tiles.push({
       id:          item.id,
       uuid:        item.uuid,
@@ -84,12 +75,5 @@ export function packBagGrid(items, cols = 6, minRows = 6) {
   }
 
   const rows = Math.max(minRows, maxRow);
-
-  // 背景格
-  const cells = [];
-  for (let y = 0; y < rows; y++)
-    for (let x = 0; x < cols; x++)
-      cells.push({ x, y, col: x + 1, row: y + 1, occupied: occupied.has(`${x},${y}`) });
-
-  return { tiles, rows, cells, usedCells: occupied.size };
+  return { tiles, rows, cells: buildCells(cols, rows, occupied), usedCells: occupied.size };
 }
