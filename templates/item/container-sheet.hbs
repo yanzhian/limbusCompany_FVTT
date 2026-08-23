@@ -55,6 +55,21 @@
           <span class="container-avail-sep">/</span>
           <span class="container-avail-max">{{containerMax}}</span>
           <span class="container-avail-unit">格可用</span>
+
+          {{!-- 存放限制：类型 AND 分类，留空 = 不限制（多个用 / 分隔） --}}
+          <span class="container-limit-sep">·</span>
+          {{#if (and isEditable (not isLocked))}}
+            <input type="text" name="system.allowTypes" value="{{system.allowTypes}}"
+                   class="container-limit-input" placeholder="类型" title="存放限制·类型：留空=不限制，多个用 / 分隔（消耗品/材料）"/>
+            <input type="text" name="system.allowCategories" value="{{system.allowCategories}}"
+                   class="container-limit-input" placeholder="分类" title="存放限制·分类：留空=不限制，多个用 / 分隔（医疗/食材）"/>
+          {{else}}
+            {{#if system.allowTypes}}<span class="container-limit-badge">类型：{{system.allowTypes}}</span>{{/if}}
+            {{#if system.allowCategories}}<span class="container-limit-badge">分类：{{system.allowCategories}}</span>{{/if}}
+            {{#unless system.allowTypes}}{{#unless system.allowCategories}}
+              <span class="container-limit-none">存放不限</span>
+            {{/unless}}{{/unless}}
+          {{/if}}
         </div>
 
       </div>
@@ -89,27 +104,6 @@
           <span class="cost-display">{{system.cost}}</span>
         {{/if}}
       </div>
-    </div>
-
-    {{!-- ── 存放限制（类型 AND 分类，留空 = 不限制）───────────────── --}}
-    <div class="container-limit-row">
-      <span class="container-limit-label" title="留空 = 不限制；多个用 / 分隔；两条同时满足才收">存放限制</span>
-      {{#if (and isEditable (not isLocked))}}
-        <input type="text" name="system.allowTypes" value="{{system.allowTypes}}"
-               class="container-limit-input" placeholder="类型（消耗品/材料）"/>
-        <input type="text" name="system.allowCategories" value="{{system.allowCategories}}"
-               class="container-limit-input" placeholder="分类（医疗/食材）"/>
-      {{else}}
-        {{#if system.allowTypes}}
-          <span class="container-limit-badge">类型：{{system.allowTypes}}</span>
-        {{/if}}
-        {{#if system.allowCategories}}
-          <span class="container-limit-badge">分类：{{system.allowCategories}}</span>
-        {{/if}}
-        {{#unless system.allowTypes}}{{#unless system.allowCategories}}
-          <span class="container-limit-none">无限制</span>
-        {{/unless}}{{/unless}}
-      {{/if}}
     </div>
 
     {{!-- ── 分割线 ──────────────────────────────────────────────────── --}}

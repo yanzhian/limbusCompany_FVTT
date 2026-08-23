@@ -4001,6 +4001,21 @@ body.game .limbuscompany.app img {
 .limbuscompany .container-avail-max { color: var(--text-main); }
 .limbuscompany .container-avail-sep { color: var(--text-dim); }
 
+/* 存放限制：并入剩余容量行，字号与颜色一律继承该行 */
+.limbuscompany .container-avail-row { flex-wrap: wrap; }
+.limbuscompany .container-limit-sep { color: var(--text-dim); }
+.limbuscompany .container-limit-input {
+  width: 78px;
+  background: rgba(0,0,0,.25);
+  border: 1px solid var(--border-gold);
+  border-radius: 2px;
+  padding: 0 4px;
+  font-size: inherit;
+  color: inherit;
+}
+.limbuscompany .container-limit-badge { color: inherit; }
+.limbuscompany .container-limit-none  { color: var(--text-dim); font-style: italic; }
+
 /* ═══ 容器网格（Diablo 风格二层布局）═══════════════════════════════ */
 .limbuscompany .cg-wrap {
   --cg-cell: 44px;
