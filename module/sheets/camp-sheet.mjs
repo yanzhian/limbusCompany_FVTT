@@ -13,6 +13,7 @@
  */
 import { getBagItems, packBagGrid } from "../helpers/bag-grid.mjs";
 import { buildPlacementGrid, canPlace, autoPlace } from "../helpers/grid-layout.mjs";
+import { GridDnD } from "../helpers/grid-dnd.mjs";
 import { buildItemTitleCard, closeTitleCardUnlessLocked, toggleTitleCardLock } from "./item-sheet.mjs";
 
 export class LimbusCampSheet extends ActorSheet {
@@ -235,6 +236,34 @@ export class LimbusCampSheet extends ActorSheet {
 
     // 仓库图块：拖拽开始
     html.find(".camp-cg .cg-item-tile").on("dragstart", this._onCgTileDragStart.bind(this));
+    // pointer 自绘拖放：图块拖动交给 GridDnD（幽灵 / 落点预览 / R 旋转）；
+    // 格子上的原生 drop 监听保留——外部拖入与 GridDnD 合成的 drop 都由它接
+    const whRoot = html.find(".camp-cg")[0];
+    if (whRoot) {
+      GridDnD.register(whRoot, {
+        key:        `campWarehouse:${this.actor.uuid}`,
+        cols:       this.actor.system.warehouseSize?.width  ?? 7,
+        rows:       this.actor.system.warehouseSize?.height ?? 7,
+        editable:   () => this.isEditable,
+        placements: () => this.actor.system.warehouseContents ?? [],
+        payloadFor: (tile) => {
+          const idx = parseInt(tile.dataset.placementIdx ?? "-1");
+          const p   = this.actor.system.warehouseContents?.[idx];
+          if (idx < 0 || !p) return null;
+          return {
+            type: "Item",
+            uuid: tile.dataset.itemUuid ?? "",
+            x: p.x, y: p.y, w: p.w ?? 1, h: p.h ?? 1,
+            placementIdx: idx,
+            fromCampWarehouse: {
+              campActorId:  this.actor.id,
+              placementIdx: idx,
+              offX: 0, offY: 0,
+            },
+          };
+        },
+      });
+    }
     html.find(".camp-cg .cg-item-tile").on("mouseenter",  this._onCgTileHoverStart.bind(this));
     html.find(".camp-cg .cg-item-tile").on("mousedown", (ev) => {
       if (ev.button !== 1) return;
@@ -364,21 +393,27 @@ export class LimbusCampSheet extends ActorSheet {
     // ── 仓库内图块移动 ────────────────────────────────────────────────
     if (raw.type === "Item" && raw.fromCampWarehouse?.campActorId === this.actor.id) {
       const { placementIdx: idx, offX = 0, offY = 0 } = raw.fromCampWarehouse;
-      const nx = targetX - offX, ny = targetY - offY;
+      // GridDnD：拖动中按过 R —— 按旋转后的尺寸落地，抓取偏移随之作废
+      const rot = !!raw.rotatePending;
+      const nx  = rot ? targetX : targetX - offX;
+      const ny  = rot ? targetY : targetY - offY;
 
       if (game.user.isGM) {
         const contents = foundry.utils.deepClone(sys.warehouseContents ?? []);
         const p = contents[idx];
         if (!p) return;
-        if (!this._whCanPlace(nx, ny, p.w ?? 1, p.h ?? 1, cols, rows, idx))
+        const pw = rot ? (p.h ?? 1) : (p.w ?? 1);
+        const ph = rot ? (p.w ?? 1) : (p.h ?? 1);
+        if (!this._whCanPlace(nx, ny, pw, ph, cols, rows, idx))
           return void ui.notifications.warn("此位置无法放置（超出边界或与其他物品重叠）");
         p.x = nx; p.y = ny;
+        if (rot) { p.w = pw; p.h = ph; p.rotated = !p.rotated; }
         return void await this.actor.update({ "system.warehouseContents": contents });
       } else {
         // 玩家通过 socket 委托 GM 执行移动
         game.socket.emit("system.limbusCompany_FVTT", {
           type: "campMoveItem",
-          campActorId: this.actor.id, placementIdx: idx, nx, ny,
+          campActorId: this.actor.id, placementIdx: idx, nx, ny, rot,
           userId: game.user.id,
         });
         return;
@@ -1172,7 +1207,7 @@ export class LimbusCampSheet extends ActorSheet {
 
   /* ─── 静态：GM 端执行玩家移动仓库物品 ──────────────────────────────── */
 
-  static async _gmExecuteMoveItem({ campActorId, placementIdx, nx, ny }) {
+  static async _gmExecuteMoveItem({ campActorId, placementIdx, nx, ny, rot = false }) {
     const campActor = game.actors.get(campActorId);
     if (!campActor) return;
 
@@ -1183,7 +1218,9 @@ export class LimbusCampSheet extends ActorSheet {
     const p        = contents[placementIdx];
     if (!p) return;
 
-    const pw = p.w ?? 1, ph = p.h ?? 1;
+    // rot：玩家在 GridDnD 拖动中按过 R，落地时宽高对调
+    const pw = rot ? (p.h ?? 1) : (p.w ?? 1);
+    const ph = rot ? (p.w ?? 1) : (p.h ?? 1);
     if (nx < 0 || ny < 0 || nx + pw > cols || ny + ph > rows) {
       ui.notifications.warn("此位置超出仓库边界。"); return;
     }
@@ -1198,6 +1235,7 @@ export class LimbusCampSheet extends ActorSheet {
           }
     }
     p.x = nx; p.y = ny;
+    if (rot) { p.w = pw; p.h = ph; p.rotated = !p.rotated; }
     await campActor.update({ "system.warehouseContents": contents });
   }
 

@@ -14,6 +14,7 @@
  */
 import { buildItemTitleCard, closeTitleCardUnlessLocked, toggleTitleCardLock } from "./item-sheet.mjs";
 import { buildPlacementGrid, canPlace, autoPlace } from "../helpers/grid-layout.mjs";
+import { GridDnD } from "../helpers/grid-dnd.mjs";
 
 export class LimbusLootSheet extends ActorSheet {
 
@@ -222,6 +223,29 @@ export class LimbusLootSheet extends ActorSheet {
 
     // ── 图块拖拽（GM 解锁时或玩家均可拖动图块在内部移动） ────────────────
     html.find(".cg-item-tile").on("dragstart",   this._onTileDragStart.bind(this));
+    // pointer 自绘拖放：图块拖动交给 GridDnD（幽灵 / 落点预览 / R 旋转）
+    const lootRoot = html.find(".loot-cg")[0];
+    if (lootRoot) {
+      GridDnD.register(lootRoot, {
+        key:        `loot:${this.actor.uuid}`,
+        cols:       this.actor.system.gridSize?.width  ?? 5,
+        rows:       this.actor.system.gridSize?.height ?? 5,
+        editable:   () => this.isEditable,
+        placements: () => this.actor.system.lootContents ?? [],
+        payloadFor: (tile) => {
+          const idx = parseInt(tile.dataset.placementIdx ?? -1);
+          const p   = this.actor.system.lootContents?.[idx];
+          if (idx < 0 || !p) return null;
+          return {
+            type: "Item",
+            uuid: tile.dataset.itemUuid ?? "",
+            x: p.x, y: p.y, w: p.w ?? 1, h: p.h ?? 1,
+            placementIdx: idx,
+            fromLootGrid: { lootActorId: this.actor.id, placementIdx: idx, offX: 0, offY: 0 },
+          };
+        },
+      });
+    }
     html.find(".cg-item-tile").on("contextmenu", this._onTileContextMenu.bind(this));
 
     // ── 图块双击：玩家揭晓 / 拾取 ────────────────────────────────────────
@@ -576,20 +600,26 @@ export class LimbusLootSheet extends ActorSheet {
     // ── 网格内部移动 ──────────────────────────────────────────────────────
     if (raw.type === "Item" && raw.fromLootGrid?.lootActorId === this.actor.id) {
       const { placementIdx: idx, offX = 0, offY = 0 } = raw.fromLootGrid;
-      const nx = targetX - offX, ny = targetY - offY;
+      // GridDnD：拖动中按过 R —— 按旋转后的尺寸落地，抓取偏移随之作废
+      const rot = !!raw.rotatePending;
+      const nx  = rot ? targetX : targetX - offX;
+      const ny  = rot ? targetY : targetY - offY;
 
       if (game.user.isGM) {
         const contents = foundry.utils.deepClone(sys.lootContents ?? []);
         const p = contents[idx];
         if (!p) return;
-        if (!this._canPlace(nx, ny, p.w ?? 1, p.h ?? 1, cols, rows, idx))
+        const pw = rot ? (p.h ?? 1) : (p.w ?? 1);
+        const ph = rot ? (p.w ?? 1) : (p.h ?? 1);
+        if (!this._canPlace(nx, ny, pw, ph, cols, rows, idx))
           return void ui.notifications.warn("此位置无法放置（超出边界或与其他物品重叠）");
         p.x = nx; p.y = ny;
+        if (rot) { p.w = pw; p.h = ph; p.rotated = !p.rotated; }
         return void await this.actor.update({ "system.lootContents": contents });
       } else {
         game.socket.emit("system.limbusCompany_FVTT", {
           type: "lootMoveItem",
-          lootActorId: this.actor.id, placementIdx: idx, nx, ny,
+          lootActorId: this.actor.id, placementIdx: idx, nx, ny, rot,
           userId: game.user.id,
         });
         return;
@@ -972,7 +1002,7 @@ export class LimbusLootSheet extends ActorSheet {
     await lootActor.update({ "system.lootContents": contents });
   }
 
-  static async _gmExecuteMoveItem({ lootActorId, placementIdx, nx, ny }) {
+  static async _gmExecuteMoveItem({ lootActorId, placementIdx, nx, ny, rot = false }) {
     const lootActor = game.actors.get(lootActorId);
     if (!lootActor) return;
     const sys  = lootActor.system;
@@ -982,8 +1012,12 @@ export class LimbusLootSheet extends ActorSheet {
     const contents = foundry.utils.deepClone(sys.lootContents ?? []);
     const p        = contents[placementIdx];
     if (!p) return;
-    if (nx < 0 || ny < 0 || nx + (p.w ?? 1) > cols || ny + (p.h ?? 1) > rows) return;
+    // rot：玩家在 GridDnD 拖动中按过 R，落地时宽高对调
+    const pw = rot ? (p.h ?? 1) : (p.w ?? 1);
+    const ph = rot ? (p.w ?? 1) : (p.h ?? 1);
+    if (nx < 0 || ny < 0 || nx + pw > cols || ny + ph > rows) return;
     p.x = nx; p.y = ny;
+    if (rot) { p.w = pw; p.h = ph; p.rotated = !p.rotated; }
     await lootActor.update({ "system.lootContents": contents });
   }
 
