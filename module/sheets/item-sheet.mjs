@@ -1199,7 +1199,7 @@ export class LimbusItemSheet extends ItemSheet {
       const place = this._cgCanPlace(targetX, targetY, w, h, cols, rows)
         ? { x: targetX, y: targetY, w, h, rotated: rot0 }
         : this._cgAutoPlace(w, h);
-      if (!place) return void ui.notifications.warn("容器空间不足，无法放置该物品。");
+      if (!place) return void ui.notifications.warn("容器容量空间已满，无法放入。");
 
       // 从源容器移除占位
       const { containerId: srcId, placementIdx: srcIdx,
@@ -1266,7 +1266,7 @@ export class LimbusItemSheet extends ItemSheet {
     const place = this._cgCanPlace(targetX, targetY, w, h, cols, rows)
       ? { x: targetX, y: targetY, w, h, rotated: rot1 }
       : this._cgAutoPlace(w, h);
-    if (!place) return void ui.notifications.warn("容器空间不足，无法放置该物品。");
+    if (!place) return void ui.notifications.warn("容器容量空间已满，无法放入。");
 
     const containerActor = this.item.parent;
     const sourceActor    = dropped.parent;

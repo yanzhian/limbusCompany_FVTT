@@ -7284,8 +7284,10 @@ input.item-piles-quantity {
   overflow:  auto;
   padding:   8px;
 }
+/* 营地左栏的角色背包：格子尺寸与右侧仓库（继承基准的 44px）保持一致——
+   两边要互相拖放，格子不一样大时物品跨过去尺寸会突变，很难对准 */
 .limbuscompany .cg-wrap.camp-char-cg {
-  --cg-cell: 34px;
+  --cg-cell: 44px;
   --cg-gap:  2px;
 }
 

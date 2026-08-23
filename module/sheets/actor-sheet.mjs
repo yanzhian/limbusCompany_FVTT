@@ -14,7 +14,7 @@ import { ClashManager } from "../helpers/clash.mjs";
 import { CustomBuffRegistry, resolveBuffHandler, normalizeBuffType } from "../helpers/custom-buffs.mjs";
 import { getBagItems, packBagGrid } from "../helpers/bag-grid.mjs";
 import { GridDnD } from "../helpers/grid-dnd.mjs";
-import { canPlace } from "../helpers/grid-layout.mjs";
+import { autoPlace, canPlace, makeLockedSet } from "../helpers/grid-layout.mjs";
 import { buildItemTitleCard, closeTitleCardUnlessLocked, toggleTitleCardLock } from "./item-sheet.mjs";
 import { ClashVFX } from "../helpers/clash-vfx.mjs";
 import { QuickActionHUD } from "./quick-action-hud.mjs";
@@ -192,6 +192,10 @@ export class LimbusActorSheet extends ActorSheet {
       context.bagGrid = packBagGrid(getBagItems(actor), 6, 6, actor.system?.bagLayout ?? []);
       // GridDnD 的碰撞检测直接读这份渲染结果，免得再算一遍
       this._bagGridCache = context.bagGrid;
+      // 没有坐标记录的物品（新捡到的、刚从容器里拿出来的）本次是自动补位的，
+      // 把补位结果落成记录——否则下次渲染会重新首适应，挪动一件物品会连带
+      // 把别的物品也重排一遍（"自动排序"的观感就是从这儿来的）。
+      this._persistBagLayout(context.bagGrid);
     }
     // ── 技能分组（技能 Tab） ───────────────────────────────────────────────
     context.skillGroups = this._groupSkillItems();
@@ -1079,7 +1083,7 @@ export class LimbusActorSheet extends ActorSheet {
       const h = owned.system?.capacity?.h ?? 1;
       const slot = this._findContainerSlot(container, w, h);
       if (!slot) {
-        ui.notifications.warn(`容器「${container.name}」空间不足，无法存入「${owned.name}」。`);
+        ui.notifications.warn(`容器「${container.name}」容量空间已满，无法存入「${owned.name}」。`);
         return;
       }
       const contents = foundry.utils.deepClone(container.system.contents ?? []);
@@ -2267,6 +2271,30 @@ export class LimbusActorSheet extends ActorSheet {
    * 背包格投放：把落点写进 `system.bagLayout`（塔科夫式自由摆放）。
    * 只处理"背包内部挪动"——从容器/仓库/侧边栏拖来的物品仍走既有流程。
    */
+  /**
+   * 把渲染时自动补位的坐标写回 `system.bagLayout`，让背包摆放彻底固定下来。
+   * 只补缺失的条目，不动玩家已经摆好的；没有缺失就一次写都不发。
+   * 渲染流程里不能同步 await（会把 getData 拖住并触发再次渲染），
+   * 因此 fire-and-forget，并用一个标志位防止写入引发的重渲染再次进来。
+   */
+  _persistBagLayout(grid) {
+    if (this._bagLayoutSyncing) return;
+    if (!this.actor.isOwner) return;
+    const layout = this.actor.system?.bagLayout ?? [];
+    const known  = new Set(layout.map(e => e.itemId));
+    const missing = (grid?.tiles ?? []).filter(t => !known.has(t.id));
+    if (!missing.length) return;
+
+    this._bagLayoutSyncing = true;
+    const next = [
+      ...layout,
+      ...missing.map(t => ({ itemId: t.id, x: t.x, y: t.y, rotated: !!t.rotated })),
+    ];
+    this.actor.update({ "system.bagLayout": next })
+      .catch(err => console.warn("[背包] 摆放坐标写入失败", err))
+      .finally(() => { this._bagLayoutSyncing = false; });
+  }
+
   async _onBagCellDrop(event) {
     event.preventDefault();
     let raw;
@@ -2341,25 +2369,11 @@ export class LimbusActorSheet extends ActorSheet {
     if (contents.some(p => p.uuid === dragged.uuid)) return;
     const cap = dragged.system?.capacity ?? { w: 1, h: 1 };
     const iw = Math.max(1, cap.w ?? 1), ih = Math.max(1, cap.h ?? 1);
-    const canPlace = (x, y, w, h) => {
-      if (x < 0 || y < 0 || x + w > gw || y + h > gh) return false;
-      for (const p of contents) {
-        const pw = p.w ?? 1, ph = p.h ?? 1;
-        for (let dy = 0; dy < h; dy++)
-          for (let dx = 0; dx < w; dx++)
-            if (p.x <= x + dx && x + dx < p.x + pw &&
-                p.y <= y + dy && y + dy < p.y + ph) return false;
-      }
-      return true;
-    };
-    let place = null;
-    outer: for (let y = 0; y < gh; y++) {
-      for (let x = 0; x < gw; x++) {
-        if (canPlace(x, y, iw, ih))              { place = { x, y, w: iw, h: ih, rotated: false }; break outer; }
-        if (iw !== ih && canPlace(x, y, ih, iw)) { place = { x, y, w: ih, h: iw, rotated: true  }; break outer; }
-      }
-    }
-    if (!place) { ui.notifications.warn(`【${container.name}】空间不足，无法存入。`); return; }
+    // 自动寻位：复用共用算法，**锁定格不可占用**（原来这份手写实现漏了这一条）
+    const place = autoPlace(contents, iw, ih, gw, gh, {
+      lockedSet: makeLockedSet(container.system.lockedCells ?? []),
+    });
+    if (!place) { ui.notifications.warn(`【${container.name}】容量空间已满，无法存入。`); return; }
 
     contents.push({ uuid: dragged.uuid, x: place.x, y: place.y, w: place.w, h: place.h, rotated: place.rotated });
     await container.update({ "system.contents": contents });
