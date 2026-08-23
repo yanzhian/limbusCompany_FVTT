@@ -14,6 +14,7 @@ import { ClashManager } from "../helpers/clash.mjs";
 import { SKILLBOOK_MAX_SLOTS } from "../documents/item.mjs";
 import { CustomBuffRegistry, normalizeBuffType } from "../helpers/custom-buffs.mjs";
 import { linkifyHtml } from "../helpers/linkify.mjs";
+import { GridDnD } from "../helpers/grid-dnd.mjs";
 import { buildPlacementGrid, canPlace, autoPlace, makeLockedSet } from "../helpers/grid-layout.mjs";
 
 /** 背景的等级物品不收这三类（背景由向导指定、恐慌卡走 panicSlots、技能走技能书） */
@@ -484,6 +485,41 @@ export class LimbusItemSheet extends ItemSheet {
     html.find(".cg-item-tile").on("dragstart",   this._onCgTileDragStart.bind(this));
     html.find(".cg-item-tile").on("contextmenu", this._onCgTileMenu.bind(this));
     html.find(".cg-rotate-btn").on("click",      this._onCgTileRotate.bind(this));
+    // pointer 自绘拖放：图块的拖动交给 GridDnD（幽灵块 / 落点预览 / R 旋转），
+    // 格子上的原生 drop 监听保留不动——侧边栏、合集包拖进来仍走原生 DnD，
+    // GridDnD 松手时也是合成一个原生 drop 事件投给格子，复用同一套转移逻辑。
+    const cgRoot = html.find(".cg-wrap")[0];
+    if (cgRoot && this.item.type === "container") {
+      GridDnD.register(cgRoot, {
+        key:        `container:${this.item.uuid}`,
+        cols:       this.item.system.gridSize?.width  ?? 3,
+        rows:       this.item.system.gridSize?.height ?? 3,
+        editable:   () => this.isEditable,
+        placements: () => this.item.system.contents ?? [],
+        lockedSet:  () => makeLockedSet(this.item.system.lockedCells ?? []),
+        payloadFor: (tile) => {
+          const idx = parseInt(tile.dataset.placementIdx ?? -1);
+          const p   = this.item.system.contents?.[idx];
+          if (!p) return null;
+          const payload = {
+            type: "Item",
+            x: p.x, y: p.y, w: p.w ?? 1, h: p.h ?? 1,
+            placementIdx: idx,
+            fromContainer: {
+              isWorldContainer: !this.item.parent,
+              actorId:          this.item.parent?.id ?? null,
+              containerId:      this.item.id,
+              placementIdx:     idx,
+              offX: 0, offY: 0,
+            },
+          };
+          if (p.uuid)     payload.uuid     = p.uuid;
+          if (p.itemData) payload.itemData = p.itemData;
+          return payload;
+        },
+      });
+    }
+
     // 解锁状态下，空格子显示 pointer 光标（提示可点击锁定）
     if (!this.isLocked && this.item.type === "container") {
       html.find(".cg-wrap").addClass("cg-edit-unlocked");
@@ -1135,10 +1171,16 @@ export class LimbusItemSheet extends ItemSheet {
       const contents = foundry.utils.deepClone(sys.contents ?? []);
       const p = contents[idx];
       if (!p) return;
-      const nx = targetX - offX, ny = targetY - offY;
-      if (!this._cgCanPlace(nx, ny, p.w ?? 1, p.h ?? 1, cols, rows, idx))
+      // GridDnD：拖动中按过 R —— 按旋转后的尺寸落地，抓取偏移随之作废
+      const rot = !!raw.rotatePending;
+      const pw  = rot ? (p.h ?? 1) : (p.w ?? 1);
+      const ph  = rot ? (p.w ?? 1) : (p.h ?? 1);
+      const nx  = rot ? targetX : targetX - offX;
+      const ny  = rot ? targetY : targetY - offY;
+      if (!this._cgCanPlace(nx, ny, pw, ph, cols, rows, idx))
         return void ui.notifications.warn("此位置无法放置（超出边界或与其他物品重叠）");
       p.x = nx; p.y = ny;
+      if (rot) { p.w = pw; p.h = ph; p.rotated = !p.rotated; }
       return void await this.item.update({ "system.contents": contents });
     }
 
@@ -1149,11 +1191,13 @@ export class LimbusItemSheet extends ItemSheet {
       const itemDataSrc = raw.itemData;
       if (itemDataSrc.type === "container") return;           // 禁止容器嵌套
 
-      const cap = itemDataSrc.system?.capacity ?? { w: 1, h: 1 };
-      const w = Math.max(1, cap.w ?? 1), h = Math.max(1, cap.h ?? 1);
+      const cap  = itemDataSrc.system?.capacity ?? { w: 1, h: 1 };
+      const rot0 = !!raw.rotatePending;                        // GridDnD 的待定旋转
+      const w = Math.max(1, (rot0 ? cap.h : cap.w) ?? 1);
+      const h = Math.max(1, (rot0 ? cap.w : cap.h) ?? 1);
       // 目标格有效则直接用，否则自动寻找第一个可放入的位置（含旋转尝试）
       const place = this._cgCanPlace(targetX, targetY, w, h, cols, rows)
-        ? { x: targetX, y: targetY, w, h, rotated: false }
+        ? { x: targetX, y: targetY, w, h, rotated: rot0 }
         : this._cgAutoPlace(w, h);
       if (!place) return void ui.notifications.warn("容器空间不足，无法放置该物品。");
 
@@ -1213,12 +1257,14 @@ export class LimbusItemSheet extends ItemSheet {
       return;
     }
 
-    const cap = dropped.system?.capacity ?? { w: 1, h: 1 };
-    const w = Math.max(1, cap.w ?? 1), h = Math.max(1, cap.h ?? 1);
+    const cap  = dropped.system?.capacity ?? { w: 1, h: 1 };
+    const rot1 = !!raw.rotatePending;                          // GridDnD 的待定旋转
+    const w = Math.max(1, (rot1 ? cap.h : cap.w) ?? 1);
+    const h = Math.max(1, (rot1 ? cap.w : cap.h) ?? 1);
 
     // 目标格有效则直接用，否则自动寻找第一个可放入的位置（含旋转尝试）
     const place = this._cgCanPlace(targetX, targetY, w, h, cols, rows)
-      ? { x: targetX, y: targetY, w, h, rotated: false }
+      ? { x: targetX, y: targetY, w, h, rotated: rot1 }
       : this._cgAutoPlace(w, h);
     if (!place) return void ui.notifications.warn("容器空间不足，无法放置该物品。");
 

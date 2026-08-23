@@ -4071,6 +4071,54 @@ body.game .limbuscompany.app img {
 }
 .limbuscompany .cg-item-tile.cg-hidden { display: none; }
 
+/* ══ pointer 自绘拖放（grid-dnd.mjs）══════════════════════════════════════
+   拖动中原图块整个隐藏（格子看着就是空的），跟随光标的是下面这份不透明幽灵。 */
+.limbuscompany .cg-item-tile.cg-dragging { visibility: hidden; }
+
+/* 拖动全程禁掉文字选中与图块 hover 效果，免得拖着拖着选中一片文本 */
+body.cg-dragging-active { user-select: none; cursor: grabbing; }
+body.cg-dragging-active .limbuscompany .cg-item-tile:hover {
+  border-color: var(--border-gold);
+  box-shadow: inset 0 0 0 1px rgba(95,62,33,.4);
+}
+
+/* 幽灵块：跟着光标走，不吃鼠标事件（否则 elementFromPoint 全命中它自己） */
+.cg-drag-ghost {
+  position: fixed;
+  left: -9999px;
+  top:  -9999px;
+  pointer-events: none;
+  opacity: 1;
+  background: #180F08;
+  border: 1px solid #E5BA25;
+  border-radius: 3px;
+  box-shadow: 0 0 10px rgba(229,186,37,.5);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  box-sizing: border-box;
+  z-index: 100000;
+}
+.cg-drag-ghost .cg-rotate-btn { display: none; }
+
+/* 落点预览：绿=可放，红=放不下（越界 / 重叠 / 锁定格） */
+.limbuscompany .cg-drop-preview {
+  pointer-events: none;
+  border-radius: 2px;
+  z-index: 20;
+  box-sizing: border-box;
+}
+.limbuscompany .cg-drop-preview.cg-ok {
+  background: rgba(106,168,79,.28);
+  border: 1px solid rgba(140,200,110,.9);
+}
+.limbuscompany .cg-drop-preview.cg-bad {
+  background: rgba(184,68,68,.26);
+  border: 1px solid rgba(224,96,96,.9);
+}
+
 /* 图标：填满格子 70% */
 .limbuscompany .cg-tile-icon {
   width: 70%; height: 70%;
