@@ -7278,7 +7278,7 @@ input.item-piles-quantity {
   overflow:       hidden;
 }
 .camp-char-panel {
-  flex:            0 0 250px;   /* 固定宽度，缩放窗口不变；容量超出向下扩展（6×N） */
+  flex:            0 0 265px;   /* 固定宽度，缩放窗口不变；容量超出向下扩展（6×N） */
   border-right:    1px solid var(--border-gold);
 }
 .camp-char-panel.cg-drag-over {
