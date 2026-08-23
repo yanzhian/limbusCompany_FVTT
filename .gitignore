@@ -1,0 +1,5 @@
+
+# 合集包（LevelDB）的运行期产物：世界开着时才有，不该进版本库
+packs/*/LOCK
+packs/*/LOG
+packs/*/LOG.old

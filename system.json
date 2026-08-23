@@ -43,6 +43,106 @@
       "background": {}
     }
   },
+  "packs": [
+    {
+      "name": "equipment",
+      "label": "装备",
+      "path": "packs/equipment",
+      "type": "Item",
+      "system": "limbusCompany_FVTT",
+      "ownership": {
+        "PLAYER": "OBSERVER",
+        "ASSISTANT": "OWNER"
+      }
+    },
+    {
+      "name": "skills",
+      "label": "技能",
+      "path": "packs/skills",
+      "type": "Item",
+      "system": "limbusCompany_FVTT",
+      "ownership": {
+        "PLAYER": "OBSERVER",
+        "ASSISTANT": "OWNER"
+      }
+    },
+    {
+      "name": "consumables",
+      "label": "消耗品与材料",
+      "path": "packs/consumables",
+      "type": "Item",
+      "system": "limbusCompany_FVTT",
+      "ownership": {
+        "PLAYER": "OBSERVER",
+        "ASSISTANT": "OWNER"
+      }
+    },
+    {
+      "name": "containers",
+      "label": "容器",
+      "path": "packs/containers",
+      "type": "Item",
+      "system": "limbusCompany_FVTT",
+      "ownership": {
+        "PLAYER": "OBSERVER",
+        "ASSISTANT": "OWNER"
+      }
+    },
+    {
+      "name": "skillbooks",
+      "label": "技能书",
+      "path": "packs/skillbooks",
+      "type": "Item",
+      "system": "limbusCompany_FVTT",
+      "ownership": {
+        "PLAYER": "OBSERVER",
+        "ASSISTANT": "OWNER"
+      }
+    },
+    {
+      "name": "panics",
+      "label": "恐慌卡",
+      "path": "packs/panics",
+      "type": "Item",
+      "system": "limbusCompany_FVTT",
+      "ownership": {
+        "PLAYER": "OBSERVER",
+        "ASSISTANT": "OWNER"
+      }
+    },
+    {
+      "name": "backgrounds",
+      "label": "背景",
+      "path": "packs/backgrounds",
+      "type": "Item",
+      "system": "limbusCompany_FVTT",
+      "ownership": {
+        "PLAYER": "OBSERVER",
+        "ASSISTANT": "OWNER"
+      }
+    },
+    {
+      "name": "npcs",
+      "label": "NPC 与敌人",
+      "path": "packs/npcs",
+      "type": "Actor",
+      "system": "limbusCompany_FVTT",
+      "ownership": {
+        "PLAYER": "OBSERVER",
+        "ASSISTANT": "OWNER"
+      }
+    },
+    {
+      "name": "adventures",
+      "label": "冒险整合包",
+      "path": "packs/adventures",
+      "type": "Adventure",
+      "ownership": {
+        "PLAYER": "OBSERVER",
+        "ASSISTANT": "OWNER"
+      }
+    }
+  ],
   "socket": true,
   "url": "",
   "manifest": "",
