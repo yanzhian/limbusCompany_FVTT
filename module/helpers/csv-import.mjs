@@ -161,6 +161,10 @@ export const COLUMN_ALIASES = {
   "援护防御": "system.coverDefense",
   "无法拼点": "system.noClash",
   "无差别攻击": "system.indiscriminate", "无差别": "system.indiscriminate",
+
+  // ── 容器：存放限制（两条 AND，留空 = 不限制，多个用 / 分隔）─────────
+  "允许类型": "system.allowTypes", "存放限制-类型": "system.allowTypes",
+  "允许分类": "system.allowCategories", "存放限制-分类": "system.allowCategories",
   "容量扩散": V_SPREAD, "扩散": V_SPREAD,   // "[链式扩散3]" / "广域乱射2"
   "理智消耗": "system.sanityCost",
   "罪孽资源消耗": V_SIN_COST,       // "暴怒2/嫉妒1"
@@ -788,6 +792,8 @@ const COLUMN_NOTES = {
   "无法装备": "填 是/否、TRUE/FALSE",
   "援护防御": "填 是/否、TRUE/FALSE；标记为【援护防御】专属技能",
   "无法拼点": "填 是/否、TRUE/FALSE；被锁定的目标只能【承受】，不能对抗",
+  "允许类型": "容器存放限制·类型，多个用 / 分隔（消耗品/材料），留空=不限制",
+  "允许分类": "容器存放限制·分类，多个用 / 分隔（医疗/食材），与类型同时满足才收",
   "无差别攻击": "填 是/否、TRUE/FALSE；容量扩散时敌我不分，范围内的友方也会被打到（自己除外）",
   "可复用":   "填 是/否、TRUE/FALSE",
   "无限耐久": "填 是/否、TRUE/FALSE",
