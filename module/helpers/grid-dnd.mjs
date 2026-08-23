@@ -287,7 +287,13 @@ function _onPointerUp(ev) {
     ?? hover.root.querySelector(`.cg-cell[data-x="${hover.x}"][data-y="${hover.y}"]`);
   if (!cell) return;
 
-  const payload = { ...drag.payload, rotatePending: drag.rotated };
+  // dropX/dropY = 已经算好抓取偏移与旋转的落点左上角。
+  // 老的 drop 处理器仍按自己的 offX/offY 换算（行为不变），新写的直接用这两个值。
+  const payload = {
+    ...drag.payload,
+    rotatePending: drag.rotated,
+    dropX: hover.x, dropY: hover.y,
+  };
   let dt;
   try {
     dt = new DataTransfer();

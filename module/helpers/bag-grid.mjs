@@ -1,12 +1,13 @@
 /**
  * bag-grid.mjs — 角色背包网格打包器
  *
- * character 没有持久化的背包坐标数据，本工具在渲染时将背包物品
- * 按容量（capacity.w × capacity.h）首适应打包进 6 列网格，仅供显示。
+ * 背包摆放坐标持久化在 `actor.system.bagLayout`（玩家拖过的物品才有记录）。
+ * 本工具把有记录的按原位落位、没记录的按容量（capacity.w × capacity.h）
+ * 首适应补进 6 列网格。
  * 供 camp-sheet（营地左栏角色面板）与 actor-sheet（物品 Tab 网格视图）共用。
  */
 
-import { autoPlace, buildCells, markOccupied } from "./grid-layout.mjs";
+import { autoPlace, buildCells, canPlace, markOccupied } from "./grid-layout.mjs";
 
 /** 计入背包容量的物品类型 */
 export const BAG_ITEM_TYPES = ["equipment", "consumable", "material", "container", "skillbook", "background"];
@@ -35,27 +36,46 @@ export function getBagItems(actor) {
 const PACK_ROW_LIMIT = 200;
 
 /**
- * 将物品首适应打包进 cols 列网格。
+ * 将物品打包进 cols 列网格。
  * 放置算法复用 helpers/grid-layout.mjs（与容器 / 营地仓库同一套碰撞与旋转规则），
- * 区别是背包没有持久化坐标，行数不设上限、每次渲染重新打包。
+ * 区别是背包行数不设上限（按内容自然增长）。
  * @param {Item[]} items
  * @param {number} cols     列数（默认 6）
  * @param {number} minRows  最少行数（默认 6）
+ * @param {object[]} layout  持久化摆放记录 actor.system.bagLayout
  * @returns {{ tiles: object[], rows: number, cells: object[], usedCells: number }}
  *   tiles: { id, uuid, name, img, quantity, isContainer, x, y, w, h, col, row }
  */
-export function packBagGrid(items, cols = 6, minRows = 6) {
+export function packBagGrid(items, cols = 6, minRows = 6, layout = []) {
   const placements = [];   // { x, y, w, h } —— 供 autoPlace 做碰撞检测
   const tiles      = [];
   const occupied   = new Set();
   let   maxRow     = 0;
 
-  for (const item of items) {
-    const cap = item.system?.capacity ?? {};
-    const w = Math.max(1, Math.min(cols, cap.w ?? 1));
-    const h = Math.max(1, cap.h ?? 1);
+  // 有持久化坐标的先按坐标落位，剩下的再首适应补位——
+  // 否则自动补位可能先占掉别人摆好的格子。
+  const saved = new Map((layout ?? []).map(e => [e.itemId, e]));
+  const ordered = [
+    ...items.filter(i => saved.has(i.id)),
+    ...items.filter(i => !saved.has(i.id)),
+  ];
 
-    const place = autoPlace(placements, w, h, cols, PACK_ROW_LIMIT);
+  for (const item of ordered) {
+    const cap  = item.system?.capacity ?? {};
+    const ent  = saved.get(item.id) ?? null;
+    const rot  = !!ent?.rotated;
+    const rawW = Math.max(1, cap.w ?? 1);
+    const rawH = Math.max(1, cap.h ?? 1);
+    const w = Math.max(1, Math.min(cols, rot ? rawH : rawW));
+    const h = Math.max(1, rot ? rawW : rawH);
+
+    // 摆过的按原位放；位置已失效（网格变窄、与别人重叠）时退回自动补位
+    let place = null;
+    if (ent && canPlace(placements, ent.x, ent.y, w, h, cols, PACK_ROW_LIMIT)) {
+      place = { x: ent.x, y: ent.y, w, h, rotated: rot };
+    } else {
+      place = autoPlace(placements, w, h, cols, PACK_ROW_LIMIT);
+    }
     if (!place) continue;
 
     placements.push(place);
@@ -69,6 +89,7 @@ export function packBagGrid(items, cols = 6, minRows = 6) {
       img:         item.img,
       quantity:    item.system?.quantity ?? 1,
       isContainer: item.type === "container",
+      rotated:     !!place.rotated,
       x: place.x, y: place.y, w: place.w, h: place.h,
       col: place.x + 1, row: place.y + 1,
     });

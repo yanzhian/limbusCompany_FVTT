@@ -13,6 +13,8 @@
 import { ClashManager } from "../helpers/clash.mjs";
 import { CustomBuffRegistry, resolveBuffHandler, normalizeBuffType } from "../helpers/custom-buffs.mjs";
 import { getBagItems, packBagGrid } from "../helpers/bag-grid.mjs";
+import { GridDnD } from "../helpers/grid-dnd.mjs";
+import { canPlace } from "../helpers/grid-layout.mjs";
 import { buildItemTitleCard, closeTitleCardUnlessLocked, toggleTitleCardLock } from "./item-sheet.mjs";
 import { ClashVFX } from "../helpers/clash-vfx.mjs";
 import { QuickActionHUD } from "./quick-action-hud.mjs";
@@ -187,7 +189,9 @@ export class LimbusActorSheet extends ActorSheet {
     // 物品 Tab 网格视图（工具栏切换按钮）
     context.itemGridView = this._itemGridView ?? false;
     if (context.itemGridView) {
-      context.bagGrid = packBagGrid(getBagItems(actor), 6, 6);
+      context.bagGrid = packBagGrid(getBagItems(actor), 6, 6, actor.system?.bagLayout ?? []);
+      // GridDnD 的碰撞检测直接读这份渲染结果，免得再算一遍
+      this._bagGridCache = context.bagGrid;
     }
     // ── 技能分组（技能 Tab） ───────────────────────────────────────────────
     context.skillGroups = this._groupSkillItems();
@@ -743,6 +747,36 @@ export class LimbusActorSheet extends ActorSheet {
       event.originalEvent.dataTransfer.dropEffect = "move";
     });
     html.find(".bag-cg .cg-item-tile.cg-tile-container").on("drop", this._onBagTileDropOnContainer.bind(this));
+    // 背包格：接住 GridDnD 合成的 drop（自由摆放的落点写进 system.bagLayout）
+    html.find(".bag-cg .cg-cell").on("dragover", (ev) => ev.preventDefault());
+    html.find(".bag-cg .cg-cell").on("drop", this._onBagCellDrop.bind(this));
+    // pointer 自绘拖放：幽灵 / 落点预览 / R 旋转
+    const bagRoot = html.find(".bag-cg")[0];
+    if (bagRoot) {
+      const grid = this._bagGridCache ?? null;
+      GridDnD.register(bagRoot, {
+        key:        `bag:${this.actor.uuid}`,
+        cols:       6,
+        rows:       grid?.rows ?? 6,
+        editable:   () => this.isEditable,
+        placements: () => (grid?.tiles ?? []).map(t => ({ x: t.x, y: t.y, w: t.w, h: t.h })),
+        payloadFor: (tile) => {
+          const id = tile.dataset.itemId ?? "";
+          if (!id) return null;
+          const idx = (grid?.tiles ?? []).findIndex(t => t.id === id);
+          return {
+            type: "Item",
+            uuid: tile.dataset.itemUuid ?? "",
+            x: parseInt(tile.dataset.x ?? 0),
+            y: parseInt(tile.dataset.y ?? 0),
+            w: parseInt(tile.dataset.w ?? 1),
+            h: parseInt(tile.dataset.h ?? 1),
+            placementIdx: idx,
+            fromBag: { actorId: this.actor.id, itemId: id },
+          };
+        },
+      });
+    }
     html.find(".filter-favorite-btn").on("click", this._onFavFilter.bind(this));
 
     // ── 搜索框 ────────────────────────────────────────────────────────────
@@ -2229,6 +2263,54 @@ export class LimbusActorSheet extends ActorSheet {
   }
 
   /** 网格视图：拖到容器图块上，自动寻位存入容器（容器不能存放容器） */
+  /**
+   * 背包格投放：把落点写进 `system.bagLayout`（塔科夫式自由摆放）。
+   * 只处理"背包内部挪动"——从容器/仓库/侧边栏拖来的物品仍走既有流程。
+   */
+  async _onBagCellDrop(event) {
+    event.preventDefault();
+    let raw;
+    try { raw = JSON.parse(event.originalEvent.dataTransfer.getData("text/plain")); }
+    catch { return; }
+    if (raw?.fromBag?.actorId !== this.actor.id) return;
+
+    const itemId = raw.fromBag.itemId;
+    const item   = this.actor.items.get(itemId);
+    if (!item) return;
+
+    const grid = this._bagGridCache ?? { tiles: [], rows: 6 };
+    const cols = 6;
+    const rows = grid.rows ?? 6;
+
+    const layout  = foundry.utils.deepClone(this.actor.system.bagLayout ?? []);
+    const entry   = layout.find(e => e.itemId === itemId) ?? null;
+    const wasRot  = entry?.rotated ?? false;
+    const newRot  = raw.rotatePending ? !wasRot : wasRot;
+
+    const cap  = item.system?.capacity ?? {};
+    const rawW = Math.max(1, cap.w ?? 1);
+    const rawH = Math.max(1, cap.h ?? 1);
+    const w    = newRot ? rawH : rawW;
+    const h    = newRot ? rawW : rawH;
+
+    // 落点：GridDnD 已经把抓取偏移与旋转算进 dropX/dropY，直接用；
+    // 万一是别处合成的 drop（没有这两个字段），退回用格子坐标。
+    const x = raw.dropX ?? parseInt(event.currentTarget.dataset.x ?? 0);
+    const y = raw.dropY ?? parseInt(event.currentTarget.dataset.y ?? 0);
+
+    // 与其他物品的碰撞（自己排除在外）
+    const others = (grid.tiles ?? [])
+      .filter(t => t.id !== itemId)
+      .map(t => ({ x: t.x, y: t.y, w: t.w, h: t.h }));
+    if (!canPlace(others, x, y, w, h, cols, rows)) {
+      return void ui.notifications.warn("此位置无法放置（超出背包边界或与其他物品重叠）");
+    }
+
+    if (entry) { entry.x = x; entry.y = y; entry.rotated = newRot; }
+    else       { layout.push({ itemId, x, y, rotated: newRot }); }
+    await this.actor.update({ "system.bagLayout": layout });
+  }
+
   async _onBagTileDropOnContainer(event) {
     const container = this.actor.items.get(event.currentTarget.dataset.itemId ?? "");
     if (container?.type !== "container") return;

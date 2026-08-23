@@ -135,6 +135,20 @@ export class CharacterData extends foundry.abstract.TypeDataModel {
         ],
       }),
 
+      // ── 背包摆放（塔科夫式自由摆放的持久化坐标） ────────────────────
+      // 只存"人为摆过"的物品：{ itemId, x, y, rotated }。
+      // 没有记录的物品（新捡到的、刚从容器里拿出来的）在渲染时首适应自动补位，
+      // 补位结果不会写回——玩家真正拖过一次才落成记录。
+      bagLayout: new fields.ArrayField(
+        new fields.SchemaField({
+          itemId:  new fields.StringField({ required: true, initial: "" }),
+          x:       new fields.NumberField({ required: true, integer: true, min: 0, initial: 0 }),
+          y:       new fields.NumberField({ required: true, integer: true, min: 0, initial: 0 }),
+          rotated: new fields.BooleanField({ initial: false }),
+        }),
+        { required: true, initial: [] }
+      ),
+
       // ── 恐慌类型槽位（战斗 Tab 罪孽抗性下方，存嵌入恐慌卡的 itemId） ──
       panicSlots: new fields.SchemaField({
         lowMorale: new fields.StringField({ required: false, initial: "" }),

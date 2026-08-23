@@ -71,7 +71,8 @@
       <div class="cg-wrap bag-cg" style="--grid-cols:6; --grid-rows:{{bagGrid.rows}}">
         {{#each bagGrid.cells}}
           <div class="cg-cell {{#if occupied}}cg-occupied{{/if}}"
-               style="grid-column:{{col}}; grid-row:{{row}}"></div>
+               style="grid-column:{{col}}; grid-row:{{row}}"
+               data-x="{{x}}" data-y="{{y}}"></div>
         {{/each}}
         {{#each bagGrid.tiles}}
           <div class="cg-item-tile {{#if isContainer}}cg-tile-container{{/if}}"
@@ -79,6 +80,8 @@
                data-item-id="{{id}}"
                data-item-uuid="{{uuid}}"
                data-item-name="{{name}}"
+               data-x="{{x}}" data-y="{{y}}"
+               data-w="{{w}}" data-h="{{h}}"
                draggable="true"
                title="{{name}}（双击查看）">
             <img src="{{img}}" class="cg-tile-icon" alt="{{name}}">
