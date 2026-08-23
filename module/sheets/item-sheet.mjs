@@ -20,6 +20,9 @@ import { buildPlacementGrid, canPlace, autoPlace, makeLockedSet } from "../helpe
 /** 背景的等级物品不收这三类（背景由向导指定、恐慌卡走 panicSlots、技能走技能书） */
 const BG_ITEM_BLOCKED_TYPES = ["background", "panic", "skill"];
 
+/** 有没有在线 GM 可以代执行写操作（权限不足时的兜底通道） */
+const _hasActiveGM = () => game.users?.some(u => u.isGM && u.active) ?? false;
+
 /**
  * 激活效果剪贴板（本次会话内共享，跨物品卡有效，刷新页面后清空）。
  * 存的是去掉 id 的 activity 快照——粘贴时再补一个新 id。
@@ -282,6 +285,40 @@ export class LimbusItemSheet extends ItemSheet {
     return context;
   }
 
+  /**
+   * 容器数据写入。
+   * 容器可能挂在**别人**的 Actor 上（最典型的是营地仓库里的箱子：物品属于营地
+   * Actor，玩家对它只有"查看"权限），直接 `item.update()` 会被权限挡下。
+   * 统一走 `_safeDocUpdate`：本人有权就直接写，没权就发 socket 请 GM 代执行。
+   */
+  async _containerUpdate(data) {
+    return ClashManager._safeDocUpdate(this.item, data);
+  }
+
+  /**
+   * 容器卡的实时刷新。
+   * 容器格里画的是**别的物品**（按 uuid 引用），那些物品被移走/删除时 Foundry
+   * 不会重渲染本卡，于是内容看着还在（其实早没了）。这里监听物品增删改，
+   * 只要牵动本容器引用的 uuid 就重画；容器自己没了就直接关卡。
+   */
+  _registerContainerWatch() {
+    if (this._containerWatchIds || this.item.type !== "container") return;
+    const refresh = (doc) => {
+      if (GridDnD.dragging) return;                 // 拖动中不打断
+      const uuids = (this.item.system?.contents ?? []).map(p => p.uuid).filter(Boolean);
+      if (!uuids.includes(doc?.uuid)) return;
+      this.render(false);
+    };
+    const selfGone = (doc) => {
+      if (doc?.id === this.item.id) this.close();
+    };
+    this._containerWatchIds = {
+      createItem: Hooks.on("createItem", refresh),
+      updateItem: Hooks.on("updateItem", refresh),
+      deleteItem: Hooks.on("deleteItem", (doc) => { selfGone(doc); refresh(doc); }),
+    };
+  }
+
   /* ─── 容器网格构建 ──────────────────────────────────────────────────────── */
 
   /**
@@ -490,11 +527,14 @@ export class LimbusItemSheet extends ItemSheet {
     // GridDnD 松手时也是合成一个原生 drop 事件投给格子，复用同一套转移逻辑。
     const cgRoot = html.find(".cg-wrap")[0];
     if (cgRoot && this.item.type === "container") {
+      this._registerContainerWatch();
       GridDnD.register(cgRoot, {
         key:        `container:${this.item.uuid}`,
         cols:       this.item.system.gridSize?.width  ?? 3,
         rows:       this.item.system.gridSize?.height ?? 3,
-        editable:   () => this.isEditable,
+        // 容器可能挂在营地等"只读"Actor 上：写操作会转交 GM 代执行，
+        // 所以只要有在线 GM 就允许拖动，不能拿 isEditable 一票否决
+        editable:   () => this.isEditable || _hasActiveGM(),
         placements: () => this.item.system.contents ?? [],
         lockedSet:  () => makeLockedSet(this.item.system.lockedCells ?? []),
         payloadFor: (tile) => {
@@ -689,6 +729,8 @@ export class LimbusItemSheet extends ItemSheet {
 
   async close(options = {}) {
     this._forceCloseAllTitleCards();
+    for (const [hook, id] of Object.entries(this._containerWatchIds ?? {})) Hooks.off(hook, id);
+    this._containerWatchIds = null;
     return super.close(options);
   }
 
@@ -1181,7 +1223,7 @@ export class LimbusItemSheet extends ItemSheet {
         return void ui.notifications.warn("此位置无法放置（超出边界或与其他物品重叠）");
       p.x = nx; p.y = ny;
       if (rot) { p.w = pw; p.h = ph; p.rotated = !p.rotated; }
-      return void await this.item.update({ "system.contents": contents });
+      return void await this._containerUpdate({ "system.contents": contents });
     }
 
     // ── 金库物品拖入（带 itemData，无 UUID）────────────────────────────────
@@ -1234,7 +1276,7 @@ export class LimbusItemSheet extends ItemSheet {
         // 目标也是世界金库：保持 itemData 存储
         contents.push({ uuid: "", itemData: itemDataSrc, x: place.x, y: place.y, w: place.w, h: place.h, rotated: place.rotated });
       }
-      return void await this.item.update({ "system.contents": contents });
+      return void await this._containerUpdate({ "system.contents": contents });
     }
 
     // ── 从物品列表或其他容器拖入 ────────────────────────────────────────
@@ -1347,7 +1389,7 @@ export class LimbusItemSheet extends ItemSheet {
     const entry = { uuid: storedUuid, x: place.x, y: place.y, w: place.w, h: place.h, rotated: place.rotated };
     if (storedItemData) entry.itemData = storedItemData;
     contents.push(entry);
-    await this.item.update({ "system.contents": contents });
+    await this._containerUpdate({ "system.contents": contents });
   }
 
   /* ─── 技能书：拖入高亮 ──────────────────────────────────────────────────── */
@@ -1610,7 +1652,7 @@ export class LimbusItemSheet extends ItemSheet {
     if (!this._cgCanPlace(p.x, p.y, nw, nh, cols, rows, idx))
       return void ui.notifications.warn("旋转后无法放置（超出边界或与其他物品重叠）");
     p.w = nw; p.h = nh; p.rotated = !p.rotated;
-    await this.item.update({ "system.contents": contents });
+    await this._containerUpdate({ "system.contents": contents });
   }
 
   /* ─── 容器格：左键锁定切换 ──────────────────────────────────────────────── */
@@ -1714,7 +1756,7 @@ export class LimbusItemSheet extends ItemSheet {
           }
         }
         contents.splice(idx, 1);
-        await this.item.update({ "system.contents": contents });
+        await this._containerUpdate({ "system.contents": contents });
 
       } else if (action === "edit") {
         if (isVaultItem) {
@@ -1745,7 +1787,7 @@ export class LimbusItemSheet extends ItemSheet {
         });
         if (!confirmed) return;
         contents.splice(idx, 1);
-        await this.item.update({ "system.contents": contents });
+        await this._containerUpdate({ "system.contents": contents });
         if (!isVaultItem && uuid) {
           const itm = await fromUuid(uuid).catch(() => null);
           await itm?.delete();
