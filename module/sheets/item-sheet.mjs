@@ -16,6 +16,12 @@ import { CustomBuffRegistry, normalizeBuffType } from "../helpers/custom-buffs.m
 import { linkifyHtml } from "../helpers/linkify.mjs";
 import { buildPlacementGrid, canPlace, autoPlace, makeLockedSet } from "../helpers/grid-layout.mjs";
 
+/**
+ * 拖动中按 R 的"待定旋转"标记。跨物品卡拖动时源与目标是两个 Sheet 实例，
+ * 挂在实例上对方读不到，所以放在模块作用域里共享。
+ */
+let _cgDragRotatePending = false;
+
 /** 背景的等级物品不收这三类（背景由向导指定、恐慌卡走 panicSlots、技能走技能书） */
 const BG_ITEM_BLOCKED_TYPES = ["background", "panic", "skill"];
 
@@ -482,8 +488,29 @@ export class LimbusItemSheet extends ItemSheet {
     html.find(".cg-cell").on("drop",      this._onCgCellDrop.bind(this));
     html.find(".cg-cell").on("click",     this._onCgCellClick.bind(this));
     html.find(".cg-item-tile").on("dragstart",   this._onCgTileDragStart.bind(this));
+    html.find(".cg-item-tile").on("dragend",     this._onCgTileDragEnd.bind(this));
     html.find(".cg-item-tile").on("contextmenu", this._onCgTileMenu.bind(this));
     html.find(".cg-rotate-btn").on("click",      this._onCgTileRotate.bind(this));
+    // 悬停记录：R 键旋转要知道鼠标此刻停在哪一块上
+    html.find(".cg-item-tile").on("mouseenter", (ev) => {
+      this._cgHoverIdx = parseInt(ev.currentTarget.dataset.placementIdx ?? -1);
+    });
+    html.find(".cg-item-tile").on("mouseleave", () => { this._cgHoverIdx = -1; });
+    // 缝隙（网格 gap / padding）不是合法投放点：接住它并明确告知失败，
+    // 否则浏览器默认行为是"什么都不发生"，看起来像卡了一下
+    html.find(".cg-wrap").on("dragover", (ev) => {
+      if (ev.target !== ev.currentTarget) return;   // 落在格子/图块上，交给它们自己处理
+      ev.preventDefault();
+      ev.originalEvent.dataTransfer.dropEffect = "none";
+      $(ev.currentTarget).addClass("cg-gap-reject");
+    });
+    html.find(".cg-wrap").on("dragleave drop", (ev) => {
+      $(ev.currentTarget).removeClass("cg-gap-reject");
+      if (ev.type !== "drop" || ev.target !== ev.currentTarget) return;
+      ev.preventDefault();
+      ui.notifications.warn("拖到了格子缝隙上——放置取消，请对准格子。");
+    });
+    this._bindCgRotateKey();
     // 解锁状态下，空格子显示 pointer 光标（提示可点击锁定）
     if (!this.isLocked && this.item.type === "container") {
       html.find(".cg-wrap").addClass("cg-edit-unlocked");
@@ -653,6 +680,13 @@ export class LimbusItemSheet extends ItemSheet {
 
   async close(options = {}) {
     this._forceCloseAllTitleCards();
+    // R 键监听挂在 document 上，关卡时必须摘掉，否则会随开关次数累积
+    if (this._cgKeyHandler) {
+      document.removeEventListener("keydown", this._cgKeyHandler);
+      this._cgKeyHandler = null;
+    }
+    this._cgDragGhost?.remove();
+    this._cgDragGhost = null;
     return super.close(options);
   }
 
@@ -1135,10 +1169,16 @@ export class LimbusItemSheet extends ItemSheet {
       const contents = foundry.utils.deepClone(sys.contents ?? []);
       const p = contents[idx];
       if (!p) return;
-      const nx = targetX - offX, ny = targetY - offY;
-      if (!this._cgCanPlace(nx, ny, p.w ?? 1, p.h ?? 1, cols, rows, idx))
+      // 拖动途中按过 R：按旋转后的尺寸落地（抓取偏移也随之失效，改从落点算起）
+      const rot = _cgDragRotatePending;
+      const pw  = rot ? (p.h ?? 1) : (p.w ?? 1);
+      const ph  = rot ? (p.w ?? 1) : (p.h ?? 1);
+      const nx  = rot ? targetX : targetX - offX;
+      const ny  = rot ? targetY : targetY - offY;
+      if (!this._cgCanPlace(nx, ny, pw, ph, cols, rows, idx))
         return void ui.notifications.warn("此位置无法放置（超出边界或与其他物品重叠）");
       p.x = nx; p.y = ny;
+      if (rot) { p.w = pw; p.h = ph; p.rotated = !p.rotated; }
       return void await this.item.update({ "system.contents": contents });
     }
 
@@ -1150,10 +1190,13 @@ export class LimbusItemSheet extends ItemSheet {
       if (itemDataSrc.type === "container") return;           // 禁止容器嵌套
 
       const cap = itemDataSrc.system?.capacity ?? { w: 1, h: 1 };
-      const w = Math.max(1, cap.w ?? 1), h = Math.max(1, cap.h ?? 1);
+      // 拖动途中按过 R：按旋转后的尺寸落地
+      const rot0 = _cgDragRotatePending;
+      const w = Math.max(1, (rot0 ? cap.h : cap.w) ?? 1);
+      const h = Math.max(1, (rot0 ? cap.w : cap.h) ?? 1);
       // 目标格有效则直接用，否则自动寻找第一个可放入的位置（含旋转尝试）
       const place = this._cgCanPlace(targetX, targetY, w, h, cols, rows)
-        ? { x: targetX, y: targetY, w, h, rotated: false }
+        ? { x: targetX, y: targetY, w, h, rotated: rot0 }
         : this._cgAutoPlace(w, h);
       if (!place) return void ui.notifications.warn("容器空间不足，无法放置该物品。");
 
@@ -1214,11 +1257,14 @@ export class LimbusItemSheet extends ItemSheet {
     }
 
     const cap = dropped.system?.capacity ?? { w: 1, h: 1 };
-    const w = Math.max(1, cap.w ?? 1), h = Math.max(1, cap.h ?? 1);
+    // 拖动途中按过 R：按旋转后的尺寸落地
+    const rot1 = _cgDragRotatePending;
+    const w = Math.max(1, (rot1 ? cap.h : cap.w) ?? 1);
+    const h = Math.max(1, (rot1 ? cap.w : cap.h) ?? 1);
 
     // 目标格有效则直接用，否则自动寻找第一个可放入的位置（含旋转尝试）
     const place = this._cgCanPlace(targetX, targetY, w, h, cols, rows)
-      ? { x: targetX, y: targetY, w, h, rotated: false }
+      ? { x: targetX, y: targetY, w, h, rotated: rot1 }
       : this._cgAutoPlace(w, h);
     if (!place) return void ui.notifications.warn("容器空间不足，无法放置该物品。");
 
@@ -1520,6 +1566,68 @@ export class LimbusItemSheet extends ItemSheet {
 
   /* ─── 物品格：开始拖拽（内部重定位）────────────────────────────────────── */
 
+  /**
+   * R 键旋转（塔科夫式操作）。两种情形共用一个 document 级监听：
+   *  · 拖动中按 R  → 只记一个"落地时转 90°"的待定标记，投放时才真正生效
+   *  · 悬停时按 R  → 立刻旋转：原地转不开就自动找空位
+   * 监听挂在 document 上（拖动过程中焦点不在窗口里，挂 this.element 收不到），
+   * 但只有"鼠标正停在本卡的图块上"或"本卡正在拖动"时才响应，不会抢别处的 R。
+   */
+  _bindCgRotateKey() {
+    this._cgHoverIdx ??= -1;
+    if (this._cgKeyHandler) document.removeEventListener("keydown", this._cgKeyHandler);
+    this._cgKeyHandler = async (ev) => {
+      if (ev.key !== "r" && ev.key !== "R") return;
+      // 正在输入框里打字时不抢键
+      const tag = ev.target?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || ev.target?.isContentEditable) return;
+
+      if (this._cgDragging) {
+        ev.preventDefault();
+        _cgDragRotatePending = !_cgDragRotatePending;
+        this._cgDragGhost?.classList.toggle("cg-ghost-rotated", _cgDragRotatePending);
+        return;
+      }
+      if ((this._cgHoverIdx ?? -1) < 0) return;
+      ev.preventDefault();
+      await this._cgRotateAt(this._cgHoverIdx, { autoPlace: true });
+    };
+    document.addEventListener("keydown", this._cgKeyHandler);
+  }
+
+  /**
+   * 旋转指定位置的物品。
+   * @param {number}  idx                 contents 下标
+   * @param {boolean} [options.autoPlace] 原地放不下时是否自动另寻空位
+   */
+  async _cgRotateAt(idx, { autoPlace = false } = {}) {
+    if (!(idx >= 0)) return false;
+    const sys  = this.item.system;
+    const cols = sys.gridSize?.width  ?? 3;
+    const rows = sys.gridSize?.height ?? 3;
+    const contents = foundry.utils.deepClone(sys.contents ?? []);
+    const p = contents[idx];
+    if (!p) return false;
+
+    const nw = p.h ?? 1, nh = p.w ?? 1;
+    if (this._cgCanPlace(p.x, p.y, nw, nh, cols, rows, idx)) {
+      p.w = nw; p.h = nh; p.rotated = !p.rotated;
+      await this.item.update({ "system.contents": contents });
+      return true;
+    }
+    if (autoPlace) {
+      // 原地转不开：以旋转后的尺寸在整个网格里找第一个放得下的位置
+      const spot = this._cgAutoPlace(nw, nh, idx);
+      if (spot) {
+        p.x = spot.x; p.y = spot.y; p.w = nw; p.h = nh; p.rotated = !p.rotated;
+        await this.item.update({ "system.contents": contents });
+        return true;
+      }
+    }
+    ui.notifications.warn("旋转后放不下（超出边界或与其他物品重叠）");
+    return false;
+  }
+
   _onCgTileDragStart(event) {
     this._forceCloseAllTitleCards(); // 拖动开始即关闭 Title 卡
     const tile  = event.currentTarget;
@@ -1545,6 +1653,38 @@ export class LimbusItemSheet extends ItemSheet {
     if (p.itemData) payload.itemData = p.itemData;
     event.originalEvent.dataTransfer.setData("text/plain", JSON.stringify(payload));
     event.originalEvent.dataTransfer.effectAllowed = "move";
+
+    // ── 塔科夫式拖动手感 ────────────────────────────────────────────────
+    // ① 跟着光标走的是一份**不透明**的克隆（浏览器默认的拖影是半透明的）；
+    // ② 原图块在拖动期间整个藏起来，格子看上去就是空的。
+    // 克隆必须先入 DOM 才能被 setDragImage 截图，截完下一帧即可移除。
+    const ghost = tile.cloneNode(true);
+    ghost.classList.add("cg-drag-ghost");
+    ghost.style.width  = `${tile.offsetWidth}px`;
+    ghost.style.height = `${tile.offsetHeight}px`;
+    document.body.appendChild(ghost);
+    this._cgDragGhost = ghost;
+    try {
+      event.originalEvent.dataTransfer.setDragImage(
+        ghost, event.clientX - rect.left, event.clientY - rect.top);
+    } catch { /* 个别浏览器不支持 setDragImage，退回默认拖影 */ }
+
+    this._cgDragging     = true;
+    _cgDragRotatePending = false;
+    this._cgDragTile   = tile;
+    // 同步隐藏会把拖影一起截没，推迟到下一帧
+    setTimeout(() => tile.classList.add("cg-dragging"), 0);
+  }
+
+  /** 拖动结束（无论成功与否）：收回拖影克隆、恢复原图块、清掉待定旋转 */
+  _onCgTileDragEnd() {
+    this._cgDragGhost?.remove();
+    this._cgDragGhost = null;
+    this._cgDragTile?.classList.remove("cg-dragging");
+    this._cgDragTile     = null;
+    this._cgDragging     = false;
+    _cgDragRotatePending = false;
+    this.element?.find?.(".cg-wrap").removeClass("cg-gap-reject");
   }
 
   /* ─── 物品格：旋转 ──────────────────────────────────────────────────────── */

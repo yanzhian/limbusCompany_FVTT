@@ -4071,6 +4071,38 @@ body.game .limbuscompany.app img {
 }
 .limbuscompany .cg-item-tile.cg-hidden { display: none; }
 
+/* ── 塔科夫式拖动 ──────────────────────────────────────────────────────────
+   拖动中：原图块整个藏起来（格子看着就是空的），跟着光标的是下面那份
+   不透明克隆——浏览器默认拖影是半透明的，所以自己造一个顶掉它。 */
+.limbuscompany .cg-item-tile.cg-dragging { visibility: hidden; }
+
+.cg-drag-ghost {
+  position: fixed;
+  top: -9999px;
+  left: -9999px;
+  opacity: 1;
+  pointer-events: none;
+  background: #180F08;
+  border: 1px solid #E5BA25;
+  border-radius: 3px;
+  box-shadow: 0 0 8px rgba(229,186,37,.45);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  box-sizing: border-box;
+  z-index: 100000;
+}
+/* 拖动中按 R：拖影转 90° 以示待定旋转（落地时才真正生效） */
+.cg-drag-ghost.cg-ghost-rotated { transform: rotate(90deg); }
+
+/* 缝隙（gap / padding）上不能放：整块网格给个红边提示 */
+.limbuscompany .cg-wrap.cg-gap-reject {
+  outline: 1px solid rgba(184,68,68,.75);
+  outline-offset: -1px;
+}
+
 /* 图标：填满格子 70% */
 .limbuscompany .cg-tile-icon {
   width: 70%; height: 70%;
