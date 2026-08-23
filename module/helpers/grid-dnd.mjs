@@ -218,8 +218,11 @@ function _updateHover(clientX, clientY) {
   const overTile = document.elementFromPoint(clientX, clientY)
     ?.closest?.(".cg-item-tile.cg-tile-container");
   if (overTile && overTile !== _drag.tile && _drag.payload.uuid) {
-    _drag.hover = { root, adapter, tileEl: overTile, ok: true };
-    _drawTilePreview(overTile);
+    // 目标容器收不收这件物品（类型/分类限制）由各 Sheet 回答；
+    // 不实现这个钩子就当作收——判定仍会在落库那一步兜底。
+    const ok = adapter.tileAccepts ? !!adapter.tileAccepts(overTile, _drag.payload) : true;
+    _drag.hover = { root, adapter, tileEl: overTile, ok };
+    _drawTilePreview(overTile, ok);
     return;
   }
 
@@ -238,10 +241,10 @@ function _updateHover(clientX, clientY) {
   _drawPreview(root, x, y, ok, adapter.cols);
 }
 
-/** 容器图块上的"存入"提示：直接罩在这块图块上（金色） */
-function _drawTilePreview(tileEl) {
+/** 容器图块上的提示：罩在整块图块上——能存金色，不收红色 */
+function _drawTilePreview(tileEl, ok = true) {
   const el = document.createElement("div");
-  el.className = "cg-drop-preview cg-into";
+  el.className = `cg-drop-preview ${ok ? "cg-into" : "cg-bad"}`;
   el.style.gridColumn = tileEl.style.gridColumn;
   el.style.gridRow    = tileEl.style.gridRow;
   tileEl.parentElement?.appendChild(el);

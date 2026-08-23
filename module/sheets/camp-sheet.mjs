@@ -285,11 +285,21 @@ export class LimbusCampSheet extends ActorSheet {
         // 所以这里不能拿 isEditable 当闸门，否则玩家端整个拖不动。
         editable:   () => true,
         placements: () => this.actor.system.warehouseContents ?? [],
+        tileAccepts: (tileEl, payload) => {
+          const box = fromUuidSync(tileEl.dataset.itemUuid ?? "");
+          if (!box || !payload.itemMeta) return true;
+          return canContainerAccept(box, payload.itemMeta).ok;
+        },
         payloadFor: (tile) => {
           const idx = parseInt(tile.dataset.placementIdx ?? "-1");
           const p   = this.actor.system.warehouseContents?.[idx];
           if (idx < 0 || !p) return null;
+          const doc = fromUuidSync(tile.dataset.itemUuid ?? "");
           return {
+            itemMeta: {
+              type:   doc?.type ?? "",
+              system: { category: doc?.system?.category ?? "", subtype: doc?.system?.subtype ?? "" },
+            },
             type: "Item",
             uuid: tile.dataset.itemUuid ?? "",
             x: p.x, y: p.y, w: p.w ?? 1, h: p.h ?? 1,
@@ -371,11 +381,21 @@ export class LimbusCampSheet extends ActorSheet {
         rows:       charGrid.rows ?? BAG_ROWS,
         editable:   () => !!charActor?.isOwner,
         placements: () => (charGrid.tiles ?? []).map(t => ({ x: t.x, y: t.y, w: t.w, h: t.h })),
+        tileAccepts: (tileEl, payload) => {
+          const box = fromUuidSync(tileEl.dataset.itemUuid ?? "");
+          if (!box || !payload.itemMeta) return true;
+          return canContainerAccept(box, payload.itemMeta).ok;
+        },
         payloadFor: (tile) => {
           const uuid = tile.dataset.itemUuid ?? "";
           const t    = (charGrid.tiles ?? []).find(x => x.uuid === uuid);
           if (!t) return null;
+          const doc = fromUuidSync(uuid);
           return {
+            itemMeta: {
+              type:   doc?.type ?? "",
+              system: { category: doc?.system?.category ?? "", subtype: doc?.system?.subtype ?? "" },
+            },
             type: "Item", uuid,
             x: t.x, y: t.y, w: t.w, h: t.h,
             placementIdx: (charGrid.tiles ?? []).indexOf(t),

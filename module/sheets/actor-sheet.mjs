@@ -767,11 +767,22 @@ export class LimbusActorSheet extends ActorSheet {
         rows:       grid?.rows ?? BAG_ROWS,
         editable:   () => this.isEditable,
         placements: () => (grid?.tiles ?? []).map(t => ({ x: t.x, y: t.y, w: t.w, h: t.h })),
+        // 悬停在容器图块上时：这个容器收不收拖着的这件东西（红框即不收）
+        tileAccepts: (tileEl, payload) => {
+          const box = this.actor.items.get(tileEl.dataset.itemId ?? "");
+          if (!box || !payload.itemMeta) return true;
+          return canContainerAccept(box, payload.itemMeta).ok;
+        },
         payloadFor: (tile) => {
           const id = tile.dataset.itemId ?? "";
           if (!id) return null;
           const idx = (grid?.tiles ?? []).findIndex(t => t.id === id);
+          const doc = this.actor.items.get(id);
           return {
+            itemMeta: {
+              type:   doc?.type ?? "",
+              system: { category: doc?.system?.category ?? "", subtype: doc?.system?.subtype ?? "" },
+            },
             type: "Item",
             uuid: tile.dataset.itemUuid ?? "",
             x: parseInt(tile.dataset.x ?? 0),

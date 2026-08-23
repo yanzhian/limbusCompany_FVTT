@@ -21,6 +21,20 @@ import { buildPlacementGrid, canPlace, autoPlace, makeLockedSet } from "../helpe
 /** 背景的等级物品不收这三类（背景由向导指定、恐慌卡走 panicSlots、技能走技能书） */
 const BG_ITEM_BLOCKED_TYPES = ["background", "panic", "skill"];
 
+/**
+ * 拖动 payload 里随身携带的物品"身份卡"：容器限制判定只看类型/分类/子类型，
+ * 悬停预览必须同步出结果（来不及 await fromUuid），所以起拖时就带上。
+ */
+function _itemMetaOf(itemLike) {
+  return {
+    type:   itemLike?.type ?? "",
+    system: {
+      category: itemLike?.system?.category ?? "",
+      subtype:  itemLike?.system?.subtype  ?? "",
+    },
+  };
+}
+
 /** 有没有在线 GM 可以代执行写操作（权限不足时的兜底通道） */
 const _hasActiveGM = () => game.users?.some(u => u.isGM && u.active) ?? false;
 
@@ -439,6 +453,13 @@ export class LimbusItemSheet extends ItemSheet {
         editable:   () => this.isEditable || _hasActiveGM(),
         placements: () => this.item.system.contents ?? [],
         lockedSet:  () => makeLockedSet(this.item.system.lockedCells ?? []),
+        // 悬停在容器图块上时：这个容器收不收拖着的这件东西
+        tileAccepts: (tileEl, payload) => {
+          const uuid = tileEl.dataset.itemUuid ?? "";
+          const box  = uuid ? fromUuidSync(uuid) : null;
+          if (!box || !payload.itemMeta) return true;
+          return canContainerAccept(box, payload.itemMeta).ok;
+        },
         payloadFor: (tile) => {
           const idx = parseInt(tile.dataset.placementIdx ?? -1);
           const p   = this.item.system.contents?.[idx];
@@ -457,6 +478,8 @@ export class LimbusItemSheet extends ItemSheet {
           };
           if (p.uuid)     payload.uuid     = p.uuid;
           if (p.itemData) payload.itemData = p.itemData;
+          const doc = p.uuid ? fromUuidSync(p.uuid) : null;
+          payload.itemMeta = _itemMetaOf(doc ?? p.itemData);
           return payload;
         },
       });
