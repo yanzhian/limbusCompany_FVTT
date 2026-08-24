@@ -19,8 +19,8 @@
 /** 调试台（sparkle-lab）定稿的参数 */
 export const READY_SPARKLE = {
   count:        6,
-  density:      0.52,
-  area:         "fill",
+  density:      0.34,
+  area:         "center",
   spreadJitter: 0.55,
   size:         55,
   jitter:       0.6,
@@ -79,6 +79,15 @@ function place(st, i, n, w, h, o) {
       pad + (w - pad * 2) * Math.min(0.999, Math.max(0, (cx + 0.5 + jx) / cols)),
       pad + (h - pad * 2) * Math.min(0.999, Math.max(0, (cy + 0.5 + jy) / rows)),
     ];
+  }
+
+  if (o.area === "center") {
+    // 集中：绕中心成环，半径由密集度决定（越小越抱团）。
+    // 角度按序号均分，所以不会挤成一坨；抖动只在自己那一份角度里晃。
+    const cx  = w / 2, cy = h / 2;
+    const ang = ((i + 0.5 + (st.t - 0.5) * o.spreadJitter) / n) * Math.PI * 2;
+    const rad = Math.min(w, h) * 0.5 * o.density * (0.4 + st.d * 0.6);
+    return [cx + Math.cos(ang) * rad, cy + Math.sin(ang) * rad];
   }
 
   if (o.area === "corner") {
