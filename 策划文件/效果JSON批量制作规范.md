@@ -151,6 +151,7 @@
 | `category` | `categories: ["slash", ...]` | 使用了某分类的骰 |
 | `background` | `bgName` | 背景名或背景标签 |
 | `equipped` | `equipName`/`equipTag`/`equipCategory`、`count`、`perEach`、`maxTimes` | 装备格里符合条件的件数；`perEach: true` 时也提供倍数 |
+| `equipSlotCategory` | `equipSlot`（`weapon`/`upper`/`lower`/`accessory`，留空=不限部位）、`equipCategory`（分类，多个用 `/` 分隔） | 【装备分类】：某部位装备的分类是否命中（「若你武器的分类为弓刀」） |
 | `allyTag` | `target`（`bgTag`/`bgTagOther`/`allTeamOther`…）、`targetTag`、`targetTagCount`、`perEach`、`maxTimes` | 场上有没有符合条件的友方（「若有其他背景带有X的友方」）；`perEach: true` 时人数也当倍数 |
 | `fieldResource` | `fieldName`、`comparison`、`stacks` | 公用场地层数 |
 | `sinResource` | `sinType`、`comparison`、`value` | 全局罪孽池点数 |
@@ -264,6 +265,9 @@
 // 触发一次目标的某个 BUFF（跳伤害）
 { "type": "triggerBuff", "target": "target",
   "trigBuff": "burn", "trigBuffCustom": "", "trigStacks": 1, ... }
+
+// 范围修改：只作用于**已装备的武器**（其他部位一律忽略），持久生效不自动还原
+{ "type": "rangeChg", "rangeMode": "ranged", "rangeValue": 8 }
 
 // 骰子类型（本次攻击内有效）
 { "type": "diceTypeChg", "diceTypeVal": "unbreakable" }   // normal / unbreakable / severing

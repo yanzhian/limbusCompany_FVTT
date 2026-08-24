@@ -9584,3 +9584,23 @@ input.item-piles-quantity {
   flex: 0 0 auto;
   min-height: 80px;
 }
+
+/* ── 武器：近战/远程 + 攻击范围 ─────────────────────────────────────── */
+.limbuscompany .equip-range-row {
+  display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+  font-size: .72rem; color: var(--text-sub); padding: 2px 0;
+}
+.limbuscompany .equip-rangetype-sel { width: 68px; }
+.limbuscompany .equip-range-input {
+  width: 46px; background: rgba(0,0,0,.25); border: 1px solid var(--border-gold);
+  border-radius: 2px; color: var(--text-main); font-size: .72rem; padding: 0 4px;
+}
+.limbuscompany .equip-range-ft,
+.limbuscompany .equip-range-display { color: var(--text-dim); }
+.limbuscompany .equip-rangetype-badge {
+  padding: 0 6px; border-radius: 2px; background: rgba(95,62,33,.35);
+  border: 1px solid var(--border-gold); color: var(--text-main);
+}
+.limbuscompany .equip-rangetype-badge.is-ranged {
+  background: rgba(47,97,87,.35); border-color: #4E9A8C; color: #BFE6DC;
+}

@@ -229,6 +229,9 @@ export class LimbusItemSheet extends ItemSheet {
     // ── 装备专用数据 ──────────────────────────────────────────────────────
     if (item.type === "equipment") {
       context.isWeapon    = sys.subtype === "weapon";
+      // 武器的攻击方式与射程（1 格 = 5ft，沿用容量扩散那套换算口径）
+      context.rangeTypeLabel = sys.rangeType === "ranged" ? "远程" : "近战";
+      context.rangeFt        = `${((sys.range ?? 1) * 5 + 2.5).toFixed(1)}ft`;
       context.isUpper     = sys.subtype === "upper";
       context.isLower     = sys.subtype === "lower";
       context.isAccessory = sys.subtype === "accessory";
@@ -2366,6 +2369,7 @@ function _activityEffectLabels() {
     { value: "triggerBuff",  label: "触发BUFF" },
     { value: "useSkill",     label: "使用技能" },
     { value: "diceTypeChg",  label: "骰子类型" },
+    { value: "rangeChg",     label: "范围修改" },
     { value: "extraDamage",  label: "追加伤害" },
     { value: "relatedSkillConvert", label: "相关技能转换" },
     { value: "fieldResource", label: "公用场地" },
@@ -2485,7 +2489,7 @@ function _buildCondRow(cond, idx, cfg) {
   if (cond?.type === "level") {
     cond = { ...cond, type: "useSkill", skillLevel: cond.level ?? 1, skillNameOrTag: cond.skillNameOrTag ?? "" };
   }
-  const condType   = ["perN","noBuff","baseAttr","useSkill","buffCompare","category","useSin","fieldResource","sinResource","background","equipped","allyTag"].includes(cond?.type) ? cond.type : "hasBuff";
+  const condType   = ["perN","noBuff","baseAttr","useSkill","buffCompare","category","useSin","fieldResource","sinResource","background","equipped","allyTag","equipSlotCategory"].includes(cond?.type) ? cond.type : "hasBuff";
   const isBuffSec  = condType === "hasBuff" || condType === "noBuff" || condType === "perN" || condType === "buffCompare";
   const isUseSinSec = condType === "useSin";
   const selSins    = Array.isArray(cond?.sinTypes) ? cond.sinTypes
@@ -2548,6 +2552,7 @@ function _buildCondRow(cond, idx, cfg) {
           <option value="background"  ${condType === "background"  ? "selected" : ""}>背景</option>
           <option value="equipped"    ${condType === "equipped"    ? "selected" : ""}>已装备</option>
           <option value="allyTag"     ${condType === "allyTag"     ? "selected" : ""}>友方存在</option>
+          <option value="equipSlotCategory" ${condType === "equipSlotCategory" ? "selected" : ""}>装备分类</option>
           <option value="fieldResource" ${condType === "fieldResource" ? "selected" : ""}>公用场地</option>
           <option value="sinResource"   ${condType === "sinResource"   ? "selected" : ""}>罪孽资源</option>
         </select>
@@ -2620,6 +2625,22 @@ function _buildCondRow(cond, idx, cfg) {
           <label class="ae-cond-cat-cb"><input type="checkbox" class="cond-usesin-cb" value="gloom" ${selSins.includes("gloom") ? "checked" : ""}> 忧郁</label>
           <label class="ae-cond-cat-cb"><input type="checkbox" class="cond-usesin-cb" value="pride" ${selSins.includes("pride") ? "checked" : ""}> 傲慢</label>
           <label class="ae-cond-cat-cb"><input type="checkbox" class="cond-usesin-cb" value="envy" ${selSins.includes("envy") ? "checked" : ""}> 嫉妒</label>
+        </span>
+        <!-- 装备分类：某个部位上装备的物品，其分类是否命中（如"武器的分类是弓刀"）。
+             部位留空 = 不限部位；分类可用 / 分隔多个，任一命中即可。 -->
+        <span class="ae-cond-slotcat-sec" ${condType === "equipSlotCategory" ? "" : 'style="display:none"'}>
+          <label>部位</label>
+          <select class="ae-sel cond-equip-slot">
+            <option value=""          ${!cond?.equipSlot ? "selected" : ""}>不限</option>
+            <option value="weapon"    ${cond?.equipSlot === "weapon"    ? "selected" : ""}>武器</option>
+            <option value="upper"     ${cond?.equipSlot === "upper"     ? "selected" : ""}>上装</option>
+            <option value="lower"     ${cond?.equipSlot === "lower"     ? "selected" : ""}>下装</option>
+            <option value="accessory" ${cond?.equipSlot === "accessory" ? "selected" : ""}>饰品</option>
+          </select>
+          <label>分类</label>
+          <input class="ae-input cond-slot-category" type="text" style="width:130px;"
+                 value="${_esc(cond?.equipCategory ?? "")}"
+                 placeholder="如：弓刀（多个用 / 分隔）">
         </span>
         <!-- 已装备：数名称/标签/分类符合的装备件数；三个筛选可任意组合、留空即不限。
              勾选"每"时，件数还会成为后续效果的倍数（每装备 1 件 → 加 3 层 …）-->
@@ -2923,6 +2944,7 @@ function _buildEffectRow(eff, idx, cfg) {
   // 来源只保留 [标签+等级] 与 [技能名字]；旧数据的 uuid / equipped 一律回落为标签模式
   const useSkillRef    = eff?.skillRef === "name" ? "name" : "tag";
   const isDiceTypeChg  = type === "diceTypeChg";
+  const isRangeChg     = type === "rangeChg";
   const isExtraDamage  = type === "extraDamage";
   const isRelConvert   = type === "relatedSkillConvert";
   const isFieldEff     = type === "fieldResource";
@@ -3046,6 +3068,16 @@ function _buildEffectRow(eff, idx, cfg) {
             <option value="normal"      ${(eff?.diceTypeVal ?? "normal") === "normal"      ? "selected" : ""}>一般骰子</option>
             <option value="unbreakable" ${(eff?.diceTypeVal ?? "normal") === "unbreakable" ? "selected" : ""}>不可摧毁</option>
           </select>
+        </span>
+        <span class="ae-eff-rangechg-sec" ${isRangeChg ? "" : 'style="display:none"'}>
+          <label>攻击方式</label>
+          <select class="ae-sel eff-range-mode">
+            <option value="melee"  ${(eff?.rangeMode ?? "melee") === "melee"  ? "selected" : ""}>近战</option>
+            <option value="ranged" ${eff?.rangeMode === "ranged" ? "selected" : ""}>远程</option>
+          </select>
+          <label>范围（格）</label>
+          <input class="ae-input-sm eff-range-value" type="number" min="0" max="99"
+                 value="${eff?.rangeValue ?? 1}" title="只作用于已装备的武器，其他部位忽略">
         </span>
         <span class="ae-eff-extradmg-sec" ${isExtraDamage ? "" : 'style="display:none"'}>
           <label>物理分类</label>
@@ -3244,6 +3276,7 @@ function _bindCondType(html) {
     row.find(".ae-cond-sin-sec").toggle(isSinSec);
     row.find(".ae-cond-bg-sec").toggle(isBgSec);
     row.find(".ae-cond-equip-sec").toggle(isEquipSec);
+    row.find(".ae-cond-slotcat-sec").toggle(type === "equipSlotCategory");
     row.find(".ae-cond-target-sec").toggle(!isCatSec && !isFieldSec && !isSinSec && type !== "useSin");
     row.find(".ae-cond-pern-max").toggle(isPerN);
     row.find(".ae-cond-pern-dim-sec").toggle(isPerN);
@@ -3363,6 +3396,7 @@ function _bindEffType(html) {
     row.find(".ae-eff-random-sec").toggle(isRandomBuff);
     row.find(".ae-eff-useskill-sec").toggle(isUseSkill);
     row.find(".ae-eff-dicetypechg-sec").toggle(isDiceTypeChg);
+    row.find(".ae-eff-rangechg-sec").toggle(type === "rangeChg");
     row.find(".ae-eff-extradmg-sec").toggle(isExtraDamage);
     row.find(".ae-eff-relconvert-sec").toggle(isRelConvert);
   });
@@ -3423,6 +3457,14 @@ function _readActivityForm(html, original) {
         type:   "allyTag",
         target: $r.find(".cond-target").val() || "bgTagOther",
         ..._readBgTagMeta($r, "cond"),
+      });
+    } else if (condType === "equipSlotCategory") {
+      // 【装备分类】：某个部位上装备的物品，其分类是否命中
+      preconditions.push({
+        type:          "equipSlotCategory",
+        target:        $r.find(".cond-target").val() || "self",
+        equipSlot:     $r.find(".cond-equip-slot").val() || "",
+        equipCategory: $r.find(".cond-slot-category").val()?.trim() || "",
       });
     } else if (condType === "background") {
       preconditions.push({
@@ -3599,6 +3641,14 @@ function _readActivityForm(html, original) {
       effects.push({
         type,
         diceTypeVal: $r.find(".eff-dice-type-val").val() || "normal",
+      });
+      return;
+    }
+    if (type === "rangeChg") {
+      effects.push({
+        type,
+        rangeMode:  $r.find(".eff-range-mode").val() || "melee",
+        rangeValue: Math.max(0, parseInt($r.find(".eff-range-value").val()) || 0),
       });
       return;
     }

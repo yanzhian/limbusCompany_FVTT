@@ -466,6 +466,28 @@ export class ClashManager {
     return true;
   }
 
+  /**
+   * 取装备格里指定部位的装备（武器/上装/下装/饰品）。
+   * 部位用 subtype 判定；武器/饰品可能有多件，返回全部。
+   * @param {Actor}  actor
+   * @param {string} slot  weapon / upper / lower / accessory；空 = 不限部位
+   */
+  static _getEquippedBySlot(actor, slot) {
+    const list = ClashManager._getEquippedItems(actor);
+    if (!slot) return list;
+    return list.filter(it => (it.system?.subtype ?? "") === slot);
+  }
+
+  /**
+   * 【范围修改】的落点：当前**已装备的武器**。
+   * 多把武器时优先取已激活（isActive）的那把，没有激活标记就取第一把。
+   */
+  static _activeWeaponOf(actor) {
+    const weapons = ClashManager._getEquippedBySlot(actor, "weapon");
+    if (!weapons.length) return null;
+    return weapons.find(w => w.system?.isActive) ?? weapons[0];
+  }
+
   /** 该角色装备格里符合条件的装备件数 */
   static _countEquipped(actor, pre) {
     return ClashManager._getEquippedItems(actor)
@@ -1344,6 +1366,24 @@ export class ClashManager {
           continue;
         }
 
+        // ── equipSlotCategory 类型（编辑器里叫【装备分类】）───────────────
+        // 「若你 <部位> 的分类为 <X>」。分类可用 / 分隔多个，任一命中即可；
+        // 部位留空 = 不限部位，只要装备格里有任意一件符合分类即可。
+        if (pre.type === "equipSlotCategory") {
+          const precTgt = (pre.target ?? "self") === "self" ? owner : other;
+          if (!precTgt) { precondFail = true; break; }
+          const wanted = String(pre.equipCategory ?? "")
+            .split("/").map(x => x.trim()).filter(Boolean);
+          const list = ClashManager._getEquippedBySlot(precTgt, pre.equipSlot ?? "");
+          if (!list.length) { precondFail = true; break; }
+          if (wanted.length) {
+            const hit = list.some(it =>
+              wanted.includes(String(it.system?.category ?? "").trim()));
+            if (!hit) { precondFail = true; break; }
+          }
+          continue;
+        }
+
         // ── baseAttr 类型：检查角色属性值 ──────────────────────────────
         if (pre.type === "baseAttr") {
           const precTgt = (pre.target ?? "self") === "self" ? owner : other;
@@ -1978,6 +2018,23 @@ export class ClashManager {
               const label = newDiceType === "unbreakable" ? "不可摧毁" : "一般骰子";
               descStr = `【${item.name}】骰子类型变更为【${label}】`;
             }
+            break;
+          }
+          case "rangeChg": {
+            // 【范围修改】只作用于**当前装备的武器**，其他部位一律忽略。
+            // 这是持久改动（不随攻击后还原）——"拉弓姿势"要一直保持到
+            // 玩家自己换回来，所以写进武器数据，权限不足时转交 GM 代执行。
+            const weapon = ClashManager._activeWeaponOf(effTgt ?? owner);
+            if (!weapon) { descStr = "范围修改：没有已装备的武器"; break; }
+            const mode = eff.rangeMode === "ranged" ? "ranged" : "melee";
+            const val  = Math.max(0, parseInt(eff.rangeValue ?? 1) || 0);
+            await ClashManager._safeDocUpdate(weapon, {
+              "system.rangeType": mode,
+              "system.range":     val,
+            });
+            const ft = (val * 5 + 2.5).toFixed(1);
+            descStr = `【${weapon.name}】转为${mode === "ranged" ? "远程" : "近战"}，`
+              + `攻击范围 ${val} 格（${ft}ft）`;
             break;
           }
           case "relatedSkillConvert": {

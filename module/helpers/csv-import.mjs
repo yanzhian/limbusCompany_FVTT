@@ -144,6 +144,8 @@ export const COLUMN_ALIASES = {
   "攻击等级": "system.atkAdj", "攻击修正": "system.atkAdj",
   "防御等级": "system.defAdj", "防御修正": "system.defAdj",
   "速度":     "system.speedAdj", "速度修正": "system.speedAdj",
+  "攻击方式": "system.rangeType", "近战远程": "system.rangeType",
+  "攻击范围": "system.range", "射程": "system.range",
   "抗性": V_RESIST,                 // "打" → 打击抗性 x0.5
   "弱性": V_WEAK,                   // "突" → 突刺抗性 x2.0
   "斩击抗性": "system.resistanceAdj.slash",
@@ -186,6 +188,9 @@ const VALUE_ALIASES = {
   "system.sinType": {
     "暴怒": "wrath", "愤怒": "wrath", "色欲": "lust", "怠惰": "sloth",
     "暴食": "gluttony", "忧郁": "gloom", "傲慢": "pride", "嫉妒": "envy",
+  },
+  "system.rangeType": {
+    "近战": "melee", "远程": "ranged", "melee": "melee", "ranged": "ranged",
   },
   "system.diceType": {
     "": "normal", "-": "normal", "普通": "normal", "一般": "normal", "一般骰子": "normal",
@@ -722,7 +727,7 @@ export function buildItemData(rows, defaultType) {
 /** 各类型的模板列（与实际编辑用的表格布局一致；「图标/区域N」为表格自用，导入时忽略；
     「完成」列填真值时整行跳过，见 isDoneMark） */
 const TEMPLATE_COLUMNS = {
-  equipment:  ["图标", "完成", "名称", "类型", "攻击等级", "防御等级", "速度",
+  equipment:  ["图标", "完成", "名称", "类型", "攻击等级", "防御等级", "速度", "攻击方式", "攻击范围",
                "抗性", "弱性", "分类", "星芒", "容量", "标签", "效果", "价格"],
   skill:      ["图标", "完成", "名称", "类型", "分类", "罪孽", "等级", "骰数",
                "攻击容量", "容量扩散", "骰类型", "无法装备", "援护防御", "无法拼点", "无差别攻击", "标签", "效果",
@@ -792,6 +797,8 @@ const COLUMN_NOTES = {
   "无法装备": "填 是/否、TRUE/FALSE",
   "援护防御": "填 是/否、TRUE/FALSE；标记为【援护防御】专属技能",
   "无法拼点": "填 是/否、TRUE/FALSE；被锁定的目标只能【承受】，不能对抗",
+  "攻击方式": "仅武器：近战 / 远程",
+  "攻击范围": "仅武器：攻击范围格数（1 格 = 5ft）",
   "允许类型": "容器存放限制·类型，多个用 / 分隔（消耗品/材料），留空=不限制",
   "允许分类": "容器存放限制·分类，多个用 / 分隔（医疗/食材），与类型同时满足才收",
   "无差别攻击": "填 是/否、TRUE/FALSE；容量扩散时敌我不分，范围内的友方也会被打到（自己除外）",
