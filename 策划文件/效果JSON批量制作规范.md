@@ -267,6 +267,7 @@
   "trigBuff": "burn", "trigBuffCustom": "", "trigStacks": 1, ... }
 
 // 范围修改：只作用于**已装备的武器**（其他部位一律忽略），持久生效不自动还原
+// 近战：拼点前瞬移贴身；远程：不移动、隔空开拼，胜则推人、败不被推
 { "type": "rangeChg", "rangeMode": "ranged", "rangeValue": 8 }
 
 // 骰子类型（本次攻击内有效）

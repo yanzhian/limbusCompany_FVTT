@@ -3205,6 +3205,18 @@ export class ClashManager {
       def: defItem?.system?.diceType ?? "default",
     };
     const _rollsFx = { atk: atkRollFx, def: defRollFx };
+
+    // ── 出手前的站位 ────────────────────────────────────────────────────
+    // 近战武器（含长矛/锁链这种范围 >1 的）在拼点前瞬移到目标身旁，之后一切照旧；
+    // 远程武器**不移动**，隔着距离直接开拼——击退与追击的差异见 knockback.mjs。
+    if (canvas?.ready) {
+      const atkTok0 = ClashManager._tokenOfActor(atkActor);
+      const defTok0 = ClashManager._tokenOfActor(defActor);
+      if (atkTok0 && defTok0 && !ClashKnockback.weaponRangeOf(atkActor).ranged) {
+        await ClashKnockback.approach(atkTok0, defTok0);
+      }
+    }
+
     const _sumParts = (parts) => parts.reduce((a, p) => a + (p.value ?? 0), 0);
     const _atkEffFx = _sumParts(_atkPartsFx);
     const _defEffFx = _sumParts(_defPartsFx);
