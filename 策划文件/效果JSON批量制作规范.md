@@ -169,7 +169,18 @@
 ```
 
 - **层数与强度分别扣**：填了哪个扣哪个，两个都填就都扣，都留 0 时按"扣 1 层"
-- 「消耗所有 X」没有专门写法，用 `"stacks": 99` 之类的大数扣光即可
+
+#### 「消耗所有 X」→ 用 `consumeAll`
+
+```json
+{ "type": "forced", "target": "self", "buff": "custom", "buffCustom": "炎蝶之棺",
+  "consumeAll": true }
+```
+
+- 编辑器里对应 BUFF 消耗行的 **【扣光】** 勾选框。
+- 语义是「有多少扣多少」：整条 BUFF 直接移除，**一层都没有也不算付不起**，不会让整条 Activity 失败。
+- 勾上后 `intensity` / `stacks` 被忽略。
+- ⚠️ **不要用 `"stacks": 99` 之类的大数**。那走的是普通强制消耗，预检查要求你**真的**有 99 层，永远付不起 → 整条 Activity 被静默跳过（曾导致整段 [攻击后] 一句都不执行）。
 
 ### 5.2 每（消耗式倍数）
 
@@ -180,6 +191,21 @@
 ```
 每 N 扣一次、算一倍，只扣 `倍数 × N`。`maxTimes` 同上。
 群体目标时**逐个扣**，倍数取所有目标里最小的那个。
+
+**不足 1 倍（倍数 = 0）时不再跳过整条 Activity**：什么都不扣，只有「随倍数缩放的效果」失效，
+其余效果照常执行。例：
+
+> [攻击后]：消耗所有【炎蝶之棺】，恢复 20 生命值，每消耗 3 级【烧伤】恢复 1D6，将本骰转换成"烙印"
+
+目标没有烧伤时，少回那 1D6，但 20 点固定回血与骰子转换照常发生。
+
+随倍数缩放（0 倍时跳过）的效果类型见 `ClashManager.PER_SCALED_EFFECTS`：
+`addBuff` `randomBuff` `hpAdj` `sanityAdj` `apAdj` `atkAdj` `defAdj` `weightAdj`
+`diceAdj` `diceFacesAdj` `baseValue` `fieldResource` `seismicBlast` `extraDamage`。
+其余（`diceTypeChg` `removeBuff` `rangeChg` `triggerBuff`…）与倍数无关，0 倍时照常跑。
+
+> 注意：**倍数是整条 Activity 共用的**（取所有「每」条件与「每」消耗的最小值）。
+> 想让固定部分和「每 N」部分互不影响地各自缩放，仍然要**拆成两条 Activity**。
 
 ### 5.3 其他
 

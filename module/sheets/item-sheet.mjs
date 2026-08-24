@@ -2800,6 +2800,8 @@ function _buildCostRow(cost, idx, cfg) {
   const isDiscard  = selType === "discard";
   const isPerStack = selType === "perStack";
   const isRandom   = selType === "random";
+  // 「扣光」只对 BUFF 类的强制消耗有意义（每/随机/属性/丢弃都有各自的语义）
+  const isConsumeAllable = !isPerStack && !isRandom && !isAttr && !isDiscard;
   const costPerNDim = cost?.perNDim === "intensity" ? "intensity" : "stacks";
   const costPerNDimOpts = [
     ["stacks","层数"],["intensity","强度"],
@@ -2881,7 +2883,14 @@ function _buildCostRow(cost, idx, cfg) {
           <input class="ae-input cost-buff" type="text" list="ae-buff-dl"
                  placeholder="输入或选择BUFF…" autocomplete="off" style="width:100px;"
                  value="${_esc(_keyToLabel(cost?.buff ?? "", cost?.buffCustom ?? ""))}">
-          <span class="ae-cost-intensity-sec" ${isPerStack ? 'style="display:none"' : ""}>
+          <!-- 扣光：「消耗所有 X」的正确写法。勾上后忽略强度/层数，有多少扣多少，
+               一层都没有也不会让整条 Activity 失败。不要再用 stacks:99 之类的大数——
+               那是强制消耗，预检查要求真有 99 层，永远付不起 -->
+          <span class="ae-cost-all-sec" ${isConsumeAllable ? "" : 'style="display:none"'}>
+            <label title="消耗所有：有多少扣多少，没有也不算失败（忽略强度/层数）">扣光</label>
+            <input class="cost-consume-all" type="checkbox" ${cost?.consumeAll ? "checked" : ""}>
+          </span>
+          <span class="ae-cost-intensity-sec" ${(isPerStack || cost?.consumeAll) ? 'style="display:none"' : ""}>
             <label>强度</label>
             <input class="ae-input-sm cost-intensity" type="number" value="${cost?.intensity ?? 0}" min="0">
           </span>
@@ -2889,8 +2898,10 @@ function _buildCostRow(cost, idx, cfg) {
             <label>维度</label>
             <select class="ae-sel cost-pern-dim">${costPerNDimOpts}</select>
           </span>
-          <label class="cost-stacks-label">${isPerStack ? (costPerNDim === "intensity" ? "每N级" : "每N层") : "层数"}</label>
-          <input class="ae-input-sm cost-stacks"    type="number" value="${cost?.stacks ?? 0}"    min="0">
+          <span class="ae-cost-stacks-sec" ${cost?.consumeAll ? 'style="display:none"' : ""}>
+            <label class="cost-stacks-label">${isPerStack ? (costPerNDim === "intensity" ? "每N级" : "每N层") : "层数"}</label>
+            <input class="ae-input-sm cost-stacks"    type="number" value="${cost?.stacks ?? 0}"    min="0">
+          </span>
           <span class="ae-cost-pern-max" ${isPerStack ? "" : 'style="display:none"'}>
             <label>最大倍数</label>
             <input class="ae-input-sm cost-max-times" type="number" value="${cost?.maxTimes ?? 0}" min="0" placeholder="0=无限">
@@ -3318,7 +3329,12 @@ function _bindCostType(html) {
     row.find(".cost-stacks-label").text(isPerStack ? (perNDim === "intensity" ? "每N级" : "每N层") : "层数");
     row.find(".ae-cost-pern-max").toggle(isPerStack);
     row.find(".ae-cost-pern-dim-sec").toggle(isPerStack);
-    row.find(".ae-cost-intensity-sec").toggle(!isPerStack);
+    // 扣光：只对 BUFF 强制消耗开放；勾上后强度/层数没有意义，一并隐藏
+    const canAll = !isPerStack && !isRandom && !isAttr && !isDiscard && !isField && !isSin;
+    const isAll  = canAll && row.find(".cost-consume-all").prop("checked");
+    row.find(".ae-cost-all-sec").toggle(canAll);
+    row.find(".ae-cost-intensity-sec").toggle(!isPerStack && !isAll);
+    row.find(".ae-cost-stacks-sec").toggle(!isAll);
   };
   html.find(".cost-type").off("change").on("change", function () {
     refreshRow($(this).closest(".ae-cost-row"));
@@ -3331,6 +3347,9 @@ function _bindCostType(html) {
     if (row.find(".cost-type").val() !== "perStack") return;
     const dim = $(this).val() === "intensity" ? "intensity" : "stacks";
     row.find(".cost-stacks-label").text(dim === "intensity" ? "每N级" : "每N层");
+  });
+  html.find(".cost-consume-all").off("change").on("change", function () {
+    refreshRow($(this).closest(".ae-cost-row"));
   });
   html.find(".cost-discard-mode").off("change").on("change", function () {
     const row     = $(this).closest(".ae-cost-row");
@@ -3579,6 +3598,8 @@ function _readActivityForm(html, original) {
         target,
         buff:       resolveKey($r.find(".cost-buff").val()),
         buffCustom: "",
+        // 扣光：忽略强度/层数，执行时整条 BUFF 移除
+        consumeAll: type !== "perStack" && $r.find(".cost-consume-all").prop("checked") === true,
         intensity:  type === "perStack" ? 0 : (parseInt($r.find(".cost-intensity").val()) || 0),
         stacks:     parseInt($r.find(".cost-stacks").val())    || 0,
         ..._readBgTagMeta($r, "cost"),

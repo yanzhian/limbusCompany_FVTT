@@ -659,6 +659,19 @@ export class ClashManager {
     "diceAdj", "diceFacesAdj", "baseValue", "weightAdj", "diceTypeChg",
   ]);
 
+  /**
+   * 数值会被「每 N」倍数缩放的效果类型。
+   * 倍数为 0（一倍都不够）时，这些效果整条跳过——不然 addBuff 会加 0 层、
+   * seismicBlast 会被 Math.max(1,…) 兜底成 1 次，全是错的。
+   * 不在这个集合里的效果（diceTypeChg / removeBuff / rangeChg / triggerBuff…）
+   * 与倍数无关，0 倍时照常执行。
+   */
+  static PER_SCALED_EFFECTS = new Set([
+    "addBuff", "randomBuff", "hpAdj", "sanityAdj", "apAdj", "atkAdj", "defAdj",
+    "weightAdj", "diceAdj", "diceFacesAdj", "baseValue",
+    "fieldResource", "seismicBlast", "extraDamage",
+  ]);
+
   static async _applyActivitiesAndEquip(item, trigger, ctx) {
     await ClashManager._applyActivities(item, trigger, ctx);
     const owner = ctx.owner ?? null;
@@ -1531,20 +1544,22 @@ export class ClashManager {
             if (!ok) { forcedFail = true; break; }
           }
           if (forcedFail) break;
-        } else if (cost.target === "field" && (cost.type === "forced" || cost.type === "perStack")) {
-          // 公用场地：层数不足（每N层的 N）则跳过整条 Activity
+        } else if (cost.target === "field" && cost.type === "forced") {
+          // 公用场地·强制消耗：层数不足则跳过整条 Activity
+          //（【每】不再拦截：不足 1 倍时倍数为 0，只让随倍数缩放的效果失效，见下方）
           if (!cost.fieldName) { forcedFail = true; break; }
           const have = SinResourceHUD.getFieldResourceStacks(cost.fieldName);
           if (have < Math.max(1, cost.stacks ?? 1)) { forcedFail = true; break; }
-        } else if (cost.target === "sin" && (cost.type === "forced" || cost.type === "perStack")) {
-          // 罪孽资源：点数不足（每N点的 N）则跳过整条 Activity
+        } else if (cost.target === "sin" && cost.type === "forced") {
+          // 罪孽资源·强制消耗：点数不足则跳过整条 Activity
           if (!cost.sinType) { forcedFail = true; break; }
           const have = SinResourceHUD.getSinValue(cost.sinType);
           if (have < Math.max(1, cost.value ?? 1)) { forcedFail = true; break; }
-        } else if (cost.buff && (cost.type === "forced" || cost.type === "perStack")) {
-          // 强制消耗 / 每：数值不足则跳过整条 Activity
-          // ·【每】：只看一个维度（perNDim），门槛是每 N 的那个 N
-          // ·【强制消耗】：层数与强度分别校验——填了哪个就要够哪个
+        } else if (cost.buff && cost.type === "forced") {
+          // 强制消耗：数值不足则跳过整条 Activity（层数与强度分别校验，填了哪个就要够哪个）
+          // ·【扣光】（consumeAll）：语义是"有多少扣多少"，一律放行，0 也不阻断
+          // ·【每】同样不再拦截，理由见上
+          if (cost.consumeAll) continue;
           const costBuffType = cost.buff === "custom" ? (cost.buffCustom || "custom") : cost.buff;
           const costTgts = await ClashManager._resolveTargets(cost.target ?? "self", owner, other, cost, ctx);
           if (costTgts.length === 0) { forcedFail = true; break; }
@@ -1552,10 +1567,7 @@ export class ClashManager {
             const existing = ClashManager._getBuff(tgt, costBuffType);
             const haveS = existing?.stacks    ?? 0;
             const haveI = existing?.intensity ?? 0;
-            if (cost.type === "perStack") {
-              const haveVal = cost.perNDim === "intensity" ? haveI : haveS;
-              if (haveVal < Math.max(1, cost.stacks ?? 1)) { forcedFail = true; break; }
-            } else {
+            {
               const needS = cost.stacks    ?? 0;
               const needI = cost.intensity ?? 0;
               // 两个都没填时按老规矩当作"扣 1 层"
@@ -1659,14 +1671,27 @@ export class ClashManager {
               const have     = dim === "intensity" ? (existing?.intensity ?? 0) : (existing?.stacks ?? 0);
               let   times    = Math.floor(have / n);
               if ((cost.maxTimes ?? 0) > 0) times = Math.min(times, cost.maxTimes);
-              if (dim === "intensity") {
-                await ClashManager._reduceBuffIntensity(tgt, costBuffType, times * n);
-              } else {
-                await ClashManager._reduceBuffStacks(tgt, costBuffType, times * n);
+              // 不足 1 倍时 times = 0：什么都不扣（也不再让整条 Activity 失败）
+              if (times > 0) {
+                if (dim === "intensity") {
+                  await ClashManager._reduceBuffIntensity(tgt, costBuffType, times * n);
+                } else {
+                  await ClashManager._reduceBuffStacks(tgt, costBuffType, times * n);
+                }
               }
               each.push(times);
             }
-            if (each.length) costMultipliers.push(Math.min(...each));
+            // 一个目标都没有 = 0 倍（而不是"没这条消耗"，那会让效果按满额跑）
+            costMultipliers.push(each.length ? Math.min(...each) : 0);
+          } else if (cost.consumeAll) {
+            // 扣光：整条 BUFF 直接移除（有多少扣多少，一条都没有也不算失败）。
+            // 「消耗所有 X」请用这个，不要再写 stacks: 99 —— 大数走的是强制消耗，
+            // 预检查要求真的有 99 层，永远付不起，整条 Activity 会被静默跳过。
+            for (const tgt of costTgts) {
+              if (ClashManager._getBuff(tgt, costBuffType)) {
+                await ClashManager._removeBuff(tgt, costBuffType);
+              }
+            }
           } else if (cost.type !== "none") {
             // 强制消耗：层数与强度分别扣，填了哪个扣哪个（都没填按扣 1 层）
             const needS = cost.stacks    ?? 0;
@@ -1684,7 +1709,7 @@ export class ClashManager {
             const n     = Math.max(1, cost.stacks ?? 1);
             let   times = Math.floor(have / n);
             if ((cost.maxTimes ?? 0) > 0) times = Math.min(times, cost.maxTimes);
-            await SinResourceHUD.consumeFieldResourceStacks(cost.fieldName, times * n);
+            if (times > 0) await SinResourceHUD.consumeFieldResourceStacks(cost.fieldName, times * n);
             costMultipliers.push(times);
           } else if (cost.type !== "none") {
             await SinResourceHUD.consumeFieldResourceStacks(cost.fieldName, cost.stacks ?? 1);
@@ -1722,6 +1747,11 @@ export class ClashManager {
         // 连击的第 2 次交锋起：改写技能本身的效果（骰数/面数/基础值/攻击容量/
         // 骰子类型）不再重复执行，否则每交锋一次就再加一遍，3d 会滚成 6d
         if (ctx._comboRound > 1 && ClashManager.COMBO_ONCE_EFFECTS.has(eff.type)) continue;
+        // 「每 N」一倍都不够时（倍数 0）：只跳过随倍数缩放的效果，
+        // 不随倍数走的效果（转换骰子类型、移除 BUFF 等）照常执行。
+        // 例：「消耗所有【炎蝶之棺】回 20 血；每消耗 3 级【烧伤】回 1D6；转成烙印」
+        // ——没有烧伤时该少回 1D6，而不是连固定回血和转换一起消失。
+        if (perStackMultiplier === 0 && ClashManager.PER_SCALED_EFFECTS.has(eff.type)) continue;
         const effTgts = await ClashManager._resolveTargets(eff.target ?? "self", owner, other, eff, ctx);
         if (effTgts.length === 0) continue;
 
