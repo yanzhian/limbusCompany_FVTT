@@ -9604,3 +9604,30 @@ input.item-piles-quantity {
 .limbuscompany .equip-rangetype-badge.is-ranged {
   background: rgba(47,97,87,.35); border-color: #4E9A8C; color: #BFE6DC;
 }
+
+/* ─── 【大招就绪】十字星芒 ──────────────────────────────────────────────
+   canvas 由 module/helpers/ready-sparkle.mjs 动态插入，绝对定位居中覆盖在
+   图标上、向外扩到图标的 4/3（对应 100×100 图层 / 75×75 图标的实装比例）。
+   宿主必须 position:relative 且 overflow 可见，否则星芒会错位或被裁。 */
+.limbus-ready-sparkle {
+  position:       absolute;
+  pointer-events: none;
+  z-index:        5;
+}
+
+/* 战斗页技能槽：.combat-skill-slot-wrap 本身已是 relative + overflow:visible */
+.limbuscompany .combat-section       { overflow: visible; }
+.limbuscompany .ego-combat-section   { overflow: visible; }
+
+/* 快捷 HUD：技能行与 EGO 行需要定位上下文，且不能裁掉外扩的画布 */
+.limbuscompany .qa-skill-row,
+.limbuscompany .qa-ego-row {
+  position: relative;
+  overflow: visible;
+}
+
+/* 小队 HUD：头像所在的主行 */
+.squad-main-row {
+  position: relative;
+  overflow: visible;
+}
