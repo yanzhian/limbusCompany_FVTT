@@ -299,8 +299,24 @@
 // 骰子类型（本次攻击内有效）
 { "type": "diceTypeChg", "diceTypeVal": "unbreakable" }   // normal / unbreakable / severing
 
-// 相关技能转换（永久换卡，形态切换用）
-{ "type": "relatedSkillConvert", "relMode": "byName", "relSkillName": "守护者" }
+// 相关技能转换（换卡，形态切换用）
+// relDuration: "permanent"（默认）/ "afterClash"（本次结算后还原）/ "endOfTurn"（本回合结束时还原）
+{ "type": "relatedSkillConvert", "relMode": "byName", "relSkillName": "守护者",
+  "relDuration": "permanent" }
+
+/* ⚠️ 还原不要写在目标技能上。
+ * 「强化形态自己写一条 [攻击后] 转换回原形态」看似可行，但那条转换挂在**强化形态**上，
+ * 它分不清自己是被哪条路径换上来的。永久转换和临时转换共用同一个强化形态时，
+ * 任意一次使用都会把两边一起还原（守备技能触发一次，永久那条也跟着掉回去）。
+ *
+ * 正确写法：还原挂在**转换这一侧**，用 relDuration 声明时长。
+ *   - 永久那条（Lv.3 → 强化Lv.3）：relDuration = "permanent"
+ *   - 临时那条（守备技能触发）：  relDuration = "afterClash" 或 "endOfTurn"
+ *   - 强化形态上**不写**任何转换回去的效果
+ * 引擎只在**真的发生了替换**时登记还原（replaceSkillSlot 返回 true）。
+ * 槽位里本来就是强化形态（已被永久那条换上去了）时，临时那条是空操作、不登记，
+ * 到点也就不会把永久状态误还原。多层临时转换按后进先出剥回。
+ */
 
 // 使用技能（[反应] 常用，其余触发时机同样可用）
 { "type": "useSkill", "target": "self", "skillRef": "name",

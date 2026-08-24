@@ -796,6 +796,9 @@ Hooks.on("updateCombat", async (combat, changed) => {
       }
     }
 
+    // ── 临时技能转换：还原「本回合结束时」到期的那些 ─────────────────────
+    await ClashManager._revertTempSkillConverts(actor, "endOfTurn");
+
     // ── 场地资源 onRoundStart 钩子：每回合开始对每个行动角色调用一次 ──────
     for (const [fieldName, def] of FieldResourceRegistry) {
       if (typeof def.onRoundStart !== "function") continue;

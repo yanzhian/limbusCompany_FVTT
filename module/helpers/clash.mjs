@@ -2079,10 +2079,20 @@ export class ClashManager {
             if (!name) { descStr = "相关技能转换：未配置技能名字"; break; }
             const newItem = (relOwner.items ?? []).find(it => it.type === "skill" && it.name === name && it.id !== item.id);
             if (!newItem) { descStr = `相关技能转换：背包中找不到技能【${name}】`; break; }
+            // 转换时长：permanent（默认，老数据）/ afterClash（本次结算后）/ endOfTurn（本回合结束时）
+            const relUntil = ["afterClash", "endOfTurn"].includes(eff.relDuration) ? eff.relDuration : "";
             const replaced = await relOwner.replaceSkillSlot?.(item.id, newItem.id);
             if (replaced) relOwner.sheet?._replaceCombatBagSkill?.(item.id, newItem.id);
+            // 临时转换：登记还原任务。**只有真的发生了替换才登记**——
+            // 若槽位里本来就是目标技能（比如已被另一条"永久转换"换上去了），
+            // replaceSkillSlot 返回 false，这里什么都不记，到点也就不会把别人的永久状态还原掉。
+            if (replaced && relUntil) {
+              await ClashManager._pushTempSkillConvert(relOwner, item.id, newItem.id, relUntil);
+            }
+            const relUntilLabel = relUntil === "afterClash" ? "（本次结算后还原）"
+                                : relUntil === "endOfTurn"  ? "（本回合结束时还原）" : "永久";
             descStr = replaced
-              ? `【${item.name}】永久转换为【${newItem.name}】`
+              ? `【${item.name}】${relUntil ? "临时" : relUntilLabel}转换为【${newItem.name}】${relUntil ? relUntilLabel : ""}`
               : `相关技能转换：未找到【${item.name}】所在的技能槽位`;
             break;
           }
@@ -4065,13 +4075,63 @@ export class ClashManager {
 
   /** 攻防双方的技能与装备格物品一起还原 */
   static async _restoreAllItemMods(...items) {
+    const actors = new Set();
     for (const item of items) {
       if (!item) continue;
       await ClashManager._restoreItemMods(item);
       for (const eq of ClashManager._getEquippedItems(item.parent ?? null)) {
         await ClashManager._restoreItemMods(eq);
       }
+      if (item.parent) actors.add(item.parent);
     }
+    // 骰子数值还原完，顺带把「本次结算后还原」的临时技能转换也还原掉。
+    // 放在这里 = [攻击后] 已经派发完，临时形态该做的事都做完了。
+    for (const actor of actors) {
+      await ClashManager._revertTempSkillConverts(actor, "afterClash");
+    }
+  }
+
+  /* ─── 临时技能转换的还原登记 ─────────────────────────────────────────────
+   * 【相关技能转换】默认是永久的，还原要靠目标技能自己再写一条转换回去。
+   * 但那条"转回去"挂在**目标技能**上，它分不清自己是被哪条路径换上来的——
+   * 永久转换和临时转换共用同一个强化形态时，任何一次使用都会把两边一起还原。
+   * 所以还原改成挂在**转换这一侧**：谁临时换的，谁负责到点换回去。
+   * 记录写在角色 flag 上（跨 action 持久化），栈式：后进先出地还原。
+   * ──────────────────────────────────────────────────────────────────── */
+  static TEMP_CONVERT_FLAG = "tempSkillConverts";
+
+  static async _pushTempSkillConvert(actor, fromId, toId, until) {
+    if (!actor || !fromId || !toId) return;
+    const list = foundry.utils.deepClone(
+      actor.getFlag?.("limbusCompany_FVTT", ClashManager.TEMP_CONVERT_FLAG) ?? []);
+    list.push({ from: fromId, to: toId, until });
+    await ClashManager._safeDocUpdate(actor,
+      { [`flags.limbusCompany_FVTT.${ClashManager.TEMP_CONVERT_FLAG}`]: list });
+  }
+
+  /**
+   * 还原到期的临时技能转换。
+   * @param {Actor}  actor
+   * @param {string} until  "afterClash" / "endOfTurn"；传 "all" 还原全部（长休、脱战等）
+   */
+  static async _revertTempSkillConverts(actor, until) {
+    if (!actor) return;
+    const list = actor.getFlag?.("limbusCompany_FVTT", ClashManager.TEMP_CONVERT_FLAG) ?? [];
+    if (!list.length) return;
+    const due  = [];
+    const keep = [];
+    for (const rec of list) {
+      (until === "all" || rec?.until === until ? due : keep).push(rec);
+    }
+    if (!due.length) return;
+    // 后进先出：多层临时转换时按相反顺序剥回去，中间状态才不会错位
+    for (const rec of due.reverse()) {
+      // 槽位里已经不是当初换上去的那个了（别人又换过），就不要强行改回去
+      const replaced = await actor.replaceSkillSlot?.(rec.to, rec.from);
+      if (replaced) actor.sheet?._replaceCombatBagSkill?.(rec.to, rec.from);
+    }
+    await ClashManager._safeDocUpdate(actor,
+      { [`flags.limbusCompany_FVTT.${ClashManager.TEMP_CONVERT_FLAG}`]: keep });
   }
 
   /* ─── EGO 罪孽抗性修改 ────────────────────────────────────────────────── */

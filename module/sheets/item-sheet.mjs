@@ -3110,7 +3110,14 @@ function _buildEffectRow(eff, idx, cfg) {
           <label>技能名字</label>
           <input class="ae-input eff-relconvert-name" type="text" list="ae-owned-skill-dl"
                  value="${_esc(eff?.relSkillName ?? "")}" placeholder="技能名字（在背包/技能列表中检索）" style="width:130px;" autocomplete="off">
-          <span class="ae-eff-relconvert-hint">永久替换本技能在角色技能槽中的位置（在背包/技能列表按名字检索目标技能）</span>
+          <label>时长</label>
+          <select class="ae-sel eff-relconvert-duration">${
+            [["permanent","永久"],["afterClash","本次结算后还原"],["endOfTurn","本回合结束时还原"]]
+              .map(([v,l]) => `<option value="${v}" ${(eff?.relDuration ?? "permanent") === v ? "selected" : ""}>${l}</option>`)
+              .join("")
+          }</select>
+          <span class="ae-eff-relconvert-hint">替换本技能在角色技能槽中的位置（在背包/技能列表按名字检索目标技能）。
+          「还原」由这条转换自己负责，目标技能上<strong>不需要</strong>再写一条转回去——那样会让共用同一强化形态的其他路径也被一起还原。</span>
         </span>
         </div>
       </div>
@@ -3686,6 +3693,7 @@ function _readActivityForm(html, original) {
         type,
         relMode:      "byName",
         relSkillName: $r.find(".eff-relconvert-name").val()?.trim() || "",
+        relDuration:  $r.find(".eff-relconvert-duration").val() || "permanent",
       });
       return;
     }
