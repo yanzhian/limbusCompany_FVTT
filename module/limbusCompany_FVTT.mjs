@@ -670,6 +670,10 @@ Hooks.on("updateCombat", async (combat, changed) => {
     // 每轮重置拼点胜利计数 & 每回合效果触发次数
     await actor.unsetFlag("limbusCompany_FVTT", "clashWinsThisRound");
     await actor.unsetFlag("limbusCompany_FVTT", "turnFireCounts");
+    // 每回合 BUFF 获得额度（maxGainPerRound）——这里才是"每回合"。
+    // 漏了这一句时它只在 deleteCombat 里清，等于整场战斗共用一份额度：
+    // 【炎蝶之棺】攒满 20 层后，后面每一轮都再也加不上，直到战斗结束。
+    await actor.unsetFlag("limbusCompany_FVTT", "buffRoundGain");
 
     // ── 回合结束 BUFF 清理与晋升 ────────────────────────────────────────
     // 移除本轮有效的临时 BUFF（强壮/虚弱/混乱/恐慌等），将下回合 BUFF 转为本回合

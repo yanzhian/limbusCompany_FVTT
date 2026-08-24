@@ -809,7 +809,16 @@ export class ClashManager {
       );
       const gained  = gainMap[type] ?? 0;
       const allowed = Math.max(0, maxGainPerRound - gained);
-      if (allowed <= 0) return;              // 本回合该 BUFF 的获得额度已用尽
+      if (allowed <= 0) {
+        // 本回合该 BUFF 的获得额度已用尽。这里以前是静默 return，
+        // 结果是"技能明明写了加 6 层却一层没加"且毫无提示，很难查。
+        // 只提示自己能改的角色，免得群体效果刷屏。
+        if (actor?.isOwner) {
+          ui.notifications?.info(
+            `【${customHandler?.label ?? ClashManager._buffLabel(type)}】本回合已达获得上限（${maxGainPerRound} 层）。`);
+        }
+        return;
+      }
       stacks = Math.min(stacks, allowed);
       gainMap[type]  = gained + stacks;
       gainFlagUpdate = { "flags.limbusCompany_FVTT.buffRoundGain": gainMap };
