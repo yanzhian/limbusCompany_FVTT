@@ -282,59 +282,85 @@ registerCustomBuff("defensiveStance", {
 /**
  * 【蝶】
  * - 最大值：10 层
- * - 受到伤害时，消耗 1 层，为目标恢复 1D6 理智值，为自己添加 1 层【沉沦2】
+ * - 受到伤害时，**随机**消耗 1 层 或 1 级：
+ *     · 消耗 1 层 → 为伤害来源恢复 1D6 理智值
+ *     · 消耗 1 级 → 为自己添加 1 层 2 级【沉沦】
+ *   两种代价只会二选一，付不起的那种（层或级已归零）不会被抽中。
  */
 registerCustomBuff("butterfly", {
   label:       "蝶",
   maxStacks:   10,
-  description: "- 最大值：10 层\n- 受到伤害时，消耗 1 层，为目标恢复 1D6 的理智值，为自己添加 1 层【沉沦2】",
+  description: "- 最大值：10 层\n"
+    + "- 受到伤害时，随机消耗 1 层 或 1 级：\n"
+    + "  · 消耗 1 层 → 为目标恢复 1D6 的理智值\n"
+    + "  · 消耗 1 级 → 为自己添加 1 层 2 级【沉沦】",
 
   async onTakeDamage(actor, buff, ctx) {
-    if ((buff.stacks ?? 0) <= 0) return;
+    const stacks    = buff.stacks    ?? 0;
+    const intensity = buff.intensity ?? 0;
+    if (stacks <= 0 && intensity <= 0) return;
 
-    // 在同一个 buffs 快照上完成：蝶-1层 + 沉沦+1层，合并为一次 update
+    // 抽签：只把付得起的那一侧放进候选池
+    const pool = [];
+    if (stacks    > 0) pool.push("stack");
+    if (intensity > 0) pool.push("level");
+    const pay = pool[Math.floor(Math.random() * pool.length)];
+
+    // 层与沉沦在同一份快照上改完，合并成一次 update
     const buffs = foundry.utils.deepClone(actor.system?.buffs ?? []);
     const idx   = buffs.findIndex(b => b.id === buff.id);
     if (idx < 0) return;
-    const newStacks = (buffs[idx].stacks ?? 1) - 1;
-    if (newStacks <= 0) {
-      buffs.splice(idx, 1);
+
+    let restStacks = stacks;
+    let restInt    = intensity;
+    if (pay === "stack") {
+      restStacks = stacks - 1;
+      if (restStacks <= 0) buffs.splice(idx, 1);
+      else                 buffs[idx].stacks = restStacks;
     } else {
-      buffs[idx].stacks = newStacks;
+      restInt = intensity - 1;
+      // 强度归零的蝶不再是蝶，整条移除
+      if (restInt <= 0) buffs.splice(idx, 1);
+      else              buffs[idx].intensity = restInt;
     }
 
-    // 沉沦 +1 层（强度 2）
-    const si = buffs.findIndex(b => b.type === "sinking");
-    if (si >= 0) {
-      buffs[si].stacks = (buffs[si].stacks ?? 0) + 1;
-    } else {
-      buffs.push({
-        id:        foundry.utils.randomID(),
-        type:      "sinking",
-        name:      "沉沦",
-        intensity: 2,
-        stacks:    1,
-        whenAdded: "本回合",
-      });
+    // 消耗 1 级 → 自己吃 1 层 2 级【沉沦】
+    if (pay === "level") {
+      const si = buffs.findIndex(b => b.type === "sinking");
+      if (si >= 0) {
+        buffs[si].stacks = (buffs[si].stacks ?? 0) + 1;
+      } else {
+        buffs.push({
+          id:        foundry.utils.randomID(),
+          type:      "sinking",
+          name:      "沉沦",
+          intensity: 2,
+          stacks:    1,
+          whenAdded: "本回合",
+        });
+      }
     }
     await _safeUpdate(actor, { "system.buffs": buffs });
 
-    // 为伤害来源（attacker）恢复 1D6 理智
+    // 消耗 1 层 → 为伤害来源恢复 1D6 理智
     const target = ctx?.attacker ?? null;
-    let sanHeal = 0;
-    if (target) {
+    let sanHeal  = 0;
+    if (pay === "stack" && target) {
       const healRoll = new Roll("1d6");
       await healRoll.evaluate();
       sanHeal = healRoll.total;
       const curSan = target.system?.sanity?.value ?? 50;
-      const newSan = Math.min(95, curSan + sanHeal);
-      await _safeUpdate(target, { "system.sanity.value": newSan });
+      await _safeUpdate(target, { "system.sanity.value": Math.min(95, curSan + sanHeal) });
     }
 
     // 返回消息文本，由 _applyAndSendTake 收集后并入 ⚡ 活动消息
-    return `【蝶】触发（剩余 <strong>${newStacks}</strong> 层）：`
-      + (target ? ` 为 <strong>${target.name}</strong> 恢复 <strong>${sanHeal}</strong> 点理智。` : "")
-      + ` 自身获得 1 层【沉沦】（强度 2）。`;
+    const rest = `（剩余 <strong>${restStacks}</strong> 层 / <strong>${restInt}</strong> 级）`;
+    if (pay === "stack") {
+      return `【蝶】触发，消耗 1 层${rest}：`
+        + (target ? ` 为 <strong>${target.name}</strong> 恢复 <strong>${sanHeal}</strong> 点理智。`
+                  : ` 但没有可恢复的目标。`);
+    }
+    return `【蝶】触发，消耗 1 级${rest}：自身获得 1 层【沉沦】（强度 2）。`;
   },
 });
 
