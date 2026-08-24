@@ -2079,17 +2079,23 @@ export class ClashManager {
             if (!name) { descStr = "相关技能转换：未配置技能名字"; break; }
             const newItem = (relOwner.items ?? []).find(it => it.type === "skill" && it.name === name && it.id !== item.id);
             if (!newItem) { descStr = `相关技能转换：背包中找不到技能【${name}】`; break; }
-            // 转换时长：permanent（默认，老数据）/ afterClash（本次结算后）/ endOfTurn（本回合结束时）
-            const relUntil = ["afterClash", "endOfTurn"].includes(eff.relDuration) ? eff.relDuration : "";
+            // 转换时长：permanent（默认，老数据）/ afterUse（转换后的技能被用掉一次）/
+            //           afterClash（本次结算后）/ endOfTurn（本回合结束时）
+            const relUntil = ["afterUse", "afterClash", "endOfTurn"].includes(eff.relDuration)
+              ? eff.relDuration : "";
+            // 槽位要在替换**之前**定位：还原按槽位记账，基础槽与守备槽同时被换成
+            // 同一个强化形态时，按 id 还原会把两个槽一起改掉
+            const relSlot  = relUntil ? (relOwner.findSkillSlot?.(item.id) ?? null) : null;
             const replaced = await relOwner.replaceSkillSlot?.(item.id, newItem.id);
             if (replaced) relOwner.sheet?._replaceCombatBagSkill?.(item.id, newItem.id);
             // 临时转换：登记还原任务。**只有真的发生了替换才登记**——
             // 若槽位里本来就是目标技能（比如已被另一条"永久转换"换上去了），
             // replaceSkillSlot 返回 false，这里什么都不记，到点也就不会把别人的永久状态还原掉。
             if (replaced && relUntil) {
-              await ClashManager._pushTempSkillConvert(relOwner, item.id, newItem.id, relUntil);
+              await ClashManager._pushTempSkillConvert(relOwner, item.id, newItem.id, relUntil, relSlot);
             }
-            const relUntilLabel = relUntil === "afterClash" ? "（本次结算后还原）"
+            const relUntilLabel = relUntil === "afterUse"   ? "（使用一次后还原）"
+                                : relUntil === "afterClash" ? "（本次结算后还原）"
                                 : relUntil === "endOfTurn"  ? "（本回合结束时还原）" : "永久";
             descStr = replaced
               ? `【${item.name}】${relUntil ? "临时" : relUntilLabel}转换为【${newItem.name}】${relUntil ? relUntilLabel : ""}`
@@ -4084,8 +4090,14 @@ export class ClashManager {
       }
       if (item.parent) actors.add(item.parent);
     }
-    // 骰子数值还原完，顺带把「本次结算后还原」的临时技能转换也还原掉。
+    // 骰子数值还原完，顺带处理临时技能转换的还原。
     // 放在这里 = [攻击后] 已经派发完，临时形态该做的事都做完了。
+    // 先「使用一次后还原」——这次真正投出去的就是 items 里的这几张；
+    // 再「本次结算后还原」，把这次结算里刚换上、并不打算留到下次的那些收回。
+    for (const item of items) {
+      if (!item?.parent) continue;
+      await ClashManager._revertTempSkillConvertsOnUse(item.parent, item.id);
+    }
     for (const actor of actors) {
       await ClashManager._revertTempSkillConverts(actor, "afterClash");
     }
@@ -4100,13 +4112,22 @@ export class ClashManager {
    * ──────────────────────────────────────────────────────────────────── */
   static TEMP_CONVERT_FLAG = "tempSkillConverts";
 
-  static async _pushTempSkillConvert(actor, fromId, toId, until) {
+  static async _pushTempSkillConvert(actor, fromId, toId, until, slot = null) {
     if (!actor || !fromId || !toId) return;
     const list = foundry.utils.deepClone(
       actor.getFlag?.("limbusCompany_FVTT", ClashManager.TEMP_CONVERT_FLAG) ?? []);
-    list.push({ from: fromId, to: toId, until });
+    list.push({ from: fromId, to: toId, until, slot });
     await ClashManager._safeDocUpdate(actor,
       { [`flags.limbusCompany_FVTT.${ClashManager.TEMP_CONVERT_FLAG}`]: list });
+  }
+
+  /** 按记录把一个槽位还原回去（有槽位记账就按槽位，老数据回退到按 id） */
+  static async _applyTempConvertRevert(actor, rec) {
+    let ok = false;
+    if (rec?.slot?.kind) ok = await actor.setSkillSlot?.(rec.slot, rec.from);
+    else                 ok = await actor.replaceSkillSlot?.(rec.to, rec.from);
+    if (ok) actor.sheet?._replaceCombatBagSkill?.(rec.to, rec.from);
+    return ok;
   }
 
   /**
@@ -4125,11 +4146,30 @@ export class ClashManager {
     }
     if (!due.length) return;
     // 后进先出：多层临时转换时按相反顺序剥回去，中间状态才不会错位
-    for (const rec of due.reverse()) {
-      // 槽位里已经不是当初换上去的那个了（别人又换过），就不要强行改回去
-      const replaced = await actor.replaceSkillSlot?.(rec.to, rec.from);
-      if (replaced) actor.sheet?._replaceCombatBagSkill?.(rec.to, rec.from);
-    }
+    for (const rec of [...due].reverse()) await ClashManager._applyTempConvertRevert(actor, rec);
+    await ClashManager._safeDocUpdate(actor,
+      { [`flags.limbusCompany_FVTT.${ClashManager.TEMP_CONVERT_FLAG}`]: keep });
+  }
+
+  /**
+   * 「使用一次后还原」：转换出来的形态被真正用掉一次（作为攻方或守方的骰参与了
+   * 一次结算）之后还原。
+   *
+   * 关键点：**所有指向同一个形态的记录一起还原**。基础技能槽和守备技能槽都被换成
+   * 了同一张强化技能时，它整体只是"一次"资源——任一边用掉，另一边也跟着还原回去，
+   * 而不是各留各的。按槽位记账，所以两个槽各自回到各自原来的技能。
+   *
+   * @param {Actor}  actor
+   * @param {string} usedItemId  本次结算里真正投出去的那张技能的 id
+   */
+  static async _revertTempSkillConvertsOnUse(actor, usedItemId) {
+    if (!actor || !usedItemId) return;
+    const list = actor.getFlag?.("limbusCompany_FVTT", ClashManager.TEMP_CONVERT_FLAG) ?? [];
+    if (!list.length) return;
+    const due  = list.filter(r => r?.until === "afterUse" && r?.to === usedItemId);
+    if (!due.length) return;
+    const keep = list.filter(r => !due.includes(r));
+    for (const rec of [...due].reverse()) await ClashManager._applyTempConvertRevert(actor, rec);
     await ClashManager._safeDocUpdate(actor,
       { [`flags.limbusCompany_FVTT.${ClashManager.TEMP_CONVERT_FLAG}`]: keep });
   }
