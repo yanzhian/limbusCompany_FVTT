@@ -9631,3 +9631,143 @@ input.item-piles-quantity {
   position: relative;
   overflow: visible;
 }
+
+/* ══════════════════════════════════════════════════════════════════════
+   对抗聊天：三级视觉体系
+   L1 主卷 .limbus-clash-card   —— 有边框、有标题栏的完整结算
+   L2 分区 .lc-sec              —— 主卷内部分段，细标题 + 淡线，不用整条金线切断
+   L3 细条 .lc-thin             —— 跳动伤害/扩散等附属事件，无大头像、单行、左侧色条
+   色值一律走变量，改配色只动这一处。
+   ══════════════════════════════════════════════════════════════════════ */
+.limbuscompany .lc-chat,
+.limbus-clash-card {
+  --lc-gold:      #C9A84C;
+  --lc-gold-dim:  #8A7231;
+  --lc-text:      #E8C9A2;
+  --lc-text-sub:  #9A8462;
+  --lc-text-dim:  #6A5A48;
+  --lc-red:       #B84444;
+  --lc-red-deep:  #8B1A1A;
+  --lc-green:     #6EE06E;
+  --lc-edge:      #5A3A1A;
+  --lc-hair:      rgba(201,168,76,.14);
+}
+
+/* ── 标题栏（替代 50px 圆头像 + 20px 大标题）──────────────────────── */
+.lc-bar {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 10px; margin: -10px -12px 9px;
+  background: rgba(201,168,76,.09);
+  border-bottom: 1px solid rgba(201,168,76,.22);
+}
+.lc-bar .lc-av {
+  width: 16px; height: 16px; flex: none; border-radius: 2px;
+  object-fit: cover; border: 1px solid var(--lc-edge);
+}
+.lc-bar .lc-ttl {
+  font-size: 13px; font-weight: bold; color: var(--lc-gold); letter-spacing: .04em;
+}
+.lc-bar .lc-who { font-size: 11px; color: var(--lc-text-sub); }
+.lc-bar .lc-res {
+  margin-left: auto; font-size: 11px; font-weight: bold;
+  padding: 1px 7px; border-radius: 2px;
+}
+.lc-bar .lc-res.win  { color: #0B0707; background: var(--lc-green); }
+.lc-bar .lc-res.lose { color: #fff;    background: var(--lc-red); }
+
+/* ── 对阵条：一行说完谁打谁、用什么、赢没赢 ────────────────────────── */
+.lc-duel { display: flex; align-items: center; gap: 9px; }
+.lc-duel .lc-p { display: flex; align-items: center; gap: 7px; flex: 1; min-width: 0; }
+.lc-duel .lc-p.r { flex-direction: row-reverse; text-align: right; }
+.lc-duel .lc-ic {
+  width: 34px; height: 34px; flex: none;
+  border: 1px solid var(--lc-edge); object-fit: cover;
+}
+.lc-duel .lc-meta { min-width: 0; }
+.lc-duel .lc-nm {
+  font-size: 12px; color: var(--lc-text);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.lc-duel .lc-sk { font-size: 10.5px; color: var(--lc-text-sub); }
+.lc-duel .lc-sc {
+  font-size: 22px; font-weight: bold; line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+.lc-duel .lc-sc.win  { color: var(--lc-green); }
+.lc-duel .lc-sc.lose { color: var(--lc-text-sub); }
+.lc-duel .lc-cmp { font-size: 13px; color: var(--lc-gold-dim); flex: none; }
+
+/* ── 分区 ───────────────────────────────────────────────────────────── */
+.lc-sec { margin-top: 9px; padding-top: 8px; border-top: 1px solid var(--lc-hair); }
+.lc-sec > .lc-h {
+  font-size: 10px; letter-spacing: .14em; color: var(--lc-gold-dim);
+  margin-bottom: 4px; display: flex; align-items: center; gap: 6px;
+}
+.lc-sec > .lc-h .lc-cnt { color: var(--lc-text-dim); letter-spacing: 0; }
+
+/* 伤害行：数字挑出来，其余压低 */
+.lc-dmg { display: flex; align-items: baseline; gap: 8px; font-size: 12px; }
+.lc-dmg + .lc-dmg { margin-top: 3px; }
+.lc-dmg .lc-who { color: var(--lc-text-sub); }
+.lc-dmg .lc-v {
+  font-size: 17px; font-weight: bold; color: var(--lc-red);
+  font-variant-numeric: tabular-nums;
+}
+.lc-dmg .lc-hp {
+  margin-left: auto; font-size: 11px; color: var(--lc-text-dim);
+  font-variant-numeric: tabular-nums;
+}
+.lc-note { font-size: 10.5px; color: var(--lc-text-dim); margin-top: 2px; padding-left: 2px; }
+
+/* 触发效果：左侧色条 + 单行，时机与内容分栏 */
+.lc-trig { font-size: 11.5px; line-height: 1.65; color: var(--lc-text-sub); }
+.lc-trig .lc-r { display: flex; gap: 7px; padding: 1px 0; }
+.lc-trig .lc-k {
+  color: var(--lc-gold-dim); flex: none; font-size: 10.5px; min-width: 66px;
+  border-left: 2px solid rgba(201,168,76,.45); padding-left: 6px;
+}
+.lc-trig .lc-vv { color: var(--lc-text); min-width: 0; }
+
+/* ── 折叠区 ─────────────────────────────────────────────────────────── */
+details.lc-fold { margin-top: 7px; }
+details.lc-fold > summary {
+  cursor: pointer; list-style: none;
+  font-size: 10.5px; letter-spacing: .1em; color: var(--lc-gold-dim); padding: 2px 0;
+}
+details.lc-fold > summary::-webkit-details-marker { display: none; }
+details.lc-fold > summary::before { content: "▸ "; }
+details.lc-fold[open] > summary::before { content: "▾ "; }
+details.lc-fold .lc-in {
+  font-size: 11px; color: var(--lc-text-sub); line-height: 1.75;
+  padding: 5px 8px; background: rgba(0,0,0,.28); border-radius: 3px; margin-top: 3px;
+}
+
+/* ── L3 细条：附属事件 ──────────────────────────────────────────────── */
+.lc-thin {
+  display: flex; align-items: center; gap: 8px;
+  padding: 4px 10px; font-size: 11.5px;
+  color: var(--lc-text);
+  background: rgba(26,21,16,.55);
+  border-left: 2px solid var(--lc-edge); border-radius: 0 3px 3px 0;
+  font-family: var(--font-main, sans-serif);
+}
+.lc-thin .lc-av {
+  width: 16px; height: 16px; flex: none; border-radius: 2px;
+  object-fit: cover; border: 1px solid var(--lc-edge);
+}
+.lc-thin .lc-tag {
+  font-size: 10px; letter-spacing: .1em; color: var(--lc-text-dim);
+  flex: none; min-width: 52px;
+}
+.lc-thin .lc-who { color: var(--lc-text-sub); }
+.lc-thin .lc-v   { color: var(--lc-red); font-weight: bold; font-variant-numeric: tabular-nums; }
+.lc-thin .lc-hp  { margin-left: auto; color: var(--lc-text-dim); font-variant-numeric: tabular-nums; }
+.lc-thin .lc-msg { min-width: 0; }
+
+/* 类型色条 */
+.lc-thin.k-burn    { border-left-color: #C4531F; }
+.lc-thin.k-bleed   { border-left-color: #8B1A1A; }
+.lc-thin.k-tremor  { border-left-color: #5A8BC4; }
+.lc-thin.k-spread  { border-left-color: #7A6AB8; }
+.lc-thin.k-counter { border-left-color: #C9A84C; }
+.lc-thin.k-cover   { border-left-color: #4CA88A; }

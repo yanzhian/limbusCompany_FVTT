@@ -449,12 +449,8 @@ Hooks.on("renderChatMessage", (_message, html, _data) => {
     html.find(".clash-btn-reroll").on("click", () => {
       ClashManager.rerollClash(flags.rerollData);
     });
-    // 理智变化折叠行
-    html.find(".limbus-sanity-toggle-row").on("click", function () {
-      const $sec = $(this).next(".limbus-sanity-section");
-      const open = $sec.toggle().is(":visible");
-      $(this).find(".limbus-sanity-toggle").text(open ? "▲ 理智" : "▼ 理智");
-    });
+    // 理智与计算明细已并入 <details class="lc-fold">，由浏览器原生折叠，
+    // 不再需要手写的 toggle 处理器。
   }
 
   // ── 反击聊天框：双方承受按钮 ──
@@ -768,10 +764,11 @@ Hooks.on("updateCombat", async (combat, changed) => {
       if (actor.checkAndTriggerChaos) await actor.checkAndTriggerChaos(newHp, oldHp, { silent: true, source: "burn" });
       await ChatMessage.create({
         speaker: ChatMessage.getSpeaker({ actor }),
-        content: `<div class="limbuscompany chat-clash">
-          <strong>${actor.name}</strong>【燃烧】发作：受到 <strong>${dmg}</strong> 点固定伤害。
-          （HP ${oldHp} → ${newHp}）${chaosTriggeredByBurn ? "　<span style='color:#E84444;font-weight:bold;'>——【陷入混乱】！</span>" : ""}
-        </div>`,
+        content: ClashManager._lcThin({
+          kind: "burn", tag: "燃烧", actor, value: dmg,
+          text: chaosTriggeredByBurn ? "<span style='color:#E84444;font-weight:bold;'>【陷入混乱】</span>" : "",
+          hp:   `${oldHp} → ${newHp}`,
+        }),
       });
     }
 
