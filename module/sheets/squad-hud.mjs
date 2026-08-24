@@ -8,6 +8,8 @@
  * 快捷键：Z = 切换队伍1，X = 切换队伍2（在 limbusCompany_FVTT.mjs 注册）
  */
 
+import { attachReadySparkle, clearReadySparkles, readySkillIds } from "../helpers/ready-sparkle.mjs";
+
 const BUFF_ICON_BASE = "systems/limbusCompany_FVTT/assets/icons/Buff_icon/";
 const BUFF_ICON_MAP  = {
   strong:        "强壮.webp",        weak:          "虚弱.webp",
@@ -204,6 +206,14 @@ export class SquadHUD extends Application {
 
   activateListeners(html) {
     super.activateListeners(html);
+
+    // ── 【大招就绪】星芒：谁的强化形态已经换上槽位，就在谁的头像上闪 ───────
+    clearReadySparkles(html);
+    html.find(".squad-avatar").each((_, img) => {
+      const id    = img.closest(".squad-member")?.dataset?.actorId;
+      const actor = id ? game.actors?.get(id) : null;
+      if (actor && readySkillIds(actor).size) attachReadySparkle(img);
+    });
 
     // 标题栏拖动
     html.find(".squad-header").on("mousedown", (e) => {
