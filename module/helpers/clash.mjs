@@ -2208,34 +2208,27 @@ export class ClashManager {
   }
 
   /** 构建活动效果汇总消息的 HTML 内容。指定 title 时始终折叠为一条摘要。 */
-  /**
-   * 触发效果汇总的正文（不含外层卡片），供主卷内嵌与独立消息共用。
-   * 每条效果一行：左栏是触发时机，右栏是内容——旧版把时机做成整行标题、
-   * 内容再缩进一层，十几条触发就是三十几行。
-   */
-  static _lcTrigRows(entries) {
-    return `<div class="lc-trig">${entries.map(({ trigger, itemName, ownerName, msgs }) => {
-      const src = `${ownerName && ownerName !== itemName ? `${ownerName}·` : ""}${itemName}`;
-      return msgs.map((m, i) => `
-        <div class="lc-r">
-          <span class="lc-k">${i === 0 ? trigger : ""}</span>
-          <span class="lc-vv">${m}${i === 0 && src ? ` <span style="color:var(--lc-text-dim);">· ${src}</span>` : ""}</span>
-        </div>`).join("");
-    }).join("")}</div>`;
-  }
-
-  /** 触发效果总条数（用于折叠标题上的计数） */
-  static _lcTrigCount(entries) {
-    return entries.reduce((n, e) => n + (e.msgs?.length ?? 0), 0);
-  }
-
   static _buildActMsgContent(entries, title = "") {
-    const n = ClashManager._lcTrigCount(entries);
-    // 一律折叠：触发详情是复盘时才看的，不该常驻聊天流
+    const rows = entries.map(({ trigger, itemName, ownerName, msgs }) => `
+      <div style="margin-bottom:4px;">
+        <span style="font-weight:bold;color:#C9A84C;">⚡ [${trigger}] ${ownerName && ownerName !== itemName ? `${ownerName}·` : ""}${itemName}</span>
+        ${msgs.map(m => `<div style="color:#E8C9A2;padding-left:8px;">${m}</div>`).join("")}
+      </div>`).join(ClashManager._goldDivider());
+    const body = `<div style="font-size:.8rem;line-height:1.7;">${rows}</div>`;
+    // 无标题且条目不多时直接平铺；否则折叠详情
+    if (!title && entries.length <= 2) {
+      return `<div class="limbus-clash-card">${body}</div>`;
+    }
+    const summaryLabel = title
+      ? `▼ ${title}：详细信息（${entries.length} 条触发效果）`
+      : `▼ 详细信息（${entries.length} 条触发效果）`;
     return `<div class="limbus-clash-card">
-      ${ClashManager._lcFold(
-        `${title ? `${title}　` : ""}触发效果　${n} 条`,
-        ClashManager._lcTrigRows(entries))}
+      <details>
+        <summary style="cursor:pointer;font-size:.8rem;color:#C9A84C;font-weight:bold;user-select:none;list-style:none;">
+          ${summaryLabel}
+        </summary>
+        ${body}
+      </details>
     </div>`;
   }
 
@@ -2284,11 +2277,10 @@ export class ClashManager {
 
     await ClashManager._safeChatCreate({
       speaker: ChatMessage.getSpeaker({ actor }),
-      content: ClashManager._lcThin({
-        kind: "bleed", tag: "流血", actor, value: dmg,
-        text: bleedChaosCount > 0 ? `<span style="color:#E84444;font-weight:bold;">【${bleedChaosName}】</span>` : "",
-        hp:   `${oldHp} → ${newHp}`,
-      }),
+      content: `<div class="limbuscompany chat-clash">
+        <strong>${actor.name}</strong>【流血】发作：受到 <strong>${dmg}</strong> 点固定伤害。
+        （HP ${oldHp} → ${newHp}）${bleedChaosCount > 0 ? `　<span style='color:#E84444;font-weight:bold;'>——【${bleedChaosName}】！</span>` : ""}
+      </div>`,
     });
     return dmg;
   }
@@ -2358,81 +2350,8 @@ export class ClashManager {
     return "";
   }
 
-  /**
-   * 分隔线。旧版是一条从头贯到尾的金线，一条消息里出现四五次，把内容切成
-   * 互不相干的碎片。现在降级成分区细线（与 .lc-sec 的上边框同一视觉重量）。
-   */
   static _goldDivider() {
-    return `<div style="height:1px;margin:8px 0;background:rgba(201,168,76,.14);"></div>`;
-  }
-
-  /* ─── 对抗聊天：三级视觉体系的构件 ──────────────────────────────────────
-   * L1 主卷 .limbus-clash-card + .lc-bar 标题栏
-   * L2 分区 .lc-sec
-   * L3 细条 .lc-thin（附属事件：跳动伤害、扩散、援护…）
-   * 样式全在 styles/limbusCompany_FVTT.css，这里只拼结构。
-   * ──────────────────────────────────────────────────────────────────── */
-
-  /**
-   * 主卷标题栏。替代旧的 `_chatHeader`（50px 圆头像 + 20px 大标题）——
-   * 那套规格让追击伤害和拼点结算占一样的篇幅，主次全平掉了。
-   * @param {Actor}  actor
-   * @param {string} title
-   * @param {{result?:"win"|"lose"|"", round?:number}} [opt]
-   */
-  static _lcBar(actor, title, { result = "", round = 0 } = {}) {
-    const img  = actor?.img ?? "icons/svg/mystery-man.svg";
-    const name = actor?.name ?? "";
-    const rnd  = round > 0
-      ? `<span class="lc-who" style="border:1px solid rgba(201,168,76,.32);border-radius:2px;padding:0 4px;">R${round}</span>`
-      : "";
-    const res  = result === "win"  ? `<span class="lc-res win">胜</span>`
-               : result === "lose" ? `<span class="lc-res lose">负</span>` : "";
-    return `<div class="lc-bar">
-      ${rnd}
-      <img class="lc-av" src="${img}" alt="">
-      <span class="lc-ttl">${title}</span>
-      <span class="lc-who">${name}</span>
-      ${res}
-    </div>`;
-  }
-
-  /**
-   * L3 细条：一行说完的附属事件，16px 小方头像 + 左侧类型色条。
-   * @param {object} o
-   * @param {string} o.kind  burn/bleed/tremor/spread/counter/cover
-   * @param {string} o.tag   左侧类型标签
-   * @param {Actor}  o.actor
-   * @param {string} [o.text]  正文（与 value 二选一或并存）
-   * @param {number} [o.value] 伤害数值（负数显示）
-   * @param {string} [o.hp]    右端 HP 变化，如 "32 → 27"
-   */
-  static _lcThin({ kind = "", tag = "", actor = null, text = "", value = null, hp = "" }) {
-    const img = actor?.img ?? "icons/svg/mystery-man.svg";
-    return `<div class="lc-thin ${kind ? `k-${kind}` : ""}">
-      <span class="lc-tag">${tag}</span>
-      <img class="lc-av" src="${img}" alt="">
-      <span class="lc-who">${actor?.name ?? ""}</span>
-      ${value != null ? `<span class="lc-v">−${value}</span>` : ""}
-      ${text ? `<span class="lc-msg">${text}</span>` : ""}
-      ${hp ? `<span class="lc-hp">${hp}</span>` : ""}
-    </div>`;
-  }
-
-  /** L2 分区 */
-  static _lcSec(title, inner, count = 0) {
-    return `<div class="lc-sec">
-      <div class="lc-h">${title}${count ? `<span class="lc-cnt">${count} 条</span>` : ""}</div>
-      ${inner}
-    </div>`;
-  }
-
-  /** 折叠区（计算明细、理智、触发详情都用它） */
-  static _lcFold(summary, inner, open = false) {
-    return `<details class="lc-fold"${open ? " open" : ""}>
-      <summary>${summary}</summary>
-      <div class="lc-in">${inner}</div>
-    </details>`;
+    return `<div style="height:1px;margin:8px 0;background:linear-gradient(90deg,transparent 0%,#C9A84C 30%,#C9A84C 70%,transparent 100%);"></div>`;
   }
 
   static _chatHeader(actor, title) {
@@ -2631,7 +2550,8 @@ export class ClashManager {
 
     const content = `
       <div class="limbus-clash-card" data-clash-type="initiate">
-        ${ClashManager._lcBar(actor, "发起对抗")}
+        ${ClashManager._chatHeader(actor, "发起对抗")}
+        ${ClashManager._goldDivider()}
         ${ClashManager._skillRow(item)}
         ${targetName ? `<div style="font-size:.78rem;color:#B43822;margin-top:6px;">
           ⊘ 已指定目标：<strong>${targetName}</strong>（其他角色无法对抗/承受）
@@ -2828,10 +2748,10 @@ export class ClashManager {
     const covered = game.actors.get(initFlags.targetActorId ?? "");
     await ClashManager._safeChatCreate({
       speaker: ChatMessage.getSpeaker({ actor }),
-      content: ClashManager._lcThin({
-        kind: "cover", tag: "援护防御", actor,
-        text: `替 <strong>${covered?.name ?? "队友"}</strong> 接下这次对抗 · ${skill.name}`,
-      }),
+      content: `<div class="limbuscompany chat-clash">
+        <strong>${actor.name}</strong> 发动【援护防御】，替 <strong>${covered?.name ?? "队友"}</strong>
+        接下这次对抗（使用 <strong>${skill.name}</strong>）。
+      </div>`,
     });
 
     await ClashManager.showPerformDialog(actor, skill, msgId, newFlags, -1);
@@ -3199,7 +3119,8 @@ export class ClashManager {
     // 进行对抗聊天框（对抗按钮置灰，无承受按钮）
     const responseContent = `
       <div class="limbus-clash-card" data-clash-type="response">
-        ${ClashManager._lcBar(defActor, "进行对抗")}
+        ${ClashManager._chatHeader(defActor, "进行对抗")}
+        ${ClashManager._goldDivider()}
         ${ClashManager._skillRow(defItem)}
         <div style="display:flex;gap:8px;margin-top:8px;margin-bottom:4px;">
           <button disabled style="width:50px;height:30px;background:#3A3028;color:#6A5A48;
@@ -4022,39 +3943,52 @@ export class ClashManager {
              <span style="font-size:.7rem;color:#6A5A48;">先选中 Token，再点击按钮扣除 ${finalDamage} 点生命值</span>
            </div>`;
 
-    // 结果标签：平局不标胜负
-    const resultTag = isTie ? "" : (isClashCounterWin || !noTake ? "win" : "lose");
-
     const content = `
       <div class="limbus-clash-card" data-clash-type="resolve">
-        ${ClashManager._lcBar(atkActor ?? { img: "", name: "?" }, resolveTitle,
-                              { result: resultTag, round: game.combat?.round ?? 0 })}
-
-        <div class="lc-duel">
-          <div class="lc-p">
-            <img class="lc-ic" src="${atkItemImg ?? ""}" alt="">
-            <div class="lc-meta">
-              <div class="lc-nm">${atkActor?.name ?? "?"}</div>
-              <div class="lc-sk">${atkItemName ?? ""}${atkFormula ? ` · ${atkFormula}` : ""}</div>
-            </div>
+        ${ClashManager._chatHeader(atkActor ?? { img: "", name: "?" }, resolveTitle)}
+        ${ClashManager._goldDivider()}
+        <div style="display:flex;align-items:flex-start;gap:12px;margin:8px 0;">
+          <div style="flex:1;text-align:center;">
+            <div style="font-size:12px;color:#9A8462;margin-bottom:4px;">${atkActor?.name ?? "?"}</div>
+            <img src="${atkItemImg ?? ""}" style="width:50px;height:50px;object-fit:cover;display:block;margin:0 auto;" alt="">
+            <div style="font-size:12px;color:#E8C9A2;margin-top:4px;">${atkItemName ?? ""}</div>
+            <div style="font-size:11px;color:#EBBD68;">${atkFormula ?? ""}</div>
           </div>
-          <span class="lc-sc ${atkTotal >= defTotal ? "win" : "lose"}">${atkTotal}</span>
-          <span class="lc-cmp">${cmp}</span>
-          <span class="lc-sc ${defTotal > atkTotal ? "win" : "lose"}">${defTotal}</span>
-          <div class="lc-p r">
-            <img class="lc-ic" src="${defItemImg ?? ""}" alt="">
-            <div class="lc-meta">
-              <div class="lc-nm">${defActor?.name ?? "?"}</div>
-              <div class="lc-sk">${defItemName ?? ""}${defFormula ? ` · ${defFormula}` : ""}</div>
-            </div>
+          <div style="align-self:center;font-size:1.6rem;font-weight:bold;color:#C9A84C;padding:0 4px;">${isClashCounterWin ? "⚔️" : "VS"}</div>
+          <div style="flex:1;text-align:center;">
+            <div style="font-size:12px;color:#9A8462;margin-bottom:4px;">${defActor?.name ?? "?"}</div>
+            <img src="${defItemImg ?? ""}" style="width:50px;height:50px;object-fit:cover;display:block;margin:0 auto;" alt="">
+            <div style="font-size:12px;color:#E8C9A2;margin-top:4px;">${defItemName ?? ""}</div>
+            <div style="font-size:11px;color:#EBBD68;">${defFormula ?? ""}</div>
           </div>
         </div>
-
-        <div class="lc-sec">${takeSection}</div>
-
-        ${(notes.length || sanityNotes.length) ? ClashManager._lcFold(
-          "计算明细" + (sanityNotes.length ? " · 理智" : ""),
-          [...notes, ...sanityNotes].map(n => `<div>${n}</div>`).join("")) : ""}
+        ${ClashManager._goldDivider()}
+        <div style="text-align:center;margin:8px 0;">
+          <div style="font-size:14px;color:#C9A84C;margin-bottom:6px;">拼点结算</div>
+          <div style="display:flex;align-items:center;justify-content:center;gap:14px;">
+            <span style="${atkTotalStyle}">${atkTotal}</span>
+            <span style="font-size:1.5rem;color:#C9A84C;">${cmp}</span>
+            <span style="${defTotalStyle}">${defTotal}</span>
+          </div>
+        </div>
+        ${ClashManager._goldDivider()}
+        <div style="font-size:.8rem;color:#9A8462;line-height:1.7;margin:4px 0 8px;">
+          ${notes.map(n => `<div>${n}</div>`).join("")}
+        </div>
+        ${sanityNotes.length ? `
+        <div class="limbus-sanity-toggle-row"
+             style="display:flex;align-items:center;gap:6px;cursor:pointer;margin:4px 0 0;user-select:none;">
+          <div style="flex:1;height:1px;background:linear-gradient(to right,transparent,#C9A84C);"></div>
+          <span class="limbus-sanity-toggle"
+                style="font-size:.72rem;color:#C9A84C;padding:0 4px;line-height:1;">▼ 理智</span>
+          <div style="flex:1;height:1px;background:linear-gradient(to left,transparent,#C9A84C);"></div>
+        </div>
+        <div class="limbus-sanity-section"
+             style="display:none;font-size:.8rem;line-height:1.8;padding:4px 6px;
+                    background:rgba(0,0,0,.25);border-radius:3px;margin-bottom:4px;">
+          ${sanityNotes.map(n => `<div>${n}</div>`).join("")}
+        </div>` : ""}
+        ${takeSection}
       </div>`;
 
     await ClashManager._safeChatCreate({
@@ -4667,7 +4601,8 @@ export class ClashManager {
 
     return `
       <div class="limbus-clash-card" data-clash-type="weight-spread" style="font-size:.75rem;">
-        ${ClashManager._lcBar(actor, "容量扩散")}
+        ${ClashManager._chatHeader(actor, "容量扩散")}
+        ${ClashManager._goldDivider()}
         <div style="font-size:.72rem;color:#E8C9A2;margin:2px 0 4px;">
           ⚔️ <strong>${flags.itemName ?? "技能"}</strong> 容量命中！${modeLine}
         </div>
@@ -5054,11 +4989,14 @@ export class ClashManager {
     // 发送反击触发聊天头（伤害消息由 _applyAndSendTake 单独发送）
     await ClashManager._safeChatCreate({
       speaker: ChatMessage.getSpeaker({ actor: loserActor }),
-      content: ClashManager._lcThin({
-        kind: "counter", tag: "不可摧毁", actor: loserActor,
-        text: `${loserItem.name} 反击 <strong>${targetActor.name}</strong>`
-            + (breatheCrit ? ` <span style="color:#FFD066;font-weight:bold;">暴击</span>` : ""),
-      }),
+      content: `<div class="limbuscompany chat-clash">
+        ${ClashManager._chatHeader(loserActor, "不可摧毁拼点失败反击")}
+        <div style="margin:4px 0 2px;font-size:.82rem;">
+          <strong>${loserItem.name}</strong>（不可摧毁骰）触发，对
+          <strong>${targetActor.name}</strong> 发起反击
+          ${breatheCrit ? `<span style="color:#FFD066;font-weight:bold;">　暴击！</span>` : ""}
+        </div>
+      </div>`,
     });
 
     // 对目标造成伤害（包含破裂/沉沦/护盾/混乱等完整结算）
@@ -5253,7 +5191,8 @@ export class ClashManager {
       <div class="limbus-clash-card limbus-take-card"
            style="background:linear-gradient(180deg,#2D0509 0%,#1A0305 100%);"
            data-clash-type="take">
-        ${ClashManager._lcBar(actor, takeLabel)}
+        ${ClashManager._chatHeader(actor, takeLabel)}
+        ${ClashManager._goldDivider()}
         ${calcNotes.length > 0 ? `
         <div style="margin:6px 0 4px;padding:5px 7px;background:rgba(0,0,0,.25);border-radius:3px;">
           <div style="font-size:.65rem;font-weight:bold;color:#C9A84C;margin-bottom:3px;letter-spacing:.05em;">结算说明</div>
@@ -5405,7 +5344,8 @@ export class ClashManager {
 
     const content = `
       <div class="limbus-clash-card" data-clash-type="counter">
-        ${ClashManager._lcBar(defActor, "反击")}
+        ${ClashManager._chatHeader(defActor, "反击")}
+        ${ClashManager._goldDivider()}
         <div style="display:flex;align-items:flex-start;gap:12px;margin:8px 0;">
           <div style="flex:1;text-align:center;">
             <div style="font-size:12px;color:#9A8462;margin-bottom:4px;">${atkActor?.name ?? "?"}</div>
@@ -5554,7 +5494,8 @@ export class ClashManager {
 
     const content = `
       <div class="limbus-clash-card" data-clash-type="block">
-        ${ClashManager._lcBar(defActor, "防御（格挡）")}
+        ${ClashManager._chatHeader(defActor, "防御（格挡）")}
+        ${ClashManager._goldDivider()}
         <div style="display:flex;align-items:flex-start;gap:12px;margin:8px 0;">
           <div style="flex:1;text-align:center;">
             <div style="font-size:12px;color:#9A8462;margin-bottom:4px;">${atkActor?.name ?? "?"}</div>
