@@ -1110,8 +1110,21 @@ Hooks.once("init", () => {
   /** 返回 n 次重复的数组（用于 each 循环生成 n 个元素） */
   Handlebars.registerHelper("times", (n, _options) => Array.from({ length: n }, (_, i) => i));
 
-  /** 判断两个值是否相等 */
-  Handlebars.registerHelper("eq", (a, b) => a === b);
+  /**
+   * 判断两个值是否相等。**两种用法都支持**：
+   *   · 子表达式：`{{#if (eq a b)}}`      → 返回布尔值
+   *   · 块助手：  `{{#eq a b}}selected{{/eq}}` → 相等时输出块内容
+   * 只写成值助手的话，块用法里 Handlebars 会把 options 当第二个参数传进来，
+   * 助手又从不调用 options.fn，结果块内容永远不输出——所有
+   * `{{#eq}}selected{{/eq}}` 的下拉都会退回第一项（选了远程却显示近战就是这么来的）。
+   */
+  Handlebars.registerHelper("eq", function (a, b, options) {
+    const same = a === b;
+    if (options && typeof options.fn === "function") {
+      return same ? options.fn(this) : options.inverse(this);
+    }
+    return same;
+  });
 
   /** 逻辑与（子表达式用：(and a b)） */
   Handlebars.registerHelper("and", (a, b) => Boolean(a) && Boolean(b));
