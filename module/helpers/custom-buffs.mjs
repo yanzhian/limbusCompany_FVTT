@@ -281,16 +281,17 @@ registerCustomBuff("defensiveStance", {
 
 /**
  * 【蝶】
- * - 最大值：10 层
+ * - 最大值：10 层 10 级
  * - 受到伤害时，**随机**消耗 1 层 或 1 级：
  *     · 消耗 1 层 → 为伤害来源恢复 1D6 理智值
  *     · 消耗 1 级 → 为自己添加 1 层 2 级【沉沦】
  *   两种代价只会二选一，付不起的那种（层或级已归零）不会被抽中。
  */
 registerCustomBuff("butterfly", {
-  label:       "蝶",
-  maxStacks:   10,
-  description: "- 最大值：10 层\n"
+  label:        "蝶",
+  maxStacks:    10,
+  maxIntensity: 10,
+  description: "- 最大值：10 层 10 级\n"
     + "- 受到伤害时，随机消耗 1 层 或 1 级：\n"
     + "  · 消耗 1 层 → 为目标恢复 1D6 的理智值\n"
     + "  · 消耗 1 级 → 为自己添加 1 层 2 级【沉沦】",
