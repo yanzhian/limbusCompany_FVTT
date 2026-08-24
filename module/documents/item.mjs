@@ -67,6 +67,13 @@ export class EquipmentData extends foundry.abstract.TypeDataModel {
         pierce: new fields.StringField({ required: false, initial: "" }),
       }),
 
+      // ── 武器专用：攻击方式与射程（其余子类型忽略这两项）────────────────
+      // rangeType：melee = 近战，ranged = 远程
+      // range：攻击范围，单位「格」（1 格 = 5ft，显示时按 N×5+2.5 ft 换算）
+      rangeType: new fields.StringField({ required: false, initial: "melee",
+        choices: ["melee", "ranged"] }),
+      range:     new fields.NumberField({ required: false, integer: true, min: 0, initial: 1 }),
+
       // 攻/防/速度修正值
       atkAdj:   new fields.NumberField({ required: true, integer: true, initial: 0 }),
       defAdj:   new fields.NumberField({ required: true, integer: true, initial: 0 }),

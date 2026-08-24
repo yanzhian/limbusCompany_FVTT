@@ -100,6 +100,8 @@ const V_WEAK      = "__weak";
 const V_SIN_COST  = "__sinCost";
 const V_SPREAD    = "__spread";
 const V_EGO_RES   = "__egoRes";
+/** 「攻击范围」列：留空 = 近战 1 格；"2" = 近战 2 格；"远程6" = 远程 6 格 */
+const V_RANGE     = "__range";
 /** 「完成」列：值为真时整行跳过（已经导入过的条目不再重复导入） */
 const V_DONE      = "__done";
 
@@ -144,6 +146,7 @@ export const COLUMN_ALIASES = {
   "攻击等级": "system.atkAdj", "攻击修正": "system.atkAdj",
   "防御等级": "system.defAdj", "防御修正": "system.defAdj",
   "速度":     "system.speedAdj", "速度修正": "system.speedAdj",
+  "攻击范围": V_RANGE, "射程": V_RANGE,   // 留空=近战1；"2"=近战2；"远程6"=远程6
   "抗性": V_RESIST,                 // "打" → 打击抗性 x0.5
   "弱性": V_WEAK,                   // "突" → 突刺抗性 x2.0
   "斩击抗性": "system.resistanceAdj.slash",
@@ -161,6 +164,10 @@ export const COLUMN_ALIASES = {
   "援护防御": "system.coverDefense",
   "无法拼点": "system.noClash",
   "无差别攻击": "system.indiscriminate", "无差别": "system.indiscriminate",
+
+  // ── 容器：存放限制（两条 AND，留空 = 不限制，多个用 / 分隔）─────────
+  "允许类型": "system.allowTypes", "存放限制-类型": "system.allowTypes",
+  "允许分类": "system.allowCategories", "存放限制-分类": "system.allowCategories",
   "容量扩散": V_SPREAD, "扩散": V_SPREAD,   // "[链式扩散3]" / "广域乱射2"
   "理智消耗": "system.sanityCost",
   "罪孽资源消耗": V_SIN_COST,       // "暴怒2/嫉妒1"
@@ -532,6 +539,25 @@ function parseSpread(text) {
 }
 
 /**
+ * 【攻击范围】列（仅武器）。绝大多数武器都是近战，所以只留一列：
+ *   留空      → 近战 1 格（默认）
+ *   "2"       → 近战 2 格（长矛、锁链这类）
+ *   "远程6"   → 远程 6 格
+ *   "远程"    → 远程 1 格
+ */
+function parseRange(text) {
+  if (isBlank(String(text ?? "").trim())) return {};
+  const raw    = String(text).trim();
+  const ranged = /远程|远距|ranged/i.test(raw);
+  const m      = /(\d+)/.exec(raw);
+  const n      = m ? Math.max(0, Number(m[1])) : 1;
+  return {
+    "system.rangeType": ranged ? "ranged" : "melee",
+    "system.range":     n,
+  };
+}
+
+/**
  * 【抗性修改】列："暴怒x0.5傲慢x0.5怠惰x2.0嫉妒x2.0"
  * 实际表里是不带分隔符连写的，同样用扫描式匹配。
  */
@@ -560,6 +586,7 @@ function parseVirtualColumn(marker, text, itemType) {
     case V_WEAK:     return parsePhysList(text, WEAK_MULT);
     case V_SIN_COST: return parseSinCost(text);
     case V_SPREAD:   return parseSpread(text);
+    case V_RANGE:    return parseRange(text);
     case V_EGO_RES:  return parseEgoRes(text);
     case V_CAPACITY: {
       const r = parseWxH(text);
@@ -718,7 +745,7 @@ export function buildItemData(rows, defaultType) {
 /** 各类型的模板列（与实际编辑用的表格布局一致；「图标/区域N」为表格自用，导入时忽略；
     「完成」列填真值时整行跳过，见 isDoneMark） */
 const TEMPLATE_COLUMNS = {
-  equipment:  ["图标", "完成", "名称", "类型", "攻击等级", "防御等级", "速度",
+  equipment:  ["图标", "完成", "名称", "类型", "攻击等级", "防御等级", "速度", "攻击范围",
                "抗性", "弱性", "分类", "星芒", "容量", "标签", "效果", "价格"],
   skill:      ["图标", "完成", "名称", "类型", "分类", "罪孽", "等级", "骰数",
                "攻击容量", "容量扩散", "骰类型", "无法装备", "援护防御", "无法拼点", "无差别攻击", "标签", "效果",
@@ -788,6 +815,9 @@ const COLUMN_NOTES = {
   "无法装备": "填 是/否、TRUE/FALSE",
   "援护防御": "填 是/否、TRUE/FALSE；标记为【援护防御】专属技能",
   "无法拼点": "填 是/否、TRUE/FALSE；被锁定的目标只能【承受】，不能对抗",
+  "攻击范围": "仅武器：留空=近战1格；填数字=近战N格（长矛/锁链）；填「远程6」=远程6格",
+  "允许类型": "容器存放限制·类型，多个用 / 分隔（消耗品/材料），留空=不限制",
+  "允许分类": "容器存放限制·分类，多个用 / 分隔（医疗/食材），与类型同时满足才收",
   "无差别攻击": "填 是/否、TRUE/FALSE；容量扩散时敌我不分，范围内的友方也会被打到（自己除外）",
   "可复用":   "填 是/否、TRUE/FALSE",
   "无限耐久": "填 是/否、TRUE/FALSE",

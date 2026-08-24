@@ -670,6 +670,10 @@ Hooks.on("updateCombat", async (combat, changed) => {
     // 每轮重置拼点胜利计数 & 每回合效果触发次数
     await actor.unsetFlag("limbusCompany_FVTT", "clashWinsThisRound");
     await actor.unsetFlag("limbusCompany_FVTT", "turnFireCounts");
+    // 每回合 BUFF 获得额度（maxGainPerRound）——这里才是"每回合"。
+    // 漏了这一句时它只在 deleteCombat 里清，等于整场战斗共用一份额度：
+    // 【炎蝶之棺】攒满 20 层后，后面每一轮都再也加不上，直到战斗结束。
+    await actor.unsetFlag("limbusCompany_FVTT", "buffRoundGain");
 
     // ── 回合结束 BUFF 清理与晋升 ────────────────────────────────────────
     // 移除本轮有效的临时 BUFF（强壮/虚弱/混乱/恐慌等），将下回合 BUFF 转为本回合
@@ -795,6 +799,9 @@ Hooks.on("updateCombat", async (combat, changed) => {
         endMsgs.push({ trigger: "回合结束时", itemName: handler.label ?? buff.name ?? buff.type, msgs: [msg] });
       }
     }
+
+    // ── 临时技能转换：还原「本回合结束时」到期的那些 ─────────────────────
+    await ClashManager._revertTempSkillConverts(actor, "endOfTurn");
 
     // ── 场地资源 onRoundStart 钩子：每回合开始对每个行动角色调用一次 ──────
     for (const [fieldName, def] of FieldResourceRegistry) {
@@ -1110,8 +1117,21 @@ Hooks.once("init", () => {
   /** 返回 n 次重复的数组（用于 each 循环生成 n 个元素） */
   Handlebars.registerHelper("times", (n, _options) => Array.from({ length: n }, (_, i) => i));
 
-  /** 判断两个值是否相等 */
-  Handlebars.registerHelper("eq", (a, b) => a === b);
+  /**
+   * 判断两个值是否相等。**两种用法都支持**：
+   *   · 子表达式：`{{#if (eq a b)}}`      → 返回布尔值
+   *   · 块助手：  `{{#eq a b}}selected{{/eq}}` → 相等时输出块内容
+   * 只写成值助手的话，块用法里 Handlebars 会把 options 当第二个参数传进来，
+   * 助手又从不调用 options.fn，结果块内容永远不输出——所有
+   * `{{#eq}}selected{{/eq}}` 的下拉都会退回第一项（选了远程却显示近战就是这么来的）。
+   */
+  Handlebars.registerHelper("eq", function (a, b, options) {
+    const same = a === b;
+    if (options && typeof options.fn === "function") {
+      return same ? options.fn(this) : options.inverse(this);
+    }
+    return same;
+  });
 
   /** 逻辑与（子表达式用：(and a b)） */
   Handlebars.registerHelper("and", (a, b) => Boolean(a) && Boolean(b));

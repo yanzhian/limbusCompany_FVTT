@@ -229,6 +229,9 @@ export class LimbusItemSheet extends ItemSheet {
     // ── 装备专用数据 ──────────────────────────────────────────────────────
     if (item.type === "equipment") {
       context.isWeapon    = sys.subtype === "weapon";
+      // 武器的攻击方式与射程（1 格 = 5ft，沿用容量扩散那套换算口径）
+      context.rangeTypeLabel = sys.rangeType === "ranged" ? "远程" : "近战";
+      context.rangeFt        = `${((sys.range ?? 1) * 5 + 2.5).toFixed(1)}ft`;
       context.isUpper     = sys.subtype === "upper";
       context.isLower     = sys.subtype === "lower";
       context.isAccessory = sys.subtype === "accessory";
@@ -2366,6 +2369,7 @@ function _activityEffectLabels() {
     { value: "triggerBuff",  label: "触发BUFF" },
     { value: "useSkill",     label: "使用技能" },
     { value: "diceTypeChg",  label: "骰子类型" },
+    { value: "rangeChg",     label: "范围修改" },
     { value: "extraDamage",  label: "追加伤害" },
     { value: "relatedSkillConvert", label: "相关技能转换" },
     { value: "fieldResource", label: "公用场地" },
@@ -2485,7 +2489,7 @@ function _buildCondRow(cond, idx, cfg) {
   if (cond?.type === "level") {
     cond = { ...cond, type: "useSkill", skillLevel: cond.level ?? 1, skillNameOrTag: cond.skillNameOrTag ?? "" };
   }
-  const condType   = ["perN","noBuff","baseAttr","useSkill","buffCompare","category","useSin","fieldResource","sinResource","background","equipped","allyTag"].includes(cond?.type) ? cond.type : "hasBuff";
+  const condType   = ["perN","noBuff","baseAttr","useSkill","buffCompare","category","useSin","fieldResource","sinResource","background","equipped","allyTag","equipSlotCategory"].includes(cond?.type) ? cond.type : "hasBuff";
   const isBuffSec  = condType === "hasBuff" || condType === "noBuff" || condType === "perN" || condType === "buffCompare";
   const isUseSinSec = condType === "useSin";
   const selSins    = Array.isArray(cond?.sinTypes) ? cond.sinTypes
@@ -2548,6 +2552,7 @@ function _buildCondRow(cond, idx, cfg) {
           <option value="background"  ${condType === "background"  ? "selected" : ""}>背景</option>
           <option value="equipped"    ${condType === "equipped"    ? "selected" : ""}>已装备</option>
           <option value="allyTag"     ${condType === "allyTag"     ? "selected" : ""}>友方存在</option>
+          <option value="equipSlotCategory" ${condType === "equipSlotCategory" ? "selected" : ""}>装备分类</option>
           <option value="fieldResource" ${condType === "fieldResource" ? "selected" : ""}>公用场地</option>
           <option value="sinResource"   ${condType === "sinResource"   ? "selected" : ""}>罪孽资源</option>
         </select>
@@ -2620,6 +2625,22 @@ function _buildCondRow(cond, idx, cfg) {
           <label class="ae-cond-cat-cb"><input type="checkbox" class="cond-usesin-cb" value="gloom" ${selSins.includes("gloom") ? "checked" : ""}> 忧郁</label>
           <label class="ae-cond-cat-cb"><input type="checkbox" class="cond-usesin-cb" value="pride" ${selSins.includes("pride") ? "checked" : ""}> 傲慢</label>
           <label class="ae-cond-cat-cb"><input type="checkbox" class="cond-usesin-cb" value="envy" ${selSins.includes("envy") ? "checked" : ""}> 嫉妒</label>
+        </span>
+        <!-- 装备分类：某个部位上装备的物品，其分类是否命中（如"武器的分类是弓刀"）。
+             部位留空 = 不限部位；分类可用 / 分隔多个，任一命中即可。 -->
+        <span class="ae-cond-slotcat-sec" ${condType === "equipSlotCategory" ? "" : 'style="display:none"'}>
+          <label>部位</label>
+          <select class="ae-sel cond-equip-slot">
+            <option value=""          ${!cond?.equipSlot ? "selected" : ""}>不限</option>
+            <option value="weapon"    ${cond?.equipSlot === "weapon"    ? "selected" : ""}>武器</option>
+            <option value="upper"     ${cond?.equipSlot === "upper"     ? "selected" : ""}>上装</option>
+            <option value="lower"     ${cond?.equipSlot === "lower"     ? "selected" : ""}>下装</option>
+            <option value="accessory" ${cond?.equipSlot === "accessory" ? "selected" : ""}>饰品</option>
+          </select>
+          <label>分类</label>
+          <input class="ae-input cond-slot-category" type="text" style="width:130px;"
+                 value="${_esc(cond?.equipCategory ?? "")}"
+                 placeholder="如：弓刀（多个用 / 分隔）">
         </span>
         <!-- 已装备：数名称/标签/分类符合的装备件数；三个筛选可任意组合、留空即不限。
              勾选"每"时，件数还会成为后续效果的倍数（每装备 1 件 → 加 3 层 …）-->
@@ -2779,6 +2800,8 @@ function _buildCostRow(cost, idx, cfg) {
   const isDiscard  = selType === "discard";
   const isPerStack = selType === "perStack";
   const isRandom   = selType === "random";
+  // 「扣光」只对 BUFF 类的强制消耗有意义（每/随机/属性/丢弃都有各自的语义）
+  const isConsumeAllable = !isPerStack && !isRandom && !isAttr && !isDiscard;
   const costPerNDim = cost?.perNDim === "intensity" ? "intensity" : "stacks";
   const costPerNDimOpts = [
     ["stacks","层数"],["intensity","强度"],
@@ -2860,7 +2883,14 @@ function _buildCostRow(cost, idx, cfg) {
           <input class="ae-input cost-buff" type="text" list="ae-buff-dl"
                  placeholder="输入或选择BUFF…" autocomplete="off" style="width:100px;"
                  value="${_esc(_keyToLabel(cost?.buff ?? "", cost?.buffCustom ?? ""))}">
-          <span class="ae-cost-intensity-sec" ${isPerStack ? 'style="display:none"' : ""}>
+          <!-- 扣光：「消耗所有 X」的正确写法。勾上后忽略强度/层数，有多少扣多少，
+               一层都没有也不会让整条 Activity 失败。不要再用 stacks:99 之类的大数——
+               那是强制消耗，预检查要求真有 99 层，永远付不起 -->
+          <span class="ae-cost-all-sec" ${isConsumeAllable ? "" : 'style="display:none"'}>
+            <label title="消耗所有：有多少扣多少，没有也不算失败（忽略强度/层数）">扣光</label>
+            <input class="cost-consume-all" type="checkbox" ${cost?.consumeAll ? "checked" : ""}>
+          </span>
+          <span class="ae-cost-intensity-sec" ${(isPerStack || cost?.consumeAll) ? 'style="display:none"' : ""}>
             <label>强度</label>
             <input class="ae-input-sm cost-intensity" type="number" value="${cost?.intensity ?? 0}" min="0">
           </span>
@@ -2868,8 +2898,10 @@ function _buildCostRow(cost, idx, cfg) {
             <label>维度</label>
             <select class="ae-sel cost-pern-dim">${costPerNDimOpts}</select>
           </span>
-          <label class="cost-stacks-label">${isPerStack ? (costPerNDim === "intensity" ? "每N级" : "每N层") : "层数"}</label>
-          <input class="ae-input-sm cost-stacks"    type="number" value="${cost?.stacks ?? 0}"    min="0">
+          <span class="ae-cost-stacks-sec" ${cost?.consumeAll ? 'style="display:none"' : ""}>
+            <label class="cost-stacks-label">${isPerStack ? (costPerNDim === "intensity" ? "每N级" : "每N层") : "层数"}</label>
+            <input class="ae-input-sm cost-stacks"    type="number" value="${cost?.stacks ?? 0}"    min="0">
+          </span>
           <span class="ae-cost-pern-max" ${isPerStack ? "" : 'style="display:none"'}>
             <label>最大倍数</label>
             <input class="ae-input-sm cost-max-times" type="number" value="${cost?.maxTimes ?? 0}" min="0" placeholder="0=无限">
@@ -2923,6 +2955,7 @@ function _buildEffectRow(eff, idx, cfg) {
   // 来源只保留 [标签+等级] 与 [技能名字]；旧数据的 uuid / equipped 一律回落为标签模式
   const useSkillRef    = eff?.skillRef === "name" ? "name" : "tag";
   const isDiceTypeChg  = type === "diceTypeChg";
+  const isRangeChg     = type === "rangeChg";
   const isExtraDamage  = type === "extraDamage";
   const isRelConvert   = type === "relatedSkillConvert";
   const isFieldEff     = type === "fieldResource";
@@ -3047,6 +3080,16 @@ function _buildEffectRow(eff, idx, cfg) {
             <option value="unbreakable" ${(eff?.diceTypeVal ?? "normal") === "unbreakable" ? "selected" : ""}>不可摧毁</option>
           </select>
         </span>
+        <span class="ae-eff-rangechg-sec" ${isRangeChg ? "" : 'style="display:none"'}>
+          <label>攻击方式</label>
+          <select class="ae-sel eff-range-mode">
+            <option value="melee"  ${(eff?.rangeMode ?? "melee") === "melee"  ? "selected" : ""}>近战</option>
+            <option value="ranged" ${eff?.rangeMode === "ranged" ? "selected" : ""}>远程</option>
+          </select>
+          <label>范围（格）</label>
+          <input class="ae-input-sm eff-range-value" type="number" min="0" max="99"
+                 value="${eff?.rangeValue ?? 1}" title="只作用于已装备的武器，其他部位忽略">
+        </span>
         <span class="ae-eff-extradmg-sec" ${isExtraDamage ? "" : 'style="display:none"'}>
           <label>物理分类</label>
           <select class="ae-sel eff-extradmg-category">
@@ -3067,7 +3110,17 @@ function _buildEffectRow(eff, idx, cfg) {
           <label>技能名字</label>
           <input class="ae-input eff-relconvert-name" type="text" list="ae-owned-skill-dl"
                  value="${_esc(eff?.relSkillName ?? "")}" placeholder="技能名字（在背包/技能列表中检索）" style="width:130px;" autocomplete="off">
-          <span class="ae-eff-relconvert-hint">永久替换本技能在角色技能槽中的位置（在背包/技能列表按名字检索目标技能）</span>
+          <label>时长</label>
+          <select class="ae-sel eff-relconvert-duration">${
+            [["permanent","永久"],["afterUse","使用一次后还原"],
+             ["afterClash","本次结算后还原"],["endOfTurn","本回合结束时还原"]]
+              .map(([v,l]) => `<option value="${v}" ${(eff?.relDuration ?? "permanent") === v ? "selected" : ""}>${l}</option>`)
+              .join("")
+          }</select>
+          <span class="ae-eff-relconvert-hint">替换本技能在角色技能槽中的位置（在背包/技能列表按名字检索目标技能）。
+          「还原」由这条转换自己负责，目标技能上<strong>不需要</strong>再写一条转回去——那样会让共用同一强化形态的其他路径也被一起还原。
+          <br>【使用一次后还原】：换上来的形态被真正投出去一次后还原；多个槽位（如基础槽＋守备槽）换成同一张时，
+          任一边用掉，另一边也一并还原——整体只算一次。</span>
         </span>
         </div>
       </div>
@@ -3244,6 +3297,7 @@ function _bindCondType(html) {
     row.find(".ae-cond-sin-sec").toggle(isSinSec);
     row.find(".ae-cond-bg-sec").toggle(isBgSec);
     row.find(".ae-cond-equip-sec").toggle(isEquipSec);
+    row.find(".ae-cond-slotcat-sec").toggle(type === "equipSlotCategory");
     row.find(".ae-cond-target-sec").toggle(!isCatSec && !isFieldSec && !isSinSec && type !== "useSin");
     row.find(".ae-cond-pern-max").toggle(isPerN);
     row.find(".ae-cond-pern-dim-sec").toggle(isPerN);
@@ -3285,7 +3339,12 @@ function _bindCostType(html) {
     row.find(".cost-stacks-label").text(isPerStack ? (perNDim === "intensity" ? "每N级" : "每N层") : "层数");
     row.find(".ae-cost-pern-max").toggle(isPerStack);
     row.find(".ae-cost-pern-dim-sec").toggle(isPerStack);
-    row.find(".ae-cost-intensity-sec").toggle(!isPerStack);
+    // 扣光：只对 BUFF 强制消耗开放；勾上后强度/层数没有意义，一并隐藏
+    const canAll = !isPerStack && !isRandom && !isAttr && !isDiscard && !isField && !isSin;
+    const isAll  = canAll && row.find(".cost-consume-all").prop("checked");
+    row.find(".ae-cost-all-sec").toggle(canAll);
+    row.find(".ae-cost-intensity-sec").toggle(!isPerStack && !isAll);
+    row.find(".ae-cost-stacks-sec").toggle(!isAll);
   };
   html.find(".cost-type").off("change").on("change", function () {
     refreshRow($(this).closest(".ae-cost-row"));
@@ -3298,6 +3357,9 @@ function _bindCostType(html) {
     if (row.find(".cost-type").val() !== "perStack") return;
     const dim = $(this).val() === "intensity" ? "intensity" : "stacks";
     row.find(".cost-stacks-label").text(dim === "intensity" ? "每N级" : "每N层");
+  });
+  html.find(".cost-consume-all").off("change").on("change", function () {
+    refreshRow($(this).closest(".ae-cost-row"));
   });
   html.find(".cost-discard-mode").off("change").on("change", function () {
     const row     = $(this).closest(".ae-cost-row");
@@ -3363,6 +3425,7 @@ function _bindEffType(html) {
     row.find(".ae-eff-random-sec").toggle(isRandomBuff);
     row.find(".ae-eff-useskill-sec").toggle(isUseSkill);
     row.find(".ae-eff-dicetypechg-sec").toggle(isDiceTypeChg);
+    row.find(".ae-eff-rangechg-sec").toggle(type === "rangeChg");
     row.find(".ae-eff-extradmg-sec").toggle(isExtraDamage);
     row.find(".ae-eff-relconvert-sec").toggle(isRelConvert);
   });
@@ -3423,6 +3486,14 @@ function _readActivityForm(html, original) {
         type:   "allyTag",
         target: $r.find(".cond-target").val() || "bgTagOther",
         ..._readBgTagMeta($r, "cond"),
+      });
+    } else if (condType === "equipSlotCategory") {
+      // 【装备分类】：某个部位上装备的物品，其分类是否命中
+      preconditions.push({
+        type:          "equipSlotCategory",
+        target:        $r.find(".cond-target").val() || "self",
+        equipSlot:     $r.find(".cond-equip-slot").val() || "",
+        equipCategory: $r.find(".cond-slot-category").val()?.trim() || "",
       });
     } else if (condType === "background") {
       preconditions.push({
@@ -3537,6 +3608,8 @@ function _readActivityForm(html, original) {
         target,
         buff:       resolveKey($r.find(".cost-buff").val()),
         buffCustom: "",
+        // 扣光：忽略强度/层数，执行时整条 BUFF 移除
+        consumeAll: type !== "perStack" && $r.find(".cost-consume-all").prop("checked") === true,
         intensity:  type === "perStack" ? 0 : (parseInt($r.find(".cost-intensity").val()) || 0),
         stacks:     parseInt($r.find(".cost-stacks").val())    || 0,
         ..._readBgTagMeta($r, "cost"),
@@ -3602,6 +3675,14 @@ function _readActivityForm(html, original) {
       });
       return;
     }
+    if (type === "rangeChg") {
+      effects.push({
+        type,
+        rangeMode:  $r.find(".eff-range-mode").val() || "melee",
+        rangeValue: Math.max(0, parseInt($r.find(".eff-range-value").val()) || 0),
+      });
+      return;
+    }
     if (type === "fieldResource") {
       effects.push({
         type,
@@ -3615,6 +3696,7 @@ function _readActivityForm(html, original) {
         type,
         relMode:      "byName",
         relSkillName: $r.find(".eff-relconvert-name").val()?.trim() || "",
+        relDuration:  $r.find(".eff-relconvert-duration").val() || "permanent",
       });
       return;
     }

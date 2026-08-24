@@ -19,6 +19,7 @@ import { canContainerAccept, wouldNest } from "../helpers/container-rules.mjs";
 import { buildItemTitleCard, closeTitleCardUnlessLocked, toggleTitleCardLock } from "./item-sheet.mjs";
 import { ClashVFX } from "../helpers/clash-vfx.mjs";
 import { QuickActionHUD } from "./quick-action-hud.mjs";
+import { refreshReadySlots } from "../helpers/ready-sparkle.mjs";
 
 /**
  * 以 actorId 为 key 的模块级战斗袋状态 Map。
@@ -1698,6 +1699,9 @@ export class LimbusActorSheet extends ActorSheet {
       const sinColor = CONFIG.LIMBUSCOMPANY?.SIN_COLORS?.[mainItem?.system?.sinType] ?? "";
       $slot.css("--slot-sin-color", (sinColor && i < 2) ? sinColor : "");
     });
+
+    // 【大招就绪】星芒：槽位 DOM 是复用的，每次重绘都先清后挂
+    refreshReadySlots(html, this.actor);
   }
 
   // 从 pool 中取下一张牌补充到 slots[5]

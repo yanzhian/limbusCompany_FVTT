@@ -151,6 +151,7 @@
 | `category` | `categories: ["slash", ...]` | 使用了某分类的骰 |
 | `background` | `bgName` | 背景名或背景标签 |
 | `equipped` | `equipName`/`equipTag`/`equipCategory`、`count`、`perEach`、`maxTimes` | 装备格里符合条件的件数；`perEach: true` 时也提供倍数 |
+| `equipSlotCategory` | `equipSlot`（`weapon`/`upper`/`lower`/`accessory`，留空=不限部位）、`equipCategory`（分类，多个用 `/` 分隔） | 【装备分类】：某部位装备的分类是否命中（「若你武器的分类为弓刀」） |
 | `allyTag` | `target`（`bgTag`/`bgTagOther`/`allTeamOther`…）、`targetTag`、`targetTagCount`、`perEach`、`maxTimes` | 场上有没有符合条件的友方（「若有其他背景带有X的友方」）；`perEach: true` 时人数也当倍数 |
 | `fieldResource` | `fieldName`、`comparison`、`stacks` | 公用场地层数 |
 | `sinResource` | `sinType`、`comparison`、`value` | 全局罪孽池点数 |
@@ -168,7 +169,18 @@
 ```
 
 - **层数与强度分别扣**：填了哪个扣哪个，两个都填就都扣，都留 0 时按"扣 1 层"
-- 「消耗所有 X」没有专门写法，用 `"stacks": 99` 之类的大数扣光即可
+
+#### 「消耗所有 X」→ 用 `consumeAll`
+
+```json
+{ "type": "forced", "target": "self", "buff": "custom", "buffCustom": "炎蝶之棺",
+  "consumeAll": true }
+```
+
+- 编辑器里对应 BUFF 消耗行的 **【扣光】** 勾选框。
+- 语义是「有多少扣多少」：整条 BUFF 直接移除，**一层都没有也不算付不起**，不会让整条 Activity 失败。
+- 勾上后 `intensity` / `stacks` 被忽略。
+- ⚠️ **不要用 `"stacks": 99` 之类的大数**。那走的是普通强制消耗，预检查要求你**真的**有 99 层，永远付不起 → 整条 Activity 被静默跳过（曾导致整段 [攻击后] 一句都不执行）。
 
 ### 5.2 每（消耗式倍数）
 
@@ -179,6 +191,21 @@
 ```
 每 N 扣一次、算一倍，只扣 `倍数 × N`。`maxTimes` 同上。
 群体目标时**逐个扣**，倍数取所有目标里最小的那个。
+
+**不足 1 倍（倍数 = 0）时不再跳过整条 Activity**：什么都不扣，只有「随倍数缩放的效果」失效，
+其余效果照常执行。例：
+
+> [攻击后]：消耗所有【炎蝶之棺】，恢复 20 生命值，每消耗 3 级【烧伤】恢复 1D6，将本骰转换成"烙印"
+
+目标没有烧伤时，少回那 1D6，但 20 点固定回血与骰子转换照常发生。
+
+随倍数缩放（0 倍时跳过）的效果类型见 `ClashManager.PER_SCALED_EFFECTS`：
+`addBuff` `randomBuff` `hpAdj` `sanityAdj` `apAdj` `atkAdj` `defAdj` `weightAdj`
+`diceAdj` `diceFacesAdj` `baseValue` `fieldResource` `seismicBlast` `extraDamage`。
+其余（`diceTypeChg` `removeBuff` `rangeChg` `triggerBuff`…）与倍数无关，0 倍时照常跑。
+
+> 注意：**倍数是整条 Activity 共用的**（取所有「每」条件与「每」消耗的最小值）。
+> 想让固定部分和「每 N」部分互不影响地各自缩放，仍然要**拆成两条 Activity**。
 
 ### 5.3 其他
 
@@ -265,11 +292,49 @@
 { "type": "triggerBuff", "target": "target",
   "trigBuff": "burn", "trigBuffCustom": "", "trigStacks": 1, ... }
 
+// 范围修改：只作用于**已装备的武器**（其他部位一律忽略），持久生效不自动还原
+// 近战：拼点前瞬移贴身；远程：不移动、隔空开拼，胜则推人、败不被推
+{ "type": "rangeChg", "rangeMode": "ranged", "rangeValue": 8 }
+
 // 骰子类型（本次攻击内有效）
 { "type": "diceTypeChg", "diceTypeVal": "unbreakable" }   // normal / unbreakable / severing
 
-// 相关技能转换（永久换卡，形态切换用）
-{ "type": "relatedSkillConvert", "relMode": "byName", "relSkillName": "守护者" }
+// 相关技能转换（换卡，形态切换用）
+// relDuration: "permanent"（默认）/ "afterUse"（换上来的形态被投出去一次后还原）/
+//              "afterClash"（本次结算后还原）/ "endOfTurn"（本回合结束时还原）
+{ "type": "relatedSkillConvert", "relMode": "byName", "relSkillName": "守护者",
+  "relDuration": "permanent" }
+
+/* ⚠️ 还原不要写在目标技能上。
+ * 「强化形态自己写一条 [攻击后] 转换回原形态」看似可行，但那条转换挂在**强化形态**上，
+ * 它分不清自己是被哪条路径换上来的。永久转换和临时转换共用同一个强化形态时，
+ * 任意一次使用都会把两边一起还原（守备技能触发一次，永久那条也跟着掉回去）。
+ *
+ * 正确写法：还原挂在**转换这一侧**，用 relDuration 声明时长，
+ * 强化形态上**不写**任何转换回去的效果。
+ *
+ * 典型场景：基础技能 Lv.3 与守备技能都能转成同一张「强化Lv.3」，且强化形态整体
+ * 只能用 1 次（任一边用掉，另一边也消失）——两条转换都写：
+ *   { "type": "relatedSkillConvert", "relMode": "byName",
+ *     "relSkillName": "强化Lv.3", "relDuration": "afterUse" }
+ *
+ * 时长语义：
+ *   - "afterUse"    换上来的形态被**真正投出去一次**（作为攻方或守方的骰参与结算）后还原。
+ *                   转换本身发生在哪个时机（[回合开始时]/[激活]/[反应]/[攻击前]/[攻击后]）
+ *                   都不影响——那次结算投的是原技能，不算"用掉强化形态"。
+ *   - "afterClash"  转换所在的这次结算一结束就还原。**注意**：若转换是在 [攻击后] 触发的，
+ *                   强化形态还没来得及被使用就会被收回，多数换卡流程不该用这个。
+ *   - "endOfTurn"   本回合结束时还原。
+ *
+ * 引擎细节：
+ *   - 只在**真的发生了替换**时登记还原。槽位里本来就是强化形态（已被另一条换上去了）
+ *     时是空操作、不登记，到点也就不会把别人的状态误还原。
+ *   - 还原**按槽位记账**，不是按 id：基础槽与守备槽同时换成同一张强化技能时，
+ *     两个槽各自回到各自原来的技能，不会互相误伤。
+ *   - "afterUse" 时，指向同一张形态的**所有**记录一起还原 —— 这就是"另一个也会消失"。
+ *   - 多层临时转换按后进先出剥回。
+ *   - 兜底：**长休时还原全部临时转换**。始终没被投出去的 "afterUse" 形态不会跨休息残留。
+ */
 
 // 使用技能（[反应] 常用，其余触发时机同样可用）
 { "type": "useSkill", "target": "self", "skillRef": "name",

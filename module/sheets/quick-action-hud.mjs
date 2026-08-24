@@ -13,6 +13,7 @@
 
 import { ClashManager } from "../helpers/clash.mjs";
 import { CustomBuffRegistry } from "../helpers/custom-buffs.mjs";
+import { refreshReadySlots } from "../helpers/ready-sparkle.mjs";
 import { closeTitleCardUnlessLocked, toggleTitleCardLock,
          attachHoverableTitleCard, buildBuffTitleCard } from "./item-sheet.mjs";
 
@@ -408,6 +409,12 @@ export class QuickActionHUD extends Application {
 
   activateListeners(html) {
     super.activateListeners(html);
+
+    // ── 【大招就绪】星芒：技能槽与 EGO 槽都参与 ───────────────────────────
+    if (this._actor) {
+      refreshReadySlots(html, this._actor,
+        ".qa-skill-slot[data-item-id], .qa-ego-slot[data-item-id]");
+    }
 
     // ── AP 硬币点击（与角色卡逻辑一致） ──────────────────────────────────
     html.find(".qa-ap-coin").on("click", async (e) => {

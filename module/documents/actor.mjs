@@ -863,10 +863,15 @@ export class LimbusActor extends Actor {
   // ─── 长休 ──────────────────────────────────────────────────────────────
 
   /**
-   * 执行长休：恢复 HP / 理智 / AP，重置混乱阈值。
+   * 执行长休：恢复 HP / 理智 / AP，重置混乱阈值，还原全部临时技能转换。
    * 无确认对话框，直接执行。
    */
   async longRest() {
+    // 兜底：一直没被使用掉的临时技能转换（如「使用一次后还原」的强化形态在战斗
+    // 结束前始终没投出去）会一直挂在槽位上，长休时统一收回，不跨休息残留
+    const { ClashManager } = await import("../helpers/clash.mjs");
+    await ClashManager._revertTempSkillConverts(this, "all");
+
     const sys              = this.system;
     const defaultThresholds = sys.getDefaultChaosThresholds?.() ?? [
       { percent: 60, triggered: false },
@@ -1403,6 +1408,60 @@ export class LimbusActor extends Actor {
       await ClashManager._safeDocUpdate(this, updates);
     }
     return changed;
+  }
+
+  /**
+   * 定位某技能 id 所在的槽位（第一处命中）。
+   * 临时技能转换的还原要按**槽位**记账而不是按 id——基础槽与守备槽可能同时
+   * 被换成了同一个强化形态，此时按 id 还原会把两个槽一起改掉。
+   * @param {string} itemId
+   * @returns {{kind:string, idx?:number, grade?:string}|null}
+   */
+  findSkillSlot(itemId) {
+    if (!itemId) return null;
+    const sys = this.system;
+    const bIdx = (sys.skills?.basic ?? []).indexOf(itemId);
+    if (bIdx >= 0) return { kind: "basic", idx: bIdx };
+    if (sys.skills?.defense === itemId) return { kind: "defense" };
+    for (const [grade, id] of Object.entries(sys.skills?.ego ?? {})) {
+      if (id === itemId) return { kind: "ego", grade };
+    }
+    return null;
+  }
+
+  /**
+   * 把指定槽位直接写成 itemId（临时技能转换的还原用）。
+   * @param {{kind:string, idx?:number, grade?:string}} slot
+   * @param {string} itemId
+   * @returns {Promise<boolean>}
+   */
+  async setSkillSlot(slot, itemId) {
+    if (!slot?.kind || !itemId) return false;
+    const sys = this.system;
+    const updates = {};
+
+    if (slot.kind === "basic") {
+      const basic = [...(sys.skills?.basic ?? [])];
+      const idx   = slot.idx ?? -1;
+      if (idx < 0 || idx >= basic.length) return false;
+      if (basic[idx] === itemId) return false;
+      basic[idx] = itemId;
+      updates["system.skills.basic"] = basic;
+    } else if (slot.kind === "defense") {
+      if (sys.skills?.defense === itemId) return false;
+      updates["system.skills.defense"] = itemId;
+    } else if (slot.kind === "ego") {
+      const ego = { ...(sys.skills?.ego ?? {}) };
+      if (!(slot.grade in ego) || ego[slot.grade] === itemId) return false;
+      ego[slot.grade] = itemId;
+      updates["system.skills.ego"] = ego;
+    } else {
+      return false;
+    }
+
+    const { ClashManager } = await import("../helpers/clash.mjs");
+    await ClashManager._safeDocUpdate(this, updates);
+    return true;
   }
 
   // ─── 先攻骰掷 ─────────────────────────────────────────────────────────

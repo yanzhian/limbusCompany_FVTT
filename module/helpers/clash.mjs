@@ -466,6 +466,28 @@ export class ClashManager {
     return true;
   }
 
+  /**
+   * 取装备格里指定部位的装备（武器/上装/下装/饰品）。
+   * 部位用 subtype 判定；武器/饰品可能有多件，返回全部。
+   * @param {Actor}  actor
+   * @param {string} slot  weapon / upper / lower / accessory；空 = 不限部位
+   */
+  static _getEquippedBySlot(actor, slot) {
+    const list = ClashManager._getEquippedItems(actor);
+    if (!slot) return list;
+    return list.filter(it => (it.system?.subtype ?? "") === slot);
+  }
+
+  /**
+   * 【范围修改】的落点：当前**已装备的武器**。
+   * 多把武器时优先取已激活（isActive）的那把，没有激活标记就取第一把。
+   */
+  static _activeWeaponOf(actor) {
+    const weapons = ClashManager._getEquippedBySlot(actor, "weapon");
+    if (!weapons.length) return null;
+    return weapons.find(w => w.system?.isActive) ?? weapons[0];
+  }
+
   /** 该角色装备格里符合条件的装备件数 */
   static _countEquipped(actor, pre) {
     return ClashManager._getEquippedItems(actor)
@@ -637,6 +659,19 @@ export class ClashManager {
     "diceAdj", "diceFacesAdj", "baseValue", "weightAdj", "diceTypeChg",
   ]);
 
+  /**
+   * 数值会被「每 N」倍数缩放的效果类型。
+   * 倍数为 0（一倍都不够）时，这些效果整条跳过——不然 addBuff 会加 0 层、
+   * seismicBlast 会被 Math.max(1,…) 兜底成 1 次，全是错的。
+   * 不在这个集合里的效果（diceTypeChg / removeBuff / rangeChg / triggerBuff…）
+   * 与倍数无关，0 倍时照常执行。
+   */
+  static PER_SCALED_EFFECTS = new Set([
+    "addBuff", "randomBuff", "hpAdj", "sanityAdj", "apAdj", "atkAdj", "defAdj",
+    "weightAdj", "diceAdj", "diceFacesAdj", "baseValue",
+    "fieldResource", "seismicBlast", "extraDamage",
+  ]);
+
   static async _applyActivitiesAndEquip(item, trigger, ctx) {
     await ClashManager._applyActivities(item, trigger, ctx);
     const owner = ctx.owner ?? null;
@@ -774,7 +809,16 @@ export class ClashManager {
       );
       const gained  = gainMap[type] ?? 0;
       const allowed = Math.max(0, maxGainPerRound - gained);
-      if (allowed <= 0) return;              // 本回合该 BUFF 的获得额度已用尽
+      if (allowed <= 0) {
+        // 本回合该 BUFF 的获得额度已用尽。这里以前是静默 return，
+        // 结果是"技能明明写了加 6 层却一层没加"且毫无提示，很难查。
+        // 只提示自己能改的角色，免得群体效果刷屏。
+        if (actor?.isOwner) {
+          ui.notifications?.info(
+            `【${customHandler?.label ?? ClashManager._buffLabel(type)}】本回合已达获得上限（${maxGainPerRound} 层）。`);
+        }
+        return;
+      }
       stacks = Math.min(stacks, allowed);
       gainMap[type]  = gained + stacks;
       gainFlagUpdate = { "flags.limbusCompany_FVTT.buffRoundGain": gainMap };
@@ -1344,6 +1388,24 @@ export class ClashManager {
           continue;
         }
 
+        // ── equipSlotCategory 类型（编辑器里叫【装备分类】）───────────────
+        // 「若你 <部位> 的分类为 <X>」。分类可用 / 分隔多个，任一命中即可；
+        // 部位留空 = 不限部位，只要装备格里有任意一件符合分类即可。
+        if (pre.type === "equipSlotCategory") {
+          const precTgt = (pre.target ?? "self") === "self" ? owner : other;
+          if (!precTgt) { precondFail = true; break; }
+          const wanted = String(pre.equipCategory ?? "")
+            .split("/").map(x => x.trim()).filter(Boolean);
+          const list = ClashManager._getEquippedBySlot(precTgt, pre.equipSlot ?? "");
+          if (!list.length) { precondFail = true; break; }
+          if (wanted.length) {
+            const hit = list.some(it =>
+              wanted.includes(String(it.system?.category ?? "").trim()));
+            if (!hit) { precondFail = true; break; }
+          }
+          continue;
+        }
+
         // ── baseAttr 类型：检查角色属性值 ──────────────────────────────
         if (pre.type === "baseAttr") {
           const precTgt = (pre.target ?? "self") === "self" ? owner : other;
@@ -1491,20 +1553,22 @@ export class ClashManager {
             if (!ok) { forcedFail = true; break; }
           }
           if (forcedFail) break;
-        } else if (cost.target === "field" && (cost.type === "forced" || cost.type === "perStack")) {
-          // 公用场地：层数不足（每N层的 N）则跳过整条 Activity
+        } else if (cost.target === "field" && cost.type === "forced") {
+          // 公用场地·强制消耗：层数不足则跳过整条 Activity
+          //（【每】不再拦截：不足 1 倍时倍数为 0，只让随倍数缩放的效果失效，见下方）
           if (!cost.fieldName) { forcedFail = true; break; }
           const have = SinResourceHUD.getFieldResourceStacks(cost.fieldName);
           if (have < Math.max(1, cost.stacks ?? 1)) { forcedFail = true; break; }
-        } else if (cost.target === "sin" && (cost.type === "forced" || cost.type === "perStack")) {
-          // 罪孽资源：点数不足（每N点的 N）则跳过整条 Activity
+        } else if (cost.target === "sin" && cost.type === "forced") {
+          // 罪孽资源·强制消耗：点数不足则跳过整条 Activity
           if (!cost.sinType) { forcedFail = true; break; }
           const have = SinResourceHUD.getSinValue(cost.sinType);
           if (have < Math.max(1, cost.value ?? 1)) { forcedFail = true; break; }
-        } else if (cost.buff && (cost.type === "forced" || cost.type === "perStack")) {
-          // 强制消耗 / 每：数值不足则跳过整条 Activity
-          // ·【每】：只看一个维度（perNDim），门槛是每 N 的那个 N
-          // ·【强制消耗】：层数与强度分别校验——填了哪个就要够哪个
+        } else if (cost.buff && cost.type === "forced") {
+          // 强制消耗：数值不足则跳过整条 Activity（层数与强度分别校验，填了哪个就要够哪个）
+          // ·【扣光】（consumeAll）：语义是"有多少扣多少"，一律放行，0 也不阻断
+          // ·【每】同样不再拦截，理由见上
+          if (cost.consumeAll) continue;
           const costBuffType = cost.buff === "custom" ? (cost.buffCustom || "custom") : cost.buff;
           const costTgts = await ClashManager._resolveTargets(cost.target ?? "self", owner, other, cost, ctx);
           if (costTgts.length === 0) { forcedFail = true; break; }
@@ -1512,10 +1576,7 @@ export class ClashManager {
             const existing = ClashManager._getBuff(tgt, costBuffType);
             const haveS = existing?.stacks    ?? 0;
             const haveI = existing?.intensity ?? 0;
-            if (cost.type === "perStack") {
-              const haveVal = cost.perNDim === "intensity" ? haveI : haveS;
-              if (haveVal < Math.max(1, cost.stacks ?? 1)) { forcedFail = true; break; }
-            } else {
+            {
               const needS = cost.stacks    ?? 0;
               const needI = cost.intensity ?? 0;
               // 两个都没填时按老规矩当作"扣 1 层"
@@ -1619,14 +1680,27 @@ export class ClashManager {
               const have     = dim === "intensity" ? (existing?.intensity ?? 0) : (existing?.stacks ?? 0);
               let   times    = Math.floor(have / n);
               if ((cost.maxTimes ?? 0) > 0) times = Math.min(times, cost.maxTimes);
-              if (dim === "intensity") {
-                await ClashManager._reduceBuffIntensity(tgt, costBuffType, times * n);
-              } else {
-                await ClashManager._reduceBuffStacks(tgt, costBuffType, times * n);
+              // 不足 1 倍时 times = 0：什么都不扣（也不再让整条 Activity 失败）
+              if (times > 0) {
+                if (dim === "intensity") {
+                  await ClashManager._reduceBuffIntensity(tgt, costBuffType, times * n);
+                } else {
+                  await ClashManager._reduceBuffStacks(tgt, costBuffType, times * n);
+                }
               }
               each.push(times);
             }
-            if (each.length) costMultipliers.push(Math.min(...each));
+            // 一个目标都没有 = 0 倍（而不是"没这条消耗"，那会让效果按满额跑）
+            costMultipliers.push(each.length ? Math.min(...each) : 0);
+          } else if (cost.consumeAll) {
+            // 扣光：整条 BUFF 直接移除（有多少扣多少，一条都没有也不算失败）。
+            // 「消耗所有 X」请用这个，不要再写 stacks: 99 —— 大数走的是强制消耗，
+            // 预检查要求真的有 99 层，永远付不起，整条 Activity 会被静默跳过。
+            for (const tgt of costTgts) {
+              if (ClashManager._getBuff(tgt, costBuffType)) {
+                await ClashManager._removeBuff(tgt, costBuffType);
+              }
+            }
           } else if (cost.type !== "none") {
             // 强制消耗：层数与强度分别扣，填了哪个扣哪个（都没填按扣 1 层）
             const needS = cost.stacks    ?? 0;
@@ -1644,7 +1718,7 @@ export class ClashManager {
             const n     = Math.max(1, cost.stacks ?? 1);
             let   times = Math.floor(have / n);
             if ((cost.maxTimes ?? 0) > 0) times = Math.min(times, cost.maxTimes);
-            await SinResourceHUD.consumeFieldResourceStacks(cost.fieldName, times * n);
+            if (times > 0) await SinResourceHUD.consumeFieldResourceStacks(cost.fieldName, times * n);
             costMultipliers.push(times);
           } else if (cost.type !== "none") {
             await SinResourceHUD.consumeFieldResourceStacks(cost.fieldName, cost.stacks ?? 1);
@@ -1682,6 +1756,11 @@ export class ClashManager {
         // 连击的第 2 次交锋起：改写技能本身的效果（骰数/面数/基础值/攻击容量/
         // 骰子类型）不再重复执行，否则每交锋一次就再加一遍，3d 会滚成 6d
         if (ctx._comboRound > 1 && ClashManager.COMBO_ONCE_EFFECTS.has(eff.type)) continue;
+        // 「每 N」一倍都不够时（倍数 0）：只跳过随倍数缩放的效果，
+        // 不随倍数走的效果（转换骰子类型、移除 BUFF 等）照常执行。
+        // 例：「消耗所有【炎蝶之棺】回 20 血；每消耗 3 级【烧伤】回 1D6；转成烙印」
+        // ——没有烧伤时该少回 1D6，而不是连固定回血和转换一起消失。
+        if (perStackMultiplier === 0 && ClashManager.PER_SCALED_EFFECTS.has(eff.type)) continue;
         const effTgts = await ClashManager._resolveTargets(eff.target ?? "self", owner, other, eff, ctx);
         if (effTgts.length === 0) continue;
 
@@ -1980,6 +2059,23 @@ export class ClashManager {
             }
             break;
           }
+          case "rangeChg": {
+            // 【范围修改】只作用于**当前装备的武器**，其他部位一律忽略。
+            // 这是持久改动（不随攻击后还原）——"拉弓姿势"要一直保持到
+            // 玩家自己换回来，所以写进武器数据，权限不足时转交 GM 代执行。
+            const weapon = ClashManager._activeWeaponOf(effTgt ?? owner);
+            if (!weapon) { descStr = "范围修改：没有已装备的武器"; break; }
+            const mode = eff.rangeMode === "ranged" ? "ranged" : "melee";
+            const val  = Math.max(0, parseInt(eff.rangeValue ?? 1) || 0);
+            await ClashManager._safeDocUpdate(weapon, {
+              "system.rangeType": mode,
+              "system.range":     val,
+            });
+            const ft = (val * 5 + 2.5).toFixed(1);
+            descStr = `【${weapon.name}】转为${mode === "ranged" ? "远程" : "近战"}，`
+              + `攻击范围 ${val} 格（${ft}ft）`;
+            break;
+          }
           case "relatedSkillConvert": {
             // 相关技能转换：将"本骰"（item）永久替换为角色背包/技能列表中按名字检索到的技能。
             // 旧版"随机/指定序号"（需要在技能上预先配置一个 UUID 池、互相套娃）已移除，
@@ -1992,10 +2088,26 @@ export class ClashManager {
             if (!name) { descStr = "相关技能转换：未配置技能名字"; break; }
             const newItem = (relOwner.items ?? []).find(it => it.type === "skill" && it.name === name && it.id !== item.id);
             if (!newItem) { descStr = `相关技能转换：背包中找不到技能【${name}】`; break; }
+            // 转换时长：permanent（默认，老数据）/ afterUse（转换后的技能被用掉一次）/
+            //           afterClash（本次结算后）/ endOfTurn（本回合结束时）
+            const relUntil = ["afterUse", "afterClash", "endOfTurn"].includes(eff.relDuration)
+              ? eff.relDuration : "";
+            // 槽位要在替换**之前**定位：还原按槽位记账，基础槽与守备槽同时被换成
+            // 同一个强化形态时，按 id 还原会把两个槽一起改掉
+            const relSlot  = relUntil ? (relOwner.findSkillSlot?.(item.id) ?? null) : null;
             const replaced = await relOwner.replaceSkillSlot?.(item.id, newItem.id);
             if (replaced) relOwner.sheet?._replaceCombatBagSkill?.(item.id, newItem.id);
+            // 临时转换：登记还原任务。**只有真的发生了替换才登记**——
+            // 若槽位里本来就是目标技能（比如已被另一条"永久转换"换上去了），
+            // replaceSkillSlot 返回 false，这里什么都不记，到点也就不会把别人的永久状态还原掉。
+            if (replaced && relUntil) {
+              await ClashManager._pushTempSkillConvert(relOwner, item.id, newItem.id, relUntil, relSlot);
+            }
+            const relUntilLabel = relUntil === "afterUse"   ? "（使用一次后还原）"
+                                : relUntil === "afterClash" ? "（本次结算后还原）"
+                                : relUntil === "endOfTurn"  ? "（本回合结束时还原）" : "永久";
             descStr = replaced
-              ? `【${item.name}】永久转换为【${newItem.name}】`
+              ? `【${item.name}】${relUntil ? "临时" : relUntilLabel}转换为【${newItem.name}】${relUntil ? relUntilLabel : ""}`
               : `相关技能转换：未找到【${item.name}】所在的技能槽位`;
             break;
           }
@@ -3148,6 +3260,18 @@ export class ClashManager {
       def: defItem?.system?.diceType ?? "default",
     };
     const _rollsFx = { atk: atkRollFx, def: defRollFx };
+
+    // ── 出手前的站位 ────────────────────────────────────────────────────
+    // 近战武器（含长矛/锁链这种范围 >1 的）在拼点前瞬移到目标身旁，之后一切照旧；
+    // 远程武器**不移动**，隔着距离直接开拼——击退与追击的差异见 knockback.mjs。
+    if (canvas?.ready) {
+      const atkTok0 = ClashManager._tokenOfActor(atkActor);
+      const defTok0 = ClashManager._tokenOfActor(defActor);
+      if (atkTok0 && defTok0 && !ClashKnockback.weaponRangeOf(atkActor).ranged) {
+        await ClashKnockback.approach(atkTok0, defTok0);
+      }
+    }
+
     const _sumParts = (parts) => parts.reduce((a, p) => a + (p.value ?? 0), 0);
     const _atkEffFx = _sumParts(_atkPartsFx);
     const _defEffFx = _sumParts(_defPartsFx);
@@ -3966,13 +4090,97 @@ export class ClashManager {
 
   /** 攻防双方的技能与装备格物品一起还原 */
   static async _restoreAllItemMods(...items) {
+    const actors = new Set();
     for (const item of items) {
       if (!item) continue;
       await ClashManager._restoreItemMods(item);
       for (const eq of ClashManager._getEquippedItems(item.parent ?? null)) {
         await ClashManager._restoreItemMods(eq);
       }
+      if (item.parent) actors.add(item.parent);
     }
+    // 骰子数值还原完，顺带处理临时技能转换的还原。
+    // 放在这里 = [攻击后] 已经派发完，临时形态该做的事都做完了。
+    // 先「使用一次后还原」——这次真正投出去的就是 items 里的这几张；
+    // 再「本次结算后还原」，把这次结算里刚换上、并不打算留到下次的那些收回。
+    for (const item of items) {
+      if (!item?.parent) continue;
+      await ClashManager._revertTempSkillConvertsOnUse(item.parent, item.id);
+    }
+    for (const actor of actors) {
+      await ClashManager._revertTempSkillConverts(actor, "afterClash");
+    }
+  }
+
+  /* ─── 临时技能转换的还原登记 ─────────────────────────────────────────────
+   * 【相关技能转换】默认是永久的，还原要靠目标技能自己再写一条转换回去。
+   * 但那条"转回去"挂在**目标技能**上，它分不清自己是被哪条路径换上来的——
+   * 永久转换和临时转换共用同一个强化形态时，任何一次使用都会把两边一起还原。
+   * 所以还原改成挂在**转换这一侧**：谁临时换的，谁负责到点换回去。
+   * 记录写在角色 flag 上（跨 action 持久化），栈式：后进先出地还原。
+   * ──────────────────────────────────────────────────────────────────── */
+  static TEMP_CONVERT_FLAG = "tempSkillConverts";
+
+  static async _pushTempSkillConvert(actor, fromId, toId, until, slot = null) {
+    if (!actor || !fromId || !toId) return;
+    const list = foundry.utils.deepClone(
+      actor.getFlag?.("limbusCompany_FVTT", ClashManager.TEMP_CONVERT_FLAG) ?? []);
+    list.push({ from: fromId, to: toId, until, slot });
+    await ClashManager._safeDocUpdate(actor,
+      { [`flags.limbusCompany_FVTT.${ClashManager.TEMP_CONVERT_FLAG}`]: list });
+  }
+
+  /** 按记录把一个槽位还原回去（有槽位记账就按槽位，老数据回退到按 id） */
+  static async _applyTempConvertRevert(actor, rec) {
+    let ok = false;
+    if (rec?.slot?.kind) ok = await actor.setSkillSlot?.(rec.slot, rec.from);
+    else                 ok = await actor.replaceSkillSlot?.(rec.to, rec.from);
+    if (ok) actor.sheet?._replaceCombatBagSkill?.(rec.to, rec.from);
+    return ok;
+  }
+
+  /**
+   * 还原到期的临时技能转换。
+   * @param {Actor}  actor
+   * @param {string} until  "afterClash" / "endOfTurn"；传 "all" 还原全部（长休、脱战等）
+   */
+  static async _revertTempSkillConverts(actor, until) {
+    if (!actor) return;
+    const list = actor.getFlag?.("limbusCompany_FVTT", ClashManager.TEMP_CONVERT_FLAG) ?? [];
+    if (!list.length) return;
+    const due  = [];
+    const keep = [];
+    for (const rec of list) {
+      (until === "all" || rec?.until === until ? due : keep).push(rec);
+    }
+    if (!due.length) return;
+    // 后进先出：多层临时转换时按相反顺序剥回去，中间状态才不会错位
+    for (const rec of [...due].reverse()) await ClashManager._applyTempConvertRevert(actor, rec);
+    await ClashManager._safeDocUpdate(actor,
+      { [`flags.limbusCompany_FVTT.${ClashManager.TEMP_CONVERT_FLAG}`]: keep });
+  }
+
+  /**
+   * 「使用一次后还原」：转换出来的形态被真正用掉一次（作为攻方或守方的骰参与了
+   * 一次结算）之后还原。
+   *
+   * 关键点：**所有指向同一个形态的记录一起还原**。基础技能槽和守备技能槽都被换成
+   * 了同一张强化技能时，它整体只是"一次"资源——任一边用掉，另一边也跟着还原回去，
+   * 而不是各留各的。按槽位记账，所以两个槽各自回到各自原来的技能。
+   *
+   * @param {Actor}  actor
+   * @param {string} usedItemId  本次结算里真正投出去的那张技能的 id
+   */
+  static async _revertTempSkillConvertsOnUse(actor, usedItemId) {
+    if (!actor || !usedItemId) return;
+    const list = actor.getFlag?.("limbusCompany_FVTT", ClashManager.TEMP_CONVERT_FLAG) ?? [];
+    if (!list.length) return;
+    const due  = list.filter(r => r?.until === "afterUse" && r?.to === usedItemId);
+    if (!due.length) return;
+    const keep = list.filter(r => !due.includes(r));
+    for (const rec of [...due].reverse()) await ClashManager._applyTempConvertRevert(actor, rec);
+    await ClashManager._safeDocUpdate(actor,
+      { [`flags.limbusCompany_FVTT.${ClashManager.TEMP_CONVERT_FLAG}`]: keep });
   }
 
   /* ─── EGO 罪孽抗性修改 ────────────────────────────────────────────────── */
