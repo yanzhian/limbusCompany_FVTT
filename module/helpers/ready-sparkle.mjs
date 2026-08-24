@@ -18,17 +18,17 @@
 
 /** 调试台（sparkle-lab）定稿的参数 */
 export const READY_SPARKLE = {
-  count:        6,
-  density:      0.34,
+  count:        4,
+  density:      0.70,
   area:         "center",
   spreadJitter: 0.55,
-  size:         55,
+  size:         60,
   jitter:       0.6,
   aspect:       0.8,
   width:        2.1,
   angle:        45,
   speed:        0.5,
-  stagger:      0.9,
+  stagger:      0.75,
   glow:         0.2,
   drift:        6,
   color:        "#E8CAA2",
