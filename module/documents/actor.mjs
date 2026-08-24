@@ -863,10 +863,15 @@ export class LimbusActor extends Actor {
   // ─── 长休 ──────────────────────────────────────────────────────────────
 
   /**
-   * 执行长休：恢复 HP / 理智 / AP，重置混乱阈值。
+   * 执行长休：恢复 HP / 理智 / AP，重置混乱阈值，还原全部临时技能转换。
    * 无确认对话框，直接执行。
    */
   async longRest() {
+    // 兜底：一直没被使用掉的临时技能转换（如「使用一次后还原」的强化形态在战斗
+    // 结束前始终没投出去）会一直挂在槽位上，长休时统一收回，不跨休息残留
+    const { ClashManager } = await import("../helpers/clash.mjs");
+    await ClashManager._revertTempSkillConverts(this, "all");
+
     const sys              = this.system;
     const defaultThresholds = sys.getDefaultChaosThresholds?.() ?? [
       { percent: 60, triggered: false },
