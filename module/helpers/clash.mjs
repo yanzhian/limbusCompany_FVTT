@@ -3952,6 +3952,7 @@ export class ClashManager {
 
   /**
    * 拼点结算表：左=攻方数值　中=项目　右=守方数值。
+   * 不列「总和」——上面「拼点结算」那两个大数字就是总和，重复一次没意义。
    * 带 + 的数值蓝色、带 − 的红色，0 与无符号项保持常规色。
    * 旧版是一段「6D4+13=25 +BUFF(+6)+等级差(+1)=32」的连排公式，
    * 两边要对着读才知道差在哪；拆成三栏后同一项目左右并排，一眼看得出。
@@ -3972,9 +3973,9 @@ export class ClashManager {
     };
     const plain = (v) => `<span style="color:#E8C9A2;">${v}</span>`;
 
-    const row = (label, left, right, strong = false) => `
+    const row = (label, left, right) => `
       <div style="display:grid;grid-template-columns:1fr auto 1fr;align-items:baseline;
-                  gap:10px;padding:2px 0;${strong ? "font-size:1.05rem;font-weight:bold;" : ""}">
+                  gap:10px;padding:2px 0;">
         <div style="text-align:right;font-variant-numeric:tabular-nums;">${left}</div>
         <div style="color:#9A8462;font-size:.72rem;min-width:34px;text-align:center;">${label}</div>
         <div style="text-align:left;font-variant-numeric:tabular-nums;">${right}</div>
@@ -3986,7 +3987,6 @@ export class ClashManager {
         ${row("骰掷", plain(r.atkRoll), plain(r.defRoll))}
         ${row("等差", sign(r.atkLvBonus), sign(r.defLvBonus))}
         ${row("加成", sign(r.atkMod),     sign(r.defMod))}
-        ${row("总和", plain(r.atkSum),    plain(r.defSum), true)}
       </div>`;
   }
 
@@ -4003,6 +4003,15 @@ export class ClashManager {
     const isClashBlockWin   = !atkWins && defCat === "clashBlock";
     const isDodgeWin        = !!dodgeWin;
     const noTake            = isDodgeWin || isClashBlockWin;
+
+    const atkTotalStyle = atkWins
+      ? "font-size:2rem;font-weight:bold;color:#E8C9A2;"
+      : "font-size:2rem;font-weight:bold;color:#B84444;";
+    const defTotalStyle = !atkWins
+      ? "font-size:2rem;font-weight:bold;color:#E8C9A2;"
+      : "font-size:2rem;font-weight:bold;color:#B84444;";
+    // 闪避平局时两边点数相等，显示 "=" 但结果是守方躲开
+    const cmp = atkTotal === defTotal ? "=" : (atkTotal > defTotal ? ">" : "<");
 
     const resolveTitle = isClashCounterWin ? "⚔️ 强化反击"
                        : isDodgeWin        ? "闪避成功"
@@ -4074,6 +4083,15 @@ export class ClashManager {
             <img src="${defItemImg ?? ""}" style="width:50px;height:50px;object-fit:cover;display:block;margin:0 auto;" alt="">
             <div style="font-size:12px;color:#E8C9A2;margin-top:4px;">${defItemName ?? ""}</div>
             <div style="font-size:11px;color:#EBBD68;">${defFormula ?? ""}</div>
+          </div>
+        </div>
+        ${ClashManager._goldDivider()}
+        <div style="text-align:center;margin:8px 0;">
+          <div style="font-size:14px;color:#C9A84C;margin-bottom:6px;">拼点结算</div>
+          <div style="display:flex;align-items:center;justify-content:center;gap:14px;">
+            <span style="${atkTotalStyle}">${atkTotal}</span>
+            <span style="font-size:1.5rem;color:#C9A84C;">${cmp}</span>
+            <span style="${defTotalStyle}">${defTotal}</span>
           </div>
         </div>
         ${ClashManager._goldDivider()}
