@@ -4011,7 +4011,7 @@ export class ClashManager {
         <div style="font-size:.8rem;color:#9A8462;line-height:1.7;margin:4px 0 8px;">
           ${notes.map(n => `<div>${n}</div>`).join("")}
         </div>
-        <!--LC_DETAILS-->
+        <div class="limbus-detail-slot"></div>
         ${sanityNotes.length ? `
         <div class="limbus-sanity-toggle-row"
              style="display:flex;align-items:center;gap:6px;cursor:pointer;margin:4px 0 0;user-select:none;">
@@ -4100,7 +4100,13 @@ export class ClashManager {
       </div>`;
 
     try {
-      const content = (msg.content ?? "").replace("<!--LC_DETAILS-->", html);
+      const src  = msg.content ?? "";
+      const slot = '<div class="limbus-detail-slot"></div>';
+      // 占位符不在（模板改动、内容被清洗）时兜底追加到卡片末尾，
+      // 宁可位置不理想也不要整块详细信息凭空消失
+      const content = src.includes(slot)
+        ? src.replace(slot, html)
+        : src.replace(/<\/div>\s*$/, `${html}</div>`);
       await msg.update({ content });
     } catch (err) {
       console.warn("limbusCompany_FVTT | 注入详细信息失败", err);
@@ -4614,7 +4620,7 @@ export class ClashManager {
         </div>
 
         ${ClashManager._goldDivider()}
-        <!--LC_DETAILS-->
+        <div class="limbus-detail-slot"></div>
         ${calcNotes.length ? `
         <div style="font-size:.8rem;color:#9A8462;line-height:1.7;margin:4px 0 8px;">
           ${calcNotes.map(n => `<div>${n}</div>`).join("")}
@@ -5147,7 +5153,10 @@ export class ClashManager {
       return;
     }
 
-    await ClashManager._applyAndSendTake(actor, damage);
+    // 收集护盾吸收、onTakeDamage 等 BUFF 钩子消息——【结算结果】按钮这条路径上
+    // 没有别的地方会汇总它们，不收就彻底没人报了
+    const hookMsgs = [];
+    await ClashManager._applyAndSendTake(actor, damage, { hookMsgs });
 
     // 若选中的是非 linked token actor（与 base actor 为不同文档），额外同步该 token 的 HP
     if (selActor && selActor !== actor && selActor.isToken) {
@@ -5303,7 +5312,7 @@ export class ClashManager {
     if (!silent) {
       await ClashManager._sendTakeMsg(actor, damage, oldHp, finalHp, maxHp, chaosTriggered,
         { ruptureDmg, sanityDmg, sinkingGloomDmg, tremorTriggered, chaosName, calcNotes, takeLabel,
-          shieldBefore });
+          shieldBefore, hookMsgs });
     }
     return { damage, oldHp, finalHp, maxHp, chaosTriggered, chaosName,
              ruptureDmg, sanityDmg, sinkingGloomDmg, tremorTriggered };
@@ -5320,7 +5329,7 @@ export class ClashManager {
   static async _sendTakeMsg(actor, damage, oldHp, newHp, maxHp, chaosTriggered,
       { ruptureDmg = 0, sanityDmg = 0, sinkingGloomDmg = 0, tremorTriggered = false,
         chaosName = "陷入混乱", calcNotes = [], takeLabel = "承受结算",
-        shieldBefore = 0 } = {}) {
+        shieldBefore = 0, hookMsgs = null } = {}) {
 
     const triggers = [];
     if (ruptureDmg > 0) {
@@ -5339,6 +5348,9 @@ export class ClashManager {
     if (takeLabel.includes("追加伤害")) {
       triggers.unshift({ k: "追加伤害", v: `承受 <b>${damage}</b> 点` });
     }
+    // BUFF 钩子（护盾吸收、onTakeDamage 等）。烧伤这类也可能由技能效果在此刻触发，
+    // 所以不写死类型，来什么列什么。
+    for (const m of (hookMsgs ?? [])) triggers.push({ k: "效果触发", v: m });
 
     const content = `
       <div class="limbus-clash-card limbus-take-card"
