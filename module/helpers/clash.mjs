@@ -770,7 +770,9 @@ export class ClashManager {
     // 基础特殊类 BUFF（烧伤/流血/破裂/震颤/沉沦/呼吸法；充能是例外，不算在内）：不存在"0层"或"0级"的这类 BUFF，
     // 传入的层数/强度若为 0 一律视为 1（无论是新建还是叠加到已有 BUFF 上）。
     // 增益/减益（strong/weak/atkLevelUp 等）与自定义注册 BUFF 不受此规则影响。
-    if (ClashManager.ZERO_DEFAULT_BUFF_TYPES.has(type)) {
+    // 【特殊震颤】（震颤-灼热/回响/崩坏…）与普通【震颤】同规则：
+    // 不存在"0 层"或"0 级"的震颤，传 0 一律视为 1
+    if (ClashManager.ZERO_DEFAULT_BUFF_TYPES.has(type) || isTremorFamilyType(type)) {
       if (!(stacks    > 0)) stacks    = 1;
       if (!(intensity > 0)) intensity = 1;
     }
@@ -959,8 +961,25 @@ export class ClashManager {
    * 震颤族全部消失时，连带移除依附其存在的 BUFF（【振幅转换】【振幅纠缠】）。
    * 每次引爆结束、以及回合结算后调用。
    */
+  /**
+   * 清除层数已经归零的震颤族 BUFF。
+   * 普通【震颤】由 reduceBuffStacks 减到 0 时自动移除，但特殊震颤可能从别的
+   * 路径（振幅转换/纠缠的同步、手改状态栏、效果直接赋值）落到 0 层却留在身上，
+   * 状态栏挂着一个 0 层震颤、还会被 _tremorFamilyBuffs 以外的地方读到。
+   * 特殊震颤遵守【震颤】的规则：0 层即消失。
+   */
+  static async _pruneZeroTremors(actor) {
+    if (!actor) return;
+    const buffs = actor.system?.buffs ?? [];
+    const keep  = buffs.filter(b => !(isTremorFamilyType(b.type) && (b.stacks ?? 0) <= 0));
+    if (keep.length === buffs.length) return;
+    await ClashManager._safeDocUpdate(actor, { "system.buffs": keep });
+  }
+
   static async _cleanupTremorDependents(actor) {
     if (!actor) return;
+    // 先扫掉 0 层的震颤族，下面「震颤族全没了 → 移除振幅转换/纠缠」才判得准
+    await ClashManager._pruneZeroTremors(actor);
     if (ClashManager._tremorFamilyBuffs(actor).length > 0) return;
     const buffs = actor.system?.buffs ?? [];
     if (!buffs.some(b => TREMOR_DEPENDENT_TYPES.includes(b.type))) return;
@@ -1174,7 +1193,7 @@ export class ClashManager {
       blasts++;
     }
 
-    if (blasts > 0) await ClashManager._cleanupTremorDependents(target);
+    await ClashManager._cleanupTremorDependents(target);
     return { blasts, msgs };
   }
 
