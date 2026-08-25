@@ -1358,9 +1358,13 @@ export class ClashManager {
     ctx._fireCounts = ctx._fireCounts ?? {};
 
     const msgs = [];
+    // 【装备激活】卡要按「哪条 activity 触发了、它的前置是什么、产出了哪几行」
+    // 分块展示，所以这里顺带按 act 记一份
+    const firedActs = [];
 
     for (const act of acts) {
       if (!act?.trigger || act.trigger !== trigger) continue;
+      const _msgMark = msgs.length;
 
       // ── 次数限制（perTurn / perEncounter）────────────────────────────────
       const limitType  = act.limit?.type;
@@ -2237,6 +2241,8 @@ export class ClashManager {
         } // end for effTgt
       }
 
+      if (msgs.length > _msgMark) firedActs.push({ act, lines: msgs.slice(_msgMark) });
+
       // 记录触发次数（写入 actor flags 以实现跨 action 持久化）
       if ((limitType === "perTurn" || limitType === "perEncounter") && limitCount > 0 && owner) {
         const flagKey = limitType === "perTurn" ? "turnFireCounts" : "encounterFireCounts";
@@ -2255,7 +2261,14 @@ export class ClashManager {
       return;
     }
 
-    // 无收集桶时立即发（兼容 [使用时] 等独立触发场景）
+    // 【激活】([使用时]) 有自己的卡：头「装备激活」+ 角色名，
+    // 下面按 activity 列「物品名：前置条件」与效果说明
+    if (trigger === "使用时") {
+      await ClashManager._sendActivateCard(owner, item, firedActs);
+      return;
+    }
+
+    // 无收集桶时立即发（其余独立触发场景）
     await ClashManager._safeChatCreate({
       speaker: ChatMessage.getSpeaker({ actor: owner }),
       content: ClashManager._buildActMsgContent([{ trigger, itemName: item?.name ?? "", msgs }]),
@@ -6381,6 +6394,45 @@ export class ClashManager {
       if (line) out.push(line);
     }
     return out;
+  }
+
+  /**
+   * 【装备激活】卡（[使用时]）。与【反应触发】同一套排版：
+   *   头  装备激活
+   *   像  角色名字
+   *   ——————————
+   *   「装备名字」：前置条件（有才写）
+   *   触发效果说明
+   *   ——————————
+   * @param {Actor}  actor
+   * @param {Item}   item
+   * @param {{act:object, lines:string[]}[]} firedActs  实际触发了的 activity
+   */
+  static async _sendActivateCard(actor, item, firedActs = []) {
+    if (!firedActs.length) return;
+    const blocks = firedActs.map(({ act, lines }) => {
+      const pres = Array.isArray(act.preconditions) ? act.preconditions
+        : (act.precondition ? [act.precondition] : []);
+      const preStr = pres.map(p => ClashManager._preStr(p)).filter(Boolean).join(" 且 ");
+      return `
+        <div style="font-size:.82rem;color:#E8C9A2;margin:6px 0 2px;">
+          <strong>「${item?.name ?? ""}」</strong>${preStr ? `：<span style="color:#9A8462;">${preStr}</span>` : ""}
+        </div>
+        <div style="font-size:.78rem;color:#9A8462;line-height:1.7;margin:0 0 6px;">
+          ${lines.map(l => `<div>${l}</div>`).join("")}
+        </div>`;
+    }).join("");
+
+    await ClashManager._safeChatCreate({
+      speaker: actor ? ChatMessage.getSpeaker({ actor }) : undefined,
+      content: `
+        <div class="limbus-clash-card" data-clash-type="activate">
+          ${ClashManager._chatHeader(actor ?? { img: "", name: "?" }, "装备激活")}
+          ${ClashManager._goldDivider()}
+          ${blocks}
+          ${ClashManager._goldDivider()}
+        </div>`,
+    });
   }
 
   /**
