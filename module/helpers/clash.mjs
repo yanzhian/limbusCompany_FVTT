@@ -4082,7 +4082,6 @@ export class ClashManager {
         </div>
         ${ClashManager._goldDivider()}
         ${ClashManager._buildScoreTable(res.scoreRows)}
-        <div style="height:30px;"></div>
         ${ClashManager._buildDetailsFold(actMsgs)}
         <div style="height:30px;"></div>
         ${sanityNotes.length ? `
@@ -4098,8 +4097,9 @@ export class ClashManager {
                     background:rgba(0,0,0,.25);border-radius:3px;margin-bottom:4px;">
           ${sanityNotes.map(n => `<div>${n}</div>`).join("")}
         </div>` : ""}
+        <div style="height:30px;"></div>
         ${notes.length ? `
-        <div style="font-size:.8rem;color:#9A8462;line-height:1.7;margin:8px 0 8px;">
+        <div style="font-size:.8rem;color:#9A8462;line-height:1.7;margin:0 0 4px;">
           ${notes.map(n => `<div>${ClashManager._hlDamage(n)}</div>`).join("")}
         </div>` : ""}
         ${takeSection}
