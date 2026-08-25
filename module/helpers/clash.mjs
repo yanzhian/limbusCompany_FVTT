@@ -2135,7 +2135,11 @@ export class ClashManager {
             // system 也可能没刷新，取不到就退化成按 id 还原，会把「另一个槽也变成了
             // 同一个强化形态」的那一格一起改掉——基础技能格因此变成了守备技能。
             const replaced = await relOwner.replaceSkillSlot?.(item.id, newItem.id);
-            if (replaced) relOwner.sheet?._replaceCombatBagSkill?.(item.id, newItem.id);
+            // 换了几个槽位，6 袋/HUD 里就替换几处
+            if (replaced) {
+              relOwner.sheet?._replaceCombatBagSkill?.(item.id, newItem.id,
+                Array.isArray(replaced) ? replaced.length : 1);
+            }
             // 临时转换：登记还原任务，**每个被换掉的槽位各记一条**。
             // 只有真的发生了替换才登记——若槽位里本来就是目标技能（比如已被另一条
             // "永久转换"换上去了），replaceSkillSlot 返回 false，这里什么都不记，
@@ -4567,7 +4571,8 @@ export class ClashManager {
     const slot = rec?.slot?.kind ? rec.slot : (actor.findSkillSlot?.(rec?.to) ?? null);
     if (!slot?.kind) return false;
     const ok = await actor.setSkillSlot?.(slot, rec.from);
-    if (ok) actor.sheet?._replaceCombatBagSkill?.(rec.to, rec.from);
+    // 一条记录只对应一个槽位，6 袋/HUD 里也只还原一处
+    if (ok) actor.sheet?._replaceCombatBagSkill?.(rec.to, rec.from, 1);
     return ok;
   }
 

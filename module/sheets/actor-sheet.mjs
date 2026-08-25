@@ -1602,19 +1602,30 @@ export class LimbusActorSheet extends ActorSheet {
    * @param {string} oldId
    * @param {string} newId
    */
-  _replaceCombatBagSkill(oldId, newId) {
+  _replaceCombatBagSkill(oldId, newId, limit = Infinity) {
     const state = this._combatBagState;
     if (!state || !oldId || !newId || oldId === newId) return;
 
+    // limit：最多替换几处。临时技能转换的**还原**是一条记录对应一个槽位，
+    // 必须传 1——基础槽与守备槽同时换成同一个强化形态时，无限制地全量替换
+    // 会把 6 袋与 HUD 里另一格也一起写成对方的原技能。
+    let left = Math.max(0, limit);
     let changed = false;
     for (const key of ["equipped", "slots", "pool"]) {
       const arr = state[key];
       if (!Array.isArray(arr)) continue;
-      for (let i = 0; i < arr.length; i++) {
-        if (arr[i] === oldId) { arr[i] = newId; changed = true; }
+      for (let i = 0; i < arr.length && left > 0; i++) {
+        if (arr[i] === oldId) { arr[i] = newId; changed = true; left--; }
       }
+      if (left <= 0) break;
     }
-    if (changed) this._renderCombatSlots(this.element);
+    if (changed) {
+      this._renderCombatSlots(this.element);
+      // 快捷操作 HUD 读的是同一份 _combatBagState，得跟着重画
+      import("./quick-action-hud.mjs")
+        .then(({ QuickActionHUD }) => QuickActionHUD.onActorUpdate?.(this.actor))
+        .catch(() => {});
+    }
   }
 
   _syncCombatSlots(html) {
