@@ -470,6 +470,8 @@ Hooks.on("renderChatMessage", (_message, html, _data) => {
       }
       // 本场对抗中发作的【流血】：攒到这里，跟在【结算结果】之后公示
       await ClashManager._sendBleedMsgs(flags.bleedMsgs ?? []);
+      // 反应检查：延后到伤害落地之后，前置条件读到的才是结算后的数值
+      if (flags.reactionCheck) await ClashManager.runReactionCheck(flags.reactionCheck);
       // 容量扩散：打出伤害的一方攻击容量 >=2 时，在扣血后发出扩散承受卡
       const ws = flags.weightSpread;
       if (ws && (ws.weight ?? 1) >= 2) {
@@ -496,6 +498,7 @@ Hooks.on("renderChatMessage", (_message, html, _data) => {
       await ClashManager.handleApplyDamage(flags.defActorId, flags.damageToDefActor ?? 0);
       await ClashManager.handleApplyDamage(flags.atkActorId, flags.damageToAtkActor ?? 0);
       await ClashManager._sendBleedMsgs(flags.bleedMsgs ?? []);
+      if (flags.reactionCheck) await ClashManager.runReactionCheck(flags.reactionCheck);
     });
     html.find(".clash-btn-redo").on("click", async () => {
       if (!game.user.isGM) return;
@@ -516,6 +519,7 @@ Hooks.on("renderChatMessage", (_message, html, _data) => {
       const damage        = parseInt(e.currentTarget.dataset.damage ?? flags.damage) || 0;
       await ClashManager.handleApplyDamage(targetActorId, damage);
       await ClashManager._sendBleedMsgs(flags.bleedMsgs ?? []);
+      if (flags.reactionCheck) await ClashManager.runReactionCheck(flags.reactionCheck);
     });
   }
 });

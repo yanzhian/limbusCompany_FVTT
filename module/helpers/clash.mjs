@@ -3509,8 +3509,9 @@ export class ClashManager {
       await ClashManager._restoreAllItemMods(atkItem, defItem);
       await ClashManager.restoreItemSnaps(_statSnap);
       await ClashManager._flushTakeAgg();
+      ClashManager._armReactionCheck({ lastSkillUuid: atkItem?.uuid ?? null, attacker: atkActor, defender: defActor });
       await ClashManager._resolveDirectCounter(atkActor, defActor, effectiveInitFlags, defItem, defFinalRoll, defFinalFormula, _actMsgs);
-      await ClashManager._broadcastAndCheckReactions({ lastSkillUuid: atkItem?.uuid ?? null, attacker: atkActor, defender: defActor });
+      await ClashManager._flushReactionCheck();
       return;
     }
     if (defCategory === "block") {
@@ -3521,8 +3522,9 @@ export class ClashManager {
       await ClashManager._restoreAllItemMods(atkItem, defItem);
       await ClashManager.restoreItemSnaps(_statSnap);
       await ClashManager._flushTakeAgg();
+      ClashManager._armReactionCheck({ lastSkillUuid: atkItem?.uuid ?? null, attacker: atkActor, defender: defActor });
       await ClashManager._resolveDirectBlock(atkActor, defActor, effectiveInitFlags, defItem, defFinalRoll, defFinalFormula, _actMsgs);
-      await ClashManager._broadcastAndCheckReactions({ lastSkillUuid: atkItem?.uuid ?? null, attacker: atkActor, defender: defActor });
+      await ClashManager._flushReactionCheck();
       return;
     }
 
@@ -3669,11 +3671,11 @@ export class ClashManager {
       : null;
 
     await ClashManager._flushTakeAgg();
+    ClashManager._armReactionCheck({ lastSkillUuid: atkItem?.uuid ?? null, attacker: atkActor, defender: defActor });
     await ClashManager._sendResolveMsg(
       resolution, finalInitFlags, defActor, defItem, defFormula, sanityNotes, _actMsgs, _takeEffectRows,
       _ubCounter);
-
-    await ClashManager._broadcastAndCheckReactions({ lastSkillUuid: atkItem?.uuid ?? null, attacker: atkActor, defender: defActor });
+    await ClashManager._flushReactionCheck();
   }
 
   /* ─── 阶段五a：连击（行动值决定的多次交锋）──────────────────────────── */
@@ -4231,6 +4233,8 @@ export class ClashManager {
           weightSpread,
           // 本场对抗中发作的【流血】：等【结算结果】按下去才公示
           bleedMsgs:     noTake ? [] : _bleedResolve,
+          // 反应检查交给【结算结果】：扣完血再扫，前置条件读到的才是新数值
+          reactionCheck: noTake ? null : ClashManager._takeReactionCheck(),
           // 【不可摧毁】反击的伤害跟着同一个【结算结果】一起落地
           unbreakable:   ubCounter ? {
             targetActorId: ubCounter.targetActor?.id ?? "",
@@ -4853,6 +4857,7 @@ export class ClashManager {
     // 单方面攻击卡：与拼点对抗卡同一套流程——先把结果摆出来，
     // 扣血、破裂/沉沦/震颤引爆等等都等【结算结果】按下去才发生。
     await ClashManager._flushTakeAgg();
+    ClashManager._armReactionCheck({ lastSkillUuid: atkItem2?.uuid ?? null, attacker: atkActor, defender: defActor });
     await ClashManager._sendDirectTakeMsg({
       actMsgs: _actMsgs2, takeEffects: _takeEffectRows2,
       scoreRows: { atkLv, defLv, roll: finalRollTotal, lvBonus, mod: atkDiceMod },
@@ -4870,7 +4875,7 @@ export class ClashManager {
       } : null,
     });
 
-    await ClashManager._broadcastAndCheckReactions({ lastSkillUuid: atkItem2?.uuid ?? null, attacker: atkActor, defender: defActor });
+    await ClashManager._flushReactionCheck();
   }
 
   /**
@@ -4971,6 +4976,7 @@ export class ClashManager {
           takeEffects,
           weightSpread,
           bleedMsgs:     ClashManager._takeBleedBuf(),
+          reactionCheck: ClashManager._takeReactionCheck(),
           directRedo:    { initFlags },
         },
       },
@@ -6055,6 +6061,7 @@ export class ClashManager {
           damageToDefActor,
           damageToAtkActor,
           bleedMsgs:      ClashManager._takeBleedBuf(),
+          reactionCheck:  ClashManager._takeReactionCheck(),
           // 整局重掷（仅 GM）：与拼点对抗卡同一套
           redoData: {
             defActorId: defActor?.id ?? "",
@@ -6227,6 +6234,7 @@ export class ClashManager {
           targetActorId: defActor?.id ?? "",
           damage:        finalDamage,
           bleedMsgs:     finalDamage > 0 ? _bleed : [],
+          reactionCheck: finalDamage > 0 ? ClashManager._takeReactionCheck() : null,
         },
       },
     });
@@ -6234,6 +6242,133 @@ export class ClashManager {
   }
 
   /* ─── 反应系统 ─────────────────────────────────────────────────────────── */
+
+  /**
+   * 反应卡上的「前置条件」一行——把 precondition 对象翻译成人话。
+   * 编辑器里能配的类型都覆盖到，认不出来的退回类型名，不至于空一格。
+   */
+  static _preStr(pre) {
+    if (!pre?.type) return "";
+    const who  = (pre.target === "target" || pre.target === "allEnemy" || pre.target === "allEnemyOther")
+      ? "目标" : "自己";
+    const bn   = pre.buff === "custom" ? (pre.buffCustom || "自定义") : ClashManager._buffLabel(pre.buff ?? "");
+    const CMP  = { lt: "<", lte: "≤", gt: ">", gte: "≥", eq: "=", ne: "≠" };
+    const cmp  = CMP[pre.comparison] ?? "=";
+    const t    = pre.type;
+    if (t === "hasBuff") {
+      const q = [];
+      if ((pre.intensity ?? 0) > 0) q.push(`${pre.intensity} 级`);
+      if ((pre.stacks    ?? 0) > 0) q.push(`${pre.stacks} 层`);
+      return `${who}拥有${q.length ? ` ${q.join("／")}` : ""}【${bn}】`;
+    }
+    if (t === "noBuff")      return `${who}未拥有【${bn}】`;
+    if (t === "perN")        return `${who}每 ${pre.stacks ?? 1} ${pre.perNDim === "intensity" ? "级" : "层"}【${bn}】`;
+    if (t === "buffCompare") return `${who}的【${bn}】${pre.compareDim === "intensity" ? "强度" : "层数"} ${cmp} ${pre.stacks ?? 0}`;
+    if (t === "baseAttr") {
+      const AL = { hp: "生命值", sanity: "理智", ap: "行动值", sm: "星尘",
+                   str: "力量", agi: "敏捷", con: "体质", int: "智力", per: "感知", cha: "魅力" };
+      return `${who}的${AL[pre.attrType] ?? pre.attrType ?? "属性"} ${cmp} ${pre.attrValue ?? 0}`;
+    }
+    if (t === "equipped")    return `${who}装备了 ${Math.max(1, pre.count ?? 1)} 件指定物品`;
+    if (t === "background")  return `${who}的背景为「${pre.bgName ?? ""}」`;
+    if (t === "useSkill")    return `对方使用了指定技能`;
+    if (t === "useSin")      return `对方使用了 ${(Array.isArray(pre.sinTypes) ? pre.sinTypes : [pre.sinType])
+                                        .filter(Boolean).map(x => ClashManager._sinLabel(x)).join("／")} 属性的骰`;
+    if (t === "category")    return `对方使用了 ${(pre.categories ?? []).map(c => ClashManager._catLabel(c)).join("／")} 类技能`;
+    return t;
+  }
+
+  /** 反应卡上的「触发效果说明」——列全部效果，不是只取第一条 */
+  static _actAllStr(act) {
+    const list = Array.isArray(act?.effects) ? act.effects : (act?.effect ? [act.effect] : []);
+    const out  = [];
+    for (const eff of list) {
+      if (eff?.type === "useSkill") {
+        const name = eff.skillRef === "name"
+          ? (eff.skillName ?? "").trim()
+          : `标签【${(eff.skillTag ?? "").trim()}】${(parseInt(eff.skillLevel) || 0) > 0 ? ` Lv.${parseInt(eff.skillLevel)}` : ""}`;
+        out.push(`使用技能「${name || "?"}」`);
+        continue;
+      }
+      const line = ClashManager._actStr({ effect: eff });
+      if (line) out.push(line);
+    }
+    return out;
+  }
+
+  /**
+   * 【反应触发】卡。
+   *   头  反应触发
+   *   像  角色名字
+   *   ——————————
+   *   「装备名字」：前置条件
+   *   触发效果说明（含 useSkill 的技能名）
+   *   ——————————
+   */
+  static async _sendReactionCard(actor, item, act) {
+    const pres = Array.isArray(act.preconditions) ? act.preconditions
+      : (act.precondition ? [act.precondition] : []);
+    const preStr = pres.map(p => ClashManager._preStr(p)).filter(Boolean).join(" 且 ");
+    const effLines = ClashManager._actAllStr(act);
+
+    await ClashManager._safeChatCreate({
+      speaker: ChatMessage.getSpeaker({ actor }),
+      content: `
+        <div class="limbus-clash-card" data-clash-type="reaction">
+          ${ClashManager._chatHeader(actor, "反应触发")}
+          ${ClashManager._goldDivider()}
+          <div style="font-size:.82rem;color:#E8C9A2;margin:6px 0 2px;">
+            <strong>「${item.name}」</strong>${preStr ? `：<span style="color:#9A8462;">${preStr}</span>` : ""}
+          </div>
+          ${effLines.length ? `
+          <div style="font-size:.78rem;color:#9A8462;line-height:1.7;margin:0 0 6px;">
+            ${effLines.map(l => `<div>${l}</div>`).join("")}
+          </div>` : ""}
+          ${ClashManager._goldDivider()}
+        </div>`,
+    });
+  }
+
+  /* ─── 反应检查的延后：等【结算结果】按下去再扫 ─────────────────────────
+   * 反应原先在结算卡建好的那一刻就扫一遍，于是伤害还没落地（【结算结果】都
+   * 没点）下一轮对抗就已经弹出来了，前置条件读到的还是旧血量/旧 BUFF。
+   * 现在改成：卡上有【结算结果】就把检查交给按钮，扣完血再扫；卡上没有按钮
+   * （闪避成功、完全格挡这类）才当场扫。
+   * ──────────────────────────────────────────────────────────────────── */
+
+  /** @type {{lastSkillUuid:string|null, attackerId:string|null, defenderId:string|null}|null} */
+  static _pendingReaction = null;
+
+  /** 建卡之前登记一次待做的反应检查 */
+  static _armReactionCheck({ lastSkillUuid = null, attacker = null, defender = null } = {}) {
+    ClashManager._pendingReaction = {
+      lastSkillUuid,
+      attackerId: attacker?.id ?? null,
+      defenderId: defender?.id ?? null,
+    };
+  }
+
+  /** 卡片把它接走（写进 flags，交给【结算结果】）；接走后就不会再当场跑 */
+  static _takeReactionCheck() {
+    const p = ClashManager._pendingReaction;
+    ClashManager._pendingReaction = null;
+    return p;
+  }
+
+  /** 建卡之后调用：没被卡片接走（无结算按钮）就当场扫一遍 */
+  static async _flushReactionCheck() {
+    const p = ClashManager._takeReactionCheck();
+    if (p) await ClashManager.runReactionCheck(p);
+  }
+
+  /** 由 flags 里的记录还原成 actor 再扫——【结算结果】按钮走这条 */
+  static async runReactionCheck({ lastSkillUuid = null, attackerId = null, defenderId = null } = {}) {
+    await ClashManager._broadcastAndCheckReactions({
+      lastSkillUuid,
+      attacker: attackerId ? game.actors.get(attackerId) : null,
+      defender: defenderId ? game.actors.get(defenderId) : null,
+    });
+  }
 
   /**
    * 广播反应检查到所有客户端，同时在本客户端运行。
@@ -6297,17 +6432,12 @@ export class ClashManager {
           // 先记账再执行：效果里可能又发起一次对抗，届时会重新走一遍反应检查，
           // 不先扣次数就会自己触发自己
           await ClashManager._bumpLimit(act, item, actor);
-          // 执行效果
+          // 先发卡再执行效果：useSkill 型会弹出【发起对抗】并生成自己的卡，
+          // 效果跑完再发就会插在那些卡后面，日志顺序反了
+          await ClashManager._sendReactionCard(actor, item, act);
           for (const eff of (act.effects ?? [])) {
             await ClashManager._applyReactionEff(eff, item, actor, attacker, defender);
           }
-          await ChatMessage.create({
-            speaker: ChatMessage.getSpeaker({ actor }),
-            content: `<div class="limbuscompany chat-clash">
-              <strong>${actor.name}</strong> 触发反应「${act.name}」
-              （来自 <strong>${item.name}</strong>）。
-            </div>`,
-          });
         }
       }
     }
