@@ -942,6 +942,7 @@ Hooks.on("updateCombat", async (combat, changed) => {
         content: `
           <div class="limbus-initiative-card" style="padding:10px 12px 8px;">
             <div class="ic-title" style="font-size:20px;">第 ${changed.round} 回合 · 先攻骰掷</div>
+            <div style="height:30px;"></div>
             <div class="ic-gold-divider"></div>
             ${rowsHtml}
             <div class="ic-gold-divider"></div>

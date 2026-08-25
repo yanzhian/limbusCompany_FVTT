@@ -3417,8 +3417,10 @@ export class ClashManager {
       : defRoll;
 
     // 反击/防御：不走拼点流程，直接结算
+    // 反击 / 格挡：不走拼点流程，直接结算。
+    // 建卡一律放在所有 activity 跑完之后——「详细信息」要连 [攻击后] 一起收进去，
+    // 与拼点对抗卡同理。
     if (defCategory === "counter") {
-      await ClashManager._resolveDirectCounter(atkActor, defActor, effectiveInitFlags, defItem, defFinalRoll, defFinalFormula);
       // 反击：守方拼点胜/主动命中攻方，攻方拼点败/被命中
       await ClashManager._applyActivitiesAndEquip(defItem,  "拼点成功", defCtx);
       await ClashManager._applyActivitiesAndEquip(atkItem,  "拼点失败", atkCtx);
@@ -3430,12 +3432,11 @@ export class ClashManager {
       await ClashManager._restoreAllItemMods(atkItem, defItem);
       await ClashManager.restoreItemSnaps(_statSnap);
       await ClashManager._flushTakeAgg();
-      await ClashManager._flushActMsgs(_actMsgs, atkActor);
+      await ClashManager._resolveDirectCounter(atkActor, defActor, effectiveInitFlags, defItem, defFinalRoll, defFinalFormula, _actMsgs);
       await ClashManager._broadcastAndCheckReactions({ lastSkillUuid: atkItem?.uuid ?? null, attacker: atkActor, defender: defActor });
       return;
     }
     if (defCategory === "block") {
-      await ClashManager._resolveDirectBlock(atkActor, defActor, effectiveInitFlags, defItem, defFinalRoll, defFinalFormula);
       // 格挡：攻方命中守方（守方未命中攻方）
       await ClashManager._applyActivitiesAndEquip(atkItem,  "命中时", atkCtx);
       await ClashManager._applyActivitiesAndEquip(atkItem,  "攻击后", atkCtx);
@@ -3443,7 +3444,7 @@ export class ClashManager {
       await ClashManager._restoreAllItemMods(atkItem, defItem);
       await ClashManager.restoreItemSnaps(_statSnap);
       await ClashManager._flushTakeAgg();
-      await ClashManager._flushActMsgs(_actMsgs, atkActor);
+      await ClashManager._resolveDirectBlock(atkActor, defActor, effectiveInitFlags, defItem, defFinalRoll, defFinalFormula, _actMsgs);
       await ClashManager._broadcastAndCheckReactions({ lastSkillUuid: atkItem?.uuid ?? null, attacker: atkActor, defender: defActor });
       return;
     }
@@ -5648,7 +5649,7 @@ export class ClashManager {
    * - 防守方（使用反击技能）受到攻击方有效骰数×抗性的伤害
    * - 攻击方受到防守方有效骰数×罪孽抗性的反击伤害
    */
-  static async _resolveDirectCounter(atkActor, defActor, initFlags, defItem, defRoll, defFormula) {
+  static async _resolveDirectCounter(atkActor, defActor, initFlags, defItem, defRoll, defFormula, actMsgs = []) {
     const atkCategory = initFlags.category ?? "";
     const atkSinType  = initFlags.sinType  ?? "";
     const defSinType  = defItem.system?.sinType ?? "";
@@ -5764,24 +5765,41 @@ export class ClashManager {
           </div>
         </div>
         ${ClashManager._goldDivider()}
-        <div style="font-size:.8rem;color:#9A8462;line-height:1.7;margin:4px 0 8px;">
-          ${noteLines.map(n => `<div>${n}</div>`).join("")}
+        <div style="text-align:center;margin:8px 0;">
+          <div style="font-size:14px;color:#C9A84C;margin-bottom:6px;">拼点结算</div>
+          <div style="display:flex;align-items:center;justify-content:center;gap:14px;">
+            <span style="font-size:2rem;font-weight:bold;color:${atkEffective >= defEffective ? "#E8C9A2" : "#B84444"};">${atkEffective}</span>
+            <span style="font-size:1.5rem;color:#C9A84C;">${atkEffective === defEffective ? "=" : (atkEffective > defEffective ? ">" : "<")}</span>
+            <span style="font-size:2rem;font-weight:bold;color:${defEffective > atkEffective ? "#E8C9A2" : "#B84444"};">${defEffective}</span>
+          </div>
         </div>
         ${ClashManager._goldDivider()}
-        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+        ${ClashManager._buildScoreTable({
+          atkLv, defLv,
+          atkRoll: atkEffective - atkLvBonus, defRoll: defEffective - defLvBonus,
+          atkLvBonus, defLvBonus, atkMod: 0, defMod: 0,
+        })}
+        ${ClashManager._buildDetailsFold(actMsgs)}
+        <div style="height:30px;"></div>
+        ${noteLines.length ? `
+        <div style="font-size:.8rem;color:#9A8462;line-height:1.7;margin:0 0 4px;">
+          ${noteLines.map(n => `<div>${ClashManager._hlDamage(n)}</div>`).join("")}
+        </div>` : ""}
+        ${ClashManager._goldDivider()}
+        <div class="lc-btn-row" style="display:flex;gap:8px;align-items:stretch;">
           <button class="clash-btn-apply-damage"
                   data-target-actor-id="${defActor?.id ?? ""}"
                   data-damage="${damageToDefActor}"
-                  style="flex:1;min-width:80px;height:30px;background:#B84444;color:#fff;
-                         border:none;cursor:pointer;font-size:.8rem;border-radius:2px;">
-            ${defActor?.name ?? "?"} 承受 ${damageToDefActor}
+                  style="flex:1;height:30px;padding:0 10px;background:#5F3E22;color:#E8C9A2;
+                         border:1px solid #C9A84C;border-radius:2px;cursor:pointer;font-size:.8rem;">
+            结算结果 · ${defActor?.name ?? "?"} ${damageToDefActor}
           </button>
           <button class="clash-btn-apply-damage"
                   data-target-actor-id="${atkActor?.id ?? ""}"
                   data-damage="${damageToAtkActor}"
-                  style="flex:1;min-width:80px;height:30px;background:#7A2222;color:#fff;
-                         border:none;cursor:pointer;font-size:.8rem;border-radius:2px;">
-            ${atkActor?.name ?? "?"} 承受反击 ${damageToAtkActor}
+                  style="flex:1;height:30px;padding:0 10px;background:#241B12;color:#9A8462;
+                         border:1px solid #5A3A1A;border-radius:2px;cursor:pointer;font-size:.8rem;">
+            结算结果 · ${atkActor?.name ?? "?"} ${damageToAtkActor}
           </button>
         </div>
       </div>`;
@@ -5808,7 +5826,7 @@ export class ClashManager {
    * 含 BUFF（强壮/忍耐/破绽）和攻防等级差值。
    * 最终伤害 = max(0, round(atkEffective × 抗性) − defEffective + 易损 - 守护)
    */
-  static async _resolveDirectBlock(atkActor, defActor, initFlags, defItem, defRoll, defFormula) {
+  static async _resolveDirectBlock(atkActor, defActor, initFlags, defItem, defRoll, defFormula, actMsgs = []) {
     const atkCategory = initFlags.category ?? "";
     const atkSinType  = initFlags.sinType  ?? "";
     const PHYS_CATS   = ["slash", "blunt", "pierce"];
@@ -5914,19 +5932,36 @@ export class ClashManager {
           </div>
         </div>
         ${ClashManager._goldDivider()}
-        <div style="font-size:.8rem;color:#9A8462;line-height:1.7;margin:4px 0 8px;">
-          ${notes.map(n => `<div>${n}</div>`).join("")}
+        <div style="text-align:center;margin:8px 0;">
+          <div style="font-size:14px;color:#C9A84C;margin-bottom:6px;">拼点结算</div>
+          <div style="display:flex;align-items:center;justify-content:center;gap:14px;">
+            <span style="font-size:2rem;font-weight:bold;color:${atkEffective > defEffective ? "#E8C9A2" : "#B84444"};">${atkEffective}</span>
+            <span style="font-size:1.5rem;color:#C9A84C;">${atkEffective === defEffective ? "=" : (atkEffective > defEffective ? ">" : "<")}</span>
+            <span style="font-size:2rem;font-weight:bold;color:${defEffective >= atkEffective ? "#E8C9A2" : "#B84444"};">${defEffective}</span>
+          </div>
+        </div>
+        ${ClashManager._goldDivider()}
+        ${ClashManager._buildScoreTable({
+          atkLv, defLv,
+          atkRoll: initFlags.rollTotal ?? 0, defRoll: defRoll.total ?? 0,
+          atkLvBonus, defLvBonus, atkMod: atkDiceMod, defMod: defDiceMod,
+        })}
+        ${ClashManager._buildDetailsFold(actMsgs)}
+        <div style="height:30px;"></div>
+        <div style="font-size:.8rem;color:#9A8462;line-height:1.7;margin:0 0 4px;">
+          ${notes.map(n => `<div>${ClashManager._hlDamage(n)}</div>`).join("")}
           ${defEffective >= rawDamage ? `<div style="color:#6EE06E;font-weight:bold;">✓ 护盾足以挡下本次伤害！</div>` : ""}
         </div>
         ${ClashManager._goldDivider()}
         ${finalDamage > 0
-          ? `<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+          ? `<div class="lc-btn-row" style="display:flex;gap:8px;align-items:stretch;">
                <button class="clash-btn-apply-damage"
                        data-target-actor-id="${defActor?.id ?? ""}"
                        data-damage="${finalDamage}"
-                       style="width:48px;height:30px;background:#B84444;color:#fff;
-                              border:none;cursor:pointer;font-size:.85rem;border-radius:2px;flex-shrink:0;">承受</button>
-               <span style="font-size:.7rem;color:#6A5A48;">扣除 ${finalDamage} 点生命值</span>
+                       style="flex:1;height:30px;padding:0 14px;background:#5F3E22;color:#E8C9A2;
+                              border:1px solid #C9A84C;border-radius:2px;cursor:pointer;font-size:.85rem;">
+                 结算结果
+               </button>
              </div>`
           : `<div style="padding:4px 0;">
                <span style="font-size:.85rem;color:#6EE06E;font-weight:bold;">✓ 格挡成功，无伤害</span>
