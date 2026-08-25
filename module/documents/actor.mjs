@@ -1309,7 +1309,13 @@ export class LimbusActor extends Actor {
     for (const eq of ClashManager._getEquippedItems(this)) {
       await ClashManager._applyActivities(eq, "陷入混乱时", ctx);
     }
-    if (ctx._actMsgs.length) await ClashManager._flushActMsgs(ctx._actMsgs, this);
+    if (!ctx._actMsgs.length) return;
+    // 混乱可能发生在承受伤害那一刻，也可能发生在回合结束的跳动伤害里。
+    // 外层登记了环境桶就收进去（→ 承受结算 / 先攻骰掷的「上回合结束」），
+    // 没登记才自己单发一条。
+    if (!ClashManager.pushAmbient(ctx._actMsgs)) {
+      await ClashManager._flushActMsgs(ctx._actMsgs, this);
+    }
   }
 
   /**
@@ -1326,8 +1332,46 @@ export class LimbusActor extends Actor {
     await ClashManager._applyActivities(item, triggerName, {
       owner: this, atkActor: this, defActor: null, _fireCounts: {}, _actMsgs: msgs,
     });
-    await ClashManager._flushActMsgs(msgs, this, {
-      title: `${this.name}·${triggerName}`,
+    await this.sendPanicCheckCard(triggerName, msgs, item);
+  }
+
+  /**
+   * 【恐慌鉴定】卡：结构比照【先攻骰掷】——角色一行，下接两个折叠。
+   * 恐慌与坚定是互斥的两种结果，所以同一张卡上只会有一个折叠有内容，
+   * 另一个不渲染（连那 30px 也不留）。
+   * @param {string}   triggerName "恐慌触发时" | "坚定触发时"
+   * @param {object[]} msgs        该时机收集到的 activity 消息
+   * @param {Item}     item        恐慌卡本体
+   */
+  async sendPanicCheckCard(triggerName, msgs, item = null) {
+    const { ClashManager } = await import("../helpers/clash.mjs");
+    const isFear = triggerName === "恐慌触发时";
+    const fold   = ClashManager._buildDetailsFold(msgs, {
+      label: isFear ? "恐慌触发" : "坚定触发",
+    });
+    const row = `
+      <div style="display:flex;align-items:center;gap:8px;margin:4px 0;">
+        <img src="${this.img}" alt="${this.name}"
+             style="width:30px;height:30px;object-fit:cover;border-radius:50%;
+                    border:2px solid ${isFear ? "#8B1A1A" : "#3A5A1A"};">
+        <span style="color:#E8C9A2;font-size:.85rem;flex:1;">${this.name}</span>
+        <span style="font-size:.8rem;color:${isFear ? "#E84444" : "#6EE06E"};font-weight:bold;">
+          ${isFear ? "恐慌" : "坚定"}
+        </span>
+        ${item ? `<span style="font-size:.75rem;color:#9A8462;">${item.name}</span>` : ""}
+      </div>`;
+
+    await ChatMessage.create({
+      content: `
+        <div class="limbus-initiative-card" style="padding:10px 12px 8px;">
+          <div class="ic-title" style="font-size:20px;">恐慌鉴定</div>
+          <div style="height:30px;"></div>
+          <div class="ic-gold-divider"></div>
+          ${row}
+          <div class="ic-gold-divider"></div>
+          ${fold}
+          ${fold ? '<div style="height:30px;"></div><div class="ic-gold-divider"></div>' : ""}
+        </div>`,
     });
   }
 

@@ -2217,6 +2217,22 @@ export class ClashManager {
    * @param {object[]} actMsgs  ctx._actMsgs 数组
    * @param {Actor}    speaker  消息发言人（通常为攻击方）
    */
+  /* ─── 环境收集桶 ────────────────────────────────────────────────────────
+   * [陷入混乱时] 这类触发没有固定归属：可能发生在承受伤害的那一刻（→ 承受结算），
+   * 也可能发生在回合结束的跳动伤害里（→ 先攻骰掷的「上回合结束」）。
+   * 由外层把当前该收进哪里登记在这里，触发方只管往里丢。
+   * ──────────────────────────────────────────────────────────────────── */
+
+  /** @type {object[]|null} */
+  static _ambientActMsgs = null;
+
+  /** 有环境桶就收进去并返回 true；没有则由调用方自己发消息 */
+  static pushAmbient(entries) {
+    if (!ClashManager._ambientActMsgs || !entries?.length) return false;
+    ClashManager._ambientActMsgs.push(...entries);
+    return true;
+  }
+
   static async _flushActMsgs(actMsgs, speaker, { title = "" } = {}) {
     if (!actMsgs?.length) return;
     await ClashManager._safeChatCreate({
@@ -5415,7 +5431,7 @@ export class ClashManager {
   }
 
   /** 把一次承受记进聚合表 */
-  static _recordTake(actor, res, { takeLabel = "", shieldBefore = 0, hookMsgs = null } = {}) {
+  static _recordTake(actor, res, { takeLabel = "", shieldBefore = 0, hookMsgs = null, extraRows = [] } = {}) {
     const agg = ClashManager._takeAgg;
     if (!agg) return;
     const key = actor?.id ?? "";
@@ -5434,9 +5450,13 @@ export class ClashManager {
     if (res.sinkingGloomDmg) rec.triggers.push({ k: "沉沦触发", v: `理智见底，额外承受 <b>${res.sinkingGloomDmg}</b> 点【忧郁】伤害` });
     if (res.tremorTriggered) rec.triggers.push({ k: "震颤引爆", v: "消耗 1 层【震颤】，混乱阈值前移" });
     for (const m of (hookMsgs ?? [])) rec.triggers.push({ k: "效果", v: m });
+    for (const r of (extraRows ?? [])) rec.triggers.push(r);
   }
 
   static async _applyAndSendTake(actor, damage, { isSeismic = false, calcNotes = [], attacker = null, hookMsgs = null, takeLabel = "承受结算", category = "", sinType = "", item = null, silent = false, takeEffects = [] } = {}) {
+    // 本次结算期间把 [陷入混乱时] 之类的触发收到这里，结束时并进承受卡
+    const _prevAmbient = ClashManager._ambientActMsgs;
+    ClashManager._ambientActMsgs = [];
     const sys   = actor.system;
     const maxHp = sys.hp?.max ?? 1;
 
@@ -5573,6 +5593,11 @@ export class ClashManager {
     // 沉沦忧郁追加伤害发生在 HP 结算之后，需将最终 HP 一并传给聊天框显示
     // （生命值锁定时 sinkingGloomDmg 恒为 0，finalHp 与 newHp 一致，仍钉死为 hpLockValue）
     const finalHp = Math.max(0, newHp - sinkingGloomDmg);
+    // 结算过程中触发的 [陷入混乱时] 收进本次承受（环境桶在函数开头登记）
+    const _chaosRows = (ClashManager._ambientActMsgs ?? [])
+      .flatMap(e => (e.msgs ?? []).map(m => ({ k: e.trigger ?? "效果", v: m })));
+    ClashManager._ambientActMsgs = _prevAmbient;
+
     const _res = { damage, oldHp, finalHp, maxHp, chaosTriggered, chaosName,
                    ruptureDmg, sanityDmg, sinkingGloomDmg, tremorTriggered };
 
@@ -5580,11 +5605,12 @@ export class ClashManager {
     if (!silent) {
       if (ClashManager._takeAgg) {
         // 聚合中：只记账，最后合并成一张卡
-        ClashManager._recordTake(actor, _res, { takeLabel, shieldBefore, hookMsgs });
+        ClashManager._recordTake(actor, _res, { takeLabel, shieldBefore, hookMsgs,
+          extraRows: _chaosRows });
       } else {
         await ClashManager._sendTakeMsg(actor, damage, oldHp, finalHp, maxHp, chaosTriggered,
           { ruptureDmg, sanityDmg, sinkingGloomDmg, tremorTriggered, chaosName, calcNotes, takeLabel,
-            shieldBefore, hookMsgs, takeEffects });
+            shieldBefore, hookMsgs, takeEffects: [...takeEffects, ..._chaosRows] });
       }
     }
     return _res;
