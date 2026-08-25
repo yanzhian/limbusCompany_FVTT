@@ -3246,6 +3246,8 @@ export class ClashManager {
     // 于是在已经被加过的值上继续加——点数就一场比一场大。
     // 这里补一次幂等的还原：没有残留时是空操作。
     await ClashManager._restoreItemModsOnly(atkItem, defItem);
+    // 再抄一份快照，收尾时无条件写回——不依赖 flag 活到那一刻
+    const _statSnap = ClashManager.snapItemStats(atkItem, defItem);
 
     // 本次对抗内的零散承受（追击、引爆伤害…）合并成一张卡，不各发各的
     ClashManager._beginTakeAgg();
@@ -3426,6 +3428,7 @@ export class ClashManager {
       await ClashManager._applyActivitiesAndEquip(atkItem,  "攻击后", atkCtx);
       await ClashManager._applyActivitiesAndEquip(defItem,  "攻击后", defCtx);
       await ClashManager._restoreAllItemMods(atkItem, defItem);
+      await ClashManager.restoreItemSnaps(_statSnap);
       await ClashManager._flushTakeAgg();
       await ClashManager._flushActMsgs(_actMsgs, atkActor);
       await ClashManager._broadcastAndCheckReactions({ lastSkillUuid: atkItem?.uuid ?? null, attacker: atkActor, defender: defActor });
@@ -3438,6 +3441,7 @@ export class ClashManager {
       await ClashManager._applyActivitiesAndEquip(atkItem,  "攻击后", atkCtx);
       await ClashManager._applyActivitiesAndEquip(defItem,  "攻击后", defCtx);
       await ClashManager._restoreAllItemMods(atkItem, defItem);
+      await ClashManager.restoreItemSnaps(_statSnap);
       await ClashManager._flushTakeAgg();
       await ClashManager._flushActMsgs(_actMsgs, atkActor);
       await ClashManager._broadcastAndCheckReactions({ lastSkillUuid: atkItem?.uuid ?? null, attacker: atkActor, defender: defActor });
@@ -3578,6 +3582,7 @@ export class ClashManager {
     await ClashManager._applyActivitiesAndEquip(atkItem, "攻击后", atkCtx);
     await ClashManager._applyActivitiesAndEquip(defItem,  "攻击后", defCtx);
     await ClashManager._restoreAllItemMods(atkItem, defItem);
+    await ClashManager.restoreItemSnaps(_statSnap);
 
     await ClashManager._flushTakeAgg();
     await ClashManager._sendResolveMsg(
@@ -4286,6 +4291,50 @@ export class ClashManager {
     }
   }
 
+  /* ─── 快照式还原 ─────────────────────────────────────────────────────────
+   * tempMods flag 那套（改前存原值 → [攻击后] 还原 → 删 flag）依赖 flag 一路
+   * 活到还原那一刻。只要中间有一步没走到，原值就永久丢了，物品的公式从此定格在
+   * 被加过的数值上（2D4+4 打完变成 3D4+6，下一次从 3D4+6 起跳）。
+   *
+   * 这里改成不依赖任何持久化状态：对抗开场把参战物品的四个字段抄进函数作用域，
+   * 收尾时无条件写回。快照活在调用栈上，不会因为 flag 读写失败而丢。
+   * ──────────────────────────────────────────────────────────────────── */
+
+  /** 抄下参战物品（技能 + 双方装备格）的骰值字段 */
+  static snapItemStats(...actorsOrItems) {
+    const seen = new Map();
+    const add  = (it) => {
+      if (!it || seen.has(it.id)) return;
+      const vals = {};
+      for (const path of ClashManager.TEMP_MOD_PATHS) {
+        vals[path] = foundry.utils.getProperty(it, path);
+      }
+      seen.set(it.id, { item: it, vals });
+    };
+    for (const x of actorsOrItems) {
+      if (!x) continue;
+      add(x);
+      for (const eq of ClashManager._getEquippedItems(x.parent ?? null)) add(eq);
+    }
+    return [...seen.values()];
+  }
+
+  /** 把快照原样写回；顺带清掉 tempMods，两套机制不打架 */
+  static async restoreItemSnaps(snaps) {
+    for (const { item, vals } of (snaps ?? [])) {
+      if (!item) continue;
+      const update = {};
+      for (const [path, orig] of Object.entries(vals)) {
+        if (orig === undefined) continue;
+        if (foundry.utils.getProperty(item, path) !== orig) update[path] = orig;
+      }
+      if (item.getFlag?.("limbusCompany_FVTT", "tempMods")) {
+        update["flags.limbusCompany_FVTT.-=tempMods"] = null;
+      }
+      if (Object.keys(update).length) await ClashManager._safeDocUpdate(item, update);
+    }
+  }
+
   /**
    * 把一个角色身上**所有**带临时改动的物品还原。
    *
@@ -4530,8 +4579,9 @@ export class ClashManager {
     const _fc2      = {};
     const _actMsgs2 = [];
     const coveredForActor = initFlags.coveredForId ? (game.actors.get(initFlags.coveredForId) ?? null) : null;
-    // 同上：开场清一次上一场的残留
+    // 同上：开场清一次上一场的残留，并抄快照
     await ClashManager._restoreItemModsOnly(atkItem2);
+    const _statSnap2 = ClashManager.snapItemStats(atkItem2);
 
     ClashManager._beginTakeAgg();
     const _takeEffectRows2 = [];
@@ -4674,6 +4724,7 @@ export class ClashManager {
     // [攻击后]：必须在建卡之前跑完，详细信息才收得全（与拼点对抗卡同理）
     await ClashManager._applyActivitiesAndEquip(atkItem2, "攻击后", atkCtx2);
     await ClashManager._restoreAllItemMods(atkItem2);
+    await ClashManager.restoreItemSnaps(_statSnap2);
 
     // 单方面攻击卡：与拼点对抗卡同一套流程——先把结果摆出来，
     // 扣血、破裂/沉沦/震颤引爆等等都等【结算结果】按下去才发生。
