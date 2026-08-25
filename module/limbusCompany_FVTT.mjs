@@ -480,10 +480,21 @@ Hooks.on("renderChatMessage", (_message, html, _data) => {
 
   // ── 反击聊天框：双方承受按钮 ──
   if (flags.type === "clash-counter") {
-    html.find(".clash-btn-apply-damage").on("click", (e) => {
-      const targetActorId = e.currentTarget.dataset.targetActorId;
-      const damage        = parseInt(e.currentTarget.dataset.damage) || 0;
-      ClashManager.handleApplyDamage(targetActorId, damage);
+    // 反击是一次交锋两边同时挨打，结算就该是一下——和拼点对抗一样，
+    // 一个【结算结果】把双方的伤害一起落地，不再拆成两个按钮各点各的
+    html.find(".clash-btn-settle").on("click", async () => {
+      await ClashManager.handleApplyDamage(flags.defActorId, flags.damageToDefActor ?? 0);
+      await ClashManager.handleApplyDamage(flags.atkActorId, flags.damageToAtkActor ?? 0);
+    });
+    html.find(".clash-btn-redo").on("click", async () => {
+      if (!game.user.isGM) return;
+      const ok = await Dialog.confirm({
+        title:   "重新骰掷",
+        content: "<p>把这一场对抗从头再打一遍？</p>"
+               + "<p style='color:#B84444;font-size:.85rem;'>上一次已经发生的效果不会回滚"
+               + "（加出去的 BUFF、扣掉的资源都还在），重打会再触发一次。</p>",
+      });
+      if (ok) await ClashManager.redoClash(flags.redoData);
     });
   }
 

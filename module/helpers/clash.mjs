@@ -5787,20 +5787,14 @@ export class ClashManager {
         </div>` : ""}
         ${ClashManager._goldDivider()}
         <div class="lc-btn-row" style="display:flex;gap:8px;align-items:stretch;">
-          <button class="clash-btn-apply-damage"
-                  data-target-actor-id="${defActor?.id ?? ""}"
-                  data-damage="${damageToDefActor}"
-                  style="flex:1;height:30px;padding:0 10px;background:#5F3E22;color:#E8C9A2;
-                         border:1px solid #C9A84C;border-radius:2px;cursor:pointer;font-size:.8rem;">
-            结算结果 · ${defActor?.name ?? "?"} ${damageToDefActor}
+          <button class="clash-btn-settle lc-btn primary"
+                  style="flex:1;height:30px;padding:0 14px;background:#5F3E22;color:#E8C9A2;
+                         border:1px solid #C9A84C;border-radius:2px;cursor:pointer;font-size:.85rem;">
+            结算结果
           </button>
-          <button class="clash-btn-apply-damage"
-                  data-target-actor-id="${atkActor?.id ?? ""}"
-                  data-damage="${damageToAtkActor}"
-                  style="flex:1;height:30px;padding:0 10px;background:#241B12;color:#9A8462;
-                         border:1px solid #5A3A1A;border-radius:2px;cursor:pointer;font-size:.8rem;">
-            结算结果 · ${atkActor?.name ?? "?"} ${damageToAtkActor}
-          </button>
+          ${(game.user?.isGM ?? false) ? `<button class="clash-btn-redo lc-btn dim"
+                    style="height:30px;padding:0 14px;background:#241B12;color:#9A8462;
+                           border:1px solid #5A3A1A;border-radius:2px;cursor:pointer;font-size:.85rem;">重新骰掷</button>` : ""}
         </div>
       </div>`;
 
@@ -5814,6 +5808,13 @@ export class ClashManager {
           atkActorId:     atkActor?.id ?? "",
           damageToDefActor,
           damageToAtkActor,
+          // 整局重掷（仅 GM）：与拼点对抗卡同一套
+          redoData: {
+            defActorId: defActor?.id ?? "",
+            defItemId:  defItem?.id  ?? "",
+            defFormula: defFormula   ?? "",
+            initFlags,
+          },
         },
       },
     });
