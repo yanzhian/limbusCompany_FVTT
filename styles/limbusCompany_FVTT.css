@@ -5695,21 +5695,35 @@ body.cg-dragging-active .limbuscompany .cg-item-tile:hover {
   flex-shrink: 0;
 }
 
-.limbus-panic-card .pc-name {
+/* 中列：名字在上、骰掷说明在下（头像纵跨两行，结果纵向居中） */
+.limbus-panic-card .pc-main {
   flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.limbus-panic-card .pc-name {
   font-size: 14px;
   color: #A1CAE8;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .limbus-panic-card .pc-note {
   font-size: 13px;
   color: #9AB4C6;
+  white-space: nowrap;
 }
 
 .limbus-panic-card .pc-label {
   font-size: 16px;
   font-weight: bold;
   line-height: 1;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .limbus-panic-card .pc-label.is-resolve { color: #5DADE2; }

@@ -5467,8 +5467,10 @@ export class ClashManager {
         ${i ? '<div class="pc-gap"></div>' : ""}
         <div class="pc-row">
           <img class="pc-avatar" src="${r.actor.img}" alt="${r.actor.name}">
-          <span class="pc-name">${r.actor.name}</span>
-          ${r.note ? `<span class="pc-note">${r.note}</span>` : ""}
+          <div class="pc-main">
+            <span class="pc-name">${r.actor.name}</span>
+            ${r.note ? `<span class="pc-note">${r.note}</span>` : ""}
+          </div>
           <span class="pc-label ${cls}">${r.label}</span>
         </div>
         ${ClashManager._panicDots(r.counters)}`;
