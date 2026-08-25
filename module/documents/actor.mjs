@@ -1185,9 +1185,11 @@ export class LimbusActor extends Actor {
       const alreadyFired = this.getFlag("limbusCompany_FVTT", firedKey) ?? false;
       if (!alreadyFired) {
         await this.setFlag("limbusCompany_FVTT", firedKey, true);
-        await ChatMessage.create({
-          content: `<div class="limbuscompany chat-clash"><strong>${this.name}</strong> 理智跌至 ${clamped}——【士气低落】！</div>`,
-        });
+        const { ClashManager } = await import("../helpers/clash.mjs");
+        await ClashManager.recordPanic(this, "士气低落", "fear", {
+          fear:    this.system.panicCounters?.fear ?? 0,
+          resolve: this.system.panicCounters?.resolve ?? 0,
+        }, `理智 ${clamped}`);
         await this.triggerPanicActivities("lowMorale", "恐慌触发时");
       }
     }
@@ -1214,33 +1216,12 @@ export class LimbusActor extends Actor {
     const nextFear    = side === "fear"    ? Math.min(3, curFear + 1)    : curFear;
     const nextResolve = side === "resolve" ? Math.min(3, curResolve + 1) : curResolve;
 
-    const ownerUser  = game.users?.find(u => !u.isGM && u.character?.id === this.id);
-    const playerName = ownerUser?.name ?? game.user?.name ?? this.name;
-
-    await ChatMessage.create({
-      speaker: ChatMessage.getSpeaker({ actor: this }),
-      content: `
-        <div class="limbus-panic-check-card">
-          <div class="ic-header">
-            <img class="ic-actor-avatar" src="${this.img}" alt="${this.name}">
-            <div class="ic-actor-info">
-              <div class="ic-title">恐慌鉴定</div>
-              <div class="ic-player">${playerName}</div>
-            </div>
-          </div>
-          <div class="ic-blue-divider"></div>
-          <div class="panic-check-result-row">
-            <span class="panic-check-roll">1d10 = ${roll.total}（智力 ${int}）</span>
-            <span class="panic-check-arrow">→</span>
-            <span class="panic-check-outcome ${success ? "is-resolve" : "is-fear"}">${success ? "坚定" : "恐慌"} +1</span>
-          </div>
-          <div class="ic-blue-divider"></div>
-          <div class="panic-check-status-row">
-            <span class="panic-status-resolve">坚定 ${nextResolve}/3</span>
-            <span class="panic-status-fear">恐慌 ${nextFear}/3</span>
-          </div>
-        </div>`,
-    });
+    const { ClashManager } = await import("../helpers/clash.mjs");
+    await ClashManager.recordPanic(
+      this, success ? "坚定 +1" : "恐惧 +1", side,
+      { fear: nextFear, resolve: nextResolve },
+      `1d10 = ${roll.total}（智力 ${int}）`
+    );
     await this.addPanicCounter(side);
   }
 
@@ -1263,19 +1244,25 @@ export class LimbusActor extends Actor {
   async setPanicCounter(side, value) {
     const clamped = Math.max(0, Math.min(3, value));
     await this._safeUpdateSelf({ [`system.panicCounters.${side}`]: clamped });
-    if (clamped >= 3) await this._resolvePanicOutcome(side);
+    if (clamped < 3) return;
+    // 手动拖点触发的一连串恐慌消息（触发恐慌 → 士气低落 → 恐慌卡效果）也合成一张卡
+    const { ClashManager } = await import("../helpers/clash.mjs");
+    await ClashManager.withPanicAgg(() => this._resolvePanicOutcome(side));
   }
 
   /** 恐慌/坚定计数达到 3：触发对应效果 + 重置理智（30 恐慌 / 70 坚定）。 */
   async _resolvePanicOutcome(side) {
     const isFear = side === "fear";
     await this.setSanity(isFear ? 30 : 70);
-    await ChatMessage.create({
-      content: `<div class="limbuscompany chat-clash">
-        <strong>${this.name}</strong> ${isFear ? "恐慌" : "坚定"}计数达到 3——
-        触发【${isFear ? "恐慌触发时" : "坚定触发时"}】，理智调整为 ${isFear ? 30 : 70}。
-      </div>`,
-    });
+    const { ClashManager } = await import("../helpers/clash.mjs");
+    await ClashManager.recordPanic(
+      this, isFear ? "触发恐慌" : "触发坚定", side,
+      {
+        fear:    this.system.panicCounters?.fear ?? 0,
+        resolve: this.system.panicCounters?.resolve ?? 0,
+      },
+      `理智 → ${isFear ? 30 : 70}`
+    );
     await this.triggerPanicActivities("panic", isFear ? "恐慌触发时" : "坚定触发时");
   }
 
@@ -1332,47 +1319,12 @@ export class LimbusActor extends Actor {
     await ClashManager._applyActivities(item, triggerName, {
       owner: this, atkActor: this, defActor: null, _fireCounts: {}, _actMsgs: msgs,
     });
-    await this.sendPanicCheckCard(triggerName, msgs, item);
-  }
-
-  /**
-   * 【恐慌鉴定】卡：结构比照【先攻骰掷】——角色一行，下接两个折叠。
-   * 恐慌与坚定是互斥的两种结果，所以同一张卡上只会有一个折叠有内容，
-   * 另一个不渲染（连那 30px 也不留）。
-   * @param {string}   triggerName "恐慌触发时" | "坚定触发时"
-   * @param {object[]} msgs        该时机收集到的 activity 消息
-   * @param {Item}     item        恐慌卡本体
-   */
-  async sendPanicCheckCard(triggerName, msgs, item = null) {
-    const { ClashManager } = await import("../helpers/clash.mjs");
-    const isFear = triggerName === "恐慌触发时";
-    const fold   = ClashManager._buildDetailsFold(msgs, {
-      label: isFear ? "恐慌触发" : "坚定触发",
-    });
-    const row = `
-      <div style="display:flex;align-items:center;gap:8px;margin:4px 0;">
-        <img src="${this.img}" alt="${this.name}"
-             style="width:30px;height:30px;object-fit:cover;border-radius:50%;
-                    border:2px solid ${isFear ? "#8B1A1A" : "#3A5A1A"};">
-        <span style="color:#E8C9A2;font-size:.85rem;flex:1;">${this.name}</span>
-        <span style="font-size:.8rem;color:${isFear ? "#E84444" : "#6EE06E"};font-weight:bold;">
-          ${isFear ? "恐慌" : "坚定"}
-        </span>
-        ${item ? `<span style="font-size:.75rem;color:#9A8462;">${item.name}</span>` : ""}
-      </div>`;
-
-    await ChatMessage.create({
-      content: `
-        <div class="limbus-initiative-card" style="padding:10px 12px 8px;">
-          <div class="ic-title" style="font-size:20px;">恐慌鉴定</div>
-          <div style="height:30px;"></div>
-          <div class="ic-gold-divider"></div>
-          ${row}
-          <div class="ic-gold-divider"></div>
-          ${fold}
-          ${fold ? '<div style="height:30px;"></div><div class="ic-gold-divider"></div>' : ""}
-        </div>`,
-    });
+    if (!msgs.length) return;
+    const kind = triggerName === "坚定触发时" ? "resolve" : "fear";
+    // 聚合开着就并进【恐慌鉴定】卡底部的对应折叠，没开才自己单发一条
+    if (!ClashManager.pushPanicActMsgs(kind, msgs)) {
+      await ClashManager._flushActMsgs(msgs, this);
+    }
   }
 
   // ─── 辅助：获取已装备物品（从 actor.items） ────────────────────────────

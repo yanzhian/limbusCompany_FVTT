@@ -5399,6 +5399,104 @@ export class ClashManager {
    * 先前生命值取第一次的、现在生命值取最后一次的，触发行按顺序累加。
    * ──────────────────────────────────────────────────────────────────── */
 
+  /* ────────────────────────────────────────────────────────────────────
+   * 【恐慌鉴定】聚合
+   * 一次回合结束里，同一个人可能连着产出好几条恐慌相关消息（士气低落、
+   * 1d10 鉴定的 恐惧+1/坚定+1、计数满 3 的 触发恐慌/触发坚定），多个人
+   * 就是一屏。聚合后统一成一张卡：每人一行（40px 头像 + 名称 + 结果 +
+   * 下一行 OOO OOO 计数），底部接【恐慌触发】【坚定触发】两个折叠。
+   * ──────────────────────────────────────────────────────────────────── */
+
+  /** @type {{rows:object[],fear:object[],resolve:object[]}|null} */
+  static _panicAgg = null;
+
+  static _beginPanicAgg() { ClashManager._panicAgg = { rows: [], fear: [], resolve: [] }; }
+
+  /**
+   * 在聚合中执行一段会产出恐慌消息的流程；可重入——已经处在聚合里就直接跑，
+   * 只有最外层负责发卡。回合结束的批量鉴定与角色卡上手动拖点都走这里。
+   */
+  static async withPanicAgg(fn) {
+    if (ClashManager._panicAgg) return fn();
+    ClashManager._beginPanicAgg();
+    try { return await fn(); }
+    finally { await ClashManager._flushPanicAgg(); }
+  }
+
+  /**
+   * 记一行恐慌鉴定结果。聚合未开启时立刻单发一张只有这一行的卡。
+   * @param {Actor}  actor
+   * @param {string} label    "恐惧 +1" | "坚定 +1" | "触发恐慌" | "触发坚定" | "士气低落"
+   * @param {"fear"|"resolve"} kind  决定行的配色
+   * @param {{fear:number,resolve:number}} counters 该行公示的计数
+   * @param {string} [note]   行尾小字（如 1d10 = 6（智力 5））
+   */
+  static async recordPanic(actor, label, kind, counters, note = "") {
+    const row = { actor, label, kind, counters, note };
+    if (ClashManager._panicAgg) { ClashManager._panicAgg.rows.push(row); return; }
+    await ClashManager._sendPanicCard({ rows: [row], fear: [], resolve: [] });
+  }
+
+  /** 把恐慌卡 activities 的消息收进对应折叠；聚合未开启时返回 false */
+  static pushPanicActMsgs(kind, entries) {
+    if (!ClashManager._panicAgg || !entries?.length) return false;
+    ClashManager._panicAgg[kind === "fear" ? "fear" : "resolve"].push(...entries);
+    return true;
+  }
+
+  /** 发出聚合的【恐慌鉴定】卡并关闭聚合 */
+  static async _flushPanicAgg() {
+    const agg = ClashManager._panicAgg;
+    ClashManager._panicAgg = null;
+    if (!agg?.rows.length) return;
+    await ClashManager._sendPanicCard(agg);
+  }
+
+  /** OOO OOO：坚定三点（绿）+ 恐慌三点（红），已计数的点亮 */
+  static _panicDots({ fear = 0, resolve = 0 } = {}) {
+    const grp = (n, color) => Array.from({ length: 3 }, (_, i) => `
+      <span style="display:inline-block;width:9px;height:9px;border-radius:50%;
+                   border:1px solid ${color};margin-right:3px;
+                   background:${i < n ? color : "transparent"};"></span>`).join("");
+    return `
+      <div style="display:flex;align-items:center;gap:10px;padding-left:48px;line-height:1;">
+        <span style="display:inline-flex;align-items:center;">${grp(resolve, "#6EE06E")}</span>
+        <span style="display:inline-flex;align-items:center;">${grp(fear, "#E84444")}</span>
+      </div>`;
+  }
+
+  static async _sendPanicCard({ rows, fear, resolve }) {
+    const rowsHtml = rows.map((r, i) => {
+      const color = r.kind === "fear" ? "#E84444" : "#6EE06E";
+      return `
+        ${i ? '<div style="height:10px;"></div>' : ""}
+        <div style="display:flex;align-items:center;gap:8px;">
+          <img src="${r.actor.img}" alt="${r.actor.name}"
+               style="width:40px;height:40px;object-fit:cover;border-radius:4px;
+                      border:1px solid ${color};">
+          <span style="color:#E8C9A2;font-size:.85rem;flex:1;">${r.actor.name}</span>
+          ${r.note ? `<span style="font-size:.72rem;color:#9A8462;">${r.note}</span>` : ""}
+          <span style="font-size:.8rem;color:${color};font-weight:bold;">${r.label}</span>
+        </div>
+        ${ClashManager._panicDots(r.counters)}`;
+    }).join("");
+
+    const foldFear    = ClashManager._buildDetailsFold(fear,    { label: "恐慌触发" });
+    const foldResolve = ClashManager._buildDetailsFold(resolve, { label: "坚定触发" });
+
+    await ClashManager._safeChatCreate({
+      content: `
+        <div class="limbus-initiative-card" style="padding:10px 12px 8px;">
+          <div class="ic-title" style="font-size:20px;">恐慌鉴定</div>
+          <div style="height:10px;"></div>
+          <div class="ic-gold-divider"></div>
+          ${rowsHtml}
+          <div class="ic-gold-divider"></div>
+          ${foldFear}${foldResolve}
+        </div>`,
+    });
+  }
+
   /** @type {Map<string,object>|null} */
   static _takeAgg = null;
 

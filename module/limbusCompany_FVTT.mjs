@@ -696,6 +696,8 @@ Hooks.on("updateCombat", async (combat, changed) => {
   // 回合结束期间的 [陷入混乱时]（烧伤跳动打进混乱那类）收进「上回合结束」
   const _prevAmbient = ClashManager._ambientActMsgs;
   ClashManager._ambientActMsgs = endMsgs;
+  // 全体角色的恐慌/坚定鉴定合并成一张【恐慌鉴定】卡（结构比照【先攻骰掷】）
+  ClashManager._beginPanicAgg();
 
   for (const combatant of combat.combatants) {
     const actor = combatant.actor;
@@ -910,6 +912,7 @@ Hooks.on("updateCombat", async (combat, changed) => {
   }
 
   ClashManager._ambientActMsgs = _prevAmbient;
+  await ClashManager._flushPanicAgg();
 
   // 回合结束/开始的触发汇总不再各发一条，统一并进下面那张先攻骰掷卡。
   // 没有先攻卡可挂时（第 0→1 轮、或全场没有 character）才退回单独发。
