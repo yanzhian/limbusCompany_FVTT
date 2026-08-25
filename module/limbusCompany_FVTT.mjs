@@ -430,7 +430,7 @@ Hooks.on("renderChatMessage", (_message, html, _data) => {
     });
   }
 
-  // ── 拼点结算聊天框：承受（扣血） / 再次骰掷（平局） ──
+  // ── 拼点结算聊天框：承受（扣血）──
   if (flags.type === "clash-resolve") {
     html.find(".clash-btn-apply-damage").on("click", async (e) => {
       const targetActorId = e.currentTarget.dataset.targetActorId ?? flags.targetActorId;
@@ -445,9 +445,6 @@ Hooks.on("renderChatMessage", (_message, html, _data) => {
           actorId: tgt.id, name: tgt.name, dmg: damage, note: "拼点命中",
         } : null);
       }
-    });
-    html.find(".clash-btn-reroll").on("click", () => {
-      ClashManager.rerollClash(flags.rerollData);
     });
     // 理智变化折叠行
     html.find(".limbus-sanity-toggle-row").on("click", function () {

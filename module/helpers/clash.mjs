@@ -3416,10 +3416,10 @@ export class ClashManager {
     }
 
     // ── [拼点成功/失败] / [命中时] / [暴击命中时] / [受到伤害时] ────────
-    const { atkWins, isTie, dodgeWin, breatheCrit } = resolution;
+    const { atkWins, dodgeWin, breatheCrit } = resolution;
     // 【不可摧毁】反击暂存，稍后在 _sendResolveMsg 后触发
     let _unbreakableCounterArgs = null;
-    if (!isTie) {
+    {
       if (atkWins) {
         // 攻击方拼点胜
         await ClashManager._applyActivitiesAndEquip(atkItem, "拼点成功", atkCtx);
@@ -3476,7 +3476,7 @@ export class ClashManager {
 
     // ── 拼点理智变化（非平局、非闪避胜利时结算）──────────────────────────
     const sanityNotes = [];
-    if (!isTie && !dodgeWin) {
+    if (!dodgeWin) {
       const { gainNote, lossNote } = await ClashManager._applySanityFromClash(
         resolution.winner, resolution.loser
       );
@@ -3712,8 +3712,15 @@ export class ClashManager {
     const defEffective = defTotal + defDiceMod + defPwrMod + defLvBonus;
 
     // ── 胜负判定（基于含等级差的有效骰数）───────────────────────────────
-    const isTie    = atkEffective === defEffective;
-    const atkWins  = atkEffective >= defEffective; // 平局暂时归攻击方，由 isTie 旗标覆盖显示
+    // 平局不再是一种独立结果：
+    // ·连击路径（_runComboClash）本来就把平局当作"不扣行动值、再拼一次"，
+    //   循环到分出胜负为止，返回上来的点数不可能相等；
+    // ·闪避只拼一次、也不扣行动值，所以平局判**闪避成功**（躲开了，无伤害）——
+    //   闪避判定的是"够不够快躲开"，不需要决出胜负。
+    // 其余极端情况（连拼 20 次兜底）平局归攻击方。
+    const atkWins  = (defCategory === "dodge")
+      ? atkEffective > defEffective          // 闪避：平局算守方躲开
+      : atkEffective >= defEffective;
     const winner   = atkWins ? atkActor : defActor;
     const loser    = atkWins ? defActor : atkActor;
     const winScore = atkWins ? atkEffective : defEffective;
@@ -3723,8 +3730,7 @@ export class ClashManager {
     // ── 呼吸（breathing）：命中方判定暴击（在抗性计算之前） ──────────────
     // 暴击判定先于抗性，critMult 作为额外倍率参与 winScore 计算，
     // 触发时层数-1 由调用方执行
-    // 平局时不触发暴击
-    const breatheBuff = isTie ? null : ClashManager._getBuff(winner, "breathing");
+    const breatheBuff = ClashManager._getBuff(winner, "breathing");
     let   breatheCrit = false;
     let   critMult    = 1.0;
     if (breatheBuff && breatheBuff.stacks > 0) {
@@ -3754,13 +3760,11 @@ export class ClashManager {
     const totalMult    = critMult * physMult * sinMult;
     const adjustedBase = Math.max(0, Math.round(winScore * critMult) + fragile - guard);
 
-    // 闪避：拼点成功 → 无伤害；平局 → 无伤害（再次骰掷）
-    const dodgeWin  = defCategory === "dodge" && !atkWins && !isTie;
+    // 闪避：拼点成功或平局 → 躲开，无伤害
+    const dodgeWin  = defCategory === "dodge" && !atkWins;
 
     let finalDamage;
-    if (isTie) {
-      finalDamage = 0;
-    } else if (dodgeWin) {
+    if (dodgeWin) {
       finalDamage = 0;
     } else if (defCategory === "clashBlock") {
       if (!atkWins) {
@@ -3801,8 +3805,8 @@ export class ClashManager {
     if (atkLvBonus > 0) notes.push(`（攻击方等级 ${atkSideLv} vs 防守方等级 ${defSideLv}，等级差 ${atkSideLv - defSideLv}，拼点+${atkLvBonus}）`);
     if (defLvBonus > 0) notes.push(`（防守方等级 ${defSideLv} vs 攻击方等级 ${atkSideLv}，等级差 ${defSideLv - atkSideLv}，拼点+${defLvBonus}）`);
 
-    if (isTie) {
-      notes.push(`平局！（${atkEffective} = ${defEffective}）需要再次骰掷`);
+    if (dodgeWin && atkEffective === defEffective) {
+      notes.push(`平局 → ${defActor?.name ?? "?"} 闪避成功（无伤害）`);
     } else {
       notes.push(`${winner?.name ?? "?"} 获胜，${loserName} 败北`);
 
@@ -3836,7 +3840,7 @@ export class ClashManager {
     }
 
     return {
-      atkWins, isTie, winner, loser,
+      atkWins, winner, loser,
       atkTotal: atkEffective, defTotal: defEffective, winScore,
       atkItemName, atkItemImg, atkFormula, atkActor,
       defItemName, defItemImg, defFormula, defActor,
@@ -3848,60 +3852,37 @@ export class ClashManager {
 
   static async _sendResolveMsg(res, initFlags, defActor, defItem, defFormula, sanityNotes = []) {
     const {
-      atkWins, isTie, atkTotal, defTotal,
+      atkWins, atkTotal, defTotal,
       atkItemName, atkItemImg, atkFormula, atkActor,
       defItemName, defItemImg,
       loser, finalDamage, notes, dodgeWin, defCategory: resDC,
     } = res;
 
     const defCat = resDC ?? defItem?.system?.category ?? "";
-    const isClashCounterWin = !atkWins && !isTie && defCat === "clashCounter";
-    const isClashBlockWin   = !atkWins && !isTie && defCat === "clashBlock";
+    const isClashCounterWin = !atkWins && defCat === "clashCounter";
+    const isClashBlockWin   = !atkWins && defCat === "clashBlock";
     const isDodgeWin        = !!dodgeWin;
     const noTake            = isDodgeWin || isClashBlockWin;
 
-    const resolveTitle = isTie             ? "平局"
-                       : isClashCounterWin ? "⚔️ 强化反击"
+    const resolveTitle = isClashCounterWin ? "⚔️ 强化反击"
                        : isDodgeWin        ? "闪避成功"
                        : isClashBlockWin   ? "格挡成功"
                        : "拼点对抗";
 
-    const atkTotalStyle = isTie
-      ? "font-size:2rem;font-weight:bold;color:#C9A84C;"
-      : atkWins
-        ? "font-size:2rem;font-weight:bold;color:#E8C9A2;"
-        : "font-size:2rem;font-weight:bold;color:#B84444;";
-    const defTotalStyle = isTie
-      ? "font-size:2rem;font-weight:bold;color:#C9A84C;"
-      : !atkWins
-        ? "font-size:2rem;font-weight:bold;color:#E8C9A2;"
-        : "font-size:2rem;font-weight:bold;color:#B84444;";
-    const cmp = isTie ? "=" : (atkTotal > defTotal ? ">" : "<");
+    const atkTotalStyle = atkWins
+      ? "font-size:2rem;font-weight:bold;color:#E8C9A2;"
+      : "font-size:2rem;font-weight:bold;color:#B84444;";
+    const defTotalStyle = !atkWins
+      ? "font-size:2rem;font-weight:bold;color:#E8C9A2;"
+      : "font-size:2rem;font-weight:bold;color:#B84444;";
+    // 闪避平局时两边点数相等，显示 "=" 但结果是守方躲开
+    const cmp = atkTotal === defTotal ? "=" : (atkTotal > defTotal ? ">" : "<");
 
-    // 再次骰掷所需数据（存入 flags 供按钮回调使用）
-    const rerollData = isTie ? {
-      atkActorId:  atkActor?.id  ?? "",
-      atkFormula:  atkFormula    ?? "",
-      atkItemName, atkItemImg,
-      atkCategory: initFlags.category ?? "",
-      atkSinType:  initFlags.sinType  ?? "",
-      atkWeight:   initFlags.weight   ?? 1,
-      atkRollBase: initFlags.rollTotal ?? 0,
-      atkItemId:   initFlags.itemId   ?? "",
-      atkItemUuid: initFlags.itemUuid ?? "",
-      defActorId:  defActor?.id  ?? "",
-      defFormula:  defFormula    ?? "",
-      defItemName, defItemImg,
-      defCategory: defCat,
-      defSinType:  defItem?.system?.sinType ?? "",
-      defCounterType: defItem?.system?.counterType ?? "",
-      defItemId:   defItem?.id ?? "",
-    } : null;
 
     // 容量扩散信息：谁打出伤害就带谁的攻击容量。
     // 攻击方获胜 → 用攻击技能；反击/可拼点反击获胜 → 用守备技能（守备技能同样有攻击容量）。
-    const isCounterWin = !atkWins && !isTie && (defCat === "counter" || defCat === "clashCounter");
-    const weightSpread = (atkWins && !isTie) ? {
+    const isCounterWin = !atkWins && (defCat === "counter" || defCat === "clashCounter");
+    const weightSpread = atkWins ? {
       attackerId: atkActor?.id      ?? "",
       rollTotal:  initFlags.rollTotal ?? 0,
       category:   initFlags.category  ?? "",
@@ -3921,16 +3902,7 @@ export class ClashManager {
       itemImg:    defItemImg    ?? "",
     } : null;
 
-    const takeSection = isTie
-      ? `<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-           <button class="clash-btn-reroll"
-                   style="padding:4px 16px;height:30px;background:#5F3E22;color:#E8C9A2;
-                          border:1px solid #C9A84C;cursor:pointer;font-size:.85rem;border-radius:2px;flex-shrink:0;">
-             再次骰掷
-           </button>
-           <span style="font-size:.7rem;color:#6A5A48;">平局！双方重新骰掷</span>
-         </div>`
-      : noTake
+    const takeSection = noTake
         ? `<div style="padding:4px 0;">
              <span style="font-size:.85rem;color:#6EE06E;font-weight:bold;">✓ 防守成功，无伤害</span>
            </div>`
@@ -3999,7 +3971,6 @@ export class ClashManager {
           type:          "clash-resolve",
           targetActorId: loser?.id ?? "",
           damage:        finalDamage,
-          rerollData,
           weightSpread,
         },
       },
@@ -4207,114 +4178,6 @@ export class ClashManager {
       update[`system.egoResistances.${sinType}`] = multiplier;
     }
     if (Object.keys(update).length) await ClashManager._safeDocUpdate(actor, update);
-  }
-
-  /* ─── 再次骰掷（平局时重新计算） ─────────────────────────────────────── */
-
-  static async rerollClash(rerollData) {
-    if (!rerollData) return;
-    const {
-      atkActorId, atkFormula, atkItemName, atkItemImg, atkCategory, atkSinType,
-      defActorId, defFormula, defItemName, defItemImg, defCategory, defSinType,
-      defCounterType = "",
-    } = rerollData;
-
-    const atkActor = game.actors.get(atkActorId);
-    const defActor = game.actors.get(defActorId);
-    if (!atkActor || !defActor) {
-      ui.notifications.warn("找不到对抗双方角色，无法再次骰掷");
-      return;
-    }
-
-    const atkRoll = new Roll(atkFormula);
-    const defRoll = new Roll(defFormula);
-    await atkRoll.evaluate();
-    await defRoll.evaluate();
-    // 与首次投骰一致：过一遍 BUFF 的 modifyDiceRoll，并夹住 0 下限
-    // （负面骰如 20-1D8 在极端情况下会掷出负数）
-    ClashManager.applyDiceRollMods(atkActor, atkRoll, { isDefense: false });
-    ClashManager.applyDiceRollMods(defActor, defRoll, { isDefense: true });
-
-    const resolution = ClashManager._computeResolution({
-      atkActor,    atkTotal:    atkRoll.total,  atkFormula,
-      atkItemName, atkItemImg,  atkCategory,    atkSinType,
-      defActor,    defTotal:    defRoll.total,  defFormula,
-      defItemName, defItemImg,  defCategory,    defSinType,
-      defCounterType,
-    });
-
-    // 呼吸暴击（再次骰掷后也检查）
-    if (resolution.breatheCrit && resolution.winner) {
-      await ClashManager._reduceBuffStacks(resolution.winner, "breathing");
-    }
-    if (resolution.dodgeWin) {
-    }
-
-    await ClashManager._sendResolveMsg(resolution,
-      {
-        category:  atkCategory,
-        sinType:   atkSinType,
-        weight:    rerollData.atkWeight   ?? 1,
-        rollTotal: rerollData.atkRollBase ?? atkRoll.total,
-        itemId:    rerollData.atkItemId   ?? "",
-        itemName:  atkItemName,
-        itemImg:   atkItemImg,
-      },
-      defActor,
-      { img: defItemImg, name: defItemName, system: { category: defCategory, sinType: defSinType } },
-      defFormula,
-    );
-
-    // ── 平局重投后触发 Activity（仅 GM 执行，拥有全部 Actor 写权限） ──
-    if (!game.user.isGM) return;
-
-    const { atkWins, isTie: newIsTie, dodgeWin, breatheCrit } = resolution;
-    if (newIsTie) return; // 再次平局，等待下一次重投
-
-    const atkItemDoc = atkActor?.items?.get(rerollData.atkItemId)
-      ?? (rerollData.atkItemUuid ? await fromUuid(rerollData.atkItemUuid).catch(() => null) : null)
-      ?? null;
-    const defItemDoc = defActor?.items?.get(rerollData.defItemId) ?? null;
-
-    const _fc2      = {};
-    const _actMsgs2 = [];
-    const coveredForActor = initFlags.coveredForId ? (game.actors.get(initFlags.coveredForId) ?? null) : null;
-    const atkCtx2 = { atkActor, defActor, owner: atkActor, other: defActor, coveredForActor, _fireCounts: _fc2, _actMsgs: _actMsgs2, _currentItemId: atkItemDoc?.id ?? "" };
-    const defCtx2 = { atkActor, defActor, owner: defActor, other: atkActor, coveredForActor, _fireCounts: _fc2, _actMsgs: _actMsgs2, _currentItemId: defItemDoc?.id ?? "" };
-
-    let _unbreakableCounterArgs2 = null;
-    if (atkWins) {
-      await ClashManager._applyActivitiesAndEquip(atkItemDoc, "拼点成功", atkCtx2);
-      await ClashManager._applyActivitiesAndEquip(defItemDoc,  "拼点失败", defCtx2);
-      // 【不可摧毁】：防守方拼点失败后自动反击（延迟到 _sendResolveMsg 后，此处已在其后）
-      if (defItemDoc?.system?.diceType === "unbreakable") {
-        _unbreakableCounterArgs2 = [defItemDoc, defActor, atkActor, defCtx2];
-      }
-      if (!dodgeWin) {
-        await ClashManager._applyActivitiesAndEquip(atkItemDoc, "命中时", atkCtx2);
-        if (breatheCrit) {
-          await ClashManager._applyActivitiesAndEquip(atkItemDoc, "暴击命中时", atkCtx2);
-        }
-        await ClashManager._dispatchTakeDamage(defItemDoc, defActor, atkActor, defCtx2);
-      }
-    } else {
-      await ClashManager._applyActivitiesAndEquip(atkItemDoc, "拼点失败", atkCtx2);
-      await ClashManager._applyActivitiesAndEquip(defItemDoc,  "拼点成功", defCtx2);
-      // 【不可摧毁】：攻击方拼点失败后自动反击（延迟到 _sendResolveMsg 后，此处已在其后）
-      if (atkItemDoc?.system?.diceType === "unbreakable") {
-        _unbreakableCounterArgs2 = [atkItemDoc, atkActor, defActor, atkCtx2];
-      }
-      if (!dodgeWin) {
-        await ClashManager._applyActivitiesAndEquip(defItemDoc, "命中时", defCtx2);
-        await ClashManager._dispatchTakeDamage(atkItemDoc, atkActor, defActor, atkCtx2);
-      }
-    }
-
-    if (_unbreakableCounterArgs2) {
-      await ClashManager._triggerUnbreakableCounter(..._unbreakableCounterArgs2);
-    }
-
-    await ClashManager._flushActMsgs(_actMsgs2, atkActor);
   }
 
   /* ─── 阶段六：直接承受（跳过对抗，玩家B点聊天框承受） ────────────────── */
