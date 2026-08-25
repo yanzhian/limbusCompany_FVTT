@@ -474,6 +474,8 @@ Hooks.on("renderChatMessage", (_message, html, _data) => {
       }
       await ClashManager._flushTakeAgg();
       // 反应检查：延后到伤害落地之后，前置条件读到的才是结算后的数值
+      // [拼点失败] 之类的效果发起的新对抗：排到这里，伤害落地之后再弹
+      if (flags.skillLaunches) await ClashManager.runSkillLaunches(flags.skillLaunches);
       if (flags.reactionCheck) await ClashManager.runReactionCheck(flags.reactionCheck);
       // 容量扩散：打出伤害的一方攻击容量 >=2 时，在扣血后发出扩散承受卡
       const ws = flags.weightSpread;
@@ -503,6 +505,8 @@ Hooks.on("renderChatMessage", (_message, html, _data) => {
       await ClashManager.handleApplyDamage(flags.defActorId, flags.damageToDefActor ?? 0);
       await ClashManager.handleApplyDamage(flags.atkActorId, flags.damageToAtkActor ?? 0);
       await ClashManager._flushTakeAgg();
+      // [拼点失败] 之类的效果发起的新对抗：排到这里，伤害落地之后再弹
+      if (flags.skillLaunches) await ClashManager.runSkillLaunches(flags.skillLaunches);
       if (flags.reactionCheck) await ClashManager.runReactionCheck(flags.reactionCheck);
     });
     html.find(".clash-btn-redo").on("click", async () => {
@@ -526,6 +530,8 @@ Hooks.on("renderChatMessage", (_message, html, _data) => {
       await ClashManager.settleBleed(flags.bleedMsgs ?? []);
       await ClashManager.handleApplyDamage(targetActorId, damage);
       await ClashManager._flushTakeAgg();
+      // [拼点失败] 之类的效果发起的新对抗：排到这里，伤害落地之后再弹
+      if (flags.skillLaunches) await ClashManager.runSkillLaunches(flags.skillLaunches);
       if (flags.reactionCheck) await ClashManager.runReactionCheck(flags.reactionCheck);
     });
   }

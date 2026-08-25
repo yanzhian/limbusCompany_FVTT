@@ -2195,8 +2195,11 @@ export class ClashManager {
               else if (rt === "defender") tgtId = ctx.defActor?.id ?? "";
               // 指定目标不能是自己，否则发出的对抗卡没人能响应
               if (tgtId === useTgt?.id) tgtId = "";
-              await ClashManager.showInitiateDialog(useTgt, skillItem, -2, tgtId);
-              descStr = `【${useTgt?.name ?? ""}】发起对抗：【${skillItem.name}】`;
+              // 对抗结算中：排队等【结算结果】，别抢在伤害落地之前把下一击打出去
+              const queued = ClashManager.queueSkillLaunch(useTgt, skillItem, tgtId);
+              if (!queued) await ClashManager.showInitiateDialog(useTgt, skillItem, -2, tgtId);
+              descStr = `【${useTgt?.name ?? ""}】发起对抗：【${skillItem.name}】`
+                      + (queued ? "（结算后）" : "");
             }
             break;
           }
@@ -3367,6 +3370,8 @@ export class ClashManager {
 
     // 本次对抗内的零散承受（追击、引爆伤害…）合并成一张卡，不各发各的
     ClashManager._beginTakeAgg();
+    // ④效果 useSkill 发起的新对抗排队，等【结算结果】之后再弹
+    ClashManager._beginSkillLaunchQueue();
     // 本场对抗中的【流血】发作先攒起来，等【结算结果】之后再公示
     ClashManager._beginBleedBuf();
     // [受到伤害时] 的效果带到承受结算卡上（伤害要等【结算结果】才应用，
@@ -3552,7 +3557,9 @@ export class ClashManager {
       await ClashManager._flushTakeAgg();
       ClashManager._armReactionCheck({ lastSkillUuid: atkItem?.uuid ?? null, attacker: atkActor, defender: defActor });
       await ClashManager._resolveDirectCounter(atkActor, defActor, effectiveInitFlags, defItem, defFinalRoll, defFinalFormula, _actMsgs);
-      await ClashManager._flushReactionCheck();
+      await ClashManager._flushSkillLaunches();
+      await ClashManager._flushSkillLaunches();
+    await ClashManager._flushReactionCheck();
       return;
     }
     if (defCategory === "block") {
@@ -3565,7 +3572,9 @@ export class ClashManager {
       await ClashManager._flushTakeAgg();
       ClashManager._armReactionCheck({ lastSkillUuid: atkItem?.uuid ?? null, attacker: atkActor, defender: defActor });
       await ClashManager._resolveDirectBlock(atkActor, defActor, effectiveInitFlags, defItem, defFinalRoll, defFinalFormula, _actMsgs);
-      await ClashManager._flushReactionCheck();
+      await ClashManager._flushSkillLaunches();
+      await ClashManager._flushSkillLaunches();
+    await ClashManager._flushReactionCheck();
       return;
     }
 
@@ -3716,6 +3725,7 @@ export class ClashManager {
     await ClashManager._sendResolveMsg(
       resolution, finalInitFlags, defActor, defItem, defFormula, sanityNotes, _actMsgs, _takeEffectRows,
       _ubCounter);
+    await ClashManager._flushSkillLaunches();
     await ClashManager._flushReactionCheck();
   }
 
@@ -4276,6 +4286,7 @@ export class ClashManager {
           bleedMsgs:     noTake ? [] : _bleedResolve,
           // 反应检查交给【结算结果】：扣完血再扫，前置条件读到的才是新数值
           reactionCheck: noTake ? null : ClashManager._takeReactionCheck(),
+          skillLaunches: noTake ? null : ClashManager._takeSkillLaunches(),
           // 【不可摧毁】反击的伤害跟着同一个【结算结果】一起落地
           unbreakable:   ubCounter ? {
             targetActorId: ubCounter.targetActor?.id ?? "",
@@ -4743,6 +4754,7 @@ export class ClashManager {
     const _statSnap2 = ClashManager.snapItemStats(atkItem2);
 
     ClashManager._beginTakeAgg();
+    ClashManager._beginSkillLaunchQueue();
     // 单方面攻击同样是攻击动作，攻击方的【流血】要发作（守方没出手，不发作）
     ClashManager._beginBleedBuf();
     const _takeEffectRows2 = [];
@@ -4922,6 +4934,7 @@ export class ClashManager {
       } : null,
     });
 
+    await ClashManager._flushSkillLaunches();
     await ClashManager._flushReactionCheck();
   }
 
@@ -5024,6 +5037,7 @@ export class ClashManager {
           weightSpread,
           bleedMsgs:     ClashManager._takeBleedBuf(),
           reactionCheck: ClashManager._takeReactionCheck(),
+          skillLaunches: ClashManager._takeSkillLaunches(),
           directRedo:    { initFlags },
         },
       },
@@ -6109,6 +6123,7 @@ export class ClashManager {
           damageToAtkActor,
           bleedMsgs:      ClashManager._takeBleedBuf(),
           reactionCheck:  ClashManager._takeReactionCheck(),
+          skillLaunches:  ClashManager._takeSkillLaunches(),
           // 整局重掷（仅 GM）：与拼点对抗卡同一套
           redoData: {
             defActorId: defActor?.id ?? "",
@@ -6282,6 +6297,7 @@ export class ClashManager {
           damage:        finalDamage,
           bleedMsgs:     finalDamage > 0 ? _bleed : [],
           reactionCheck: finalDamage > 0 ? ClashManager._takeReactionCheck() : null,
+          skillLaunches: finalDamage > 0 ? ClashManager._takeSkillLaunches() : null,
         },
       },
     });
@@ -6374,6 +6390,49 @@ export class ClashManager {
           ${ClashManager._goldDivider()}
         </div>`,
     });
+  }
+
+  /* ─── 由效果发起的新对抗的延后 ─────────────────────────────────────────
+   * ④效果 useSkill（非守备技能）会直接弹【发起对抗】。挂在 [拼点失败] 之类的
+   * 时机上时，这一击会在本场伤害都还没落地（【结算结果】没点）的时候就打出去，
+   * 等于下一轮抢在结算前开始。与反应检查同样处理：有【结算结果】就排队等按钮，
+   * 没有按钮才当场发起。
+   * ──────────────────────────────────────────────────────────────────── */
+
+  /** @type {{actorId:string,itemId:string,tgtId:string}[]|null} */
+  static _pendingLaunches = null;
+
+  static _beginSkillLaunchQueue() { ClashManager._pendingLaunches = []; }
+
+  /** 效果侧调用：排得进队列返回 true（表示已延后），否则调用方当场发起 */
+  static queueSkillLaunch(actor, item, tgtId = "") {
+    if (!ClashManager._pendingLaunches || !actor || !item) return false;
+    ClashManager._pendingLaunches.push({ actorId: actor.id, itemId: item.id, tgtId: tgtId ?? "" });
+    return true;
+  }
+
+  static _takeSkillLaunches() {
+    const q = ClashManager._pendingLaunches;
+    ClashManager._pendingLaunches = null;
+    return q?.length ? q : null;
+  }
+
+  /** 建卡之后：没被卡片接走（无结算按钮）就当场发起 */
+  static async _flushSkillLaunches() {
+    const q = ClashManager._takeSkillLaunches();
+    if (q) await ClashManager.runSkillLaunches(q);
+  }
+
+  /** 由 flags 还原并依次弹出【发起对抗】——【结算结果】按钮走这条 */
+  static async runSkillLaunches(list) {
+    for (const e of (list ?? [])) {
+      const actor = game.actors.get(e?.actorId ?? "");
+      const item  = actor?.items?.get(e?.itemId ?? "");
+      if (!actor || !item) continue;
+      const curAP = actor.system?.ap?.value ?? 0;
+      if (curAP <= 0) await ClashManager._safeDocUpdate(actor, { "system.ap.value": 1 });
+      await ClashManager.showInitiateDialog(actor, item, -2, e.tgtId ?? "");
+    }
   }
 
   /* ─── 反应检查的延后：等【结算结果】按下去再扫 ─────────────────────────
