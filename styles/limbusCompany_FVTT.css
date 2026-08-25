@@ -5636,59 +5636,34 @@ body.cg-dragging-active .limbuscompany .cg-item-tile:hover {
 }
 
 /* ============================================================
-   §3-V  恐慌鉴定聊天卡片 — limbus-panic-check-card
+   §3-V  恐慌鉴定聊天卡片 — limbus-panic-card
+   蓝色系（沿用旧版 limbus-panic-check-card 的配色）：
+   每人一行 40px 头像 + 名称 + 结果，下一行 OOO OOO 计数点。
    ============================================================ */
 
-.chat-message .message-content:has(.limbus-panic-check-card) {
+.chat-message .message-content:has(.limbus-panic-card) {
   padding: 0;
 }
 
-.limbus-panic-check-card {
+.limbus-panic-card {
   background: linear-gradient(180deg, #121A24 0%, #090C11 100%);
   border: 1px solid #1E4A6E;
   border-radius: 6px;
   overflow: hidden;
   font-family: var(--font-main);
   color: var(--text-main);
-}
-
-.limbus-panic-check-card .ic-header {
-  display: flex;
-  align-items: center;
-  gap: 10px;
   padding: 10px 12px 8px;
 }
 
-.limbus-panic-check-card .ic-actor-avatar {
-  width: 50px;
-  height: 50px;
-  border-radius: 50%;
-  object-fit: cover;
-  border: 2px solid #1E4A6E;
-  flex-shrink: 0;
-}
-
-.limbus-panic-check-card .ic-actor-info {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-}
-
-.limbus-panic-check-card .ic-title {
+.limbus-panic-card .pc-title {
   font-size: 20px;
   font-weight: bold;
   color: #A2C9E8;
   line-height: 1.2;
+  margin-bottom: 10px;
 }
 
-.limbus-panic-check-card .ic-player {
-  font-size: 13px;
-  color: #A1CAE8;
-  opacity: 0.65;
-}
-
-.limbus-panic-check-card .ic-blue-divider {
+.limbus-panic-card .pc-divider {
   height: 1px;
   background: linear-gradient(
     to right,
@@ -5698,60 +5673,73 @@ body.cg-dragging-active .limbuscompany .cg-item-tile:hover {
     #20507A 75%,
     transparent 100%
   );
-  margin: 0 0 8px;
+  margin: 8px 0;
 }
 
-/* 结果行：1d10 结果 + 智力 + 判定结果 */
-.limbus-panic-check-card .panic-check-result-row {
+/* ── 一行结果 ── */
+.limbus-panic-card .pc-row {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 4px 14px 10px;
 }
 
-.limbus-panic-check-card .panic-check-roll {
+.limbus-panic-card .pc-row + .pc-dots { margin-top: 4px; }
+.limbus-panic-card .pc-gap { height: 10px; }
+
+.limbus-panic-card .pc-avatar {
+  width: 40px;
+  height: 40px;
+  object-fit: cover;
+  border-radius: 4px;
+  border: 1px solid #1E4A6E;
+  flex-shrink: 0;
+}
+
+.limbus-panic-card .pc-name {
+  flex: 1;
   font-size: 14px;
+  color: #A1CAE8;
+}
+
+.limbus-panic-card .pc-note {
+  font-size: 13px;
   color: #9AB4C6;
 }
 
-.limbus-panic-check-card .panic-check-arrow {
-  font-size: 14px;
-  color: #4A6A7A;
-}
-
-.limbus-panic-check-card .panic-check-outcome {
-  font-size: 18px;
+.limbus-panic-card .pc-label {
+  font-size: 16px;
   font-weight: bold;
   line-height: 1;
 }
 
-.limbus-panic-check-card .panic-check-outcome.is-resolve {
-  color: #5DADE2;
-}
+.limbus-panic-card .pc-label.is-resolve { color: #5DADE2; }
+.limbus-panic-card .pc-label.is-fear    { color: #E74C3C; }
 
-.limbus-panic-check-card .panic-check-outcome.is-fear {
-  color: #E74C3C;
-}
-
-/* 状态行：公布当前坚定/恐慌计数 */
-.limbus-panic-check-card .panic-check-status-row {
+/* ── OOO OOO 计数点：左组坚定（蓝）/ 右组恐慌（红） ── */
+.limbus-panic-card .pc-dots {
   display: flex;
   align-items: center;
-  justify-content: center;
-  gap: 18px;
-  padding: 0 14px 10px;
-  font-size: 13px;
+  gap: 10px;
+  padding-left: 48px;
+  line-height: 1;
 }
 
-.limbus-panic-check-card .panic-status-resolve {
-  color: #5DADE2;
-  font-weight: bold;
+.limbus-panic-card .pc-dot-grp {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
 }
 
-.limbus-panic-check-card .panic-status-fear {
-  color: #E74C3C;
-  font-weight: bold;
+.limbus-panic-card .pc-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  border: 1px solid currentColor;
 }
+
+.limbus-panic-card .pc-dot.on { background: currentColor; }
+.limbus-panic-card .pc-dot-grp.is-resolve { color: #5DADE2; }
+.limbus-panic-card .pc-dot-grp.is-fear    { color: #E74C3C; }
 
 /* ══════════════════════════════════════════════════════════════════════════
    全局罪孽资源 HUD

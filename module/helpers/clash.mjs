@@ -4172,7 +4172,7 @@ export class ClashManager {
    * 占位符会被清洗、跨客户端还有写权限问题，失败时整块静默消失。
    * @param {object[]} actMsgs
    */
-  static _buildDetailsFold(actMsgs, { label = "详细信息" } = {}) {
+  static _buildDetailsFold(actMsgs, { label = "详细信息", color = "#C9A84C" } = {}) {
     if (!actMsgs?.length) return "";
 
     const order = ClashManager.TRIGGER_ORDER;
@@ -4201,10 +4201,10 @@ export class ClashManager {
     return `
       <div class="limbus-detail-toggle-row"
            style="display:flex;align-items:center;gap:6px;cursor:pointer;margin:6px 0 0;user-select:none;">
-        <div style="flex:1;height:1px;background:linear-gradient(to right,transparent,#C9A84C);"></div>
+        <div style="flex:1;height:1px;background:linear-gradient(to right,transparent,${color});"></div>
         <span class="limbus-detail-toggle"
-              style="font-size:.72rem;color:#C9A84C;padding:0 4px;line-height:1;">▼ ${label}（${n}）</span>
-        <div style="flex:1;height:1px;background:linear-gradient(to left,transparent,#C9A84C);"></div>
+              style="font-size:.72rem;color:${color};padding:0 4px;line-height:1;">▼ ${label}（${n}）</span>
+        <div style="flex:1;height:1px;background:linear-gradient(to left,transparent,${color});"></div>
       </div>
       <div class="limbus-detail-section"
            style="display:none;font-size:.8rem;line-height:1.8;padding:6px 8px;
@@ -5452,46 +5452,40 @@ export class ClashManager {
     await ClashManager._sendPanicCard(agg);
   }
 
-  /** OOO OOO：坚定三点（绿）+ 恐慌三点（红），已计数的点亮 */
+  /** OOO OOO：坚定三点（蓝）+ 恐慌三点（红），已计数的点亮 */
   static _panicDots({ fear = 0, resolve = 0 } = {}) {
-    const grp = (n, color) => Array.from({ length: 3 }, (_, i) => `
-      <span style="display:inline-block;width:9px;height:9px;border-radius:50%;
-                   border:1px solid ${color};margin-right:3px;
-                   background:${i < n ? color : "transparent"};"></span>`).join("");
-    return `
-      <div style="display:flex;align-items:center;gap:10px;padding-left:48px;line-height:1;">
-        <span style="display:inline-flex;align-items:center;">${grp(resolve, "#6EE06E")}</span>
-        <span style="display:inline-flex;align-items:center;">${grp(fear, "#E84444")}</span>
-      </div>`;
+    const grp = (n, cls) => `<span class="pc-dot-grp ${cls}">` + Array.from(
+      { length: 3 }, (_, i) => `<span class="pc-dot${i < n ? " on" : ""}"></span>`
+    ).join("") + `</span>`;
+    return `<div class="pc-dots">${grp(resolve, "is-resolve")}${grp(fear, "is-fear")}</div>`;
   }
 
   static async _sendPanicCard({ rows, fear, resolve }) {
     const rowsHtml = rows.map((r, i) => {
-      const color = r.kind === "fear" ? "#E84444" : "#6EE06E";
+      const cls = r.kind === "fear" ? "is-fear" : "is-resolve";
       return `
-        ${i ? '<div style="height:10px;"></div>' : ""}
-        <div style="display:flex;align-items:center;gap:8px;">
-          <img src="${r.actor.img}" alt="${r.actor.name}"
-               style="width:40px;height:40px;object-fit:cover;border-radius:4px;
-                      border:1px solid ${color};">
-          <span style="color:#E8C9A2;font-size:.85rem;flex:1;">${r.actor.name}</span>
-          ${r.note ? `<span style="font-size:.72rem;color:#9A8462;">${r.note}</span>` : ""}
-          <span style="font-size:.8rem;color:${color};font-weight:bold;">${r.label}</span>
+        ${i ? '<div class="pc-gap"></div>' : ""}
+        <div class="pc-row">
+          <img class="pc-avatar" src="${r.actor.img}" alt="${r.actor.name}">
+          <span class="pc-name">${r.actor.name}</span>
+          ${r.note ? `<span class="pc-note">${r.note}</span>` : ""}
+          <span class="pc-label ${cls}">${r.label}</span>
         </div>
         ${ClashManager._panicDots(r.counters)}`;
     }).join("");
 
-    const foldFear    = ClashManager._buildDetailsFold(fear,    { label: "恐慌触发" });
-    const foldResolve = ClashManager._buildDetailsFold(resolve, { label: "坚定触发" });
+    // 折叠沿用卡片的蓝色调；某个时机没有效果消息时那一条不渲染
+    const foldOpts = { color: "#5DADE2" };
+    const foldFear    = ClashManager._buildDetailsFold(fear,    { label: "恐慌触发",  ...foldOpts });
+    const foldResolve = ClashManager._buildDetailsFold(resolve, { label: "坚定触发",  ...foldOpts });
 
     await ClashManager._safeChatCreate({
       content: `
-        <div class="limbus-initiative-card" style="padding:10px 12px 8px;">
-          <div class="ic-title" style="font-size:20px;">恐慌鉴定</div>
-          <div style="height:10px;"></div>
-          <div class="ic-gold-divider"></div>
+        <div class="limbus-panic-card">
+          <div class="pc-title">恐慌鉴定</div>
+          <div class="pc-divider"></div>
           ${rowsHtml}
-          <div class="ic-gold-divider"></div>
+          <div class="pc-divider"></div>
           ${foldFear}${foldResolve}
         </div>`,
     });
