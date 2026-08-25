@@ -2309,14 +2309,43 @@ export class ClashManager {
     await ClashManager._tickFieldResources("bleed", dmg, 1);
     if (actor.checkAndTriggerChaos) await actor.checkAndTriggerChaos(newHp, oldHp, { silent: true });
 
-    await ClashManager._safeChatCreate({
-      speaker: ChatMessage.getSpeaker({ actor }),
-      content: `<div class="limbuscompany chat-clash">
-        <strong>${actor.name}</strong>【流血】发作：受到 <strong>${dmg}</strong> 点固定伤害。
-        （HP ${oldHp} → ${newHp}）${bleedChaosCount > 0 ? `　<span style='color:#E84444;font-weight:bold;'>——【${bleedChaosName}】！</span>` : ""}
-      </div>`,
-    });
+    const line = `<strong>${actor.name}</strong>【流血】发作：受到 <strong>${dmg}</strong> 点固定伤害。`
+      + `（HP ${oldHp} → ${newHp}）`
+      + (bleedChaosCount > 0 ? `　<span style="color:#E84444;font-weight:bold;">——【${bleedChaosName}】！</span>` : "");
+
+    // 对抗流程里发作的流血先攒着，等【结算结果】按下去才和扣血一起公示；
+    // 缓冲没开（非对抗路径）才立刻单发一条。
+    if (ClashManager._bleedBuf) ClashManager._bleedBuf.push(line);
+    else await ClashManager._sendBleedMsgs([line], actor);
     return dmg;
+  }
+
+  /* ─── 【流血】发作消息缓冲：攒到【结算结果】之后再公示 ─────────────────── */
+
+  /** @type {string[]|null} */
+  static _bleedBuf = null;
+
+  static _beginBleedBuf() {
+    // 兜底：上一场若走了没有结算卡的分支，攒下的内容不至于永远消失
+    const left = ClashManager._bleedBuf;
+    ClashManager._bleedBuf = [];
+    if (left?.length) ClashManager._sendBleedMsgs(left);
+  }
+
+  /** 取走缓冲内容并关闭缓冲（塞进卡片 flags，等结算时再发） */
+  static _takeBleedBuf() {
+    const buf = ClashManager._bleedBuf ?? [];
+    ClashManager._bleedBuf = null;
+    return buf;
+  }
+
+  /** 把攒下的流血发作合成一条消息发出 */
+  static async _sendBleedMsgs(lines, actor = null) {
+    if (!lines?.length) return;
+    await ClashManager._safeChatCreate({
+      speaker: actor ? ChatMessage.getSpeaker({ actor }) : undefined,
+      content: `<div class="limbuscompany chat-clash">${lines.map(l => `<div>${l}</div>`).join("")}</div>`,
+    });
   }
 
   static _effectDesc(item) {
@@ -3267,6 +3296,8 @@ export class ClashManager {
 
     // 本次对抗内的零散承受（追击、引爆伤害…）合并成一张卡，不各发各的
     ClashManager._beginTakeAgg();
+    // 本场对抗中的【流血】发作先攒起来，等【结算结果】之后再公示
+    ClashManager._beginBleedBuf();
     // [受到伤害时] 的效果带到承受结算卡上（伤害要等【结算结果】才应用，
     // 所以先存进卡的 flags，按钮按下时再一起呈现）
     const _takeEffectRows = [];
@@ -4146,6 +4177,8 @@ export class ClashManager {
           damage:        finalDamage,
           takeEffects,
           weightSpread,
+          // 本场对抗中发作的【流血】：等【结算结果】按下去才公示
+          bleedMsgs:     ClashManager._takeBleedBuf(),
           // 整局重掷所需：重新骰一次双方，再跑一遍完整流程（仅 GM）
           redoData: {
             defActorId: defActor?.id ?? "",
@@ -4650,6 +4683,21 @@ export class ClashManager {
     // [命中时]：承受始终命中
     await ClashManager._applyActivitiesAndEquip(atkItem2, "命中时", atkCtx2);
 
+    // 【呼吸法】暴击：本体就是 [命中时] 的判定，[暴击命中时] 是它的衍生。
+    // 判定必须在伤害计算之前——暴击倍率要和拼点路径一样参与最终伤害。
+    let critMult2 = 1.0;
+    const breatheBuff2 = atkActor ? ClashManager._getBuff(atkActor, "breathing") : null;
+    if (breatheBuff2 && (breatheBuff2.stacks ?? 0) > 0
+        && Math.random() < (breatheBuff2.intensity ?? 1) * 0.05) {
+      critMult2 = 1.5;
+      await ClashManager._reduceBuffStacks(atkActor, "breathing");
+      await ClashManager._applyActivitiesAndEquip(atkItem2, "暴击命中时", atkCtx2);
+      _actMsgs2.push({
+        trigger: "暴击命中时", itemName: "呼吸法",
+        msgs: ["【呼吸法】暴击：伤害 ×1.5，消耗 1 层"],
+      });
+    }
+
     // ── 攻击方 BUFF 修正（承受不拼点，拼点威力↑↓不计入）──────────────────
     const strong  = atkActor ? gs(atkActor, "strong") : 0;
     const weak    = atkActor ? gs(atkActor, "weak")   : 0;
@@ -4669,7 +4717,9 @@ export class ClashManager {
     // ── 守护（层数）/ 易损（层数） ──────────────────────────────────────
     const guard   = gs(defActor, "guard");
     const fragile = gs(defActor, "fragile");
-    const adjustedAtk = Math.max(0, effectiveAtk + fragile - guard);
+    // 计算顺序与拼点路径一致：有效骰数 → 暴击倍率 → +易损-守护 → ×抗性
+    const critAtk     = Math.round(effectiveAtk * critMult2);
+    const adjustedAtk = Math.max(0, critAtk + fragile - guard);
 
     // ── 物理抗性 & 罪孽抗性 ────────────────────────────────────────────
     const effRes    = ClashManager._getEffectiveResistances(defActor);
@@ -4703,6 +4753,12 @@ export class ClashManager {
       calcNotes.push(`等级差：防御等级${defLv} > 攻击等级${atkLv}，无加成`);
     }
 
+    if (critMult2 !== 1.0) {
+      const prev = step;
+      step = critAtk;
+      calcNotes.push(`【呼吸法】暴击 ×1.5：${prev} → ${step}`);
+    }
+
     if (fragile > 0 || guard > 0) {
       const prev = step;
       step = adjustedAtk;
@@ -4717,16 +4773,6 @@ export class ClashManager {
       if (physMult !== 1.0) resParts.push(`${PHYS_LABELS[category] ?? category}抗性${physResStr}`);
       if (sinMult  !== 1.0) resParts.push(`${SIN_LABELS[sinType]  ?? sinType}罪孽抗性${sinResStr}`);
       calcNotes.push(`${resParts.join(" × ")}：${step} → ${finalDamage}`);
-    }
-
-    // [暴击命中时]：检查攻击方是否有【呼吸法】触发暴击
-    const breatheBuff2 = atkActor ? ClashManager._getBuff(atkActor, "breathing") : null;
-    if (breatheBuff2 && breatheBuff2.stacks > 0) {
-      const critChance = (breatheBuff2.intensity ?? 0) * 0.05;
-      if (Math.random() < critChance) {
-        await ClashManager._reduceBuffStacks(atkActor, "breathing");
-        await ClashManager._applyActivitiesAndEquip(atkItem2, "暴击命中时", atkCtx2);
-      }
     }
 
     // [受到伤害时]：承受方受伤（技能 + 装备格物品 + BUFF 的 onTakeDamage）
@@ -5933,6 +5979,7 @@ export class ClashManager {
           atkActorId:     atkActor?.id ?? "",
           damageToDefActor,
           damageToAtkActor,
+          bleedMsgs:      ClashManager._takeBleedBuf(),
           // 整局重掷（仅 GM）：与拼点对抗卡同一套
           redoData: {
             defActorId: defActor?.id ?? "",
