@@ -430,9 +430,26 @@ Hooks.on("renderChatMessage", (_message, html, _data) => {
     });
   }
 
-  // ── 拼点结算聊天框：承受（扣血）──
+  // ── 拼点结算聊天框：结算结果（自动扣血）/ 重新骰掷（仅 GM）──
   if (flags.type === "clash-resolve") {
-    html.find(".clash-btn-apply-damage").on("click", async (e) => {
+    // 详细信息折叠（与「▼ 理智」同一套视觉）
+    html.find(".limbus-detail-toggle-row").on("click", function () {
+      const $sec = $(this).next(".limbus-detail-section");
+      const open = $sec.toggle().is(":visible");
+      $(this).find(".limbus-detail-toggle").text(open ? "▲ 详细信息" : "▼ 详细信息");
+    });
+    // 整局重掷：仅 GM，按钮本身也只渲染给 GM
+    html.find(".clash-btn-redo").on("click", async () => {
+      if (!game.user.isGM) return;
+      const ok = await Dialog.confirm({
+        title:   "重新骰掷",
+        content: "<p>把这一场对抗从头再打一遍？</p>"
+               + "<p style='color:#B84444;font-size:.85rem;'>上一次已经发生的效果不会回滚"
+               + "（加出去的 BUFF、扣掉的资源都还在），重打会再触发一次。</p>",
+      });
+      if (ok) await ClashManager.redoClash(flags.redoData);
+    });
+    html.find(".clash-btn-settle").on("click", async (e) => {
       const targetActorId = e.currentTarget.dataset.targetActorId ?? flags.targetActorId;
       const damage        = parseInt(e.currentTarget.dataset.damage ?? flags.damage) || 0;
       await ClashManager.handleApplyDamage(targetActorId, damage);

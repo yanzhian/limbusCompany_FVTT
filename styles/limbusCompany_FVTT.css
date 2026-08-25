@@ -9712,3 +9712,12 @@ input.item-piles-quantity {
 .lc-btn-row .lc-btn.primary { background: #5F3E22; color: #E8C9A2; border: 1px solid #C9A84C; flex: 1; }
 .lc-btn-row .lc-btn.dim     { background: #241B12; color: #9A8462; border: 1px solid #5A3A1A; }
 .lc-btn-row .lc-btn.dim:hover { color: #C9A84C; border-color: #8A7231; }
+
+/* 拼点对抗卡「▼ 详细信息」折叠区：按触发时机分组 */
+.lc-trig-g + .lc-trig-g { margin-top: 5px; }
+.lc-trig-g > .k {
+  font-size: .78rem; color: #C9A84C; font-weight: bold; line-height: 1.4;
+  border-left: 2px solid #C9A84C; padding-left: 6px;
+}
+.lc-trig-g > .v { color: #E8C9A2; padding-left: 14px; font-size: .78rem; line-height: 1.65; }
+.lc-trig-g > .v .src { color: #6A5A48; }

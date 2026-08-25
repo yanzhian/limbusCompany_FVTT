@@ -3538,7 +3538,7 @@ export class ClashManager {
       if (lossNote) sanityNotes.push(lossNote);
     }
 
-    await ClashManager._sendResolveMsg(resolution, finalInitFlags, defActor, defItem, defFormula, sanityNotes);
+    const _resolveMsg = await ClashManager._sendResolveMsg(resolution, finalInitFlags, defActor, defItem, defFormula, sanityNotes);
 
     // 【不可摧毁】反击消息在拼点对抗结果之后发出
     if (_unbreakableCounterArgs) {
@@ -3550,8 +3550,8 @@ export class ClashManager {
     await ClashManager._applyActivitiesAndEquip(defItem,  "攻击后", defCtx);
     await ClashManager._restoreAllItemMods(atkItem, defItem);
 
-    // 统一发出本次对抗所有 activity 通知（汇总为一条，避免并发清理竞态）
-    await ClashManager._flushActMsgs(_actMsgs, atkActor);
+    // 详细信息并入拼点对抗卡的折叠区，不再单发一条汇总消息
+    await ClashManager._injectResolveDetails(_resolveMsg, _actMsgs);
     await ClashManager._broadcastAndCheckReactions({ lastSkillUuid: atkItem?.uuid ?? null, attacker: atkActor, defender: defActor });
   }
 
@@ -3956,17 +3956,27 @@ export class ClashManager {
       itemImg:    defItemImg    ?? "",
     } : null;
 
+    // 结算结果：直接扣血，不需要人再选一次 Token（handleApplyDamage 本来就优先用
+    // flags 里的目标 id）。重新骰掷仅 GM 可见——玩家能随意重摇结果，规则就没意义了。
+    const isGM = game.user?.isGM ?? false;
     const takeSection = noTake
-        ? `<div style="padding:4px 0;">
+        ? `<div style="padding:4px 0;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
              <span style="font-size:.85rem;color:#6EE06E;font-weight:bold;">✓ 防守成功，无伤害</span>
+             ${isGM ? `<button class="clash-btn-redo lc-btn dim"
+                       style="margin-left:auto;height:30px;padding:0 14px;background:#241B12;color:#9A8462;
+                              border:1px solid #5A3A1A;border-radius:2px;cursor:pointer;font-size:.85rem;">重新骰掷</button>` : ""}
            </div>`
-        : `<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-             <button class="clash-btn-apply-damage"
+        : `<div class="lc-btn-row" style="display:flex;gap:8px;align-items:stretch;">
+             <button class="clash-btn-settle lc-btn primary"
                      data-target-actor-id="${loser?.id ?? ""}"
                      data-damage="${finalDamage}"
-                     style="width:48px;height:30px;background:#B84444;color:#fff;
-                            border:none;cursor:pointer;font-size:.85rem;border-radius:2px;flex-shrink:0;">承受</button>
-             <span style="font-size:.7rem;color:#6A5A48;">先选中 Token，再点击按钮扣除 ${finalDamage} 点生命值</span>
+                     style="flex:1;height:30px;padding:0 14px;background:#5F3E22;color:#E8C9A2;
+                            border:1px solid #C9A84C;border-radius:2px;cursor:pointer;font-size:.85rem;">
+               结算结果
+             </button>
+             ${isGM ? `<button class="clash-btn-redo lc-btn dim"
+                       style="height:30px;padding:0 14px;background:#241B12;color:#9A8462;
+                              border:1px solid #5A3A1A;border-radius:2px;cursor:pointer;font-size:.85rem;">重新骰掷</button>` : ""}
            </div>`;
 
     const content = `
@@ -4001,6 +4011,7 @@ export class ClashManager {
         <div style="font-size:.8rem;color:#9A8462;line-height:1.7;margin:4px 0 8px;">
           ${notes.map(n => `<div>${n}</div>`).join("")}
         </div>
+        <!--LC_DETAILS-->
         ${sanityNotes.length ? `
         <div class="limbus-sanity-toggle-row"
              style="display:flex;align-items:center;gap:6px;cursor:pointer;margin:4px 0 0;user-select:none;">
@@ -4017,7 +4028,7 @@ export class ClashManager {
         ${takeSection}
       </div>`;
 
-    await ClashManager._safeChatCreate({
+    return await ClashManager._safeChatCreate({
       speaker: ChatMessage.getSpeaker({ actor: atkActor }),
       content,
       flags: {
@@ -4026,9 +4037,74 @@ export class ClashManager {
           targetActorId: loser?.id ?? "",
           damage:        finalDamage,
           weightSpread,
+          // 整局重掷所需：重新骰一次双方，再跑一遍完整流程（仅 GM）
+          redoData: {
+            defActorId: defActor?.id ?? "",
+            defItemId:  defItem?.id  ?? "",
+            defFormula: defFormula   ?? "",
+            initFlags,
+          },
         },
       },
     });
+  }
+
+  /* ─── 详细信息：按触发时机排序，注入拼点对抗卡的折叠区 ───────────────── */
+
+  /** 卡面上的触发时机顺序，详细信息按它排序 */
+  static TRIGGER_ORDER = [
+    "攻击前", "攻击时", "拼点时", "拼点成功", "拼点失败",
+    "命中时", "暴击命中时", "攻击后",
+  ];
+
+  /**
+   * 把本次对抗收集到的 activity 消息注入拼点对抗卡的「▼ 详细信息」折叠区。
+   * 之所以是"注入"而不是建卡时就写好：[攻击后] 在结算卡发出之后才触发，
+   * 建卡那一刻还拿不全。
+   */
+  static async _injectResolveDetails(msg, actMsgs) {
+    if (!msg || !actMsgs?.length) return;
+
+    const order = ClashManager.TRIGGER_ORDER;
+    const rank  = (t) => { const i = order.indexOf(t); return i < 0 ? order.length : i; };
+
+    // 同一触发时机的多条合并到一组，组间按卡面顺序排
+    const groups = new Map();
+    for (const e of actMsgs) {
+      if (!groups.has(e.trigger)) groups.set(e.trigger, []);
+      for (const m of (e.msgs ?? [])) {
+        const src = `${e.ownerName && e.ownerName !== e.itemName ? `${e.ownerName}·` : ""}${e.itemName ?? ""}`;
+        groups.get(e.trigger).push({ m, src });
+      }
+    }
+    const body = [...groups.entries()]
+      .sort((a, b) => rank(a[0]) - rank(b[0]))
+      .map(([trigger, rows]) => `
+        <div class="lc-trig-g">
+          <div class="k">${trigger}</div>
+          ${rows.map(r => `<div class="v">${r.m}${r.src ? ` <span class="src">· ${r.src}</span>` : ""}</div>`).join("")}
+        </div>`).join("");
+
+    const html = `
+      <div class="limbus-detail-toggle-row"
+           style="display:flex;align-items:center;gap:6px;cursor:pointer;margin:6px 0 0;user-select:none;">
+        <div style="flex:1;height:1px;background:linear-gradient(to right,transparent,#C9A84C);"></div>
+        <span class="limbus-detail-toggle"
+              style="font-size:.72rem;color:#C9A84C;padding:0 4px;line-height:1;">▼ 详细信息</span>
+        <div style="flex:1;height:1px;background:linear-gradient(to left,transparent,#C9A84C);"></div>
+      </div>
+      <div class="limbus-detail-section"
+           style="display:none;font-size:.8rem;line-height:1.8;padding:6px 8px;
+                  background:rgba(0,0,0,.25);border-radius:3px;margin:4px 0 0;">
+        ${body}
+      </div>`;
+
+    try {
+      const content = (msg.content ?? "").replace("<!--LC_DETAILS-->", html);
+      await msg.update({ content });
+    } catch (err) {
+      console.warn("limbusCompany_FVTT | 注入详细信息失败", err);
+    }
   }
 
   /** 丢掉 removed 这一格之后，"宣言时就在场"的下标表怎么变（右边整体左移一格） */
@@ -4232,6 +4308,46 @@ export class ClashManager {
       update[`system.egoResistances.${sinType}`] = multiplier;
     }
     if (Object.keys(update).length) await ClashManager._safeDocUpdate(actor, update);
+  }
+
+  /* ─── 整局重掷（仅 GM，剧情关卡放水用）───────────────────────────────── */
+
+  /**
+   * 把这一场对抗从头再打一遍：双方重新骰掷，完整流程再走一次。
+   *
+   * ⚠️ 这是**重打**，不是撤销。上一次已经发生的事不会回滚——加出去的 BUFF、
+   * 扣掉的资源、已经引爆的震颤都还在，重打一遍还会再来一次。回滚做不干净
+   * （很多效果不可逆），所以这里选择诚实地重打，由 GM 自行裁定要不要手动收拾。
+   * 也因此它只给 GM：玩家能随意重摇自己不满意的结果，规则就没意义了。
+   */
+  static async redoClash(redoData) {
+    if (!game.user?.isGM) {
+      ui.notifications?.warn("只有 GM 可以重新骰掷。");
+      return;
+    }
+    if (!redoData?.initFlags) return;
+
+    const { defActorId, defItemId, defFormula, initFlags } = redoData;
+    const defActor = game.actors.get(defActorId ?? "");
+    const defItem  = defActor?.items?.get(defItemId ?? "");
+    if (!defActor || !defItem) {
+      ui.notifications?.warn("找不到防守方或其技能，无法重新骰掷。");
+      return;
+    }
+
+    // 攻击方：按原公式重骰，写回 initFlags.rollTotal
+    const atkFormula = initFlags.formula ?? initFlags.diceFormula ?? "";
+    const flags2 = foundry.utils.deepClone(initFlags);
+    if (atkFormula) {
+      const atkRoll = await new Roll(atkFormula).evaluate();
+      flags2.rollTotal = atkRoll.total;
+    }
+
+    // 防守方：按原公式重骰
+    const defRoll = await new Roll(defFormula || "1d4").evaluate();
+
+    await ClashManager._sendResponseAndResolve(
+      defActor, defItem, defRoll, defFormula, initFlags.msgId ?? "", flags2, -1);
   }
 
   /* ─── 阶段六：直接承受（跳过对抗，玩家B点聊天框承受） ────────────────── */
