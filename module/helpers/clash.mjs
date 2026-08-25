@@ -3662,14 +3662,16 @@ export class ClashManager {
     await ClashManager._restoreAllItemMods(atkItem, defItem);
     await ClashManager.restoreItemSnaps(_statSnap);
 
+    // 【不可摧毁】反击：建卡之前先算好（只算不发），触发行、结算说明与伤害
+    // 全部并进【拼点对抗】卡，由同一个【结算结果】一起落地
+    const _ubCounter = _unbreakableCounterArgs
+      ? await ClashManager._computeUnbreakableCounter(..._unbreakableCounterArgs)
+      : null;
+
     await ClashManager._flushTakeAgg();
     await ClashManager._sendResolveMsg(
-      resolution, finalInitFlags, defActor, defItem, defFormula, sanityNotes, _actMsgs, _takeEffectRows);
-
-    // 【不可摧毁】反击消息在拼点对抗结果之后发出
-    if (_unbreakableCounterArgs) {
-      await ClashManager._triggerUnbreakableCounter(..._unbreakableCounterArgs);
-    }
+      resolution, finalInitFlags, defActor, defItem, defFormula, sanityNotes, _actMsgs, _takeEffectRows,
+      _ubCounter);
 
     await ClashManager._broadcastAndCheckReactions({ lastSkillUuid: atkItem?.uuid ?? null, attacker: atkActor, defender: defActor });
   }
@@ -3685,7 +3687,7 @@ export class ClashManager {
    *
    * 【不可摧毁】是个例外：它拼点失败照样能给对面造成伤害，所以只要它的币被
    * 打坏一枚，连击就当场结束——先由胜方结算伤害，随后再由【不可摧毁】那一方
-   * 结算自己的反击伤害（见 _triggerUnbreakableCounter）。连击途中只重新结算 [拼点时]（连带【流血】），其余触发时机
+   * 结算自己的反击伤害（见 _computeUnbreakableCounter）。连击途中只重新结算 [拼点时]（连带【流血】），其余触发时机
    * （命中时 / 拼点成功失败 / 攻击后 等）仍然只在最后结算一次，不会滚雪球。
    *
    * DiceSoNice 只在第一次交锋播放；胜负决出后，再单独为胜方演一次
@@ -4068,7 +4070,7 @@ export class ClashManager {
       </div>`;
   }
 
-  static async _sendResolveMsg(res, initFlags, defActor, defItem, defFormula, sanityNotes = [], actMsgs = [], takeEffects = []) {
+  static async _sendResolveMsg(res, initFlags, defActor, defItem, defFormula, sanityNotes = [], actMsgs = [], takeEffects = [], ubCounter = null) {
     const {
       atkWins, atkTotal, defTotal,
       atkItemName, atkItemImg, atkFormula, atkActor,
@@ -4080,7 +4082,9 @@ export class ClashManager {
     const isClashCounterWin = !atkWins && defCat === "clashCounter";
     const isClashBlockWin   = !atkWins && defCat === "clashBlock";
     const isDodgeWin        = !!dodgeWin;
-    const noTake            = isDodgeWin || isClashBlockWin;
+    // 拼点本身没伤害，但【不可摧毁】反击有——照样得给个【结算结果】把它落地
+    const ubDmg             = ubCounter?.finalDmg ?? 0;
+    const noTake            = (isDodgeWin || isClashBlockWin) && ubDmg <= 0;
 
     const atkTotalStyle = atkWins
       ? "font-size:2rem;font-weight:bold;color:#E8C9A2;"
@@ -4147,6 +4151,18 @@ export class ClashManager {
                               border:1px solid #5A3A1A;border-radius:2px;cursor:pointer;font-size:.85rem;">重新骰掷</button>` : ""}
            </div>`;
 
+    // 【不可摧毁】反击：结论行下面接触发行 + 结算说明，伤害并入下面的【结算结果】
+    const ubBlock = !ubCounter ? "" : `
+        <div style="margin:8px 0 4px;font-size:.82rem;color:#E8C9A2;">
+          <strong>${ubCounter.itemName}</strong>（不可摧毁骰）触发，对
+          <strong>${ubCounter.targetActor?.name ?? "?"}</strong> 发起反击
+          ${ubCounter.breatheCrit ? `<span style="color:#FFD066;font-weight:bold;">　暴击！</span>` : ""}
+        </div>
+        <div style="font-size:.78rem;color:#9A8462;line-height:1.7;margin:0 0 4px;">
+          <div style="color:#C9A84C;">结算说明</div>
+          ${ubCounter.calcNotes.map(n => `<div>${ClashManager._hlDamage(n)}</div>`).join("")}
+        </div>`;
+
     const content = `
       <div class="limbus-clash-card" data-clash-type="resolve">
         ${ClashManager._chatHeader(atkActor ?? { img: "", name: "?" }, resolveTitle)}
@@ -4197,6 +4213,7 @@ export class ClashManager {
         <div style="font-size:.8rem;color:#9A8462;line-height:1.7;margin:0 0 4px;">
           ${notes.map(n => `<div>${ClashManager._hlDamage(n)}</div>`).join("")}
         </div>` : ""}
+        ${ubBlock}
         ${takeSection}
       </div>`;
 
@@ -4214,6 +4231,11 @@ export class ClashManager {
           weightSpread,
           // 本场对抗中发作的【流血】：等【结算结果】按下去才公示
           bleedMsgs:     noTake ? [] : _bleedResolve,
+          // 【不可摧毁】反击的伤害跟着同一个【结算结果】一起落地
+          unbreakable:   ubCounter ? {
+            targetActorId: ubCounter.targetActor?.id ?? "",
+            damage:        ubCounter.finalDmg,
+          } : null,
           // 整局重掷所需：重新骰一次双方，再跑一遍完整流程（仅 GM）
           redoData: {
             defActorId: defActor?.id ?? "",
@@ -5367,10 +5389,17 @@ export class ClashManager {
    * - 变动值（面数）固定为 1：NdF+B → 每颗骰子固定投出 1 点 → 确定值 = 骰数N + 基础值B
    * - 反击最终值 = (骰数 + 基础值) + BUFF（强壮/虚弱） × 抗性（守护/易损）
    * - 可触发 loserItem 的 [命中时] / [暴击命中时] 效果
+   *
+   * **只算不发**：反击原先自己发一张头卡 + 一张承受结算 + 一条详细信息汇总，
+   * 三条消息挂在拼点对抗卡后面，读起来是断的。现在改为在建卡**之前**算好，
+   * 把触发行与结算说明并进【拼点对抗】卡，伤害交给同一个【结算结果】一起落地；
+   * [命中时]/[暴击命中时] 也直接推进主详细信息桶。
+   * @returns {{targetActor:Actor, itemName:string, finalDmg:number,
+   *            calcNotes:string[], breatheCrit:boolean}|null}
    */
-  static async _triggerUnbreakableCounter(loserItem, loserActor, targetActor, loserCtx) {
-    if (!loserItem || loserItem.system?.diceType !== "unbreakable") return;
-    if (!loserActor || !targetActor) return;
+  static async _computeUnbreakableCounter(loserItem, loserActor, targetActor, loserCtx) {
+    if (!loserItem || loserItem.system?.diceType !== "unbreakable") return null;
+    if (!loserActor || !targetActor) return null;
 
     // 解析技能公式，提取骰数（N）和基础值（B）
     // 支持格式：NdF、NdF+B、NdF-B（F=面数，被替换为1，故每骰=1点）
@@ -5428,10 +5457,9 @@ export class ClashManager {
     const adjustedBase = Math.max(0, critBase + fragile - guard);
     const finalDmg     = Math.max(0, Math.round(adjustedBase * physMult * sinMult));
 
-    // 触发 [命中时] / [暴击命中时]
-    // 本方法在拼点结算卡建好**之后**才跑，推进主 _actMsgs 那份桶已经没人再读了，
-    // 消息会石沉大海。给它自己的桶，结束时单独汇总一条。
-    const counterCtx  = { ...loserCtx, _actMsgs: [] };
+    // 触发 [命中时] / [暴击命中时]——本方法现在跑在建卡之前，
+    // 直接推进主桶，效果就会出现在【拼点对抗】卡的「详细信息」里
+    const counterCtx  = loserCtx;
     await ClashManager._applyActivitiesAndEquip(loserItem, "命中时", counterCtx);
     if (breatheCrit) await ClashManager._applyActivitiesAndEquip(loserItem, "暴击命中时", counterCtx);
 
@@ -5442,24 +5470,7 @@ export class ClashManager {
     if (fragile > 0 || guard > 0) calcNotes.push(`易损(+${fragile})/守护(-${guard}) → ${adjustedBase}`);
     if (physMult !== 1.0 || sinMult !== 1.0) calcNotes.push(`抗性(${physResStr}×${sinResStr}) → ${finalDmg}`);
 
-    // 发送反击触发聊天头（伤害消息由 _applyAndSendTake 单独发送）
-    await ClashManager._safeChatCreate({
-      speaker: ChatMessage.getSpeaker({ actor: loserActor }),
-      content: `<div class="limbuscompany chat-clash">
-        ${ClashManager._chatHeader(loserActor, "不可摧毁拼点失败反击")}
-        <div style="margin:4px 0 2px;font-size:.82rem;">
-          <strong>${loserItem.name}</strong>（不可摧毁骰）触发，对
-          <strong>${targetActor.name}</strong> 发起反击
-          ${breatheCrit ? `<span style="color:#FFD066;font-weight:bold;">　暴击！</span>` : ""}
-        </div>
-      </div>`,
-    });
-
-    // 对目标造成伤害（包含破裂/沉沦/护盾/混乱等完整结算）
-    const hookMsgs = [];
-    await ClashManager._applyAndSendTake(targetActor, finalDmg, { attacker: loserActor, calcNotes, hookMsgs });
-    // 反击自己那份触发汇总（主结算卡已经发出去了，挂不上去）
-    await ClashManager._flushActMsgs(counterCtx._actMsgs, loserActor, { title: "不可摧毁反击" });
+    return { targetActor, itemName: loserItem.name, finalDmg, calcNotes, breatheCrit };
   }
 
   /* ─── 阶段七：承受结算（应用伤害 + 发送聊天框） ─────────────────────── */

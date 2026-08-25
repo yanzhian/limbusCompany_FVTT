@@ -459,7 +459,15 @@ Hooks.on("renderChatMessage", (_message, html, _data) => {
     html.find(".clash-btn-settle").on("click", async (e) => {
       const targetActorId = e.currentTarget.dataset.targetActorId ?? flags.targetActorId;
       const damage        = parseInt(e.currentTarget.dataset.damage ?? flags.damage) || 0;
-      await ClashManager.handleApplyDamage(targetActorId, damage, flags.takeEffects ?? []);
+      // 闪避/完全格挡 + 【不可摧毁】反击：拼点本身 0 伤害，只落反击那份
+      if (damage > 0 || !flags.unbreakable) {
+        await ClashManager.handleApplyDamage(targetActorId, damage, flags.takeEffects ?? []);
+      }
+      // 【不可摧毁】拼点失败反击：和拼点伤害同一个按钮一起结算
+      const ub = flags.unbreakable;
+      if (ub?.targetActorId && (ub.damage ?? 0) > 0) {
+        await ClashManager.handleApplyDamage(ub.targetActorId, ub.damage);
+      }
       // 本场对抗中发作的【流血】：攒到这里，跟在【结算结果】之后公示
       await ClashManager._sendBleedMsgs(flags.bleedMsgs ?? []);
       // 容量扩散：打出伤害的一方攻击容量 >=2 时，在扣血后发出扩散承受卡
