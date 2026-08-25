@@ -4091,6 +4091,9 @@ export class ClashManager {
       itemImg:    defItemImg    ?? "",
     } : null;
 
+    // 防守成功（无伤害）时卡上没有【结算结果】按钮，攒下的流血没人来发，当场公示
+    const _bleedResolve = ClashManager._takeBleedBuf();
+
     // 结算结果：直接扣血，不需要人再选一次 Token（handleApplyDamage 本来就优先用
     // flags 里的目标 id）。重新骰掷仅 GM 可见——玩家能随意重摇结果，规则就没意义了。
     const isGM = game.user?.isGM ?? false;
@@ -4167,6 +4170,8 @@ export class ClashManager {
         ${takeSection}
       </div>`;
 
+    if (noTake) await ClashManager._sendBleedMsgs(_bleedResolve);
+
     return await ClashManager._safeChatCreate({
       speaker: ChatMessage.getSpeaker({ actor: atkActor }),
       content,
@@ -4178,7 +4183,7 @@ export class ClashManager {
           takeEffects,
           weightSpread,
           // 本场对抗中发作的【流血】：等【结算结果】按下去才公示
-          bleedMsgs:     ClashManager._takeBleedBuf(),
+          bleedMsgs:     noTake ? [] : _bleedResolve,
           // 整局重掷所需：重新骰一次双方，再跑一遍完整流程（仅 GM）
           redoData: {
             defActorId: defActor?.id ?? "",
@@ -4635,6 +4640,8 @@ export class ClashManager {
     const _statSnap2 = ClashManager.snapItemStats(atkItem2);
 
     ClashManager._beginTakeAgg();
+    // 单方面攻击同样是攻击动作，攻击方的【流血】要发作（守方没出手，不发作）
+    ClashManager._beginBleedBuf();
     const _takeEffectRows2 = [];
     const atkCtx2 = { atkActor, defActor: baseActor, owner: atkActor, other: baseActor, coveredForActor, _fireCounts: _fc2, _actMsgs: _actMsgs2, _currentItemId: atkItem2?.id ?? "" };
     const defCtx2 = { atkActor, defActor: baseActor, owner: baseActor, other: atkActor, coveredForActor, _fireCounts: _fc2, _actMsgs: _actMsgs2, _currentItemId: "" };
@@ -4646,6 +4653,7 @@ export class ClashManager {
     await ClashManager._applyActivitiesAndEquip(atkItem2, "攻击前", atkCtx2);
     await ClashManager._applyActivitiesAndEquip(atkItem2, "攻击时", atkCtx2);
     await ClashManager._dispatchOnAttack(atkActor, atkItem2, atkCtx2);
+    await ClashManager._processBleed(atkActor);
 
     // [攻击时] 可能修改骰子公式（diceAdj/diceFacesAdj/baseValue），检测并重投
     let finalRollTotal = rollTotal;
@@ -4910,6 +4918,7 @@ export class ClashManager {
           damage:        finalDamage,
           takeEffects,
           weightSpread,
+          bleedMsgs:     ClashManager._takeBleedBuf(),
           directRedo:    { initFlags },
         },
       },
@@ -6141,6 +6150,8 @@ export class ClashManager {
              </div>`}
       </div>`;
 
+    // 格挡成功（无伤害）时卡上没有【结算结果】按钮，攒下的流血没人来发，当场公示
+    const _bleed = ClashManager._takeBleedBuf();
     await ClashManager._safeChatCreate({
       speaker: ChatMessage.getSpeaker({ actor: defActor }),
       content,
@@ -6149,9 +6160,11 @@ export class ClashManager {
           type:          "clash-block",
           targetActorId: defActor?.id ?? "",
           damage:        finalDamage,
+          bleedMsgs:     finalDamage > 0 ? _bleed : [],
         },
       },
     });
+    if (!(finalDamage > 0)) await ClashManager._sendBleedMsgs(_bleed);
   }
 
   /* ─── 反应系统 ─────────────────────────────────────────────────────────── */

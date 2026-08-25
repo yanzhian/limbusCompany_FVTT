@@ -503,10 +503,11 @@ Hooks.on("renderChatMessage", (_message, html, _data) => {
 
   // ── 格挡聊天框：承受按钮 ──
   if (flags.type === "clash-block") {
-    html.find(".clash-btn-apply-damage").on("click", (e) => {
+    html.find(".clash-btn-apply-damage").on("click", async (e) => {
       const targetActorId = e.currentTarget.dataset.targetActorId ?? flags.targetActorId;
       const damage        = parseInt(e.currentTarget.dataset.damage ?? flags.damage) || 0;
-      ClashManager.handleApplyDamage(targetActorId, damage);
+      await ClashManager.handleApplyDamage(targetActorId, damage);
+      await ClashManager._sendBleedMsgs(flags.bleedMsgs ?? []);
     });
   }
 });
