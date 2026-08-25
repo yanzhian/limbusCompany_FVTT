@@ -609,11 +609,29 @@ export class ClashManager {
    * @param {Actor} actor    受伤的人
    * @param {Actor} attacker 打伤他的人
    */
-  static async _dispatchTakeDamage(item, actor, attacker, ctx) {
-    if (item) await ClashManager._applyActivities(item, "受到伤害时", ctx);
+  /**
+   * [受到伤害时]：技能 + 装备格物品的 Activity，以及各 BUFF 的 onTakeDamage 钩子。
+   *
+   * @param {object[]} [effectRows] 给了就把结果收进这里（`{k,v}` 触发行），
+   *   由承受结算卡以「效果」行呈现——这些效果本就跟着伤害走，
+   *   放攻击那条触发时间线（详细信息）里反而对不上。没给则退回 ctx._actMsgs。
+   */
+  static async _dispatchTakeDamage(item, actor, attacker, ctx, effectRows = null) {
+    // 收进 effectRows 时给 Activity 换一个本地收集桶，免得又漏进详细信息
+    const actCtx = effectRows ? { ...ctx, _actMsgs: [] } : ctx;
+
+    if (item) await ClashManager._applyActivities(item, "受到伤害时", actCtx);
     for (const eq of ClashManager._getEquippedItems(actor)) {
-      await ClashManager._applyActivities(eq, "受到伤害时", ctx);
+      await ClashManager._applyActivities(eq, "受到伤害时", actCtx);
     }
+    if (effectRows) {
+      for (const e of actCtx._actMsgs) {
+        for (const m of (e.msgs ?? [])) {
+          effectRows.push({ k: "效果", v: `${m}${e.itemName ? ` <span style="color:#6A5A48;">· ${e.itemName}</span>` : ""}` });
+        }
+      }
+    }
+
     for (const buff of foundry.utils.deepClone(actor?.system?.buffs ?? [])) {
       const handler = resolveBuffHandler(buff);
       if (typeof handler?.onTakeDamage !== "function") continue;
@@ -623,12 +641,12 @@ export class ClashManager {
         addBuffTo: (tgt, type, i, st, when) => ClashManager._addBuff(tgt, type, i, st, when),
         getBuff:   (type) => ClashManager._getBuff(actor, type),
       });
-      if (typeof note === "string" && note) {
-        (ctx?._actMsgs ?? []).push({
-          trigger: "受到伤害时",
-          itemName: handler.label ?? buff.name ?? buff.type,
-          msgs: [note],
-        });
+      if (typeof note !== "string" || !note) continue;
+      const src = handler.label ?? buff.name ?? buff.type;
+      if (effectRows) {
+        effectRows.push({ k: "效果", v: `${note} <span style="color:#6A5A48;">· ${src}</span>` });
+      } else {
+        (ctx?._actMsgs ?? []).push({ trigger: "受到伤害时", itemName: src, msgs: [note] });
       }
     }
   }
@@ -3223,6 +3241,9 @@ export class ClashManager {
     const coveredForActor = initFlags.coveredForId ? (game.actors.get(initFlags.coveredForId) ?? null) : null;
     // 本次对抗内的零散承受（追击、引爆伤害…）合并成一张卡，不各发各的
     ClashManager._beginTakeAgg();
+    // [受到伤害时] 的效果带到承受结算卡上（伤害要等【结算结果】才应用，
+    // 所以先存进卡的 flags，按钮按下时再一起呈现）
+    const _takeEffectRows = [];
     const atkCtx = { atkActor, defActor, owner: atkActor, other: defActor, coveredForActor, _fireCounts: _fc, _actMsgs, _currentItemId: atkItem?.id ?? "" };
     const defCtx = { atkActor, defActor, owner: defActor, other: atkActor, coveredForActor, _fireCounts: _fc, _actMsgs, _currentItemId: defItem?.id ?? "" };
 
@@ -3493,7 +3514,7 @@ export class ClashManager {
             await ClashManager._applyActivitiesAndEquip(atkItem, "暴击命中时", atkCtx);
           }
           // 防守方受到伤害（技能 + 装备格物品）
-          await ClashManager._dispatchTakeDamage(defItem, defActor, atkActor, defCtx);
+          await ClashManager._dispatchTakeDamage(defItem, defActor, atkActor, defCtx, _takeEffectRows);
         }
       } else {
         // 防守方拼点胜（攻击方落败）
@@ -3507,7 +3528,7 @@ export class ClashManager {
         if (!dodgeWin) {
           await ClashManager._applyActivitiesAndEquip(defItem, "命中时", defCtx);
           // 攻击方受到伤害（技能 + 装备格物品）
-          await ClashManager._dispatchTakeDamage(atkItem, atkActor, defActor, atkCtx);
+          await ClashManager._dispatchTakeDamage(atkItem, atkActor, defActor, atkCtx, _takeEffectRows);
         }
       }
 
@@ -3552,7 +3573,7 @@ export class ClashManager {
 
     await ClashManager._flushTakeAgg();
     await ClashManager._sendResolveMsg(
-      resolution, finalInitFlags, defActor, defItem, defFormula, sanityNotes, _actMsgs);
+      resolution, finalInitFlags, defActor, defItem, defFormula, sanityNotes, _actMsgs, _takeEffectRows);
 
     // 【不可摧毁】反击消息在拼点对抗结果之后发出
     if (_unbreakableCounterArgs) {
@@ -3911,7 +3932,7 @@ export class ClashManager {
 
   /* ─── 阶段五c：拼点结算聊天框 ──────────────────────────────────────────── */
 
-  static async _sendResolveMsg(res, initFlags, defActor, defItem, defFormula, sanityNotes = [], actMsgs = []) {
+  static async _sendResolveMsg(res, initFlags, defActor, defItem, defFormula, sanityNotes = [], actMsgs = [], takeEffects = []) {
     const {
       atkWins, atkTotal, defTotal,
       atkItemName, atkItemImg, atkFormula, atkActor,
@@ -4043,6 +4064,7 @@ export class ClashManager {
           type:          "clash-resolve",
           targetActorId: loser?.id ?? "",
           damage:        finalDamage,
+          takeEffects,
           weightSpread,
           // 整局重掷所需：重新骰一次双方，再跑一遍完整流程（仅 GM）
           redoData: {
@@ -4423,6 +4445,7 @@ export class ClashManager {
     const _actMsgs2 = [];
     const coveredForActor = initFlags.coveredForId ? (game.actors.get(initFlags.coveredForId) ?? null) : null;
     ClashManager._beginTakeAgg();
+    const _takeEffectRows2 = [];
     const atkCtx2 = { atkActor, defActor: baseActor, owner: atkActor, other: baseActor, coveredForActor, _fireCounts: _fc2, _actMsgs: _actMsgs2, _currentItemId: atkItem2?.id ?? "" };
     const defCtx2 = { atkActor, defActor: baseActor, owner: baseActor, other: atkActor, coveredForActor, _fireCounts: _fc2, _actMsgs: _actMsgs2, _currentItemId: "" };
 
@@ -4550,7 +4573,7 @@ export class ClashManager {
     }
 
     // [受到伤害时]：承受方受伤（技能 + 装备格物品 + BUFF 的 onTakeDamage）
-    await ClashManager._dispatchTakeDamage(atkItem2, baseActor, atkActor, defCtx2);
+    await ClashManager._dispatchTakeDamage(atkItem2, baseActor, atkActor, defCtx2, _takeEffectRows2);
 
     // 单方面攻击（承受）：不拼点，只把对方打退一次，攻击方不追击
     ClashVFX.broadcastBurst(ClashVFX.midPoint(atkActor, baseActor));
@@ -4567,7 +4590,7 @@ export class ClashManager {
     // 扣血、破裂/沉沦/震颤引爆等等都等【结算结果】按下去才发生。
     await ClashManager._flushTakeAgg();
     await ClashManager._sendDirectTakeMsg({
-      actMsgs: _actMsgs2,
+      actMsgs: _actMsgs2, takeEffects: _takeEffectRows2,
       atkActor, defActor: baseActor, item: atkItem2,
       finalDamage, calcNotes, initFlags,
       weightSpread: (initFlags.weight ?? 1) >= 2 ? {
@@ -4592,7 +4615,7 @@ export class ClashManager {
    */
   static async _sendDirectTakeMsg({ atkActor, defActor, item, finalDamage,
                                     calcNotes = [], initFlags = {}, weightSpread = null,
-                                    actMsgs = [] }) {
+                                    actMsgs = [], takeEffects = [] }) {
     const isGM = game.user?.isGM ?? false;
     const img  = item?.img ?? initFlags.itemImg ?? "";
     const name = item?.name ?? initFlags.itemName ?? "技能";
@@ -4649,6 +4672,7 @@ export class ClashManager {
           type:          "clash-resolve",   // 复用拼点对抗卡的按钮处理器
           targetActorId: defActor?.id ?? "",
           damage:        finalDamage,
+          takeEffects,
           weightSpread,
           directRedo:    { initFlags },
         },
@@ -5141,7 +5165,7 @@ export class ClashManager {
 
   /* ─── 阶段七：承受结算（应用伤害 + 发送聊天框） ─────────────────────── */
 
-  static async handleApplyDamage(targetActorId, damage) {
+  static async handleApplyDamage(targetActorId, damage, takeEffects = []) {
     // 优先使用 flags 记录的 base actor（更新后 linked tokens 自动同步）
     const baseActor = game.actors.get(targetActorId);
     const selToken  = canvas.tokens?.controlled?.[0];
@@ -5156,7 +5180,7 @@ export class ClashManager {
     // 收集护盾吸收、onTakeDamage 等 BUFF 钩子消息——【结算结果】按钮这条路径上
     // 没有别的地方会汇总它们，不收就彻底没人报了
     const hookMsgs = [];
-    await ClashManager._applyAndSendTake(actor, damage, { hookMsgs });
+    await ClashManager._applyAndSendTake(actor, damage, { hookMsgs, takeEffects });
 
     // 若选中的是非 linked token actor（与 base actor 为不同文档），额外同步该 token 的 HP
     if (selActor && selActor !== actor && selActor.isToken) {
@@ -5228,10 +5252,10 @@ export class ClashManager {
     if (res.sanityDmg)       rec.triggers.push({ k: "沉沦触发", v: `${res.sanityDmg} 点侵蚀度（理智 −${res.sanityDmg}）` });
     if (res.sinkingGloomDmg) rec.triggers.push({ k: "沉沦触发", v: `理智见底，额外承受 <b>${res.sinkingGloomDmg}</b> 点【忧郁】伤害` });
     if (res.tremorTriggered) rec.triggers.push({ k: "震颤引爆", v: "消耗 1 层【震颤】，混乱阈值前移" });
-    for (const m of (hookMsgs ?? [])) rec.triggers.push({ k: "效果触发", v: m });
+    for (const m of (hookMsgs ?? [])) rec.triggers.push({ k: "效果", v: m });
   }
 
-  static async _applyAndSendTake(actor, damage, { isSeismic = false, calcNotes = [], attacker = null, hookMsgs = null, takeLabel = "承受结算", category = "", sinType = "", item = null, silent = false } = {}) {
+  static async _applyAndSendTake(actor, damage, { isSeismic = false, calcNotes = [], attacker = null, hookMsgs = null, takeLabel = "承受结算", category = "", sinType = "", item = null, silent = false, takeEffects = [] } = {}) {
     const sys   = actor.system;
     const maxHp = sys.hp?.max ?? 1;
 
@@ -5379,7 +5403,7 @@ export class ClashManager {
       } else {
         await ClashManager._sendTakeMsg(actor, damage, oldHp, finalHp, maxHp, chaosTriggered,
           { ruptureDmg, sanityDmg, sinkingGloomDmg, tremorTriggered, chaosName, calcNotes, takeLabel,
-            shieldBefore, hookMsgs });
+            shieldBefore, hookMsgs, takeEffects });
       }
     }
     return _res;
@@ -5396,7 +5420,7 @@ export class ClashManager {
   static async _sendTakeMsg(actor, damage, oldHp, newHp, maxHp, chaosTriggered,
       { ruptureDmg = 0, sanityDmg = 0, sinkingGloomDmg = 0, tremorTriggered = false,
         chaosName = "陷入混乱", calcNotes = [], takeLabel = "承受结算",
-        shieldBefore = 0, hookMsgs = null } = {}) {
+        shieldBefore = 0, hookMsgs = null, takeEffects = [] } = {}) {
 
     const triggers = [];
     if (ruptureDmg > 0) {
@@ -5417,7 +5441,9 @@ export class ClashManager {
     }
     // BUFF 钩子（护盾吸收、onTakeDamage 等）。烧伤这类也可能由技能效果在此刻触发，
     // 所以不写死类型，来什么列什么。
-    for (const m of (hookMsgs ?? [])) triggers.push({ k: "效果触发", v: m });
+    for (const m of (hookMsgs ?? [])) triggers.push({ k: "效果", v: m });
+    // [受到伤害时] 的效果由结算卡的 flags 带过来
+    for (const r of (takeEffects ?? [])) triggers.push(r);
 
     const content = `
       <div class="limbus-clash-card limbus-take-card"
