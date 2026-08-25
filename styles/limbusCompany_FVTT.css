@@ -9631,3 +9631,84 @@ input.item-piles-quantity {
   position: relative;
   overflow: visible;
 }
+
+/* ══════════════════════════════════════════════════════════════════════
+   对抗聊天：生命值结算块
+   卡片外壳、50px 圆头像标题、金色分割线全部沿用原有美术，这里只是补上
+   模板里新增的那几样：护盾蓝字、带混乱阈值刻度的血条、触发行、
+   40px 缩小版（容量扩散的多目标用）。
+   ══════════════════════════════════════════════════════════════════════ */
+
+/* 生命值一行：先前生命值（含蓝色护盾） → 现在生命值 / 上限 */
+.lc-hp-num {
+  font-size: 1.05rem; line-height: 1.4; margin: 2px 0 0;
+  font-variant-numeric: tabular-nums;
+}
+.lc-hp-num .from { color: #9A8462; }
+.lc-hp-num .sh   { color: #7FB6D6; }          /* 护盾层数 */
+.lc-hp-num .arw  { color: #C9A84C; padding: 0 5px; }
+.lc-hp-num .to   { color: #E84444; font-weight: bold; font-size: 1.25rem; }
+.lc-hp-num .max  { color: #6A5A48; font-size: .78rem; }
+
+/* 血条：实心=结算后剩余，斜纹=本次损失，竖线=混乱阈值（灰=已击穿） */
+.lc-hp-bar {
+  position: relative; height: 10px; margin: 6px 0 0;
+  background: #241612; border: 1px solid #3A2018; border-radius: 2px; overflow: hidden;
+}
+.lc-hp-bar .fill {
+  position: absolute; left: 0; top: 0; bottom: 0;
+  background: linear-gradient(90deg, #8B1A1A, #B84444);
+}
+.lc-hp-bar .ghost {
+  position: absolute; top: 0; bottom: 0;
+  background: repeating-linear-gradient(45deg, rgba(232,68,68,.30) 0 4px, transparent 4px 8px);
+}
+.lc-hp-bar .thr {
+  position: absolute; top: -1px; bottom: -1px; width: 2px; background: #C9A84C;
+}
+.lc-hp-bar .thr.fired { background: #6A5A48; }
+
+/* 触发行：破裂 / 沉沦 / 震颤引爆 / 追加伤害 / 不可破坏 / 流血 */
+.lc-take-trig { margin-top: 7px; }
+.lc-take-trig .r { display: flex; gap: 7px; font-size: .78rem; line-height: 1.7; }
+.lc-take-trig .k {
+  color: #C9A84C; flex: none; min-width: 72px;
+  border-left: 2px solid #C9A84C; padding-left: 6px;
+}
+.lc-take-trig .v   { color: #E8C9A2; min-width: 0; }
+.lc-take-trig .v b { color: #E84444; }
+
+.lc-hp-blk + .lc-hp-blk { margin-top: 10px; }
+
+/* ── 40px 缩小版：容量扩散的多目标 ─────────────────────────────────── */
+.lc-hp-blk.sm + .lc-hp-blk.sm {
+  margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(201,168,76,.16);
+}
+.lc-hp-blk.sm .row40 { display: flex; align-items: center; gap: 9px; }
+.lc-hp-blk.sm .row40 img {
+  width: 40px; height: 40px; border-radius: 50%; object-fit: cover;
+  border: 2px solid #C9A84C; flex-shrink: 0;
+}
+.lc-hp-blk.sm .row40 .who { font-size: 12px; color: #9A8462; flex: none; }
+.lc-hp-blk.sm .row40 .lc-hp-num { margin: 0 0 0 auto; font-size: .9rem; text-align: right; }
+.lc-hp-blk.sm .row40 .lc-hp-num .to { font-size: 1.1rem; }
+.lc-hp-blk.sm .lc-hp-bar    { margin-top: 5px; }
+.lc-hp-blk.sm .lc-take-trig { margin-top: 5px; }
+.lc-hp-blk.sm .lc-take-trig .r { font-size: .75rem; line-height: 1.6; }
+.lc-hp-blk.sm .lc-take-trig .k { min-width: 64px; }
+
+/* 容量扩散的技能行 */
+.lc-spread-meta      { font-size: .85rem; line-height: 1.5; }
+.lc-spread-meta .sk  { color: #E8C9A2; }
+.lc-spread-meta .mode{ color: #9A8462; font-size: .78rem; }
+.lc-spread-meta .mode .ft { color: #EBBD68; }
+
+/* 结算结果 / 重新骰掷：主次两级，配色沿用原按钮 */
+.lc-btn-row { display: flex; gap: 8px; align-items: stretch; margin-top: 2px; }
+.lc-btn-row .lc-btn {
+  height: 30px; padding: 0 14px; border-radius: 2px;
+  font-size: .85rem; cursor: pointer; font-family: inherit;
+}
+.lc-btn-row .lc-btn.primary { background: #5F3E22; color: #E8C9A2; border: 1px solid #C9A84C; flex: 1; }
+.lc-btn-row .lc-btn.dim     { background: #241B12; color: #9A8462; border: 1px solid #5A3A1A; }
+.lc-btn-row .lc-btn.dim:hover { color: #C9A84C; border-color: #8A7231; }

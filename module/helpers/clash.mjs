@@ -2044,7 +2044,7 @@ export class ClashManager {
             const sinLabel = eff.dmgSinType   ? `【${ClashManager._sinLabel(eff.dmgSinType)}】`   : "";
             descStr = `对【${effTgt.name}】造成 ${dmg} 点${catLabel}${sinLabel}追加伤害（结算详情见承受结算消息）`;
             if (dmg > 0) {
-              await ClashManager._applyAndSendTake(effTgt, dmg, { attacker: owner, takeLabel: "追加伤害-承受",
+              await ClashManager._applyAndSendTake(effTgt, dmg, { attacker: owner, takeLabel: "追加伤害",
                 category: eff.dmgCategory ?? "", sinType: eff.dmgSinType ?? "", item });
             }
             break;
@@ -2352,6 +2352,60 @@ export class ClashManager {
 
   static _goldDivider() {
     return `<div style="height:1px;margin:8px 0;background:linear-gradient(90deg,transparent 0%,#C9A84C 30%,#C9A84C 70%,transparent 100%);"></div>`;
+  }
+
+  /**
+   * 生命值结算块：先前生命值（含蓝色护盾） → 现在生命值，血条带混乱阈值刻度，
+   * 下接若干条触发行。承受结算与容量扩散共用，后者传 sm:true 用 40px 缩小版。
+   *
+   * @param {object}  o
+   * @param {Actor}   o.actor
+   * @param {number}  o.oldHp    结算前生命值
+   * @param {number}  o.newHp    结算后生命值
+   * @param {number}  o.maxHp
+   * @param {number}  [o.shield] 结算前的护盾层数（蓝色写在先前生命值上）
+   * @param {{k:string,v:string}[]} [o.triggers] 触发行
+   * @param {boolean} [o.sm]     40px 缩小版
+   */
+  static _hpBlock({ actor, oldHp, newHp, maxHp, shield = 0, triggers = [], sm = false }) {
+    const pct  = (v) => Math.max(0, Math.min(100, (v / Math.max(1, maxHp)) * 100));
+    const now  = pct(newHp);
+    const lost = Math.max(0, pct(oldHp) - now);
+
+    // 混乱阈值刻度：已击穿的压成灰色
+    const thrs = (actor?.system?.chaosThresholds ?? [])
+      .map(t => `<div class="thr${t.triggered ? " fired" : ""}" style="left:${t.percent}%"></div>`)
+      .join("");
+
+    const num = `<span class="lc-hp-num">
+      <span class="from">${oldHp}${shield > 0 ? `<span class="sh">+${shield}</span>` : ""}</span>
+      <span class="arw">→</span><span class="to">${newHp}</span>
+      <span class="max">/ ${maxHp}</span>
+    </span>`;
+
+    const head = sm
+      ? `<div class="row40">
+           <img src="${actor?.img ?? "icons/svg/mystery-man.svg"}" alt="">
+           <span class="who">${actor?.name ?? ""}</span>
+           ${num}
+         </div>`
+      : num;
+
+    const trigRows = triggers.length
+      ? `<div class="lc-take-trig">${triggers
+          .map(t => `<div class="r"><span class="k">${t.k}</span><span class="v">${t.v}</span></div>`)
+          .join("")}</div>`
+      : "";
+
+    return `<div class="lc-hp-blk${sm ? " sm" : ""}">
+      ${head}
+      <div class="lc-hp-bar">
+        <div class="fill" style="width:${now.toFixed(1)}%"></div>
+        ${lost > 0 ? `<div class="ghost" style="left:${now.toFixed(1)}%;width:${lost.toFixed(1)}%"></div>` : ""}
+        ${thrs}
+      </div>
+      ${trigRows}
+    </div>`;
   }
 
   static _chatHeader(actor, title) {
@@ -4896,7 +4950,7 @@ export class ClashManager {
    * @param {object} [opts]
    * @param {boolean} [opts.isSeismic=false]  是否为【震颤引爆】类型攻击
    */
-  static async _applyAndSendTake(actor, damage, { isSeismic = false, calcNotes = [], attacker = null, hookMsgs = null, takeLabel = "承受", category = "", sinType = "", item = null, silent = false } = {}) {
+  static async _applyAndSendTake(actor, damage, { isSeismic = false, calcNotes = [], attacker = null, hookMsgs = null, takeLabel = "承受结算", category = "", sinType = "", item = null, silent = false } = {}) {
     const sys   = actor.system;
     const maxHp = sys.hp?.max ?? 1;
 
@@ -4931,9 +4985,11 @@ export class ClashManager {
     // ── 受到伤害时 BUFF ────────────────────────────────────────────────────
 
     let ruptureDmg = 0, sanityDmg = 0, tremorTriggered = false, sinkingBuff = null;
+    let shieldBefore = 0;
     if (hpLockValue == null) {
       // 【护盾】：每层抵挡 1 点伤害，先于其他伤害结算，剩余伤害再穿透
       const shieldBuff = ClashManager._getBuff(actor, "shield");
+      shieldBefore = shieldBuff?.stacks ?? 0;   // 供承受卡显示「50+8」的那个 +8
       if (shieldBuff && (shieldBuff.stacks ?? 0) > 0 && damage > 0) {
         const absorbed   = Math.min(shieldBuff.stacks, damage);
         const remaining  = shieldBuff.stacks - absorbed;
@@ -5034,21 +5090,43 @@ export class ClashManager {
     // silent：不发独立的承受卡，把结果交回调用方自己记账（容量扩散用）
     if (!silent) {
       await ClashManager._sendTakeMsg(actor, damage, oldHp, finalHp, maxHp, chaosTriggered,
-        { ruptureDmg, sanityDmg, sinkingGloomDmg, tremorTriggered, chaosName, calcNotes, takeLabel });
+        { ruptureDmg, sanityDmg, sinkingGloomDmg, tremorTriggered, chaosName, calcNotes, takeLabel,
+          shieldBefore });
     }
     return { damage, oldHp, finalHp, maxHp, chaosTriggered, chaosName,
              ruptureDmg, sanityDmg, sinkingGloomDmg, tremorTriggered };
   }
 
+  /**
+   * 承受结算卡。
+   * 卡头（50px 圆头像 + 标题 + 角色名）与金色分割线沿用原有美术；
+   * 主体换成「生命值一行 + 带混乱阈值刻度的血条 + 触发行」。
+   *
+   * 「伤害超过混乱阈值」不再写成文字——阈值刻度在血条上看得见，
+   * 击穿的演出交给 VFX。
+   */
   static async _sendTakeMsg(actor, damage, oldHp, newHp, maxHp, chaosTriggered,
-      { ruptureDmg = 0, sanityDmg = 0, sinkingGloomDmg = 0, tremorTriggered = false, chaosName = "陷入混乱", calcNotes = [], takeLabel = "承受" } = {}) {
-    const hpPct    = Math.max(0, Math.round((newHp / maxHp) * 100));
-    const totalDmg = damage + ruptureDmg + sinkingGloomDmg;
-    const extraLines = [];
-    if (ruptureDmg   > 0) extraLines.push(`【破裂】附加 +${ruptureDmg} 点固定伤害`);
-    if (sanityDmg    > 0) extraLines.push(`【沉沦】附加 ${sanityDmg} 点侵蚀度（理智-${sanityDmg}）`);
-    if (sinkingGloomDmg > 0) extraLines.push(`【沉沦】理智见底：额外受到 ${sinkingGloomDmg} 点【忧郁】伤害`);
-    if (tremorTriggered)  extraLines.push(`【震颤】引爆：混乱阈值前移`);
+      { ruptureDmg = 0, sanityDmg = 0, sinkingGloomDmg = 0, tremorTriggered = false,
+        chaosName = "陷入混乱", calcNotes = [], takeLabel = "承受结算",
+        shieldBefore = 0 } = {}) {
+
+    const triggers = [];
+    if (ruptureDmg > 0) {
+      triggers.push({ k: "破裂触发", v: `附加 <b>${ruptureDmg}</b> 点固定伤害` });
+    }
+    if (sanityDmg > 0) {
+      triggers.push({ k: "沉沦触发", v: `${sanityDmg} 点侵蚀度（理智 −${sanityDmg}）` });
+    }
+    if (sinkingGloomDmg > 0) {
+      triggers.push({ k: "沉沦触发", v: `理智见底，额外承受 <b>${sinkingGloomDmg}</b> 点【忧郁】伤害` });
+    }
+    if (tremorTriggered) {
+      triggers.push({ k: "震颤引爆", v: "消耗 1 层【震颤】，混乱阈值前移" });
+    }
+    // 追加伤害走的是独立的一次承受结算，takeLabel 会带「追加伤害」
+    if (takeLabel.includes("追加伤害")) {
+      triggers.unshift({ k: "追加伤害", v: `承受 <b>${damage}</b> 点` });
+    }
 
     const content = `
       <div class="limbus-clash-card limbus-take-card"
@@ -5056,41 +5134,12 @@ export class ClashManager {
            data-clash-type="take">
         ${ClashManager._chatHeader(actor, takeLabel)}
         ${ClashManager._goldDivider()}
-        ${calcNotes.length > 0 ? `
-        <div style="margin:6px 0 4px;padding:5px 7px;background:rgba(0,0,0,.25);border-radius:3px;">
+        ${ClashManager._hpBlock({ actor, oldHp, newHp, maxHp, shield: shieldBefore, triggers })}
+        ${calcNotes.length ? `
+        <div style="margin:8px 0 0;padding:5px 7px;background:rgba(0,0,0,.25);border-radius:3px;">
           <div style="font-size:.65rem;font-weight:bold;color:#C9A84C;margin-bottom:3px;letter-spacing:.05em;">结算说明</div>
           ${calcNotes.map(n => `<div style="font-size:.72rem;color:#9A8462;line-height:1.55;">${n}</div>`).join("")}
-        </div>
-        ${ClashManager._goldDivider()}` : ""}
-        <div style="text-align:center;margin:10px 0;">
-          <div style="font-size:16px;font-weight:bold;color:#E8C9A2;margin-bottom:6px;">生命值结算</div>
-          <div style="font-size:13px;color:#E8CAA1;margin-bottom:10px;">
-            ${actor.name} 受到了 ${totalDmg} 点伤害
-            ${ruptureDmg > 0 ? `（基础 ${damage} + 破裂 ${ruptureDmg}）` : ""}
-          </div>
-          <div style="display:flex;align-items:center;justify-content:center;gap:18px;">
-            <span style="font-size:2rem;font-weight:bold;color:#E8C9A2;">${oldHp}</span>
-            <span style="font-size:1.5rem;color:#C9A84C;">→</span>
-            <span style="font-size:2rem;font-weight:bold;color:#B84444;">${newHp}</span>
-          </div>
-        </div>
-        ${ClashManager._goldDivider()}
-        ${extraLines.length > 0
-          ? `<div style="font-size:.8rem;color:#9A8462;margin-bottom:4px;">
-               ${extraLines.map(l => `<div>${l}</div>`).join("")}
-             </div>`
-          : ""}
-        ${chaosTriggered
-          ? `<div style="text-align:center;font-size:.85rem;color:#E84444;font-weight:bold;margin-bottom:6px;">
-               伤害超过混乱阈值——【${chaosName}】
-             </div>`
-          : ""}
-        <div style="background:#1A0305;border-radius:3px;overflow:hidden;height:10px;margin:4px 0;">
-          <div style="height:100%;background:${chaosTriggered ? "#B84444" : "#C9A84C"};width:${hpPct}%;transition:width .3s;"></div>
-        </div>
-        <div style="text-align:center;font-size:.75rem;color:#9A8462;margin-top:3px;">
-          ${newHp} / ${maxHp}
-        </div>
+        </div>` : ""}
       </div>`;
 
     await ClashManager._safeChatCreate({
