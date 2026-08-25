@@ -1373,19 +1373,23 @@ export class LimbusActor extends Actor {
     if (!oldItemId || !newItemId || oldItemId === newItemId) return false;
     const sys = this.system;
     const updates = {};
-    let changed = false;
+    // 换掉了哪几个槽位——临时转换的还原按槽位记账，必须由这里如实报出来。
+    // 让调用方事后再 findSkillSlot 找一遍是不行的：那时槽位里装的已经是新技能，
+    // 而且同一 tick 里 system 还可能没刷新，找不到就会退化成按 id 还原，
+    // 把「另一个也变成了黎明将至」的槽位一起改掉。
+    const slots = [];
 
     const basic = [...(sys.skills?.basic ?? [])];
-    const bIdx  = basic.indexOf(oldItemId);
-    if (bIdx >= 0) {
-      basic[bIdx] = newItemId;
+    for (let i = 0; i < basic.length; i++) {
+      if (basic[i] !== oldItemId) continue;
+      basic[i] = newItemId;
       updates["system.skills.basic"] = basic;
-      changed = true;
+      slots.push({ kind: "basic", idx: i });
     }
 
     if (sys.skills?.defense === oldItemId) {
       updates["system.skills.defense"] = newItemId;
-      changed = true;
+      slots.push({ kind: "defense" });
     }
 
     const ego = { ...(sys.skills?.ego ?? {}) };
@@ -1393,17 +1397,19 @@ export class LimbusActor extends Actor {
       if (ego[grade] === oldItemId) {
         ego[grade] = newItemId;
         updates["system.skills.ego"] = ego;
-        changed = true;
+        slots.push({ kind: "ego", grade });
       }
     }
 
+    const changed = slots.length > 0;
     if (changed) {
       // 跨客户端执行时（如对方触发本方技能的转换效果），当前用户可能没有本
       // Actor 的写权限，复用 ClashManager._safeDocUpdate 经 socket 委托 GM 执行
       const { ClashManager } = await import("../helpers/clash.mjs");
       await ClashManager._safeDocUpdate(this, updates);
     }
-    return changed;
+    // 兼容旧用法：没换到返回 false，换到了返回槽位数组（真值）
+    return changed ? slots : false;
   }
 
   /**

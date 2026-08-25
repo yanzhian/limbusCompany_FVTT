@@ -2130,16 +2130,20 @@ export class ClashManager {
             //           afterClash（本次结算后）/ endOfTurn（本回合结束时）
             const relUntil = ["afterUse", "afterClash", "endOfTurn"].includes(eff.relDuration)
               ? eff.relDuration : "";
-            // 槽位要在替换**之前**定位：还原按槽位记账，基础槽与守备槽同时被换成
-            // 同一个强化形态时，按 id 还原会把两个槽一起改掉
-            const relSlot  = relUntil ? (relOwner.findSkillSlot?.(item.id) ?? null) : null;
+            // 换掉的槽位由 replaceSkillSlot 直接报回来（它自己最清楚动了哪几格）。
+            // 事后再 findSkillSlot 找是错的：那时槽位里装的已经是新技能，同一 tick 里
+            // system 也可能没刷新，取不到就退化成按 id 还原，会把「另一个槽也变成了
+            // 同一个强化形态」的那一格一起改掉——基础技能格因此变成了守备技能。
             const replaced = await relOwner.replaceSkillSlot?.(item.id, newItem.id);
             if (replaced) relOwner.sheet?._replaceCombatBagSkill?.(item.id, newItem.id);
-            // 临时转换：登记还原任务。**只有真的发生了替换才登记**——
-            // 若槽位里本来就是目标技能（比如已被另一条"永久转换"换上去了），
-            // replaceSkillSlot 返回 false，这里什么都不记，到点也就不会把别人的永久状态还原掉。
+            // 临时转换：登记还原任务，**每个被换掉的槽位各记一条**。
+            // 只有真的发生了替换才登记——若槽位里本来就是目标技能（比如已被另一条
+            // "永久转换"换上去了），replaceSkillSlot 返回 false，这里什么都不记，
+            // 到点也就不会把别人的永久状态还原掉。
             if (replaced && relUntil) {
-              await ClashManager._pushTempSkillConvert(relOwner, item.id, newItem.id, relUntil, relSlot);
+              for (const slot of (Array.isArray(replaced) ? replaced : [null])) {
+                await ClashManager._pushTempSkillConvert(relOwner, item.id, newItem.id, relUntil, slot);
+              }
             }
             const relUntilLabel = relUntil === "afterUse"   ? "（使用一次后还原）"
                                 : relUntil === "afterClash" ? "（本次结算后还原）"
@@ -4541,11 +4545,17 @@ export class ClashManager {
       { [`flags.limbusCompany_FVTT.${ClashManager.TEMP_CONVERT_FLAG}`]: list });
   }
 
-  /** 按记录把一个槽位还原回去（有槽位记账就按槽位，老数据回退到按 id） */
+  /**
+   * 按记录把**一个**槽位还原回去。
+   * 绝不使用 replaceSkillSlot(rec.to, rec.from)——那会把所有装着 rec.to 的槽位
+   * 一起改掉：基础槽和守备槽同时转成同一个强化形态时，用掉守备的那次会把
+   * 基础技能格也写成守备技能。老数据没有 slot，就在还原当下定位一个装着
+   * rec.to 的槽位，只动那一格。
+   */
   static async _applyTempConvertRevert(actor, rec) {
-    let ok = false;
-    if (rec?.slot?.kind) ok = await actor.setSkillSlot?.(rec.slot, rec.from);
-    else                 ok = await actor.replaceSkillSlot?.(rec.to, rec.from);
+    const slot = rec?.slot?.kind ? rec.slot : (actor.findSkillSlot?.(rec?.to) ?? null);
+    if (!slot?.kind) return false;
+    const ok = await actor.setSkillSlot?.(slot, rec.from);
     if (ok) actor.sheet?._replaceCombatBagSkill?.(rec.to, rec.from);
     return ok;
   }
