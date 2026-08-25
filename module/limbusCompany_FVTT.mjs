@@ -405,6 +405,16 @@ Hooks.on("createChatMessage", async (message) => {
 /* ─── 对抗聊天框按钮交互 ─────────────────────────────────────────────────── */
 
 Hooks.on("renderChatMessage", (_message, html, _data) => {
+  // 「▼ 详细信息」等折叠：拼点对抗 / 单方面攻击 / 容量扩散 / 先攻骰掷都有。
+  // 必须绑在 flags 守卫**之前**——先攻骰掷那张卡是纯 content、没有 flags，
+  // 挡在守卫后面的话它的折叠永远点不开。
+  html.find(".limbus-detail-toggle-row").on("click", function () {
+    const $sec = $(this).next(".limbus-detail-section");
+    const open = $sec.toggle().is(":visible");
+    const $cap = $(this).find(".limbus-detail-toggle");
+    $cap.text((open ? "▲" : "▼") + $cap.text().slice(1));
+  });
+
   const flags = _message.flags?.limbusCompany_FVTT;
   if (!flags?.type) return;
 
@@ -429,14 +439,6 @@ Hooks.on("renderChatMessage", (_message, html, _data) => {
       ClashManager.handleWeightTake(_message.id, flags);
     });
   }
-
-  // 「▼ 详细信息」折叠：拼点对抗、单方面攻击、容量扩散都有，绑在最外层
-  html.find(".limbus-detail-toggle-row").on("click", function () {
-    const $sec = $(this).next(".limbus-detail-section");
-    const open = $sec.toggle().is(":visible");
-    $(this).find(".limbus-detail-toggle").text(
-      (open ? "▲" : "▼") + $(this).find(".limbus-detail-toggle").text().slice(1));
-  });
 
   // ── 拼点结算聊天框：结算结果（自动扣血）/ 重新骰掷（仅 GM）──
   if (flags.type === "clash-resolve") {
@@ -893,9 +895,13 @@ Hooks.on("updateCombat", async (combat, changed) => {
     }
   }
 
-  // 全体角色处理完毕：各发一条折叠汇总消息
-  await ClashManager._flushActMsgs(endMsgs,   null, { title: "回合结束时" });
-  await ClashManager._flushActMsgs(startMsgs, null, { title: "回合开始时" });
+  // 回合结束/开始的触发汇总不再各发一条，统一并进下面那张先攻骰掷卡。
+  // 没有先攻卡可挂时（第 0→1 轮、或全场没有 character）才退回单独发。
+  const _hasInitCard = (changed.round ?? 0) > 1;
+  if (!_hasInitCard) {
+    await ClashManager._flushActMsgs(endMsgs,   null, { title: "回合结束时" });
+    await ClashManager._flushActMsgs(startMsgs, null, { title: "回合开始时" });
+  }
 
   // ── 一轮结束进入下一轮：重掷所有角色先攻 ──────────────────────────────
   // 第 0 → 1 轮跳过（战斗开始时已由 combatStart 钩子处理），之后每轮重掷
@@ -929,15 +935,27 @@ Hooks.on("updateCombat", async (combat, changed) => {
           <span class="initiative-arrow">→</span>
           <span class="initiative-total">${r.finalTotal}</span>
         </div>`).join("");
+      // 上回合结束 / 本回合开始的触发效果并进来，各自折叠
+      const endFold = ClashManager._buildDetailsFold(endMsgs,   { label: "上回合结束" });
+      const startFold = ClashManager._buildDetailsFold(startMsgs, { label: "回合开始" });
       await ChatMessage.create({
         content: `
           <div class="limbus-initiative-card" style="padding:10px 12px 8px;">
-            <div class="ic-title" style="font-size:20px;">先攻骰掷</div>
+            <div class="ic-title" style="font-size:20px;">第 ${changed.round} 回合 · 先攻骰掷</div>
             <div class="ic-gold-divider"></div>
             ${rowsHtml}
             <div class="ic-gold-divider"></div>
+            ${endFold}
+            ${endFold ? '<div style="height:30px;"></div>' : ""}
+            ${startFold}
+            ${startFold ? '<div style="height:30px;"></div>' : ""}
+            ${(endFold || startFold) ? '<div class="ic-gold-divider"></div>' : ""}
           </div>`,
       });
+    } else {
+      // 没人可骰先攻 → 没有卡可挂，触发汇总照旧单独发
+      await ClashManager._flushActMsgs(endMsgs,   null, { title: "回合结束时" });
+      await ClashManager._flushActMsgs(startMsgs, null, { title: "回合开始时" });
     }
   }
 });

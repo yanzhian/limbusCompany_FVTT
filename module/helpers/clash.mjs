@@ -4155,7 +4155,7 @@ export class ClashManager {
    * 占位符会被清洗、跨客户端还有写权限问题，失败时整块静默消失。
    * @param {object[]} actMsgs
    */
-  static _buildDetailsFold(actMsgs) {
+  static _buildDetailsFold(actMsgs, { label = "详细信息" } = {}) {
     if (!actMsgs?.length) return "";
 
     const order = ClashManager.TRIGGER_ORDER;
@@ -4186,7 +4186,7 @@ export class ClashManager {
            style="display:flex;align-items:center;gap:6px;cursor:pointer;margin:6px 0 0;user-select:none;">
         <div style="flex:1;height:1px;background:linear-gradient(to right,transparent,#C9A84C);"></div>
         <span class="limbus-detail-toggle"
-              style="font-size:.72rem;color:#C9A84C;padding:0 4px;line-height:1;">▼ 详细信息（${n}）</span>
+              style="font-size:.72rem;color:#C9A84C;padding:0 4px;line-height:1;">▼ ${label}（${n}）</span>
         <div style="flex:1;height:1px;background:linear-gradient(to left,transparent,#C9A84C);"></div>
       </div>
       <div class="limbus-detail-section"
