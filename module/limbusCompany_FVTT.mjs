@@ -687,6 +687,12 @@ Hooks.on("updateCombat", async (combat, changed) => {
     // 每轮重置拼点胜利计数 & 每回合效果触发次数
     await actor.unsetFlag("limbusCompany_FVTT", "clashWinsThisRound");
     await actor.unsetFlag("limbusCompany_FVTT", "turnFireCounts");
+    // 骰数/面数/基础值/攻击容量的临时改动兜底还原。
+    // 对抗流程在 [攻击后] 会精确还原参战的那几件，但【激活】([使用时])、
+    // [回合开始时]、[反应] 这些非对抗路径同样能改这四个字段，却没有收尾——
+    // 不兜这一下就永久留在物品上了。
+    await ClashManager.restoreActorItemMods(actor);
+
     // 每回合 BUFF 获得额度（maxGainPerRound）——这里才是"每回合"。
     // 漏了这一句时它只在 deleteCombat 里清，等于整场战斗共用一份额度：
     // 【炎蝶之棺】攒满 20 层后，后面每一轮都再也加不上，直到战斗结束。

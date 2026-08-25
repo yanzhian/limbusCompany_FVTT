@@ -4286,6 +4286,21 @@ export class ClashManager {
     }
   }
 
+  /**
+   * 把一个角色身上**所有**带临时改动的物品还原。
+   *
+   * 对抗流程会在 [攻击后] 精确还原参战的那几件，但非对抗路径不会：
+   * 装备卡/技能卡的【激活】（[使用时]）、[回合开始时]、[反应] 等等
+   * 同样能改骰数/面数/基础值，却没有任何收尾——改完就永久留在物品上。
+   * 回合结束时用这个兜一次，把那些改动降级成「本回合内有效」。
+   */
+  static async restoreActorItemMods(actor) {
+    for (const item of (actor?.items ?? [])) {
+      const mods = item.getFlag?.("limbusCompany_FVTT", "tempMods");
+      if (mods && Object.keys(mods).length) await ClashManager._restoreItemMods(item);
+    }
+  }
+
   /** 攻防双方的技能与装备格物品一起还原 */
   static async _restoreAllItemMods(...items) {
     const actors = new Set();
