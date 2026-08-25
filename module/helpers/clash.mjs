@@ -5441,7 +5441,6 @@ export class ClashManager {
     if (breatheCrit) calcNotes.push(`【呼吸法】暴击 ×1.5 → ${critBase}`);
     if (fragile > 0 || guard > 0) calcNotes.push(`易损(+${fragile})/守护(-${guard}) → ${adjustedBase}`);
     if (physMult !== 1.0 || sinMult !== 1.0) calcNotes.push(`抗性(${physResStr}×${sinResStr}) → ${finalDmg}`);
-    if (breatheCrit) calcNotes.push(`【呼吸】暴击！`);
 
     // 发送反击触发聊天头（伤害消息由 _applyAndSendTake 单独发送）
     await ClashManager._safeChatCreate({
