@@ -447,7 +447,10 @@ Hooks.on("renderChatMessage", (_message, html, _data) => {
                + "<p style='color:#B84444;font-size:.85rem;'>上一次已经发生的效果不会回滚"
                + "（加出去的 BUFF、扣掉的资源都还在），重打会再触发一次。</p>",
       });
-      if (ok) await ClashManager.redoClash(flags.redoData);
+      if (!ok) return;
+      // 单方面攻击卡复用同一处理器，重掷走各自的入口
+      if (flags.directRedo) await ClashManager.redoDirectTake(flags.directRedo);
+      else                  await ClashManager.redoClash(flags.redoData);
     });
     html.find(".clash-btn-settle").on("click", async (e) => {
       const targetActorId = e.currentTarget.dataset.targetActorId ?? flags.targetActorId;

@@ -4547,11 +4547,22 @@ export class ClashManager {
     // [受到伤害时]：承受方受伤（技能 + 装备格物品 + BUFF 的 onTakeDamage）
     await ClashManager._dispatchTakeDamage(atkItem2, baseActor, atkActor, defCtx2);
 
-    const _buffHookMsgs2 = [];
-    await ClashManager._applyAndSendTake(baseActor, finalDamage, { calcNotes, attacker: atkActor, hookMsgs: _buffHookMsgs2, category, sinType, item: atkItem2 });
-    if (_buffHookMsgs2.length) {
-      _actMsgs2.push({ trigger: "受到伤害时", itemName: baseActor.name, msgs: _buffHookMsgs2 });
-    }
+    // 单方面攻击卡：与拼点对抗卡同一套流程——先把结果摆出来，
+    // 扣血、破裂/沉沦/震颤引爆等等都等【结算结果】按下去才发生。
+    const _directMsg = await ClashManager._sendDirectTakeMsg({
+      atkActor, defActor: baseActor, item: atkItem2,
+      finalDamage, calcNotes, initFlags,
+      weightSpread: (initFlags.weight ?? 1) >= 2 ? {
+        attackerId: atkActor?.id     ?? "",
+        rollTotal:  initFlags.rollTotal ?? 0,
+        category:   initFlags.category  ?? "",
+        sinType:    initFlags.sinType   ?? "",
+        weight:     initFlags.weight    ?? 1,
+        itemId:     initFlags.itemId    ?? "",
+        itemName:   initFlags.itemName  ?? "",
+        itemImg:    initFlags.itemImg   ?? "",
+      } : null,
+    });
 
     // 单方面攻击（承受）：不拼点，只把对方打退一次，攻击方不追击
     ClashVFX.broadcastBurst(ClashVFX.midPoint(atkActor, baseActor));
@@ -4564,23 +4575,101 @@ export class ClashManager {
     await ClashManager._applyActivitiesAndEquip(atkItem2, "攻击后", atkCtx2);
     await ClashManager._restoreAllItemMods(atkItem2);
 
-    // 统一发出本次承受所有 activity 通知
-    await ClashManager._flushActMsgs(_actMsgs2, atkActor);
+    // 详细信息并入单方面攻击卡的折叠区（与拼点对抗卡同样是发卡后再注入）
+    await ClashManager._injectResolveDetails(_directMsg, _actMsgs2);
     await ClashManager._broadcastAndCheckReactions({ lastSkillUuid: atkItem2?.uuid ?? null, attacker: atkActor, defender: defActor });
+  }
 
-    // 若选中的是非 linked token actor，额外同步该 token 的 HP
-    if (selActor !== baseActor && selActor.isToken) {
-      const th = selActor.system?.hp?.value ?? 0;
-      await selActor.update({ "system.hp.value": Math.max(0, th - finalDamage) });
-    }
+  /**
+   * 单方面攻击卡：在【发起对抗】阶段直接点【承受】走的就是这条路。
+   * 结构与拼点对抗卡一致，只是没有对手那一侧，也没有胜负——
+   * 头像标题 → 技能 → 结算数字 → 详细信息 → 结算结果 / 重新骰掷。
+   */
+  static async _sendDirectTakeMsg({ atkActor, defActor, item, finalDamage,
+                                    calcNotes = [], initFlags = {}, weightSpread = null }) {
+    const isGM = game.user?.isGM ?? false;
+    const img  = item?.img ?? initFlags.itemImg ?? "";
+    const name = item?.name ?? initFlags.itemName ?? "技能";
+    const sys  = item?.system ?? {};
+    const meta = [ClashManager._catLabel(sys.category), sys.diceFormula]
+      .filter(Boolean).join(" · ");
 
-    // ── 容量扩散：攻击容量 >=2 时发出额外承受卡 ────────────────────────────
-    const weight = initFlags.weight ?? 1;
-    if (weight >= 2) {
-      await ClashManager._sendWeightSpreadCard(initFlags, atkActor, {
-        actorId: baseActor.id, name: baseActor.name, dmg: finalDamage, note: "拼点命中",
-      });
+    const content = `
+      <div class="limbus-clash-card" data-clash-type="direct-take">
+        ${ClashManager._chatHeader(atkActor ?? { img: "", name: "?" }, "单方面攻击")}
+        ${ClashManager._goldDivider()}
+
+        <div style="display:flex;align-items:center;gap:10px;">
+          <img src="${img}" style="width:50px;height:50px;object-fit:cover;flex-shrink:0;" alt="">
+          <div style="min-width:0;">
+            <div style="font-size:13px;color:#E8C9A2;">${defActor?.name ?? "?"}</div>
+            <div style="font-size:12px;color:#9A8462;">${name}${meta ? `　<span style="color:#EBBD68;">${meta}</span>` : ""}</div>
+          </div>
+        </div>
+
+        ${ClashManager._goldDivider()}
+        <div style="text-align:center;margin:8px 0;">
+          <div style="font-size:14px;color:#C9A84C;margin-bottom:6px;">结算</div>
+          <div style="font-size:2rem;font-weight:bold;color:#B84444;">${finalDamage}</div>
+        </div>
+
+        ${ClashManager._goldDivider()}
+        <!--LC_DETAILS-->
+        ${calcNotes.length ? `
+        <div style="font-size:.8rem;color:#9A8462;line-height:1.7;margin:4px 0 8px;">
+          ${calcNotes.map(n => `<div>${n}</div>`).join("")}
+        </div>` : ""}
+
+        ${ClashManager._goldDivider()}
+        <div class="lc-btn-row" style="display:flex;gap:8px;align-items:stretch;">
+          <button class="clash-btn-settle lc-btn primary"
+                  data-target-actor-id="${defActor?.id ?? ""}"
+                  data-damage="${finalDamage}"
+                  style="flex:1;height:30px;padding:0 14px;background:#5F3E22;color:#E8C9A2;
+                         border:1px solid #C9A84C;border-radius:2px;cursor:pointer;font-size:.85rem;">
+            结算结果
+          </button>
+          ${isGM ? `<button class="clash-btn-redo lc-btn dim"
+                    style="height:30px;padding:0 14px;background:#241B12;color:#9A8462;
+                           border:1px solid #5A3A1A;border-radius:2px;cursor:pointer;font-size:.85rem;">重新骰掷</button>` : ""}
+        </div>
+      </div>`;
+
+    return await ClashManager._safeChatCreate({
+      speaker: ChatMessage.getSpeaker({ actor: atkActor }),
+      content,
+      flags: {
+        limbusCompany_FVTT: {
+          type:          "clash-resolve",   // 复用拼点对抗卡的按钮处理器
+          targetActorId: defActor?.id ?? "",
+          damage:        finalDamage,
+          weightSpread,
+          directRedo:    { initFlags },
+        },
+      },
+    });
+  }
+
+  /**
+   * 单方面攻击的整局重掷（仅 GM）。攻击方按原公式重骰一次，再走一遍承受流程。
+   * 与 redoClash 一样是**重打不是撤销**，已发生的效果不回滚。
+   */
+  static async redoDirectTake(directRedo) {
+    if (!game.user?.isGM) {
+      ui.notifications?.warn("只有 GM 可以重新骰掷。");
+      return;
     }
+    const initFlags = directRedo?.initFlags;
+    if (!initFlags) return;
+
+    const flags2  = foundry.utils.deepClone(initFlags);
+    const formula = initFlags.formula ?? "";
+    if (formula) {
+      const roll = await new Roll(formula).evaluate();
+      flags2.rollTotal = roll.total;
+      flags2.rollData  = (typeof roll.toJSON === "function") ? roll.toJSON() : null;
+    }
+    await ClashManager.handleDirectTake(flags2);
   }
 
   /* ─── 容量扩散承受 ──────────────────────────────────────────────────────── */
@@ -4590,9 +4679,9 @@ export class ClashManager {
     const actor       = atkActor ?? game.actors.get(flags.attackerId);
     const btnDisabled = remainingUses <= 0 || !!flags.running;
     const btnStyle    = btnDisabled
-      ? "background:#555;color:#888;border:none;cursor:not-allowed;opacity:.6;"
-      : "background:#B84444;color:#fff;border:none;cursor:pointer;";
-    const btnLabel    = flags.running ? "扩散中…" : remainingUses <= 0 ? "（已用尽）" : `承受（×${remainingUses}）`;
+      ? "background:#2A2521;color:#6A5A48;border:1px solid #3A3227;cursor:not-allowed;"
+      : "background:#5F3E22;color:#E8C9A2;border:1px solid #C9A84C;cursor:pointer;";
+    const btnLabel    = flags.running ? "扩散中…" : remainingUses <= 0 ? "（已用尽）" : `结算结果（×${remainingUses}）`;
 
     // 容量方块：拼点那一击本身占 1 点
     const cap  = flags.weight ?? 1;
@@ -4613,49 +4702,53 @@ export class ClashManager {
       ? `<span style="font-size:.62rem;color:#C9A84C;margin-left:6px;">${modeLabel} · ${ft}ft</span>${indisLabel}`
       : indisLabel;
 
-    // 战果：伤害卡只在这里记账（含陷入混乱）
-    const hits = flags.hits ?? [];
-    const rows = hits.map(h => `
-      <div style="display:flex;gap:5px;align-items:baseline;font-size:.7rem;line-height:1.55;">
-        <span style="color:#E8C9A2;">${h.name}</span>
-        <span style="color:#B84444;font-weight:bold;">-${h.dmg}</span>
-        ${h.hp ? `<span style="color:#6A5A48;font-size:.62rem;">${h.hp}</span>` : ""}
-        ${h.note ? `<span style="color:#9A8462;font-size:.62rem;">${h.note}</span>` : ""}
-        ${h.chaos ? `<span style="color:#E84444;font-weight:bold;font-size:.62rem;">【${h.chaos}】</span>` : ""}
-      </div>`).join("");
+    // 战果：每个目标一个 40px 缩小版结算块（与承受结算卡同构，小一档）
+    const hits  = flags.hits ?? [];
     const total = hits.reduce((a2, h) => a2 + (h.dmg ?? 0), 0);
-    const log = `
-      <div style="border-left:2px solid #8A7433;padding-left:6px;margin:4px 0 6px;">
-        ${rows || `<span style="color:#5B4F40;font-size:.65rem;font-style:italic;">尚无战果</span>`}
-        ${hits.length ? `<div style="border-top:1px solid #3A3227;margin-top:3px;padding-top:2px;
-            font-size:.65rem;color:#9A8462;">合计
-            <span style="color:#B84444;font-weight:bold;">${total}</span> · 命中 ${hits.length} 次</div>` : ""}
-      </div>`;
+    const log = hits.length
+      ? hits.map(h => {
+          const tgt = game.actors.get(h.actorId);
+          return ClashManager._hpBlock({
+            actor:  tgt ?? { name: h.name, img: "icons/svg/mystery-man.svg" },
+            oldHp:  h.oldHp ?? 0, newHp: h.newHp ?? 0, maxHp: h.maxHp ?? 1,
+            triggers: [
+              ...(h.note ? [{ k: "命中", v: h.note }] : []),
+              ...(h.trg ?? []),
+            ],
+            sm: true,
+          });
+        }).join("")
+      : `<div style="color:#5B4F40;font-size:.7rem;font-style:italic;padding:2px 0;">尚无战果</div>`;
 
     return `
-      <div class="limbus-clash-card" data-clash-type="weight-spread" style="font-size:.75rem;">
+      <div class="limbus-clash-card" data-clash-type="weight-spread">
         ${ClashManager._chatHeader(actor, "容量扩散")}
         ${ClashManager._goldDivider()}
-        <div style="font-size:.72rem;color:#E8C9A2;margin:2px 0 4px;">
-          ⚔️ <strong>${flags.itemName ?? "技能"}</strong> 容量命中！${modeLine}
+        <div class="lc-spread-meta">
+          <span class="sk">【${flags.itemName ?? "技能"}】</span>容量扩散
+          <span class="mode">　${modeLabel} · <span class="ft">${ft}ft</span></span>${indisLabel}
         </div>
-        <div style="margin-bottom:3px;">
+        <div style="margin:4px 0 0;">
           <span style="font-size:.62rem;color:#9A8462;margin-right:4px;">攻击容量</span>${sqs}
         </div>
+        ${ClashManager._goldDivider()}
         ${log}
-        <div style="display:flex;align-items:center;gap:8px;">
+        ${hits.length ? `<div style="border-top:1px solid #3A3227;margin-top:6px;padding-top:3px;
+            font-size:.68rem;color:#9A8462;">合计
+            <span style="color:#B84444;font-weight:bold;">${total}</span> · 命中 ${hits.length} 次</div>` : ""}
+        ${ClashManager._goldDivider()}
+        <div class="lc-btn-row" style="display:flex;gap:8px;align-items:stretch;">
           <button class="clash-btn-weight-take"
-                  style="height:24px;padding:0 12px;${btnStyle}font-size:.72rem;border-radius:2px;"
+                  style="flex:1;height:30px;padding:0 14px;${btnStyle}font-size:.85rem;border-radius:2px;"
                   ${btnDisabled ? "disabled" : ""}>
             ${btnLabel}
           </button>
-          <span style="font-size:.62rem;color:#6A5A48;">
-            ${cap >= 2
-              ? (flags.spreadMode === "spray" ? "范围内随机抽取，可能重复命中" : "范围内逐个打过去，不重复")
-              : "点击自动结算这一次扩散"}
-          </span>
         </div>
-        ${ClashManager._goldDivider()}
+        <div style="font-size:.62rem;color:#6A5A48;margin-top:4px;">
+          ${cap >= 2
+            ? (flags.spreadMode === "spray" ? "范围内随机抽取，可能重复命中" : "范围内逐个打过去，不重复")
+            : "点击自动结算这一次扩散"}
+        </div>
       </div>`;
   }
 
@@ -4916,15 +5009,18 @@ export class ClashManager {
         calcNotes, attacker: atkActor, takeLabel: "容量扩散-承受", silent: true,
         category: flags.category, sinType: flags.sinType, item: atkItem,
       });
-      const extra = [];
-      if (take?.ruptureDmg)      extra.push(`破裂+${take.ruptureDmg}`);
-      if (take?.sinkingGloomDmg) extra.push(`沉沦+${take.sinkingGloomDmg}`);
-      if (take?.tremorTriggered) extra.push("震颤引爆");
+      // 触发行：与承受结算卡同一套写法
+      const trg = [];
+      if (take?.ruptureDmg)      trg.push({ k: "破裂触发", v: `附加 <b>${take.ruptureDmg}</b> 点固定伤害` });
+      if (take?.sanityDmg)       trg.push({ k: "沉沦触发", v: `${take.sanityDmg} 点侵蚀度（理智 −${take.sanityDmg}）` });
+      if (take?.sinkingGloomDmg) trg.push({ k: "沉沦触发", v: `理智见底，额外承受 <b>${take.sinkingGloomDmg}</b> 点【忧郁】伤害` });
+      if (take?.tremorTriggered) trg.push({ k: "震颤引爆", v: "消耗 1 层【震颤】，混乱阈值前移" });
       hits.push({
         actorId: tgtActor.id, name: tgtActor.name, dmg: finalDamage,
-        hp: `${take?.finalHp ?? 0}/${take?.maxHp ?? 0}`,
-        chaos: take?.chaosTriggered ? (take.chaosName ?? "陷入混乱") : "",
-        note: [mode === "spray" ? `骰 ${roll}` : "", resNote, ...extra].filter(Boolean).join(" · "),
+        // 血条所需：结算前后生命值与上限
+        oldHp: take?.oldHp ?? 0, newHp: take?.finalHp ?? 0, maxHp: take?.maxHp ?? 1,
+        trg,
+        note: [mode === "spray" ? `骰 ${roll}` : "", resNote].filter(Boolean).join(" · "),
       });
       hitActorIds.add(tgtActor.id);
       if (mode === "chain") anchorId = tgtActor.id;     // 链式：锚点前移
