@@ -4009,14 +4009,6 @@ export class ClashManager {
                        : isClashBlockWin   ? "格挡成功"
                        : "拼点对抗";
 
-    const atkTotalStyle = atkWins
-      ? "font-size:2rem;font-weight:bold;color:#E8C9A2;"
-      : "font-size:2rem;font-weight:bold;color:#B84444;";
-    const defTotalStyle = !atkWins
-      ? "font-size:2rem;font-weight:bold;color:#E8C9A2;"
-      : "font-size:2rem;font-weight:bold;color:#B84444;";
-    // 闪避平局时两边点数相等，显示 "=" 但结果是守方躲开
-    const cmp = atkTotal === defTotal ? "=" : (atkTotal > defTotal ? ">" : "<");
 
 
     // 容量扩散信息：谁打出伤害就带谁的攻击容量。
@@ -4082,15 +4074,6 @@ export class ClashManager {
             <img src="${defItemImg ?? ""}" style="width:50px;height:50px;object-fit:cover;display:block;margin:0 auto;" alt="">
             <div style="font-size:12px;color:#E8C9A2;margin-top:4px;">${defItemName ?? ""}</div>
             <div style="font-size:11px;color:#EBBD68;">${defFormula ?? ""}</div>
-          </div>
-        </div>
-        ${ClashManager._goldDivider()}
-        <div style="text-align:center;margin:8px 0;">
-          <div style="font-size:14px;color:#C9A84C;margin-bottom:6px;">拼点结算</div>
-          <div style="display:flex;align-items:center;justify-content:center;gap:14px;">
-            <span style="${atkTotalStyle}">${atkTotal}</span>
-            <span style="font-size:1.5rem;color:#C9A84C;">${cmp}</span>
-            <span style="${defTotalStyle}">${defTotal}</span>
           </div>
         </div>
         ${ClashManager._goldDivider()}
@@ -4731,6 +4714,7 @@ export class ClashManager {
     await ClashManager._flushTakeAgg();
     await ClashManager._sendDirectTakeMsg({
       actMsgs: _actMsgs2, takeEffects: _takeEffectRows2,
+      scoreRows: { atkLv, defLv, roll: finalRollTotal, lvBonus, mod: atkDiceMod },
       atkActor, defActor: baseActor, item: atkItem2,
       finalDamage, calcNotes, initFlags,
       weightSpread: (initFlags.weight ?? 1) >= 2 ? {
@@ -4749,13 +4733,43 @@ export class ClashManager {
   }
 
   /**
+   * 单方面攻击的骰掷结果表。
+   * 只有一方出手，所以除了「等级」（左攻击等级 / 右防御等级）之外都是单值。
+   * 不列「总和」——总和就是下面那个大大的结算数字，重复一次没意义。
+   */
+  static _buildSoloScoreTable({ atkLv, defLv, roll, lvBonus, mod }) {
+    const sign = (v) => {
+      const n = Number(v) || 0;
+      if (n > 0) return `<span style="color:#7FB6D6;">+${n}</span>`;
+      if (n < 0) return `<span style="color:#E84444;">${n}</span>`;
+      return `<span style="color:#6A5A48;">0</span>`;
+    };
+    const row = (label, left, right = "") => `
+      <div style="display:grid;grid-template-columns:1fr auto 1fr;align-items:baseline;
+                  gap:10px;padding:2px 0;">
+        <div style="text-align:right;font-variant-numeric:tabular-nums;">${left}</div>
+        <div style="color:#9A8462;font-size:.72rem;min-width:34px;text-align:center;">${label}</div>
+        <div style="text-align:left;font-variant-numeric:tabular-nums;">${right}</div>
+      </div>`;
+
+    return `
+      <div style="margin:6px 0;font-size:.86rem;">
+        ${row("等级", `<span style="color:#E8C9A2;">${atkLv}</span>`,
+                      `<span style="color:#E8C9A2;">${defLv}</span>`)}
+        ${row("骰掷", `<span style="color:#E8C9A2;">${roll}</span>`)}
+        ${row("等差", sign(lvBonus))}
+        ${row("加成", sign(mod))}
+      </div>`;
+  }
+
+  /**
    * 单方面攻击卡：在【发起对抗】阶段直接点【承受】走的就是这条路。
    * 结构与拼点对抗卡一致，只是没有对手那一侧，也没有胜负——
    * 头像标题 → 技能 → 结算数字 → 详细信息 → 结算结果 / 重新骰掷。
    */
   static async _sendDirectTakeMsg({ atkActor, defActor, item, finalDamage,
                                     calcNotes = [], initFlags = {}, weightSpread = null,
-                                    actMsgs = [], takeEffects = [] }) {
+                                    actMsgs = [], takeEffects = [], scoreRows = null }) {
     const isGM = game.user?.isGM ?? false;
     const img  = item?.img ?? initFlags.itemImg ?? "";
     const name = item?.name ?? initFlags.itemName ?? "技能";
@@ -4777,6 +4791,7 @@ export class ClashManager {
         </div>
 
         ${ClashManager._goldDivider()}
+        ${scoreRows ? ClashManager._buildSoloScoreTable(scoreRows) : ""}
         <div style="text-align:center;margin:8px 0;">
           <div style="font-size:14px;color:#C9A84C;margin-bottom:6px;">结算</div>
           <div style="font-size:2rem;font-weight:bold;color:#B84444;">${finalDamage}</div>
