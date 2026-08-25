@@ -3864,8 +3864,7 @@ export class ClashManager {
     const loserName = loser?.name ?? "?";
     const notes     = [];
 
-    notes.push(`本次对抗：${atkActor?.name ?? "?"} vs ${defActor?.name ?? "?"}`);
-    notes.push(`结算结果：`);
+
 
     // 攻击方骰数（有 BUFF 或等级差时展示修正过程）
     const atkModParts = [];
@@ -3873,7 +3872,7 @@ export class ClashManager {
     if (atkLvBonus  > 0)  atkModParts.push(`等级差(+${atkLvBonus})`);
     const atkBuffStr = atkModParts.length > 0
       ? `+${atkModParts.join("+")}=${atkEffective}` : "";
-    notes.push(`　${atkActor?.name ?? "?"}：${atkFormula.toUpperCase()}=${atkTotal} ${atkBuffStr}`.trim());
+
 
     // 防守方骰数
     const defModParts = [];
@@ -3881,11 +3880,8 @@ export class ClashManager {
     if (defLvBonus > 0) defModParts.push(`等级差(+${defLvBonus})`);
     const defBuffStr = defModParts.length > 0
       ? `+${defModParts.join("+")}=${defEffective}` : "";
-    notes.push(`　${defActor?.name ?? "?"}：${defFormula.toUpperCase()}=${defTotal} ${defBuffStr}`.trim());
 
-    // 等级差说明
-    if (atkLvBonus > 0) notes.push(`（攻击方等级 ${atkSideLv} vs 防守方等级 ${defSideLv}，等级差 ${atkSideLv - defSideLv}，拼点+${atkLvBonus}）`);
-    if (defLvBonus > 0) notes.push(`（防守方等级 ${defSideLv} vs 攻击方等级 ${atkSideLv}，等级差 ${defSideLv - atkSideLv}，拼点+${defLvBonus}）`);
+
 
     if (dodgeWin && atkEffective === defEffective) {
       notes.push(`平局 → ${defActor?.name ?? "?"} 闪避成功（无伤害）`);
@@ -3921,8 +3917,17 @@ export class ClashManager {
       }
     }
 
+    // 结算表：左=攻方 中=项目 右=守方，由 _buildScoreTable 渲染
+    const scoreRows = {
+      atkLv: atkSideLv, defLv: defSideLv,
+      atkRoll: atkTotal, defRoll: defTotal,
+      atkLvBonus, defLvBonus,
+      atkMod: atkDiceMod, defMod: defDiceMod + defPwrMod,
+      atkSum: atkEffective, defSum: defEffective,
+    };
+
     return {
-      atkWins, winner, loser,
+      atkWins, winner, loser, scoreRows,
       atkTotal: atkEffective, defTotal: defEffective, winScore,
       atkItemName, atkItemImg, atkFormula, atkActor,
       defItemName, defItemImg, defFormula, defActor,
@@ -3931,6 +3936,46 @@ export class ClashManager {
   }
 
   /* ─── 阶段五c：拼点结算聊天框 ──────────────────────────────────────────── */
+
+  /**
+   * 拼点结算表：左=攻方数值　中=项目　右=守方数值。
+   * 带 + 的数值蓝色、带 − 的红色，0 与无符号项保持常规色。
+   * 旧版是一段「6D4+13=25 +BUFF(+6)+等级差(+1)=32」的连排公式，
+   * 两边要对着读才知道差在哪；拆成三栏后同一项目左右并排，一眼看得出。
+   */
+  /** 把「受到 96 点伤害」里的数字标红——结论行里最该被一眼看到的就是它 */
+  static _hlDamage(text) {
+    return String(text).replace(/受到\s*(\d+)\s*点/g,
+      '受到 <span style="color:#E84444;font-weight:bold;">$1</span> 点');
+  }
+
+  static _buildScoreTable(r) {
+    if (!r) return "";
+    const sign = (v) => {
+      const n = Number(v) || 0;
+      if (n > 0) return `<span style="color:#7FB6D6;">+${n}</span>`;
+      if (n < 0) return `<span style="color:#E84444;">${n}</span>`;
+      return `<span style="color:#6A5A48;">0</span>`;
+    };
+    const plain = (v) => `<span style="color:#E8C9A2;">${v}</span>`;
+
+    const row = (label, left, right, strong = false) => `
+      <div style="display:grid;grid-template-columns:1fr auto 1fr;align-items:baseline;
+                  gap:10px;padding:2px 0;${strong ? "font-size:1.05rem;font-weight:bold;" : ""}">
+        <div style="text-align:right;font-variant-numeric:tabular-nums;">${left}</div>
+        <div style="color:#9A8462;font-size:.72rem;min-width:34px;text-align:center;">${label}</div>
+        <div style="text-align:left;font-variant-numeric:tabular-nums;">${right}</div>
+      </div>`;
+
+    return `
+      <div style="margin:6px 0;font-size:.86rem;">
+        ${row("等级", plain(r.atkLv),   plain(r.defLv))}
+        ${row("骰掷", plain(r.atkRoll), plain(r.defRoll))}
+        ${row("等差", sign(r.atkLvBonus), sign(r.defLvBonus))}
+        ${row("加成", sign(r.atkMod),     sign(r.defMod))}
+        ${row("总和", plain(r.atkSum),    plain(r.defSum), true)}
+      </div>`;
+  }
 
   static async _sendResolveMsg(res, initFlags, defActor, defItem, defFormula, sanityNotes = [], actMsgs = [], takeEffects = []) {
     const {
@@ -4036,10 +4081,10 @@ export class ClashManager {
           </div>
         </div>
         ${ClashManager._goldDivider()}
-        <div style="font-size:.8rem;color:#9A8462;line-height:1.7;margin:4px 0 8px;">
-          ${notes.map(n => `<div>${n}</div>`).join("")}
-        </div>
+        ${ClashManager._buildScoreTable(res.scoreRows)}
+        <div style="height:30px;"></div>
         ${ClashManager._buildDetailsFold(actMsgs)}
+        <div style="height:30px;"></div>
         ${sanityNotes.length ? `
         <div class="limbus-sanity-toggle-row"
              style="display:flex;align-items:center;gap:6px;cursor:pointer;margin:4px 0 0;user-select:none;">
@@ -4052,6 +4097,10 @@ export class ClashManager {
              style="display:none;font-size:.8rem;line-height:1.8;padding:4px 6px;
                     background:rgba(0,0,0,.25);border-radius:3px;margin-bottom:4px;">
           ${sanityNotes.map(n => `<div>${n}</div>`).join("")}
+        </div>` : ""}
+        ${notes.length ? `
+        <div style="font-size:.8rem;color:#9A8462;line-height:1.7;margin:8px 0 8px;">
+          ${notes.map(n => `<div>${ClashManager._hlDamage(n)}</div>`).join("")}
         </div>` : ""}
         ${takeSection}
       </div>`;
