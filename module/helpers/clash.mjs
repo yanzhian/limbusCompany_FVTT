@@ -1088,6 +1088,26 @@ export class ClashManager {
    * @param {object} opts     { attacker }
    * @returns {{ blasts: number, msgs: string[] }}
    */
+  /**
+   * 撞墙触发的【震颤引爆】。seismicBlast 会返回「哪条震颤被引爆、阈值前移多少」
+   * 以及各【特殊震颤】的额外效果行——这些原先被 onWallHit 的箭头函数直接丢掉了，
+   * 现在收进当前卡的详细信息桶（没有桶就退回环境桶 / 单发）。
+   * @param {Actor} target
+   * @param {{attacker:Actor|null, bucket:object[]|null}} opts
+   */
+  static async _wallSeismicBlast(target, { attacker = null, bucket = null } = {}) {
+    const { blasts, msgs } = await ClashManager.seismicBlast(target, 1, { attacker });
+    if (!blasts || !msgs.length) return blasts;
+    const entry = {
+      trigger:  "震颤引爆",
+      itemName: `${target?.name ?? ""}·撞墙`,
+      msgs,
+    };
+    if (bucket) bucket.push(entry);
+    else if (!ClashManager.pushAmbient([entry])) await ClashManager._flushActMsgs([entry], target);
+    return blasts;
+  }
+
   static async seismicBlast(target, times = 1, { attacker = null } = {}) {
     const msgs = [];
     if (!target) return { blasts: 0, msgs };
@@ -3443,7 +3463,7 @@ export class ClashManager {
             _burstMid();
             await ClashKnockback.repel({
               winner: atkActor, loser: defActor, winScore: _atkEffFx, chase: false,
-              onWallHit: (a) => ClashManager.seismicBlast(a, 1, { attacker: atkActor }),
+              onWallHit: (a) => ClashManager._wallSeismicBlast(a, { attacker: atkActor, bucket: atkCtx._actMsgs }),
             });
           } else if (defCategory === "counter") {
             // 反击方反手扑回来，再把进攻方打退
@@ -3451,7 +3471,7 @@ export class ClashManager {
             await ClashKnockback.repel({
               winner: defActor, loser: atkActor, winScore: _defEffFx,
               chase: false, approachFirst: true,
-              onWallHit: (a) => ClashManager.seismicBlast(a, 1, { attacker: defActor }),
+              onWallHit: (a) => ClashManager._wallSeismicBlast(a, { attacker: defActor, bucket: defCtx._actMsgs }),
             });
           }
         },
@@ -3527,7 +3547,7 @@ export class ClashManager {
         _burstMid();
         await ClashKnockback.repel({
           winner: atkActor, loser: defActor, winScore: atkEffFx, chase: false,
-          onWallHit: (a) => ClashManager.seismicBlast(a, 1, { attacker: atkActor }),
+          onWallHit: (a) => ClashManager._wallSeismicBlast(a, { attacker: atkActor, bucket: atkCtx._actMsgs }),
         });
       }
     }
@@ -3761,8 +3781,8 @@ export class ClashManager {
           loser:  aEff > dEff ? defActor : atkActor,
           winScore: Math.max(aEff, dEff),
           chase: true,
-          onWallHit: (actor) => ClashManager.seismicBlast(actor, 1,
-            { attacker: aEff > dEff ? atkActor : defActor }),
+          onWallHit: (actor) => ClashManager._wallSeismicBlast(actor,
+            { attacker: aEff > dEff ? atkActor : defActor, bucket: atkCtx._actMsgs }),
         });
       }
 
@@ -3810,7 +3830,7 @@ export class ClashManager {
         winner: winActor, loser: loseActor,
         winScore: winParts.reduce((a, p) => a + (p.value ?? 0), 0),
         chase: false,
-        onWallHit: (actor) => ClashManager.seismicBlast(actor, 1, { attacker: winActor }),
+        onWallHit: (actor) => ClashManager._wallSeismicBlast(actor, { attacker: winActor, bucket: atkCtx._actMsgs }),
       });
     }
 
@@ -4800,7 +4820,7 @@ export class ClashManager {
     ClashVFX.broadcastBurst(ClashVFX.midPoint(atkActor, baseActor));
     await ClashKnockback.repel({
       winner: atkActor, loser: baseActor, winScore: step, chase: false,
-      onWallHit: (a) => ClashManager.seismicBlast(a, 1, { attacker: atkActor }),
+      onWallHit: (a) => ClashManager._wallSeismicBlast(a, { attacker: atkActor, bucket: _actMsgs2 }),
     });
 
     // [攻击后]：必须在建卡之前跑完，详细信息才收得全（与拼点对抗卡同理）
@@ -5071,7 +5091,7 @@ export class ClashManager {
    * 单个扩散目标的伤害计算（与拼点伤害同一套：强壮/虚弱 → 等级差 → 易损/守护 → 抗性）
    * @returns {{ finalDamage: number, calcNotes: string[], resNote: string }}
    */
-  static _spreadDamage(atkActor, defActor, { rollTotal = 0, category = "", sinType = "" } = {}) {
+  static _spreadDamage(atkActor, defActor, { rollTotal = 0, category = "", sinType = "", critMult = 1.0 } = {}) {
     const PHYS_CATS   = ["slash", "blunt", "pierce"];
     const SIN_TYPES   = ["wrath","lust","sloth","gluttony","gloom","pride","envy"];
     const PHYS_LABELS = { slash: "斩击", blunt: "打击", pierce: "突刺" };
@@ -5091,7 +5111,9 @@ export class ClashManager {
     const effectiveAtk = rollTotal + atkDiceMod + lvBonus;
     const guard        = gs(defActor, "guard");
     const fragile      = gs(defActor, "fragile");
-    const adjustedAtk  = Math.max(0, effectiveAtk + fragile - guard);
+    // 与拼点/单方面攻击同序：有效骰数 → 暴击倍率 → +易损-守护 → ×抗性
+    const critAtk      = Math.round(effectiveAtk * critMult);
+    const adjustedAtk  = Math.max(0, critAtk + fragile - guard);
 
     const effRes     = ClashManager._getEffectiveResistances(defActor);
     const physResStr = PHYS_CATS.includes(category) ? (effRes[category] ?? "x1.0") : "x1.0";
@@ -5113,6 +5135,11 @@ export class ClashManager {
     if (lvBonus > 0) {
       step += lvBonus;
       calcNotes.push(`等级差（攻Lv${atkLv} vs 防Lv${defLv}，差${atkLv - defLv}，+${lvBonus}）→ ${step}`);
+    }
+    if (critMult !== 1.0) {
+      const prev = step;
+      step = critAtk;
+      calcNotes.push(`【呼吸法】暴击 ×1.5：${prev} → ${step}`);
     }
     if (fragile > 0 || guard > 0) {
       const prev = step;
@@ -5260,9 +5287,16 @@ export class ClashManager {
         const fml  = item?.system?.diceFormula;
         if (fml) { const r = new Roll(fml); await r.evaluate(); roll = r.total; }
       }
+      // 【呼吸法】暴击：判定必须在伤害计算之前，×1.5 才进得去
+      // （[暴击命中时] 仍在下面 ④ 和 [命中时] 一起跑，触发顺序不变）
+      const _breathe = ClashManager._getBuff(atkActor, "breathing");
+      const _crit    = !!_breathe && (_breathe.stacks ?? 0) > 0
+                    && Math.random() < (_breathe.intensity ?? 1) * 0.05;
+
       const { finalDamage, calcNotes, resNote } =
         ClashManager._spreadDamage(atkActor, tgtActor, {
           rollTotal: roll, category: flags.category, sinType: flags.sinType,
+          critMult: _crit ? 1.5 : 1.0,
         });
 
       // ③ TOTAL 累加 + 目标处 +N
@@ -5282,10 +5316,8 @@ export class ClashManager {
           _fireCounts: fireCounts, _actMsgs: actMsgs, _currentItemId: atkItem.id,
         };
         await ClashManager._applyActivitiesAndEquip(atkItem, "命中时", hitCtx);
-        // 【呼吸法】暴击判定：每层强度 5% 概率，触发后消耗 1 层
-        const breathe = ClashManager._getBuff(atkActor, "breathing");
-        if (breathe && (breathe.stacks ?? 0) > 0
-            && Math.random() < (breathe.intensity ?? 0) * 0.05) {
+        // 【呼吸法】暴击已在伤害计算前判定，这里只负责消耗层数与衍生触发
+        if (_crit) {
           await ClashManager._reduceBuffStacks(atkActor, "breathing");
           await ClashManager._applyActivitiesAndEquip(atkItem, "暴击命中时", hitCtx);
         }
@@ -5301,7 +5333,10 @@ export class ClashManager {
       if (take?.ruptureDmg)      trg.push({ k: "破裂触发", v: `附加 <b>${take.ruptureDmg}</b> 点固定伤害` });
       if (take?.sanityDmg)       trg.push({ k: "沉沦触发", v: `${take.sanityDmg} 点侵蚀度（理智 −${take.sanityDmg}）` });
       if (take?.sinkingGloomDmg) trg.push({ k: "沉沦触发", v: `理智见底，额外承受 <b>${take.sinkingGloomDmg}</b> 点【忧郁】伤害` });
-      if (take?.tremorTriggered) trg.push({ k: "震颤引爆", v: "消耗 1 层【震颤】，混乱阈值前移" });
+      if (take?.tremorTriggered) {
+        const lines = take.tremorMsgs?.length ? take.tremorMsgs : ["消耗 1 层【震颤】，混乱阈值前移"];
+        for (const l of lines) trg.push({ k: "震颤引爆", v: l });
+      }
       hits.push({
         actorId: tgtActor.id, name: tgtActor.name, dmg: finalDamage,
         // 血条所需：结算前后生命值与上限
@@ -5378,18 +5413,20 @@ export class ClashManager {
     const sinResStr  = SIN_TYPES.has(sin)
       ? (targetActor.system?.egoResistances?.[sin] ?? "x1.0") : "x1.0";
     const sinMult    = ClashManager._parseResistance(sinResStr);
-    const guard   = gs(targetActor, "guard");
-    const fragile = gs(targetActor, "fragile");
-    const adjustedBase = Math.max(0, adjusted + fragile - guard);
-    const finalDmg     = Math.max(0, Math.round(adjustedBase * physMult * sinMult));
-
-    // 呼吸暴击判定
+    // 呼吸暴击判定——必须在伤害计算之前，×1.5 才进得去
+    // （原先写在 finalDmg 之后，卡上印了「暴击！」但伤害其实没放大）
     const breatheBuff = ClashManager._getBuff(loserActor, "breathing");
     let breatheCrit = false;
     if (breatheBuff && breatheBuff.stacks > 0) {
       breatheCrit = Math.random() < (breatheBuff.intensity ?? 1) * 0.05;
       if (breatheCrit) await ClashManager._reduceBuffStacks(loserActor, "breathing");
     }
+
+    const guard   = gs(targetActor, "guard");
+    const fragile = gs(targetActor, "fragile");
+    const critBase     = Math.round(adjusted * (breatheCrit ? 1.5 : 1.0));
+    const adjustedBase = Math.max(0, critBase + fragile - guard);
+    const finalDmg     = Math.max(0, Math.round(adjustedBase * physMult * sinMult));
 
     // 触发 [命中时] / [暴击命中时]
     // 本方法在拼点结算卡建好**之后**才跑，推进主 _actMsgs 那份桶已经没人再读了，
@@ -5401,6 +5438,7 @@ export class ClashManager {
     // 构建结算说明
     const calcNotes = [`【不可摧毁】反击（变动值=1）：${formulaDisplay}`];
     if (buffMod !== 0) calcNotes.push(`BUFF(强壮${strong}-虚弱${weak}=${buffMod >= 0 ? "+" : ""}${buffMod}) → ${adjusted}`);
+    if (breatheCrit) calcNotes.push(`【呼吸法】暴击 ×1.5 → ${critBase}`);
     if (fragile > 0 || guard > 0) calcNotes.push(`易损(+${fragile})/守护(-${guard}) → ${adjustedBase}`);
     if (physMult !== 1.0 || sinMult !== 1.0) calcNotes.push(`抗性(${physResStr}×${sinResStr}) → ${finalDmg}`);
     if (breatheCrit) calcNotes.push(`【呼吸】暴击！`);
@@ -5607,7 +5645,10 @@ export class ClashManager {
     if (res.ruptureDmg)      rec.triggers.push({ k: "破裂触发", v: `附加 <b>${res.ruptureDmg}</b> 点固定伤害` });
     if (res.sanityDmg)       rec.triggers.push({ k: "沉沦触发", v: `${res.sanityDmg} 点侵蚀度（理智 −${res.sanityDmg}）` });
     if (res.sinkingGloomDmg) rec.triggers.push({ k: "沉沦触发", v: `理智见底，额外承受 <b>${res.sinkingGloomDmg}</b> 点【忧郁】伤害` });
-    if (res.tremorTriggered) rec.triggers.push({ k: "震颤引爆", v: "消耗 1 层【震颤】，混乱阈值前移" });
+    if (res.tremorTriggered) {
+      const lines = res.tremorMsgs?.length ? res.tremorMsgs : ["消耗 1 层【震颤】，混乱阈值前移"];
+      for (const l of lines) rec.triggers.push({ k: "震颤引爆", v: l });
+    }
     for (const m of (hookMsgs ?? [])) rec.triggers.push({ k: "效果", v: m });
     for (const r of (extraRows ?? [])) rec.triggers.push(r);
   }
@@ -5650,6 +5691,7 @@ export class ClashManager {
     // ── 受到伤害时 BUFF ────────────────────────────────────────────────────
 
     let ruptureDmg = 0, sanityDmg = 0, tremorTriggered = false, sinkingBuff = null;
+    let tremorMsgs = [];
     let shieldBefore = 0;
     if (hpLockValue == null) {
       // 【护盾】：每层抵挡 1 点伤害，先于其他伤害结算，剩余伤害再穿透
@@ -5689,8 +5731,11 @@ export class ClashManager {
 
       // 【震颤】：受到震颤引爆攻击时，混乱阈值前移强度值，层数-1
       if (isSeismic) {
-        const { blasts } = await ClashManager.seismicBlast(actor, 1, { attacker });
+        const { blasts, msgs: blastMsgs } = await ClashManager.seismicBlast(actor, 1, { attacker });
         tremorTriggered = blasts > 0;
+        // 引爆的是哪条震颤、前移了多少、各【特殊震颤】又触发了什么，都由
+        // seismicBlast 返回；原先只留一句固定文案，这些全丢了
+        tremorMsgs = blastMsgs ?? [];
       }
     }
 
@@ -5758,7 +5803,7 @@ export class ClashManager {
     ClashManager._ambientActMsgs = _prevAmbient;
 
     const _res = { damage, oldHp, finalHp, maxHp, chaosTriggered, chaosName,
-                   ruptureDmg, sanityDmg, sinkingGloomDmg, tremorTriggered };
+                   ruptureDmg, sanityDmg, sinkingGloomDmg, tremorTriggered, tremorMsgs };
 
     // silent：不发独立的承受卡，把结果交回调用方自己记账（容量扩散用）
     if (!silent) {
@@ -5768,7 +5813,7 @@ export class ClashManager {
           extraRows: _chaosRows });
       } else {
         await ClashManager._sendTakeMsg(actor, damage, oldHp, finalHp, maxHp, chaosTriggered,
-          { ruptureDmg, sanityDmg, sinkingGloomDmg, tremorTriggered, chaosName, calcNotes, takeLabel,
+          { ruptureDmg, sanityDmg, sinkingGloomDmg, tremorTriggered, tremorMsgs, chaosName, calcNotes, takeLabel,
             shieldBefore, hookMsgs, takeEffects: [...takeEffects, ..._chaosRows] });
       }
     }
@@ -5784,7 +5829,7 @@ export class ClashManager {
    * 击穿的演出交给 VFX。
    */
   static async _sendTakeMsg(actor, damage, oldHp, newHp, maxHp, chaosTriggered,
-      { ruptureDmg = 0, sanityDmg = 0, sinkingGloomDmg = 0, tremorTriggered = false,
+      { ruptureDmg = 0, sanityDmg = 0, sinkingGloomDmg = 0, tremorTriggered = false, tremorMsgs = [],
         chaosName = "陷入混乱", calcNotes = [], takeLabel = "承受结算",
         shieldBefore = 0, hookMsgs = null, takeEffects = [] } = {}) {
 
@@ -5799,7 +5844,8 @@ export class ClashManager {
       triggers.push({ k: "沉沦触发", v: `理智见底，额外承受 <b>${sinkingGloomDmg}</b> 点【忧郁】伤害` });
     }
     if (tremorTriggered) {
-      triggers.push({ k: "震颤引爆", v: "消耗 1 层【震颤】，混乱阈值前移" });
+      const lines = tremorMsgs?.length ? tremorMsgs : ["消耗 1 层【震颤】，混乱阈值前移"];
+      for (const l of lines) triggers.push({ k: "震颤引爆", v: l });
     }
     // 追加伤害走的是独立的一次承受结算，takeLabel 会带「追加伤害」
     if (takeLabel.includes("追加伤害")) {
