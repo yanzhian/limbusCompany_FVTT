@@ -3221,6 +3221,8 @@ export class ClashManager {
     const _actMsgs = [];
     // 【援护防御】顶上来时被替下的那个队友（target:"covered" 用它）
     const coveredForActor = initFlags.coveredForId ? (game.actors.get(initFlags.coveredForId) ?? null) : null;
+    // 本次对抗内的零散承受（追击、引爆伤害…）合并成一张卡，不各发各的
+    ClashManager._beginTakeAgg();
     const atkCtx = { atkActor, defActor, owner: atkActor, other: defActor, coveredForActor, _fireCounts: _fc, _actMsgs, _currentItemId: atkItem?.id ?? "" };
     const defCtx = { atkActor, defActor, owner: defActor, other: atkActor, coveredForActor, _fireCounts: _fc, _actMsgs, _currentItemId: defItem?.id ?? "" };
 
@@ -3395,6 +3397,7 @@ export class ClashManager {
       await ClashManager._applyActivitiesAndEquip(atkItem,  "攻击后", atkCtx);
       await ClashManager._applyActivitiesAndEquip(defItem,  "攻击后", defCtx);
       await ClashManager._restoreAllItemMods(atkItem, defItem);
+      await ClashManager._flushTakeAgg();
       await ClashManager._flushActMsgs(_actMsgs, atkActor);
       await ClashManager._broadcastAndCheckReactions({ lastSkillUuid: atkItem?.uuid ?? null, attacker: atkActor, defender: defActor });
       return;
@@ -3406,6 +3409,7 @@ export class ClashManager {
       await ClashManager._applyActivitiesAndEquip(atkItem,  "攻击后", atkCtx);
       await ClashManager._applyActivitiesAndEquip(defItem,  "攻击后", defCtx);
       await ClashManager._restoreAllItemMods(atkItem, defItem);
+      await ClashManager._flushTakeAgg();
       await ClashManager._flushActMsgs(_actMsgs, atkActor);
       await ClashManager._broadcastAndCheckReactions({ lastSkillUuid: atkItem?.uuid ?? null, attacker: atkActor, defender: defActor });
       return;
@@ -3546,6 +3550,7 @@ export class ClashManager {
     await ClashManager._applyActivitiesAndEquip(defItem,  "攻击后", defCtx);
     await ClashManager._restoreAllItemMods(atkItem, defItem);
 
+    await ClashManager._flushTakeAgg();
     await ClashManager._sendResolveMsg(
       resolution, finalInitFlags, defActor, defItem, defFormula, sanityNotes, _actMsgs);
 
@@ -4417,6 +4422,7 @@ export class ClashManager {
     const _fc2      = {};
     const _actMsgs2 = [];
     const coveredForActor = initFlags.coveredForId ? (game.actors.get(initFlags.coveredForId) ?? null) : null;
+    ClashManager._beginTakeAgg();
     const atkCtx2 = { atkActor, defActor: baseActor, owner: atkActor, other: baseActor, coveredForActor, _fireCounts: _fc2, _actMsgs: _actMsgs2, _currentItemId: atkItem2?.id ?? "" };
     const defCtx2 = { atkActor, defActor: baseActor, owner: baseActor, other: atkActor, coveredForActor, _fireCounts: _fc2, _actMsgs: _actMsgs2, _currentItemId: "" };
 
@@ -4559,6 +4565,7 @@ export class ClashManager {
 
     // 单方面攻击卡：与拼点对抗卡同一套流程——先把结果摆出来，
     // 扣血、破裂/沉沦/震颤引爆等等都等【结算结果】按下去才发生。
+    await ClashManager._flushTakeAgg();
     await ClashManager._sendDirectTakeMsg({
       actMsgs: _actMsgs2,
       atkActor, defActor: baseActor, item: atkItem2,
@@ -5164,6 +5171,66 @@ export class ClashManager {
    * @param {object} [opts]
    * @param {boolean} [opts.isSeismic=false]  是否为【震颤引爆】类型攻击
    */
+  /* ─── 承受聚合 ───────────────────────────────────────────────────────────
+   * 一次对抗里的零散承受（【本国剑术】追击、【震颤-灼热】/【震颤-崩坏】的引爆
+   * 伤害、[追加伤害] 效果…）本来各发各的卡，同一个人被打三下就是三张承受结算。
+   * 开启聚合后它们只记账不发卡，最后按角色合并成一张：
+   * 先前生命值取第一次的、现在生命值取最后一次的，触发行按顺序累加。
+   * ──────────────────────────────────────────────────────────────────── */
+
+  /** @type {Map<string,object>|null} */
+  static _takeAgg = null;
+
+  static _beginTakeAgg() { ClashManager._takeAgg = new Map(); }
+
+  /** 把聚合到的承受合并成一张卡发出，并关闭聚合 */
+  static async _flushTakeAgg() {
+    const agg = ClashManager._takeAgg;
+    ClashManager._takeAgg = null;
+    if (!agg?.size) return;
+
+    for (const rec of agg.values()) {
+      if (!rec.actor) continue;
+      const content = `
+        <div class="limbus-clash-card limbus-take-card"
+             style="background:linear-gradient(180deg,#2D0509 0%,#1A0305 100%);"
+             data-clash-type="take">
+          ${ClashManager._chatHeader(rec.actor, "承受结算")}
+          ${ClashManager._goldDivider()}
+          ${ClashManager._hpBlock({
+            actor: rec.actor, oldHp: rec.oldHp, newHp: rec.newHp,
+            maxHp: rec.maxHp, shield: rec.shield, triggers: rec.triggers })}
+        </div>`;
+      await ClashManager._safeChatCreate({
+        speaker: ChatMessage.getSpeaker({ actor: rec.actor }),
+        content,
+        flags: { limbusCompany_FVTT: { type: "clash-take" } },
+      });
+    }
+  }
+
+  /** 把一次承受记进聚合表 */
+  static _recordTake(actor, res, { takeLabel = "", shieldBefore = 0, hookMsgs = null } = {}) {
+    const agg = ClashManager._takeAgg;
+    if (!agg) return;
+    const key = actor?.id ?? "";
+    let rec = agg.get(key);
+    if (!rec) {
+      rec = { actor, oldHp: res.oldHp, newHp: res.finalHp, maxHp: res.maxHp,
+              shield: shieldBefore, triggers: [] };
+      agg.set(key, rec);
+    } else {
+      rec.newHp = res.finalHp;          // 先前取第一次、现在取最后一次
+    }
+    const label = takeLabel && takeLabel !== "承受结算" ? takeLabel : "追加伤害";
+    if (res.damage > 0) rec.triggers.push({ k: label, v: `承受 <b>${res.damage}</b> 点` });
+    if (res.ruptureDmg)      rec.triggers.push({ k: "破裂触发", v: `附加 <b>${res.ruptureDmg}</b> 点固定伤害` });
+    if (res.sanityDmg)       rec.triggers.push({ k: "沉沦触发", v: `${res.sanityDmg} 点侵蚀度（理智 −${res.sanityDmg}）` });
+    if (res.sinkingGloomDmg) rec.triggers.push({ k: "沉沦触发", v: `理智见底，额外承受 <b>${res.sinkingGloomDmg}</b> 点【忧郁】伤害` });
+    if (res.tremorTriggered) rec.triggers.push({ k: "震颤引爆", v: "消耗 1 层【震颤】，混乱阈值前移" });
+    for (const m of (hookMsgs ?? [])) rec.triggers.push({ k: "效果触发", v: m });
+  }
+
   static async _applyAndSendTake(actor, damage, { isSeismic = false, calcNotes = [], attacker = null, hookMsgs = null, takeLabel = "承受结算", category = "", sinType = "", item = null, silent = false } = {}) {
     const sys   = actor.system;
     const maxHp = sys.hp?.max ?? 1;
@@ -5301,14 +5368,21 @@ export class ClashManager {
     // 沉沦忧郁追加伤害发生在 HP 结算之后，需将最终 HP 一并传给聊天框显示
     // （生命值锁定时 sinkingGloomDmg 恒为 0，finalHp 与 newHp 一致，仍钉死为 hpLockValue）
     const finalHp = Math.max(0, newHp - sinkingGloomDmg);
+    const _res = { damage, oldHp, finalHp, maxHp, chaosTriggered, chaosName,
+                   ruptureDmg, sanityDmg, sinkingGloomDmg, tremorTriggered };
+
     // silent：不发独立的承受卡，把结果交回调用方自己记账（容量扩散用）
     if (!silent) {
-      await ClashManager._sendTakeMsg(actor, damage, oldHp, finalHp, maxHp, chaosTriggered,
-        { ruptureDmg, sanityDmg, sinkingGloomDmg, tremorTriggered, chaosName, calcNotes, takeLabel,
-          shieldBefore, hookMsgs });
+      if (ClashManager._takeAgg) {
+        // 聚合中：只记账，最后合并成一张卡
+        ClashManager._recordTake(actor, _res, { takeLabel, shieldBefore, hookMsgs });
+      } else {
+        await ClashManager._sendTakeMsg(actor, damage, oldHp, finalHp, maxHp, chaosTriggered,
+          { ruptureDmg, sanityDmg, sinkingGloomDmg, tremorTriggered, chaosName, calcNotes, takeLabel,
+            shieldBefore, hookMsgs });
+      }
     }
-    return { damage, oldHp, finalHp, maxHp, chaosTriggered, chaosName,
-             ruptureDmg, sanityDmg, sinkingGloomDmg, tremorTriggered };
+    return _res;
   }
 
   /**
