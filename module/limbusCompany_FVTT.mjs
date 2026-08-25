@@ -459,6 +459,10 @@ Hooks.on("renderChatMessage", (_message, html, _data) => {
     html.find(".clash-btn-settle").on("click", async (e) => {
       const targetActorId = e.currentTarget.dataset.targetActorId ?? flags.targetActorId;
       const damage        = parseInt(e.currentTarget.dataset.damage ?? flags.damage) || 0;
+      // 本场对抗的全部承受合并成一张卡：【流血】要排在拼点伤害之前记账，
+      // 血条的「先前生命值」才是流血之前那个数
+      ClashManager._beginTakeAgg();
+      await ClashManager.settleBleed(flags.bleedMsgs ?? []);
       // 闪避/完全格挡 + 【不可摧毁】反击：拼点本身 0 伤害，只落反击那份
       if (damage > 0 || !flags.unbreakable) {
         await ClashManager.handleApplyDamage(targetActorId, damage, flags.takeEffects ?? []);
@@ -468,8 +472,7 @@ Hooks.on("renderChatMessage", (_message, html, _data) => {
       if (ub?.targetActorId && (ub.damage ?? 0) > 0) {
         await ClashManager.handleApplyDamage(ub.targetActorId, ub.damage);
       }
-      // 本场对抗中发作的【流血】：攒到这里，跟在【结算结果】之后公示
-      await ClashManager._sendBleedMsgs(flags.bleedMsgs ?? []);
+      await ClashManager._flushTakeAgg();
       // 反应检查：延后到伤害落地之后，前置条件读到的才是结算后的数值
       if (flags.reactionCheck) await ClashManager.runReactionCheck(flags.reactionCheck);
       // 容量扩散：打出伤害的一方攻击容量 >=2 时，在扣血后发出扩散承受卡
@@ -495,9 +498,11 @@ Hooks.on("renderChatMessage", (_message, html, _data) => {
     // 反击是一次交锋两边同时挨打，结算就该是一下——和拼点对抗一样，
     // 一个【结算结果】把双方的伤害一起落地，不再拆成两个按钮各点各的
     html.find(".clash-btn-settle").on("click", async () => {
+      ClashManager._beginTakeAgg();
+      await ClashManager.settleBleed(flags.bleedMsgs ?? []);
       await ClashManager.handleApplyDamage(flags.defActorId, flags.damageToDefActor ?? 0);
       await ClashManager.handleApplyDamage(flags.atkActorId, flags.damageToAtkActor ?? 0);
-      await ClashManager._sendBleedMsgs(flags.bleedMsgs ?? []);
+      await ClashManager._flushTakeAgg();
       if (flags.reactionCheck) await ClashManager.runReactionCheck(flags.reactionCheck);
     });
     html.find(".clash-btn-redo").on("click", async () => {
@@ -517,8 +522,10 @@ Hooks.on("renderChatMessage", (_message, html, _data) => {
     html.find(".clash-btn-apply-damage").on("click", async (e) => {
       const targetActorId = e.currentTarget.dataset.targetActorId ?? flags.targetActorId;
       const damage        = parseInt(e.currentTarget.dataset.damage ?? flags.damage) || 0;
+      ClashManager._beginTakeAgg();
+      await ClashManager.settleBleed(flags.bleedMsgs ?? []);
       await ClashManager.handleApplyDamage(targetActorId, damage);
-      await ClashManager._sendBleedMsgs(flags.bleedMsgs ?? []);
+      await ClashManager._flushTakeAgg();
       if (flags.reactionCheck) await ClashManager.runReactionCheck(flags.reactionCheck);
     });
   }

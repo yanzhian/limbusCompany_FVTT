@@ -2334,19 +2334,24 @@ export class ClashManager {
     const bleedCurrentLevel  = bleedExistingType ? (_BC_TYPES.indexOf(bleedExistingType) + 1) : 0;
     const bleedNewLevel      = Math.min(3, bleedCurrentLevel + bleedChaosCount);
     const bleedChaosName     = _BC_NAMES[bleedNewLevel - 1] ?? "陷入混乱";
-    await ClashManager._safeDocUpdate(actor, { "system.hp.value": newHp });
+    // 层数-1 与场地资源是「发作」本身的记账，攻击当下就结算；
+    // 掉血则和拼点伤害一样延后到【结算结果】，好并进同一张承受结算卡。
     await ClashManager._reduceBuffStacks(actor, "bleed");
     await ClashManager._tickFieldResources("bleed", dmg, 1);
+
+    if (ClashManager._bleedBuf) {
+      ClashManager._bleedBuf.push({ actorId: actor.id, dmg, hpFloor: _bleedMods.hpFloor ?? null });
+      return dmg;
+    }
+
+    // 缓冲没开（非对抗路径）：当场扣血、当场公示
+    await ClashManager._safeDocUpdate(actor, { "system.hp.value": newHp });
     if (actor.checkAndTriggerChaos) await actor.checkAndTriggerChaos(newHp, oldHp, { silent: true });
-
-    const line = `<strong>${actor.name}</strong>【流血】发作：受到 <strong>${dmg}</strong> 点固定伤害。`
+    await ClashManager._sendBleedMsgs([
+      `<strong>${actor.name}</strong>【流血】发作：受到 <strong>${dmg}</strong> 点固定伤害。`
       + `（HP ${oldHp} → ${newHp}）`
-      + (bleedChaosCount > 0 ? `　<span style="color:#E84444;font-weight:bold;">——【${bleedChaosName}】！</span>` : "");
-
-    // 对抗流程里发作的流血先攒着，等【结算结果】按下去才和扣血一起公示；
-    // 缓冲没开（非对抗路径）才立刻单发一条。
-    if (ClashManager._bleedBuf) ClashManager._bleedBuf.push(line);
-    else await ClashManager._sendBleedMsgs([line], actor);
+      + (bleedChaosCount > 0 ? `　<span style="color:#E84444;font-weight:bold;">——【${bleedChaosName}】！</span>` : ""),
+    ], actor);
     return dmg;
   }
 
@@ -2359,7 +2364,7 @@ export class ClashManager {
     // 兜底：上一场若走了没有结算卡的分支，攒下的内容不至于永远消失
     const left = ClashManager._bleedBuf;
     ClashManager._bleedBuf = [];
-    if (left?.length) ClashManager._sendBleedMsgs(left);
+    if (left?.length) ClashManager.settleBleedNow(left);
   }
 
   /** 取走缓冲内容并关闭缓冲（塞进卡片 flags，等结算时再发） */
@@ -2369,13 +2374,45 @@ export class ClashManager {
     return buf;
   }
 
-  /** 把攒下的流血发作合成一条消息发出 */
+  /** 非对抗路径的流血公示（对抗路径走 settleBleed，并进承受结算卡） */
   static async _sendBleedMsgs(lines, actor = null) {
     if (!lines?.length) return;
     await ClashManager._safeChatCreate({
       speaker: actor ? ChatMessage.getSpeaker({ actor }) : undefined,
       content: `<div class="limbuscompany chat-clash">${lines.map(l => `<div>${l}</div>`).join("")}</div>`,
     });
+  }
+
+  /** 没有【结算结果】按钮的分支：当场结算并单独出一张承受结算卡 */
+  static async settleBleedNow(entries) {
+    if (!entries?.length) return;
+    ClashManager._beginTakeAgg();
+    await ClashManager.settleBleed(entries);
+    await ClashManager._flushTakeAgg();
+  }
+
+  /**
+   * 【结算结果】按下时结算攒下的流血：扣血 + 检查混乱，并把「流血发作」记进
+   * 承受结算的聚合表——这样它就是那张卡上的一行，而不是又一条独立消息。
+   * 必须在拼点伤害之前调用：聚合的「先前生命值」取第一条记录，流血发生在前。
+   * @param {{actorId:string,dmg:number,hpFloor:number|null}[]} entries
+   */
+  static async settleBleed(entries) {
+    for (const e of (entries ?? [])) {
+      const actor = game.actors.get(e?.actorId ?? "");
+      if (!actor || !(e.dmg > 0)) continue;
+      const oldHp = actor.system?.hp?.value ?? 0;
+      const newHp = ClashManager.applyHpFloor(oldHp, oldHp - e.dmg, e.hpFloor);
+      await ClashManager._safeDocUpdate(actor, { "system.hp.value": newHp });
+      if (actor.checkAndTriggerChaos) {
+        await actor.checkAndTriggerChaos(newHp, oldHp, { silent: true, source: "bleed" });
+      }
+      ClashManager._recordTake(actor, {
+        damage: 0, oldHp, finalHp: newHp, maxHp: actor.system?.hp?.max ?? 1,
+      }, {
+        extraRows: [{ k: "流血发作", v: `受到 <b>${oldHp - newHp}</b> 点固定伤害` }],
+      });
+    }
   }
 
   static _effectDesc(item) {
@@ -4219,7 +4256,7 @@ export class ClashManager {
         ${takeSection}
       </div>`;
 
-    if (noTake) await ClashManager._sendBleedMsgs(_bleedResolve);
+    if (noTake) await ClashManager.settleBleedNow(_bleedResolve);
 
     return await ClashManager._safeChatCreate({
       speaker: ChatMessage.getSpeaker({ actor: atkActor }),
@@ -6238,7 +6275,7 @@ export class ClashManager {
         },
       },
     });
-    if (!(finalDamage > 0)) await ClashManager._sendBleedMsgs(_bleed);
+    if (!(finalDamage > 0)) await ClashManager.settleBleedNow(_bleed);
   }
 
   /* ─── 反应系统 ─────────────────────────────────────────────────────────── */
