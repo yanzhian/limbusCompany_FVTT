@@ -3538,20 +3538,22 @@ export class ClashManager {
       if (lossNote) sanityNotes.push(lossNote);
     }
 
-    const _resolveMsg = await ClashManager._sendResolveMsg(resolution, finalInitFlags, defActor, defItem, defFormula, sanityNotes);
+    // ── [攻击后]：结算完对抗结果后触发 ────────────────────────────────
+    // 必须在建卡**之前**跑完：详细信息要连 [攻击后] 一起收进折叠区，
+    // 建完卡再回头 update 一次太脆（占位符被清洗、跨客户端权限都会让它静默失败）。
+    // 骰值改动只影响 item，resolution 里的点数早就算好了，不受影响。
+    await ClashManager._applyActivitiesAndEquip(atkItem, "攻击后", atkCtx);
+    await ClashManager._applyActivitiesAndEquip(defItem,  "攻击后", defCtx);
+    await ClashManager._restoreAllItemMods(atkItem, defItem);
+
+    await ClashManager._sendResolveMsg(
+      resolution, finalInitFlags, defActor, defItem, defFormula, sanityNotes, _actMsgs);
 
     // 【不可摧毁】反击消息在拼点对抗结果之后发出
     if (_unbreakableCounterArgs) {
       await ClashManager._triggerUnbreakableCounter(..._unbreakableCounterArgs);
     }
 
-    // ── [攻击后]：结算完对抗结果后触发 ────────────────────────────────
-    await ClashManager._applyActivitiesAndEquip(atkItem, "攻击后", atkCtx);
-    await ClashManager._applyActivitiesAndEquip(defItem,  "攻击后", defCtx);
-    await ClashManager._restoreAllItemMods(atkItem, defItem);
-
-    // 详细信息并入拼点对抗卡的折叠区，不再单发一条汇总消息
-    await ClashManager._injectResolveDetails(_resolveMsg, _actMsgs);
     await ClashManager._broadcastAndCheckReactions({ lastSkillUuid: atkItem?.uuid ?? null, attacker: atkActor, defender: defActor });
   }
 
@@ -3904,7 +3906,7 @@ export class ClashManager {
 
   /* ─── 阶段五c：拼点结算聊天框 ──────────────────────────────────────────── */
 
-  static async _sendResolveMsg(res, initFlags, defActor, defItem, defFormula, sanityNotes = []) {
+  static async _sendResolveMsg(res, initFlags, defActor, defItem, defFormula, sanityNotes = [], actMsgs = []) {
     const {
       atkWins, atkTotal, defTotal,
       atkItemName, atkItemImg, atkFormula, atkActor,
@@ -4011,7 +4013,7 @@ export class ClashManager {
         <div style="font-size:.8rem;color:#9A8462;line-height:1.7;margin:4px 0 8px;">
           ${notes.map(n => `<div>${n}</div>`).join("")}
         </div>
-        <div class="limbus-detail-slot"></div>
+        ${ClashManager._buildDetailsFold(actMsgs)}
         ${sanityNotes.length ? `
         <div class="limbus-sanity-toggle-row"
              style="display:flex;align-items:center;gap:6px;cursor:pointer;margin:4px 0 0;user-select:none;">
@@ -4058,12 +4060,13 @@ export class ClashManager {
   ];
 
   /**
-   * 把本次对抗收集到的 activity 消息注入拼点对抗卡的「▼ 详细信息」折叠区。
-   * 之所以是"注入"而不是建卡时就写好：[攻击后] 在结算卡发出之后才触发，
-   * 建卡那一刻还拿不全。
+   * 「▼ 详细信息」折叠区：本次对抗收集到的全部 activity 消息，按卡面的触发时机排序。
+   * 建卡时直接拼进去——早先是建完卡再 msg.update() 注入，那条路太脆：
+   * 占位符会被清洗、跨客户端还有写权限问题，失败时整块静默消失。
+   * @param {object[]} actMsgs
    */
-  static async _injectResolveDetails(msg, actMsgs) {
-    if (!msg || !actMsgs?.length) return;
+  static _buildDetailsFold(actMsgs) {
+    if (!actMsgs?.length) return "";
 
     const order = ClashManager.TRIGGER_ORDER;
     const rank  = (t) => { const i = order.indexOf(t); return i < 0 ? order.length : i; };
@@ -4077,6 +4080,9 @@ export class ClashManager {
         groups.get(e.trigger).push({ m, src });
       }
     }
+    const n = [...groups.values()].reduce((a, v) => a + v.length, 0);
+    if (!n) return "";
+
     const body = [...groups.entries()]
       .sort((a, b) => rank(a[0]) - rank(b[0]))
       .map(([trigger, rows]) => `
@@ -4085,12 +4091,12 @@ export class ClashManager {
           ${rows.map(r => `<div class="v">${r.m}${r.src ? ` <span class="src">· ${r.src}</span>` : ""}</div>`).join("")}
         </div>`).join("");
 
-    const html = `
+    return `
       <div class="limbus-detail-toggle-row"
            style="display:flex;align-items:center;gap:6px;cursor:pointer;margin:6px 0 0;user-select:none;">
         <div style="flex:1;height:1px;background:linear-gradient(to right,transparent,#C9A84C);"></div>
         <span class="limbus-detail-toggle"
-              style="font-size:.72rem;color:#C9A84C;padding:0 4px;line-height:1;">▼ 详细信息</span>
+              style="font-size:.72rem;color:#C9A84C;padding:0 4px;line-height:1;">▼ 详细信息（${n}）</span>
         <div style="flex:1;height:1px;background:linear-gradient(to left,transparent,#C9A84C);"></div>
       </div>
       <div class="limbus-detail-section"
@@ -4098,19 +4104,6 @@ export class ClashManager {
                   background:rgba(0,0,0,.25);border-radius:3px;margin:4px 0 0;">
         ${body}
       </div>`;
-
-    try {
-      const src  = msg.content ?? "";
-      const slot = '<div class="limbus-detail-slot"></div>';
-      // 占位符不在（模板改动、内容被清洗）时兜底追加到卡片末尾，
-      // 宁可位置不理想也不要整块详细信息凭空消失
-      const content = src.includes(slot)
-        ? src.replace(slot, html)
-        : src.replace(/<\/div>\s*$/, `${html}</div>`);
-      await msg.update({ content });
-    } catch (err) {
-      console.warn("limbusCompany_FVTT | 注入详细信息失败", err);
-    }
   }
 
   /** 丢掉 removed 这一格之后，"宣言时就在场"的下标表怎么变（右边整体左移一格） */
@@ -4553,9 +4546,21 @@ export class ClashManager {
     // [受到伤害时]：承受方受伤（技能 + 装备格物品 + BUFF 的 onTakeDamage）
     await ClashManager._dispatchTakeDamage(atkItem2, baseActor, atkActor, defCtx2);
 
+    // 单方面攻击（承受）：不拼点，只把对方打退一次，攻击方不追击
+    ClashVFX.broadcastBurst(ClashVFX.midPoint(atkActor, baseActor));
+    await ClashKnockback.repel({
+      winner: atkActor, loser: baseActor, winScore: step, chase: false,
+      onWallHit: (a) => ClashManager.seismicBlast(a, 1, { attacker: atkActor }),
+    });
+
+    // [攻击后]：必须在建卡之前跑完，详细信息才收得全（与拼点对抗卡同理）
+    await ClashManager._applyActivitiesAndEquip(atkItem2, "攻击后", atkCtx2);
+    await ClashManager._restoreAllItemMods(atkItem2);
+
     // 单方面攻击卡：与拼点对抗卡同一套流程——先把结果摆出来，
     // 扣血、破裂/沉沦/震颤引爆等等都等【结算结果】按下去才发生。
-    const _directMsg = await ClashManager._sendDirectTakeMsg({
+    await ClashManager._sendDirectTakeMsg({
+      actMsgs: _actMsgs2,
       atkActor, defActor: baseActor, item: atkItem2,
       finalDamage, calcNotes, initFlags,
       weightSpread: (initFlags.weight ?? 1) >= 2 ? {
@@ -4570,19 +4575,6 @@ export class ClashManager {
       } : null,
     });
 
-    // 单方面攻击（承受）：不拼点，只把对方打退一次，攻击方不追击
-    ClashVFX.broadcastBurst(ClashVFX.midPoint(atkActor, baseActor));
-    await ClashKnockback.repel({
-      winner: atkActor, loser: baseActor, winScore: step, chase: false,
-      onWallHit: (a) => ClashManager.seismicBlast(a, 1, { attacker: atkActor }),
-    });
-
-    // [攻击后]：结算完毕
-    await ClashManager._applyActivitiesAndEquip(atkItem2, "攻击后", atkCtx2);
-    await ClashManager._restoreAllItemMods(atkItem2);
-
-    // 详细信息并入单方面攻击卡的折叠区（与拼点对抗卡同样是发卡后再注入）
-    await ClashManager._injectResolveDetails(_directMsg, _actMsgs2);
     await ClashManager._broadcastAndCheckReactions({ lastSkillUuid: atkItem2?.uuid ?? null, attacker: atkActor, defender: defActor });
   }
 
@@ -4592,7 +4584,8 @@ export class ClashManager {
    * 头像标题 → 技能 → 结算数字 → 详细信息 → 结算结果 / 重新骰掷。
    */
   static async _sendDirectTakeMsg({ atkActor, defActor, item, finalDamage,
-                                    calcNotes = [], initFlags = {}, weightSpread = null }) {
+                                    calcNotes = [], initFlags = {}, weightSpread = null,
+                                    actMsgs = [] }) {
     const isGM = game.user?.isGM ?? false;
     const img  = item?.img ?? initFlags.itemImg ?? "";
     const name = item?.name ?? initFlags.itemName ?? "技能";
@@ -4620,7 +4613,7 @@ export class ClashManager {
         </div>
 
         ${ClashManager._goldDivider()}
-        <div class="limbus-detail-slot"></div>
+        ${ClashManager._buildDetailsFold(actMsgs)}
         ${calcNotes.length ? `
         <div style="font-size:.8rem;color:#9A8462;line-height:1.7;margin:4px 0 8px;">
           ${calcNotes.map(n => `<div>${n}</div>`).join("")}
