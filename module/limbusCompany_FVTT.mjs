@@ -740,18 +740,19 @@ Hooks.on("updateCombat", async (combat, changed) => {
     // 恐慌结束（上回合有恐慌，且本轮没有新的下回合恐慌）：恢复理智至 50
     if (panicWasActive && !panicActivating) {
       await actor.update({ "system.sanity.value": 50 });
-      await ChatMessage.create({
-        speaker: ChatMessage.getSpeaker({ actor }),
-        content: `<div class="limbuscompany chat-clash"><strong>${actor.name}</strong> 恢复神志，理智恢复至 <strong>50</strong>。</div>`,
+      endMsgs.push({
+        trigger: "回合结束时", itemName: "恐慌结束",
+        msgs: [`<strong>${actor.name}</strong> 恢复神志，理智恢复至 <strong>50</strong>`],
       });
     }
 
     // 恐慌 BUFF 本回合首次激活：公告并触发恐慌卡效果
     // （具体效果如清空 AP 由恐慌卡的「恐慌触发时」activities 配置）
     if (panicActivating) {
-      await ChatMessage.create({
-        speaker: ChatMessage.getSpeaker({ actor }),
-        content: `<div class="limbuscompany chat-clash"><strong>${actor.name}</strong>【陷入恐慌】！无法使用基础及守备技能，E.G.O 不消耗理智但罪孽资源 ×1.5。</div>`,
+      endMsgs.push({
+        trigger: "回合结束时", itemName: "陷入恐慌",
+        msgs: [`<strong>${actor.name}</strong>【陷入恐慌】！无法使用基础及守备技能，`
+             + `E.G.O 不消耗理智但罪孽资源 ×1.5`],
       });
       await actor.triggerPanicActivities?.("panic");
     }
@@ -793,12 +794,11 @@ Hooks.on("updateCombat", async (combat, changed) => {
       await actor.reduceBuffStacks?.("burn");
       await ClashManager._tickFieldResources("burn", dmg, 1);
       if (actor.checkAndTriggerChaos) await actor.checkAndTriggerChaos(newHp, oldHp, { silent: true, source: "burn" });
-      await ChatMessage.create({
-        speaker: ChatMessage.getSpeaker({ actor }),
-        content: `<div class="limbuscompany chat-clash">
-          <strong>${actor.name}</strong>【燃烧】发作：受到 <strong>${dmg}</strong> 点固定伤害。
-          （HP ${oldHp} → ${newHp}）${chaosTriggeredByBurn ? "　<span style='color:#E84444;font-weight:bold;'>——【陷入混乱】！</span>" : ""}
-        </div>`,
+      endMsgs.push({
+        trigger: "回合结束时", itemName: "燃烧",
+        msgs: [`<strong>${actor.name}</strong> 受到 <strong>${dmg}</strong> 点固定伤害`
+             + `（HP ${oldHp} → ${newHp}）`
+             + (chaosTriggeredByBurn ? `　<span style="color:#E84444;font-weight:bold;">【陷入混乱】</span>` : "")],
       });
     }
 

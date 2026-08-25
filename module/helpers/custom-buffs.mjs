@@ -234,10 +234,8 @@ registerCustomBuff("defensiveStance", {
     if (newStacks <= 0) {
       buffs.splice(idx, 1);
       await _safeUpdate(actor, { "system.buffs": buffs });
-      await ChatMessage.create({
-        speaker: ChatMessage.getSpeaker({ actor }),
-        content: `<div class="limbuscompany chat-clash"><strong>${actor.name}</strong>【防御姿态】已消散。</div>`,
-      });
+      // 返回字符串 → 并入先攻卡的「上回合结束」折叠，不再单发一条
+      return `<strong>${actor.name}</strong>【防御姿态】已消散`;
     } else {
       buffs[idx].stacks = newStacks;
       await _safeUpdate(actor, { "system.buffs": buffs });
@@ -906,10 +904,8 @@ registerCustomBuff("flameButterflyCoffin", {
     }
 
     await _safeUpdate(actor, { "system.buffs": buffs });
-    await ChatMessage.create({
-      speaker: ChatMessage.getSpeaker({ actor }),
-      content: `<div class="limbuscompany chat-clash"><strong>${actor.name}</strong>【炎蝶之棺】：${note}。</div>`,
-    });
+    // 返回字符串 → 并入先攻卡的「上回合结束」折叠，不再单发一条
+    return `<strong>${actor.name}</strong>：${note}`;
   },
 });
 
