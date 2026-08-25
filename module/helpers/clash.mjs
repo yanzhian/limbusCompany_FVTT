@@ -2285,6 +2285,16 @@ export class ClashManager {
    * @param {Actor} actor  持有 bleed 的攻击方/响应方
    * @returns {number} 实际造成的流血伤害（0 = 未触发）
    */
+  /**
+   * 守方这次防御算不算「攻击动作」——决定守方的【流血】发不发作。
+   * 【反击】反手打人、【可拼点反击】【可拼点格挡】有拼点对抗动作，都算；
+   * 【闪避】【格挡】只是躲和挡，不算。进攻方不受此限，永远发作。
+   * @param {string} defCategory
+   */
+  static _defActsAsAttack(defCategory) {
+    return ["counter", "clashCounter", "clashBlock"].includes(defCategory);
+  }
+
   static async _processBleed(actor) {
     const buff = ClashManager._getBuff(actor, "bleed");
     if (!buff || buff.stacks <= 0) return 0;
@@ -3319,7 +3329,7 @@ export class ClashManager {
     await ClashManager._dispatchOnAttack(atkActor, atkItem, atkCtx);
     await ClashManager._dispatchOnAttack(defActor, defItem, defCtx);
     await ClashManager._processBleed(atkActor);
-    await ClashManager._processBleed(defActor);
+    if (ClashManager._defActsAsAttack(defCategory)) await ClashManager._processBleed(defActor);
     await ClashManager._applyActivitiesAndEquip(atkItem, "拼点时", atkCtx);
     await ClashManager._applyActivitiesAndEquip(defItem,  "拼点时", defCtx);
 
@@ -3707,7 +3717,7 @@ export class ClashManager {
         await ClashManager._applyActivitiesAndEquip(atkItem, "拼点时", atkCtx);
         await ClashManager._applyActivitiesAndEquip(defItem, "拼点时", defCtx);
         await ClashManager._processBleed(atkActor);
-        await ClashManager._processBleed(defActor);
+        if (ClashManager._defActsAsAttack(defCategory)) await ClashManager._processBleed(defActor);
         atkCtx._comboRound = 1;
         defCtx._comboRound = 1;
 
