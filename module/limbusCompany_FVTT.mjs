@@ -430,14 +430,16 @@ Hooks.on("renderChatMessage", (_message, html, _data) => {
     });
   }
 
+  // 「▼ 详细信息」折叠：拼点对抗、单方面攻击、容量扩散都有，绑在最外层
+  html.find(".limbus-detail-toggle-row").on("click", function () {
+    const $sec = $(this).next(".limbus-detail-section");
+    const open = $sec.toggle().is(":visible");
+    $(this).find(".limbus-detail-toggle").text(
+      (open ? "▲" : "▼") + $(this).find(".limbus-detail-toggle").text().slice(1));
+  });
+
   // ── 拼点结算聊天框：结算结果（自动扣血）/ 重新骰掷（仅 GM）──
   if (flags.type === "clash-resolve") {
-    // 详细信息折叠（与「▼ 理智」同一套视觉）
-    html.find(".limbus-detail-toggle-row").on("click", function () {
-      const $sec = $(this).next(".limbus-detail-section");
-      const open = $sec.toggle().is(":visible");
-      $(this).find(".limbus-detail-toggle").text(open ? "▲ 详细信息" : "▼ 详细信息");
-    });
     // 整局重掷：仅 GM，按钮本身也只渲染给 GM
     html.find(".clash-btn-redo").on("click", async () => {
       if (!game.user.isGM) return;

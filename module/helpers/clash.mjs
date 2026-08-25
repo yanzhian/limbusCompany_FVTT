@@ -4939,6 +4939,8 @@ export class ClashManager {
         ${hits.length ? `<div style="border-top:1px solid #3A3227;margin-top:6px;padding-top:3px;
             font-size:.68rem;color:#9A8462;">合计
             <span style="color:#B84444;font-weight:bold;">${total}</span> · 命中 ${hits.length} 次</div>` : ""}
+        <div style="height:30px;"></div>
+        ${ClashManager._buildDetailsFold(flags.actMsgs ?? [])}
         ${ClashManager._goldDivider()}
         <div class="lc-btn-row" style="display:flex;gap:8px;align-items:stretch;">
           <button class="clash-btn-weight-take"
@@ -5233,8 +5235,8 @@ export class ClashManager {
     }
 
     ClashTotalFX.spreadClose();
-    await ClashManager._flushActMsgs(actMsgs, atkActor);
-    await setCard({ running: false, anchorId });
+    // 详细信息并入扩散卡的折叠区，不再单发一条汇总消息
+    await setCard({ running: false, anchorId, actMsgs });
   }
 
   /** 容量扩散的节奏（ms）：瞬移到位后的停顿 / TOTAL 累加时长 */
