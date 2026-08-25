@@ -5311,8 +5311,11 @@ export class ClashManager {
     }
 
     // 触发 [命中时] / [暴击命中时]
-    await ClashManager._applyActivitiesAndEquip(loserItem, "命中时", loserCtx);
-    if (breatheCrit) await ClashManager._applyActivitiesAndEquip(loserItem, "暴击命中时", loserCtx);
+    // 本方法在拼点结算卡建好**之后**才跑，推进主 _actMsgs 那份桶已经没人再读了，
+    // 消息会石沉大海。给它自己的桶，结束时单独汇总一条。
+    const counterCtx  = { ...loserCtx, _actMsgs: [] };
+    await ClashManager._applyActivitiesAndEquip(loserItem, "命中时", counterCtx);
+    if (breatheCrit) await ClashManager._applyActivitiesAndEquip(loserItem, "暴击命中时", counterCtx);
 
     // 构建结算说明
     const calcNotes = [`【不可摧毁】反击（变动值=1）：${formulaDisplay}`];
@@ -5337,6 +5340,8 @@ export class ClashManager {
     // 对目标造成伤害（包含破裂/沉沦/护盾/混乱等完整结算）
     const hookMsgs = [];
     await ClashManager._applyAndSendTake(targetActor, finalDmg, { attacker: loserActor, calcNotes, hookMsgs });
+    // 反击自己那份触发汇总（主结算卡已经发出去了，挂不上去）
+    await ClashManager._flushActMsgs(counterCtx._actMsgs, loserActor, { title: "不可摧毁反击" });
   }
 
   /* ─── 阶段七：承受结算（应用伤害 + 发送聊天框） ─────────────────────── */
@@ -6378,9 +6383,11 @@ export class ClashManager {
       }
       // 守备技能：触发其"使用时" Activities，不发起对抗
       if (skillItem.system?.type === "defense") {
+        // 不传 _actMsgs：这里没有卡可挂，让它自己单独发一条
+        //（传空数组等于把消息收进去再扔掉）
         await ClashManager._applyActivities(skillItem, "使用时", {
           owner: actor, atkActor: actor, defActor: defender ?? attacker,
-          _fireCounts: {}, _actMsgs: [],
+          _fireCounts: {},
         });
         return;
       }
@@ -6419,7 +6426,7 @@ export class ClashManager {
     };
     await ClashManager._applyActivities(fakeItem, "__reaction__", {
       owner: actor, atkActor: actor, defActor: defender ?? attacker,
-      _fireCounts: {}, _actMsgs: [],
+      _fireCounts: {},
     });
   }
 
