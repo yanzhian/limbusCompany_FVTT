@@ -3239,6 +3239,14 @@ export class ClashManager {
     const _actMsgs = [];
     // 【援护防御】顶上来时被替下的那个队友（target:"covered" 用它）
     const coveredForActor = initFlags.coveredForId ? (game.actors.get(initFlags.coveredForId) ?? null) : null;
+    // 开场先清一次上一场没还原干净的临时改动。
+    // 骰数/面数/基础值/攻击容量都是「改前存原值 → [攻击后] 还原 → 删 flag」，
+    // 但只要有任何一条路径没走到还原（异常、提前 return、跨客户端写失败），
+    // tempMods 就会留在物品上；下一场 _stashItemMod 看到 flag 已存在便不再记，
+    // 于是在已经被加过的值上继续加——点数就一场比一场大。
+    // 这里补一次幂等的还原：没有残留时是空操作。
+    await ClashManager._restoreItemModsOnly(atkItem, defItem);
+
     // 本次对抗内的零散承受（追击、引爆伤害…）合并成一张卡，不各发各的
     ClashManager._beginTakeAgg();
     // [受到伤害时] 的效果带到承受结算卡上（伤害要等【结算结果】才应用，
@@ -4264,6 +4272,20 @@ export class ClashManager {
     await ClashManager._safeDocUpdate(item, update);
   }
 
+  /**
+   * 只还原骰数/面数/基础值/攻击容量，**不**碰临时技能转换。
+   * 开场清账用：那时大招还没投出去，顺手把 afterUse 的转换还原掉就全毁了。
+   */
+  static async _restoreItemModsOnly(...items) {
+    for (const item of items) {
+      if (!item) continue;
+      await ClashManager._restoreItemMods(item);
+      for (const eq of ClashManager._getEquippedItems(item.parent ?? null)) {
+        await ClashManager._restoreItemMods(eq);
+      }
+    }
+  }
+
   /** 攻防双方的技能与装备格物品一起还原 */
   static async _restoreAllItemMods(...items) {
     const actors = new Set();
@@ -4493,6 +4515,9 @@ export class ClashManager {
     const _fc2      = {};
     const _actMsgs2 = [];
     const coveredForActor = initFlags.coveredForId ? (game.actors.get(initFlags.coveredForId) ?? null) : null;
+    // 同上：开场清一次上一场的残留
+    await ClashManager._restoreItemModsOnly(atkItem2);
+
     ClashManager._beginTakeAgg();
     const _takeEffectRows2 = [];
     const atkCtx2 = { atkActor, defActor: baseActor, owner: atkActor, other: baseActor, coveredForActor, _fireCounts: _fc2, _actMsgs: _actMsgs2, _currentItemId: atkItem2?.id ?? "" };
