@@ -38,6 +38,7 @@ import { ChaosTokenLabel }   from "./helpers/chaos-token-label.mjs";
 import { ClashTotalFX }     from "./helpers/clash-total-fx.mjs";
 import { ClashKnockback } from "./helpers/knockback.mjs";
 import { ClashVFX }       from "./helpers/clash-vfx.mjs";
+import { TokenRingHUD }   from "./helpers/token-ring-hud.mjs";
 
 /* ─── Item Piles 联动注册 ─────────────────────────────────────────────────── */
 
@@ -199,6 +200,9 @@ Hooks.once("init", () => {
   // 注册小队 HUD 世界设置
   SquadHUD.init();
 
+  // Token 生命环 HUD（客户端开关）
+  TokenRingHUD.init();
+
   // ── 预加载 HBS 模板 ───────────────────────────────────────────────────
   _preloadTemplates();
 
@@ -219,6 +223,9 @@ Hooks.once("ready", () => {
 
   // 显示全局罪孽资源 HUD
   SinResourceHUD.create();
+
+  // Token 生命环 HUD：挂钩子并画一遍现有 Token
+  TokenRingHUD.ready();
 
   // 创建快捷操作 HUD 单例（选中 Token 时自动渲染）
   QuickActionHUD.create();
