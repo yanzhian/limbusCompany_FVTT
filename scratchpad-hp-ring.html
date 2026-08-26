@@ -6,9 +6,9 @@
 <style>
   :root{
     --ring-empty:rgba(255,255,255,.13);
-    --ring-fill:#ffcf3f;
-    --ring-fill-low:#ff4d4d;
-    --ring-glow:rgba(255,207,63,.55);
+    --ring-fill:#e03a3a;
+    --ring-fill-low:#ff2d2d;
+    --ring-glow:rgba(255,60,50,.55);
   }
   *{box-sizing:border-box}
   body{
@@ -55,21 +55,18 @@
   .hud > *.sel{outline:1px dashed #9d7cc4;outline-offset:4px}
   .hp-val{font:700 30px/1 Impact,"Arial Black",sans-serif;color:#ff5a3c;
           text-shadow:0 2px 0 #000,0 0 10px rgba(255,60,40,.6)}
-  /* 理智：一个独立的小圆环，数值写在圈里（量程 5–95） */
-  .san-val{width:52px;height:52px;display:grid;place-items:center}
-  .san-val .san-ring{position:absolute;inset:0;width:100%;height:100%;
-                     transform:rotate(-90deg)}          /* 12 点起顺时针 */
-  .san-val .san-ring circle{fill:rgba(12,20,40,.8);stroke-linecap:round}
-  .san-val .san-track{stroke:rgba(255,255,255,.14);stroke-width:5}
-  .san-val .san-fill{fill:none;stroke:#6fb3ff;stroke-width:5;
-                     filter:drop-shadow(0 0 5px rgba(111,179,255,.6));
-                     transition:stroke-dasharray .35s ease}
-  .san-val b{position:relative;font:700 16px/1 system-ui;color:#cfe4ff;
-             text-shadow:0 1px 2px #000}
-  .buffs{display:flex;gap:4px}
-  .buffs i{width:26px;height:26px;border-radius:5px;display:grid;place-items:center;
-           font-style:normal;font-size:13px;background:rgba(20,10,30,.85);
-           border:1px solid #8a6bb5;box-shadow:0 2px 6px rgba(0,0,0,.5)}
+  /* 理智：与 HUD 其余部分同一套——胶囊标签，不做环 */
+  .san-val{display:flex;align-items:center;gap:5px;
+           font:700 15px/1 system-ui;color:#cfe4ff;
+           background:rgba(12,20,40,.8);border:1px solid #5b7fbf;
+           border-radius:999px;padding:3px 10px;text-shadow:0 1px 2px #000}
+  /* BUFF：不要底框，30px 图标，一排最多 6 个，从左往右；
+     宽度钉死成 6 格（6×30 + 5×4 = 200px），于是满行自然铺满、
+     不足一行（或最后一行）居中 */
+  .buffs{display:flex;flex-wrap:wrap;gap:4px;width:200px;justify-content:center}
+  .buffs i{width:30px;height:30px;display:grid;place-items:center;
+           font-style:normal;font-size:24px;line-height:1;
+           filter:drop-shadow(0 2px 3px rgba(0,0,0,.75))}
 
   /* ── 控制面板 ── */
   .panel{flex:1 1 340px;max-width:420px;background:rgba(20,12,32,.6);
@@ -106,14 +103,8 @@
 
   <div class="hud" id="hud">
     <div class="hp-val"  data-key="hp"    id="hpEl">278</div>
-    <div class="san-val" data-key="san"   id="sanEl">
-      <svg viewBox="0 0 44 44" class="san-ring">
-        <circle class="san-track" cx="22" cy="22" r="18"></circle>
-        <circle class="san-fill"  cx="22" cy="22" r="18" id="sanArc"></circle>
-      </svg>
-      <b>50</b>
-    </div>
-    <div class="buffs"   data-key="buff"  id="buffEl"><i>🔥</i><i>🛡</i><i>⚡</i></div>
+    <div class="san-val" data-key="san"   id="sanEl"><span>SAN</span><b>50</b></div>
+    <div class="buffs"   data-key="buff"  id="buffEl"><i>🔥</i><i>🛡</i><i>⚡</i><i>💧</i><i>🌀</i><i>🩸</i><i>❄</i><i>☠</i></div>
   </div>
 </div>
 
@@ -144,7 +135,7 @@
   <h2>数值</h2>
   <div class="row"><label>生命值</label><input type="range" id="hp" min="0" max="278" value="278"><span class="num" id="hpN">278</span></div>
   <div class="row"><label>理智值</label><input type="range" id="san" min="5" max="95" value="50"><span class="num" id="sanN">50</span></div>
-  <p class="hint">理智量程固定 5–95（5 = 空环，95 = 满环）。</p>
+  <p class="hint">理智量程固定 5–95（与角色卡 sanity 的 schema 一致）。</p>
   <div class="btns">
     <button data-dmg="20">-20</button><button data-dmg="60">-60</button>
     <button data-dmg="-40">+40</button><button id="reset">重置</button>
@@ -255,14 +246,6 @@ function render(){
 
   $("hpEl").textContent = Math.round(cfg.hp);
   $("sanEl").querySelector("b").textContent = Math.round(cfg.san);
-  // 理智环：量程 5–95，5 = 空、95 = 满
-  const sArc = $("sanArc");
-  if (sArc){
-    const r = +sArc.getAttribute("r"), C = 2 * Math.PI * r;
-    const sPct = Math.max(0, Math.min(1,
-      (cfg.san - cfg.sanMin) / (cfg.sanMax - cfg.sanMin)));
-    sArc.style.strokeDasharray = `${(C * sPct).toFixed(2)} ${C.toFixed(2)}`;
-  }
   document.querySelectorAll("#hud > *").forEach(el => {
     const p = cfg.pos[el.dataset.key];
     if (!p) return;
