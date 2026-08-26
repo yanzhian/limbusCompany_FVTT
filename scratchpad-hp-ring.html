@@ -55,11 +55,12 @@
   .hud > *.sel{outline:1px dashed #9d7cc4;outline-offset:4px}
   .hp-val{font:700 30px/1 Impact,"Arial Black",sans-serif;color:#ff5a3c;
           text-shadow:0 2px 0 #000,0 0 10px rgba(255,60,40,.6)}
-  /* 理智：与 HUD 其余部分同一套——胶囊标签，不做环 */
-  .san-val{display:flex;align-items:center;gap:5px;
-           font:700 15px/1 system-ui;color:#cfe4ff;
-           background:rgba(12,20,40,.8);border:1px solid #5b7fbf;
-           border-radius:999px;padding:3px 10px;text-shadow:0 1px 2px #000}
+  /* 理智：一个圆形徽章——是"圈"，但不画进度环，圈里就是数值 */
+  .san-val{width:44px;height:44px;border-radius:50%;
+           display:grid;place-items:center;
+           font:700 17px/1 system-ui;color:#cfe4ff;
+           background:rgba(12,20,40,.85);border:1px solid #5b7fbf;
+           box-shadow:0 2px 8px rgba(0,0,0,.5);text-shadow:0 1px 2px #000}
   /* BUFF：不要底框，30px 图标，一排最多 6 个，从左往右；
      宽度钉死成 6 格（6×30 + 5×4 = 200px），于是满行自然铺满、
      不足一行（或最后一行）居中 */
@@ -103,7 +104,7 @@
 
   <div class="hud" id="hud">
     <div class="hp-val"  data-key="hp"    id="hpEl">278</div>
-    <div class="san-val" data-key="san"   id="sanEl"><span>SAN</span><b>50</b></div>
+    <div class="san-val" data-key="san"   id="sanEl"><b>50</b></div>
     <div class="buffs"   data-key="buff"  id="buffEl"><i>🔥</i><i>🛡</i><i>⚡</i><i>💧</i><i>🌀</i><i>🩸</i><i>❄</i><i>☠</i></div>
   </div>
 </div>
