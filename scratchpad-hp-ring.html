@@ -99,13 +99,12 @@
 
   <h2>环形</h2>
   <div class="row"><label>边数</label><input type="range" id="sides" min="3" max="16" value="7"><span class="num" id="sidesN">7</span></div>
-  <div class="row"><label>横向半径</label><input type="range" id="radiusX" min="20" max="220" value="83"><span class="num" id="radiusXN">83</span></div>
-  <div class="row"><label>纵向半径</label><input type="range" id="radiusY" min="6"  max="220" value="31"><span class="num" id="radiusYN">31</span></div>
-  <div class="row"><label>线粗(px)</label><input type="range" id="thick" min="2" max="40" value="12"><span class="num" id="thickN">12</span></div>
-  <div class="btns">
-    <button id="linkBtn">↔ 拉成正多边形</button>
-    <span class="hint" style="align-self:center">两个半径相等 ＝ 不压扁</span>
-  </div>
+  <div class="row"><label>半径(px)</label><input type="range" id="radius" min="20" max="220" value="83"><span class="num" id="radiusN">83</span></div>
+  <div class="row"><label>线粗(px)</label><input type="range" id="thick" min="2" max="48" value="22"><span class="num" id="thickN">22</span></div>
+  <div class="row"><label>倾斜角</label><input type="range" id="tilt" min="0" max="85" value="68"><span class="num" id="tiltN">68</span></div>
+  <div class="row"><label>透视(px)</label><input type="range" id="persp" min="200" max="2000" step="20" value="520"><span class="num" id="perspN">520</span></div>
+  <p class="hint">环是平躺在地面上的正多边形，按真实透视投影——近处自然变粗、远处变细。
+     倾斜角 0 ＝ 正俯视（正多边形）；透视越大越接近平行投影。</p>
   <div class="row"><label>起点角</label><input type="range" id="start" min="0" max="359" value="193"><span class="num" id="startN">193</span></div>
   <div class="row"><label>血条起点</label><input type="range" id="arcStart" min="0" max="100" value="0"><span class="num" id="arcStartN">0</span></div>
   <div class="row"><label>血条终点</label><input type="range" id="arcEnd" min="0" max="100" value="50"><span class="num" id="arcEndN">50</span></div>
