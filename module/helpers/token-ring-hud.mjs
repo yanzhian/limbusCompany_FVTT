@@ -40,13 +40,13 @@ export class TokenRingHUD {
     // 长度单位＝「一格 100px 时的像素」，实际按 grid.size/100 缩放。
     // 环是平躺在地面上的**正多边形**，用真实透视投影压成扁的：
     // 半径与线宽都是地面平面内的尺寸，投影后近处自然变粗、远处变细。
-    sides: 7, radius: 56, thickness: 19, tilt: 69, persp: 520,
+    sides: 7, radius: 39, thickness: 19, tilt: 69, persp: 520,
     startDeg: 193, ccw: true,
     arcStart: 5, arcEnd: 50,
     showThres: true,
     // 各元素相对 Token 中心的偏移（基准网格下的 px）；ring 是环自己的位置
     pos: { ring: { x: -3, y: 42 },
-           hp: { x: -55, y: 31 }, san: { x: 54, y: 30 }, buff: { x: 3, y: 94 } },
+           hp: { x: -39, y: 29 }, san: { x: 33, y: 30 }, buff: { x: 3, y: 85 } },
     // 颜色
     trackColor: 0xffffff, trackAlpha: 0.13,
     fillColor:  0xe03a3a, fillLowColor: 0xff2d2d, lowAt: 0.3,
@@ -54,7 +54,7 @@ export class TokenRingHUD {
     // HUD 尺寸（同样是基准网格下的 px）
     hpFont: 23, sanSize: 28, sanFont: 15,
     // BUFF 行
-    buffIcon: 30, buffGap: 5, buffPerRow: 6,
+    buffIcon: 30, buffGap: 2, buffPerRow: 6,
   };
 
   static _enabled = true;
@@ -76,10 +76,30 @@ export class TokenRingHUD {
     Hooks.on("drawToken",    (token) => TokenRingHUD.draw(token));
     Hooks.on("refreshToken", (token) => TokenRingHUD.draw(token));
     Hooks.on("destroyToken", (token) => TokenRingHUD._destroy(token));
+    // 选中/取消选中 → 只改层级，不用整个重画
+    Hooks.on("controlToken", (token) => TokenRingHUD._applySort(token));
+    Hooks.on("hoverToken",   (token) => TokenRingHUD._applySort(token));
     // 血量/理智/BUFF/混乱阈值变化 → 重画该角色的所有 Token
     Hooks.on("updateActor",  (actor) => TokenRingHUD.refreshActor(actor));
 
     TokenRingHUD.refreshAll();
+  }
+
+  /**
+   * 层级：默认排在**自己这个 Token 之下**（sort - 1），于是上方单位的环与
+   * BUFF 会被下方单位的立绘盖住；选中或悬停时抬到最高，需要看清就点一下。
+   *
+   * 覆盖层挂在 canvas.primary（立绘所在的组）里才可能被别的立绘遮住——
+   * 挂在 Token 自己身上等于挂进 interface 层，那一层永远画在所有立绘之上。
+   */
+  static _applySort(token) {
+    const box = token?._limbusRing;
+    if (!box || box.destroyed) return;
+    const doc = token.document;
+    const on  = token.controlled || token.hover;
+    box.elevation = doc?.elevation ?? 0;
+    box.sort      = on ? 1e6 : (doc?.sort ?? 0) - 1;
+    if (canvas?.primary) canvas.primary.sortDirty = true;
   }
 
   static refreshAll() {
@@ -206,14 +226,22 @@ export class TokenRingHUD {
     if (!box || box.destroyed) {
       box = new PIXI.Container();
       box.eventMode = "none";
+      box.sortLayer = token.mesh?.sortLayer ?? 700;   // PrimaryCanvasObject 的 TOKENS 层
       token._limbusRing = box;
-      token.addChild(box);
+      // 优先挂进 primary（立绘所在的组），这样才可能被别的立绘遮住；
+      // 拿不到就退回挂在 Token 上（行为同旧版：永远画在最上层）
+      if (canvas?.primary) { box._inPrimary = true; canvas.primary.addChild(box); }
+      else                 { box._inPrimary = false; token.addChild(box); }
     }
     box.removeChildren().forEach(ch => ch.destroy({ children: true }));
     // 不要反向旋转：Foundry 里 Token 的朝向作用在 token.mesh 上，
     // 这个容器本身从不旋转——反向转反而会让整套 HUD 跟着角色朝向甩。
     box.rotation = 0;
-    box.position.set((token.w ?? 0) / 2, (token.h ?? 0) / 2);
+    // 挂在 primary 时用世界坐标（Token 的中心），挂在 Token 上时用局部坐标
+    if (box._inPrimary) box.position.set(token.center?.x ?? 0, token.center?.y ?? 0);
+    else                box.position.set((token.w ?? 0) / 2, (token.h ?? 0) / 2);
+    box.visible = token.visible !== false;
+    TokenRingHUD._applySort(token);
 
     TokenRingHUD._drawRing(box, actor, scale);
     TokenRingHUD._drawHp(box, actor, scale);
@@ -342,24 +370,31 @@ export class TokenRingHUD {
       sp.position.set(x, y);
       box.addChild(sp);
 
-      // 层数角标（>1 才显示）
-      const st = buffs[i].stacks ?? 0;
-      if (st > 1) {
-        const n = TokenRingHUD._text(String(st), {
+      // 角标：右下＝层数、左下＝强度（等级）。两个都只在 >0 时画，
+      // 免得没有强度概念的 BUFF（守护/易损那类）多出一个 0
+      const badge = (txt, dx, fill) => {
+        const n = TokenRingHUD._text(txt, {
           fontFamily: "system-ui, sans-serif",
-          fontSize: 12 * scale, fontWeight: "bold", fill: 0xffffff,
+          fontSize: 12 * scale, fontWeight: "bold", fill,
           stroke: 0x000000, strokeThickness: 3 * scale,
         });
-        n.position.set(x + size / 2 - 3 * scale, y + size / 2 - 3 * scale);
+        n.position.set(x + dx, y + size / 2 - 3 * scale);
         box.addChild(n);
-      }
+      };
+      const st = buffs[i].stacks ?? 0;
+      const it = buffs[i].intensity ?? 0;
+      if (st > 0) badge(String(st), size / 2 - 3 * scale, 0xffffff);
+      if (it > 0) badge(String(it), -size / 2 + 3 * scale, 0xffd066);
     }
   }
 
   static _destroy(token) {
     const box = token?._limbusRing;
     if (!box) return;
-    if (!box.destroyed) box.destroy({ children: true });
+    if (!box.destroyed) {
+      box.parent?.removeChild(box);      // 挂在 primary 时不会随 Token 一起销毁
+      box.destroy({ children: true });
+    }
     delete token._limbusRing;
   }
 }

@@ -99,7 +99,7 @@
 
   <h2>环形</h2>
   <div class="row"><label>边数</label><input type="range" id="sides" min="3" max="16" value="7"><span class="num" id="sidesN">7</span></div>
-  <div class="row"><label>半径(px)</label><input type="range" id="radius" min="20" max="220" value="56"><span class="num" id="radiusN">56</span></div>
+  <div class="row"><label>半径(px)</label><input type="range" id="radius" min="20" max="220" value="39"><span class="num" id="radiusN">39</span></div>
   <div class="row"><label>线粗(px)</label><input type="range" id="thick" min="2" max="48" value="19"><span class="num" id="thickN">19</span></div>
   <div class="row"><label>倾斜角</label><input type="range" id="tilt" min="0" max="85" value="69"><span class="num" id="tiltN">69</span></div>
   <div class="row"><label>透视(px)</label><input type="range" id="persp" min="200" max="2000" step="20" value="520"><span class="num" id="perspN">520</span></div>
@@ -133,7 +133,7 @@
 
   <h2>BUFF 行</h2>
   <div class="row"><label>图标(px)</label><input type="range" id="buffIcon" min="14" max="48" value="30"><span class="num" id="buffIconN">30</span></div>
-  <div class="row"><label>间隔(px)</label><input type="range" id="buffGap" min="0" max="14" value="5"><span class="num" id="buffGapN">5</span></div>
+  <div class="row"><label>间隔(px)</label><input type="range" id="buffGap" min="0" max="14" value="2"><span class="num" id="buffGapN">2</span></div>
   <div class="row"><label>每行个数</label><input type="range" id="buffPerRow" min="3" max="10" value="6"><span class="num" id="buffPerRowN">6</span></div>
 
   <h2>位置（可直接拖画面上的元素）</h2>
@@ -143,8 +143,8 @@
     <button data-key="san">理智值</button>
     <button data-key="buff">BUFF</button>
   </div>
-  <div class="row"><label>X 偏移</label><input type="range" id="posX" min="-220" max="220" value="-55"><span class="num" id="posXN">-55</span></div>
-  <div class="row"><label>Y 偏移</label><input type="range" id="posY" min="-220" max="220" value="31"><span class="num" id="posYN">31</span></div>
+  <div class="row"><label>X 偏移</label><input type="range" id="posX" min="-220" max="220" value="-39"><span class="num" id="posXN">-39</span></div>
+  <div class="row"><label>Y 偏移</label><input type="range" id="posY" min="-220" max="220" value="29"><span class="num" id="posYN">29</span></div>
 
   <h2>导出配置</h2>
   <div class="btns"><button id="dump">生成 JSON</button></div>
@@ -160,13 +160,13 @@ const cfg = {
   // 环是平躺在地面上的**正多边形**，靠真实透视投影出扁的样子：
   // 先在地面平面里算好（半径、线宽都是地面内的 px），再 rotateX(tilt)
   // + 透视距离 persp 投到屏幕。近处粗、远处细是投影自带的，不用手调。
-  sides: 7, radius: 56, thickness: 19, tilt: 69, persp: 520,
+  sides: 7, radius: 39, thickness: 19, tilt: 69, persp: 520,
   startDeg: 193, ccw: true,
   arcStart: 5, arcEnd: 50,
   thresholds: [60, 30], showThres: true,
   hpFont: 23, sanSize: 28, sanFont: 15,
-  buffIcon: 30, buffGap: 5, buffPerRow: 6,
-  pos: { ring:{x:-3,y:42}, hp:{x:-55,y:31}, san:{x:54,y:30}, buff:{x:3,y:94} },
+  buffIcon: 30, buffGap: 2, buffPerRow: 6,
+  pos: { ring:{x:-3,y:42}, hp:{x:-39,y:29}, san:{x:33,y:30}, buff:{x:3,y:85} },
   hp: 278, hpMax: 278, san: 50,
   buffCount: 5
 };
