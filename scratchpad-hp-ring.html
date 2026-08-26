@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>七边形生命环原型</title>
+<style>
+  :root{
+    --bg:#1a1024;
+    --ring-empty:rgba(255,255,255,.13);
+    --ring-fill:#ffcf3f;
+    --ring-fill-low:#ff4d4d;
+    --ring-glow:rgba(255,207,63,.55);
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0;min-height:100vh;background:
+      radial-gradient(ellipse at 50% 40%, #3a1c4d 0%, var(--bg) 70%);
+    color:#eee;font:14px/1.5 system-ui,"Microsoft YaHei",sans-serif;
+    display:flex;flex-direction:column;align-items:center;gap:28px;padding:40px 16px;
+  }
+  h1{font-size:18px;font-weight:600;letter-spacing:.04em;margin:0}
+
+  /* ── token 舞台：整体做透视倾斜 ── */
+  .stage{
+    perspective: 520px;
+    width:300px;height:300px;
+    display:grid;place-items:center;
+  }
+  .ground{
+    transform: rotateX(58deg);      /* 俯视角 */
+    transform-style: preserve-3d;
+    position:relative;width:220px;height:220px;
+    display:grid;place-items:center;
+  }
+  .ring{width:100%;height:100%;overflow:visible;display:block}
+  .ring path{fill:none;stroke-linecap:butt;stroke-linejoin:miter}
+  .ring .track{stroke:var(--ring-empty);stroke-width:13}
+  .ring .fill{
+    stroke:var(--ring-fill);stroke-width:13;
+    filter:drop-shadow(0 0 6px var(--ring-glow));
+    transition:stroke-dashoffset .45s cubic-bezier(.3,.9,.3,1), stroke .3s;
+  }
+  .ring .inner{stroke:rgba(0,0,0,.55);stroke-width:2}
+
+  /* token 立在环中央，不跟着倾斜 */
+  .token{
+    position:absolute;left:50%;top:50%;
+    transform: translate(-50%,-72%) rotateX(-58deg);
+    transform-origin:50% 100%;
+    width:86px;height:112px;
+    background:linear-gradient(180deg,#4a5a8a,#1d2440);
+    border:2px solid rgba(255,255,255,.25);border-radius:6px;
+    display:grid;place-items:center;font-size:12px;color:#cfd6ee;
+    box-shadow:0 12px 22px rgba(0,0,0,.5);
+  }
+
+  /* 数值：屏幕空间，永远正对镜头 */
+  .hp-label{
+    position:absolute;left:-6px;top:52%;
+    transform:translate(-100%,-50%);
+    font:700 30px/1 Impact,"Arial Black",sans-serif;
+    color:#ff5a3c;text-shadow:0 2px 0 #000,0 0 10px rgba(255,60,40,.6);
+    pointer-events:none;
+  }
+  .stage-wrap{position:relative}
+
+  .panel{display:flex;gap:10px;align-items:center;flex-wrap:wrap;justify-content:center}
+  button{
+    background:#2c1d3d;color:#eee;border:1px solid #6b4a8f;border-radius:6px;
+    padding:7px 14px;cursor:pointer;font-size:13px;
+  }
+  button:hover{background:#3d2a55}
+  input[type=range]{width:200px}
+  code{background:#00000055;padding:1px 5px;border-radius:4px}
+  .note{max-width:560px;color:#b9aec8;font-size:13px}
+</style>
+</head>
+<body>
+<h1>七边形生命环 · 逆时针扣血</h1>
+
+<div class="stage-wrap">
+  <div class="stage">
+    <div class="ground">
+      <svg class="ring" viewBox="0 0 200 200">
+        <path class="track" id="track"></path>
+        <path class="fill"  id="fill"></path>
+        <path class="inner" id="inner"></path>
+      </svg>
+      <div class="token">TOKEN</div>
+    </div>
+  </div>
+  <div class="hp-label" id="hpLabel">278</div>
+</div>
+
+<div class="panel">
+  <button data-dmg="20">-20</button>
+  <button data-dmg="60">-60</button>
+  <button data-dmg="-40">+40 治疗</button>
+  <button id="reset">重置</button>
+</div>
+<div class="panel">
+  <label>倾斜角 <input type="range" id="tilt" min="0" max="75" value="58"></label>
+  <label>边数 <input type="range" id="sides" min="3" max="12" value="7"></label>
+</div>
+
+<p class="note">
+  血条沿七边形边框走，起点在正上方顶点，<b>逆时针</b>消耗（先扣左上那条边）。
+  低于 30% 自动转红。整个环用 <code>rotateX</code> 做透视，token 与数字反向补偿保持正对镜头。
+</p>
+
+<script>
+const R = 88, CX = 100, CY = 100;
+let sides = 7, max = 278, hp = 278;
+
+function polygonPath(n, r){
+  const pts = [];
+  for (let i = 0; i < n; i++){
+    // -90° 起点在正上方；负角步进 = 逆时针（SVG y 轴向下）
+    const a = -Math.PI/2 - i * (2*Math.PI/n);
+    pts.push([CX + r*Math.cos(a), CY + r*Math.sin(a)]);
+  }
+  return "M" + pts.map(p => p.map(v => v.toFixed(2)).join(",")).join("L") + "Z";
+}
+
+const fillEl = document.getElementById("fill");
+const trackEl = document.getElementById("track");
+const innerEl = document.getElementById("inner");
+const label = document.getElementById("hpLabel");
+
+function rebuild(){
+  const d = polygonPath(sides, R);
+  trackEl.setAttribute("d", d);
+  fillEl.setAttribute("d", d);
+  innerEl.setAttribute("d", polygonPath(sides, R - 7));
+  const len = fillEl.getTotalLength();
+  fillEl.style.strokeDasharray = len;
+  fillEl.dataset.len = len;
+  render();
+}
+
+function render(){
+  const pct = Math.max(0, Math.min(1, hp / max));
+  const len = +fillEl.dataset.len;
+  fillEl.style.strokeDashoffset = len * (1 - pct);   // 从尾部收回 = 逆时针扣除
+  fillEl.style.stroke = pct <= .3
+    ? getComputedStyle(document.documentElement).getPropertyValue("--ring-fill-low")
+    : getComputedStyle(document.documentElement).getPropertyValue("--ring-fill");
+  label.textContent = Math.round(hp);
+}
+
+document.querySelectorAll("[data-dmg]").forEach(b =>
+  b.onclick = () => { hp = Math.max(0, Math.min(max, hp - +b.dataset.dmg)); render(); });
+document.getElementById("reset").onclick = () => { hp = max; render(); };
+document.getElementById("tilt").oninput = e => {
+  const v = e.target.value;
+  document.querySelector(".ground").style.transform = `rotateX(${v}deg)`;
+  document.querySelector(".token").style.transform = `translate(-50%,-72%) rotateX(-${v}deg)`;
+};
+document.getElementById("sides").oninput = e => { sides = +e.target.value; rebuild(); };
+
+rebuild();
+</script>
+</body>
+</html>
