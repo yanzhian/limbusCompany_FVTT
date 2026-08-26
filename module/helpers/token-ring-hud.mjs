@@ -40,21 +40,21 @@ export class TokenRingHUD {
     // 长度单位＝「一格 100px 时的像素」，实际按 grid.size/100 缩放。
     // 环是平躺在地面上的**正多边形**，用真实透视投影压成扁的：
     // 半径与线宽都是地面平面内的尺寸，投影后近处自然变粗、远处变细。
-    sides: 7, radius: 83, thickness: 22, tilt: 68, persp: 520,
+    sides: 7, radius: 64, thickness: 22, tilt: 67, persp: 520,
     startDeg: 193, ccw: true,
-    arcStart: 0, arcEnd: 50,
+    arcStart: 5, arcEnd: 50,
     showThres: true,
     // 各元素相对 Token 中心的偏移（基准网格下的 px）；ring 是环自己的位置
-    pos: { ring: { x: 0, y: 0 },
-           hp: { x: -81, y: -13 }, san: { x: 77, y: -11 }, buff: { x: 1, y: 88 } },
+    pos: { ring: { x: -3, y: 42 },
+           hp: { x: -62, y: 36 }, san: { x: 58, y: 36 }, buff: { x: 3, y: 94 } },
     // 颜色
     trackColor: 0xffffff, trackAlpha: 0.13,
     fillColor:  0xe03a3a, fillLowColor: 0xff2d2d, lowAt: 0.3,
     thresColor: 0xffffff, thresDoneColor: 0x7a6b8c,
     // HUD 尺寸（同样是基准网格下的 px）
-    hpFont: 30, sanSize: 44, sanFont: 17,
+    hpFont: 28, sanSize: 38, sanFont: 16,
     // BUFF 行
-    buffIcon: 30, buffGap: 4, buffPerRow: 6,
+    buffIcon: 31, buffGap: 5, buffPerRow: 6,
   };
 
   static _enabled = true;
