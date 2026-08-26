@@ -462,6 +462,8 @@ Hooks.on("renderChatMessage", (_message, html, _data) => {
       // 本场对抗的全部承受合并成一张卡：【流血】要排在拼点伤害之前记账，
       // 血条的「先前生命值」才是流血之前那个数
       ClashManager._beginTakeAgg();
+      // 沉沦降理智可能把人打进【士气低落】——聚合成一张【恐慌鉴定】卡
+      ClashManager._beginPanicAgg();
       await ClashManager.settleBleed(flags.bleedMsgs ?? []);
       // 闪避/完全格挡 + 【不可摧毁】反击 / [追加伤害]：拼点本身 0 伤害，
       // 只落挂在后面那几份
@@ -476,9 +478,10 @@ Hooks.on("renderChatMessage", (_message, html, _data) => {
       // [追加伤害]：时间上在主伤害之后，排在最后记账
       await ClashManager.runExtraDamage(flags.extraDmg ?? []);
       await ClashManager._flushTakeAgg();
-      // 反应检查：延后到伤害落地之后，前置条件读到的才是结算后的数值
+      await ClashManager._flushPanicAgg();
       // [拼点失败] 之类的效果发起的新对抗：排到这里，伤害落地之后再弹
       if (flags.skillLaunches) await ClashManager.runSkillLaunches(flags.skillLaunches);
+      // 反应检查：延后到伤害落地之后，前置条件读到的才是结算后的数值
       if (flags.reactionCheck) await ClashManager.runReactionCheck(flags.reactionCheck);
       // 容量扩散：打出伤害的一方攻击容量 >=2 时，在扣血后发出扩散承受卡
       const ws = flags.weightSpread;
@@ -504,11 +507,14 @@ Hooks.on("renderChatMessage", (_message, html, _data) => {
     // 一个【结算结果】把双方的伤害一起落地，不再拆成两个按钮各点各的
     html.find(".clash-btn-settle").on("click", async () => {
       ClashManager._beginTakeAgg();
+      // 沉沦降理智可能把人打进【士气低落】——聚合成一张【恐慌鉴定】卡
+      ClashManager._beginPanicAgg();
       await ClashManager.settleBleed(flags.bleedMsgs ?? []);
       await ClashManager.handleApplyDamage(flags.defActorId, flags.damageToDefActor ?? 0);
       await ClashManager.handleApplyDamage(flags.atkActorId, flags.damageToAtkActor ?? 0);
       await ClashManager.runExtraDamage(flags.extraDmg ?? []);
       await ClashManager._flushTakeAgg();
+      await ClashManager._flushPanicAgg();
       // [拼点失败] 之类的效果发起的新对抗：排到这里，伤害落地之后再弹
       if (flags.skillLaunches) await ClashManager.runSkillLaunches(flags.skillLaunches);
       if (flags.reactionCheck) await ClashManager.runReactionCheck(flags.reactionCheck);
@@ -531,10 +537,13 @@ Hooks.on("renderChatMessage", (_message, html, _data) => {
       const targetActorId = e.currentTarget.dataset.targetActorId ?? flags.targetActorId;
       const damage        = parseInt(e.currentTarget.dataset.damage ?? flags.damage) || 0;
       ClashManager._beginTakeAgg();
+      // 沉沦降理智可能把人打进【士气低落】——聚合成一张【恐慌鉴定】卡
+      ClashManager._beginPanicAgg();
       await ClashManager.settleBleed(flags.bleedMsgs ?? []);
       await ClashManager.handleApplyDamage(targetActorId, damage);
       await ClashManager.runExtraDamage(flags.extraDmg ?? []);
       await ClashManager._flushTakeAgg();
+      await ClashManager._flushPanicAgg();
       // [拼点失败] 之类的效果发起的新对抗：排到这里，伤害落地之后再弹
       if (flags.skillLaunches) await ClashManager.runSkillLaunches(flags.skillLaunches);
       if (flags.reactionCheck) await ClashManager.runReactionCheck(flags.reactionCheck);

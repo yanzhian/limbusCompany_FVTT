@@ -3425,6 +3425,9 @@ export class ClashManager {
     ClashManager._beginSkillLaunchQueue();
     // [追加伤害] 同样排队，和主伤害一起落进承受结算卡
     ClashManager._beginExtraDmgQueue();
+    // 拼点理智变化可能把人打进【士气低落】，进而弹出一张【恐慌鉴定】卡。
+    // 开着聚合，这些行就并成一张、排在对抗卡之后，而不是插在中间。
+    ClashManager._beginPanicAgg();
     // 本场对抗中的【流血】发作先攒起来，等【结算结果】之后再公示
     ClashManager._beginBleedBuf();
     // [受到伤害时] 的效果带到承受结算卡上（伤害要等【结算结果】才应用，
@@ -3613,6 +3616,7 @@ export class ClashManager {
       // 否则聊天里会先冒出两张【承受结算】、再出【反击】，读起来是倒的
       await ClashManager._flushExtraDmg();
       await ClashManager._flushTakeAgg();
+      await ClashManager._flushPanicAgg();
       await ClashManager._flushSkillLaunches();
       await ClashManager._flushReactionCheck();
       return;
@@ -3628,6 +3632,7 @@ export class ClashManager {
       await ClashManager._resolveDirectBlock(atkActor, defActor, effectiveInitFlags, defItem, defFinalRoll, defFinalFormula, _actMsgs);
       await ClashManager._flushExtraDmg();
       await ClashManager._flushTakeAgg();
+      await ClashManager._flushPanicAgg();
       await ClashManager._flushSkillLaunches();
       await ClashManager._flushReactionCheck();
       return;
@@ -3734,17 +3739,25 @@ export class ClashManager {
       const winner = atkWins ? atkActor : defActor;
       const loser  = atkWins ? defActor : atkActor;
       if (winner && loser) {
+        // 与 onRoundEnd 同一约定：返回字符串则并进本次对抗卡的「详细信息」，
+        // 处理器不再自己发 ChatMessage（【防御姿态】原先就是自己发的）
         for (const buff of [...(winner.system?.buffs ?? [])]) {
           const handler = resolveBuffHandler(buff);
-          if (typeof handler?.onClashWin === "function") {
-            await handler.onClashWin(winner, loser, buff);
+          if (typeof handler?.onClashWin !== "function") continue;
+          const line = await handler.onClashWin(winner, loser, buff);
+          if (typeof line === "string" && line) {
+            _actMsgs.push({ trigger: "拼点成功", itemName: handler.label ?? buff.name ?? "",
+                            ownerName: winner.name, msgs: [line] });
           }
         }
         // 败者侧的 onClashLose（与 onClashWin 对称）
         for (const buff of [...(loser.system?.buffs ?? [])]) {
           const handler = resolveBuffHandler(buff);
-          if (typeof handler?.onClashLose === "function") {
-            await handler.onClashLose(loser, winner, buff);
+          if (typeof handler?.onClashLose !== "function") continue;
+          const line = await handler.onClashLose(loser, winner, buff);
+          if (typeof line === "string" && line) {
+            _actMsgs.push({ trigger: "拼点失败", itemName: handler.label ?? buff.name ?? "",
+                            ownerName: loser.name, msgs: [line] });
           }
         }
       }
@@ -3782,6 +3795,7 @@ export class ClashManager {
     // 结算过程中的零散承受排在【拼点对抗】之后
     await ClashManager._flushExtraDmg();
     await ClashManager._flushTakeAgg();
+    await ClashManager._flushPanicAgg();
     await ClashManager._flushSkillLaunches();
     await ClashManager._flushReactionCheck();
   }
@@ -4818,6 +4832,7 @@ export class ClashManager {
     ClashManager._beginTakeAgg();
     ClashManager._beginSkillLaunchQueue();
     ClashManager._beginExtraDmgQueue();
+    ClashManager._beginPanicAgg();
     // 单方面攻击同样是攻击动作，攻击方的【流血】要发作（守方没出手，不发作）
     ClashManager._beginBleedBuf();
     const _takeEffectRows2 = [];
@@ -4999,6 +5014,7 @@ export class ClashManager {
     // 结算过程中的零散承受排在【单方面攻击】之后
     await ClashManager._flushExtraDmg();
     await ClashManager._flushTakeAgg();
+    await ClashManager._flushPanicAgg();
     await ClashManager._flushSkillLaunches();
     await ClashManager._flushReactionCheck();
   }
