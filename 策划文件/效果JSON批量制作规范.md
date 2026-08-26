@@ -299,6 +299,15 @@
 // 骰子类型（本次攻击内有效）
 { "type": "diceTypeChg", "diceTypeVal": "unbreakable" }   // normal / unbreakable / severing
 
+// 替换恐慌卡（BOSS 特殊能力：给目标换一张【陷入恐慌】或【士气低落】）
+// panicSlot: "panic"（陷入恐慌，默认）/ "lowMorale"（士气低落）
+// panicCardName: 按名字在**世界物品与全部合集包**里检索——恐慌卡不像技能那样
+//                角色本来就带着，所以检索范围不是背包。找到后复制给目标并占住
+//                该槽位，被顶掉的旧卡若没有别的槽还在用就删除。
+// 卡上标了另一种 panicType 时不会放入（与角色卡拖放同一套校验）。
+{ "type": "panicCardSwap", "target": "target",
+  "panicSlot": "panic", "panicCardName": "深渊的低语" }
+
 // 相关技能转换（换卡，形态切换用）
 // relDuration: "permanent"（默认）/ "afterUse"（换上来的形态被投出去一次后还原）/
 //              "afterClash"（本次结算后还原）/ "endOfTurn"（本回合结束时还原）

@@ -2378,6 +2378,7 @@ function _activityEffectLabels() {
     { value: "rangeChg",     label: "范围修改" },
     { value: "extraDamage",  label: "追加伤害" },
     { value: "relatedSkillConvert", label: "相关技能转换" },
+    { value: "panicCardSwap", label: "替换恐慌卡" },
     { value: "fieldResource", label: "公用场地" },
   ];
 }
@@ -2965,13 +2966,14 @@ function _buildEffectRow(eff, idx, cfg) {
   const isExtraDamage  = type === "extraDamage";
   const isRelConvert   = type === "relatedSkillConvert";
   const isFieldEff     = type === "fieldResource";
+  const isPanicSwap    = type === "panicCardSwap";
   const effOpts    = _activityEffectLabels()
     .map(e => `<option value="${e.value}" ${type === e.value ? "selected" : ""}>${e.label}</option>`).join("");
   const roundVal   = eff?.round ?? "本回合";
   const roundOpts  = _ROUND_OPTIONS
     .map(v => `<option value="${v}" ${roundVal === v ? "selected" : ""}>${v}</option>`).join("");
   const formulaVal = _esc(eff?.value ?? "");
-  const isValSec   = !isBuff && !isTriggerBuff && !isRandomBuff && !isUseSkill && !isDiceTypeChg && !isRelConvert && !isFieldEff;
+  const isValSec   = !isBuff && !isTriggerBuff && !isRandomBuff && !isUseSkill && !isDiceTypeChg && !isRelConvert && !isFieldEff && !isPanicSwap;
   return `
     <div class="ae-row ae-eff-row">
       <div class="ae-row-hd">
@@ -3111,6 +3113,21 @@ function _buildEffectRow(eff, idx, cfg) {
               `<option value="${s}" ${eff?.dmgSinType === s ? "selected" : ""}>${cfg.SIN_LABELS_ZH?.[s] ?? s}</option>`
             ).join("")}
           </select>
+        </span>
+        <span class="ae-eff-panicswap-sec" ${isPanicSwap ? "" : 'style="display:none"'}>
+          <label>槽位</label>
+          <select class="ae-sel eff-panicswap-slot">${
+            [["panic","陷入恐慌"],["lowMorale","士气低落"]]
+              .map(([v,l]) => `<option value="${v}" ${(eff?.panicSlot ?? "panic") === v ? "selected" : ""}>${l}</option>`)
+              .join("")
+          }</select>
+          <label>恐慌卡名字</label>
+          <input class="ae-input eff-panicswap-name" type="text"
+                 value="${_esc(eff?.panicCardName ?? "")}"
+                 placeholder="恐慌卡名字（世界物品 / 合集包）" style="width:150px;" autocomplete="off">
+          <span class="ae-eff-relconvert-hint">按名字在<strong>世界物品与全部合集包</strong>里检索一张恐慌卡，
+          复制给目标并占住所选槽位；被顶掉的旧卡若没有别的槽还在用就删除。
+          卡上标了另一种类型（士气低落／陷入恐慌）时不会放入。</span>
         </span>
         <span class="ae-eff-relconvert-sec" ${isRelConvert ? "" : 'style="display:none"'}>
           <label>技能名字</label>
@@ -3420,12 +3437,13 @@ function _bindEffType(html) {
     const isExtraDamage = type === "extraDamage";
     const isRelConvert  = type === "relatedSkillConvert";
     const isFieldEff    = type === "fieldResource";
+    const isPanicSwap   = type === "panicCardSwap";
     row.find(".ae-eff-target-sec").toggle(!isUseSkill && !isDiceTypeChg && !isRelConvert && !isFieldEff);
     row.find(".ae-eff-field-sec").toggle(isFieldEff);
     row.find(".eff-field-stacks").attr("placeholder", _effValuePlaceholder("hpAdj"));
     row.find(".ae-eff-round-sec").toggle(isAddBuff);
     row.find(".ae-eff-buff-sec").toggle(isBuff);
-    row.find(".ae-eff-val-sec").toggle(!isBuff && !isTriggerBuff && !isRandomBuff && !isUseSkill && !isDiceTypeChg && !isRelConvert && !isFieldEff);
+    row.find(".ae-eff-val-sec").toggle(!isBuff && !isTriggerBuff && !isRandomBuff && !isUseSkill && !isDiceTypeChg && !isRelConvert && !isFieldEff && !isPanicSwap);
     row.find(".eff-value").attr("placeholder", _effValuePlaceholder(type));
     row.find(".ae-eff-trig-sec").toggle(isTriggerBuff);
     row.find(".ae-eff-random-sec").toggle(isRandomBuff);
@@ -3434,6 +3452,7 @@ function _bindEffType(html) {
     row.find(".ae-eff-rangechg-sec").toggle(type === "rangeChg");
     row.find(".ae-eff-extradmg-sec").toggle(isExtraDamage);
     row.find(".ae-eff-relconvert-sec").toggle(isRelConvert);
+    row.find(".ae-eff-panicswap-sec").toggle(isPanicSwap);
   });
 }
 
@@ -3694,6 +3713,16 @@ function _readActivityForm(html, original) {
         type,
         fieldName: $r.find(".eff-field-name").val()?.trim() || "",
         value:     $r.find(".eff-field-stacks").val()?.trim() || "",
+      });
+      return;
+    }
+    if (type === "panicCardSwap") {
+      effects.push({
+        type,
+        target:        $r.find(".eff-target").val() || "target",
+        panicSlot:     $r.find(".eff-panicswap-slot").val() || "panic",
+        panicCardName: $r.find(".eff-panicswap-name").val()?.trim() || "",
+        ..._readBgTagMeta($r, "eff"),
       });
       return;
     }

@@ -2141,6 +2141,29 @@ export class ClashManager {
             }
             break;
           }
+          case "panicCardSwap": {
+            // 替换恐慌卡：按名字在世界物品 / 合集包里检索一张恐慌卡，
+            // 嵌入目标角色并占住对应槽位（BOSS 的"给你换一张陷入恐慌"）
+            const pcName = (eff.panicCardName ?? "").trim();
+            if (!pcName) { descStr = "替换恐慌卡：未配置卡名"; break; }
+            const pcSlot = eff.panicSlot === "lowMorale" ? "lowMorale" : "panic";
+            const pcLabel = (CONFIG.LIMBUSCOMPANY?.PANIC_TYPES ?? {})[pcSlot] ?? pcSlot;
+            if (!effTgt) { descStr = "替换恐慌卡：没有目标"; break; }
+            const src = await ClashManager._findPanicCardByName(pcName);
+            if (!src) { descStr = `替换恐慌卡：找不到恐慌卡【${pcName}】`; break; }
+            // 卡上标了另一种类型就不给放，和角色卡拖放同一套校验
+            const srcType = src.system?.panicType ?? "";
+            if (srcType && srcType !== pcSlot) {
+              descStr = `替换恐慌卡：【${src.name}】是「`
+                + `${(CONFIG.LIMBUSCOMPANY?.PANIC_TYPES ?? {})[srcType] ?? srcType}」卡，放不进「${pcLabel}」槽`;
+              break;
+            }
+            const ok = await ClashManager.swapPanicCard(effTgt, pcSlot, src);
+            descStr = ok
+              ? `【${effTgt.name}】的「${pcLabel}」更换为【${src.name}】`
+              : `替换恐慌卡：无法写入【${effTgt.name}】`;
+            break;
+          }
           case "diceTypeChg": {
             const newDiceType = eff.diceTypeVal ?? "normal";
             if (item) {
@@ -2543,6 +2566,10 @@ export class ClashManager {
     if (t === "diceFacesAdj"){ const v = eff.value ?? eff.intensity ?? 0; return `技能面数 → d${v}`; }
     if (t === "baseValue")   { const v = eff.value ?? eff.intensity ?? 0; return `技能基础值 ${v >= 0 ? "+" : ""}${v}`; }
     if (t === "seismicBlast") return `对${tgt}触发震颤引爆 ×${eff.value ?? 1}`;
+    if (t === "panicCardSwap") {
+      const sl = (CONFIG.LIMBUSCOMPANY?.PANIC_TYPES ?? {})[eff.panicSlot ?? "panic"] ?? "陷入恐慌";
+      return `将${tgt}的「${sl}」更换为【${eff.panicCardName || "?"}】`;
+    }
     if (t === "triggerBuff") {
       const bn = eff.trigBuff === "custom" ? (eff.trigBuffCustom || "自定义") : ClashManager._buffLabel(eff.trigBuff ?? "");
       return `触发${tgt} ${eff.trigStacks ?? 1} 层 ${bn}`;
@@ -6548,6 +6575,69 @@ export class ClashManager {
     });
   }
 
+  /* ─── 恐慌卡替换 ───────────────────────────────────────────────────────
+   * ④效果【替换恐慌卡】：BOSS 的特殊能力给目标换一张【陷入恐慌】（或士气低落）。
+   * 恐慌卡不像技能那样"角色本来就带着"，所以检索范围是世界物品 + 全部合集包，
+   * 按名字精确匹配（合集包 UUID 提取后会变，名字不会）。
+   * ──────────────────────────────────────────────────────────────────── */
+
+  /**
+   * 按名字检索一张恐慌卡：先世界物品，再逐个合集包。
+   * @param {string} name
+   * @returns {Promise<Item|null>}
+   */
+  static async _findPanicCardByName(name) {
+    const want = (name ?? "").trim();
+    if (!want) return null;
+
+    const world = game.items?.find(it => it.type === "panic" && it.name === want);
+    if (world) return world;
+
+    for (const pack of (game.packs ?? [])) {
+      if (pack.documentName !== "Item") continue;
+      const index = await pack.getIndex({ fields: ["type"] });
+      const entry = index.find(e => e.type === "panic" && e.name === want);
+      if (!entry) continue;
+      const doc = await pack.getDocument(entry._id).catch(() => null);
+      if (doc) return doc;
+    }
+    return null;
+  }
+
+  /**
+   * 把 src 这张恐慌卡嵌入 actor 并占住 slot，旧卡若没有别的槽还在用就删掉。
+   * 与角色卡上手动拖放同一套流程。写权限不足时委托 GM 代执行。
+   * @param {Actor}  actor
+   * @param {"lowMorale"|"panic"} slot
+   * @param {Item}   src
+   * @returns {Promise<boolean>}
+   */
+  static async swapPanicCard(actor, slot, src) {
+    if (!actor || !src) return false;
+
+    if (!actor.canUserModify?.(game.user, "update")) {
+      // 嵌入物品要在目标角色上建文档，玩家端多半没权限——整件事交给 GM
+      game.socket.emit("system.limbusCompany_FVTT", {
+        type: "gmPanicSwap", actorId: actor.id, slot, srcUuid: src.uuid,
+      });
+      return true;
+    }
+
+    const data = src.toObject();
+    delete data._id;
+    const [newItem] = await actor.createEmbeddedDocuments("Item", [data]);
+    if (!newItem) return false;
+
+    const oldId = actor.system?.panicSlots?.[slot] ?? "";
+    await ClashManager._safeDocUpdate(actor, { [`system.panicSlots.${slot}`]: newItem.id });
+    if (oldId && oldId !== newItem.id) {
+      const stillUsed = Object.entries(actor.system?.panicSlots ?? {})
+        .some(([k, v]) => k !== slot && v === oldId);
+      if (!stillUsed) await actor.items.get(oldId)?.delete();
+    }
+    return true;
+  }
+
   /* ─── [追加伤害] 的延后 ─────────────────────────────────────────────────
    * extraDamage 原先当场走 _applyAndSendTake，于是伤害在【结算结果】之前就
    * 落地了，还各自冒一张【承受结算】。与拼点伤害、流血一致：对抗结算中先排队，
@@ -7146,6 +7236,19 @@ export class ClashManager {
       const attacker = attackerId ? game.actors.get(attackerId) : null;
       const defender = defenderId ? game.actors.get(defenderId) : null;
       await ClashManager._checkAndOfferReactions({ lastSkillUuid, attacker, defender });
+      return;
+    }
+
+    // 玩家无权限时委托 GM 替目标角色更换恐慌卡（要在别人身上建嵌入文档）
+    if (msg.type === "gmPanicSwap") {
+      if (!game.user.isGM) return;
+      try {
+        const actor = msg.actorId ? game.actors.get(msg.actorId) : null;
+        const src   = msg.srcUuid ? await fromUuid(msg.srcUuid) : null;
+        if (actor && src) await ClashManager.swapPanicCard(actor, msg.slot, src);
+      } catch (err) {
+        console.error("[ClashManager] gmPanicSwap 失败:", err);
+      }
       return;
     }
 
