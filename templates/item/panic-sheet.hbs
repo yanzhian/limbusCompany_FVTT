@@ -61,8 +61,11 @@
 
     <div class="equip-divider"></div>
 
-    {{!-- ── 效果触发编辑器（触发时机使用「恐慌触发时」） ────────────── --}}
-    {{> systems/limbusCompany_FVTT/templates/partials/activity-editor.hbs}}
+    {{!-- ── 效果触发编辑器（触发时机使用「恐慌触发时」/「坚定触发时」） ──
+         与技能卡/装备卡一致：默认收起，由底部【编辑激活效果】按钮展开 --}}
+    {{#if activitiesExpanded}}
+      {{> systems/limbusCompany_FVTT/templates/partials/activity-editor.hbs}}
+    {{/if}}
 
   </div>{{!-- /equip-body --}}
 
@@ -70,6 +73,7 @@
   <div class="item-sheet-footer">
     <div class="footer-actions">
       <button class="item-send-chat sheet-btn">发送聊天框</button>
+      <button class="activity-edit-toggle sheet-btn">编辑激活效果 {{#if activitiesExpanded}}▼{{else}}▲{{/if}}</button>
     </div>
   </div>
 
