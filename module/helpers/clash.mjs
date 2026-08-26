@@ -2571,6 +2571,10 @@ export class ClashManager {
       return `将${tgt}的「${slotLabel}」更换为【${(eff.panicCardName ?? "").trim() || "?"}】`;
     }
     if (t === "panicCardSwap") {
+      const slotLabel = (CONFIG.LIMBUSCOMPANY?.PANIC_TYPES ?? {})[eff.panicSlot ?? "panic"] ?? "陷入恐慌";
+      return `将${tgt}的「${slotLabel}」更换为【${(eff.panicCardName ?? "").trim() || "?"}】`;
+    }
+    if (t === "panicCardSwap") {
       const sl = (CONFIG.LIMBUSCOMPANY?.PANIC_TYPES ?? {})[eff.panicSlot ?? "panic"] ?? "陷入恐慌";
       return `将${tgt}的「${sl}」更换为【${eff.panicCardName || "?"}】`;
     }
