@@ -128,6 +128,7 @@
 
   <h2>位置（可直接拖画面上的元素）</h2>
   <div class="btns" id="posPick">
+    <button data-key="ring">环形</button>
     <button data-key="hp" class="on">生命值</button>
     <button data-key="san">理智值</button>
     <button data-key="buff">BUFF</button>
@@ -152,7 +153,7 @@ const cfg = {
   arcStart: 0, arcEnd: 50,
   thresholds: [60, 30], showThres: true,
   buffIcon: 30, buffGap: 4, buffPerRow: 6,
-  pos: { hp:{x:-81,y:-13}, san:{x:77,y:-11}, buff:{x:1,y:88} },
+  pos: { ring:{x:0,y:0}, hp:{x:-81,y:-13}, san:{x:77,y:-11}, buff:{x:1,y:88} },
   hp: 278, hpMax: 278, san: 50,
   buffCount: 5
 };
@@ -167,10 +168,11 @@ function polygonPts(){
   const r = cfg.radius, flat = cfg.flatten / 100;
   const a0 = cfg.startDeg * Math.PI / 180;
   const step = (2*Math.PI/cfg.sides) * (cfg.ccw ? -1 : 1);
+  const ox = CX + cfg.pos.ring.x, oy = CY + cfg.pos.ring.y;   // 环自己的偏移
   const pts = [];
   for (let i = 0; i < cfg.sides; i++){
     const a = a0 + i*step;
-    pts.push({ x: CX + r*Math.cos(a), y: CY + r*Math.sin(a)*flat });
+    pts.push({ x: ox + r*Math.cos(a), y: oy + r*Math.sin(a)*flat });
   }
   pts.push({ ...pts[0] });
   return pts;
@@ -323,6 +325,7 @@ function selectKey(k){
   posKey = k;
   document.querySelectorAll("#posPick button").forEach(b => b.classList.toggle("on", b.dataset.key === k));
   document.querySelectorAll("#hud > *").forEach(e => e.classList.toggle("sel", e.dataset.key === k));
+  $("ringSvg").style.filter = (k === "ring") ? "drop-shadow(0 0 4px #c9a6f0)" : "";
   $("posX").value = cfg.pos[k].x; $("posXN").textContent = cfg.pos[k].x;
   $("posY").value = cfg.pos[k].y; $("posYN").textContent = cfg.pos[k].y;
 }

@@ -44,8 +44,9 @@ export class TokenRingHUD {
     startDeg: 193, ccw: true,
     arcStart: 0, arcEnd: 50,
     showThres: true,
-    // HUD 元素相对 Token 中心的偏移（基准网格下的 px）
-    pos: { hp: { x: -81, y: -13 }, san: { x: 77, y: -11 }, buff: { x: 1, y: 88 } },
+    // 各元素相对 Token 中心的偏移（基准网格下的 px）；ring 是环自己的位置
+    pos: { ring: { x: 0, y: 0 },
+           hp: { x: -81, y: -13 }, san: { x: 77, y: -11 }, buff: { x: 1, y: 88 } },
     // 颜色
     trackColor: 0xffffff, trackAlpha: 0.13,
     fillColor:  0xe03a3a, fillLowColor: 0xff2d2d, lowAt: 0.3,
@@ -208,7 +209,9 @@ export class TokenRingHUD {
     const pct   = Math.max(0, Math.min(1, hp / hpMax));
     const width = c.thickness * scale;
 
+    const ring = TokenRingHUD.CFG.pos.ring ?? { x: 0, y: 0 };
     const g = new PIXI.Graphics();
+    g.position.set(ring.x * scale, ring.y * scale);
     // 轨道：整段
     TokenRingHUD._strokePolyline(g, TokenRingHUD._slice(pts, segs, a, b),
       width, c.trackColor, c.trackAlpha);
@@ -223,6 +226,7 @@ export class TokenRingHUD {
     // 混乱阈值刻度：与承受结算卡上的血条同一套映射
     const half = width / 2 + 4 * scale;
     const marks = new PIXI.Graphics();
+    marks.position.set(ring.x * scale, ring.y * scale);
     for (const t of (actor.system?.chaosThresholds ?? [])) {
       const p = TokenRingHUD._at(pts, segs, a + S * (1 - (t.percent ?? 0) / 100));
       const nx = -p.ty, ny = p.tx;
