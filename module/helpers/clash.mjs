@@ -562,12 +562,18 @@ export class ClashManager {
       for (const buff of foundry.utils.deepClone(ally.system?.buffs ?? [])) {
         const handler = resolveBuffHandler(buff);
         if (typeof handler?.onAllyHpDamage !== "function") continue;
-        await handler.onAllyHpDamage(ally, buff, {
+        const note = await handler.onAllyHpDamage(ally, buff, {
           victim, amount, attacker,
           addBuff:   (type, i, st, when) => ClashManager._addBuff(ally, type, i, st, when),
           addBuffTo: (tgt, type, i, st, when) => ClashManager._addBuff(tgt, type, i, st, when),
           getBuff:   (type) => ClashManager._getBuff(ally, type),
         });
+        // 同上：返回字符串并进当前卡（承受结算那张），处理器不自己发消息
+        if (typeof note === "string" && note) {
+          const line = [{ trigger: "BUFF触发", itemName: handler.label ?? buff.name ?? buff.type,
+                          ownerName: ally.name, msgs: [note] }];
+          if (!ClashManager.pushAmbient(line)) await ClashManager._flushActMsgs(line, ally);
+        }
       }
     }
   }
@@ -1033,16 +1039,26 @@ export class ClashManager {
    */
   static async _dispatchBuffChange(actor, event, ctx) {
     if (!actor || ctx?._internal) return;
+    const lines = [];
     for (const buff of foundry.utils.deepClone(actor.system?.buffs ?? [])) {
       const handler = resolveBuffHandler(buff);
       const fn = handler?.[event];
       if (typeof fn !== "function") continue;
       try {
-        await fn(actor, buff, ctx);
+        const note = await fn(actor, buff, ctx);
+        // 与其余钩子同一约定：返回字符串就并进当前这张卡，绝不自己发消息。
+        // 这两个钩子（onBuffGained/onBuffLost）原先直接丢掉返回值——处理器
+        // 想报点什么只能自己 ChatMessage.create，那正是要杜绝的写法。
+        if (typeof note === "string" && note) {
+          lines.push({ trigger: "BUFF触发", itemName: handler.label ?? buff.name ?? buff.type,
+                       ownerName: actor.name, msgs: [note] });
+        }
       } catch (err) {
         console.error(`ClashManager: BUFF【${buff.name ?? buff.type}】${event} 执行出错`, err);
       }
     }
+    if (!lines.length) return;
+    if (!ClashManager.pushAmbient(lines)) await ClashManager._flushActMsgs(lines, actor);
   }
 
   /**
