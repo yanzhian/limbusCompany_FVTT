@@ -8,17 +8,15 @@
  *   · 混乱阈值刻度：越过的变灰（对应 chaosThresholds[i].triggered）
  *   · 生命值数字 / 理智圆形徽章 / BUFF 图标行（每行 6 个，不足一行居中）
  *
- * 「躺在地面上」是靠把 y 坐标乘 cos(tilt) 压扁模拟的——Foundry 的画布是
+ * 「躺在地面上」是靠把 y 坐标乘 flatten 压扁模拟的——Foundry 的画布是
  * 正俯视 2D，没有真正的 3D，压扁就是这个视角下的等效结果。
+ * flatten = 100 就是不压扁的正多边形。
  *
  * 所有尺寸以 100px 网格为基准（原型里 token 边长＝一格＝100px），
  * 实际按 canvas.grid.size / 100 缩放，换网格大小不用重调。
  */
 
-/** 原型 SVG 的 viewBox 是 200 宽、画在 240px 的地面上 → 1 单位 = 1.2px */
-const UNIT_PX = 240 / 200;
-
-/** 原型基准网格：一格 100px */
+/** 原型基准网格：一格 100px。CFG 里所有长度都是这个基准下的像素 */
 const BASE_CELL = 100;
 
 const BUFF_ICON_BASE = "systems/limbusCompany_FVTT/assets/icons/Buff_icon/";
@@ -39,7 +37,10 @@ export class TokenRingHUD {
   /* ─── 配置（原型面板导出的那份） ──────────────────────────────────────── */
 
   static CFG = {
-    sides: 7, radius: 69, thickness: 18, tilt: 68,
+    // 长度单位＝「一格 100px 时的像素」，实际按 grid.size/100 缩放
+    sides: 7, radius: 83, thickness: 22,
+    // 纵向压扁百分比：100 = 正多边形，越小越扁（模拟贴地的透视）
+    flatten: 37,
     startDeg: 193, ccw: true,
     arcStart: 0, arcEnd: 50,
     showThres: true,
@@ -92,14 +93,14 @@ export class TokenRingHUD {
   /* ─── 几何 ────────────────────────────────────────────────────────────── */
 
   /**
-   * 多边形顶点（已按 tilt 压扁）。
+   * 多边形顶点（已按 flatten 压扁）。
    * 与原型同一套：起点角 startDeg，ccw 决定步进方向；y 轴向下，
    * 所以角度递减看起来才是逆时针。
    */
   static _polygon(scale) {
     const c = TokenRingHUD.CFG;
-    const r = c.radius * UNIT_PX * scale;
-    const flat = Math.cos(c.tilt * Math.PI / 180);
+    const r = c.radius * scale;
+    const flat = c.flatten / 100;
     const a0 = c.startDeg * Math.PI / 180;
     const step = (2 * Math.PI / c.sides) * (c.ccw ? -1 : 1);
     const pts = [];
@@ -181,8 +182,9 @@ export class TokenRingHUD {
       token.addChild(box);
     }
     box.removeChildren().forEach(ch => ch.destroy({ children: true }));
-    // Token 自身可能带旋转，HUD 与环不跟着转
-    box.rotation = -(token.document?.rotation ?? 0) * Math.PI / 180;
+    // 不要反向旋转：Foundry 里 Token 的朝向作用在 token.mesh 上，
+    // 这个容器本身从不旋转——反向转反而会让整套 HUD 跟着角色朝向甩。
+    box.rotation = 0;
     box.position.set((token.w ?? 0) / 2, (token.h ?? 0) / 2);
 
     TokenRingHUD._drawRing(box, actor, scale);
@@ -204,7 +206,7 @@ export class TokenRingHUD {
     const hp    = actor.system?.hp?.value ?? 0;
     const hpMax = Math.max(1, actor.system?.hp?.max ?? 1);
     const pct   = Math.max(0, Math.min(1, hp / hpMax));
-    const width = c.thickness * UNIT_PX * scale;
+    const width = c.thickness * scale;
 
     const g = new PIXI.Graphics();
     // 轨道：整段

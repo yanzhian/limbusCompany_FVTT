@@ -2,88 +2,59 @@
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8">
-<title>七边形生命环原型</title>
+<title>Token 生命环原型 · 俯视版</title>
 <style>
-  :root{
-    --ring-empty:rgba(255,255,255,.13);
-    --ring-fill:#e03a3a;
-    --ring-fill-low:#ff2d2d;
-    --ring-glow:rgba(255,60,50,.55);
-  }
   *{box-sizing:border-box}
   body{
-    margin:0;min-height:100vh;
-    background:radial-gradient(ellipse at 50% 35%, #3a1c4d 0%, #1a1024 70%);
+    margin:0;min-height:100vh;background:#2b2333;
     color:#eee;font:13px/1.55 system-ui,"Microsoft YaHei",sans-serif;
-    display:flex;gap:32px;padding:32px;align-items:flex-start;flex-wrap:wrap;
+    display:flex;gap:28px;padding:28px;align-items:flex-start;flex-wrap:wrap;
     justify-content:center;
   }
-  h1{font-size:17px;font-weight:600;margin:0 0 14px}
+  h1{font-size:17px;font-weight:600;margin:0 0 4px}
   h2{font-size:13px;font-weight:600;margin:16px 0 8px;color:#c9b6e0;
      border-bottom:1px solid #4a3363;padding-bottom:4px}
+  .sub{color:#9a8fae;font-size:11.5px;margin:0 0 14px}
 
-  /* ── 舞台 ── */
-  .stage-wrap{position:relative;flex:0 0 auto}
-  .stage{perspective:520px;width:340px;height:340px;display:grid;place-items:center}
-  .ground{
-    transform:rotateX(58deg);transform-style:preserve-3d;
-    position:relative;width:240px;height:240px;display:grid;place-items:center;
-  }
-  .ring{width:100%;height:100%;overflow:visible;display:block}
+  /* ── 舞台：正俯视，和 Foundry 画布一样，没有任何 3D ── */
+  .stage{position:relative;flex:0 0 auto;width:520px;height:520px;
+         background:#3b3145;border:1px solid #55475f;overflow:hidden}
+  .grid{position:absolute;inset:0}
+  .ring{position:absolute;left:0;top:0;width:100%;height:100%;overflow:visible;
+        pointer-events:none}
   .ring path,.ring line{fill:none;stroke-linecap:butt;stroke-linejoin:miter}
-  .track{stroke:var(--ring-empty)}
-  .fill{stroke:var(--ring-fill);filter:drop-shadow(0 0 6px var(--ring-glow));
-        transition:stroke-dashoffset .45s cubic-bezier(.3,.9,.3,1),stroke .3s}
+  .track{stroke:rgba(255,255,255,.13)}
+  .fill{stroke:#e03a3a;filter:drop-shadow(0 0 6px rgba(255,60,50,.55))}
   .thres{stroke:#fff;stroke-width:2;opacity:.85}
   .thres.done{stroke:#7a6b8c;opacity:.5}
 
-  /* FVTT 的一格：正方形，平躺在地面平面上（和环同一个 rotateX），
-     用来量环、HUD 相对于一格有多大 */
-  .cell{
-    position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
-    width:100px;height:100px;
-    border:1px dashed rgba(255,255,255,.4);
-    background:rgba(255,255,255,.05);
-    box-sizing:border-box;
-  }
-  /* Token 立牌：正方形，边长＝一格 */
-  .token{
-    position:absolute;left:50%;top:50%;
-    transform:translate(-50%,-100%) rotateX(-58deg);transform-origin:50% 100%;
-    width:100px;height:100px;
-    background:linear-gradient(180deg,#4a5a8a,#1d2440);
-    border:2px solid rgba(255,255,255,.25);border-radius:4px;
-    display:grid;place-items:center;font-size:12px;color:#cfd6ee;
-    box-shadow:0 12px 22px rgba(0,0,0,.5);
-  }
+  /* Token：正好一格，橙框（对应截图里那个黄框） */
+  .token{position:absolute;transform:translate(-50%,-50%);
+         border:3px solid #ff9a2e;border-radius:2px;
+         background:linear-gradient(180deg,#5a6a9a,#252c48);
+         display:grid;place-items:center;color:#cfd6ee;font-size:12px}
 
-  /* ── 屏幕空间 HUD：永远正对镜头，可拖动 ── */
+  /* ── HUD：屏幕空间，px 偏移＝ Foundry 里的 px 偏移 ── */
   .hud{position:absolute;inset:0;pointer-events:none}
   .hud > *{position:absolute;pointer-events:auto;cursor:grab;user-select:none;
            white-space:nowrap;transform:translate(-50%,-50%)}
   .hud > *.dragging{cursor:grabbing}
   .hud > *.sel{outline:1px dashed #9d7cc4;outline-offset:4px}
-  .hp-val{font:700 30px/1 Impact,"Arial Black",sans-serif;color:#ff5a3c;
+  .hp-val{font:700 34px/1 Impact,"Arial Black",sans-serif;color:#ff5a3c;
           text-shadow:0 2px 0 #000,0 0 10px rgba(255,60,40,.6)}
-  /* 理智：一个圆形徽章——是"圈"，但不画进度环，圈里就是数值 */
-  .san-val{width:44px;height:44px;border-radius:50%;
-           display:grid;place-items:center;
+  .san-val{width:44px;height:44px;border-radius:50%;display:grid;place-items:center;
            font:700 17px/1 system-ui;color:#cfe4ff;
            background:rgba(12,20,40,.85);border:1px solid #5b7fbf;
            box-shadow:0 2px 8px rgba(0,0,0,.5);text-shadow:0 1px 2px #000}
-  /* BUFF：不要底框，30px 图标，一排最多 6 个，从左往右；
-     宽度钉死成 6 格（6×30 + 5×4 = 200px），于是满行自然铺满、
-     不足一行（或最后一行）居中 */
-  .buffs{display:flex;flex-wrap:wrap;gap:4px;width:200px;justify-content:center}
-  .buffs i{width:30px;height:30px;display:grid;place-items:center;
-           font-style:normal;font-size:24px;line-height:1;
+  .buffs{display:flex;flex-wrap:wrap;justify-content:center}
+  .buffs i{display:grid;place-items:center;font-style:normal;line-height:1;
            filter:drop-shadow(0 2px 3px rgba(0,0,0,.75))}
 
   /* ── 控制面板 ── */
-  .panel{flex:1 1 340px;max-width:420px;background:rgba(20,12,32,.6);
+  .panel{flex:1 1 330px;max-width:400px;background:rgba(20,12,32,.6);
          border:1px solid #4a3363;border-radius:10px;padding:16px 18px}
   .row{display:flex;align-items:center;gap:10px;margin:7px 0}
-  .row label{flex:0 0 88px;color:#b9aec8}
+  .row label{flex:0 0 84px;color:#b9aec8}
   .row input[type=range]{flex:1;min-width:0}
   .row .num{flex:0 0 44px;text-align:right;font-variant-numeric:tabular-nums;color:#e8dcf5}
   .btns{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0 4px}
@@ -94,75 +65,75 @@
   input[type=text]{background:#1b1128;color:#eee;border:1px solid #6b4a8f;
                    border-radius:5px;padding:5px 8px;font-size:12px;flex:1;min-width:0}
   pre{background:#0f0918;border:1px solid #3b2a52;border-radius:6px;padding:10px;
-      font-size:11px;color:#b9d9c0;overflow:auto;max-height:190px;margin:8px 0 0}
+      font-size:11px;color:#b9d9c0;overflow:auto;max-height:220px;margin:8px 0 0}
   .hint{color:#8f82a3;font-size:11.5px;margin:6px 0 0}
 </style>
 </head>
 <body>
 
-<div class="stage-wrap">
-  <div class="stage">
-    <div class="ground">
-      <svg class="ring" viewBox="0 0 200 200">
-        <path class="track" id="track"></path>
-        <path class="fill"  id="fill"></path>
-        <g id="thresGroup"></g>
-      </svg>
-      <div class="cell" id="cellEl"></div>
-      <div class="token" id="tokenEl">TOKEN</div>
-    </div>
-  </div>
-
+<div class="stage" id="stage">
+  <div class="grid" id="gridEl"></div>
+  <svg class="ring" id="ringSvg">
+    <path class="track" id="track"></path>
+    <path class="fill"  id="fill"></path>
+    <g id="thresGroup"></g>
+  </svg>
+  <div class="token" id="tokenEl">TOKEN</div>
   <div class="hud" id="hud">
-    <div class="hp-val"  data-key="hp"    id="hpEl">278</div>
-    <div class="san-val" data-key="san"   id="sanEl"><b>50</b></div>
-    <div class="buffs"   data-key="buff"  id="buffEl"><i>🔥</i><i>🛡</i><i>⚡</i><i>💧</i><i>🌀</i><i>🩸</i><i>❄</i><i>☠</i></div>
+    <div class="hp-val"  data-key="hp"   id="hpEl">278</div>
+    <div class="san-val" data-key="san"  id="sanEl"><b>50</b></div>
+    <div class="buffs"   data-key="buff" id="buffEl"></div>
   </div>
 </div>
 
 <div class="panel">
-  <h1>七边形生命环 · 原型</h1>
+  <h1>Token 生命环 · 俯视原型</h1>
+  <p class="sub">正俯视、无 3D —— 和 Foundry 画布一致。橙框 ＝ 1 格。
+     所有数值都是「一格 100px 时的像素」，实装时按 grid.size/100 缩放。</p>
+
+  <h2>格子</h2>
+  <div class="row"><label>格子(px)</label><input type="range" id="cell" min="60" max="180" value="100"><span class="num" id="cellN">100</span></div>
 
   <h2>环形</h2>
-  <div class="row"><label>线粗细</label><input type="range" id="thick" min="2" max="30" step="1" value="18"><span class="num" id="thickN">18</span></div>
-  <div class="row"><label>边数</label><input type="range" id="sides" min="3" max="12" value="7"><span class="num" id="sidesN">7</span></div>
-  <div class="row"><label>半径</label><input type="range" id="radius" min="50" max="95" value="69"><span class="num" id="radiusN">69</span></div>
-  <div class="row"><label>格子(px)</label><input type="range" id="cell" min="60" max="160" value="100"><span class="num" id="cellN">100</span></div>
-  <p class="hint" id="scaleHint">—</p>
-  <div class="row"><label>倾斜角</label><input type="range" id="tilt" min="0" max="75" value="68"><span class="num" id="tiltN">68</span></div>
+  <div class="row"><label>边数</label><input type="range" id="sides" min="3" max="16" value="7"><span class="num" id="sidesN">7</span></div>
+  <div class="row"><label>半径(px)</label><input type="range" id="radius" min="30" max="200" value="83"><span class="num" id="radiusN">83</span></div>
+  <div class="row"><label>线粗(px)</label><input type="range" id="thick" min="2" max="40" value="22"><span class="num" id="thickN">22</span></div>
+  <div class="row"><label>压扁(%)</label><input type="range" id="flat" min="10" max="100" value="37"><span class="num" id="flatN">37</span></div>
   <div class="row"><label>起点角</label><input type="range" id="start" min="0" max="359" value="193"><span class="num" id="startN">193</span></div>
   <div class="row"><label>血条起点</label><input type="range" id="arcStart" min="0" max="100" value="0"><span class="num" id="arcStartN">0</span></div>
   <div class="row"><label>血条终点</label><input type="range" id="arcEnd" min="0" max="100" value="50"><span class="num" id="arcEndN">50</span></div>
   <div class="btns">
     <button id="dirBtn" class="on">逆时针 ↺</button>
-    <span class="hint" style="align-self:center">起点角 180° = 9 点方向；血条起点/终点是沿环走过的百分比</span>
+    <span class="hint" style="align-self:center">压扁 100% ＝ 正多边形</span>
   </div>
+  <p class="hint" id="scaleHint">—</p>
 
-  <h2>混乱阈值预览</h2>
+  <h2>混乱阈值</h2>
   <div class="row"><label>阈值(%)</label><input type="text" id="thresIn" value="60,30"></div>
-  <div class="btns">
-    <button id="thresToggle" class="on">显示刻度</button>
-    <button id="thresReset">重置已触发</button>
-  </div>
-  <p class="hint">已越过的阈值会变灰（模拟 <code>triggered</code> latch）。</p>
+  <div class="btns"><button id="thresToggle" class="on">显示刻度</button></div>
 
   <h2>数值</h2>
   <div class="row"><label>生命值</label><input type="range" id="hp" min="0" max="278" value="278"><span class="num" id="hpN">278</span></div>
   <div class="row"><label>理智值</label><input type="range" id="san" min="5" max="95" value="50"><span class="num" id="sanN">50</span></div>
-  <p class="hint">理智量程固定 5–95（与角色卡 sanity 的 schema 一致）。</p>
+  <div class="row"><label>BUFF 数</label><input type="range" id="buffCount" min="0" max="14" value="5"><span class="num" id="buffCountN">5</span></div>
   <div class="btns">
     <button data-dmg="20">-20</button><button data-dmg="60">-60</button>
     <button data-dmg="-40">+40</button><button id="reset">重置</button>
   </div>
 
-  <h2>位置（可直接拖拽画面上的元素）</h2>
+  <h2>BUFF 行</h2>
+  <div class="row"><label>图标(px)</label><input type="range" id="buffIcon" min="14" max="48" value="30"><span class="num" id="buffIconN">30</span></div>
+  <div class="row"><label>间隔(px)</label><input type="range" id="buffGap" min="0" max="14" value="4"><span class="num" id="buffGapN">4</span></div>
+  <div class="row"><label>每行个数</label><input type="range" id="buffPerRow" min="3" max="10" value="6"><span class="num" id="buffPerRowN">6</span></div>
+
+  <h2>位置（可直接拖画面上的元素）</h2>
   <div class="btns" id="posPick">
     <button data-key="hp" class="on">生命值</button>
     <button data-key="san">理智值</button>
     <button data-key="buff">BUFF</button>
   </div>
-  <div class="row"><label>X 偏移</label><input type="range" id="posX" min="-170" max="170" value="-81"><span class="num" id="posXN">-81</span></div>
-  <div class="row"><label>Y 偏移</label><input type="range" id="posY" min="-170" max="170" value="-13"><span class="num" id="posYN">-13</span></div>
+  <div class="row"><label>X 偏移</label><input type="range" id="posX" min="-220" max="220" value="-81"><span class="num" id="posXN">-81</span></div>
+  <div class="row"><label>Y 偏移</label><input type="range" id="posY" min="-220" max="220" value="-13"><span class="num" id="posYN">-13</span></div>
 
   <h2>导出配置</h2>
   <div class="btns"><button id="dump">生成 JSON</button></div>
@@ -170,160 +141,171 @@
 </div>
 
 <script>
-const CX = 100, CY = 100;
+/* 舞台中心 ＝ Token 中心 ＝ 所有偏移的原点 */
+const SW = 520, CX = SW / 2, CY = SW / 2;
+
 const cfg = {
-  sides: 7, radius: 69, thickness: 18, tilt: 68,
-  cell: 100,              // FVTT 一格的像素边长（默认网格 100px）
-  startDeg: 193,          // 9 点略偏下
-  ccw: true,              // 逆时针
-  // 血条占环的哪一段（沿 ccw 方向走过的百分比）。0→100 就是整圈；
-  // 现在只用前半圈，后半圈留白给 BUFF 那一行。
+  cell: 100,
+  sides: 7, radius: 83, thickness: 22,
+  flatten: 37,            // 纵向压扁百分比：100 = 正多边形
+  startDeg: 193, ccw: true,
   arcStart: 0, arcEnd: 50,
   thresholds: [60, 30], showThres: true,
+  buffIcon: 30, buffGap: 4, buffPerRow: 6,
   pos: { hp:{x:-81,y:-13}, san:{x:77,y:-11}, buff:{x:1,y:88} },
-  hp: 278, hpMax: 278,
-  san: 50, sanMin: 5, sanMax: 95
+  hp: 278, hpMax: 278, san: 50,
+  buffCount: 5
 };
+const EMOJI = ["🔥","🛡","⚡","💧","🌀","🩸","❄","☠","🌟","🍀","🕯","🔮","⚙","🎴"];
 let posKey = "hp";
 
 const $ = id => document.getElementById(id);
 const fillEl = $("fill"), trackEl = $("track"), thresG = $("thresGroup");
 
-/* 多边形路径：起点角 startDeg，ccw 决定步进方向。
-   SVG y 轴向下 → 角度递减 = 视觉逆时针。 */
-function polygonPath(n, r, startDeg, ccw){
-  const a0 = startDeg * Math.PI / 180;
-  const step = (2*Math.PI/n) * (ccw ? -1 : 1);
+/* ── 几何：多边形顶点（已压扁），单位就是屏幕 px ── */
+function polygonPts(){
+  const r = cfg.radius, flat = cfg.flatten / 100;
+  const a0 = cfg.startDeg * Math.PI / 180;
+  const step = (2*Math.PI/cfg.sides) * (cfg.ccw ? -1 : 1);
   const pts = [];
-  for (let i = 0; i < n; i++){
+  for (let i = 0; i < cfg.sides; i++){
     const a = a0 + i*step;
-    pts.push([CX + r*Math.cos(a), CY + r*Math.sin(a)]);
+    pts.push({ x: CX + r*Math.cos(a), y: CY + r*Math.sin(a)*flat });
   }
-  return "M" + pts.map(p => p.map(v => v.toFixed(2)).join(",")).join("L") + "Z";
+  pts.push({ ...pts[0] });
+  return pts;
 }
-
-/* SVG viewBox 是 200 宽，画在 240px 的 .ground 上 → 1 单位 = 1.2px。
-   把环的实际直径换算成像素与"格"，好判断它相对 token 有多大。 */
-const UNIT_PX = 240 / 200;
-function updateScaleHint(){
-  const el = $("scaleHint");
-  if (!el) return;
-  const dPx = cfg.radius * 2 * UNIT_PX;
-  el.textContent = `环直径 ≈ ${dPx.toFixed(0)}px ＝ ${(dPx / cfg.cell).toFixed(2)} 格`
-    + `（token 边长 ＝ 1 格 ＝ ${cfg.cell}px）`;
-}
-
-function rebuild(){
-  const d = polygonPath(cfg.sides, cfg.radius, cfg.startDeg, cfg.ccw);
-  trackEl.setAttribute("d", d);
-  fillEl.setAttribute("d", d);
-  trackEl.style.strokeWidth = cfg.thickness;
-  fillEl.style.strokeWidth  = cfg.thickness;
-  const len = fillEl.getTotalLength();
-  fillEl.dataset.len = len;
-  updateScaleHint();
-  render();
-}
-
-/* 血条实际占用的那一段：起点距离 a、长度 S（沿路径） */
-function span(){
-  const len = +fillEl.dataset.len || 0;
-  const a = len * Math.min(cfg.arcStart, cfg.arcEnd) / 100;
-  const b = len * Math.max(cfg.arcStart, cfg.arcEnd) / 100;
-  return { len, a, S: b - a };
-}
-
-/* 只画路径上 [at, at+seg] 这一段。
-   dasharray = "0 at seg len"：先一段 0 长度的实线，跳过 at，再画 seg，
-   剩下的用一个足够长的间隔吃掉。比 dashoffset 正负号那套直观得多。 */
-function dashSub(el, at, seg, len){
-  el.style.strokeDasharray = `0 ${at.toFixed(2)} ${Math.max(0, seg).toFixed(2)} ${(len + 1).toFixed(2)}`;
-}
-
-/* 阈值刻度：沿路径按百分比取点，画一段垂直于边的短线 */
-function drawThresholds(){
-  thresG.innerHTML = "";
-  if (!cfg.showThres) return;
-  const { len, a, S } = span();
-  const half = cfg.thickness / 2 + 4;
-  for (const pct of cfg.thresholds){
-    // 缺口从血条起点长出，所以 pct 剩余血量的边界点落在这一段的 (1-pct) 处
-    const at = a + S * (1 - pct/100);
-    const p  = fillEl.getPointAtLength(at);
-    const q  = fillEl.getPointAtLength(Math.min(len, at + 1));
-    const dx = q.x - p.x, dy = q.y - p.y;
-    const m  = Math.hypot(dx, dy) || 1;
-    const nx = -dy/m, ny = dx/m;                 // 法线
-    const el = document.createElementNS("http://www.w3.org/2000/svg", "line");
-    el.setAttribute("x1", p.x - nx*half); el.setAttribute("y1", p.y - ny*half);
-    el.setAttribute("x2", p.x + nx*half); el.setAttribute("y2", p.y + ny*half);
-    el.setAttribute("class", "thres" + (cfg.hp/cfg.hpMax <= pct/100 ? " done" : ""));
-    thresG.appendChild(el);
+function measure(pts){
+  const segs = []; let total = 0;
+  for (let i = 0; i < pts.length-1; i++){
+    const d = Math.hypot(pts[i+1].x-pts[i].x, pts[i+1].y-pts[i].y);
+    segs.push(d); total += d;
   }
+  return { segs, total };
+}
+function at(pts, segs, dist){
+  let d = Math.max(0, dist);
+  for (let i = 0; i < segs.length; i++){
+    if (d <= segs[i] || i === segs.length-1){
+      const t = segs[i] ? Math.min(1, d/segs[i]) : 0;
+      const p0 = pts[i], p1 = pts[i+1];
+      const dx = p1.x-p0.x, dy = p1.y-p0.y, m = Math.hypot(dx,dy) || 1;
+      return { x: p0.x+dx*t, y: p0.y+dy*t, tx: dx/m, ty: dy/m };
+    }
+    d -= segs[i];
+  }
+  const l = pts[pts.length-1];
+  return { x:l.x, y:l.y, tx:1, ty:0 };
+}
+/* 折线上 [d0,d1] 这一段 → SVG path */
+function slicePath(pts, segs, d0, d1){
+  if (!(d1 > d0)) return "";
+  const out = [at(pts, segs, d0)];
+  let acc = 0;
+  for (let i = 0; i < segs.length; i++){
+    const end = acc + segs[i];
+    if (end > d0 && end < d1) out.push(pts[i+1]);
+    acc = end;
+  }
+  out.push(at(pts, segs, d1));
+  return "M" + out.map(p => `${p.x.toFixed(2)},${p.y.toFixed(2)}`).join("L");
+}
+
+/* ── 渲染 ── */
+function drawGrid(){
+  const c = cfg.cell;
+  const ox = ((CX - c/2) % c + c) % c, oy = ((CY - c/2) % c + c) % c;
+  const g = $("gridEl");
+  g.style.background =
+    `repeating-linear-gradient(90deg, rgba(255,255,255,.10) 0 1px, transparent 1px ${c}px),`
+  + `repeating-linear-gradient(0deg,  rgba(255,255,255,.10) 0 1px, transparent 1px ${c}px)`;
+  g.style.backgroundPosition = `${ox}px ${oy}px`;
+  const t = $("tokenEl");
+  t.style.width = c + "px"; t.style.height = c + "px";
+  t.style.left = CX + "px"; t.style.top = CY + "px";
 }
 
 function render(){
+  const pts = polygonPts();
+  const { segs, total } = measure(pts);
+  const a = total * Math.min(cfg.arcStart, cfg.arcEnd) / 100;
+  const b = total * Math.max(cfg.arcStart, cfg.arcEnd) / 100;
+  const S = b - a;
   const pct = Math.max(0, Math.min(1, cfg.hp / cfg.hpMax));
-  const { len, a, S } = span();
-  // 轨道只铺满血条自己那一段；填充锚在段尾，空缺从段首长出（原来的扣血方向）
-  dashSub(trackEl, a, S, len);
-  dashSub(fillEl,  a + S * (1 - pct), S * pct, len);
-  const css = getComputedStyle(document.documentElement);
-  fillEl.style.stroke = css.getPropertyValue(pct <= .3 ? "--ring-fill-low" : "--ring-fill");
+
+  trackEl.setAttribute("d", slicePath(pts, segs, a, b));
+  fillEl.setAttribute("d",  pct > 0 ? slicePath(pts, segs, a + S*(1-pct), b) : "");
+  trackEl.style.strokeWidth = cfg.thickness;
+  fillEl.style.strokeWidth  = cfg.thickness;
+  fillEl.style.stroke = pct <= .3 ? "#ff2d2d" : "#e03a3a";
+
+  thresG.innerHTML = "";
+  if (cfg.showThres){
+    const half = cfg.thickness/2 + 4;
+    for (const p0 of cfg.thresholds){
+      const p = at(pts, segs, a + S*(1 - p0/100));
+      const nx = -p.ty, ny = p.tx;
+      const el = document.createElementNS("http://www.w3.org/2000/svg","line");
+      el.setAttribute("x1", p.x-nx*half); el.setAttribute("y1", p.y-ny*half);
+      el.setAttribute("x2", p.x+nx*half); el.setAttribute("y2", p.y+ny*half);
+      el.setAttribute("class","thres" + (pct <= p0/100 ? " done" : ""));
+      thresG.appendChild(el);
+    }
+  }
 
   $("hpEl").textContent = Math.round(cfg.hp);
   $("sanEl").querySelector("b").textContent = Math.round(cfg.san);
+
+  const bw = cfg.buffPerRow * cfg.buffIcon + (cfg.buffPerRow-1) * cfg.buffGap;
+  const be = $("buffEl");
+  be.style.width = bw + "px";
+  be.style.gap = cfg.buffGap + "px";
+  be.innerHTML = Array.from({length: cfg.buffCount}, (_,i) =>
+    `<i style="width:${cfg.buffIcon}px;height:${cfg.buffIcon}px;font-size:${Math.round(cfg.buffIcon*.8)}px">${EMOJI[i%EMOJI.length]}</i>`).join("");
+
   document.querySelectorAll("#hud > *").forEach(el => {
     const p = cfg.pos[el.dataset.key];
     if (!p) return;
-    el.style.left = `calc(50% + ${p.x}px)`;
-    el.style.top  = `calc(50% + ${p.y}px)`;
+    el.style.left = (CX + p.x) + "px";
+    el.style.top  = (CY + p.y) + "px";
   });
-  drawThresholds();
+
+  const d = cfg.radius * 2;
+  $("scaleHint").textContent =
+    `环宽 ${d}px ＝ ${(d/cfg.cell).toFixed(2)} 格；`
+  + `压扁后高 ${(d*cfg.flatten/100).toFixed(0)}px ＝ ${(d*cfg.flatten/100/cfg.cell).toFixed(2)} 格`;
 }
 
-function applyTilt(){
-  document.querySelector(".ground").style.transform = `rotateX(${cfg.tilt}deg)`;
-  document.querySelector(".token").style.transform =
-    `translate(-50%,-100%) rotateX(-${cfg.tilt}deg)`;
-}
-
-/* 一格的边长：地面上的方格与 token 立牌都按它走（token 边长＝一格） */
-function applyCell(){
-  const px = cfg.cell + "px";
-  const c = $("cellEl"), t = $("tokenEl");
-  if (c){ c.style.width = px; c.style.height = px; }
-  if (t){ t.style.width = px; t.style.height = px; }
-  updateScaleHint();
-}
-
-/* ── 控件绑定 ── */
+/* ── 控件 ── */
 function slider(id, key, after){
   const el = $(id), n = $(id + "N");
   el.oninput = () => { const v = +el.value; if (n) n.textContent = v; key(v); (after||render)(); };
 }
-slider("thick",  v => cfg.thickness = v, rebuild);
-slider("sides",  v => cfg.sides = v,     rebuild);
-slider("radius", v => cfg.radius = v,    rebuild);
-slider("start",  v => cfg.startDeg = v,  rebuild);
-slider("arcStart", v => cfg.arcStart = v);
-slider("arcEnd",   v => cfg.arcEnd   = v);
-slider("tilt",   v => cfg.tilt = v,      applyTilt);
-slider("cell",   v => cfg.cell = v,      applyCell);
-slider("hp",     v => cfg.hp = v);
-slider("san",    v => cfg.san = v);
-slider("posX",   v => cfg.pos[posKey].x = v);
-slider("posY",   v => cfg.pos[posKey].y = v);
+slider("cell",       v => cfg.cell = v,       () => { drawGrid(); render(); });
+slider("sides",      v => cfg.sides = v);
+slider("radius",     v => cfg.radius = v);
+slider("thick",      v => cfg.thickness = v);
+slider("flat",       v => cfg.flatten = v);
+slider("start",      v => cfg.startDeg = v);
+slider("arcStart",   v => cfg.arcStart = v);
+slider("arcEnd",     v => cfg.arcEnd = v);
+slider("hp",         v => cfg.hp = v);
+slider("san",        v => cfg.san = v);
+slider("buffCount",  v => cfg.buffCount = v);
+slider("buffIcon",   v => cfg.buffIcon = v);
+slider("buffGap",    v => cfg.buffGap = v);
+slider("buffPerRow", v => cfg.buffPerRow = v);
+slider("posX",       v => cfg.pos[posKey].x = v);
+slider("posY",       v => cfg.pos[posKey].y = v);
 
 $("dirBtn").onclick = e => {
   cfg.ccw = !cfg.ccw;
   e.target.textContent = cfg.ccw ? "逆时针 ↺" : "顺时针 ↻";
   e.target.classList.toggle("on", cfg.ccw);
-  rebuild();
+  render();
 };
 $("thresIn").oninput = e => {
-  cfg.thresholds = e.target.value.split(",")
-    .map(s => parseFloat(s)).filter(v => v > 0 && v <= 100);
+  cfg.thresholds = e.target.value.split(",").map(s => parseFloat(s)).filter(v => v > 0 && v <= 100);
   render();
 };
 $("thresToggle").onclick = e => {
@@ -331,15 +313,12 @@ $("thresToggle").onclick = e => {
   e.target.classList.toggle("on", cfg.showThres);
   render();
 };
-$("thresReset").onclick = () => { cfg.hp = cfg.hpMax; $("hp").value = cfg.hp; $("hpN").textContent = cfg.hp; render(); };
-
 document.querySelectorAll("[data-dmg]").forEach(b => b.onclick = () => {
   cfg.hp = Math.max(0, Math.min(cfg.hpMax, cfg.hp - +b.dataset.dmg));
   $("hp").value = cfg.hp; $("hpN").textContent = cfg.hp; render();
 });
 $("reset").onclick = () => { cfg.hp = cfg.hpMax; $("hp").value = cfg.hp; $("hpN").textContent = cfg.hp; render(); };
 
-/* 位置目标切换 */
 function selectKey(k){
   posKey = k;
   document.querySelectorAll("#posPick button").forEach(b => b.classList.toggle("on", b.dataset.key === k));
@@ -349,14 +328,13 @@ function selectKey(k){
 }
 document.querySelectorAll("#posPick button").forEach(b => b.onclick = () => selectKey(b.dataset.key));
 
-/* HUD 拖拽 */
 let drag = null;
-document.querySelectorAll("#hud > *").forEach(el => {
-  el.addEventListener("pointerdown", ev => {
-    const k = el.dataset.key; selectKey(k);
-    drag = { el, k, sx: ev.clientX, sy: ev.clientY, ox: cfg.pos[k].x, oy: cfg.pos[k].y };
-    el.classList.add("dragging"); el.setPointerCapture(ev.pointerId);
-  });
+$("hud").addEventListener("pointerdown", ev => {
+  const el = ev.target.closest("#hud > *");
+  if (!el) return;
+  const k = el.dataset.key; selectKey(k);
+  drag = { el, k, sx: ev.clientX, sy: ev.clientY, ox: cfg.pos[k].x, oy: cfg.pos[k].y };
+  el.classList.add("dragging"); el.setPointerCapture(ev.pointerId);
 });
 addEventListener("pointermove", ev => {
   if (!drag) return;
@@ -369,17 +347,16 @@ addEventListener("pointermove", ev => {
 addEventListener("pointerup", () => { if (drag) drag.el.classList.remove("dragging"); drag = null; });
 
 $("dump").onclick = () => {
-  const { sides, radius, thickness, tilt, cell, startDeg, ccw,
-          arcStart, arcEnd, thresholds, showThres, pos, sanMin, sanMax } = cfg;
+  const { sides, radius, thickness, flatten, startDeg, ccw, arcStart, arcEnd,
+          thresholds, showThres, buffIcon, buffGap, buffPerRow, pos } = cfg;
   $("out").textContent = JSON.stringify(
-    { sides, radius, thickness, tilt, cell, startDeg, ccw, arcStart, arcEnd,
-      thresholds, showThres, sanMin, sanMax, pos }, null, 2);
+    { sides, radius, thickness, flatten, startDeg, ccw, arcStart, arcEnd,
+      thresholds, showThres, buffIcon, buffGap, buffPerRow, pos }, null, 2);
 };
 
 selectKey("hp");
-applyTilt();
-applyCell();
-rebuild();
+drawGrid();
+render();
 </script>
 </body>
 </html>
