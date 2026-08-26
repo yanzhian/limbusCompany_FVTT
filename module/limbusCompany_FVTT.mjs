@@ -463,8 +463,9 @@ Hooks.on("renderChatMessage", (_message, html, _data) => {
       // 血条的「先前生命值」才是流血之前那个数
       ClashManager._beginTakeAgg();
       await ClashManager.settleBleed(flags.bleedMsgs ?? []);
-      // 闪避/完全格挡 + 【不可摧毁】反击：拼点本身 0 伤害，只落反击那份
-      if (damage > 0 || !flags.unbreakable) {
+      // 闪避/完全格挡 + 【不可摧毁】反击 / [追加伤害]：拼点本身 0 伤害，
+      // 只落挂在后面那几份
+      if (damage > 0 || !(flags.unbreakable || flags.extraDmg)) {
         await ClashManager.handleApplyDamage(targetActorId, damage, flags.takeEffects ?? []);
       }
       // 【不可摧毁】拼点失败反击：和拼点伤害同一个按钮一起结算
@@ -472,6 +473,8 @@ Hooks.on("renderChatMessage", (_message, html, _data) => {
       if (ub?.targetActorId && (ub.damage ?? 0) > 0) {
         await ClashManager.handleApplyDamage(ub.targetActorId, ub.damage);
       }
+      // [追加伤害]：时间上在主伤害之后，排在最后记账
+      await ClashManager.runExtraDamage(flags.extraDmg ?? []);
       await ClashManager._flushTakeAgg();
       // 反应检查：延后到伤害落地之后，前置条件读到的才是结算后的数值
       // [拼点失败] 之类的效果发起的新对抗：排到这里，伤害落地之后再弹
@@ -504,6 +507,7 @@ Hooks.on("renderChatMessage", (_message, html, _data) => {
       await ClashManager.settleBleed(flags.bleedMsgs ?? []);
       await ClashManager.handleApplyDamage(flags.defActorId, flags.damageToDefActor ?? 0);
       await ClashManager.handleApplyDamage(flags.atkActorId, flags.damageToAtkActor ?? 0);
+      await ClashManager.runExtraDamage(flags.extraDmg ?? []);
       await ClashManager._flushTakeAgg();
       // [拼点失败] 之类的效果发起的新对抗：排到这里，伤害落地之后再弹
       if (flags.skillLaunches) await ClashManager.runSkillLaunches(flags.skillLaunches);
@@ -529,6 +533,7 @@ Hooks.on("renderChatMessage", (_message, html, _data) => {
       ClashManager._beginTakeAgg();
       await ClashManager.settleBleed(flags.bleedMsgs ?? []);
       await ClashManager.handleApplyDamage(targetActorId, damage);
+      await ClashManager.runExtraDamage(flags.extraDmg ?? []);
       await ClashManager._flushTakeAgg();
       // [拼点失败] 之类的效果发起的新对抗：排到这里，伤害落地之后再弹
       if (flags.skillLaunches) await ClashManager.runSkillLaunches(flags.skillLaunches);

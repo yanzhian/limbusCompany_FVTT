@@ -2105,8 +2105,13 @@ export class ClashManager {
             const sinLabel = eff.dmgSinType   ? `【${ClashManager._sinLabel(eff.dmgSinType)}】`   : "";
             descStr = `对【${effTgt.name}】造成 ${dmg} 点${catLabel}${sinLabel}追加伤害（结算详情见承受结算消息）`;
             if (dmg > 0) {
-              await ClashManager._applyAndSendTake(effTgt, dmg, { attacker: owner, takeLabel: "追加伤害",
-                category: eff.dmgCategory ?? "", sinType: eff.dmgSinType ?? "", item });
+              // 对抗结算中：排队等【结算结果】，不在按钮之前就把血扣了
+              const queued = ClashManager.queueExtraDamage(effTgt, dmg, {
+                attacker: owner, category: eff.dmgCategory ?? "", sinType: eff.dmgSinType ?? "", item });
+              if (!queued) {
+                await ClashManager._applyAndSendTake(effTgt, dmg, { attacker: owner, takeLabel: "追加伤害",
+                  category: eff.dmgCategory ?? "", sinType: eff.dmgSinType ?? "", item });
+              }
             }
             break;
           }
@@ -3413,6 +3418,8 @@ export class ClashManager {
     ClashManager._beginTakeAgg();
     // ④效果 useSkill 发起的新对抗排队，等【结算结果】之后再弹
     ClashManager._beginSkillLaunchQueue();
+    // [追加伤害] 同样排队，和主伤害一起落进承受结算卡
+    ClashManager._beginExtraDmgQueue();
     // 本场对抗中的【流血】发作先攒起来，等【结算结果】之后再公示
     ClashManager._beginBleedBuf();
     // [受到伤害时] 的效果带到承受结算卡上（伤害要等【结算结果】才应用，
@@ -3599,6 +3606,7 @@ export class ClashManager {
       await ClashManager._resolveDirectCounter(atkActor, defActor, effectiveInitFlags, defItem, defFinalRoll, defFinalFormula, _actMsgs);
       // 结算过程中的零散承受（追击、追加伤害、引爆…）排在结算卡**之后**发，
       // 否则聊天里会先冒出两张【承受结算】、再出【反击】，读起来是倒的
+      await ClashManager._flushExtraDmg();
       await ClashManager._flushTakeAgg();
       await ClashManager._flushSkillLaunches();
       await ClashManager._flushReactionCheck();
@@ -3613,6 +3621,7 @@ export class ClashManager {
       await ClashManager.restoreItemSnaps(_statSnap);
       ClashManager._armReactionCheck({ lastSkillUuid: atkItem?.uuid ?? null, attacker: atkActor, defender: defActor });
       await ClashManager._resolveDirectBlock(atkActor, defActor, effectiveInitFlags, defItem, defFinalRoll, defFinalFormula, _actMsgs);
+      await ClashManager._flushExtraDmg();
       await ClashManager._flushTakeAgg();
       await ClashManager._flushSkillLaunches();
       await ClashManager._flushReactionCheck();
@@ -3766,6 +3775,7 @@ export class ClashManager {
       resolution, finalInitFlags, defActor, defItem, defFormula, sanityNotes, _actMsgs, _takeEffectRows,
       _ubCounter);
     // 结算过程中的零散承受排在【拼点对抗】之后
+    await ClashManager._flushExtraDmg();
     await ClashManager._flushTakeAgg();
     await ClashManager._flushSkillLaunches();
     await ClashManager._flushReactionCheck();
@@ -4177,9 +4187,11 @@ export class ClashManager {
     const isClashCounterWin = !atkWins && defCat === "clashCounter";
     const isClashBlockWin   = !atkWins && defCat === "clashBlock";
     const isDodgeWin        = !!dodgeWin;
-    // 拼点本身没伤害，但【不可摧毁】反击有——照样得给个【结算结果】把它落地
+    // 拼点本身没伤害，但【不可摧毁】反击 / [追加伤害] 有——照样得给个
+    // 【结算结果】把它们落地
     const ubDmg             = ubCounter?.finalDmg ?? 0;
-    const noTake            = (isDodgeWin || isClashBlockWin) && ubDmg <= 0;
+    const _extraDmg         = ClashManager._takeExtraDmg();
+    const noTake            = (isDodgeWin || isClashBlockWin) && ubDmg <= 0 && !_extraDmg;
 
     const atkTotalStyle = atkWins
       ? "font-size:2rem;font-weight:bold;color:#E8C9A2;"
@@ -4329,6 +4341,8 @@ export class ClashManager {
           // 反应检查交给【结算结果】：扣完血再扫，前置条件读到的才是新数值
           reactionCheck: noTake ? null : ClashManager._takeReactionCheck(),
           skillLaunches: noTake ? null : ClashManager._takeSkillLaunches(),
+          // [追加伤害]：和主伤害一起落进同一张承受结算卡
+          extraDmg:      noTake ? null : _extraDmg,
           // 【不可摧毁】反击的伤害跟着同一个【结算结果】一起落地
           unbreakable:   ubCounter ? {
             targetActorId: ubCounter.targetActor?.id ?? "",
@@ -4798,6 +4812,7 @@ export class ClashManager {
 
     ClashManager._beginTakeAgg();
     ClashManager._beginSkillLaunchQueue();
+    ClashManager._beginExtraDmgQueue();
     // 单方面攻击同样是攻击动作，攻击方的【流血】要发作（守方没出手，不发作）
     ClashManager._beginBleedBuf();
     const _takeEffectRows2 = [];
@@ -4977,6 +4992,7 @@ export class ClashManager {
     });
 
     // 结算过程中的零散承受排在【单方面攻击】之后
+    await ClashManager._flushExtraDmg();
     await ClashManager._flushTakeAgg();
     await ClashManager._flushSkillLaunches();
     await ClashManager._flushReactionCheck();
@@ -5082,6 +5098,7 @@ export class ClashManager {
           bleedMsgs:     ClashManager._takeBleedBuf(),
           reactionCheck: ClashManager._takeReactionCheck(),
           skillLaunches: ClashManager._takeSkillLaunches(),
+          extraDmg:      ClashManager._takeExtraDmg(),
           directRedo:    { initFlags },
         },
       },
@@ -6168,6 +6185,7 @@ export class ClashManager {
           bleedMsgs:      ClashManager._takeBleedBuf(),
           reactionCheck:  ClashManager._takeReactionCheck(),
           skillLaunches:  ClashManager._takeSkillLaunches(),
+          extraDmg:       ClashManager._takeExtraDmg(),
           // 整局重掷（仅 GM）：与拼点对抗卡同一套
           redoData: {
             defActorId: defActor?.id ?? "",
@@ -6342,6 +6360,7 @@ export class ClashManager {
           bleedMsgs:     finalDamage > 0 ? _bleed : [],
           reactionCheck: finalDamage > 0 ? ClashManager._takeReactionCheck() : null,
           skillLaunches: finalDamage > 0 ? ClashManager._takeSkillLaunches() : null,
+          extraDmg:      finalDamage > 0 ? ClashManager._takeExtraDmg() : null,
         },
       },
     });
@@ -6473,6 +6492,64 @@ export class ClashManager {
           ${ClashManager._goldDivider()}
         </div>`,
     });
+  }
+
+  /* ─── [追加伤害] 的延后 ─────────────────────────────────────────────────
+   * extraDamage 原先当场走 _applyAndSendTake，于是伤害在【结算结果】之前就
+   * 落地了，还各自冒一张【承受结算】。与拼点伤害、流血一致：对抗结算中先排队，
+   * 按下【结算结果】时和主伤害一起落进同一张承受结算卡。
+   * ──────────────────────────────────────────────────────────────────── */
+
+  /** @type {object[]|null} */
+  static _pendingExtraDmg = null;
+
+  static _beginExtraDmgQueue() { ClashManager._pendingExtraDmg = []; }
+
+  /** 效果侧调用：排得进队列返回 true（已延后），否则调用方当场结算 */
+  static queueExtraDamage(target, dmg, { attacker = null, category = "", sinType = "", item = null } = {}) {
+    if (!ClashManager._pendingExtraDmg || !target || !(dmg > 0)) return false;
+    ClashManager._pendingExtraDmg.push({
+      targetId:   target.id,
+      attackerId: attacker?.id ?? "",
+      itemId:     item?.id ?? "",
+      itemOwnerId: item?.parent?.id ?? "",
+      dmg, category, sinType,
+    });
+    return true;
+  }
+
+  static _takeExtraDmg() {
+    const q = ClashManager._pendingExtraDmg;
+    ClashManager._pendingExtraDmg = null;
+    return q?.length ? q : null;
+  }
+
+  /** 建卡之后：没被卡片接走（无结算按钮）就当场结算 */
+  static async _flushExtraDmg() {
+    const q = ClashManager._takeExtraDmg();
+    if (q) await ClashManager.runExtraDamage(q);
+  }
+
+  /**
+   * 结算排队的 [追加伤害]。外层聚合开着就并进同一张承受结算卡，
+   * 没开就自己开一次（无【结算结果】按钮的分支）。
+   */
+  static async runExtraDamage(list) {
+    if (!list?.length) return;
+    const own = !ClashManager._takeAgg;
+    if (own) ClashManager._beginTakeAgg();
+    for (const e of list) {
+      const target   = game.actors.get(e?.targetId ?? "");
+      if (!target || !(e.dmg > 0)) continue;
+      const attacker = e.attackerId ? game.actors.get(e.attackerId) : null;
+      const owner    = e.itemOwnerId ? game.actors.get(e.itemOwnerId) : null;
+      const item     = e.itemId ? (owner?.items?.get(e.itemId) ?? null) : null;
+      await ClashManager._applyAndSendTake(target, e.dmg, {
+        attacker, takeLabel: "追加伤害",
+        category: e.category ?? "", sinType: e.sinType ?? "", item,
+      });
+    }
+    if (own) await ClashManager._flushTakeAgg();
   }
 
   /* ─── 由效果发起的新对抗的延后 ─────────────────────────────────────────
