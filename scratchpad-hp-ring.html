@@ -5,7 +5,6 @@
 <title>七边形生命环原型</title>
 <style>
   :root{
-    --bg:#1a1024;
     --ring-empty:rgba(255,255,255,.13);
     --ring-fill:#ffcf3f;
     --ring-fill-low:#ff4d4d;
@@ -13,70 +12,78 @@
   }
   *{box-sizing:border-box}
   body{
-    margin:0;min-height:100vh;background:
-      radial-gradient(ellipse at 50% 40%, #3a1c4d 0%, var(--bg) 70%);
-    color:#eee;font:14px/1.5 system-ui,"Microsoft YaHei",sans-serif;
-    display:flex;flex-direction:column;align-items:center;gap:28px;padding:40px 16px;
+    margin:0;min-height:100vh;
+    background:radial-gradient(ellipse at 50% 35%, #3a1c4d 0%, #1a1024 70%);
+    color:#eee;font:13px/1.55 system-ui,"Microsoft YaHei",sans-serif;
+    display:flex;gap:32px;padding:32px;align-items:flex-start;flex-wrap:wrap;
+    justify-content:center;
   }
-  h1{font-size:18px;font-weight:600;letter-spacing:.04em;margin:0}
+  h1{font-size:17px;font-weight:600;margin:0 0 14px}
+  h2{font-size:13px;font-weight:600;margin:16px 0 8px;color:#c9b6e0;
+     border-bottom:1px solid #4a3363;padding-bottom:4px}
 
-  /* ── token 舞台：整体做透视倾斜 ── */
-  .stage{
-    perspective: 520px;
-    width:300px;height:300px;
-    display:grid;place-items:center;
-  }
+  /* ── 舞台 ── */
+  .stage-wrap{position:relative;flex:0 0 auto}
+  .stage{perspective:520px;width:340px;height:340px;display:grid;place-items:center}
   .ground{
-    transform: rotateX(58deg);      /* 俯视角 */
-    transform-style: preserve-3d;
-    position:relative;width:220px;height:220px;
-    display:grid;place-items:center;
+    transform:rotateX(58deg);transform-style:preserve-3d;
+    position:relative;width:240px;height:240px;display:grid;place-items:center;
   }
   .ring{width:100%;height:100%;overflow:visible;display:block}
-  .ring path{fill:none;stroke-linecap:butt;stroke-linejoin:miter}
-  .ring .track{stroke:var(--ring-empty);stroke-width:13}
-  .ring .fill{
-    stroke:var(--ring-fill);stroke-width:13;
-    filter:drop-shadow(0 0 6px var(--ring-glow));
-    transition:stroke-dashoffset .45s cubic-bezier(.3,.9,.3,1), stroke .3s;
-  }
-  .ring .inner{stroke:rgba(0,0,0,.55);stroke-width:2}
+  .ring path,.ring line{fill:none;stroke-linecap:butt;stroke-linejoin:miter}
+  .track{stroke:var(--ring-empty)}
+  .fill{stroke:var(--ring-fill);filter:drop-shadow(0 0 6px var(--ring-glow));
+        transition:stroke-dashoffset .45s cubic-bezier(.3,.9,.3,1),stroke .3s}
+  .thres{stroke:#fff;stroke-width:2;opacity:.85}
+  .thres.done{stroke:#7a6b8c;opacity:.5}
 
-  /* token 立在环中央，不跟着倾斜 */
   .token{
     position:absolute;left:50%;top:50%;
-    transform: translate(-50%,-72%) rotateX(-58deg);
-    transform-origin:50% 100%;
-    width:86px;height:112px;
+    transform:translate(-50%,-72%) rotateX(-58deg);transform-origin:50% 100%;
+    width:88px;height:114px;
     background:linear-gradient(180deg,#4a5a8a,#1d2440);
     border:2px solid rgba(255,255,255,.25);border-radius:6px;
     display:grid;place-items:center;font-size:12px;color:#cfd6ee;
     box-shadow:0 12px 22px rgba(0,0,0,.5);
   }
 
-  /* 数值：屏幕空间，永远正对镜头 */
-  .hp-label{
-    position:absolute;left:-6px;top:52%;
-    transform:translate(-100%,-50%);
-    font:700 30px/1 Impact,"Arial Black",sans-serif;
-    color:#ff5a3c;text-shadow:0 2px 0 #000,0 0 10px rgba(255,60,40,.6);
-    pointer-events:none;
-  }
-  .stage-wrap{position:relative}
+  /* ── 屏幕空间 HUD：永远正对镜头，可拖动 ── */
+  .hud{position:absolute;inset:0;pointer-events:none}
+  .hud > *{position:absolute;pointer-events:auto;cursor:grab;user-select:none;
+           white-space:nowrap;transform:translate(-50%,-50%)}
+  .hud > *.dragging{cursor:grabbing}
+  .hud > *.sel{outline:1px dashed #9d7cc4;outline-offset:4px}
+  .hp-val{font:700 30px/1 Impact,"Arial Black",sans-serif;color:#ff5a3c;
+          text-shadow:0 2px 0 #000,0 0 10px rgba(255,60,40,.6)}
+  .san-val{display:flex;align-items:center;gap:5px;
+           font:700 15px/1 system-ui;color:#cfe4ff;
+           background:rgba(12,20,40,.8);border:1px solid #5b7fbf;
+           border-radius:999px;padding:3px 10px;text-shadow:0 1px 2px #000}
+  .buffs{display:flex;gap:4px}
+  .buffs i{width:26px;height:26px;border-radius:5px;display:grid;place-items:center;
+           font-style:normal;font-size:13px;background:rgba(20,10,30,.85);
+           border:1px solid #8a6bb5;box-shadow:0 2px 6px rgba(0,0,0,.5)}
 
-  .panel{display:flex;gap:10px;align-items:center;flex-wrap:wrap;justify-content:center}
-  button{
-    background:#2c1d3d;color:#eee;border:1px solid #6b4a8f;border-radius:6px;
-    padding:7px 14px;cursor:pointer;font-size:13px;
-  }
+  /* ── 控制面板 ── */
+  .panel{flex:1 1 340px;max-width:420px;background:rgba(20,12,32,.6);
+         border:1px solid #4a3363;border-radius:10px;padding:16px 18px}
+  .row{display:flex;align-items:center;gap:10px;margin:7px 0}
+  .row label{flex:0 0 88px;color:#b9aec8}
+  .row input[type=range]{flex:1;min-width:0}
+  .row .num{flex:0 0 44px;text-align:right;font-variant-numeric:tabular-nums;color:#e8dcf5}
+  .btns{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0 4px}
+  button{background:#2c1d3d;color:#eee;border:1px solid #6b4a8f;border-radius:6px;
+         padding:6px 12px;cursor:pointer;font-size:12px}
   button:hover{background:#3d2a55}
-  input[type=range]{width:200px}
-  code{background:#00000055;padding:1px 5px;border-radius:4px}
-  .note{max-width:560px;color:#b9aec8;font-size:13px}
+  button.on{background:#6b4a8f;border-color:#c9a6f0}
+  input[type=text]{background:#1b1128;color:#eee;border:1px solid #6b4a8f;
+                   border-radius:5px;padding:5px 8px;font-size:12px;flex:1;min-width:0}
+  pre{background:#0f0918;border:1px solid #3b2a52;border-radius:6px;padding:10px;
+      font-size:11px;color:#b9d9c0;overflow:auto;max-height:190px;margin:8px 0 0}
+  .hint{color:#8f82a3;font-size:11.5px;margin:6px 0 0}
 </style>
 </head>
 <body>
-<h1>七边形生命环 · 逆时针扣血</h1>
 
 <div class="stage-wrap">
   <div class="stage">
@@ -84,80 +91,226 @@
       <svg class="ring" viewBox="0 0 200 200">
         <path class="track" id="track"></path>
         <path class="fill"  id="fill"></path>
-        <path class="inner" id="inner"></path>
+        <g id="thresGroup"></g>
       </svg>
       <div class="token">TOKEN</div>
     </div>
   </div>
-  <div class="hp-label" id="hpLabel">278</div>
+
+  <div class="hud" id="hud">
+    <div class="hp-val"  data-key="hp"    id="hpEl">278</div>
+    <div class="san-val" data-key="san"   id="sanEl"><span>SAN</span><b>50</b></div>
+    <div class="buffs"   data-key="buff"  id="buffEl"><i>🔥</i><i>🛡</i><i>⚡</i></div>
+  </div>
 </div>
 
 <div class="panel">
-  <button data-dmg="20">-20</button>
-  <button data-dmg="60">-60</button>
-  <button data-dmg="-40">+40 治疗</button>
-  <button id="reset">重置</button>
-</div>
-<div class="panel">
-  <label>倾斜角 <input type="range" id="tilt" min="0" max="75" value="58"></label>
-  <label>边数 <input type="range" id="sides" min="3" max="12" value="7"></label>
-</div>
+  <h1>七边形生命环 · 原型</h1>
 
-<p class="note">
-  血条沿七边形边框走，起点在正上方顶点，<b>逆时针</b>消耗（先扣左上那条边）。
-  低于 30% 自动转红。整个环用 <code>rotateX</code> 做透视，token 与数字反向补偿保持正对镜头。
-</p>
+  <h2>环形</h2>
+  <div class="row"><label>线粗细</label><input type="range" id="thick" min="2" max="30" step="1" value="13"><span class="num" id="thickN">13</span></div>
+  <div class="row"><label>边数</label><input type="range" id="sides" min="3" max="12" value="7"><span class="num" id="sidesN">7</span></div>
+  <div class="row"><label>半径</label><input type="range" id="radius" min="50" max="95" value="88"><span class="num" id="radiusN">88</span></div>
+  <div class="row"><label>倾斜角</label><input type="range" id="tilt" min="0" max="75" value="58"><span class="num" id="tiltN">58</span></div>
+  <div class="row"><label>起点</label><input type="range" id="start" min="0" max="359" value="180"><span class="num" id="startN">180</span></div>
+  <div class="btns">
+    <button id="dirBtn" class="on">逆时针 ↺</button>
+    <span class="hint" style="align-self:center">起点 180° = 9 点方向</span>
+  </div>
+
+  <h2>混乱阈值预览</h2>
+  <div class="row"><label>阈值(%)</label><input type="text" id="thresIn" value="60,30"></div>
+  <div class="btns">
+    <button id="thresToggle" class="on">显示刻度</button>
+    <button id="thresReset">重置已触发</button>
+  </div>
+  <p class="hint">已越过的阈值会变灰（模拟 <code>triggered</code> latch）。</p>
+
+  <h2>数值</h2>
+  <div class="row"><label>生命值</label><input type="range" id="hp" min="0" max="278" value="278"><span class="num" id="hpN">278</span></div>
+  <div class="row"><label>理智值</label><input type="range" id="san" min="5" max="95" value="50"><span class="num" id="sanN">50</span></div>
+  <div class="btns">
+    <button data-dmg="20">-20</button><button data-dmg="60">-60</button>
+    <button data-dmg="-40">+40</button><button id="reset">重置</button>
+  </div>
+
+  <h2>位置（可直接拖拽画面上的元素）</h2>
+  <div class="btns" id="posPick">
+    <button data-key="hp" class="on">生命值</button>
+    <button data-key="san">理智值</button>
+    <button data-key="buff">BUFF</button>
+  </div>
+  <div class="row"><label>X 偏移</label><input type="range" id="posX" min="-170" max="170" value="-105"><span class="num" id="posXN">-105</span></div>
+  <div class="row"><label>Y 偏移</label><input type="range" id="posY" min="-170" max="170" value="18"><span class="num" id="posYN">18</span></div>
+
+  <h2>导出配置</h2>
+  <div class="btns"><button id="dump">生成 JSON</button></div>
+  <pre id="out">—</pre>
+</div>
 
 <script>
-const R = 88, CX = 100, CY = 100;
-let sides = 7, max = 278, hp = 278;
+const CX = 100, CY = 100;
+const cfg = {
+  sides: 7, radius: 88, thickness: 13, tilt: 58,
+  startDeg: 180,          // 180° = 9 点方向
+  ccw: true,              // 逆时针
+  thresholds: [60, 30], showThres: true,
+  pos: { hp:{x:-105,y:18}, san:{x:0,y:96}, buff:{x:0,y:-118} },
+  hp: 278, hpMax: 278, san: 50
+};
+let posKey = "hp";
 
-function polygonPath(n, r){
+const $ = id => document.getElementById(id);
+const fillEl = $("fill"), trackEl = $("track"), thresG = $("thresGroup");
+
+/* 多边形路径：起点角 startDeg，ccw 决定步进方向。
+   SVG y 轴向下 → 角度递减 = 视觉逆时针。 */
+function polygonPath(n, r, startDeg, ccw){
+  const a0 = startDeg * Math.PI / 180;
+  const step = (2*Math.PI/n) * (ccw ? -1 : 1);
   const pts = [];
   for (let i = 0; i < n; i++){
-    // -90° 起点在正上方；负角步进 = 逆时针（SVG y 轴向下）
-    const a = -Math.PI/2 - i * (2*Math.PI/n);
+    const a = a0 + i*step;
     pts.push([CX + r*Math.cos(a), CY + r*Math.sin(a)]);
   }
   return "M" + pts.map(p => p.map(v => v.toFixed(2)).join(",")).join("L") + "Z";
 }
 
-const fillEl = document.getElementById("fill");
-const trackEl = document.getElementById("track");
-const innerEl = document.getElementById("inner");
-const label = document.getElementById("hpLabel");
-
 function rebuild(){
-  const d = polygonPath(sides, R);
+  const d = polygonPath(cfg.sides, cfg.radius, cfg.startDeg, cfg.ccw);
   trackEl.setAttribute("d", d);
   fillEl.setAttribute("d", d);
-  innerEl.setAttribute("d", polygonPath(sides, R - 7));
+  trackEl.style.strokeWidth = cfg.thickness;
+  fillEl.style.strokeWidth  = cfg.thickness;
   const len = fillEl.getTotalLength();
   fillEl.style.strokeDasharray = len;
   fillEl.dataset.len = len;
+  drawThresholds(len);
   render();
 }
 
-function render(){
-  const pct = Math.max(0, Math.min(1, hp / max));
-  const len = +fillEl.dataset.len;
-  fillEl.style.strokeDashoffset = len * (1 - pct);   // 从尾部收回 = 逆时针扣除
-  fillEl.style.stroke = pct <= .3
-    ? getComputedStyle(document.documentElement).getPropertyValue("--ring-fill-low")
-    : getComputedStyle(document.documentElement).getPropertyValue("--ring-fill");
-  label.textContent = Math.round(hp);
+/* 阈值刻度：沿路径按百分比取点，画一段垂直于边的短线 */
+function drawThresholds(len){
+  thresG.innerHTML = "";
+  if (!cfg.showThres) return;
+  const half = cfg.thickness / 2 + 4;
+  for (const pct of cfg.thresholds){
+    // 缺口从起点长出，所以 pct 剩余血量对应的边界点在 (1-pct) 处
+    const at = len * (1 - pct/100);
+    const p  = fillEl.getPointAtLength(at);
+    const q  = fillEl.getPointAtLength(Math.min(len, at + 1));
+    const dx = q.x - p.x, dy = q.y - p.y;
+    const m  = Math.hypot(dx, dy) || 1;
+    const nx = -dy/m, ny = dx/m;                 // 法线
+    const el = document.createElementNS("http://www.w3.org/2000/svg", "line");
+    el.setAttribute("x1", p.x - nx*half); el.setAttribute("y1", p.y - ny*half);
+    el.setAttribute("x2", p.x + nx*half); el.setAttribute("y2", p.y + ny*half);
+    el.setAttribute("class", "thres" + (cfg.hp/cfg.hpMax <= pct/100 ? " done" : ""));
+    thresG.appendChild(el);
+  }
 }
 
-document.querySelectorAll("[data-dmg]").forEach(b =>
-  b.onclick = () => { hp = Math.max(0, Math.min(max, hp - +b.dataset.dmg)); render(); });
-document.getElementById("reset").onclick = () => { hp = max; render(); };
-document.getElementById("tilt").oninput = e => {
-  const v = e.target.value;
-  document.querySelector(".ground").style.transform = `rotateX(${v}deg)`;
-  document.querySelector(".token").style.transform = `translate(-50%,-72%) rotateX(-${v}deg)`;
-};
-document.getElementById("sides").oninput = e => { sides = +e.target.value; rebuild(); };
+function render(){
+  const pct = Math.max(0, Math.min(1, cfg.hp / cfg.hpMax));
+  const len = +fillEl.dataset.len;
+  /* 负 offset：填充锚在路径尾端，空缺从起点(9点)沿逆时针方向长出 */
+  fillEl.style.strokeDashoffset = -len * (1 - pct);
+  const css = getComputedStyle(document.documentElement);
+  fillEl.style.stroke = css.getPropertyValue(pct <= .3 ? "--ring-fill-low" : "--ring-fill");
 
+  $("hpEl").textContent = Math.round(cfg.hp);
+  $("sanEl").querySelector("b").textContent = Math.round(cfg.san);
+  document.querySelectorAll("#hud > *").forEach(el => {
+    const p = cfg.pos[el.dataset.key];
+    if (!p) return;
+    el.style.left = `calc(50% + ${p.x}px)`;
+    el.style.top  = `calc(50% + ${p.y}px)`;
+  });
+  drawThresholds(len);
+}
+
+function applyTilt(){
+  document.querySelector(".ground").style.transform = `rotateX(${cfg.tilt}deg)`;
+  document.querySelector(".token").style.transform =
+    `translate(-50%,-72%) rotateX(-${cfg.tilt}deg)`;
+}
+
+/* ── 控件绑定 ── */
+function slider(id, key, after){
+  const el = $(id), n = $(id + "N");
+  el.oninput = () => { const v = +el.value; if (n) n.textContent = v; key(v); (after||render)(); };
+}
+slider("thick",  v => cfg.thickness = v, rebuild);
+slider("sides",  v => cfg.sides = v,     rebuild);
+slider("radius", v => cfg.radius = v,    rebuild);
+slider("start",  v => cfg.startDeg = v,  rebuild);
+slider("tilt",   v => cfg.tilt = v,      applyTilt);
+slider("hp",     v => cfg.hp = v);
+slider("san",    v => cfg.san = v);
+slider("posX",   v => cfg.pos[posKey].x = v);
+slider("posY",   v => cfg.pos[posKey].y = v);
+
+$("dirBtn").onclick = e => {
+  cfg.ccw = !cfg.ccw;
+  e.target.textContent = cfg.ccw ? "逆时针 ↺" : "顺时针 ↻";
+  e.target.classList.toggle("on", cfg.ccw);
+  rebuild();
+};
+$("thresIn").oninput = e => {
+  cfg.thresholds = e.target.value.split(",")
+    .map(s => parseFloat(s)).filter(v => v > 0 && v <= 100);
+  render();
+};
+$("thresToggle").onclick = e => {
+  cfg.showThres = !cfg.showThres;
+  e.target.classList.toggle("on", cfg.showThres);
+  render();
+};
+$("thresReset").onclick = () => { cfg.hp = cfg.hpMax; $("hp").value = cfg.hp; $("hpN").textContent = cfg.hp; render(); };
+
+document.querySelectorAll("[data-dmg]").forEach(b => b.onclick = () => {
+  cfg.hp = Math.max(0, Math.min(cfg.hpMax, cfg.hp - +b.dataset.dmg));
+  $("hp").value = cfg.hp; $("hpN").textContent = cfg.hp; render();
+});
+$("reset").onclick = () => { cfg.hp = cfg.hpMax; $("hp").value = cfg.hp; $("hpN").textContent = cfg.hp; render(); };
+
+/* 位置目标切换 */
+function selectKey(k){
+  posKey = k;
+  document.querySelectorAll("#posPick button").forEach(b => b.classList.toggle("on", b.dataset.key === k));
+  document.querySelectorAll("#hud > *").forEach(e => e.classList.toggle("sel", e.dataset.key === k));
+  $("posX").value = cfg.pos[k].x; $("posXN").textContent = cfg.pos[k].x;
+  $("posY").value = cfg.pos[k].y; $("posYN").textContent = cfg.pos[k].y;
+}
+document.querySelectorAll("#posPick button").forEach(b => b.onclick = () => selectKey(b.dataset.key));
+
+/* HUD 拖拽 */
+let drag = null;
+document.querySelectorAll("#hud > *").forEach(el => {
+  el.addEventListener("pointerdown", ev => {
+    const k = el.dataset.key; selectKey(k);
+    drag = { el, k, sx: ev.clientX, sy: ev.clientY, ox: cfg.pos[k].x, oy: cfg.pos[k].y };
+    el.classList.add("dragging"); el.setPointerCapture(ev.pointerId);
+  });
+});
+addEventListener("pointermove", ev => {
+  if (!drag) return;
+  cfg.pos[drag.k].x = Math.round(drag.ox + ev.clientX - drag.sx);
+  cfg.pos[drag.k].y = Math.round(drag.oy + ev.clientY - drag.sy);
+  $("posX").value = cfg.pos[drag.k].x; $("posXN").textContent = cfg.pos[drag.k].x;
+  $("posY").value = cfg.pos[drag.k].y; $("posYN").textContent = cfg.pos[drag.k].y;
+  render();
+});
+addEventListener("pointerup", () => { if (drag) drag.el.classList.remove("dragging"); drag = null; });
+
+$("dump").onclick = () => {
+  const { sides, radius, thickness, tilt, startDeg, ccw, thresholds, showThres, pos } = cfg;
+  $("out").textContent = JSON.stringify(
+    { sides, radius, thickness, tilt, startDeg, ccw, thresholds, showThres, pos }, null, 2);
+};
+
+selectKey("hp");
+applyTilt();
 rebuild();
 </script>
 </body>
