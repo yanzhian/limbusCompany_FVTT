@@ -2567,6 +2567,10 @@ export class ClashManager {
     if (t === "baseValue")   { const v = eff.value ?? eff.intensity ?? 0; return `技能基础值 ${v >= 0 ? "+" : ""}${v}`; }
     if (t === "seismicBlast") return `对${tgt}触发震颤引爆 ×${eff.value ?? 1}`;
     if (t === "panicCardSwap") {
+      const slotLabel = (CONFIG.LIMBUSCOMPANY?.PANIC_TYPES ?? {})[eff.panicSlot ?? "panic"] ?? "陷入恐慌";
+      return `将${tgt}的「${slotLabel}」更换为【${(eff.panicCardName ?? "").trim() || "?"}】`;
+    }
+    if (t === "panicCardSwap") {
       const sl = (CONFIG.LIMBUSCOMPANY?.PANIC_TYPES ?? {})[eff.panicSlot ?? "panic"] ?? "陷入恐慌";
       return `将${tgt}的「${sl}」更换为【${eff.panicCardName || "?"}】`;
     }
