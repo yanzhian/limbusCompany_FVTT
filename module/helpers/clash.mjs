@@ -739,9 +739,11 @@ export class ClashManager {
             const dmg = Math.max(0, Math.round(roll.total * physMult * sinMult));
             // 与 ④效果的 [追加伤害] 同路：对抗结算中先排队，等【结算结果】
             // 一起落进承受结算卡，不在按钮之前自己冒一张
-            if (!ClashManager.queueExtraDamage(targetActor, dmg, { attacker: owner, category, sinType, item })) {
+            const src = handler.label ?? buff.name ?? buff.type ?? "";
+            if (!ClashManager.queueExtraDamage(targetActor, dmg,
+                  { attacker: owner, category, sinType, item, source: src })) {
               await ClashManager._applyAndSendTake(targetActor, dmg,
-                { attacker: owner, takeLabel: "追加伤害", category, sinType, item });
+                { attacker: owner, takeLabel: ClashManager.extraDmgLabel(src), category, sinType, item });
             }
             return dmg;
           },
@@ -2127,11 +2129,14 @@ export class ClashManager {
             descStr = `对【${effTgt.name}】造成 ${dmg} 点${catLabel}${sinLabel}追加伤害（结算详情见承受结算消息）`;
             if (dmg > 0) {
               // 对抗结算中：排队等【结算结果】，不在按钮之前就把血扣了
+              const _src = (act?.name ?? "").trim() || item?.name || "";
               const queued = ClashManager.queueExtraDamage(effTgt, dmg, {
-                attacker: owner, category: eff.dmgCategory ?? "", sinType: eff.dmgSinType ?? "", item });
+                attacker: owner, category: eff.dmgCategory ?? "", sinType: eff.dmgSinType ?? "",
+                item, source: _src });
               if (!queued) {
-                await ClashManager._applyAndSendTake(effTgt, dmg, { attacker: owner, takeLabel: "追加伤害",
-                  category: eff.dmgCategory ?? "", sinType: eff.dmgSinType ?? "", item });
+                await ClashManager._applyAndSendTake(effTgt, dmg,
+                  { attacker: owner, takeLabel: ClashManager.extraDmgLabel(_src),
+                    category: eff.dmgCategory ?? "", sinType: eff.dmgSinType ?? "", item });
               }
             }
             break;
@@ -5824,7 +5829,9 @@ export class ClashManager {
     } else {
       rec.newHp = res.finalHp;          // 先前取第一次、现在取最后一次
     }
-    const label = takeLabel && takeLabel !== "承受结算" ? takeLabel : "追加伤害";
+    // 主伤害（takeLabel 就是默认的「承受结算」）那一行叫「承受」；
+    // 其余带来源的（追加伤害·XXX、容量扩散-承受…）原样用它自己的名字
+    const label = takeLabel && takeLabel !== "承受结算" ? takeLabel : "承受";
     if (res.damage > 0) rec.triggers.push({ k: label, v: `承受 <b>${res.damage}</b> 点` });
     if (res.ruptureDmg)      rec.triggers.push({ k: "破裂触发", v: `附加 <b>${res.ruptureDmg}</b> 点固定伤害` });
     if (res.sanityDmg)       rec.triggers.push({ k: "沉沦触发", v: `${res.sanityDmg} 点侵蚀度（理智 −${res.sanityDmg}）` });
@@ -6031,9 +6038,10 @@ export class ClashManager {
       const lines = tremorMsgs?.length ? tremorMsgs : ["消耗 1 层【震颤】，混乱阈值前移"];
       for (const l of lines) triggers.push({ k: "震颤引爆", v: l });
     }
-    // 追加伤害走的是独立的一次承受结算，takeLabel 会带「追加伤害」
+    // 追加伤害走的是独立的一次承受结算，takeLabel 会带「追加伤害」——
+    // 连来源一起（追加伤害·本国剑术），一屏几条时才分得清是哪一条
     if (takeLabel.includes("追加伤害")) {
-      triggers.unshift({ k: "追加伤害", v: `承受 <b>${damage}</b> 点` });
+      triggers.unshift({ k: takeLabel, v: `承受 <b>${damage}</b> 点` });
     }
     // BUFF 钩子（护盾吸收、onTakeDamage 等）。烧伤这类也可能由技能效果在此刻触发，
     // 所以不写死类型，来什么列什么。
@@ -6552,16 +6560,21 @@ export class ClashManager {
   static _beginExtraDmgQueue() { ClashManager._pendingExtraDmg = []; }
 
   /** 效果侧调用：排得进队列返回 true（已延后），否则调用方当场结算 */
-  static queueExtraDamage(target, dmg, { attacker = null, category = "", sinType = "", item = null } = {}) {
+  static queueExtraDamage(target, dmg, { attacker = null, category = "", sinType = "", item = null, source = "" } = {}) {
     if (!ClashManager._pendingExtraDmg || !target || !(dmg > 0)) return false;
     ClashManager._pendingExtraDmg.push({
       targetId:   target.id,
       attackerId: attacker?.id ?? "",
       itemId:     item?.id ?? "",
       itemOwnerId: item?.parent?.id ?? "",
-      dmg, category, sinType,
+      dmg, category, sinType, source,
     });
     return true;
+  }
+
+  /** 承受结算里那一行的名字：来源写进去，好分辨是哪一条追加伤害 */
+  static extraDmgLabel(source = "") {
+    return source ? `追加伤害·${source}` : "追加伤害";
   }
 
   static _takeExtraDmg() {
@@ -6591,7 +6604,7 @@ export class ClashManager {
       const owner    = e.itemOwnerId ? game.actors.get(e.itemOwnerId) : null;
       const item     = e.itemId ? (owner?.items?.get(e.itemId) ?? null) : null;
       await ClashManager._applyAndSendTake(target, e.dmg, {
-        attacker, takeLabel: "追加伤害",
+        attacker, takeLabel: ClashManager.extraDmgLabel(e.source),
         category: e.category ?? "", sinType: e.sinType ?? "", item,
       });
     }
