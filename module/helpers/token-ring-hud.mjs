@@ -40,7 +40,7 @@ export class TokenRingHUD {
     // 长度单位＝「一格 100px 时的像素」，实际按 grid.size/100 缩放。
     // 环是个椭圆多边形：横向、纵向半径分开给，两个相等即正多边形，
     // 纵向小于横向就是"贴地"的扁环——比给一个抽象的压扁百分比好调。
-    sides: 7, radiusX: 83, radiusY: 31, thickness: 22,
+    sides: 7, radiusX: 83, radiusY: 31, thickness: 12,
     startDeg: 193, ccw: true,
     arcStart: 0, arcEnd: 50,
     showThres: true,

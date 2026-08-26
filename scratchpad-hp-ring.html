@@ -40,7 +40,7 @@
            white-space:nowrap;transform:translate(-50%,-50%)}
   .hud > *.dragging{cursor:grabbing}
   .hud > *.sel{outline:1px dashed #9d7cc4;outline-offset:4px}
-  .hp-val{font:700 34px/1 Impact,"Arial Black",sans-serif;color:#ff5a3c;
+  .hp-val{font:700 30px/1 Impact,"Arial Black",sans-serif;color:#ff5a3c;
           text-shadow:0 2px 0 #000,0 0 10px rgba(255,60,40,.6)}
   .san-val{width:44px;height:44px;border-radius:50%;display:grid;place-items:center;
            font:700 17px/1 system-ui;color:#cfe4ff;
@@ -98,7 +98,7 @@
   <div class="row"><label>边数</label><input type="range" id="sides" min="3" max="16" value="7"><span class="num" id="sidesN">7</span></div>
   <div class="row"><label>横向半径</label><input type="range" id="radiusX" min="20" max="220" value="83"><span class="num" id="radiusXN">83</span></div>
   <div class="row"><label>纵向半径</label><input type="range" id="radiusY" min="6"  max="220" value="31"><span class="num" id="radiusYN">31</span></div>
-  <div class="row"><label>线粗(px)</label><input type="range" id="thick" min="2" max="40" value="22"><span class="num" id="thickN">22</span></div>
+  <div class="row"><label>线粗(px)</label><input type="range" id="thick" min="2" max="40" value="12"><span class="num" id="thickN">12</span></div>
   <div class="btns">
     <button id="linkBtn">↔ 拉成正多边形</button>
     <span class="hint" style="align-self:center">两个半径相等 ＝ 不压扁</span>
@@ -152,7 +152,7 @@ const cfg = {
   cell: 100,
   // 环是个椭圆多边形：横向、纵向半径分开给（都是 px）。
   // 两个相等就是正多边形；纵向小于横向就是"贴地"的那种扁环。
-  sides: 7, radiusX: 83, radiusY: 31, thickness: 22,
+  sides: 7, radiusX: 83, radiusY: 31, thickness: 12,
   startDeg: 193, ccw: true,
   arcStart: 0, arcEnd: 50,
   thresholds: [60, 30], showThres: true,
