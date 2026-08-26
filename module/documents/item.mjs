@@ -403,6 +403,9 @@ export class ContainerData extends foundry.abstract.TypeDataModel {
         { required: true, initial: [] }
       ),
       favorited: new fields.BooleanField({ required: true, initial: false }),
+      // 分类 / 标签（与消耗品、材料一致，供存放限制与检索使用）
+      category: new fields.StringField({ required: false, initial: "" }),
+      tags:     new fields.StringField({ required: false, initial: "" }),
       // 物品容量（容器本身占用角色背包格数，与内部 gridSize 无关）
       capacity: new fields.SchemaField({
         w: new fields.NumberField({ required: true, integer: true, min: 1, max: 10, initial: 1 }),
