@@ -51,6 +51,8 @@ export class TokenRingHUD {
     trackColor: 0xffffff, trackAlpha: 0.13,
     fillColor:  0xe03a3a, fillLowColor: 0xff2d2d, lowAt: 0.3,
     thresColor: 0xffffff, thresDoneColor: 0x7a6b8c,
+    // HUD 尺寸（同样是基准网格下的 px）
+    hpFont: 30, sanSize: 44, sanFont: 17,
     // BUFF 行
     buffIcon: 30, buffGap: 4, buffPerRow: 6,
   };
@@ -274,7 +276,7 @@ export class TokenRingHUD {
     const c = TokenRingHUD.CFG;
     const t = TokenRingHUD._text(String(Math.round(actor.system?.hp?.value ?? 0)), {
       fontFamily: "Impact, Arial Black, sans-serif",
-      fontSize: 30 * scale, fontWeight: "bold", fill: 0xff5a3c,
+      fontSize: c.hpFont * scale, fontWeight: "bold", fill: 0xff5a3c,
       stroke: 0x000000, strokeThickness: 3 * scale,
       dropShadow: true, dropShadowColor: 0xff3c28,
       dropShadowBlur: 6 * scale, dropShadowDistance: 0, dropShadowAlpha: 0.6,
@@ -285,7 +287,7 @@ export class TokenRingHUD {
 
   static _drawSan(box, actor, scale) {
     const c = TokenRingHUD.CFG;
-    const r = 22 * scale;
+    const r = c.sanSize * scale / 2;
     const g = new PIXI.Graphics();
     g.lineStyle({ width: Math.max(1, 1 * scale), color: 0x5b7fbf, alpha: 1 });
     g.beginFill(0x0c1428, 0.85);
@@ -296,7 +298,7 @@ export class TokenRingHUD {
 
     const t = TokenRingHUD._text(String(Math.round(actor.system?.sanity?.value ?? 0)), {
       fontFamily: "system-ui, sans-serif",
-      fontSize: 17 * scale, fontWeight: "bold", fill: 0xcfe4ff,
+      fontSize: c.sanFont * scale, fontWeight: "bold", fill: 0xcfe4ff,
       stroke: 0x000000, strokeThickness: 2 * scale,
     });
     t.position.set(g.position.x, g.position.y);

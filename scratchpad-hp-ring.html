@@ -92,8 +92,10 @@
   <p class="sub">正俯视、无 3D —— 和 Foundry 画布一致。橙框 ＝ 1 格。
      所有数值都是「一格 100px 时的像素」，实装时按 grid.size/100 缩放。</p>
 
-  <h2>格子</h2>
+  <h2>格子 / Token</h2>
   <div class="row"><label>格子(px)</label><input type="range" id="cell" min="60" max="180" value="100"><span class="num" id="cellN">100</span></div>
+  <div class="row"><label>Token 图</label><input type="file" id="tokenImg" accept="image/*" style="flex:1;min-width:0;font-size:11px"></div>
+  <p class="hint">选一张真实立绘，位置和大小才好判断；不选就是占位方块。</p>
 
   <h2>环形</h2>
   <div class="row"><label>边数</label><input type="range" id="sides" min="3" max="16" value="7"><span class="num" id="sidesN">7</span></div>
@@ -124,6 +126,11 @@
     <button data-dmg="20">-20</button><button data-dmg="60">-60</button>
     <button data-dmg="-40">+40</button><button id="reset">重置</button>
   </div>
+
+  <h2>HUD 尺寸</h2>
+  <div class="row"><label>生命字号</label><input type="range" id="hpFont" min="12" max="64" value="30"><span class="num" id="hpFontN">30</span></div>
+  <div class="row"><label>理智直径</label><input type="range" id="sanSize" min="20" max="90" value="44"><span class="num" id="sanSizeN">44</span></div>
+  <div class="row"><label>理智字号</label><input type="range" id="sanFont" min="8" max="36" value="17"><span class="num" id="sanFontN">17</span></div>
 
   <h2>BUFF 行</h2>
   <div class="row"><label>图标(px)</label><input type="range" id="buffIcon" min="14" max="48" value="30"><span class="num" id="buffIconN">30</span></div>
@@ -158,6 +165,7 @@ const cfg = {
   startDeg: 193, ccw: true,
   arcStart: 0, arcEnd: 50,
   thresholds: [60, 30], showThres: true,
+  hpFont: 30, sanSize: 44, sanFont: 17,
   buffIcon: 30, buffGap: 4, buffPerRow: 6,
   pos: { ring:{x:0,y:0}, hp:{x:-81,y:-13}, san:{x:77,y:-11}, buff:{x:1,y:88} },
   hp: 278, hpMax: 278, san: 50,
@@ -294,8 +302,13 @@ function render(){
     }
   }
 
-  $("hpEl").textContent = Math.round(cfg.hp);
-  $("sanEl").querySelector("b").textContent = Math.round(cfg.san);
+  const hpEl = $("hpEl");
+  hpEl.textContent = Math.round(cfg.hp);
+  hpEl.style.fontSize = cfg.hpFont + "px";
+  const sanEl = $("sanEl");
+  sanEl.querySelector("b").textContent = Math.round(cfg.san);
+  sanEl.style.width = sanEl.style.height = cfg.sanSize + "px";
+  sanEl.style.fontSize = cfg.sanFont + "px";
 
   const bw = cfg.buffPerRow * cfg.buffIcon + (cfg.buffPerRow-1) * cfg.buffGap;
   const be = $("buffEl");
@@ -337,12 +350,22 @@ slider("arcEnd",     v => cfg.arcEnd = v);
 slider("hp",         v => cfg.hp = v);
 slider("san",        v => cfg.san = v);
 slider("buffCount",  v => cfg.buffCount = v);
+slider("hpFont",     v => cfg.hpFont = v);
+slider("sanSize",    v => cfg.sanSize = v);
+slider("sanFont",    v => cfg.sanFont = v);
 slider("buffIcon",   v => cfg.buffIcon = v);
 slider("buffGap",    v => cfg.buffGap = v);
 slider("buffPerRow", v => cfg.buffPerRow = v);
 slider("posX",       v => cfg.pos[posKey].x = v);
 slider("posY",       v => cfg.pos[posKey].y = v);
 
+$("tokenImg").onchange = e => {
+  const f = e.target.files?.[0];
+  if (!f) return;
+  const t = $("tokenEl");
+  t.textContent = "";
+  t.style.background = `url(${URL.createObjectURL(f)}) center/contain no-repeat`;
+};
 $("dirBtn").onclick = e => {
   cfg.ccw = !cfg.ccw;
   e.target.textContent = cfg.ccw ? "逆时针 ↺" : "顺时针 ↻";
@@ -394,10 +417,12 @@ addEventListener("pointerup", () => { if (drag) drag.el.classList.remove("draggi
 
 $("dump").onclick = () => {
   const { sides, radius, thickness, tilt, persp, startDeg, ccw, arcStart, arcEnd,
-          thresholds, showThres, buffIcon, buffGap, buffPerRow, pos } = cfg;
+          thresholds, showThres, hpFont, sanSize, sanFont,
+          buffIcon, buffGap, buffPerRow, pos } = cfg;
   $("out").textContent = JSON.stringify(
     { sides, radius, thickness, tilt, persp, startDeg, ccw, arcStart, arcEnd,
-      thresholds, showThres, buffIcon, buffGap, buffPerRow, pos }, null, 2);
+      thresholds, showThres, hpFont, sanSize, sanFont,
+      buffIcon, buffGap, buffPerRow, pos }, null, 2);
 };
 
 selectKey("hp");
