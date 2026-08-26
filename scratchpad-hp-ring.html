@@ -43,9 +43,9 @@
   .hud > *.sel{outline:1px dashed #9d7cc4;outline-offset:4px}
   .hp-val{font:700 30px/1 Impact,"Arial Black",sans-serif;color:#ff5a3c;
           text-shadow:0 2px 0 #000,0 0 10px rgba(255,60,40,.6)}
+  /* 底色/描边由 JS 按理智值写入（红 5 → 灰 50 → 蓝 95） */
   .san-val{width:44px;height:44px;border-radius:50%;display:grid;place-items:center;
-           font:700 17px/1 system-ui;color:#cfe4ff;
-           background:rgba(12,20,40,.85);border:1px solid #5b7fbf;
+           font:700 17px/1 system-ui;color:#fff;border:2px solid transparent;
            box-shadow:0 2px 8px rgba(0,0,0,.5);text-shadow:0 1px 2px #000}
   .buffs{display:flex;flex-wrap:wrap;justify-content:center}
   .buffs i{display:grid;place-items:center;font-style:normal;line-height:1;
@@ -133,7 +133,7 @@
 
   <h2>BUFF 行</h2>
   <div class="row"><label>图标(px)</label><input type="range" id="buffIcon" min="14" max="48" value="30"><span class="num" id="buffIconN">30</span></div>
-  <div class="row"><label>间隔(px)</label><input type="range" id="buffGap" min="0" max="14" value="2"><span class="num" id="buffGapN">2</span></div>
+  <div class="row"><label>间隔(px)</label><input type="range" id="buffGap" min="0" max="14" value="7"><span class="num" id="buffGapN">7</span></div>
   <div class="row"><label>每行个数</label><input type="range" id="buffPerRow" min="3" max="10" value="6"><span class="num" id="buffPerRowN">6</span></div>
 
   <h2>位置（可直接拖画面上的元素）</h2>
@@ -165,11 +165,33 @@ const cfg = {
   arcStart: 5, arcEnd: 50,
   thresholds: [60, 30], showThres: true,
   hpFont: 23, sanSize: 28, sanFont: 15,
-  buffIcon: 30, buffGap: 2, buffPerRow: 6,
+  buffIcon: 30, buffGap: 7, buffPerRow: 6,
   pos: { ring:{x:-3,y:42}, hp:{x:-39,y:29}, san:{x:33,y:30}, buff:{x:3,y:85} },
   hp: 278, hpMax: 278, san: 50,
   buffCount: 5
 };
+/* 理智值配色：红(5) → 灰(50) → 蓝(95) 线性插值，与快捷 HUD 同一套锚点 */
+const SANITY_STOPS = [
+  { v:  5, c: [0xBF, 0x2B, 0x2A] },
+  { v: 50, c: [0x6A, 0x6A, 0x6A] },
+  { v: 95, c: [0x4F, 0x7A, 0x9C] },
+];
+const _hex = (a) => "#" + a.map(n =>
+  Math.round(Math.max(0, Math.min(255, n))).toString(16).padStart(2, "0")).join("");
+function sanityColors(value){
+  const v = Math.max(5, Math.min(95, Number(value) || 0));
+  let rgb = SANITY_STOPS[2].c;
+  for (let i = 0; i < SANITY_STOPS.length - 1; i++){
+    const a = SANITY_STOPS[i], b = SANITY_STOPS[i+1];
+    if (v >= a.v && v <= b.v){
+      const t = (v - a.v) / (b.v - a.v);
+      rgb = a.c.map((ch, k) => ch + (b.c[k] - ch) * t);
+      break;
+    }
+  }
+  return { bg: _hex(rgb), border: _hex(rgb.map(ch => ch * 0.62)) };
+}
+
 const EMOJI = ["🔥","🛡","⚡","💧","🌀","🩸","❄","☠","🌟","🍀","🕯","🔮","⚙","🎴"];
 let posKey = "hp";
 
@@ -308,6 +330,9 @@ function render(){
   sanEl.querySelector("b").textContent = Math.round(cfg.san);
   sanEl.style.width = sanEl.style.height = cfg.sanSize + "px";
   sanEl.style.fontSize = cfg.sanFont + "px";
+  const sc = sanityColors(cfg.san);
+  sanEl.style.background  = sc.bg;
+  sanEl.style.borderColor = sc.border;
 
   const bw = cfg.buffPerRow * cfg.buffIcon + (cfg.buffPerRow-1) * cfg.buffGap;
   const be = $("buffEl");

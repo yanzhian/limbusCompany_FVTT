@@ -33,6 +33,34 @@ const BUFF_ICON_MAP = {
   chaos: "陷入混乱.webp", panic: "陷入恐慌.webp",
 };
 
+/* 理智值配色：与快捷 HUD 同一套锚点，按数值在三点之间线性插值
+   95 = #4F7A9C（蓝，清醒）／50 = #6A6A6A（灰，中间）／5 = #BF2B2A（红，濒临恐慌） */
+const SANITY_STOPS = [
+  { v:  5, c: [0xBF, 0x2B, 0x2A] },
+  { v: 50, c: [0x6A, 0x6A, 0x6A] },
+  { v: 95, c: [0x4F, 0x7A, 0x9C] },
+];
+
+/**
+ * 理智值 → { bg, border }（PIXI 用的 0xRRGGBB 数值）。
+ * 描边取底色的 0.62 倍亮度，与快捷 HUD 的圆一致。
+ */
+function sanityColors(value) {
+  const v = Math.max(SANITY_STOPS[0].v, Math.min(SANITY_STOPS[2].v, Number(value) || 0));
+  let rgb = SANITY_STOPS[SANITY_STOPS.length - 1].c;
+  for (let i = 0; i < SANITY_STOPS.length - 1; i++) {
+    const a = SANITY_STOPS[i], b = SANITY_STOPS[i + 1];
+    if (v >= a.v && v <= b.v) {
+      const t = (v - a.v) / (b.v - a.v);
+      rgb = a.c.map((ch, k) => ch + (b.c[k] - ch) * t);
+      break;
+    }
+  }
+  const pack = (arr) => arr.reduce(
+    (acc, ch) => (acc << 8) | Math.round(Math.max(0, Math.min(255, ch))), 0);
+  return { bg: pack(rgb), border: pack(rgb.map(ch => ch * 0.62)) };
+}
+
 export class TokenRingHUD {
   /* ─── 配置（原型面板导出的那份） ──────────────────────────────────────── */
 
@@ -54,7 +82,7 @@ export class TokenRingHUD {
     // HUD 尺寸（同样是基准网格下的 px）
     hpFont: 23, sanSize: 28, sanFont: 15,
     // BUFF 行
-    buffIcon: 30, buffGap: 2, buffPerRow: 6,
+    buffIcon: 30, buffGap: 7, buffPerRow: 6,
   };
 
   static _enabled = true;
@@ -315,18 +343,21 @@ export class TokenRingHUD {
 
   static _drawSan(box, actor, scale) {
     const c = TokenRingHUD.CFG;
+    const san = actor.system?.sanity?.value ?? 50;
+    const col = sanityColors(san);
     const r = c.sanSize * scale / 2;
     const g = new PIXI.Graphics();
-    g.lineStyle({ width: Math.max(1, 1 * scale), color: 0x5b7fbf, alpha: 1 });
-    g.beginFill(0x0c1428, 0.85);
+    // 底色随理智在 红(5) → 灰(50) → 蓝(95) 之间渐变，与快捷 HUD 的理智球一致
+    g.lineStyle({ width: Math.max(1, 2 * scale), color: col.border, alpha: 1 });
+    g.beginFill(col.bg, 0.92);
     g.drawCircle(0, 0, r);
     g.endFill();
     g.position.set(c.pos.san.x * scale, c.pos.san.y * scale);
     box.addChild(g);
 
-    const t = TokenRingHUD._text(String(Math.round(actor.system?.sanity?.value ?? 0)), {
+    const t = TokenRingHUD._text(String(Math.round(san)), {
       fontFamily: "system-ui, sans-serif",
-      fontSize: c.sanFont * scale, fontWeight: "bold", fill: 0xcfe4ff,
+      fontSize: c.sanFont * scale, fontWeight: "bold", fill: 0xffffff,
       stroke: 0x000000, strokeThickness: 2 * scale,
     });
     t.position.set(g.position.x, g.position.y);
