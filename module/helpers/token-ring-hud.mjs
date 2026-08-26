@@ -8,9 +8,9 @@
  *   · 混乱阈值刻度：越过的变灰（对应 chaosThresholds[i].triggered）
  *   · 生命值数字 / 理智圆形徽章 / BUFF 图标行（每行 6 个，不足一行居中）
  *
- * 「躺在地面上」是靠纵向半径小于横向半径做出来的——Foundry 的画布是
- * 正俯视 2D，没有真正的 3D，扁环就是这个视角下的等效结果。
- * 两个半径相等就是不压扁的正多边形。
+ * 环是平躺在地面上的正多边形，按**真实透视**投影到屏幕（与原型同一套公式），
+ * 所以近处自然变粗、远处变细——这一半是拉伸椭圆做不出来的。
+ * tilt = 0 就是正俯视的正多边形。
  *
  * 所有尺寸以 100px 网格为基准（原型里 token 边长＝一格＝100px），
  * 实际按 canvas.grid.size / 100 缩放，换网格大小不用重调。
@@ -38,9 +38,9 @@ export class TokenRingHUD {
 
   static CFG = {
     // 长度单位＝「一格 100px 时的像素」，实际按 grid.size/100 缩放。
-    // 环是个椭圆多边形：横向、纵向半径分开给，两个相等即正多边形，
-    // 纵向小于横向就是"贴地"的扁环——比给一个抽象的压扁百分比好调。
-    sides: 7, radiusX: 83, radiusY: 31, thickness: 12,
+    // 环是平躺在地面上的**正多边形**，用真实透视投影压成扁的：
+    // 半径与线宽都是地面平面内的尺寸，投影后近处自然变粗、远处变细。
+    sides: 7, radius: 83, thickness: 22, tilt: 68, persp: 520,
     startDeg: 193, ccw: true,
     arcStart: 0, arcEnd: 50,
     showThres: true,
@@ -93,23 +93,33 @@ export class TokenRingHUD {
 
   /* ─── 几何 ────────────────────────────────────────────────────────────── */
 
-  /**
-   * 椭圆多边形的顶点。
-   * 与原型同一套：起点角 startDeg，ccw 决定步进方向；y 轴向下，
-   * 所以角度递减看起来才是逆时针。
-   */
-  static _polygon(scale) {
+  /* 地面平面内的正多边形顶点（半径 r，已按 scale 缩放） */
+  static _polyAt(r, scale) {
     const c = TokenRingHUD.CFG;
-    const rx = c.radiusX * scale, ry = c.radiusY * scale;
+    const rr = r * scale;
     const a0 = c.startDeg * Math.PI / 180;
     const step = (2 * Math.PI / c.sides) * (c.ccw ? -1 : 1);
     const pts = [];
     for (let i = 0; i < c.sides; i++) {
       const a = a0 + i * step;
-      pts.push({ x: rx * Math.cos(a), y: ry * Math.sin(a) });
+      pts.push({ x: rr * Math.cos(a), y: rr * Math.sin(a) });
     }
-    pts.push({ ...pts[0] });      // 闭合
+    pts.push({ ...pts[0] });
     return pts;
+  }
+
+  /**
+   * 地面 → 屏幕。就是旧原型那段 CSS 干的事：
+   * rotateX(tilt) 得到 (x, y·cos, y·sin)，再按透视距离做除法。
+   * 射影变换保直线，所以多边形的边投影后仍是直线，无需密集采样。
+   */
+  static _project(p, scale) {
+    const c = TokenRingHUD.CFG;
+    const t = c.tilt * Math.PI / 180;
+    const P = c.persp * scale;
+    const z = p.y * Math.sin(t);
+    const k = P / Math.max(1, P - z);
+    return { x: p.x * k, y: p.y * Math.cos(t) * k };
   }
 
   /** 折线各段长度与总长 */
@@ -123,8 +133,8 @@ export class TokenRingHUD {
     return { segs, total };
   }
 
-  /** 沿折线走 dist 距离处的点与切线方向 */
-  static _at(pts, segs, dist) {
+  /** 沿中心线走 dist：点、法线、落在第几条边上 */
+  static _walk(pts, segs, dist) {
     let d = Math.max(0, dist);
     for (let i = 0; i < segs.length; i++) {
       if (d <= segs[i] || i === segs.length - 1) {
@@ -132,33 +142,49 @@ export class TokenRingHUD {
         const p0 = pts[i], p1 = pts[i + 1];
         const dx = p1.x - p0.x, dy = p1.y - p0.y;
         const m = Math.hypot(dx, dy) || 1;
-        return { x: p0.x + dx * t, y: p0.y + dy * t, tx: dx / m, ty: dy / m };
+        return { x: p0.x + dx * t, y: p0.y + dy * t, nx: -dy / m, ny: dx / m, seg: i };
       }
       d -= segs[i];
     }
-    const last = pts[pts.length - 1];
-    return { x: last.x, y: last.y, tx: 1, ty: 0 };
+    const l = pts[pts.length - 1];
+    return { x: l.x, y: l.y, nx: 0, ny: 1, seg: segs.length - 1 };
   }
 
-  /** 折线上 [d0, d1] 这一段的点列（用于只画环的一部分） */
-  static _slice(pts, segs, d0, d1) {
+  /**
+   * [d0,d1] 这一段的环带，返回投影后的多边形点列。
+   * 环带必须**填充**而不是描边——描边的粗细是屏幕空间的，不会跟着透视变，
+   * 近粗远细就没了（上一版就是栽在这儿）。
+   * 正多边形整体外扩/内缩 t，得到的仍是同心正多边形，
+   * 半径变化量 = t / cos(π/n)（顶点沿角平分线走），顶点可以直接取。
+   */
+  static _ribbon(d0, d1, scale) {
+    const c = TokenRingHUD.CFG;
     if (!(d1 > d0)) return [];
-    const out = [TokenRingHUD._at(pts, segs, d0)];
-    let acc = 0;
-    for (let i = 0; i < segs.length; i++) {
-      const segEnd = acc + segs[i];
-      if (segEnd > d0 && segEnd < d1) out.push(pts[i + 1]);
-      acc = segEnd;
-    }
-    out.push(TokenRingHUD._at(pts, segs, d1));
-    return out;
+    const half = c.thickness * scale / 2;
+    const bump = half / Math.cos(Math.PI / c.sides);
+    const mid   = TokenRingHUD._polyAt(c.radius, scale);
+    const outer = TokenRingHUD._polyAt(c.radius + bump / scale, scale);
+    const inner = TokenRingHUD._polyAt(c.radius - bump / scale, scale);
+    const { segs } = TokenRingHUD._measure(mid);
+
+    const s = TokenRingHUD._walk(mid, segs, d0);
+    const e = TokenRingHUD._walk(mid, segs, d1);
+    const O = [{ x: s.x + s.nx * half, y: s.y + s.ny * half }];
+    const I = [{ x: s.x - s.nx * half, y: s.y - s.ny * half }];
+    for (let v = s.seg + 1; v <= e.seg; v++) { O.push(outer[v]); I.push(inner[v]); }
+    O.push({ x: e.x + e.nx * half, y: e.y + e.ny * half });
+    I.push({ x: e.x - e.nx * half, y: e.y - e.ny * half });
+
+    return [...O, ...I.reverse()].map(p => TokenRingHUD._project(p, scale));
   }
 
-  static _strokePolyline(g, poly, width, color, alpha = 1) {
-    if (poly.length < 2) return;
-    g.lineStyle({ width, color, alpha, cap: "butt", join: "miter" });
+  static _fillPoly(g, poly, color, alpha = 1) {
+    if (poly.length < 3) return;
+    g.beginFill(color, alpha);
     g.moveTo(poly[0].x, poly[0].y);
     for (let i = 1; i < poly.length; i++) g.lineTo(poly[i].x, poly[i].y);
+    g.closePath();
+    g.endFill();
   }
 
   /* ─── 绘制 ────────────────────────────────────────────────────────────── */
@@ -195,8 +221,8 @@ export class TokenRingHUD {
 
   static _drawRing(box, actor, scale) {
     const c = TokenRingHUD.CFG;
-    const pts = TokenRingHUD._polygon(scale);
-    const { segs, total } = TokenRingHUD._measure(pts);
+    const mid = TokenRingHUD._polyAt(c.radius, scale);
+    const { segs, total } = TokenRingHUD._measure(mid);
     if (!(total > 0)) return;
 
     const a = total * Math.min(c.arcStart, c.arcEnd) / 100;
@@ -206,34 +232,33 @@ export class TokenRingHUD {
     const hp    = actor.system?.hp?.value ?? 0;
     const hpMax = Math.max(1, actor.system?.hp?.max ?? 1);
     const pct   = Math.max(0, Math.min(1, hp / hpMax));
-    const width = c.thickness * scale;
 
-    const ring = TokenRingHUD.CFG.pos.ring ?? { x: 0, y: 0 };
+    const ring = c.pos.ring ?? { x: 0, y: 0 };
     const g = new PIXI.Graphics();
     g.position.set(ring.x * scale, ring.y * scale);
     // 轨道：整段
-    TokenRingHUD._strokePolyline(g, TokenRingHUD._slice(pts, segs, a, b),
-      width, c.trackColor, c.trackAlpha);
+    TokenRingHUD._fillPoly(g, TokenRingHUD._ribbon(a, b, scale), c.trackColor, c.trackAlpha);
     // 填充：锚在段尾，空缺从段首长出
     if (pct > 0) {
-      TokenRingHUD._strokePolyline(g, TokenRingHUD._slice(pts, segs, a + S * (1 - pct), b),
-        width, pct <= c.lowAt ? c.fillLowColor : c.fillColor);
+      TokenRingHUD._fillPoly(g, TokenRingHUD._ribbon(a + S * (1 - pct), b, scale),
+        pct <= c.lowAt ? c.fillLowColor : c.fillColor);
     }
     box.addChild(g);
 
     if (!c.showThres) return;
-    // 混乱阈值刻度：与承受结算卡上的血条同一套映射
-    const half = width / 2 + 4 * scale;
+    // 混乱阈值刻度：横跨环带的一小段线，同样先在地面算再投影
+    const half = c.thickness * scale / 2 + 4 * scale;
     const marks = new PIXI.Graphics();
     marks.position.set(ring.x * scale, ring.y * scale);
     for (const t of (actor.system?.chaosThresholds ?? [])) {
-      const p = TokenRingHUD._at(pts, segs, a + S * (1 - (t.percent ?? 0) / 100));
-      const nx = -p.ty, ny = p.tx;
+      const w = TokenRingHUD._walk(mid, segs, a + S * (1 - (t.percent ?? 0) / 100));
+      const A = TokenRingHUD._project({ x: w.x + w.nx * half, y: w.y + w.ny * half }, scale);
+      const B = TokenRingHUD._project({ x: w.x - w.nx * half, y: w.y - w.ny * half }, scale);
       marks.lineStyle({ width: Math.max(1, 2 * scale),
         color: t.triggered ? c.thresDoneColor : c.thresColor,
         alpha: t.triggered ? 0.5 : 0.85 });
-      marks.moveTo(p.x - nx * half, p.y - ny * half);
-      marks.lineTo(p.x + nx * half, p.y + ny * half);
+      marks.moveTo(A.x, A.y);
+      marks.lineTo(B.x, B.y);
     }
     box.addChild(marks);
   }

@@ -22,9 +22,10 @@
   .grid{position:absolute;inset:0}
   .ring{position:absolute;left:0;top:0;width:100%;height:100%;overflow:visible;
         pointer-events:none}
-  .ring path,.ring line{fill:none;stroke-linecap:butt;stroke-linejoin:miter}
-  .track{stroke:rgba(255,255,255,.13)}
-  .fill{stroke:#e03a3a;filter:drop-shadow(0 0 6px rgba(255,60,50,.55))}
+  .ring line{fill:none;stroke-linecap:butt}
+  .ring path{stroke:none}
+  .track{fill:rgba(255,255,255,.13)}
+  .fill{fill:#e03a3a;filter:drop-shadow(0 0 6px rgba(255,60,50,.55))}
   .thres{stroke:#fff;stroke-width:2;opacity:.85}
   .thres.done{stroke:#7a6b8c;opacity:.5}
 
@@ -150,9 +151,10 @@ const SW = 520, CX = SW / 2, CY = SW / 2;
 
 const cfg = {
   cell: 100,
-  // 环是个椭圆多边形：横向、纵向半径分开给（都是 px）。
-  // 两个相等就是正多边形；纵向小于横向就是"贴地"的那种扁环。
-  sides: 7, radiusX: 83, radiusY: 31, thickness: 12,
+  // 环是平躺在地面上的**正多边形**，靠真实透视投影出扁的样子：
+  // 先在地面平面里算好（半径、线宽都是地面内的 px），再 rotateX(tilt)
+  // + 透视距离 persp 投到屏幕。近处粗、远处细是投影自带的，不用手调。
+  sides: 7, radius: 83, thickness: 22, tilt: 68, persp: 520,
   startDeg: 193, ccw: true,
   arcStart: 0, arcEnd: 50,
   thresholds: [60, 30], showThres: true,
@@ -167,19 +169,37 @@ let posKey = "hp";
 const $ = id => document.getElementById(id);
 const fillEl = $("fill"), trackEl = $("track"), thresG = $("thresGroup");
 
-/* ── 几何：多边形顶点（已压扁），单位就是屏幕 px ── */
-function polygonPts(){
+/* ── 几何 ──────────────────────────────────────────────────────────────
+   全部先在「地面平面」里算（原点＝环心，y 向下），最后统一投影到屏幕。
+
+   投影就是旧原型那段 CSS 做的事：
+     rotateX(tilt) → (x, y·cos, y·sin)，再按 perspective 做透视除法。
+   投影是射影变换，直线仍是直线，所以正多边形的边、以及往内/往外
+   平移出的两条边界线，投影后仍是直线——不需要密集采样。
+   ──────────────────────────────────────────────────────────────────── */
+
+/* 正多边形顶点（地面平面内，半径 r） */
+function polyAt(r){
   const a0 = cfg.startDeg * Math.PI / 180;
   const step = (2*Math.PI/cfg.sides) * (cfg.ccw ? -1 : 1);
-  const ox = CX + cfg.pos.ring.x, oy = CY + cfg.pos.ring.y;   // 环自己的偏移
   const pts = [];
   for (let i = 0; i < cfg.sides; i++){
     const a = a0 + i*step;
-    pts.push({ x: ox + cfg.radiusX*Math.cos(a), y: oy + cfg.radiusY*Math.sin(a) });
+    pts.push({ x: r*Math.cos(a), y: r*Math.sin(a) });
   }
   pts.push({ ...pts[0] });
   return pts;
 }
+
+/* 地面 → 屏幕 */
+function project(p){
+  const t = cfg.tilt * Math.PI / 180;
+  const z = p.y * Math.sin(t);
+  const k = cfg.persp / Math.max(1, cfg.persp - z);
+  return { x: CX + cfg.pos.ring.x + p.x*k,
+           y: CY + cfg.pos.ring.y + p.y*Math.cos(t)*k };
+}
+
 function measure(pts){
   const segs = []; let total = 0;
   for (let i = 0; i < pts.length-1; i++){
@@ -188,32 +208,48 @@ function measure(pts){
   }
   return { segs, total };
 }
-function at(pts, segs, dist){
+
+/* 沿中心线走 dist：返回点、法线、以及它落在第几条边上 */
+function walk(pts, segs, dist){
   let d = Math.max(0, dist);
   for (let i = 0; i < segs.length; i++){
     if (d <= segs[i] || i === segs.length-1){
       const t = segs[i] ? Math.min(1, d/segs[i]) : 0;
       const p0 = pts[i], p1 = pts[i+1];
       const dx = p1.x-p0.x, dy = p1.y-p0.y, m = Math.hypot(dx,dy) || 1;
-      return { x: p0.x+dx*t, y: p0.y+dy*t, tx: dx/m, ty: dy/m };
+      return { x: p0.x+dx*t, y: p0.y+dy*t, nx: -dy/m, ny: dx/m, seg: i };
     }
     d -= segs[i];
   }
   const l = pts[pts.length-1];
-  return { x:l.x, y:l.y, tx:1, ty:0 };
+  return { x:l.x, y:l.y, nx:0, ny:1, seg: segs.length-1 };
 }
-/* 折线上 [d0,d1] 这一段 → SVG path */
-function slicePath(pts, segs, d0, d1){
-  if (!(d1 > d0)) return "";
-  const out = [at(pts, segs, d0)];
-  let acc = 0;
-  for (let i = 0; i < segs.length; i++){
-    const end = acc + segs[i];
-    if (end > d0 && end < d1) out.push(pts[i+1]);
-    acc = end;
-  }
-  out.push(at(pts, segs, d1));
-  return "M" + out.map(p => `${p.x.toFixed(2)},${p.y.toFixed(2)}`).join("L");
+
+/* 带宽度的环带：[d0,d1] 这一段，返回**投影后**的多边形点列。
+   正多边形整体往外/往内平移 t，得到的还是同心正多边形，
+   半径变化量 = t / cos(π/n)（顶点沿角平分线走），所以顶点直接取。 */
+function ribbon(d0, d1){
+  const half = cfg.thickness/2;
+  const bump = half / Math.cos(Math.PI/cfg.sides);
+  const mid   = polyAt(cfg.radius);
+  const outer = polyAt(cfg.radius + bump);
+  const inner = polyAt(cfg.radius - bump);
+  const { segs } = measure(mid);
+  if (!(d1 > d0)) return [];
+
+  const s = walk(mid, segs, d0), e = walk(mid, segs, d1);
+  const O = [{ x: s.x + s.nx*half, y: s.y + s.ny*half }];
+  const I = [{ x: s.x - s.nx*half, y: s.y - s.ny*half }];
+  for (let v = s.seg + 1; v <= e.seg; v++){ O.push(outer[v]); I.push(inner[v]); }
+  O.push({ x: e.x + e.nx*half, y: e.y + e.ny*half });
+  I.push({ x: e.x - e.nx*half, y: e.y - e.ny*half });
+
+  return [...O, ...I.reverse()].map(project);
+}
+
+function toPath(poly){
+  if (poly.length < 3) return "";
+  return "M" + poly.map(p => `${p.x.toFixed(2)},${p.y.toFixed(2)}`).join("L") + "Z";
 }
 
 /* ── 渲染 ── */
@@ -231,28 +267,28 @@ function drawGrid(){
 }
 
 function render(){
-  const pts = polygonPts();
-  const { segs, total } = measure(pts);
+  const mid = polyAt(cfg.radius);
+  const { segs, total } = measure(mid);
   const a = total * Math.min(cfg.arcStart, cfg.arcEnd) / 100;
   const b = total * Math.max(cfg.arcStart, cfg.arcEnd) / 100;
   const S = b - a;
   const pct = Math.max(0, Math.min(1, cfg.hp / cfg.hpMax));
 
-  trackEl.setAttribute("d", slicePath(pts, segs, a, b));
-  fillEl.setAttribute("d",  pct > 0 ? slicePath(pts, segs, a + S*(1-pct), b) : "");
-  trackEl.style.strokeWidth = cfg.thickness;
-  fillEl.style.strokeWidth  = cfg.thickness;
-  fillEl.style.stroke = pct <= .3 ? "#ff2d2d" : "#e03a3a";
+  // 环带是**填充**多边形，不是描边——描边的粗细不会跟着透视变
+  trackEl.setAttribute("d", toPath(ribbon(a, b)));
+  fillEl.setAttribute("d",  pct > 0 ? toPath(ribbon(a + S*(1-pct), b)) : "");
+  fillEl.style.fill = pct <= .3 ? "#ff2d2d" : "#e03a3a";
 
   thresG.innerHTML = "";
   if (cfg.showThres){
     const half = cfg.thickness/2 + 4;
     for (const p0 of cfg.thresholds){
-      const p = at(pts, segs, a + S*(1 - p0/100));
-      const nx = -p.ty, ny = p.tx;
+      const w = walk(mid, segs, a + S*(1 - p0/100));
+      const A = project({ x: w.x + w.nx*half, y: w.y + w.ny*half });
+      const B = project({ x: w.x - w.nx*half, y: w.y - w.ny*half });
       const el = document.createElementNS("http://www.w3.org/2000/svg","line");
-      el.setAttribute("x1", p.x-nx*half); el.setAttribute("y1", p.y-ny*half);
-      el.setAttribute("x2", p.x+nx*half); el.setAttribute("y2", p.y+ny*half);
+      el.setAttribute("x1", A.x); el.setAttribute("y1", A.y);
+      el.setAttribute("x2", B.x); el.setAttribute("y2", B.y);
       el.setAttribute("class","thres" + (pct <= p0/100 ? " done" : ""));
       thresG.appendChild(el);
     }
@@ -275,9 +311,13 @@ function render(){
     el.style.top  = (CY + p.y) + "px";
   });
 
-  const w = cfg.radiusX * 2, h = cfg.radiusY * 2;
+  // 投影后的实际包围盒，直接换算成"格"
+  const box = ribbon(0, total);
+  const xs = box.map(p => p.x), ys = box.map(p => p.y);
+  const w = Math.max(...xs) - Math.min(...xs), h = Math.max(...ys) - Math.min(...ys);
   $("scaleHint").textContent =
-    `环宽 ${w}px ＝ ${(w/cfg.cell).toFixed(2)} 格　·　环高 ${h}px ＝ ${(h/cfg.cell).toFixed(2)} 格`;
+    `投影后 环宽 ${w.toFixed(0)}px ＝ ${(w/cfg.cell).toFixed(2)} 格　·　`
+  + `环高 ${h.toFixed(0)}px ＝ ${(h/cfg.cell).toFixed(2)} 格`;
 }
 
 /* ── 控件 ── */
@@ -287,9 +327,10 @@ function slider(id, key, after){
 }
 slider("cell",       v => cfg.cell = v,       () => { drawGrid(); render(); });
 slider("sides",      v => cfg.sides = v);
-slider("radiusX",    v => cfg.radiusX = v);
-slider("radiusY",    v => cfg.radiusY = v);
+slider("radius",     v => cfg.radius = v);
 slider("thick",      v => cfg.thickness = v);
+slider("tilt",       v => cfg.tilt = v);
+slider("persp",      v => cfg.persp = v);
 slider("start",      v => cfg.startDeg = v);
 slider("arcStart",   v => cfg.arcStart = v);
 slider("arcEnd",     v => cfg.arcEnd = v);
@@ -302,11 +343,6 @@ slider("buffPerRow", v => cfg.buffPerRow = v);
 slider("posX",       v => cfg.pos[posKey].x = v);
 slider("posY",       v => cfg.pos[posKey].y = v);
 
-$("linkBtn").onclick = () => {
-  cfg.radiusY = cfg.radiusX;
-  $("radiusY").value = cfg.radiusY; $("radiusYN").textContent = cfg.radiusY;
-  render();
-};
 $("dirBtn").onclick = e => {
   cfg.ccw = !cfg.ccw;
   e.target.textContent = cfg.ccw ? "逆时针 ↺" : "顺时针 ↻";
@@ -357,10 +393,10 @@ addEventListener("pointermove", ev => {
 addEventListener("pointerup", () => { if (drag) drag.el.classList.remove("dragging"); drag = null; });
 
 $("dump").onclick = () => {
-  const { sides, radiusX, radiusY, thickness, startDeg, ccw, arcStart, arcEnd,
+  const { sides, radius, thickness, tilt, persp, startDeg, ccw, arcStart, arcEnd,
           thresholds, showThres, buffIcon, buffGap, buffPerRow, pos } = cfg;
   $("out").textContent = JSON.stringify(
-    { sides, radiusX, radiusY, thickness, startDeg, ccw, arcStart, arcEnd,
+    { sides, radius, thickness, tilt, persp, startDeg, ccw, arcStart, arcEnd,
       thresholds, showThres, buffIcon, buffGap, buffPerRow, pos }, null, 2);
 };
 
