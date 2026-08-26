@@ -40,21 +40,21 @@ export class TokenRingHUD {
     // 长度单位＝「一格 100px 时的像素」，实际按 grid.size/100 缩放。
     // 环是平躺在地面上的**正多边形**，用真实透视投影压成扁的：
     // 半径与线宽都是地面平面内的尺寸，投影后近处自然变粗、远处变细。
-    sides: 7, radius: 64, thickness: 22, tilt: 67, persp: 520,
+    sides: 7, radius: 56, thickness: 19, tilt: 69, persp: 520,
     startDeg: 193, ccw: true,
     arcStart: 5, arcEnd: 50,
     showThres: true,
     // 各元素相对 Token 中心的偏移（基准网格下的 px）；ring 是环自己的位置
     pos: { ring: { x: -3, y: 42 },
-           hp: { x: -62, y: 36 }, san: { x: 58, y: 36 }, buff: { x: 3, y: 94 } },
+           hp: { x: -55, y: 31 }, san: { x: 54, y: 30 }, buff: { x: 3, y: 94 } },
     // 颜色
     trackColor: 0xffffff, trackAlpha: 0.13,
     fillColor:  0xe03a3a, fillLowColor: 0xff2d2d, lowAt: 0.3,
     thresColor: 0xffffff, thresDoneColor: 0x7a6b8c,
     // HUD 尺寸（同样是基准网格下的 px）
-    hpFont: 28, sanSize: 38, sanFont: 16,
+    hpFont: 23, sanSize: 28, sanFont: 15,
     // BUFF 行
-    buffIcon: 31, buffGap: 5, buffPerRow: 6,
+    buffIcon: 30, buffGap: 5, buffPerRow: 6,
   };
 
   static _enabled = true;
@@ -320,7 +320,6 @@ export class TokenRingHUD {
     const size = c.buffIcon * scale;
     const gap  = c.buffGap * scale;
     const per  = c.buffPerRow;
-    const rows = Math.ceil(buffs.length / per);
     const originX = c.pos.buff.x * scale;
     const originY = c.pos.buff.y * scale;
 
@@ -331,7 +330,9 @@ export class TokenRingHUD {
       // 不足一行（或最后一行）居中：整行宽度按实际个数算，再左移一半
       const rowW = inRow * size + (inRow - 1) * gap;
       const x = originX - rowW / 2 + col * (size + gap) + size / 2;
-      const y = originY - (rows - 1) * (size + gap) / 2 + row * (size + gap);
+      // 第一行钉在 pos.buff.y，多出来的行**往下**排——不再整块纵向居中，
+      // 否则加一排会把已经摆好的第一行顶上去
+      const y = originY + row * (size + gap);
 
       const path = TokenRingHUD._buffIconPath(buffs[i]);
       if (!path) continue;
