@@ -2426,9 +2426,14 @@ export class ClashManager {
     });
   }
 
-  /** 没有【结算结果】按钮的分支：当场结算并单独出一张承受结算卡 */
+  /**
+   * 没有【结算结果】按钮的分支：当场结算流血。
+   * 外层聚合还开着（建卡时调用就是这种情况）就只记账，交给外层那次 flush ——
+   * 自己再 _beginTakeAgg 会把外层攒的记录整个顶掉。
+   */
   static async settleBleedNow(entries) {
     if (!entries?.length) return;
+    if (ClashManager._takeAgg) { await ClashManager.settleBleed(entries); return; }
     ClashManager._beginTakeAgg();
     await ClashManager.settleBleed(entries);
     await ClashManager._flushTakeAgg();
@@ -3590,12 +3595,13 @@ export class ClashManager {
       await ClashManager._applyActivitiesAndEquip(defItem,  "攻击后", defCtx);
       await ClashManager._restoreAllItemMods(atkItem, defItem);
       await ClashManager.restoreItemSnaps(_statSnap);
-      await ClashManager._flushTakeAgg();
       ClashManager._armReactionCheck({ lastSkillUuid: atkItem?.uuid ?? null, attacker: atkActor, defender: defActor });
       await ClashManager._resolveDirectCounter(atkActor, defActor, effectiveInitFlags, defItem, defFinalRoll, defFinalFormula, _actMsgs);
+      // 结算过程中的零散承受（追击、追加伤害、引爆…）排在结算卡**之后**发，
+      // 否则聊天里会先冒出两张【承受结算】、再出【反击】，读起来是倒的
+      await ClashManager._flushTakeAgg();
       await ClashManager._flushSkillLaunches();
-      await ClashManager._flushSkillLaunches();
-    await ClashManager._flushReactionCheck();
+      await ClashManager._flushReactionCheck();
       return;
     }
     if (defCategory === "block") {
@@ -3605,12 +3611,11 @@ export class ClashManager {
       await ClashManager._applyActivitiesAndEquip(defItem,  "攻击后", defCtx);
       await ClashManager._restoreAllItemMods(atkItem, defItem);
       await ClashManager.restoreItemSnaps(_statSnap);
-      await ClashManager._flushTakeAgg();
       ClashManager._armReactionCheck({ lastSkillUuid: atkItem?.uuid ?? null, attacker: atkActor, defender: defActor });
       await ClashManager._resolveDirectBlock(atkActor, defActor, effectiveInitFlags, defItem, defFinalRoll, defFinalFormula, _actMsgs);
+      await ClashManager._flushTakeAgg();
       await ClashManager._flushSkillLaunches();
-      await ClashManager._flushSkillLaunches();
-    await ClashManager._flushReactionCheck();
+      await ClashManager._flushReactionCheck();
       return;
     }
 
@@ -3756,11 +3761,12 @@ export class ClashManager {
       ? await ClashManager._computeUnbreakableCounter(..._unbreakableCounterArgs)
       : null;
 
-    await ClashManager._flushTakeAgg();
     ClashManager._armReactionCheck({ lastSkillUuid: atkItem?.uuid ?? null, attacker: atkActor, defender: defActor });
     await ClashManager._sendResolveMsg(
       resolution, finalInitFlags, defActor, defItem, defFormula, sanityNotes, _actMsgs, _takeEffectRows,
       _ubCounter);
+    // 结算过程中的零散承受排在【拼点对抗】之后
+    await ClashManager._flushTakeAgg();
     await ClashManager._flushSkillLaunches();
     await ClashManager._flushReactionCheck();
   }
@@ -4952,7 +4958,6 @@ export class ClashManager {
 
     // 单方面攻击卡：与拼点对抗卡同一套流程——先把结果摆出来，
     // 扣血、破裂/沉沦/震颤引爆等等都等【结算结果】按下去才发生。
-    await ClashManager._flushTakeAgg();
     ClashManager._armReactionCheck({ lastSkillUuid: atkItem2?.uuid ?? null, attacker: atkActor, defender: defActor });
     await ClashManager._sendDirectTakeMsg({
       actMsgs: _actMsgs2, takeEffects: _takeEffectRows2,
@@ -4971,6 +4976,8 @@ export class ClashManager {
       } : null,
     });
 
+    // 结算过程中的零散承受排在【单方面攻击】之后
+    await ClashManager._flushTakeAgg();
     await ClashManager._flushSkillLaunches();
     await ClashManager._flushReactionCheck();
   }
