@@ -100,6 +100,10 @@ const V_WEAK      = "__weak";
 const V_SIN_COST  = "__sinCost";
 const V_SPREAD    = "__spread";
 const V_EGO_RES   = "__egoRes";
+/** 「攻击范围」列：留空 = 近战 1 格；"2" = 近战 2 格；"远程6" = 远程 6 格 */
+const V_RANGE     = "__range";
+/** 「完成」列：值为真时整行跳过（已经导入过的条目不再重复导入） */
+const V_DONE      = "__done";
 
 /** 抗性 / 弱性列的倍率写法 */
 const RESIST_MULT = "x0.5";
@@ -113,7 +117,9 @@ const WEAK_MULT   = "x2.0";
  */
 export const COLUMN_ALIASES = {
   // ── 仅供表格自己看的列，导入时忽略 ────────────────────────────────────
-  "图标": IGNORE, "完成": IGNORE, "备注": IGNORE,
+  "图标": IGNORE, "备注": IGNORE,
+  // 「完成」列填 是/TRUE/√ 等真值时，整行跳过不导入
+  "完成": V_DONE, "已完成": V_DONE, "done": V_DONE,
   "区域1": IGNORE, "区域2": IGNORE, "区域3": IGNORE,
   "区域4": IGNORE, "区域5": IGNORE, "区域6": IGNORE,
 
@@ -140,6 +146,7 @@ export const COLUMN_ALIASES = {
   "攻击等级": "system.atkAdj", "攻击修正": "system.atkAdj",
   "防御等级": "system.defAdj", "防御修正": "system.defAdj",
   "速度":     "system.speedAdj", "速度修正": "system.speedAdj",
+  "攻击范围": V_RANGE, "射程": V_RANGE,   // 留空=近战1；"2"=近战2；"远程6"=远程6
   "抗性": V_RESIST,                 // "打" → 打击抗性 x0.5
   "弱性": V_WEAK,                   // "突" → 突刺抗性 x2.0
   "斩击抗性": "system.resistanceAdj.slash",
@@ -150,11 +157,17 @@ export const COLUMN_ALIASES = {
   // ── 技能 ──────────────────────────────────────────────────────────────
   "罪孽": "system.sinType", "罪孽属性": "system.sinType",
   "等级": V_LEVEL,               // 基础/守备写数字；EGO 写 ZAYIN/TET/HE/WAW/ALEPH
-  "骰数": V_DICE,                   // "1D4+2" → diceCount / diceFaces / baseValue
+  "骰数": V_DICE,                   // "1D4+2" / "20-1D8"（负面骰）→ diceCount / diceFaces / baseValue
   "攻击容量": "system.weight", "加重值": "system.weight", "加重": "system.weight",
   "骰类型": "system.diceType", "骰子类型": "system.diceType",
   "无法装备": "system.noEquip",
   "援护防御": "system.coverDefense",
+  "无法拼点": "system.noClash",
+  "无差别攻击": "system.indiscriminate", "无差别": "system.indiscriminate",
+
+  // ── 容器：存放限制（两条 AND，留空 = 不限制，多个用 / 分隔）─────────
+  "允许类型": "system.allowTypes", "存放限制-类型": "system.allowTypes",
+  "允许分类": "system.allowCategories", "存放限制-分类": "system.allowCategories",
   "容量扩散": V_SPREAD, "扩散": V_SPREAD,   // "[链式扩散3]" / "广域乱射2"
   "理智消耗": "system.sanityCost",
   "罪孽资源消耗": V_SIN_COST,       // "暴怒2/嫉妒1"
@@ -219,6 +232,8 @@ export function resolveColumnPath(header) {
   if (!raw) return null;
   const alias = COLUMN_ALIASES[raw] ?? COLUMN_ALIASES[raw.toLowerCase()];
   if (alias) return alias;   // 可能是 IGNORE 或 __xxx 虚拟列标记
+  // 「完成」列的列头写法很多（是否完成 / 完成？ / 完成情况…），含「完成」二字就认
+  if (raw.includes("完成")) return V_DONE;
   // 已经是路径形式（system.xxx / flags.xxx / 根字段）
   if (raw.startsWith("system.") || raw.startsWith("flags.")) return raw;
   if (["name", "img", "folder", "type"].includes(raw)) return raw;
@@ -378,6 +393,22 @@ export function richTextFromCsv(text = "") {
 const isBlank = (t) => t === "" || t === "-" || t === "—" || t === "/";
 
 /**
+ * 「完成」列的真值判定 —— 反向白名单。
+ * 只有这些写法（大小写、全半角都认）算「未完成」：
+ *   空 / - / — / / / 否 / 假 / 未 / 未完成 / 没有 / no / n / false / f / 0 / x / × / ✗ / ✘
+ * 其余任何非空内容（TRUE、是、√、已导入、日期、备注…）一律视为已完成，整行跳过。
+ * 这样写是因为表格里这一列的写法五花八门，漏判会导致重复导入。
+ */
+const DONE_FALSE = new Set([
+  "否", "假", "未", "未完成", "没有", "no", "n", "false", "f", "0", "x", "×", "✗", "✘",
+]);
+function isDoneMark(text) {
+  const t = String(text ?? "").trim();
+  if (isBlank(t)) return false;
+  return !DONE_FALSE.has(t.toLowerCase());
+}
+
+/**
  * 【分类】列。
  * - 攻击类技能：斩击 / 打击 / 突刺
  * - 守备类技能：闪避 / 格挡 / 反击-打击 / 可拼点反击-斩击
@@ -399,22 +430,39 @@ function parseCategory(text, itemType) {
   return atk ? { "system.category": atk } : { "system.category": text };
 }
 
-/** 【骰数】列："1D4+2" / "1d10" / "-" → diceCount / diceFaces / baseValue */
+/**
+ * 【骰数】列："1D4+2" / "1d10" / "20-1D8"（负面骰）/ "-" 空
+ * → diceCount / diceFaces / baseValue / negativeDice
+ * 正负面骰自动识别，不需要额外开一列。
+ */
 function parseDice(text) {
   if (isBlank(text)) return { "system.diceCount": 0 };
+
+  // 负面骰：基础值在前、骰作为减项（骰数省略视为 1）
+  const neg = /^\s*(\d+)\s*-\s*(\d*)\s*[dD]\s*(\d+)\s*$/.exec(text);
+  if (neg) {
+    return {
+      "system.diceCount":    neg[2] === "" ? 1 : Number(neg[2]),
+      "system.diceFaces":    Number(neg[3]),
+      "system.baseValue":    Number(neg[1]),
+      "system.negativeDice": true,
+    };
+  }
+
   const m = /^\s*(\d*)\s*[dD]\s*(\d+)\s*(?:([+-])\s*(\d+))?\s*$/.exec(text);
   if (!m) {
     // 没有骰子、只有一个数字时视为纯基础值
     const n = Number(text);
     if (!Number.isNaN(n)) return { "system.diceCount": 0, "system.baseValue": Math.round(n) };
-    return { __error: `骰数「${text}」无法解析（应形如 1D4 或 1D4+2）` };
+    return { __error: `骰数「${text}」无法解析（应形如 1D4、1D4+2，或负面骰 20-1D8）` };
   }
   const [, count, faces, sign, bonus] = m;
   const base = bonus ? (sign === "-" ? -Number(bonus) : Number(bonus)) : 0;
   return {
-    "system.diceCount": count === "" ? 1 : Number(count),
-    "system.diceFaces": Number(faces),
-    "system.baseValue": Math.max(0, base),
+    "system.diceCount":    count === "" ? 1 : Number(count),
+    "system.diceFaces":    Number(faces),
+    "system.baseValue":    Math.max(0, base),
+    "system.negativeDice": false,
   };
 }
 
@@ -491,6 +539,25 @@ function parseSpread(text) {
 }
 
 /**
+ * 【攻击范围】列（仅武器）。绝大多数武器都是近战，所以只留一列：
+ *   留空      → 近战 1 格（默认）
+ *   "2"       → 近战 2 格（长矛、锁链这类）
+ *   "远程6"   → 远程 6 格
+ *   "远程"    → 远程 1 格
+ */
+function parseRange(text) {
+  if (isBlank(String(text ?? "").trim())) return {};
+  const raw    = String(text).trim();
+  const ranged = /远程|远距|ranged/i.test(raw);
+  const m      = /(\d+)/.exec(raw);
+  const n      = m ? Math.max(0, Number(m[1])) : 1;
+  return {
+    "system.rangeType": ranged ? "ranged" : "melee",
+    "system.range":     n,
+  };
+}
+
+/**
  * 【抗性修改】列："暴怒x0.5傲慢x0.5怠惰x2.0嫉妒x2.0"
  * 实际表里是不带分隔符连写的，同样用扫描式匹配。
  */
@@ -519,6 +586,7 @@ function parseVirtualColumn(marker, text, itemType) {
     case V_WEAK:     return parsePhysList(text, WEAK_MULT);
     case V_SIN_COST: return parseSinCost(text);
     case V_SPREAD:   return parseSpread(text);
+    case V_RANGE:    return parseRange(text);
     case V_EGO_RES:  return parseEgoRes(text);
     case V_CAPACITY: {
       const r = parseWxH(text);
@@ -572,10 +640,17 @@ export function buildItemData(rows, defaultType) {
   const validTypes = Object.keys(CONFIG?.Item?.dataModels ?? {});
   const unknownReported = new Set();
   const typeIdx = paths.indexOf("type");
+  const doneIdx = paths.indexOf(V_DONE);
+  let   skipped = 0;                     // 因「完成」而跳过的行数
 
   for (let r = 1; r < rows.length; r++) {
     const row    = rows[r];
     const lineNo = r + 1;
+
+    // ── 「完成」列为真 → 整行跳过 ────────────────────────────────────────
+    // 放在最前面：已完成的行不参与类型判定，也不逐列解析，
+    // 因此这行即便有解析不了的内容也不会报错。
+    if (doneIdx >= 0 && isDoneMark(row[doneIdx])) { skipped++; continue; }
 
     // ── 先定类型：中文写法（基础技能 / 上装 / 消耗品…）映射到物品类型，
     //    并带出随类型固定的字段（技能的 system.type、装备的 system.subtype）──
@@ -656,6 +731,10 @@ export function buildItemData(rows, defaultType) {
     items.push(data);
   }
 
+  if (skipped > 0) {
+    warnings.push(`「完成」列已标记的 ${skipped} 行已跳过，未导入。`);
+  }
+
   return { items, errors, warnings };
 }
 
@@ -663,12 +742,13 @@ export function buildItemData(rows, defaultType) {
 //  模板 CSV 生成
 // ═══════════════════════════════════════════════════════════════════════════
 
-/** 各类型的模板列（与实际编辑用的表格布局一致；「图标/完成/区域N」为表格自用，导入时忽略） */
+/** 各类型的模板列（与实际编辑用的表格布局一致；「图标/区域N」为表格自用，导入时忽略；
+    「完成」列填真值时整行跳过，见 isDoneMark） */
 const TEMPLATE_COLUMNS = {
-  equipment:  ["图标", "完成", "名称", "类型", "攻击等级", "防御等级", "速度",
+  equipment:  ["图标", "完成", "名称", "类型", "攻击等级", "防御等级", "速度", "攻击范围",
                "抗性", "弱性", "分类", "星芒", "容量", "标签", "效果", "价格"],
   skill:      ["图标", "完成", "名称", "类型", "分类", "罪孽", "等级", "骰数",
-               "攻击容量", "容量扩散", "骰类型", "无法装备", "援护防御", "标签", "效果",
+               "攻击容量", "容量扩散", "骰类型", "无法装备", "援护防御", "无法拼点", "无差别攻击", "标签", "效果",
                "理智消耗", "罪孽资源消耗", "抗性修改"],
   consumable: ["图标", "完成", "名称", "类型", "分类", "可复用", "无限耐久", "星芒",
                "容量", "标签", "效果", "价格", "内部数量"],
@@ -722,7 +802,7 @@ const COLUMN_NOTES = {
   "类型":     "决定物品类型：基础技能/守备技能/E.G.O/上装/下装/武器/饰品/消耗品/材料/容器",
   "分类":     "技能：斩击、打击、突刺；守备可写 反击-打击、可拼点反击-斩击；其余类型为自由文本",
   "等级":     "基础/守备填数字；E.G.O 填 ZAYIN/TET/HE/WAW/ALEPH",
-  "骰数":     "形如 1D4、1D4+2；留空或 - 表示无",
+  "骰数":     "形如 1D4、1D4+2；负面骰写成 20-1D8（基础值在前）；留空或 - 表示无",
   "骰类型":   "留空=一般骰子；可填 不可摧毁 / 斩断",
   "抗性":     "斩/打/突，记 x0.5，可多写",
   "弱性":     "斩/打/突，记 x2.0，可多写",
@@ -734,9 +814,15 @@ const COLUMN_NOTES = {
   "容量扩散": "攻击容量≥2 时生效，形如 [链式扩散3] / 广域乱射2，数字为范围格数（留空=链式1格）",
   "无法装备": "填 是/否、TRUE/FALSE",
   "援护防御": "填 是/否、TRUE/FALSE；标记为【援护防御】专属技能",
+  "无法拼点": "填 是/否、TRUE/FALSE；被锁定的目标只能【承受】，不能对抗",
+  "攻击范围": "仅武器：留空=近战1格；填数字=近战N格（长矛/锁链）；填「远程6」=远程6格",
+  "允许类型": "容器存放限制·类型，多个用 / 分隔（消耗品/材料），留空=不限制",
+  "允许分类": "容器存放限制·分类，多个用 / 分隔（医疗/食材），与类型同时满足才收",
+  "无差别攻击": "填 是/否、TRUE/FALSE；容量扩散时敌我不分，范围内的友方也会被打到（自己除外）",
   "可复用":   "填 是/否、TRUE/FALSE",
   "无限耐久": "填 是/否、TRUE/FALSE",
   "图标":     "表格自用，导入时忽略",
+  "完成":     "填 是/TRUE/√ 等真值时**整行跳过**，用来避免重复导入已完成的条目；留空则正常导入",
   "完成":     "表格自用，导入时忽略",
 };
 

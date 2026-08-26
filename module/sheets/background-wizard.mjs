@@ -25,6 +25,8 @@ export class BackgroundWizard extends Application {
       width:     780,
       height:    680,
       resizable: true,
+      // 选中 / 勾选筛选都会整块重渲染，需保留滚动位置，否则列表会回滚置顶
+      scrollY:   [".bgw-panel", ".bgw-list", ".bgw-cat-list"],
     });
   }
 

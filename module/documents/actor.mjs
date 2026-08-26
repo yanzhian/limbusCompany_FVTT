@@ -135,6 +135,20 @@ export class CharacterData extends foundry.abstract.TypeDataModel {
         ],
       }),
 
+      // ── 背包摆放（塔科夫式自由摆放的持久化坐标） ────────────────────
+      // 只存"人为摆过"的物品：{ itemId, x, y, rotated }。
+      // 没有记录的物品（新捡到的、刚从容器里拿出来的）在渲染时首适应自动补位，
+      // 补位结果不会写回——玩家真正拖过一次才落成记录。
+      bagLayout: new fields.ArrayField(
+        new fields.SchemaField({
+          itemId:  new fields.StringField({ required: true, initial: "" }),
+          x:       new fields.NumberField({ required: true, integer: true, min: 0, initial: 0 }),
+          y:       new fields.NumberField({ required: true, integer: true, min: 0, initial: 0 }),
+          rotated: new fields.BooleanField({ initial: false }),
+        }),
+        { required: true, initial: [] }
+      ),
+
       // ── 恐慌类型槽位（战斗 Tab 罪孽抗性下方，存嵌入恐慌卡的 itemId） ──
       panicSlots: new fields.SchemaField({
         lowMorale: new fields.StringField({ required: false, initial: "" }),
@@ -849,10 +863,15 @@ export class LimbusActor extends Actor {
   // ─── 长休 ──────────────────────────────────────────────────────────────
 
   /**
-   * 执行长休：恢复 HP / 理智 / AP，重置混乱阈值。
+   * 执行长休：恢复 HP / 理智 / AP，重置混乱阈值，还原全部临时技能转换。
    * 无确认对话框，直接执行。
    */
   async longRest() {
+    // 兜底：一直没被使用掉的临时技能转换（如「使用一次后还原」的强化形态在战斗
+    // 结束前始终没投出去）会一直挂在槽位上，长休时统一收回，不跨休息残留
+    const { ClashManager } = await import("../helpers/clash.mjs");
+    await ClashManager._revertTempSkillConverts(this, "all");
+
     const sys              = this.system;
     const defaultThresholds = sys.getDefaultChaosThresholds?.() ?? [
       { percent: 60, triggered: false },
@@ -912,8 +931,8 @@ export class LimbusActor extends Actor {
     if (burnedIdxs.length === 0) return;
 
     // 混乱等级：0=无 1=陷入混乱 2=陷入混乱+ 3=陷入混乱++
-    const CHAOS_TYPES = ["chaos", "chaos_plus", "chaos_double_plus"];
-    const CHAOS_NAMES = ["陷入混乱", "陷入混乱+", "陷入混乱++"];
+    const CHAOS_TYPES = CONFIG.LIMBUSCOMPANY?.CHAOS_TYPES ?? ["chaos", "chaos_plus", "chaos_double_plus"];
+    const CHAOS_NAMES = CONFIG.LIMBUSCOMPANY?.CHAOS_NAMES ?? ["陷入混乱", "陷入混乱+", "陷入混乱++"];
 
     const existingChaos = (this.system.buffs ?? []).find(b => CHAOS_TYPES.includes(b.type));
     const currentLevel  = existingChaos ? (CHAOS_TYPES.indexOf(existingChaos.type) + 1) : 0;
@@ -942,6 +961,10 @@ export class LimbusActor extends Actor {
     // 混乱阈值被击穿：全场都该听见
     const { ClashTotalFX } = await import("../helpers/clash-total-fx.mjs");
     ClashTotalFX.broadcastSfx("chaos");
+
+    // ── [陷入混乱时] Activity ────────────────────────────────────────────
+    // 已装备的技能 + 装备格物品都参与；升级（混乱→混乱+）同样算一次触发
+    await this.triggerChaosActivities();
 
     // silent=true 时调用方已在取血消息中展示混乱触发信息，无需再创建独立消息
     if (!silent) {
@@ -1036,7 +1059,8 @@ export class LimbusActor extends Actor {
 
     // 已有同类型（且同回合、自定义 BUFF 还需同名）则叠加，否则新增
     // ——与 ClashManager._addBuff 保持一致，避免同一个 BUFF 在状态栏里裂成多条
-    const maxStacks     = handler?.maxStacks ?? Infinity;
+    const maxStacks     = handler?.maxStacks    ?? Infinity;
+    const maxIntensity  = handler?.maxIntensity ?? Infinity;
     const refreshOnGain = handler?.refreshOnGain ?? false;
     const whenAdded     = buffData.whenAdded ?? "本回合";
     const idx = buffs.findIndex(b =>
@@ -1046,12 +1070,13 @@ export class LimbusActor extends Actor {
 
     if (idx >= 0) {
       if (refreshOnGain) {
-        buffs[idx] = { ...buffs[idx], stacks: Math.min(rawStacks, maxStacks), intensity: rawIntensity };
+        buffs[idx] = { ...buffs[idx], stacks: Math.min(rawStacks, maxStacks),
+                       intensity: Math.min(rawIntensity, maxIntensity) };
       } else {
         buffs[idx] = {
           ...buffs[idx],
           stacks:    Math.min((buffs[idx].stacks ?? 0) + rawStacks, maxStacks),
-          intensity: (buffs[idx].intensity ?? 0) + rawIntensity,
+          intensity: Math.min((buffs[idx].intensity ?? 0) + rawIntensity, maxIntensity),
         };
       }
     } else {
@@ -1060,7 +1085,7 @@ export class LimbusActor extends Actor {
         type,
         name,
         icon:      buffData.icon ?? "",
-        intensity: rawIntensity,
+        intensity: Math.min(rawIntensity, maxIntensity),
         stacks:    Math.min(rawStacks, maxStacks),
         whenAdded,
       });
@@ -1160,9 +1185,11 @@ export class LimbusActor extends Actor {
       const alreadyFired = this.getFlag("limbusCompany_FVTT", firedKey) ?? false;
       if (!alreadyFired) {
         await this.setFlag("limbusCompany_FVTT", firedKey, true);
-        await ChatMessage.create({
-          content: `<div class="limbuscompany chat-clash"><strong>${this.name}</strong> 理智跌至 ${clamped}——【士气低落】！</div>`,
-        });
+        const { ClashManager } = await import("../helpers/clash.mjs");
+        await ClashManager.recordPanic(this, "士气低落", "fear", {
+          fear:    this.system.panicCounters?.fear ?? 0,
+          resolve: this.system.panicCounters?.resolve ?? 0,
+        }, `理智 ${clamped}`);
         await this.triggerPanicActivities("lowMorale", "恐慌触发时");
       }
     }
@@ -1189,33 +1216,12 @@ export class LimbusActor extends Actor {
     const nextFear    = side === "fear"    ? Math.min(3, curFear + 1)    : curFear;
     const nextResolve = side === "resolve" ? Math.min(3, curResolve + 1) : curResolve;
 
-    const ownerUser  = game.users?.find(u => !u.isGM && u.character?.id === this.id);
-    const playerName = ownerUser?.name ?? game.user?.name ?? this.name;
-
-    await ChatMessage.create({
-      speaker: ChatMessage.getSpeaker({ actor: this }),
-      content: `
-        <div class="limbus-panic-check-card">
-          <div class="ic-header">
-            <img class="ic-actor-avatar" src="${this.img}" alt="${this.name}">
-            <div class="ic-actor-info">
-              <div class="ic-title">恐慌鉴定</div>
-              <div class="ic-player">${playerName}</div>
-            </div>
-          </div>
-          <div class="ic-blue-divider"></div>
-          <div class="panic-check-result-row">
-            <span class="panic-check-roll">1d10 = ${roll.total}（智力 ${int}）</span>
-            <span class="panic-check-arrow">→</span>
-            <span class="panic-check-outcome ${success ? "is-resolve" : "is-fear"}">${success ? "坚定" : "恐慌"} +1</span>
-          </div>
-          <div class="ic-blue-divider"></div>
-          <div class="panic-check-status-row">
-            <span class="panic-status-resolve">坚定 ${nextResolve}/3</span>
-            <span class="panic-status-fear">恐慌 ${nextFear}/3</span>
-          </div>
-        </div>`,
-    });
+    const { ClashManager } = await import("../helpers/clash.mjs");
+    await ClashManager.recordPanic(
+      this, success ? "坚定 +1" : "恐惧 +1", side,
+      { fear: nextFear, resolve: nextResolve },
+      `1d10 = ${roll.total}（智力 ${int}）`
+    );
     await this.addPanicCounter(side);
   }
 
@@ -1238,19 +1244,25 @@ export class LimbusActor extends Actor {
   async setPanicCounter(side, value) {
     const clamped = Math.max(0, Math.min(3, value));
     await this._safeUpdateSelf({ [`system.panicCounters.${side}`]: clamped });
-    if (clamped >= 3) await this._resolvePanicOutcome(side);
+    if (clamped < 3) return;
+    // 手动拖点触发的一连串恐慌消息（触发恐慌 → 士气低落 → 恐慌卡效果）也合成一张卡
+    const { ClashManager } = await import("../helpers/clash.mjs");
+    await ClashManager.withPanicAgg(() => this._resolvePanicOutcome(side));
   }
 
   /** 恐慌/坚定计数达到 3：触发对应效果 + 重置理智（30 恐慌 / 70 坚定）。 */
   async _resolvePanicOutcome(side) {
     const isFear = side === "fear";
     await this.setSanity(isFear ? 30 : 70);
-    await ChatMessage.create({
-      content: `<div class="limbuscompany chat-clash">
-        <strong>${this.name}</strong> ${isFear ? "恐慌" : "坚定"}计数达到 3——
-        触发【${isFear ? "恐慌触发时" : "坚定触发时"}】，理智调整为 ${isFear ? 30 : 70}。
-      </div>`,
-    });
+    const { ClashManager } = await import("../helpers/clash.mjs");
+    await ClashManager.recordPanic(
+      this, isFear ? "触发恐慌" : "触发坚定", side,
+      {
+        fear:    this.system.panicCounters?.fear ?? 0,
+        resolve: this.system.panicCounters?.resolve ?? 0,
+      },
+      `理智 → ${isFear ? 30 : 70}`
+    );
     await this.triggerPanicActivities("panic", isFear ? "恐慌触发时" : "坚定触发时");
   }
 
@@ -1259,6 +1271,37 @@ export class LimbusActor extends Actor {
     const { fear = 0, resolve = 0 } = this.system.panicCounters ?? {};
     if (fear >= 3 || resolve >= 3) {
       await this._safeUpdateSelf({ "system.panicCounters.fear": 0, "system.panicCounters.resolve": 0 });
+    }
+  }
+
+  /**
+   * 触发 [陷入混乱时] 的 activities。
+   * 混乱本身是纯负面状态（物理抗性被强制翻倍、行动值清零），这个时机是留给
+   * "被打进混乱时反打一下"这类翻盘效果的。已装备技能 + 装备格物品都参与；
+   * 混乱升级（混乱 → 混乱+）同样算一次触发。
+   */
+  async triggerChaosActivities() {
+    const { ClashManager } = await import("../helpers/clash.mjs");
+    const sys  = this.system ?? {};
+    const ctx  = { owner: this, atkActor: this, defActor: null, _fireCounts: {}, _actMsgs: [] };
+    const skillIds = [
+      ...(sys.skills?.basic ?? []),
+      sys.skills?.defense ?? null,
+      ...Object.values(sys.skills?.ego ?? {}),
+    ].filter(Boolean);
+    for (const id of skillIds) {
+      const item = this.items.get(id);
+      if (item) await ClashManager._applyActivities(item, "陷入混乱时", ctx);
+    }
+    for (const eq of ClashManager._getEquippedItems(this)) {
+      await ClashManager._applyActivities(eq, "陷入混乱时", ctx);
+    }
+    if (!ctx._actMsgs.length) return;
+    // 混乱可能发生在承受伤害那一刻，也可能发生在回合结束的跳动伤害里。
+    // 外层登记了环境桶就收进去（→ 承受结算 / 先攻骰掷的「上回合结束」），
+    // 没登记才自己单发一条。
+    if (!ClashManager.pushAmbient(ctx._actMsgs)) {
+      await ClashManager._flushActMsgs(ctx._actMsgs, this);
     }
   }
 
@@ -1276,9 +1319,12 @@ export class LimbusActor extends Actor {
     await ClashManager._applyActivities(item, triggerName, {
       owner: this, atkActor: this, defActor: null, _fireCounts: {}, _actMsgs: msgs,
     });
-    await ClashManager._flushActMsgs(msgs, this, {
-      title: `${this.name}·${triggerName}`,
-    });
+    if (!msgs.length) return;
+    const kind = triggerName === "坚定触发时" ? "resolve" : "fear";
+    // 聚合开着就并进【恐慌鉴定】卡底部的对应折叠，没开才自己单发一条
+    if (!ClashManager.pushPanicActMsgs(kind, msgs)) {
+      await ClashManager._flushActMsgs(msgs, this);
+    }
   }
 
   // ─── 辅助：获取已装备物品（从 actor.items） ────────────────────────────
@@ -1327,19 +1373,23 @@ export class LimbusActor extends Actor {
     if (!oldItemId || !newItemId || oldItemId === newItemId) return false;
     const sys = this.system;
     const updates = {};
-    let changed = false;
+    // 换掉了哪几个槽位——临时转换的还原按槽位记账，必须由这里如实报出来。
+    // 让调用方事后再 findSkillSlot 找一遍是不行的：那时槽位里装的已经是新技能，
+    // 而且同一 tick 里 system 还可能没刷新，找不到就会退化成按 id 还原，
+    // 把「另一个也变成了黎明将至」的槽位一起改掉。
+    const slots = [];
 
     const basic = [...(sys.skills?.basic ?? [])];
-    const bIdx  = basic.indexOf(oldItemId);
-    if (bIdx >= 0) {
-      basic[bIdx] = newItemId;
+    for (let i = 0; i < basic.length; i++) {
+      if (basic[i] !== oldItemId) continue;
+      basic[i] = newItemId;
       updates["system.skills.basic"] = basic;
-      changed = true;
+      slots.push({ kind: "basic", idx: i });
     }
 
     if (sys.skills?.defense === oldItemId) {
       updates["system.skills.defense"] = newItemId;
-      changed = true;
+      slots.push({ kind: "defense" });
     }
 
     const ego = { ...(sys.skills?.ego ?? {}) };
@@ -1347,17 +1397,73 @@ export class LimbusActor extends Actor {
       if (ego[grade] === oldItemId) {
         ego[grade] = newItemId;
         updates["system.skills.ego"] = ego;
-        changed = true;
+        slots.push({ kind: "ego", grade });
       }
     }
 
+    const changed = slots.length > 0;
     if (changed) {
       // 跨客户端执行时（如对方触发本方技能的转换效果），当前用户可能没有本
       // Actor 的写权限，复用 ClashManager._safeDocUpdate 经 socket 委托 GM 执行
       const { ClashManager } = await import("../helpers/clash.mjs");
       await ClashManager._safeDocUpdate(this, updates);
     }
-    return changed;
+    // 兼容旧用法：没换到返回 false，换到了返回槽位数组（真值）
+    return changed ? slots : false;
+  }
+
+  /**
+   * 定位某技能 id 所在的槽位（第一处命中）。
+   * 临时技能转换的还原要按**槽位**记账而不是按 id——基础槽与守备槽可能同时
+   * 被换成了同一个强化形态，此时按 id 还原会把两个槽一起改掉。
+   * @param {string} itemId
+   * @returns {{kind:string, idx?:number, grade?:string}|null}
+   */
+  findSkillSlot(itemId) {
+    if (!itemId) return null;
+    const sys = this.system;
+    const bIdx = (sys.skills?.basic ?? []).indexOf(itemId);
+    if (bIdx >= 0) return { kind: "basic", idx: bIdx };
+    if (sys.skills?.defense === itemId) return { kind: "defense" };
+    for (const [grade, id] of Object.entries(sys.skills?.ego ?? {})) {
+      if (id === itemId) return { kind: "ego", grade };
+    }
+    return null;
+  }
+
+  /**
+   * 把指定槽位直接写成 itemId（临时技能转换的还原用）。
+   * @param {{kind:string, idx?:number, grade?:string}} slot
+   * @param {string} itemId
+   * @returns {Promise<boolean>}
+   */
+  async setSkillSlot(slot, itemId) {
+    if (!slot?.kind || !itemId) return false;
+    const sys = this.system;
+    const updates = {};
+
+    if (slot.kind === "basic") {
+      const basic = [...(sys.skills?.basic ?? [])];
+      const idx   = slot.idx ?? -1;
+      if (idx < 0 || idx >= basic.length) return false;
+      if (basic[idx] === itemId) return false;
+      basic[idx] = itemId;
+      updates["system.skills.basic"] = basic;
+    } else if (slot.kind === "defense") {
+      if (sys.skills?.defense === itemId) return false;
+      updates["system.skills.defense"] = itemId;
+    } else if (slot.kind === "ego") {
+      const ego = { ...(sys.skills?.ego ?? {}) };
+      if (!(slot.grade in ego) || ego[slot.grade] === itemId) return false;
+      ego[slot.grade] = itemId;
+      updates["system.skills.ego"] = ego;
+    } else {
+      return false;
+    }
+
+    const { ClashManager } = await import("../helpers/clash.mjs");
+    await ClashManager._safeDocUpdate(this, updates);
+    return true;
   }
 
   // ─── 先攻骰掷 ─────────────────────────────────────────────────────────

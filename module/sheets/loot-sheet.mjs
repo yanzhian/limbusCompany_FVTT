@@ -13,6 +13,8 @@
  *                lootMoveItem / lootRevealItem
  */
 import { buildItemTitleCard, closeTitleCardUnlessLocked, toggleTitleCardLock } from "./item-sheet.mjs";
+import { buildPlacementGrid, canPlace, autoPlace } from "../helpers/grid-layout.mjs";
+import { GridDnD } from "../helpers/grid-dnd.mjs";
 
 export class LimbusLootSheet extends ActorSheet {
 
@@ -150,70 +152,37 @@ export class LimbusLootSheet extends ActorSheet {
     return ctx;
   }
 
-  /* ─── 网格构建 ─────────────────────────────────────────────────────────── */
+  /* ─── 网格构建（算法见 helpers/grid-layout.mjs，与容器 / 仓库共用） ──── */
 
   async _buildGrid(placements, cols, rows) {
-    const placedItems     = [];
-    const occupied        = new Set();
-    const orphanedIndices = [];
-
-    for (let idx = 0; idx < placements.length; idx++) {
-      const p    = placements[idx];
-      let   item = null;
-      if (p?.uuid) item = await fromUuid(p.uuid).catch(() => null);
-
-      const w        = Math.max(1, p.w ?? 1);
-      const h        = Math.max(1, p.h ?? 1);
-      const inBounds = p.x >= 0 && p.y >= 0 && p.x + w <= cols && p.y + h <= rows;
-
-      if (!item) {
-        if (inBounds) {
-          for (let dy = 0; dy < h; dy++)
-            for (let dx = 0; dx < w; dx++)
-              occupied.add(`${p.x + dx},${p.y + dy}`);
-        }
-        orphanedIndices.push(idx);
-        continue;
-      }
-      if (!inBounds) continue;
-
-      for (let dy = 0; dy < h; dy++)
-        for (let dx = 0; dx < w; dx++)
-          occupied.add(`${p.x + dx},${p.y + dy}`);
-
+    const { placedItems, allCells, orphanedIndices } = await buildPlacementGrid(placements, {
+      cols, rows,
+      // 孤儿条目仍占格，保持视觉与碰撞一致
+      keepOrphanOccupancy: true,
       // 玩家视角：未揭晓的物品遮蔽名称/图标/数量（剪影 + ???）
-      const revealed = p.revealed ?? false;
-      const masked   = !revealed && !game.user.isGM;
-      placedItems.push({
-        uuid: p.uuid, idx,
-        item: masked
+      decorate: ({ entry, placement, item }) => {
+        const revealed = placement.revealed ?? false;
+        const masked   = !revealed && !game.user.isGM;
+        entry.revealed = revealed;
+        entry.masked   = masked;
+        entry.rotated  = placement.rotated && entry.w !== entry.h;
+        entry.item     = masked
           ? { id: item.id, name: "???", img: "icons/svg/mystery-man.svg", quantity: null }
           : { id: item.id, name: item.name, img: item.img,
-              quantity: item.system?.quantity ?? null },
-        x: p.x, y: p.y, w, h,
-        col: p.x + 1, row: p.y + 1,
-        rotated: p.rotated && w !== h,
-        revealed,
-        masked,
-        show: true,
-      });
-    }
+              quantity: item.system?.quantity ?? null };
+      },
+    });
 
     // 孤儿条目自动清理（GM 端延迟执行，避免 getData 重入）
     if (orphanedIndices.length > 0 && game.user.isGM) {
+      const orphanSet = new Set(orphanedIndices);
       setTimeout(async () => {
         const fresh   = foundry.utils.deepClone(this.actor.system.lootContents ?? []);
-        const cleaned = fresh.filter((_, i) => !orphanedIndices.includes(i));
+        const cleaned = fresh.filter((_, i) => !orphanSet.has(i));
         if (cleaned.length !== fresh.length)
           await this.actor.update({ "system.lootContents": cleaned });
       }, 0);
     }
-
-    const allCells = [];
-    for (let r = 0; r < rows; r++)
-      for (let c = 0; c < cols; c++)
-        allCells.push({ x: c, y: r, col: c + 1, row: r + 1,
-                        occupied: occupied.has(`${c},${r}`) });
 
     return { placedItems, allCells };
   }
@@ -221,32 +190,15 @@ export class LimbusLootSheet extends ActorSheet {
   /* ─── 放置检测辅助 ─────────────────────────────────────────────────────── */
 
   _canPlace(x, y, w, h, cols, rows, excludeIdx = -1) {
-    if (x < 0 || y < 0 || x + w > cols || y + h > rows) return false;
-    const contents = this.actor.system.lootContents ?? [];
-    for (let i = 0; i < contents.length; i++) {
-      if (i === excludeIdx) continue;
-      const p = contents[i];
-      const pw = p.w ?? 1, ph = p.h ?? 1;
-      for (let dy = 0; dy < h; dy++)
-        for (let dx = 0; dx < w; dx++)
-          if (p.x <= x + dx && x + dx < p.x + pw &&
-              p.y <= y + dy && y + dy < p.y + ph) return false;
-    }
-    return true;
+    return canPlace(this.actor.system.lootContents ?? [], x, y, w, h, cols, rows, { excludeIdx });
   }
 
   _autoPlace(w, h) {
-    const sys  = this.actor.system;
-    const cols = sys.gridSize?.width  ?? 5;
-    const rows = sys.gridSize?.height ?? 5;
-    for (let y = 0; y < rows; y++)
-      for (let x = 0; x < cols; x++) {
-        if (this._canPlace(x, y, w, h, cols, rows))
-          return { x, y, w, h, rotated: false };
-        if (w !== h && this._canPlace(x, y, h, w, cols, rows))
-          return { x, y, w: h, h: w, rotated: true };
-      }
-    return null;
+    const sys = this.actor.system;
+    return autoPlace(
+      sys.lootContents ?? [], w, h,
+      sys.gridSize?.width ?? 5, sys.gridSize?.height ?? 5
+    );
   }
 
   /* ─── activateListeners ────────────────────────────────────────────────── */
@@ -271,6 +223,31 @@ export class LimbusLootSheet extends ActorSheet {
 
     // ── 图块拖拽（GM 解锁时或玩家均可拖动图块在内部移动） ────────────────
     html.find(".cg-item-tile").on("dragstart",   this._onTileDragStart.bind(this));
+    // pointer 自绘拖放：图块拖动交给 GridDnD（幽灵 / 落点预览 / R 旋转）
+    const lootRoot = html.find(".loot-cg")[0];
+    if (lootRoot) {
+      GridDnD.register(lootRoot, {
+        key:        `loot:${this.actor.uuid}`,
+        cols:       this.actor.system.gridSize?.width  ?? 5,
+        rows:       this.actor.system.gridSize?.height ?? 5,
+        // 与营地同理：玩家对战利品 Actor 多半只有"查看"权限，
+        // 拾取/挪动本就走 GM socket 代执行，闸门不能挂在 isEditable 上
+        editable:   () => true,
+        placements: () => this.actor.system.lootContents ?? [],
+        payloadFor: (tile) => {
+          const idx = parseInt(tile.dataset.placementIdx ?? -1);
+          const p   = this.actor.system.lootContents?.[idx];
+          if (idx < 0 || !p) return null;
+          return {
+            type: "Item",
+            uuid: tile.dataset.itemUuid ?? "",
+            x: p.x, y: p.y, w: p.w ?? 1, h: p.h ?? 1,
+            placementIdx: idx,
+            fromLootGrid: { lootActorId: this.actor.id, placementIdx: idx, offX: 0, offY: 0 },
+          };
+        },
+      });
+    }
     html.find(".cg-item-tile").on("contextmenu", this._onTileContextMenu.bind(this));
 
     // ── 图块双击：玩家揭晓 / 拾取 ────────────────────────────────────────
@@ -408,7 +385,6 @@ export class LimbusLootSheet extends ActorSheet {
       });
 
       // 旋转按钮
-      html.find(".cg-rotate-btn").on("click", this._onTileRotate.bind(this));
     }
 
     // 填充货币按钮
@@ -625,20 +601,26 @@ export class LimbusLootSheet extends ActorSheet {
     // ── 网格内部移动 ──────────────────────────────────────────────────────
     if (raw.type === "Item" && raw.fromLootGrid?.lootActorId === this.actor.id) {
       const { placementIdx: idx, offX = 0, offY = 0 } = raw.fromLootGrid;
-      const nx = targetX - offX, ny = targetY - offY;
+      // GridDnD：拖动中按过 R —— 按旋转后的尺寸落地，抓取偏移随之作废
+      const rot = !!raw.rotatePending;
+      const nx  = rot ? targetX : targetX - offX;
+      const ny  = rot ? targetY : targetY - offY;
 
       if (game.user.isGM) {
         const contents = foundry.utils.deepClone(sys.lootContents ?? []);
         const p = contents[idx];
         if (!p) return;
-        if (!this._canPlace(nx, ny, p.w ?? 1, p.h ?? 1, cols, rows, idx))
+        const pw = rot ? (p.h ?? 1) : (p.w ?? 1);
+        const ph = rot ? (p.w ?? 1) : (p.h ?? 1);
+        if (!this._canPlace(nx, ny, pw, ph, cols, rows, idx))
           return void ui.notifications.warn("此位置无法放置（超出边界或与其他物品重叠）");
         p.x = nx; p.y = ny;
+        if (rot) { p.w = pw; p.h = ph; p.rotated = !p.rotated; }
         return void await this.actor.update({ "system.lootContents": contents });
       } else {
         game.socket.emit("system.limbusCompany_FVTT", {
           type: "lootMoveItem",
-          lootActorId: this.actor.id, placementIdx: idx, nx, ny,
+          lootActorId: this.actor.id, placementIdx: idx, nx, ny, rot,
           userId: game.user.id,
         });
         return;
@@ -1021,7 +1003,7 @@ export class LimbusLootSheet extends ActorSheet {
     await lootActor.update({ "system.lootContents": contents });
   }
 
-  static async _gmExecuteMoveItem({ lootActorId, placementIdx, nx, ny }) {
+  static async _gmExecuteMoveItem({ lootActorId, placementIdx, nx, ny, rot = false }) {
     const lootActor = game.actors.get(lootActorId);
     if (!lootActor) return;
     const sys  = lootActor.system;
@@ -1031,8 +1013,12 @@ export class LimbusLootSheet extends ActorSheet {
     const contents = foundry.utils.deepClone(sys.lootContents ?? []);
     const p        = contents[placementIdx];
     if (!p) return;
-    if (nx < 0 || ny < 0 || nx + (p.w ?? 1) > cols || ny + (p.h ?? 1) > rows) return;
+    // rot：玩家在 GridDnD 拖动中按过 R，落地时宽高对调
+    const pw = rot ? (p.h ?? 1) : (p.w ?? 1);
+    const ph = rot ? (p.w ?? 1) : (p.h ?? 1);
+    if (nx < 0 || ny < 0 || nx + pw > cols || ny + ph > rows) return;
     p.x = nx; p.y = ny;
+    if (rot) { p.w = pw; p.h = ph; p.rotated = !p.rotated; }
     await lootActor.update({ "system.lootContents": contents });
   }
 

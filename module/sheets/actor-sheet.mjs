@@ -12,10 +12,14 @@
 
 import { ClashManager } from "../helpers/clash.mjs";
 import { CustomBuffRegistry, resolveBuffHandler, normalizeBuffType } from "../helpers/custom-buffs.mjs";
-import { getBagItems, packBagGrid } from "../helpers/bag-grid.mjs";
+import { BAG_COLS, BAG_ROWS, getBagItems, packBagGrid } from "../helpers/bag-grid.mjs";
+import { GridDnD } from "../helpers/grid-dnd.mjs";
+import { autoPlace, canPlace, makeLockedSet } from "../helpers/grid-layout.mjs";
+import { canContainerAccept, wouldNest } from "../helpers/container-rules.mjs";
 import { buildItemTitleCard, closeTitleCardUnlessLocked, toggleTitleCardLock } from "./item-sheet.mjs";
 import { ClashVFX } from "../helpers/clash-vfx.mjs";
 import { QuickActionHUD } from "./quick-action-hud.mjs";
+import { refreshReadySlots } from "../helpers/ready-sparkle.mjs";
 
 /**
  * 以 actorId 为 key 的模块级战斗袋状态 Map。
@@ -179,7 +183,7 @@ export class LimbusActorSheet extends ActorSheet {
     // ── 物品分组（物品 Tab） ───────────────────────────────────────────────
     context.itemGroups  = this._groupEquipmentItems();
     // ── 背包容量（物品 Tab） ───────────────────────────────────────────────
-    const INVENTORY_MAX = 36; // 角色固定 6×6
+    const INVENTORY_MAX = BAG_COLS * BAG_ROWS; // 角色背包固定 5×8
     const inventoryUsed = this._calcInventoryCapacity();
     context.inventoryMax  = INVENTORY_MAX;
     context.inventoryUsed = inventoryUsed;
@@ -187,7 +191,15 @@ export class LimbusActorSheet extends ActorSheet {
     // 物品 Tab 网格视图（工具栏切换按钮）
     context.itemGridView = this._itemGridView ?? false;
     if (context.itemGridView) {
-      context.bagGrid = packBagGrid(getBagItems(actor), 6, 6);
+      context.bagGrid = packBagGrid(getBagItems(actor), BAG_COLS, BAG_ROWS,
+                                    actor.system?.bagLayout ?? []);
+      context.bagGrid.cols = BAG_COLS;
+      // GridDnD 的碰撞检测直接读这份渲染结果，免得再算一遍
+      this._bagGridCache = context.bagGrid;
+      // 没有坐标记录的物品（新捡到的、刚从容器里拿出来的）本次是自动补位的，
+      // 把补位结果落成记录——否则下次渲染会重新首适应，挪动一件物品会连带
+      // 把别的物品也重排一遍（"自动排序"的观感就是从这儿来的）。
+      this._persistBagLayout(context.bagGrid);
     }
     // ── 技能分组（技能 Tab） ───────────────────────────────────────────────
     context.skillGroups = this._groupSkillItems();
@@ -320,7 +332,7 @@ export class LimbusActorSheet extends ActorSheet {
   _calcInventoryCapacity() {
     const inContainer  = this._getItemsInContainers();
     let total = 0;
-    const nonSkillTypes = ["equipment", "consumable", "material", "container", "skillbook"];
+    const nonSkillTypes = ["equipment", "consumable", "material", "container", "skillbook", "background"];
     for (const item of this.actor.items) {
       if (!nonSkillTypes.includes(item.type)) continue;
       if (inContainer.has(item.uuid)) continue; // 容器内物品不占背包容量
@@ -341,10 +353,11 @@ export class LimbusActorSheet extends ActorSheet {
       material:  "材料",
       container: "容器",
       skillbook: "技能书",
+      background: "背景",
     };
 
     const groups = {};
-    const nonSkillTypes  = ["equipment", "consumable", "material", "container", "skillbook"];
+    const nonSkillTypes  = ["equipment", "consumable", "material", "container", "skillbook", "background"];
     const inContainer    = this._getItemsInContainers();
 
     for (const item of this.actor.items) {
@@ -360,7 +373,7 @@ export class LimbusActorSheet extends ActorSheet {
     }
 
     // Sort by predefined order
-    const order = [...subtypeOrder, "consumable", "material", "container", "skillbook"];
+    const order = [...subtypeOrder, "consumable", "material", "container", "skillbook", "background"];
     return order
       .filter(k => groups[k])
       .map(k => groups[k]);
@@ -742,6 +755,47 @@ export class LimbusActorSheet extends ActorSheet {
       event.originalEvent.dataTransfer.dropEffect = "move";
     });
     html.find(".bag-cg .cg-item-tile.cg-tile-container").on("drop", this._onBagTileDropOnContainer.bind(this));
+    // 背包格：接住 GridDnD 合成的 drop（自由摆放的落点写进 system.bagLayout）
+    html.find(".bag-cg .cg-cell").on("dragover", (ev) => ev.preventDefault());
+    html.find(".bag-cg .cg-cell").on("drop", this._onBagCellDrop.bind(this));
+    // pointer 自绘拖放：幽灵 / 落点预览 / R 旋转
+    const bagRoot = html.find(".bag-cg")[0];
+    if (bagRoot) {
+      const grid = this._bagGridCache ?? null;
+      GridDnD.register(bagRoot, {
+        key:        `bag:${this.actor.uuid}`,
+        cols:       BAG_COLS,
+        rows:       grid?.rows ?? BAG_ROWS,
+        editable:   () => this.isEditable,
+        placements: () => (grid?.tiles ?? []).map(t => ({ x: t.x, y: t.y, w: t.w, h: t.h })),
+        // 悬停在容器图块上时：这个容器收不收拖着的这件东西（红框即不收）
+        tileAccepts: (tileEl, payload) => {
+          const box = this.actor.items.get(tileEl.dataset.itemId ?? "");
+          if (!box || !payload.itemMeta) return true;
+          return canContainerAccept(box, payload.itemMeta).ok;
+        },
+        payloadFor: (tile) => {
+          const id = tile.dataset.itemId ?? "";
+          if (!id) return null;
+          const idx = (grid?.tiles ?? []).findIndex(t => t.id === id);
+          const doc = this.actor.items.get(id);
+          return {
+            itemMeta: {
+              type:   doc?.type ?? "",
+              system: { category: doc?.system?.category ?? "", subtype: doc?.system?.subtype ?? "" },
+            },
+            type: "Item",
+            uuid: tile.dataset.itemUuid ?? "",
+            x: parseInt(tile.dataset.x ?? 0),
+            y: parseInt(tile.dataset.y ?? 0),
+            w: parseInt(tile.dataset.w ?? 1),
+            h: parseInt(tile.dataset.h ?? 1),
+            placementIdx: idx,
+            fromBag: { actorId: this.actor.id, itemId: id },
+          };
+        },
+      });
+    }
     html.find(".filter-favorite-btn").on("click", this._onFavFilter.bind(this));
 
     // ── 搜索框 ────────────────────────────────────────────────────────────
@@ -1044,7 +1098,7 @@ export class LimbusActorSheet extends ActorSheet {
       const h = owned.system?.capacity?.h ?? 1;
       const slot = this._findContainerSlot(container, w, h);
       if (!slot) {
-        ui.notifications.warn(`容器「${container.name}」空间不足，无法存入「${owned.name}」。`);
+        ui.notifications.warn(`容器「${container.name}」容量空间已满，无法存入「${owned.name}」。`);
         return;
       }
       const contents = foundry.utils.deepClone(container.system.contents ?? []);
@@ -1548,19 +1602,30 @@ export class LimbusActorSheet extends ActorSheet {
    * @param {string} oldId
    * @param {string} newId
    */
-  _replaceCombatBagSkill(oldId, newId) {
+  _replaceCombatBagSkill(oldId, newId, limit = Infinity) {
     const state = this._combatBagState;
     if (!state || !oldId || !newId || oldId === newId) return;
 
+    // limit：最多替换几处。临时技能转换的**还原**是一条记录对应一个槽位，
+    // 必须传 1——基础槽与守备槽同时换成同一个强化形态时，无限制地全量替换
+    // 会把 6 袋与 HUD 里另一格也一起写成对方的原技能。
+    let left = Math.max(0, limit);
     let changed = false;
     for (const key of ["equipped", "slots", "pool"]) {
       const arr = state[key];
       if (!Array.isArray(arr)) continue;
-      for (let i = 0; i < arr.length; i++) {
-        if (arr[i] === oldId) { arr[i] = newId; changed = true; }
+      for (let i = 0; i < arr.length && left > 0; i++) {
+        if (arr[i] === oldId) { arr[i] = newId; changed = true; left--; }
       }
+      if (left <= 0) break;
     }
-    if (changed) this._renderCombatSlots(this.element);
+    if (changed) {
+      this._renderCombatSlots(this.element);
+      // 快捷操作 HUD 读的是同一份 _combatBagState，得跟着重画
+      import("./quick-action-hud.mjs")
+        .then(({ QuickActionHUD }) => QuickActionHUD.onActorUpdate?.(this.actor))
+        .catch(() => {});
+    }
   }
 
   _syncCombatSlots(html) {
@@ -1645,6 +1710,9 @@ export class LimbusActorSheet extends ActorSheet {
       const sinColor = CONFIG.LIMBUSCOMPANY?.SIN_COLORS?.[mainItem?.system?.sinType] ?? "";
       $slot.css("--slot-sin-color", (sinColor && i < 2) ? sinColor : "");
     });
+
+    // 【大招就绪】星芒：槽位 DOM 是复用的，每次重绘都先清后挂
+    refreshReadySlots(html, this.actor);
   }
 
   // 从 pool 中取下一张牌补充到 slots[5]
@@ -2228,6 +2296,78 @@ export class LimbusActorSheet extends ActorSheet {
   }
 
   /** 网格视图：拖到容器图块上，自动寻位存入容器（容器不能存放容器） */
+  /**
+   * 背包格投放：把落点写进 `system.bagLayout`（塔科夫式自由摆放）。
+   * 只处理"背包内部挪动"——从容器/仓库/侧边栏拖来的物品仍走既有流程。
+   */
+  /**
+   * 把渲染时自动补位的坐标写回 `system.bagLayout`，让背包摆放彻底固定下来。
+   * 只补缺失的条目，不动玩家已经摆好的；没有缺失就一次写都不发。
+   * 渲染流程里不能同步 await（会把 getData 拖住并触发再次渲染），
+   * 因此 fire-and-forget，并用一个标志位防止写入引发的重渲染再次进来。
+   */
+  _persistBagLayout(grid) {
+    if (this._bagLayoutSyncing) return;
+    if (!this.actor.isOwner) return;
+    const layout = this.actor.system?.bagLayout ?? [];
+    const known  = new Set(layout.map(e => e.itemId));
+    const missing = (grid?.tiles ?? []).filter(t => !known.has(t.id));
+    if (!missing.length) return;
+
+    this._bagLayoutSyncing = true;
+    const next = [
+      ...layout,
+      ...missing.map(t => ({ itemId: t.id, x: t.x, y: t.y, rotated: !!t.rotated })),
+    ];
+    this.actor.update({ "system.bagLayout": next })
+      .catch(err => console.warn("[背包] 摆放坐标写入失败", err))
+      .finally(() => { this._bagLayoutSyncing = false; });
+  }
+
+  async _onBagCellDrop(event) {
+    event.preventDefault();
+    let raw;
+    try { raw = JSON.parse(event.originalEvent.dataTransfer.getData("text/plain")); }
+    catch { return; }
+    if (raw?.fromBag?.actorId !== this.actor.id) return;
+
+    const itemId = raw.fromBag.itemId;
+    const item   = this.actor.items.get(itemId);
+    if (!item) return;
+
+    const grid = this._bagGridCache ?? { tiles: [], rows: BAG_ROWS };
+    const cols = BAG_COLS;
+    const rows = grid.rows ?? BAG_ROWS;
+
+    const layout  = foundry.utils.deepClone(this.actor.system.bagLayout ?? []);
+    const entry   = layout.find(e => e.itemId === itemId) ?? null;
+    const wasRot  = entry?.rotated ?? false;
+    const newRot  = raw.rotatePending ? !wasRot : wasRot;
+
+    const cap  = item.system?.capacity ?? {};
+    const rawW = Math.max(1, cap.w ?? 1);
+    const rawH = Math.max(1, cap.h ?? 1);
+    const w    = newRot ? rawH : rawW;
+    const h    = newRot ? rawW : rawH;
+
+    // 落点：GridDnD 已经把抓取偏移与旋转算进 dropX/dropY，直接用；
+    // 万一是别处合成的 drop（没有这两个字段），退回用格子坐标。
+    const x = raw.dropX ?? parseInt(event.currentTarget.dataset.x ?? 0);
+    const y = raw.dropY ?? parseInt(event.currentTarget.dataset.y ?? 0);
+
+    // 与其他物品的碰撞（自己排除在外）
+    const others = (grid.tiles ?? [])
+      .filter(t => t.id !== itemId)
+      .map(t => ({ x: t.x, y: t.y, w: t.w, h: t.h }));
+    if (!canPlace(others, x, y, w, h, cols, rows)) {
+      return void ui.notifications.warn("此位置无法放置（超出背包边界或与其他物品重叠）");
+    }
+
+    if (entry) { entry.x = x; entry.y = y; entry.rotated = newRot; }
+    else       { layout.push({ itemId, x, y, rotated: newRot }); }
+    await this.actor.update({ "system.bagLayout": layout });
+  }
+
   async _onBagTileDropOnContainer(event) {
     const container = this.actor.items.get(event.currentTarget.dataset.itemId ?? "");
     if (container?.type !== "container") return;
@@ -2245,9 +2385,11 @@ export class LimbusActorSheet extends ActorSheet {
     event.preventDefault();
     event.stopPropagation();
 
-    if (dragged.type === "container") {
-      ui.notifications.warn("容器不能存放容器。");
-      return;
+    // 存放限制（类型 AND 分类；容器套容器也由类型限制决定）+ 环检测
+    const verdict = canContainerAccept(container, dragged);
+    if (!verdict.ok) return void ui.notifications.warn(verdict.reason);
+    if (await wouldNest(container, dragged)) {
+      return void ui.notifications.warn("不能把容器放进它自己或它内部的容器里。");
     }
 
     // 容器内自动寻位（首适应 + 旋转）
@@ -2258,25 +2400,11 @@ export class LimbusActorSheet extends ActorSheet {
     if (contents.some(p => p.uuid === dragged.uuid)) return;
     const cap = dragged.system?.capacity ?? { w: 1, h: 1 };
     const iw = Math.max(1, cap.w ?? 1), ih = Math.max(1, cap.h ?? 1);
-    const canPlace = (x, y, w, h) => {
-      if (x < 0 || y < 0 || x + w > gw || y + h > gh) return false;
-      for (const p of contents) {
-        const pw = p.w ?? 1, ph = p.h ?? 1;
-        for (let dy = 0; dy < h; dy++)
-          for (let dx = 0; dx < w; dx++)
-            if (p.x <= x + dx && x + dx < p.x + pw &&
-                p.y <= y + dy && y + dy < p.y + ph) return false;
-      }
-      return true;
-    };
-    let place = null;
-    outer: for (let y = 0; y < gh; y++) {
-      for (let x = 0; x < gw; x++) {
-        if (canPlace(x, y, iw, ih))              { place = { x, y, w: iw, h: ih, rotated: false }; break outer; }
-        if (iw !== ih && canPlace(x, y, ih, iw)) { place = { x, y, w: ih, h: iw, rotated: true  }; break outer; }
-      }
-    }
-    if (!place) { ui.notifications.warn(`【${container.name}】空间不足，无法存入。`); return; }
+    // 自动寻位：复用共用算法，**锁定格不可占用**（原来这份手写实现漏了这一条）
+    const place = autoPlace(contents, iw, ih, gw, gh, {
+      lockedSet: makeLockedSet(container.system.lockedCells ?? []),
+    });
+    if (!place) { ui.notifications.warn(`【${container.name}】容量空间已满，无法存入。`); return; }
 
     contents.push({ uuid: dragged.uuid, x: place.x, y: place.y, w: place.w, h: place.h, rotated: place.rotated });
     await container.update({ "system.contents": contents });

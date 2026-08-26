@@ -36,6 +36,16 @@ function makeActivitySchema() {
 //  EquipmentData — 装备数据模型
 // ═══════════════════════════════════════════════════════════════════════════
 
+/**
+ * 由三个数字字段拼出骰子公式字符串。**唯一的拼装口径**——
+ * 负面骰（negativeDice）时基础值在前、骰作为减项（20-1d8），否则 NdF+B。
+ * 全仓凡是要生成这个字符串的地方都必须走这里，否则方向会各写各的。
+ */
+export function buildDiceFormula({ diceCount = 1, diceFaces = 4, baseValue = 0, negativeDice = false } = {}) {
+  if (negativeDice) return `${baseValue}-${diceCount}d${diceFaces}`;
+  return `${diceCount}d${diceFaces}` + (baseValue > 0 ? `+${baseValue}` : "");
+}
+
 export class EquipmentData extends foundry.abstract.TypeDataModel {
   static defineSchema() {
     const fields = foundry.data.fields;
@@ -56,6 +66,13 @@ export class EquipmentData extends foundry.abstract.TypeDataModel {
         blunt:  new fields.StringField({ required: false, initial: "" }),
         pierce: new fields.StringField({ required: false, initial: "" }),
       }),
+
+      // ── 武器专用：攻击方式与射程（其余子类型忽略这两项）────────────────
+      // rangeType：melee = 近战，ranged = 远程
+      // range：攻击范围，单位「格」（1 格 = 5ft，显示时按 N×5+2.5 ft 换算）
+      rangeType: new fields.StringField({ required: false, initial: "melee",
+        choices: ["melee", "ranged"] }),
+      range:     new fields.NumberField({ required: false, integer: true, min: 0, initial: 1 }),
 
       // 攻/防/速度修正值
       atkAdj:   new fields.NumberField({ required: true, integer: true, initial: 0 }),
@@ -172,6 +189,10 @@ export class SkillData extends foundry.abstract.TypeDataModel {
         baseValue:   new fields.NumberField({ required: false, nullable: true, integer: true, min: 0, initial: null }),
         diceCount:   new fields.NumberField({ required: false, nullable: true, integer: true, min: 0, initial: null }),
         diceFaces:   new fields.NumberField({ required: false, nullable: true, integer: true, min: 1, initial: null }),
+        // 侵蚀形态可以自己是负面骰（null = 沿用觉醒形态的设置）
+        negativeDice: new fields.BooleanField({ required: false, nullable: true, initial: null }),
+        // 侵蚀形态可以单独开【无差别攻击】（null = 沿用觉醒形态的设置）
+        indiscriminate: new fields.BooleanField({ required: false, nullable: true, initial: null }),
         weight:      new fields.NumberField({ required: false, nullable: true, integer: true, min: 0, initial: null }),
         sanityCost:  new fields.NumberField({ required: false, nullable: true, integer: true, min: 0, initial: null }),
         effectDesc:  new fields.HTMLField({ required: false, initial: "" }),
@@ -186,6 +207,10 @@ export class SkillData extends foundry.abstract.TypeDataModel {
         choices: ["chain", "spray"] }),
       spreadRange: new fields.NumberField({ required: false, integer: true, min: 1, max: 6, initial: 1 }),
 
+      // 【无差别攻击】：容量扩散时敌我不分，范围内的友方（含队友）同样会被打到。
+      // 常见于 E.G.O 的侵蚀形态。自己永远不会打到自己。
+      indiscriminate: new fields.BooleanField({ required: false, initial: false }),
+
       // 骰子类型：normal / unbreakable / severing
       diceType: new fields.StringField({ required: true, initial: "normal",
         choices: ["normal", "unbreakable", "severing"] }),
@@ -194,6 +219,12 @@ export class SkillData extends foundry.abstract.TypeDataModel {
       baseValue:  new fields.NumberField({ required: true, integer: true, min: 0, initial: 0 }),
       diceCount:  new fields.NumberField({ required: true, integer: true, min: 0, initial: 1 }),
       diceFaces:  new fields.NumberField({ required: true, integer: true, min: 1, initial: 4 }),
+
+      // 负面骰：公式写成「基础值 - 骰」（如 20-1D8），常见于 EGO 侵蚀形态。
+      // 三个数字字段的含义不变，只是骰子项取负 —— 于是「骰数+1」自然变成 20-2D8、
+      // 「基础值+1」变成 21-1D8，所有既有效果无需特殊处理。
+      // 该标记由骰数栏的公式文本自动推断（见 item-sheet.mjs 的 _parseDiceFormula）。
+      negativeDice: new fields.BooleanField({ required: false, initial: false }),
       // diceFormula：便捷显示字符串，如 "2d4+3"（由 prepareDerivedData 生成）
       diceFormula: new fields.StringField({ required: false, initial: "1d4" }),
 
@@ -210,6 +241,10 @@ export class SkillData extends foundry.abstract.TypeDataModel {
       // 援护防御：标记为【援护防御】专属技能——队友被锁定且行动值为 0 时，
       // 持有【援护防御】的角色可以用它顶上去替队友接下这次对抗
       coverDefense: new fields.BooleanField({ required: false, initial: false }),
+
+      // 无法拼点：被这张技能锁定的目标只能【承受】，连守备技能都不能对抗。
+      // 优先级最高——【援护防御】也不会被询问（顶上去也只是换个人承受）
+      noClash: new fields.BooleanField({ required: false, initial: false }),
 
       // 标签
       tags: new fields.ArrayField(
@@ -253,17 +288,14 @@ export class SkillData extends foundry.abstract.TypeDataModel {
     // 没填的字段照旧沿用【觉醒】的数值。
     if (this.type === "ego" && this.corrode?.initialized && this._ownerInPanic) {
       const c = this.corrode;
-      for (const key of ["category", "baseValue", "diceCount", "diceFaces", "weight", "sanityCost"]) {
+      for (const key of ["category", "baseValue", "diceCount", "diceFaces", "weight", "sanityCost", "negativeDice", "indiscriminate"]) {
         if (c[key] !== null && c[key] !== undefined) this[key] = c[key];
       }
       if (c.effectDesc) this.effectDesc = c.effectDesc;
       if (c.activities?.length) this.activities = c.activities;
     }
 
-    const { diceCount, diceFaces, baseValue } = this;
-    let formula = `${diceCount}d${diceFaces}`;
-    if (baseValue > 0) formula += `+${baseValue}`;
-    this.diceFormula = formula;
+    this.diceFormula = buildDiceFormula(this);
 
     // 若 EGO 技能且 stellarCost 未手动修改，则按 egoDiceRating 自动推算
     if (this.type === "ego" && this.egoDiceRating) {
@@ -385,6 +417,12 @@ export class ContainerData extends foundry.abstract.TypeDataModel {
       stock:  new fields.NumberField({ required: true, integer: true, min: -1, initial: -1 }),
       hidden: new fields.BooleanField({ required: true, initial: false }),
 
+      // ── 存放限制（两条 AND，留空 = 不限制）────────────────────────────
+      // 都用 `/` 分隔多个可选值，判定见 helpers/container-rules.mjs
+      // 例：医疗箱 allowTypes「消耗品/材料」+ allowCategories「医疗」
+      allowTypes:      new fields.StringField({ required: false, initial: "" }),
+      allowCategories: new fields.StringField({ required: false, initial: "" }),
+
       // 锁定格：禁止放置物品的格子坐标列表
       lockedCells: new fields.ArrayField(
         new fields.SchemaField({
@@ -504,6 +542,15 @@ export class BackgroundData extends foundry.abstract.TypeDataModel {
       // 势力/阵营标签（斜杠分隔，如"拉曼却/血魔"）：多个背景可共享同一标签，
       // 供场地资源（FieldResourceRegistry）等按 tag 匹配的玩法逻辑使用
       tags: new fields.StringField({ required: false, initial: "" }),
+
+      // 物品容量（背景卡本身占用背包/容器格数）：背景虽然是"模板"物品，
+      // 但也要能作为实物放进背包和容器里，所以和其余可携带物品一样有容量。
+      capacity: new fields.SchemaField({
+        w: new fields.NumberField({ required: true, integer: true, min: 1, max: 10, initial: 1 }),
+        h: new fields.NumberField({ required: true, integer: true, min: 1, max: 10, initial: 1 }),
+      }),
+
+      favorited: new fields.BooleanField({ required: true, initial: false }),
     };
   }
 }
@@ -531,12 +578,7 @@ export class LimbusItem extends Item {
   _prepareSkillData() {
     const sys = this.system;
     // 确保骰子公式字符串已生成（TypeDataModel.prepareDerivedData 可能已处理）
-    if (!sys.diceFormula) {
-      const { diceCount, diceFaces, baseValue } = sys;
-      let formula = `${diceCount}d${diceFaces}`;
-      if (baseValue > 0) formula += `+${baseValue}`;
-      sys.diceFormula = formula;
-    }
+    if (!sys.diceFormula) sys.diceFormula = buildDiceFormula(sys);
   }
 
   // ─── 装备派生数据 ──────────────────────────────────────────────────────
@@ -574,10 +616,7 @@ export class LimbusItem extends Item {
    */
   getDiceFormula() {
     if (this.type !== "skill") return "";
-    const { diceCount, diceFaces, baseValue } = this.system;
-    let formula = `${diceCount}d${diceFaces}`;
-    if (baseValue > 0) formula += `+${baseValue}`;
-    return formula;
+    return buildDiceFormula(this.system);
   }
 
   /**

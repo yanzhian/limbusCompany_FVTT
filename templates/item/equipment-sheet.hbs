@@ -52,6 +52,25 @@
           {{/if}}
         </div>
 
+        {{!-- 武器专用：近战/远程 + 攻击范围（格 → ft）--}}
+        {{#if isWeapon}}
+          <div class="equip-range-row">
+            {{#if (and isEditable (not isLocked))}}
+              <select name="system.rangeType" class="equip-subtype-sel equip-rangetype-sel">
+                <option value="melee"  {{#eq system.rangeType "melee"}}selected{{/eq}}>近战</option>
+                <option value="ranged" {{#eq system.rangeType "ranged"}}selected{{/eq}}>远程</option>
+              </select>
+              <span class="equip-range-label">攻击范围</span>
+              <input type="number" name="system.range" value="{{system.range}}"
+                     class="equip-range-input" min="0" max="99"/>
+              <span class="equip-range-ft">格（{{rangeFt}}）</span>
+            {{else}}
+              <span class="equip-rangetype-badge {{#eq system.rangeType "ranged"}}is-ranged{{/eq}}">{{rangeTypeLabel}}</span>
+              <span class="equip-range-display">{{system.range}} 格 · {{rangeFt}}</span>
+            {{/if}}
+          </div>
+        {{/if}}
+
         {{!-- 数值修正 + 链接方向 --}}
         <div class="equip-stats-links-row">
           <div class="equip-stats">
@@ -125,7 +144,7 @@
     <div class="item-tags-row">
       <div class="tags-area">
         {{#if (and isEditable (not isLocked))}}
-          <input type="text" name="system.tags" value="{{system.tags}}" class="tags-input" placeholder="标签1/标签2"/>
+          <input type="text" name="system.tags" value="{{join system.tags '/'}}" class="tags-input" placeholder="标签1/标签2"/>
         {{else}}
           {{#each (split system.tags '/')}}
             <span class="tag">{{trim this}}</span>

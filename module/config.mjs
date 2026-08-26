@@ -175,15 +175,56 @@ LIMBUSCOMPANY.BUFF_TYPES = {
   defensiveStance: "防御姿态",
   butterfly:       "蝶",
   piercingArrow:   "刺入之矢",
+  // 花札三色 + 光札（定事务所）
+  craneOnPine:     "松上鹤",
+  moonOnSusuki:    "芒上月",
+  indigoSakura:    "青染樱",
+  lightCard:       "光札",
 };
+
+/**
+ * 条件威力 BUFF：与【强壮/虚弱】同为"每层 ±1 有效骰数"，
+ * 区别是**带前置条件**——只有本骰的物理分类 / 罪孽与之匹配时才计入。
+ *
+ * 物理分类的判定：攻击骰看 `category`；守备骰里只有【反击】【可拼点反击】
+ * 有物理类型（看 `counterType`），闪避与格挡没有物理类型，因此吃不到这三条。
+ * 罪孽那 7 条则攻守骰一律适用。
+ *
+ * key = 匹配用的分类 / 罪孽标识，与 CATEGORIES、SINS 的取值一致。
+ */
+LIMBUSCOMPANY.COND_POWER_BUFFS = {
+  slash:    { up: "slashPowerUp",    down: "slashPowerDown",    label: "斩击" },
+  blunt:    { up: "bluntPowerUp",    down: "bluntPowerDown",    label: "打击" },
+  pierce:   { up: "piercePowerUp",   down: "piercePowerDown",   label: "突刺" },
+  wrath:    { up: "wrathPowerUp",    down: "wrathPowerDown",    label: "暴怒" },
+  lust:     { up: "lustPowerUp",     down: "lustPowerDown",     label: "色欲" },
+  sloth:    { up: "slothPowerUp",    down: "slothPowerDown",    label: "怠惰" },
+  gluttony: { up: "gluttonyPowerUp", down: "gluttonyPowerDown", label: "暴食" },
+  pride:    { up: "pridePowerUp",    down: "pridePowerDown",    label: "傲慢" },
+  gloom:    { up: "gloomPowerUp",    down: "gloomPowerDown",    label: "忧郁" },
+  envy:     { up: "envyPowerUp",     down: "envyPowerDown",     label: "嫉妒" },
+};
+
+/** 上表派生出的 20 个 key（10 提升 + 10 降低），供各处名单复用 */
+LIMBUSCOMPANY.COND_POWER_UP_KEYS   = Object.values(LIMBUSCOMPANY.COND_POWER_BUFFS).map(d => d.up);
+LIMBUSCOMPANY.COND_POWER_DOWN_KEYS = Object.values(LIMBUSCOMPANY.COND_POWER_BUFFS).map(d => d.down);
+
+// 把这 20 条并进 BUFF_TYPES（名称即"斩击威力提升 / 斩击威力降低"）
+for (const d of Object.values(LIMBUSCOMPANY.COND_POWER_BUFFS)) {
+  LIMBUSCOMPANY.BUFF_TYPES[d.up]   = `${d.label}威力提升`;
+  LIMBUSCOMPANY.BUFF_TYPES[d.down] = `${d.label}威力降低`;
+}
 
 /** 分组，用于 BUFF 下拉菜单 */
 LIMBUSCOMPANY.BUFF_GROUPS = {
-  positive: ["strong", "endure", "swift", "guard", "clashPowerUp", "atkLevelUp", "defLevelUp", "coverDefense"],
-  negative: ["weak", "breach", "bind", "fragile", "clashPowerDown", "atkLevelDown", "defLevelDown"],
+  positive: ["strong", "endure", "swift", "guard", "clashPowerUp", "atkLevelUp", "defLevelUp", "coverDefense",
+             ...LIMBUSCOMPANY.COND_POWER_UP_KEYS],
+  negative: ["weak", "breach", "bind", "fragile", "clashPowerDown", "atkLevelDown", "defLevelDown",
+             ...LIMBUSCOMPANY.COND_POWER_DOWN_KEYS],
   special:  ["burn", "bleed", "tremor", "rupture", "sinking", "breathing", "charge", "chaos", "panic", "lowMorale"],
   other:    ["custom"],
-  custom:   ["defensiveStance", "butterfly", "piercingArrow"],
+  custom:   ["defensiveStance", "butterfly", "piercingArrow",
+             "craneOnPine", "moonOnSusuki", "indigoSakura", "lightCard"],
 };
 
 /**
@@ -217,10 +258,19 @@ LIMBUSCOMPANY.BUFF_DESCRIPTIONS = {
   sinking:        "[受到伤害时]：减少 1 层【沉沦】层数，为目标造成【沉沦】强度等级的理智伤害；\n如果理智因此跌至下限 5，额外受到【沉沦】强度等级的【忧郁】罪孽伤害",
   breathing:      "[回合结束时]：减少 1 层【呼吸法】层数（无其他直接效果，供效果触发条件判定使用）",
   charge:         "[回合结束时]：减少 1 层【充能】层数（最大 20 层，供效果触发条件判定使用）",
-  chaos:          "陷入混乱：拼点骰数 ×2.0（数值随触发阈值条数升级为 混乱+/混乱++，倍率相应提升），回合结束自动移除",
+  chaos:          "陷入混乱：受到的物理伤害 ×2.0（强制覆盖，无视装备抗性；随触发阈值条数升级为 混乱+ ×2.5 / 混乱++ ×3.0）；\n触发当下行动值清零，持续「本回合 + 下回合」两轮",
   panic:          "陷入恐慌：无法使用基础及守备技能，E.G.O 不消耗理智但罪孽资源消耗 ×1.5，回合结束自动移除",
   lowMorale:      "士气低落：理智 ≤30 时触发（一场遭遇战仅生效一次）",
 };
+
+// 条件威力 BUFF 的说明（与【强壮/虚弱】同为每层 ±1 骰，但要本骰对得上）
+for (const [key, d] of Object.entries(LIMBUSCOMPANY.COND_POWER_BUFFS)) {
+  const cond = ["slash", "blunt", "pierce"].includes(key)
+    ? `本骰为【${d.label}】时（守备骰看反击类型，闪避/格挡无物理类型故不适用）`
+    : `本骰罪孽为【${d.label}】时`;
+  LIMBUSCOMPANY.BUFF_DESCRIPTIONS[d.up]   = `${cond}，有效骰数：每层 +1 骰`;
+  LIMBUSCOMPANY.BUFF_DESCRIPTIONS[d.down] = `${cond}，有效骰数：每层 -1 骰`;
+}
 
 /**
  * 回合结束时自动清除的 BUFF 类型（本回合生效，下回合转为本回合生效）。
@@ -238,6 +288,9 @@ LIMBUSCOMPANY.TURN_END_BUFF_TYPES = new Set([
   "chaos", "chaos_plus", "chaos_double_plus",
   "panic",
   // 士气低落不再作为 BUFF 添加（不出现在状态栏），此处无需再列入清除名单
+  // 20 条条件威力 BUFF 与强壮/虚弱同级，同样回合结束清除
+  ...LIMBUSCOMPANY.COND_POWER_UP_KEYS,
+  ...LIMBUSCOMPANY.COND_POWER_DOWN_KEYS,
 ]);
 
 // ─── 技能类型 ─────────────────────────────────────────────────────────────────
@@ -305,7 +358,7 @@ LIMBUSCOMPANY.ACTIVITY_TRIGGERS = [
   "拼点时", "拼点成功", "拼点失败",
   "命中时", "暴击命中时",
   "回合开始时", "回合结束时", "受到伤害时",
-  "反应", "丢弃时", "恐慌触发时", "坚定触发时",
+  "反应", "丢弃时", "恐慌触发时", "坚定触发时", "陷入混乱时",
 ];
 
 // ─── 效果类型 ─────────────────────────────────────────────────────────────────

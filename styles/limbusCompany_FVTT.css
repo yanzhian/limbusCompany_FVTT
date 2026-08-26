@@ -389,6 +389,18 @@
   color: #D8EEFA;
 }
 
+/* 无法拼点：被这张技能锁定的目标只能【承受】 */
+.limbuscompany .no-clash-badge {
+  background: #7A2A2A;
+  color: #FAD8D8;
+}
+
+/* 无差别攻击：容量扩散敌我不分，友方也会被打到 */
+.limbuscompany .indiscriminate-badge {
+  background: #6E3A7A;
+  color: #F2DAFA;
+}
+
 /* 技能卡大图标：图片保持原始尺寸（60px 就显示 60px，不放大以免发糊），
    外面叠一层罪孽/等级边框。--skill-frame-scale 控制边框相对槽位的大小，
    调整外框松紧改这一个值即可。 */
@@ -3989,6 +4001,32 @@ body.game .limbuscompany.app img {
 .limbuscompany .container-avail-max { color: var(--text-main); }
 .limbuscompany .container-avail-sep { color: var(--text-dim); }
 
+/* 存放限制行：紧跟在剩余容量行下面，字号与之一致；
+   「存放限制」四个字沿用该行的副文本色，类型/分类的值用深色 #0F0B0A */
+.limbuscompany .container-limit-row {
+  display: flex; align-items: center; gap: 4px; flex-wrap: wrap;
+  font-size: .72rem; color: var(--text-sub);
+}
+.limbuscompany .container-limit-label { color: inherit; white-space: nowrap; }
+.limbuscompany .container-limit-input {
+  width: 82px;
+  background: #C9A84C;
+  border: 1px solid var(--border-gold);
+  border-radius: 2px;
+  padding: 0 4px;
+  font-size: inherit;
+  color: #0F0B0A;
+}
+.limbuscompany .container-limit-input::placeholder { color: rgba(15,11,10,.55); }
+.limbuscompany .container-limit-badge {
+  background: #C9A84C;
+  border-radius: 2px;
+  padding: 0 5px;
+  color: #0F0B0A;
+}
+.limbuscompany .container-limit-none { color: var(--text-dim); font-style: italic; }
+
+
 /* ═══ 容器网格（Diablo 风格二层布局）═══════════════════════════════ */
 .limbuscompany .cg-wrap {
   --cg-cell: 44px;
@@ -4058,6 +4096,67 @@ body.game .limbuscompany.app img {
   box-shadow: inset 0 0 0 1px var(--gold-active), 0 0 6px rgba(229,186,37,.3);
 }
 .limbuscompany .cg-item-tile.cg-hidden { display: none; }
+
+/* ══ pointer 自绘拖放（grid-dnd.mjs）══════════════════════════════════════
+   拖动中原图块整个隐藏（格子看着就是空的），跟随光标的是下面这份不透明幽灵。 */
+.limbuscompany .cg-item-tile.cg-dragging { visibility: hidden; }
+
+/* 拖动全程禁掉文字选中与图块 hover 效果，免得拖着拖着选中一片文本 */
+body.cg-dragging-active { user-select: none; cursor: grabbing; }
+body.cg-dragging-active .limbuscompany .cg-item-tile:hover {
+  border-color: var(--border-gold);
+  box-shadow: inset 0 0 0 1px rgba(95,62,33,.4);
+}
+
+/* 幽灵块：跟着光标走，不吃鼠标事件（否则 elementFromPoint 全命中它自己） */
+.cg-drag-ghost {
+  position: fixed;
+  left: -9999px;
+  top:  -9999px;
+  pointer-events: none;
+  opacity: 1;
+  background: #180F08;
+  border: 1px solid #E5BA25;
+  border-radius: 3px;
+  box-shadow: 0 0 10px rgba(229,186,37,.5);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  box-sizing: border-box;
+  z-index: 100000;
+}
+.cg-drag-ghost .cg-rotate-btn { display: none; }
+/* 幽灵带 .limbuscompany 类（好让子元素样式生效），但它不是窗口，
+   得把窗口级的排版属性显式盖回来 */
+.limbuscompany.cg-drag-ghost {
+  padding: 0;
+  margin:  0;
+  font-family: inherit;
+}
+
+/* 落点预览：绿=可放，红=放不下（越界 / 重叠 / 锁定格） */
+.limbuscompany .cg-drop-preview {
+  pointer-events: none;
+  border-radius: 2px;
+  z-index: 20;
+  box-sizing: border-box;
+}
+.limbuscompany .cg-drop-preview.cg-ok {
+  background: rgba(106,168,79,.28);
+  border: 1px solid rgba(140,200,110,.9);
+}
+/* 罩在容器图块上：表示"存进这个容器"（落点由接收端自动寻位） */
+.limbuscompany .cg-drop-preview.cg-into {
+  background: rgba(229,186,37,.22);
+  border: 1px solid var(--gold-active, #E5BA25);
+  box-shadow: inset 0 0 8px rgba(229,186,37,.35);
+}
+.limbuscompany .cg-drop-preview.cg-bad {
+  background: rgba(184,68,68,.26);
+  border: 1px solid rgba(224,96,96,.9);
+}
 
 /* 图标：填满格子 70% */
 .limbuscompany .cg-tile-icon {
@@ -5537,59 +5636,34 @@ body.game .limbuscompany.app img {
 }
 
 /* ============================================================
-   §3-V  恐慌鉴定聊天卡片 — limbus-panic-check-card
+   §3-V  恐慌鉴定聊天卡片 — limbus-panic-card
+   蓝色系（沿用旧版 limbus-panic-check-card 的配色）：
+   每人一行 40px 头像 + 名称 + 结果，下一行 OOO OOO 计数点。
    ============================================================ */
 
-.chat-message .message-content:has(.limbus-panic-check-card) {
+.chat-message .message-content:has(.limbus-panic-card) {
   padding: 0;
 }
 
-.limbus-panic-check-card {
+.limbus-panic-card {
   background: linear-gradient(180deg, #121A24 0%, #090C11 100%);
   border: 1px solid #1E4A6E;
   border-radius: 6px;
   overflow: hidden;
   font-family: var(--font-main);
   color: var(--text-main);
-}
-
-.limbus-panic-check-card .ic-header {
-  display: flex;
-  align-items: center;
-  gap: 10px;
   padding: 10px 12px 8px;
 }
 
-.limbus-panic-check-card .ic-actor-avatar {
-  width: 50px;
-  height: 50px;
-  border-radius: 50%;
-  object-fit: cover;
-  border: 2px solid #1E4A6E;
-  flex-shrink: 0;
-}
-
-.limbus-panic-check-card .ic-actor-info {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-}
-
-.limbus-panic-check-card .ic-title {
+.limbus-panic-card .pc-title {
   font-size: 20px;
   font-weight: bold;
   color: #A2C9E8;
   line-height: 1.2;
+  margin-bottom: 10px;
 }
 
-.limbus-panic-check-card .ic-player {
-  font-size: 13px;
-  color: #A1CAE8;
-  opacity: 0.65;
-}
-
-.limbus-panic-check-card .ic-blue-divider {
+.limbus-panic-card .pc-divider {
   height: 1px;
   background: linear-gradient(
     to right,
@@ -5599,60 +5673,87 @@ body.game .limbuscompany.app img {
     #20507A 75%,
     transparent 100%
   );
-  margin: 0 0 8px;
+  margin: 8px 0;
 }
 
-/* 结果行：1d10 结果 + 智力 + 判定结果 */
-.limbus-panic-check-card .panic-check-result-row {
+/* ── 一行结果 ── */
+.limbus-panic-card .pc-row {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 4px 14px 10px;
 }
 
-.limbus-panic-check-card .panic-check-roll {
+.limbus-panic-card .pc-row + .pc-dots { margin-top: 4px; }
+.limbus-panic-card .pc-gap { height: 10px; }
+
+.limbus-panic-card .pc-avatar {
+  width: 40px;
+  height: 40px;
+  object-fit: cover;
+  border-radius: 4px;
+  border: 1px solid #1E4A6E;
+  flex-shrink: 0;
+}
+
+/* 中列：名字在上、骰掷说明在下（头像纵跨两行，结果纵向居中） */
+.limbus-panic-card .pc-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.limbus-panic-card .pc-name {
   font-size: 14px;
+  color: #A1CAE8;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.limbus-panic-card .pc-note {
+  font-size: 13px;
   color: #9AB4C6;
+  white-space: nowrap;
 }
 
-.limbus-panic-check-card .panic-check-arrow {
-  font-size: 14px;
-  color: #4A6A7A;
-}
-
-.limbus-panic-check-card .panic-check-outcome {
-  font-size: 18px;
+.limbus-panic-card .pc-label {
+  font-size: 16px;
   font-weight: bold;
+  line-height: 1;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.limbus-panic-card .pc-label.is-resolve { color: #5DADE2; }
+.limbus-panic-card .pc-label.is-fear    { color: #E74C3C; }
+
+/* ── OOO OOO 计数点：左组坚定（蓝）/ 右组恐慌（红） ── */
+.limbus-panic-card .pc-dots {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-left: 48px;
   line-height: 1;
 }
 
-.limbus-panic-check-card .panic-check-outcome.is-resolve {
-  color: #5DADE2;
-}
-
-.limbus-panic-check-card .panic-check-outcome.is-fear {
-  color: #E74C3C;
-}
-
-/* 状态行：公布当前坚定/恐慌计数 */
-.limbus-panic-check-card .panic-check-status-row {
-  display: flex;
+.limbus-panic-card .pc-dot-grp {
+  display: inline-flex;
   align-items: center;
-  justify-content: center;
-  gap: 18px;
-  padding: 0 14px 10px;
-  font-size: 13px;
+  gap: 3px;
 }
 
-.limbus-panic-check-card .panic-status-resolve {
-  color: #5DADE2;
-  font-weight: bold;
+.limbus-panic-card .pc-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  border: 1px solid currentColor;
 }
 
-.limbus-panic-check-card .panic-status-fear {
-  color: #E74C3C;
-  font-weight: bold;
-}
+.limbus-panic-card .pc-dot.on { background: currentColor; }
+.limbus-panic-card .pc-dot-grp.is-resolve { color: #5DADE2; }
+.limbus-panic-card .pc-dot-grp.is-fear    { color: #E74C3C; }
 
 /* ══════════════════════════════════════════════════════════════════════════
    全局罪孽资源 HUD
@@ -7205,7 +7306,7 @@ input.item-piles-quantity {
   overflow:       hidden;
 }
 .camp-char-panel {
-  flex:            0 0 250px;   /* 固定宽度，缩放窗口不变；容量超出向下扩展（6×N） */
+  flex:            0 0 265px;   /* 固定宽度，缩放窗口不变；容量超出向下扩展（6×N） */
   border-right:    1px solid var(--border-gold);
 }
 .camp-char-panel.cg-drag-over {
@@ -7224,8 +7325,10 @@ input.item-piles-quantity {
   overflow:  auto;
   padding:   8px;
 }
+/* 营地左栏的角色背包：格子尺寸与右侧仓库（继承基准的 44px）保持一致——
+   两边要互相拖放，格子不一样大时物品跨过去尺寸会突变，很难对准 */
 .limbuscompany .cg-wrap.camp-char-cg {
-  --cg-cell: 34px;
+  --cg-cell: 44px;
   --cg-gap:  2px;
 }
 
@@ -7494,6 +7597,42 @@ input.item-piles-quantity {
   color:        #FFD700;
   flex-shrink:  0;
 }
+/* 图标按钮（配方的隐藏/编辑/删除、面板标题栏的 +）
+   原先没有任何样式，直接吃 Foundry 的默认 button：一片黑底，还会被
+   flex 容器拉长（标题栏那个 + 尤其明显）。这里统一成小方块图标钮。 */
+.limbuscompany .icon-btn {
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  min-width: 0;
+  padding: 0;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(95,62,33,.35);
+  border: 1px solid var(--border-gold);
+  border-radius: 2px;
+  color: var(--text-main);
+  font-size: .72rem;
+  cursor: pointer;
+  transition: background .15s, color .15s, border-color .15s;
+}
+.limbuscompany .icon-btn:hover {
+  background: rgba(229,186,37,.25);
+  border-color: var(--gold-active);
+  color: var(--gold-active);
+}
+.limbuscompany .icon-btn > i { margin: 0; }
+/* 删除键单独给个警示色 */
+.limbuscompany .camp-recipe-delete:hover {
+  background: rgba(184,68,68,.3);
+  border-color: #B84444;
+  color: #E8A0A0;
+}
+/* 面板标题栏里的 + 靠右，不跟着标题一起铺满 */
+.limbuscompany .camp-panel-header .icon-btn { margin-left: auto; }
+
 .camp-recipe-btns {
   display:     flex;
   align-items: center;
@@ -8955,6 +9094,30 @@ input.item-piles-quantity {
 #limbus-clash-fx .lcfx-band--atk::after { top: 100%; }
 #limbus-clash-fx .lcfx-band--def::after { bottom: 100%; }
 
+/* ── 流动边框：贴在黑条朝屏幕中心的那条长边上 ──────────────────────────
+   黑条是 260vmax 宽且旋转过的，两端都在屏幕外，canvas 只覆盖可见的那一段
+   （left/width 与 ClashFlowEdge.FLOW_LEFT / FLOW_SPAN 保持一致）。
+   高度要容得下 粗细 + 起伏 + 撕裂 的总幅度，不够就会被裁掉边缘。 */
+#limbus-clash-fx .lcfx-flow {
+  position: absolute;
+  width: 120vmax;
+  height: 64px;
+  pointer-events: none;
+  z-index: 1;                    /* 压在文字下面，不挡 TOTAL 数字 */
+}
+/* 横向锚点必须跟黑条自身的锚点一致，否则可见段对不上：
+   攻方 left:-60vmax → 可见段在局部 60~160vmax，从左锚 52vmax 起算刚好罩住；
+   守方 right:-60vmax → 可见段在局部 100~200vmax，必须从右锚 52vmax 起算。
+   只写 left 的话守方右侧会露出一截没有流体。 */
+#limbus-clash-fx .lcfx-band--atk .lcfx-flow { left:  52vmax; }
+#limbus-clash-fx .lcfx-band--def .lcfx-flow { right: 52vmax; }
+/* 攻方在画面下方 → 内侧是它的上沿；守方在上方 → 内侧是下沿 */
+#limbus-clash-fx .lcfx-band--atk .lcfx-flow { top: -32px; }
+#limbus-clash-fx .lcfx-band--def .lcfx-flow { bottom: -32px; }
+/* 黑条的 ::after 填角块会盖住外侧，这里把流体抬到它上面 */
+#limbus-clash-fx .lcfx-band::after { z-index: 0; }
+#limbus-clash-fx .lcfx-band .lcfx-col { position: relative; z-index: 2; }
+
 #limbus-clash-fx .lcfx-band.is-in  { animation: lcfx-in  .42s cubic-bezier(.16, .9, .3, 1) forwards; }
 #limbus-clash-fx .lcfx-band.is-out { animation: lcfx-out .58s cubic-bezier(.45, 0, .7, .35) forwards; }
 
@@ -9423,3 +9586,140 @@ input.item-piles-quantity {
   flex: 0 0 auto;
   min-height: 80px;
 }
+
+/* ── 武器：近战/远程 + 攻击范围 ─────────────────────────────────────── */
+.limbuscompany .equip-range-row {
+  display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+  font-size: .72rem; color: var(--text-sub); padding: 2px 0;
+}
+.limbuscompany .equip-rangetype-sel { width: 68px; }
+.limbuscompany .equip-range-input {
+  width: 46px; background: rgba(0,0,0,.25); border: 1px solid var(--border-gold);
+  border-radius: 2px; color: var(--text-main); font-size: .72rem; padding: 0 4px;
+}
+.limbuscompany .equip-range-ft,
+.limbuscompany .equip-range-display { color: var(--text-dim); }
+.limbuscompany .equip-rangetype-badge {
+  padding: 0 6px; border-radius: 2px; background: rgba(95,62,33,.35);
+  border: 1px solid var(--border-gold); color: var(--text-main);
+}
+.limbuscompany .equip-rangetype-badge.is-ranged {
+  background: rgba(47,97,87,.35); border-color: #4E9A8C; color: #BFE6DC;
+}
+
+/* ─── 【大招就绪】十字星芒 ──────────────────────────────────────────────
+   canvas 由 module/helpers/ready-sparkle.mjs 动态插入，绝对定位居中覆盖在
+   图标上、向外扩到图标的 4/3（对应 100×100 图层 / 75×75 图标的实装比例）。
+   宿主必须 position:relative 且 overflow 可见，否则星芒会错位或被裁。 */
+.limbus-ready-sparkle {
+  position:       absolute;
+  pointer-events: none;
+  z-index:        5;
+}
+
+/* 战斗页技能槽：.combat-skill-slot-wrap 本身已是 relative + overflow:visible */
+.limbuscompany .combat-section       { overflow: visible; }
+.limbuscompany .ego-combat-section   { overflow: visible; }
+
+/* 快捷 HUD：技能行与 EGO 行需要定位上下文，且不能裁掉外扩的画布 */
+.limbuscompany .qa-skill-row,
+.limbuscompany .qa-ego-row {
+  position: relative;
+  overflow: visible;
+}
+
+/* 小队 HUD：头像所在的主行 */
+.squad-main-row {
+  position: relative;
+  overflow: visible;
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   对抗聊天：生命值结算块
+   卡片外壳、50px 圆头像标题、金色分割线全部沿用原有美术，这里只是补上
+   模板里新增的那几样：护盾蓝字、带混乱阈值刻度的血条、触发行、
+   40px 缩小版（容量扩散的多目标用）。
+   ══════════════════════════════════════════════════════════════════════ */
+
+/* 生命值一行：先前生命值（含蓝色护盾） → 现在生命值 / 上限 */
+.lc-hp-num {
+  font-size: 1.05rem; line-height: 1.4; margin: 2px 0 0;
+  font-variant-numeric: tabular-nums;
+}
+.lc-hp-num .from { color: #9A8462; }
+.lc-hp-num .sh   { color: #7FB6D6; }          /* 护盾层数 */
+.lc-hp-num .arw  { color: #C9A84C; padding: 0 5px; }
+.lc-hp-num .to   { color: #E84444; font-weight: bold; font-size: 1.25rem; }
+.lc-hp-num .max  { color: #6A5A48; font-size: .78rem; }
+
+/* 血条：实心=结算后剩余，斜纹=本次损失，竖线=混乱阈值（灰=已击穿） */
+.lc-hp-bar {
+  position: relative; height: 10px; margin: 6px 0 0;
+  background: #241612; border: 1px solid #3A2018; border-radius: 2px; overflow: hidden;
+}
+.lc-hp-bar .fill {
+  position: absolute; left: 0; top: 0; bottom: 0;
+  background: linear-gradient(90deg, #8B1A1A, #B84444);
+}
+.lc-hp-bar .ghost {
+  position: absolute; top: 0; bottom: 0;
+  background: repeating-linear-gradient(45deg, rgba(232,68,68,.30) 0 4px, transparent 4px 8px);
+}
+.lc-hp-bar .thr {
+  position: absolute; top: -1px; bottom: -1px; width: 2px; background: #C9A84C;
+}
+.lc-hp-bar .thr.fired { background: #6A5A48; }
+
+/* 触发行：破裂 / 沉沦 / 震颤引爆 / 追加伤害 / 不可破坏 / 流血 */
+.lc-take-trig { margin-top: 7px; }
+.lc-take-trig .r { display: flex; gap: 7px; font-size: .78rem; line-height: 1.7; }
+.lc-take-trig .k {
+  color: #C9A84C; flex: none; min-width: 72px;
+  border-left: 2px solid #C9A84C; padding-left: 6px;
+}
+.lc-take-trig .v   { color: #E8C9A2; min-width: 0; }
+.lc-take-trig .v b { color: #E84444; }
+
+.lc-hp-blk + .lc-hp-blk { margin-top: 10px; }
+
+/* ── 40px 缩小版：容量扩散的多目标 ─────────────────────────────────── */
+.lc-hp-blk.sm + .lc-hp-blk.sm {
+  margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(201,168,76,.16);
+}
+.lc-hp-blk.sm .row40 { display: flex; align-items: center; gap: 9px; }
+.lc-hp-blk.sm .row40 img {
+  width: 40px; height: 40px; border-radius: 50%; object-fit: cover;
+  border: 2px solid #C9A84C; flex-shrink: 0;
+}
+.lc-hp-blk.sm .row40 .who { font-size: 12px; color: #9A8462; flex: none; }
+.lc-hp-blk.sm .row40 .lc-hp-num { margin: 0 0 0 auto; font-size: .9rem; text-align: right; }
+.lc-hp-blk.sm .row40 .lc-hp-num .to { font-size: 1.1rem; }
+.lc-hp-blk.sm .lc-hp-bar    { margin-top: 5px; }
+.lc-hp-blk.sm .lc-take-trig { margin-top: 5px; }
+.lc-hp-blk.sm .lc-take-trig .r { font-size: .75rem; line-height: 1.6; }
+.lc-hp-blk.sm .lc-take-trig .k { min-width: 64px; }
+
+/* 容量扩散的技能行 */
+.lc-spread-meta      { font-size: .85rem; line-height: 1.5; }
+.lc-spread-meta .sk  { color: #E8C9A2; }
+.lc-spread-meta .mode{ color: #9A8462; font-size: .78rem; }
+.lc-spread-meta .mode .ft { color: #EBBD68; }
+
+/* 结算结果 / 重新骰掷：主次两级，配色沿用原按钮 */
+.lc-btn-row { display: flex; gap: 8px; align-items: stretch; margin-top: 2px; }
+.lc-btn-row .lc-btn {
+  height: 30px; padding: 0 14px; border-radius: 2px;
+  font-size: .85rem; cursor: pointer; font-family: inherit;
+}
+.lc-btn-row .lc-btn.primary { background: #5F3E22; color: #E8C9A2; border: 1px solid #C9A84C; flex: 1; }
+.lc-btn-row .lc-btn.dim     { background: #241B12; color: #9A8462; border: 1px solid #5A3A1A; }
+.lc-btn-row .lc-btn.dim:hover { color: #C9A84C; border-color: #8A7231; }
+
+/* 拼点对抗卡「▼ 详细信息」折叠区：按触发时机分组 */
+.lc-trig-g + .lc-trig-g { margin-top: 5px; }
+.lc-trig-g > .k {
+  font-size: .78rem; color: #C9A84C; font-weight: bold; line-height: 1.4;
+  border-left: 2px solid #C9A84C; padding-left: 6px;
+}
+.lc-trig-g > .v { color: #E8C9A2; padding-left: 14px; font-size: .78rem; line-height: 1.65; }
+.lc-trig-g > .v .src { color: #6A5A48; }

@@ -57,12 +57,14 @@
 拼点时  拼点成功  拼点失败
 命中时  暴击命中时
 回合开始时  回合结束时  受到伤害时
-反应  丢弃时  恐慌触发时  坚定触发时
+反应  丢弃时  恐慌触发时  坚定触发时  陷入混乱时
 ```
 
 - **装备卡上的【激活】按钮** 触发的是 `使用时`
 - **守备技能的【激活】** 同样是 `使用时`
 - `命中时` 在容量扩散的每一发扩散上都会各触发一次
+- `陷入混乱时` 在混乱阈值被击穿时触发（含混乱→混乱+ 的升级），
+  已装备技能与装备格物品都参与
 
 ---
 
@@ -74,6 +76,7 @@
 |---|---|
 | `self` | 自己 |
 | `target` | 目标（拼点对手） |
+| `covered` | 被援护的队友（本次对抗走了【援护防御】时，替自己顶上来之前的原目标；没走援护流程则无目标） |
 | `allTeam` | 本队全部 |
 | `allTeamOther` | 本队其他全部（排除自己） |
 | `allEnemy` | 敌对全部 |
@@ -148,6 +151,8 @@
 | `category` | `categories: ["slash", ...]` | 使用了某分类的骰 |
 | `background` | `bgName` | 背景名或背景标签 |
 | `equipped` | `equipName`/`equipTag`/`equipCategory`、`count`、`perEach`、`maxTimes` | 装备格里符合条件的件数；`perEach: true` 时也提供倍数 |
+| `equipSlotCategory` | `equipSlot`（`weapon`/`upper`/`lower`/`accessory`，留空=不限部位）、`equipCategory`（分类，多个用 `/` 分隔） | 【装备分类】：某部位装备的分类是否命中（「若你武器的分类为弓刀」） |
+| `allyTag` | `target`（`bgTag`/`bgTagOther`/`allTeamOther`…）、`targetTag`、`targetTagCount`、`perEach`、`maxTimes` | 场上有没有符合条件的友方（「若有其他背景带有X的友方」）；`perEach: true` 时人数也当倍数 |
 | `fieldResource` | `fieldName`、`comparison`、`stacks` | 公用场地层数 |
 | `sinResource` | `sinType`、`comparison`、`value` | 全局罪孽池点数 |
 
@@ -164,7 +169,18 @@
 ```
 
 - **层数与强度分别扣**：填了哪个扣哪个，两个都填就都扣，都留 0 时按"扣 1 层"
-- 「消耗所有 X」没有专门写法，用 `"stacks": 99` 之类的大数扣光即可
+
+#### 「消耗所有 X」→ 用 `consumeAll`
+
+```json
+{ "type": "forced", "target": "self", "buff": "custom", "buffCustom": "炎蝶之棺",
+  "consumeAll": true }
+```
+
+- 编辑器里对应 BUFF 消耗行的 **【扣光】** 勾选框。
+- 语义是「有多少扣多少」：整条 BUFF 直接移除，**一层都没有也不算付不起**，不会让整条 Activity 失败。
+- 勾上后 `intensity` / `stacks` 被忽略。
+- ⚠️ **不要用 `"stacks": 99` 之类的大数**。那走的是普通强制消耗，预检查要求你**真的**有 99 层，永远付不起 → 整条 Activity 被静默跳过（曾导致整段 [攻击后] 一句都不执行）。
 
 ### 5.2 每（消耗式倍数）
 
@@ -176,13 +192,28 @@
 每 N 扣一次、算一倍，只扣 `倍数 × N`。`maxTimes` 同上。
 群体目标时**逐个扣**，倍数取所有目标里最小的那个。
 
+**不足 1 倍（倍数 = 0）时不再跳过整条 Activity**：什么都不扣，只有「随倍数缩放的效果」失效，
+其余效果照常执行。例：
+
+> [攻击后]：消耗所有【炎蝶之棺】，恢复 20 生命值，每消耗 3 级【烧伤】恢复 1D6，将本骰转换成"烙印"
+
+目标没有烧伤时，少回那 1D6，但 20 点固定回血与骰子转换照常发生。
+
+随倍数缩放（0 倍时跳过）的效果类型见 `ClashManager.PER_SCALED_EFFECTS`：
+`addBuff` `randomBuff` `hpAdj` `sanityAdj` `apAdj` `atkAdj` `defAdj` `weightAdj`
+`diceAdj` `diceFacesAdj` `baseValue` `fieldResource` `seismicBlast` `extraDamage`。
+其余（`diceTypeChg` `removeBuff` `rangeChg` `triggerBuff`…）与倍数无关，0 倍时照常跑。
+
+> 注意：**倍数是整条 Activity 共用的**（取所有「每」条件与「每」消耗的最小值）。
+> 想让固定部分和「每 N」部分互不影响地各自缩放，仍然要**拆成两条 Activity**。
+
 ### 5.3 其他
 
 | type / target | 字段 |
 |---|---|
 | `attribute` | `attrType`（hp/sanity/ap）、`value` |
-| `discard` | `discardMode`（`level`/`another`/`reserve`）、`discardLevel` |
-| `random` | `randomPool: [{ buff, dim: "stacks"\|"intensity", amount }]` |
+| `discard` | `discardMode`（`level`/`another`/`reserve`）、`discardLevel`（数字，或写 `[2,3]` / `"2/3"` 表示「Lv.2 或 Lv.3」，任一命中即丢） |
+| `random` | `randomPool: [{ buff, dim: "stacks"\|"intensity", amount }]`；从**付得起**的候选里随机抽一条来扣。与强制消耗同级：一条都付不起则整条 Activity 跳过 |
 | target `field` | `fieldName`、`stacks` |
 | target `sin` | `sinType`、`value` |
 
@@ -248,7 +279,7 @@
 | `baseValue` | 基础值 | `"+1"` |
 | `weightAdj` | 攻击容量 | `"+1"` |
 | `atkAdj` / `defAdj` | 攻击 / 防御等级 | 纯数字，直接按加值 |
-| `seismicBlast` | 震颤引爆 | `"1"`＝次数，不走正负号规则 |
+| `seismicBlast` | 震颤引爆 | `"1"`＝次数，不走正负号规则；次数吃「每」的倍数 |
 | `extraDamage` | 追加伤害，另有 `dmgCategory`、`dmgSinType` | 一律按加值 |
 
 > **骰数 / 面数 / 基础值 / 攻击容量 / 骰子类型** 的改动一律**只在本次攻击内有效**，
@@ -261,13 +292,51 @@
 { "type": "triggerBuff", "target": "target",
   "trigBuff": "burn", "trigBuffCustom": "", "trigStacks": 1, ... }
 
+// 范围修改：只作用于**已装备的武器**（其他部位一律忽略），持久生效不自动还原
+// 近战：拼点前瞬移贴身；远程：不移动、隔空开拼，胜则推人、败不被推
+{ "type": "rangeChg", "rangeMode": "ranged", "rangeValue": 8 }
+
 // 骰子类型（本次攻击内有效）
 { "type": "diceTypeChg", "diceTypeVal": "unbreakable" }   // normal / unbreakable / severing
 
-// 相关技能转换（永久换卡，形态切换用）
-{ "type": "relatedSkillConvert", "relMode": "byName", "relSkillName": "守护者" }
+// 相关技能转换（换卡，形态切换用）
+// relDuration: "permanent"（默认）/ "afterUse"（换上来的形态被投出去一次后还原）/
+//              "afterClash"（本次结算后还原）/ "endOfTurn"（本回合结束时还原）
+{ "type": "relatedSkillConvert", "relMode": "byName", "relSkillName": "守护者",
+  "relDuration": "permanent" }
 
-// 使用技能（反应常用）
+/* ⚠️ 还原不要写在目标技能上。
+ * 「强化形态自己写一条 [攻击后] 转换回原形态」看似可行，但那条转换挂在**强化形态**上，
+ * 它分不清自己是被哪条路径换上来的。永久转换和临时转换共用同一个强化形态时，
+ * 任意一次使用都会把两边一起还原（守备技能触发一次，永久那条也跟着掉回去）。
+ *
+ * 正确写法：还原挂在**转换这一侧**，用 relDuration 声明时长，
+ * 强化形态上**不写**任何转换回去的效果。
+ *
+ * 典型场景：基础技能 Lv.3 与守备技能都能转成同一张「强化Lv.3」，且强化形态整体
+ * 只能用 1 次（任一边用掉，另一边也消失）——两条转换都写：
+ *   { "type": "relatedSkillConvert", "relMode": "byName",
+ *     "relSkillName": "强化Lv.3", "relDuration": "afterUse" }
+ *
+ * 时长语义：
+ *   - "afterUse"    换上来的形态被**真正投出去一次**（作为攻方或守方的骰参与结算）后还原。
+ *                   转换本身发生在哪个时机（[回合开始时]/[激活]/[反应]/[攻击前]/[攻击后]）
+ *                   都不影响——那次结算投的是原技能，不算"用掉强化形态"。
+ *   - "afterClash"  转换所在的这次结算一结束就还原。**注意**：若转换是在 [攻击后] 触发的，
+ *                   强化形态还没来得及被使用就会被收回，多数换卡流程不该用这个。
+ *   - "endOfTurn"   本回合结束时还原。
+ *
+ * 引擎细节：
+ *   - 只在**真的发生了替换**时登记还原。槽位里本来就是强化形态（已被另一条换上去了）
+ *     时是空操作、不登记，到点也就不会把别人的状态误还原。
+ *   - 还原**按槽位记账**，不是按 id：基础槽与守备槽同时换成同一张强化技能时，
+ *     两个槽各自回到各自原来的技能，不会互相误伤。
+ *   - "afterUse" 时，指向同一张形态的**所有**记录一起还原 —— 这就是"另一个也会消失"。
+ *   - 多层临时转换按后进先出剥回。
+ *   - 兜底：**长休时还原全部临时转换**。始终没被投出去的 "afterUse" 形态不会跨休息残留。
+ */
+
+// 使用技能（[反应] 常用，其余触发时机同样可用）
 { "type": "useSkill", "target": "self", "skillRef": "name",
   "skillName": "联合", "skillTag": "", "skillLevel": 0,
   "reactTarget": "defender", ... }
@@ -278,7 +347,10 @@
 { "type": "fieldResource", "fieldName": "血宴", "value": "1" }
 ```
 
-`useSkill` 的 `reactTarget`：`defender`（触发者的目标）/ `attacker`（触发者本人）/ `none`（不指定）。
+`useSkill` 的 `target` 是**由谁来使用这个技能**（不是打谁），一般填 `self`。
+打谁由 `reactTarget` 决定，**所有触发时机都生效**：`defender`（本次结算的防守方 / 触发者的目标）、
+`attacker`（本次结算的攻击方 / 触发者本人，如 [拼点失败] 反打赢了自己的那个人）、`none`（不指定，谁都能响应）。
+省略该字段时按 `none` 处理，但编辑器保存时默认写入 `defender`。
 
 ---
 
@@ -293,6 +365,16 @@
 | `swift` | 迅捷 | `bind` | 束缚 |
 | `guard` | 守护 | `fragile` | 易损 |
 | `clashPowerUp` | 拼点威力提升 | `clashPowerDown` | 拼点威力降低 |
+| `slashPowerUp` | 斩击威力提升 | `slashPowerDown` | 斩击威力降低 |
+| `bluntPowerUp` | 打击威力提升 | `bluntPowerDown` | 打击威力降低 |
+| `piercePowerUp` | 突刺威力提升 | `piercePowerDown` | 突刺威力降低 |
+| `wrathPowerUp` | 暴怒威力提升 | `wrathPowerDown` | 暴怒威力降低 |
+| `lustPowerUp` | 色欲威力提升 | `lustPowerDown` | 色欲威力降低 |
+| `slothPowerUp` | 怠惰威力提升 | `slothPowerDown` | 怠惰威力降低 |
+| `gluttonyPowerUp` | 暴食威力提升 | `gluttonyPowerDown` | 暴食威力降低 |
+| `pridePowerUp` | 傲慢威力提升 | `pridePowerDown` | 傲慢威力降低 |
+| `gloomPowerUp` | 忧郁威力提升 | `gloomPowerDown` | 忧郁威力降低 |
+| `envyPowerUp` | 嫉妒威力提升 | `envyPowerDown` | 嫉妒威力降低 |
 | `atkLevelUp` | 攻击等级提升 | `atkLevelDown` | 攻击等级降低 |
 | `defLevelUp` | 防御等级提升 | `defLevelDown` | 防御等级降低 |
 | `burn` | 烧伤 | `bleed` | 流血 |
@@ -304,10 +386,11 @@
 | `tremorCollapse` | 震颤-崩坏 | `amplitudeConvert` | 振幅转换 |
 | `amplitudeEntangle` | 振幅纠缠 | `defensiveStance` | 防御姿态 |
 | `butterfly` | 蝶 | `piercingArrow` | 刺入之矢 |
-| `indomitable` | 百折不挠 | `nativeSwordArt` | 故土剑术 |
+| `indomitable` | 百折不挠 | `nativeSwordArt` | 本国剑术 |
 | `bloodFlame` | 血炎 | `resentmentTattoo` | 怨恨纹身 |
 | `vengeanceLedger` | 复仇账簿 | `flameButterflyCoffin` | 炎蝶之棺 |
 | `dawnFire` | 黎明之火 | `greetTheDawn` | 迎接黎明 |
+| `memorialWine` | 追悼酒 | | |
 
 **没注册过的自定义计数**（如【过热的棺】）这样写：
 
@@ -315,6 +398,11 @@
 "buff": "custom", "buffCustom": "过热的棺"
 ```
 
+> **条件威力那 20 条**（`*PowerUp` / `*PowerDown`）与【强壮/虚弱】同为"每层 ±1 有效骰数"，
+> 但只有**本骰对得上**才计入：物理三条看本骰分类（守备骰看反击类型，闪避/格挡没有物理
+> 类型故吃不到），罪孽七条看本骰罪孽。攻击骰与守备骰都吃，含反击与可拼点反击。
+> 与强壮/虚弱一样回合结束自动清除。
+>
 > 注册过的 BUFF 才有最大层数、回合钩子等特性；纯计数用 `custom` 即可。
 > 新的注册键以 `module/helpers/custom-buffs.mjs` 里的 `registerCustomBuff("键", ...)` 为准。
 

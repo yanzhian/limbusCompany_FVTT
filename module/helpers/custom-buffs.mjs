@@ -7,12 +7,13 @@
  *   registerCustomBuff("myBuff", {
  *     label:         "显示名称",
  *     maxStacks:     4,          // 可选：最大层数上限（超出则截断）
+ *     maxIntensity:  5,          // 可选：最大强度上限（超出则截断）
  *     maxGainPerRound: 20,       // 可选：本回合累计可获得的层数上限（与 maxStacks 无关；
  *                                //       计数记在 actor flag buffRoundGain 上，每轮结束清空）
  *     refreshOnGain: true,       // 可选：获得时刷新（不叠加层数，直接替换）
  *     keepAtZero:    true,       // 可选：层数减至 0 时不自动清除（仍以 0 层留在状态栏，
  *                                //       需手动 removeBuff 或其他效果移除）
- *     onRoundEnd(actor, buff) {},           // 回合结束时回调 → 返回 Promise
+ *     onRoundEnd(actor, buff) {},           // 回合结束时回调；返回字符串则并入「回合结束时」折叠汇总消息
  *     onRoundStart(actor, buff) {},         // 回合开始时回调（在同一轮的 onRoundEnd 之后执行，
  *                                             // 因此回合结束时被移除的 BUFF 不会再触发）；
  *                                             // 返回字符串则并入「回合开始时」折叠汇总消息
@@ -40,6 +41,25 @@
  *     modifyOutgoingDamage(actor, buff, ctx) {}, // 自己打出伤害前调用（与 modifyIncomingDamage 对称），
  *                                             // ctx = { damage, target, category, sinType, item }；
  *                                             // 返回 { damage?, note? }
+ *     onAttack(actor, buff, ctx) {},         // 自己 [攻击时] 调用（异步，与同名 Activity 同一时点）；
+ *                                             // 每回合限次用本文件的 _consumeRoundUse(actor, key, max)
+ *                                             // ctx = { item, category, counterType, sinType,
+ *                                             //          addBuff, addBuffTo, getBuff }
+ *                                             // 返回字符串则并入本次结算的活动消息
+ *     onAllyHpDamage(carrier, buff, ctx) {}, // **本队任一单位**（含自己）被攻击掉体力时调用（异步）；
+ *                                             // 与 onTakeDamage 不同，它通知的是整队，
+ *                                             // 因此"友方受到攻击时我获得…"挂在自己身上即可。
+ *                                             // 只认攻击伤害（对抗/反击/承受/容量扩散/追加伤害），
+ *                                             // 烧伤流血破裂等跳动伤害不触发。
+ *                                             // ctx = { victim, amount, attacker,
+ *                                             //          addBuff, addBuffTo, getBuff }
+ *                                             // amount = 实际掉血量（护盾/下限保护之后）
+ *     onTakeDamage(actor, buff, ctx) {},     // 自己 [受到伤害时] 调用（异步），
+ *                                             // ctx = { attacker,
+ *                                             //          addBuff(type,intensity,stacks,whenAdded),
+ *                                             //          addBuffTo(targetActor,...),
+ *                                             //          getBuff(type) }
+ *                                             // 返回字符串则并入本次结算的活动消息
  *     onHit(actor, buff, ctx) {},            // 自己任意技能/装备 [命中时] 结算后调用（异步），
  *                                             // ctx = { item, category, target,
  *                                             //          addBuff(type,intensity,stacks,whenAdded),
@@ -114,6 +134,27 @@ async function _safeUpdate(doc, data) {
   return ClashManager._safeDocUpdate(doc, data);
 }
 
+/**
+ * BUFF 钩子的「每回合 N 次」闸门。
+ *
+ * 复用 Activity 次数限制那份 flag（`turnFireCounts`）——它在每轮的回合结束处理里
+ * 会被 unset，所以不需要自己再管清空。key 统一加 `buff:` 前缀，避免和
+ * Activity 的 `物品名_效果名` 撞车。
+ *
+ * @returns {Promise<boolean>} 本次是否放行（true = 可以执行）
+ */
+async function _consumeRoundUse(actor, key, max = 1) {
+  if (!actor) return false;
+  const flagKey = `buff:${key}`;
+  const counts  = actor.getFlag?.("limbusCompany_FVTT", "turnFireCounts") ?? {};
+  const used    = counts[flagKey] ?? 0;
+  if (used >= max) return false;
+  await _safeUpdate(actor, {
+    [`flags.limbusCompany_FVTT.turnFireCounts.${flagKey}`]: used + 1,
+  });
+  return true;
+}
+
 /* ─── 震颤族（普通震颤 + 特殊震颤） ─────────────────────────────────────── */
 
 /**
@@ -126,6 +167,12 @@ async function _safeUpdate(doc, data) {
  *             getBuff(type),                                     // 读 target 身上的 BUFF
  *             addBuff(type, intensity, stacks, whenAdded),       // 给 target 加 BUFF
  *             dealDamage(targetActor, category, formula, sinType) }
+ *
+ *   ⚠ 这里的 dealDamage 走的是**跳动通道**（与烧伤/流血同级）：抗性照常结算、
+ *     照常判混乱阈值，但**不**触发【破裂】【沉沦】，也不计入"受到攻击"的统计
+ *     （如【寄宿怨恨的剑鞘】）。因为【震颤】本身就是一种 DOT，只是触发条件是
+ *     "被引爆"——DOT 不该再去触发别的 DOT。
+ *     onHit 里的 dealDamage 则相反，走攻击通道。
  */
 export const TREMOR_BASE_TYPE = "tremor";
 
@@ -187,10 +234,8 @@ registerCustomBuff("defensiveStance", {
     if (newStacks <= 0) {
       buffs.splice(idx, 1);
       await _safeUpdate(actor, { "system.buffs": buffs });
-      await ChatMessage.create({
-        speaker: ChatMessage.getSpeaker({ actor }),
-        content: `<div class="limbuscompany chat-clash"><strong>${actor.name}</strong>【防御姿态】已消散。</div>`,
-      });
+      // 返回字符串 → 并入先攻卡的「上回合结束」折叠，不再单发一条
+      return `<strong>${actor.name}</strong>【防御姿态】已消散`;
     } else {
       buffs[idx].stacks = newStacks;
       await _safeUpdate(actor, { "system.buffs": buffs });
@@ -234,60 +279,87 @@ registerCustomBuff("defensiveStance", {
 
 /**
  * 【蝶】
- * - 最大值：10 层
- * - 受到伤害时，消耗 1 层，为目标恢复 1D6 理智值，为自己添加 1 层【沉沦2】
+ * - 最大值：10 层 10 级
+ * - 受到伤害时，**随机**消耗 1 层 或 1 级：
+ *     · 消耗 1 层 → 为伤害来源恢复 1D6 理智值
+ *     · 消耗 1 级 → 为自己添加 1 层 2 级【沉沦】
+ *   两种代价只会二选一，付不起的那种（层或级已归零）不会被抽中。
  */
 registerCustomBuff("butterfly", {
-  label:       "蝶",
-  maxStacks:   10,
-  description: "- 最大值：10 层\n- 受到伤害时，消耗 1 层，为目标恢复 1D6 的理智值，为自己添加 1 层【沉沦2】",
+  label:        "蝶",
+  maxStacks:    10,
+  maxIntensity: 10,
+  description: "- 最大值：10 层 10 级\n"
+    + "- 受到伤害时，随机消耗 1 层 或 1 级：\n"
+    + "  · 消耗 1 层 → 为目标恢复 1D6 的理智值\n"
+    + "  · 消耗 1 级 → 为自己添加 1 层 2 级【沉沦】",
 
   async onTakeDamage(actor, buff, ctx) {
-    if ((buff.stacks ?? 0) <= 0) return;
+    const stacks    = buff.stacks    ?? 0;
+    const intensity = buff.intensity ?? 0;
+    if (stacks <= 0 && intensity <= 0) return;
 
-    // 在同一个 buffs 快照上完成：蝶-1层 + 沉沦+1层，合并为一次 update
+    // 抽签：只把付得起的那一侧放进候选池
+    const pool = [];
+    if (stacks    > 0) pool.push("stack");
+    if (intensity > 0) pool.push("level");
+    const pay = pool[Math.floor(Math.random() * pool.length)];
+
+    // 层与沉沦在同一份快照上改完，合并成一次 update
     const buffs = foundry.utils.deepClone(actor.system?.buffs ?? []);
     const idx   = buffs.findIndex(b => b.id === buff.id);
     if (idx < 0) return;
-    const newStacks = (buffs[idx].stacks ?? 1) - 1;
-    if (newStacks <= 0) {
-      buffs.splice(idx, 1);
+
+    let restStacks = stacks;
+    let restInt    = intensity;
+    if (pay === "stack") {
+      restStacks = stacks - 1;
+      if (restStacks <= 0) buffs.splice(idx, 1);
+      else                 buffs[idx].stacks = restStacks;
     } else {
-      buffs[idx].stacks = newStacks;
+      restInt = intensity - 1;
+      // 强度归零的蝶不再是蝶，整条移除
+      if (restInt <= 0) buffs.splice(idx, 1);
+      else              buffs[idx].intensity = restInt;
     }
 
-    // 沉沦 +1 层（强度 2）
-    const si = buffs.findIndex(b => b.type === "sinking");
-    if (si >= 0) {
-      buffs[si].stacks = (buffs[si].stacks ?? 0) + 1;
-    } else {
-      buffs.push({
-        id:        foundry.utils.randomID(),
-        type:      "sinking",
-        name:      "沉沦",
-        intensity: 2,
-        stacks:    1,
-        whenAdded: "本回合",
-      });
+    // 消耗 1 级 → 自己吃 1 层 2 级【沉沦】
+    if (pay === "level") {
+      const si = buffs.findIndex(b => b.type === "sinking");
+      if (si >= 0) {
+        buffs[si].stacks = (buffs[si].stacks ?? 0) + 1;
+      } else {
+        buffs.push({
+          id:        foundry.utils.randomID(),
+          type:      "sinking",
+          name:      "沉沦",
+          intensity: 2,
+          stacks:    1,
+          whenAdded: "本回合",
+        });
+      }
     }
     await _safeUpdate(actor, { "system.buffs": buffs });
 
-    // 为伤害来源（attacker）恢复 1D6 理智
+    // 消耗 1 层 → 为伤害来源恢复 1D6 理智
     const target = ctx?.attacker ?? null;
-    let sanHeal = 0;
-    if (target) {
+    let sanHeal  = 0;
+    if (pay === "stack" && target) {
       const healRoll = new Roll("1d6");
       await healRoll.evaluate();
       sanHeal = healRoll.total;
       const curSan = target.system?.sanity?.value ?? 50;
-      const newSan = Math.min(95, curSan + sanHeal);
-      await _safeUpdate(target, { "system.sanity.value": newSan });
+      await _safeUpdate(target, { "system.sanity.value": Math.min(95, curSan + sanHeal) });
     }
 
     // 返回消息文本，由 _applyAndSendTake 收集后并入 ⚡ 活动消息
-    return `【蝶】触发（剩余 <strong>${newStacks}</strong> 层）：`
-      + (target ? ` 为 <strong>${target.name}</strong> 恢复 <strong>${sanHeal}</strong> 点理智。` : "")
-      + ` 自身获得 1 层【沉沦】（强度 2）。`;
+    const rest = `（剩余 <strong>${restStacks}</strong> 层 / <strong>${restInt}</strong> 级）`;
+    if (pay === "stack") {
+      return `【蝶】触发，消耗 1 层${rest}：`
+        + (target ? ` 为 <strong>${target.name}</strong> 恢复 <strong>${sanHeal}</strong> 点理智。`
+                  : ` 但没有可恢复的目标。`);
+    }
+    return `【蝶】触发，消耗 1 级${rest}：自身获得 1 层【沉沦】（强度 2）。`;
   },
 });
 
@@ -324,7 +396,7 @@ registerCustomBuff("indomitable", {
 });
 
 /**
- * 【故土剑术】
+ * 【本国剑术】
  * - 最大值：2 层
  * - 获得层数时刷新（替换），不叠加
  * - 回合结束时层数减少 1，归零时移除
@@ -332,7 +404,7 @@ registerCustomBuff("indomitable", {
  *   之后每有 5 级【呼吸法】强度，对目标造成 1D4 的斩击伤害（最多 2 次）
  */
 registerCustomBuff("nativeSwordArt", {
-  label:         "故土剑术",
+  label:         "本国剑术",
   description:   "- 最大值：2 层\n- 获得层数时刷新（替换），不叠加\n- 回合结束时层数减少 1，归零时移除\n- 自己\"斩击\"类型的骰子[命中时]：为自己添加 5 级【呼吸法】，每有 5 级【呼吸法】对目标造成 1D4 的斩击伤害（最多2次）",
   maxStacks:     2,
   refreshOnGain: true,
@@ -483,6 +555,256 @@ registerCustomBuff("bloodFlame", {
   },
 });
 
+/* ─── 花札三色：【松上鹤】/【芒上月】/【青染樱】────────────────────────────
+ * 定事务所的核心资源。三张牌各对应一种颜色与罪孽，命中时打出的骰若是同色罪孽，
+ * 就给自己的【光札】+1 级。三张牌本身只是"手里握着哪张花札"，不叠层。
+ * ───────────────────────────────────────────────────────────────────────── */
+
+/** 花札通用：命中时若本骰罪孽对上颜色 → 光札 +1 级 */
+function makeFlowerCard({ label, color, sin, sinLabel }) {
+  return {
+    label,
+    description: `- 花札·${color}\n- 命中时若本骰为【${sinLabel}】，为自己的【光札】强度 +1`,
+    maxStacks: 1,
+    async onHit(actor, buff, ctx) {
+      if (ctx?.sinType !== sin) return "";
+      await ctx.addBuff("光札", 1, 0, "本回合");
+      return `【${label}】对上【${sinLabel}】——【光札】强度 +1`;
+    },
+  };
+}
+
+registerCustomBuff("craneOnPine",  makeFlowerCard({ label: "松上鹤", color: "红", sin: "gluttony", sinLabel: "暴食" }));
+registerCustomBuff("moonOnSusuki", makeFlowerCard({ label: "芒上月", color: "黄", sin: "sloth",    sinLabel: "怠惰" }));
+registerCustomBuff("indigoSakura", makeFlowerCard({ label: "青染樱", color: "蓝", sin: "gloom",    sinLabel: "忧郁" }));
+
+/**
+ * 【光札】
+ * - 纯计数资源：最大 3 层、强度最高 5 级
+ * - 用效果编辑器写成自定义 BUFF「光札」也会命中这条上限（按名称回退匹配）
+ */
+registerCustomBuff("lightCard", {
+  label:        "光札",
+  description:  "- 最大 3 层、强度上限 5 级\n- 层数为 0 时不消失",
+  maxStacks:    3,
+  maxIntensity: 5,
+  keepAtZero:   true,
+});
+
+/**
+ * 【动力：鬼怪之火】
+ * - 最大值：20 层，每回合最多获得 10 层
+ * - 回合开始时：每有 4 层 → 自己 1 层【攻击等级提升】+ 1 层【防御等级降低】
+ * - 回合结束时：每有 5 层 → 下回合自己 1 层【迅捷】（最多 3 层）
+ * 层数本身不自然衰减，靠技能自己加减。
+ */
+registerCustomBuff("driveGhostFire", {
+  label:       "动力：鬼怪之火",
+  description: "- 最大值：20 层，每回合最多获得 10 层\n"
+    + "- 回合开始时：每有 4 层为自己添加 1 层【攻击等级提升】和 1 层【防御等级降低】\n"
+    + "- 回合结束时：每有 5 层，下回合为自己添加 1 层【迅捷】（最大值 3）",
+  maxStacks:       20,
+  maxGainPerRound: 10,
+
+  /** 回合开始：每 4 层 → 攻击等级提升 / 防御等级降低 各 1 层 */
+  async onRoundStart(actor, buff) {
+    const times = Math.floor((buff.stacks ?? 0) / 4);
+    if (times <= 0) return;
+    const { ClashManager } = await import("./clash.mjs");
+    await ClashManager._addBuff(actor, "atkLevelUp",   0, times, "本回合");
+    await ClashManager._addBuff(actor, "defLevelDown", 0, times, "本回合");
+    return `获得 <strong>${times}</strong> 层【攻击等级提升】与 <strong>${times}</strong> 层【防御等级降低】。`;
+  },
+
+  /** 回合结束：每 5 层 → 下回合 1 层【迅捷】，最多 3 层 */
+  async onRoundEnd(actor, buff) {
+    const times = Math.min(Math.floor((buff.stacks ?? 0) / 5), 3);
+    if (times <= 0) return;
+    const { ClashManager } = await import("./clash.mjs");
+    await ClashManager._addBuff(actor, "swift", 0, times, "下回合");
+    return `下回合获得 <strong>${times}</strong> 层【迅捷】。`;
+  },
+});
+
+/**
+ * 【红梅】
+ * - 最大值：10 层
+ * - 受到伤害时：消耗 1 层，为自己添加「当前层数」级【流血】，为攻击者添加 1 级【呼吸法】
+ *   （层数按扣除前的读数算——只剩 1 层时仍能给出 1 级【流血】）
+ */
+registerCustomBuff("redPlum", {
+  label:       "红梅",
+  description: "- 最大值：10 层\n"
+    + "- 受到伤害时，消耗 1 层，为自己添加「本层数」级【流血】，为攻击者添加 1 级【呼吸法】",
+  maxStacks:   10,
+
+  async onTakeDamage(actor, buff, ctx) {
+    const stacks = buff.stacks ?? 0;
+    if (stacks <= 0) return;
+    const { ClashManager } = await import("./clash.mjs");
+    await ClashManager._reduceBuffStacks(actor, buff.type ?? "redPlum", 1);
+    await ctx.addBuff("bleed", stacks, 0, "本回合");
+    let note = `消耗 1 层，自身获得 <strong>${stacks}</strong> 级【流血】`;
+    if (ctx.attacker) {
+      await ctx.addBuffTo(ctx.attacker, "breathing", 1, 0, "本回合");
+      note += `，<strong>${ctx.attacker.name}</strong> 获得 1 级【呼吸法】`;
+    }
+    return note + "。";
+  },
+});
+
+/**
+ * 【追悼酒】
+ * - 最大值：4 层
+ * - 命中时：每有 1 层，为自己恢复 1D2 点生命值（层数不消耗）
+ * 由【追悼酒】那件装备在[陷入混乱时]解除混乱后累积；
+ * [反应] 里 HP 归零时会被整包消耗掉换成大量回复。
+ */
+registerCustomBuff("memorialWine", {
+  label:       "追悼酒",
+  description: "- 最大值：4 层\n- 命中时：每有 1 层，为自己恢复 1D2 点生命值",
+  maxStacks:   4,
+
+  async onHit(actor, buff, _ctx) {
+    const stacks = buff.stacks ?? 0;
+    if (stacks <= 0) return;
+    const roll = new Roll(`${stacks}d2`);
+    await roll.evaluate();
+    const heal = roll.total;
+    const cur  = actor.system?.hp?.value ?? 0;
+    const max  = actor.system?.hp?.max   ?? cur;
+    const next = Math.min(max, cur + heal);
+    if (next === cur) return;
+    await _safeUpdate(actor, { "system.hp.value": next });
+    return `每层【追悼酒】恢复 1D2 —— 共回复 <strong>${next - cur}</strong> 点生命值（${cur} → ${next}）。`;
+  },
+});
+
+/**
+ * 【本国剑-传授真意】
+ * - 最大值：1 层
+ * - 攻击时：每有 1 层，为自己添加 3 层【斩击威力提升】（每回合 1 次）
+ * - 命中时：为自己添加 3 级【呼吸法】，为目标添加 3 级【流血】（不限次）
+ * - 回合结束时：清除本 BUFF
+ */
+registerCustomBuff("nativeSwordTruth", {
+  label:       "本国剑-传授真意",
+  description: "- 最大值：1 层\n"
+    + "- 攻击时：每有 1 层为自己添加 3 层【斩击威力提升】（每回合 1 次）\n"
+    + "- 命中时：为自己添加 3 级【呼吸法】，为目标添加 3 级【流血】\n"
+    + "- 回合结束时：清除本 BUFF",
+  maxStacks:   1,
+
+  async onAttack(actor, buff, ctx) {
+    const stacks = buff.stacks ?? 0;
+    if (stacks <= 0) return;
+    if (!await _consumeRoundUse(actor, "nativeSwordTruth")) return;
+    const add = stacks * 3;
+    await ctx.addBuff("slashPowerUp", 0, add, "本回合");
+    return `转化为 <strong>${add}</strong> 层【斩击威力提升】。`;
+  },
+
+  /** 命中时不限次：每一次命中（含容量扩散的每一发）都会各触发一次 */
+  async onHit(actor, buff, ctx) {
+    if ((buff.stacks ?? 0) <= 0) return;
+    await ctx.addBuff("breathing", 3, 0, "本回合");
+    const target = ctx?.target;
+    if (target) await ctx.addBuffTo(target, "bleed", 3, 0, "本回合");
+    return `自身获得 3 级【呼吸法】`
+      + (target ? `，<strong>${target.name}</strong> 获得 3 级【流血】` : "") + "。";
+  },
+
+  async onRoundEnd(actor, buff) {
+    const { ClashManager } = await import("./clash.mjs");
+    await ClashManager._removeBuff(actor, buff.type ?? "nativeSwordTruth");
+  },
+});
+
+/**
+ * 【郁积的怨结】
+ * 纯计数资源，由【寄宿怨恨的剑鞘】按伤害量累积。上限未定，先不封顶。
+ */
+registerCustomBuff("pentUpGrudge", {
+  label:       "郁积的怨结",
+  description: "- 最大值：99 层\n"
+    + "- 攻击时：每拥有 10 层，为自己添加 1 层【斩击威力提升】（最多 3 层，每回合 1 次）",
+  maxStacks:   99,
+
+  async onAttack(actor, buff, ctx) {
+    // 每 10 层换 1 层，最多 3 层（即 30 层封顶，多出来的层数不再转化）
+    const times = Math.min(Math.floor((buff.stacks ?? 0) / 10), 3);
+    if (times <= 0) return;
+    if (!await _consumeRoundUse(actor, "pentUpGrudge")) return;
+    await ctx.addBuff("slashPowerUp", 0, times, "本回合");
+    return `每 10 层【郁积的怨结】→ 共 <strong>${times}</strong> 层【斩击威力提升】。`;
+  },
+});
+
+/**
+ * 【寄宿怨恨的剑鞘】
+ * - 包括自身在内的友方单位[受到攻击时]，使自身获得层数相当于伤害量的【郁积的怨结】
+ * - 回合开始时：为本队其他"背景带有剑契组"的友方各添加 1 层【本国剑-传授真意】
+ * 用整队广播钩子 onAllyHpDamage 实现：谁被打掉血都会通知到本队每个人身上的这条 BUFF。
+ * 只认攻击伤害，烧伤/流血这类跳动伤害不算。
+ */
+registerCustomBuff("grudgeSheath", {
+  label:       "寄宿怨恨的剑鞘",
+  description: "- 包括自身在内的友方单位[受到攻击时]，使自身获得层数相当于伤害量的【郁积的怨结】\n"
+    + "- 回合开始时：为你其他所有背景带有「剑契组」的友方添加 1 层【本国剑-传授真意】",
+
+  async onAllyHpDamage(carrier, _buff, ctx) {
+    const amount = Math.max(0, Math.round(ctx?.amount ?? 0));
+    if (amount <= 0) return;
+    await ctx.addBuff("pentUpGrudge", 0, amount, "本回合");
+  },
+
+  /** 回合开始时：给本队其他"背景带有剑契组"的友方各 1 层【本国剑-传授洗法】 */
+  async onRoundStart(actor, _buff) {
+    const { ClashManager } = await import("./clash.mjs");
+    const allies = await ClashManager._resolveTargets("allTeamOther", actor, null);
+    const names = [];
+    for (const ally of allies) {
+      // 背景名或背景标签命中都算（与 background 前置条件的判定口径一致）
+      const tags = await ClashManager._getBackgroundTags(ally);
+      const bgUuid = ally.system?.background?.uuid;
+      const bg = bgUuid ? await fromUuid(bgUuid).catch(() => null) : null;
+      if (!tags.includes("剑契组") && bg?.name !== "剑契组") continue;
+      await ClashManager._addBuff(ally, "nativeSwordTruth", 0, 1, "本回合");
+      names.push(ally.name);
+    }
+    if (!names.length) return;
+    return `为 <strong>${names.join("、")}</strong> 各添加 1 层【本国剑-传授真意】。`;
+  },
+});
+
+/**
+ * 【本国剑-传授洗法】
+ * - 最大值：3 层
+ * - 攻击时：每有 1 层，为自己添加 1 层【斩击威力提升】
+ * - 回合结束时：清除本 BUFF（不是减层，是整条移除）
+ */
+registerCustomBuff("nativeSwordTeaching", {
+  label:       "本国剑-传授洗法",
+  description: "- 最大值：3 层\n"
+    + "- 攻击时：每有 1 层为自己添加 1 层【斩击威力提升】（每回合 1 次）\n"
+    + "- 回合结束时：清除本 BUFF",
+  maxStacks:   3,
+
+  async onAttack(actor, buff, ctx) {
+    const stacks = buff.stacks ?? 0;
+    if (stacks <= 0) return;
+    // 每回合只转化一次：一回合里打两下不会给到双份
+    if (!await _consumeRoundUse(actor, "nativeSwordTeaching")) return;
+    await ctx.addBuff("slashPowerUp", 0, stacks, "本回合");
+    return `转化为 <strong>${stacks}</strong> 层【斩击威力提升】。`;
+  },
+
+  async onRoundEnd(actor, buff) {
+    const { ClashManager } = await import("./clash.mjs");
+    await ClashManager._removeBuff(actor, buff.type ?? "nativeSwordTeaching");
+  },
+});
+
 /**
  * 【怨恨纹身】
  * - 最大值：15 层
@@ -582,10 +904,8 @@ registerCustomBuff("flameButterflyCoffin", {
     }
 
     await _safeUpdate(actor, { "system.buffs": buffs });
-    await ChatMessage.create({
-      speaker: ChatMessage.getSpeaker({ actor }),
-      content: `<div class="limbuscompany chat-clash"><strong>${actor.name}</strong>【炎蝶之棺】：${note}。</div>`,
-    });
+    // 返回字符串 → 并入先攻卡的「上回合结束」折叠，不再单发一条
+    return `<strong>${actor.name}</strong>：${note}`;
   },
 });
 
@@ -931,8 +1251,10 @@ registerFieldResource("血宴", {
     const bgUuid = ctx.actor?.system?.background?.uuid ?? "";
     if (!bgUuid) return;
     const bgItem = await fromUuid(bgUuid).catch(() => null);
-    const tags = String(bgItem?.system?.tags ?? "")
-      .split("/").map(t => t.trim()).filter(Boolean);
+    // tags 可能是数组也可能是 "a/b" 字符串，两种都要认
+    const rawTags = bgItem?.system?.tags;
+    const tags = (Array.isArray(rawTags) ? rawTags : String(rawTags ?? "").split("/"))
+      .map(t => String(t).trim()).filter(Boolean);
     if (!tags.some(t => this.roundStartTags.includes(t))) return;
     await ctx.addBuff("bleed",      5, 1, "本回合");
     await ctx.addBuff("atkLevelUp", 0, 3, "本回合");

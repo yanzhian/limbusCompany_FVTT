@@ -14,6 +14,29 @@ import { ClashManager } from "../helpers/clash.mjs";
 import { SKILLBOOK_MAX_SLOTS } from "../documents/item.mjs";
 import { CustomBuffRegistry, normalizeBuffType } from "../helpers/custom-buffs.mjs";
 import { linkifyHtml } from "../helpers/linkify.mjs";
+import { GridDnD } from "../helpers/grid-dnd.mjs";
+import { canContainerAccept, wouldNest } from "../helpers/container-rules.mjs";
+import { buildPlacementGrid, canPlace, autoPlace, makeLockedSet } from "../helpers/grid-layout.mjs";
+
+/** 背景的等级物品不收这三类（背景由向导指定、恐慌卡走 panicSlots、技能走技能书） */
+const BG_ITEM_BLOCKED_TYPES = ["background", "panic", "skill"];
+
+/**
+ * 拖动 payload 里随身携带的物品"身份卡"：容器限制判定只看类型/分类/子类型，
+ * 悬停预览必须同步出结果（来不及 await fromUuid），所以起拖时就带上。
+ */
+function _itemMetaOf(itemLike) {
+  return {
+    type:   itemLike?.type ?? "",
+    system: {
+      category: itemLike?.system?.category ?? "",
+      subtype:  itemLike?.system?.subtype  ?? "",
+    },
+  };
+}
+
+/** 有没有在线 GM 可以代执行写操作（权限不足时的兜底通道） */
+const _hasActiveGM = () => game.users?.some(u => u.isGM && u.active) ?? false;
 
 /**
  * 激活效果剪贴板（本次会话内共享，跨物品卡有效，刷新页面后清空）。
@@ -35,6 +58,8 @@ export class LimbusItemSheet extends ItemSheet {
       height:   500,
       tabs:     [],
       resizable: true,
+      // 卡内任意改动都会重渲染，需保留正文滚动位置，否则会回滚置顶
+      scrollY:  [".equip-body"],
     });
   }
 
@@ -159,10 +184,13 @@ export class LimbusItemSheet extends ItemSheet {
         weight:     pick("weight"),
         sanityCost: pick("sanityCost"),
         effectDesc: corrode ? (cSrc.effectDesc ?? "") : (src.effectDesc ?? ""),
+        // 【无差别攻击】：侵蚀形态可以单独开（null = 沿用觉醒）
+        indiscriminate: !!(pick("indiscriminate") ?? false),
       };
       context.formDiceCount = pick("diceCount") ?? 1;
       context.formDiceFaces = pick("diceFaces") ?? 4;
       context.formBaseValue = pick("baseValue") ?? 0;
+      context.formNegDice   = !!(pick("negativeDice") ?? false);
 
       // 攻击/守备类别选项：使用中文直接标签，避免模板渲染 i18n key 字符串
       const _catZh = cfg.CATEGORY_LABELS_ZH ?? {};
@@ -175,10 +203,13 @@ export class LimbusItemSheet extends ItemSheet {
       // 罪孽类型：同样使用中文标签
       context.skillSinTypes = cfg.SIN_LABELS_ZH ?? {};
 
-      // 技能骰公式（格式化为大写）——按当前展示的形态生成
+      // 技能骰公式（格式化为大写）——按当前展示的形态生成。
+      // 这里是独立于 prepareDerivedData 的一份拼装（要区分觉醒/侵蚀形态），
+      // 负面骰的方向必须在这里也照顾到，否则填 20-1D8 会被显示回 1D8+20。
       const _bv = context.formBaseValue;
-      context.diceFormulaDisplay =
-        `${context.formDiceCount}D${context.formDiceFaces}${_bv > 0 ? `+${_bv}` : ""}`;
+      context.diceFormulaDisplay = context.formNegDice
+        ? `${_bv}-${context.formDiceCount}D${context.formDiceFaces}`
+        : `${context.formDiceCount}D${context.formDiceFaces}${_bv > 0 ? `+${_bv}` : ""}`;
 
       // 攻击容量小方块
       context.weightSquares = Array.from({ length: context.form.weight ?? 0 }, (_, i) => i);
@@ -198,6 +229,9 @@ export class LimbusItemSheet extends ItemSheet {
     // ── 装备专用数据 ──────────────────────────────────────────────────────
     if (item.type === "equipment") {
       context.isWeapon    = sys.subtype === "weapon";
+      // 武器的攻击方式与射程（1 格 = 5ft，沿用容量扩散那套换算口径）
+      context.rangeTypeLabel = sys.rangeType === "ranged" ? "远程" : "近战";
+      context.rangeFt        = `${((sys.range ?? 1) * 5 + 2.5).toFixed(1)}ft`;
       context.isUpper     = sys.subtype === "upper";
       context.isLower     = sys.subtype === "lower";
       context.isAccessory = sys.subtype === "accessory";
@@ -269,57 +303,53 @@ export class LimbusItemSheet extends ItemSheet {
     return context;
   }
 
+  /**
+   * 容器数据写入。
+   * 容器可能挂在**别人**的 Actor 上（最典型的是营地仓库里的箱子：物品属于营地
+   * Actor，玩家对它只有"查看"权限），直接 `item.update()` 会被权限挡下。
+   * 统一走 `_safeDocUpdate`：本人有权就直接写，没权就发 socket 请 GM 代执行。
+   */
+  async _containerUpdate(data) {
+    return ClashManager._safeDocUpdate(this.item, data);
+  }
+
+  /**
+   * 容器卡的实时刷新。
+   * 容器格里画的是**别的物品**（按 uuid 引用），那些物品被移走/删除时 Foundry
+   * 不会重渲染本卡，于是内容看着还在（其实早没了）。这里监听物品增删改，
+   * 只要牵动本容器引用的 uuid 就重画；容器自己没了就直接关卡。
+   */
+  _registerContainerWatch() {
+    if (this._containerWatchIds || this.item.type !== "container") return;
+    const refresh = (doc) => {
+      if (GridDnD.dragging) return;                 // 拖动中不打断
+      const uuids = (this.item.system?.contents ?? []).map(p => p.uuid).filter(Boolean);
+      if (!uuids.includes(doc?.uuid)) return;
+      this.render(false);
+    };
+    const selfGone = (doc) => {
+      if (doc?.id === this.item.id) this.close();
+    };
+    this._containerWatchIds = {
+      createItem: Hooks.on("createItem", refresh),
+      updateItem: Hooks.on("updateItem", refresh),
+      deleteItem: Hooks.on("deleteItem", (doc) => { selfGone(doc); refresh(doc); }),
+    };
+  }
+
   /* ─── 容器网格构建 ──────────────────────────────────────────────────────── */
 
   /**
-   * 将 contents 放置记录解析为模板所需数据。
-   * @returns {{ placedItems: Array, allCells: Array }}
+   * 将 contents 放置记录解析为模板所需数据（算法见 helpers/grid-layout.mjs）。
+   * @returns {Promise<{ placedItems: Array, allCells: Array }>}
    */
   async _buildContainerGrid(placements, cols, rows, lockedCells = []) {
-    const placedItems = [];
-    const occupied    = new Set(); // "x,y"
-    const lockedSet   = new Set(lockedCells.map(c => `${c.x},${c.y}`));
-
-    for (let idx = 0; idx < placements.length; idx++) {
-      const p = placements[idx];
-      // 世界金库物品：无 UUID，改用 itemData 显示
-      let item = null;
-      if (p?.uuid) {
-        item = await fromUuid(p.uuid).catch(() => null);
-      } else if (p?.itemData) {
-        item = { id: null, name: p.itemData.name ?? "未知物品", img: p.itemData.img ?? "icons/svg/item-bag.svg" };
-      }
-      if (!item) continue;
-
-      const w = Math.max(1, p.w ?? 1);
-      const h = Math.max(1, p.h ?? 1);
-      if (p.x + w > cols || p.y + h > rows || p.x < 0 || p.y < 0) continue;
-
-      for (let dy = 0; dy < h; dy++)
-        for (let dx = 0; dx < w; dx++)
-          occupied.add(`${p.x + dx},${p.y + dy}`);
-
-      const q = (this._containerSearch ?? "").toLowerCase();
-      const show = !q || item.name.toLowerCase().includes(q);
-
-      placedItems.push({
-        idx, uuid: p.uuid ?? "",
-        x: p.x, y: p.y, w, h,
-        col: p.x + 1, row: p.y + 1,   // CSS grid 1-indexed
-        rotated: p.rotated ?? false,
-        show,
-        item: { _id: item.id, name: item.name, img: item.img },
-      });
-    }
-
-    const allCells = [];
-    for (let r = 0; r < rows; r++) {
-      for (let c = 0; c < cols; c++) {
-        allCells.push({ x: c, y: r, col: c + 1, row: r + 1,
-          occupied: occupied.has(`${c},${r}`),
-          locked: lockedSet.has(`${c},${r}`) });
-      }
-    }
+    const { placedItems, allCells } = await buildPlacementGrid(placements, {
+      cols, rows, lockedCells,
+      search: this._containerSearch ?? "",
+      // 容器内孤儿记录直接忽略（不占格），与既有行为一致
+      keepOrphanOccupancy: false,
+    });
     return { placedItems, allCells };
   }
 
@@ -375,44 +405,89 @@ export class LimbusItemSheet extends ItemSheet {
 
   /**
    * 自动扫描容器，找到第一个可放入的位置。
-   * 按行优先顺序扫描：先以原始尺寸尝试，找不到则以旋转尺寸再次扫描。
    * @param {number} w @param {number} h @param {number} [excludeIdx=-1]
    * @returns {{ x:number, y:number, w:number, h:number, rotated:boolean }|null}
    */
   _cgAutoPlace(w, h, excludeIdx = -1) {
-    const sys  = this.item.system;
-    const cols = sys.gridSize?.width  ?? 3;
-    const rows = sys.gridSize?.height ?? 3;
-    for (let y = 0; y < rows; y++) {
-      for (let x = 0; x < cols; x++) {
-        if (this._cgCanPlace(x, y, w, h, cols, rows, excludeIdx))
-          return { x, y, w, h, rotated: false };
-        if (w !== h && this._cgCanPlace(x, y, h, w, cols, rows, excludeIdx))
-          return { x, y, w: h, h: w, rotated: true };
-      }
-    }
-    return null;
+    const sys = this.item.system;
+    return autoPlace(
+      sys.contents ?? [], w, h,
+      sys.gridSize?.width ?? 3, sys.gridSize?.height ?? 3,
+      { excludeIdx, lockedSet: makeLockedSet(sys.lockedCells ?? []) }
+    );
   }
 
   /** 同步碰撞检测（使用已持久化的 w/h，同时检查锁定格）。 */
   _cgCanPlace(x, y, w, h, cols, rows, excludeIdx = -1) {
-    if (x < 0 || y < 0 || x + w > cols || y + h > rows) return false;
-    const contents    = this.item.system.contents ?? [];
-    const lockedCells = this.item.system.lockedCells ?? [];
-    const lockedSet   = new Set(lockedCells.map(c => `${c.x},${c.y}`));
-    // 检查是否覆盖锁定格
-    for (let dy = 0; dy < h; dy++)
-      for (let dx = 0; dx < w; dx++)
-        if (lockedSet.has(`${x + dx},${y + dy}`)) return false;
-    // 检查与已有物品的碰撞
-    for (let i = 0; i < contents.length; i++) {
-      if (i === excludeIdx) continue;
-      const p = contents[i];
-      const pw = p.w ?? 1, ph = p.h ?? 1;
-      const noOverlap = x + w <= p.x || p.x + pw <= x || y + h <= p.y || p.y + ph <= y;
-      if (!noOverlap) return false;
+    const sys = this.item.system;
+    return canPlace(sys.contents ?? [], x, y, w, h, cols, rows, {
+      excludeIdx, lockedSet: makeLockedSet(sys.lockedCells ?? []),
+    });
+  }
+
+  /**
+   * 容器网格的全部交互绑定。
+   *
+   * **必须在 `if (!this.isEditable) return;` 之前调用**：容器可能挂在别人的
+   * Actor 上（营地仓库里的箱子最典型），玩家对它只有"查看"权限，isEditable
+   * 恒为 false——绑定要是排在那道闸门后面，玩家端连拖动、右键菜单都不会挂上，
+   * 表现就是"什么都点不动"。真正的权限判定不在这里，而在写入那一步：
+   * `_containerUpdate()` 会在权限不足时转交在线 GM 代执行。
+   */
+  _bindContainerGrid(html) {
+    html.find(".cg-cell").on("dragover",  this._onCgCellDragOver.bind(this));
+    html.find(".cg-cell").on("dragleave", this._onCgCellDragLeave.bind(this));
+    html.find(".cg-cell").on("drop",      this._onCgCellDrop.bind(this));
+    html.find(".cg-cell").on("click",     this._onCgCellClick.bind(this));
+    html.find(".cg-item-tile").on("dragstart",   this._onCgTileDragStart.bind(this));
+    html.find(".cg-item-tile").on("contextmenu", this._onCgTileMenu.bind(this));
+    // pointer 自绘拖放：图块的拖动交给 GridDnD（幽灵块 / 落点预览 / R 旋转），
+    // 格子上的原生 drop 监听保留不动——侧边栏、合集包拖进来仍走原生 DnD，
+    // GridDnD 松手时也是合成一个原生 drop 事件投给格子，复用同一套转移逻辑。
+    const cgRoot = html.find(".cg-wrap")[0];
+    if (cgRoot && this.item.type === "container") {
+      this._registerContainerWatch();
+      GridDnD.register(cgRoot, {
+        key:        `container:${this.item.uuid}`,
+        cols:       this.item.system.gridSize?.width  ?? 3,
+        rows:       this.item.system.gridSize?.height ?? 3,
+        // 容器可能挂在营地等"只读"Actor 上：写操作会转交 GM 代执行，
+        // 所以只要有在线 GM 就允许拖动，不能拿 isEditable 一票否决
+        editable:   () => this.isEditable || _hasActiveGM(),
+        placements: () => this.item.system.contents ?? [],
+        lockedSet:  () => makeLockedSet(this.item.system.lockedCells ?? []),
+        // 悬停在容器图块上时：这个容器收不收拖着的这件东西
+        tileAccepts: (tileEl, payload) => {
+          const uuid = tileEl.dataset.itemUuid ?? "";
+          const box  = uuid ? fromUuidSync(uuid) : null;
+          if (!box || !payload.itemMeta) return true;
+          return canContainerAccept(box, payload.itemMeta).ok;
+        },
+        payloadFor: (tile) => {
+          const idx = parseInt(tile.dataset.placementIdx ?? -1);
+          const p   = this.item.system.contents?.[idx];
+          if (!p) return null;
+          const payload = {
+            type: "Item",
+            x: p.x, y: p.y, w: p.w ?? 1, h: p.h ?? 1,
+            placementIdx: idx,
+            fromContainer: {
+              isWorldContainer: !this.item.parent,
+              actorId:          this.item.parent?.id ?? null,
+              containerId:      this.item.id,
+              placementIdx:     idx,
+              offX: 0, offY: 0,
+            },
+          };
+          if (p.uuid)     payload.uuid     = p.uuid;
+          if (p.itemData) payload.itemData = p.itemData;
+          const doc = p.uuid ? fromUuidSync(p.uuid) : null;
+          payload.itemMeta = _itemMetaOf(doc ?? p.itemData);
+          return payload;
+        },
+      });
     }
-    return true;
+
   }
 
   /* ─── 事件绑定 ──────────────────────────────────────────────────────────── */
@@ -427,6 +502,9 @@ export class LimbusItemSheet extends ItemSheet {
     html.find(".item-use-btn").on("click",    this._onUseItem.bind(this));
 
     // ── 编辑锁切换 ────────────────────────────────────────────────────────
+    // 容器网格：放在只读段里绑定——权限判定交给写入时的 GM 代执行通道
+    this._bindContainerGrid(html);
+
     html.find(".sheet-lock-icon").on("click", this._onToggleLock.bind(this));
     html.find(".ego-form-toggle").on("click", this._onEgoFormToggle.bind(this));
 
@@ -522,14 +600,6 @@ export class LimbusItemSheet extends ItemSheet {
     // ── 容器搜索 ──────────────────────────────────────────────────────────
     html.find(".container-search").on("input", this._onContainerSearch.bind(this));
 
-    // ── 容器网格（新）─────────────────────────────────────────────────────
-    html.find(".cg-cell").on("dragover",  this._onCgCellDragOver.bind(this));
-    html.find(".cg-cell").on("dragleave", this._onCgCellDragLeave.bind(this));
-    html.find(".cg-cell").on("drop",      this._onCgCellDrop.bind(this));
-    html.find(".cg-cell").on("click",     this._onCgCellClick.bind(this));
-    html.find(".cg-item-tile").on("dragstart",   this._onCgTileDragStart.bind(this));
-    html.find(".cg-item-tile").on("contextmenu", this._onCgTileMenu.bind(this));
-    html.find(".cg-rotate-btn").on("click",      this._onCgTileRotate.bind(this));
     // 解锁状态下，空格子显示 pointer 光标（提示可点击锁定）
     if (!this.isLocked && this.item.type === "container") {
       html.find(".cg-wrap").addClass("cg-edit-unlocked");
@@ -636,6 +706,30 @@ export class LimbusItemSheet extends ItemSheet {
       }
     }
 
+    // ── 标签：输入框里是 "标签1/标签2"，数组型字段要先切成数组再写库 ────────
+    // 不切的话 ArrayField 会把整串当成一个元素（["标签1/标签2"]），
+    // 卡面上就成了一个连在一起的标签。
+    {
+      const splitTags = (raw) => String(raw)
+        .split(/[\/,，;；]/).map(t => t.trim()).filter(Boolean);
+      // 该物品的 tags 是不是数组字段：优先看 schema，其次看当前存的值
+      let isArr = Array.isArray(this.item.system?.tags);
+      try {
+        const field = this.item.system?.schema?.getField?.("tags");
+        if (field) isArr = field instanceof foundry.data.fields.ArrayField;
+      } catch { /* schema 取不到就沿用上面的判断 */ }
+
+      if (isArr) {
+        // 扁平 / 嵌套两种提交形态都要处理（同一次提交里可能只出现其中一种）
+        if (typeof formData["system.tags"] === "string") {
+          formData["system.tags"] = splitTags(formData["system.tags"]);
+        }
+        if (typeof formData.system?.tags === "string") {
+          formData.system.tags = splitTags(formData.system.tags);
+        }
+      }
+    }
+
     // ── skill：将用户输入的 diceFormula 文本解析为真正的 schema 字段
     if (this.item.type === "skill") {
       // 侵蚀形态编辑时，骰数写进 system.corrode.*
@@ -648,14 +742,16 @@ export class LimbusItemSheet extends ItemSheet {
         const parsed = _parseDiceFormula(String(rawFml));
         if (parsed) {
           if (_isFlat) {
-            formData[`${pre}diceCount`] = parsed.diceCount;
-            formData[`${pre}diceFaces`] = parsed.diceFaces;
-            formData[`${pre}baseValue`] = parsed.baseValue;
+            formData[`${pre}diceCount`]    = parsed.diceCount;
+            formData[`${pre}diceFaces`]    = parsed.diceFaces;
+            formData[`${pre}baseValue`]    = parsed.baseValue;
+            formData[`${pre}negativeDice`] = parsed.negativeDice;
           } else {
             Object.assign(nested(), {
-              diceCount: parsed.diceCount,
-              diceFaces: parsed.diceFaces,
-              baseValue: parsed.baseValue,
+              diceCount:    parsed.diceCount,
+              diceFaces:    parsed.diceFaces,
+              baseValue:    parsed.baseValue,
+              negativeDice: parsed.negativeDice,
             });
           }
         }
@@ -673,6 +769,8 @@ export class LimbusItemSheet extends ItemSheet {
 
   async close(options = {}) {
     this._forceCloseAllTitleCards();
+    for (const [hook, id] of Object.entries(this._containerWatchIds ?? {})) Hooks.off(hook, id);
+    this._containerWatchIds = null;
     return super.close(options);
   }
 
@@ -705,7 +803,7 @@ export class LimbusItemSheet extends ItemSheet {
           <div class="card-title" style="background:${sinColor}">${item.name}</div>
           <div class="card-body">
             <div><img src="${_getCategoryIcon(sys.category)}" width="16" alt=""> ${(sys.diceFormula ?? "").toUpperCase()}</div>
-            <div style="color:var(--text-sub);font-size:.75rem">${sys.tags ?? ""}</div>
+            <div style="color:var(--text-sub);font-size:.75rem">${ClashManager._itemTags(item).join(" / ")}</div>
             <div style="margin-top:4px">${sys.description ?? sys.effectDesc ?? ""}</div>
           </div>
         </div>`;
@@ -1155,11 +1253,17 @@ export class LimbusItemSheet extends ItemSheet {
       const contents = foundry.utils.deepClone(sys.contents ?? []);
       const p = contents[idx];
       if (!p) return;
-      const nx = targetX - offX, ny = targetY - offY;
-      if (!this._cgCanPlace(nx, ny, p.w ?? 1, p.h ?? 1, cols, rows, idx))
+      // GridDnD：拖动中按过 R —— 按旋转后的尺寸落地，抓取偏移随之作废
+      const rot = !!raw.rotatePending;
+      const pw  = rot ? (p.h ?? 1) : (p.w ?? 1);
+      const ph  = rot ? (p.w ?? 1) : (p.h ?? 1);
+      const nx  = rot ? targetX : targetX - offX;
+      const ny  = rot ? targetY : targetY - offY;
+      if (!this._cgCanPlace(nx, ny, pw, ph, cols, rows, idx))
         return void ui.notifications.warn("此位置无法放置（超出边界或与其他物品重叠）");
       p.x = nx; p.y = ny;
-      return void await this.item.update({ "system.contents": contents });
+      if (rot) { p.w = pw; p.h = ph; p.rotated = !p.rotated; }
+      return void await this._containerUpdate({ "system.contents": contents });
     }
 
     // ── 金库物品拖入（带 itemData，无 UUID）────────────────────────────────
@@ -1167,15 +1271,19 @@ export class LimbusItemSheet extends ItemSheet {
     if (raw.type === "Item" && raw.itemData && raw.fromContainer
         && raw.fromContainer.containerId !== this.item.id) {
       const itemDataSrc = raw.itemData;
-      if (itemDataSrc.type === "container") return;           // 禁止容器嵌套
+      // 存放限制（类型 AND 分类；容器套容器由类型限制决定）
+      const vaultVerdict = canContainerAccept(this.item, itemDataSrc);
+      if (!vaultVerdict.ok) return void ui.notifications.warn(vaultVerdict.reason);
 
-      const cap = itemDataSrc.system?.capacity ?? { w: 1, h: 1 };
-      const w = Math.max(1, cap.w ?? 1), h = Math.max(1, cap.h ?? 1);
+      const cap  = itemDataSrc.system?.capacity ?? { w: 1, h: 1 };
+      const rot0 = !!raw.rotatePending;                        // GridDnD 的待定旋转
+      const w = Math.max(1, (rot0 ? cap.h : cap.w) ?? 1);
+      const h = Math.max(1, (rot0 ? cap.w : cap.h) ?? 1);
       // 目标格有效则直接用，否则自动寻找第一个可放入的位置（含旋转尝试）
       const place = this._cgCanPlace(targetX, targetY, w, h, cols, rows)
-        ? { x: targetX, y: targetY, w, h, rotated: false }
+        ? { x: targetX, y: targetY, w, h, rotated: rot0 }
         : this._cgAutoPlace(w, h);
-      if (!place) return void ui.notifications.warn("容器空间不足，无法放置该物品。");
+      if (!place) return void ui.notifications.warn("容器容量空间已满，无法放入。");
 
       // 从源容器移除占位
       const { containerId: srcId, placementIdx: srcIdx,
@@ -1210,13 +1318,19 @@ export class LimbusItemSheet extends ItemSheet {
         // 目标也是世界金库：保持 itemData 存储
         contents.push({ uuid: "", itemData: itemDataSrc, x: place.x, y: place.y, w: place.w, h: place.h, rotated: place.rotated });
       }
-      return void await this.item.update({ "system.contents": contents });
+      return void await this._containerUpdate({ "system.contents": contents });
     }
 
     // ── 从物品列表或其他容器拖入 ────────────────────────────────────────
     const dropped = await Item.fromDropData(raw).catch(() => null);
-    if (!dropped || dropped.type === "container") return;
+    if (!dropped) return;
     if (dropped.uuid === this.item.uuid) return;            // 禁止自引用
+    // 存放限制（类型 AND 分类）+ 环检测（容器不能装进自己或自己的后代）
+    const verdict = canContainerAccept(this.item, dropped);
+    if (!verdict.ok) return void ui.notifications.warn(verdict.reason);
+    if (await wouldNest(this.item, dropped)) {
+      return void ui.notifications.warn("不能把容器放进它自己或它内部的容器里。");
+    }
 
     // 玩家把营地仓库物品拖入营地自身的容器：全程需 GM 权限，走 socket
     if (raw.fromCampWarehouse && !game.user.isGM
@@ -1233,14 +1347,16 @@ export class LimbusItemSheet extends ItemSheet {
       return;
     }
 
-    const cap = dropped.system?.capacity ?? { w: 1, h: 1 };
-    const w = Math.max(1, cap.w ?? 1), h = Math.max(1, cap.h ?? 1);
+    const cap  = dropped.system?.capacity ?? { w: 1, h: 1 };
+    const rot1 = !!raw.rotatePending;                          // GridDnD 的待定旋转
+    const w = Math.max(1, (rot1 ? cap.h : cap.w) ?? 1);
+    const h = Math.max(1, (rot1 ? cap.w : cap.h) ?? 1);
 
     // 目标格有效则直接用，否则自动寻找第一个可放入的位置（含旋转尝试）
     const place = this._cgCanPlace(targetX, targetY, w, h, cols, rows)
-      ? { x: targetX, y: targetY, w, h, rotated: false }
+      ? { x: targetX, y: targetY, w, h, rotated: rot1 }
       : this._cgAutoPlace(w, h);
-    if (!place) return void ui.notifications.warn("容器空间不足，无法放置该物品。");
+    if (!place) return void ui.notifications.warn("容器容量空间已满，无法放入。");
 
     const containerActor = this.item.parent;
     const sourceActor    = dropped.parent;
@@ -1321,7 +1437,7 @@ export class LimbusItemSheet extends ItemSheet {
     const entry = { uuid: storedUuid, x: place.x, y: place.y, w: place.w, h: place.h, rotated: place.rotated };
     if (storedItemData) entry.itemData = storedItemData;
     contents.push(entry);
-    await this.item.update({ "system.contents": contents });
+    await this._containerUpdate({ "system.contents": contents });
   }
 
   /* ─── 技能书：拖入高亮 ──────────────────────────────────────────────────── */
@@ -1464,14 +1580,27 @@ export class LimbusItemSheet extends ItemSheet {
     let raw;
     try { raw = JSON.parse(event.originalEvent.dataTransfer.getData("text/plain")); }
     catch { return; }
-    if (raw.type !== "Item") return;
+    if (raw.type !== "Item") {
+      return void ui.notifications.warn(`这里只接受物品（收到的是 ${raw.type ?? "未知内容"}）。`);
+    }
 
-    const dropped = await Item.fromDropData(raw).catch(() => null);
-    if (!dropped) { ui.notifications.warn("无法解析拖入的物品。"); return; }
+    // 容器内物品等来源没有可解析的 UUID，只带 itemData 快照——这类同样收下，
+    // 只是没有 uuid 就无法跟随源物品更新，只能用快照。
+    const dropped  = await Item.fromDropData(raw).catch(() => null);
+    const itemData = dropped ? dropped.toObject() : foundry.utils.deepClone(raw.itemData ?? null);
+    if (!itemData) {
+      return void ui.notifications.warn("无法解析拖入的物品（既取不到 UUID，也没有物品数据）。");
+    }
+    // 背景的等级物品只收"实物"：背景本身、恐慌卡、技能这三类不能作为奖励物品发放
+    // （背景由创建向导指定，恐慌卡走 panicSlots 嵌入，技能靠技能书或直接授予）。
+    const droppedType = dropped?.type ?? itemData.type ?? "";
+    if (BG_ITEM_BLOCKED_TYPES.includes(droppedType)) {
+      const zh = { background: "背景", panic: "恐慌卡", skill: "技能" }[droppedType] ?? droppedType;
+      return void ui.notifications.warn(`背景的等级物品不能放入${zh}（技能请改用技能书）。`);
+    }
 
-    const itemData = dropped.toObject();
     delete itemData._id;
-    const entry = { id: foundry.utils.randomID(), uuid: dropped.uuid ?? "", itemData };
+    const entry = { id: foundry.utils.randomID(), uuid: dropped?.uuid ?? "", itemData };
 
     if (levelId) {
       const rewards = foundry.utils.deepClone(this.item.system.levelRewards ?? []);
@@ -1571,7 +1700,7 @@ export class LimbusItemSheet extends ItemSheet {
     if (!this._cgCanPlace(p.x, p.y, nw, nh, cols, rows, idx))
       return void ui.notifications.warn("旋转后无法放置（超出边界或与其他物品重叠）");
     p.w = nw; p.h = nh; p.rotated = !p.rotated;
-    await this.item.update({ "system.contents": contents });
+    await this._containerUpdate({ "system.contents": contents });
   }
 
   /* ─── 容器格：左键锁定切换 ──────────────────────────────────────────────── */
@@ -1672,10 +1801,13 @@ export class LimbusItemSheet extends ItemSheet {
             const newData = srcItem.toObject();
             delete newData._id;
             await Item.create(newData, { parent: character });
+            // 源物品属于别人（营地/世界容器）：搬走就得删掉原件，
+            // 否则会凭空多出一份。没权限时交给在线 GM 代删。
+            await ClashManager._safeDocDelete(srcItem);
           }
         }
         contents.splice(idx, 1);
-        await this.item.update({ "system.contents": contents });
+        await this._containerUpdate({ "system.contents": contents });
 
       } else if (action === "edit") {
         if (isVaultItem) {
@@ -1706,7 +1838,7 @@ export class LimbusItemSheet extends ItemSheet {
         });
         if (!confirmed) return;
         contents.splice(idx, 1);
-        await this.item.update({ "system.contents": contents });
+        await this._containerUpdate({ "system.contents": contents });
         if (!isVaultItem && uuid) {
           const itm = await fromUuid(uuid).catch(() => null);
           await itm?.delete();
@@ -1719,19 +1851,33 @@ export class LimbusItemSheet extends ItemSheet {
 /* ─── 模块级辅助函数 ─────────────────────────────────────────────────────── */
 
 /**
- * 将 "2d6+3" / "1D4" 风格的骰子公式字符串解析为 schema 实际字段值。
- * 支持格式：NdF、NdF+B（大小写均可，忽略空格）。
- * 解析失败返回 null，调用方应保留旧值。
+ * 将骰子公式字符串解析为 schema 实际字段值。**正/负面骰自动识别**，无需额外开关：
+ *   "2d6+3" / "1D4"  → 普通骰（negativeDice: false）
+ *   "20-1D8" / "30-d6" → 负面骰（negativeDice: true，基础值 20、1 个 d8 作减项）
+ * 大小写均可，忽略空格。解析失败返回 null，调用方应保留旧值。
  */
 function _parseDiceFormula(formula) {
   if (!formula) return null;
-  const m = String(formula).toLowerCase().replace(/\s+/g, "")
-    .match(/^(\d+)d(\d+)(?:\+(\d+))?$/);
+  const t = String(formula).toLowerCase().replace(/\s+/g, "");
+
+  // 负面骰：基础值在前，骰子作为减项（骰数省略时视为 1）
+  const neg = t.match(/^(\d+)-(\d*)d(\d+)$/);
+  if (neg) {
+    return {
+      diceCount:    Math.max(0, parseInt(neg[2] === "" ? "1" : neg[2]) || 0),
+      diceFaces:    Math.max(1, parseInt(neg[3]) || 4),
+      baseValue:    Math.max(0, parseInt(neg[1]) || 0),
+      negativeDice: true,
+    };
+  }
+
+  const m = t.match(/^(\d+)d(\d+)(?:\+(\d+))?$/);
   if (!m) return null;
   return {
-    diceCount: Math.max(0, parseInt(m[1]) || 0),
-    diceFaces: Math.max(1, parseInt(m[2]) || 4),
-    baseValue: Math.max(0, parseInt(m[3] ?? 0) || 0),
+    diceCount:    Math.max(0, parseInt(m[1]) || 0),
+    diceFaces:    Math.max(1, parseInt(m[2]) || 4),
+    baseValue:    Math.max(0, parseInt(m[3] ?? 0) || 0),
+    negativeDice: false,
   };
 }
 
@@ -1850,10 +1996,19 @@ const TITLE_CARD_Z = 99990;
 
 /** 定位规则：贴在触发元素左侧，不够则右侧（与既有各处 hover 定位逻辑一致） */
 function _positionTitleCard(card, anchorEl) {
-  const rect  = anchorEl.getBoundingClientRect();
+  // 网格里的物品图块：贴**整扇窗口**的外侧，而不是图块自己的左边——
+  // 否则卡片会盖在网格上，正好挡住旁边那些格子，拖放时非常碍事。
+  const gridWrap = anchorEl.closest?.(".cg-wrap");
+  const winEl    = gridWrap ? anchorEl.closest(".app, .window-app, .application") : null;
+  const rect     = (winEl ?? anchorEl).getBoundingClientRect();
+
   const cardW = 280, cardH = 500;
   let left = rect.left - cardW - 8;
   if (left < 8) left = rect.right + 8;
+  // 右侧也放不下（窗口贴着屏幕右缘）时，夹回可视区内
+  if (left + cardW > window.innerWidth - 8) {
+    left = Math.max(8, window.innerWidth - cardW - 8);
+  }
   const top = Math.max(8, Math.min(rect.top, window.innerHeight - cardH - 8));
 
   // 层级：
@@ -2214,6 +2369,7 @@ function _activityEffectLabels() {
     { value: "triggerBuff",  label: "触发BUFF" },
     { value: "useSkill",     label: "使用技能" },
     { value: "diceTypeChg",  label: "骰子类型" },
+    { value: "rangeChg",     label: "范围修改" },
     { value: "extraDamage",  label: "追加伤害" },
     { value: "relatedSkillConvert", label: "相关技能转换" },
     { value: "fieldResource", label: "公用场地" },
@@ -2318,6 +2474,7 @@ function _buildTriggerOpts(selected) {
     { label: "── 反应 ──",  values: ["反应"] },
     { label: "── 丢弃 ──",  values: ["丢弃时"] },
     { label: "── 恐慌 ──",  values: ["恐慌触发时", "坚定触发时"] },
+    { label: "── 混乱 ──",  values: ["陷入混乱时"] },
   ];
   return groups.map(g =>
     `<optgroup label="${g.label}">${g.values.map(v =>
@@ -2332,8 +2489,11 @@ function _buildCondRow(cond, idx, cfg) {
   if (cond?.type === "level") {
     cond = { ...cond, type: "useSkill", skillLevel: cond.level ?? 1, skillNameOrTag: cond.skillNameOrTag ?? "" };
   }
-  const condType   = ["perN","noBuff","baseAttr","useSkill","buffCompare","category","fieldResource","sinResource","background","equipped"].includes(cond?.type) ? cond.type : "hasBuff";
+  const condType   = ["perN","noBuff","baseAttr","useSkill","buffCompare","category","useSin","fieldResource","sinResource","background","equipped","allyTag","equipSlotCategory"].includes(cond?.type) ? cond.type : "hasBuff";
   const isBuffSec  = condType === "hasBuff" || condType === "noBuff" || condType === "perN" || condType === "buffCompare";
+  const isUseSinSec = condType === "useSin";
+  const selSins    = Array.isArray(cond?.sinTypes) ? cond.sinTypes
+                   : (cond?.sinType ? [cond.sinType] : []);
   const isAttrSec  = condType === "baseAttr";
   const isSkillSec = condType === "useSkill";
   const isCatSec   = condType === "category";
@@ -2388,8 +2548,11 @@ function _buildCondRow(cond, idx, cfg) {
           <option value="baseAttr"    ${condType === "baseAttr"    ? "selected" : ""}>基础属性</option>
           <option value="useSkill"    ${condType === "useSkill"    ? "selected" : ""}>使用技能</option>
           <option value="category"    ${condType === "category"    ? "selected" : ""}>使用分类</option>
+          <option value="useSin"      ${condType === "useSin"      ? "selected" : ""}>使用罪孽</option>
           <option value="background"  ${condType === "background"  ? "selected" : ""}>背景</option>
           <option value="equipped"    ${condType === "equipped"    ? "selected" : ""}>已装备</option>
+          <option value="allyTag"     ${condType === "allyTag"     ? "selected" : ""}>友方存在</option>
+          <option value="equipSlotCategory" ${condType === "equipSlotCategory" ? "selected" : ""}>装备分类</option>
           <option value="fieldResource" ${condType === "fieldResource" ? "selected" : ""}>公用场地</option>
           <option value="sinResource"   ${condType === "sinResource"   ? "selected" : ""}>罪孽资源</option>
         </select>
@@ -2451,6 +2614,33 @@ function _buildCondRow(cond, idx, cfg) {
           <label class="ae-cond-cat-cb"><input type="checkbox" class="cond-category-cb" value="slash"  ${selCats.includes("slash")  ? "checked" : ""}> 斩击</label>
           <label class="ae-cond-cat-cb"><input type="checkbox" class="cond-category-cb" value="blunt"  ${selCats.includes("blunt")  ? "checked" : ""}> 打击</label>
           <label class="ae-cond-cat-cb"><input type="checkbox" class="cond-category-cb" value="pierce" ${selCats.includes("pierce") ? "checked" : ""}> 突刺</label>
+        </span>
+        <!-- 使用罪孽：本次实际打出的骰的罪孽属性（任一满足） -->
+        <span class="ae-cond-usesin-sec" ${isUseSinSec ? "" : 'style="display:none"'}>
+          <label>罪孽（任一满足）</label>
+          <label class="ae-cond-cat-cb"><input type="checkbox" class="cond-usesin-cb" value="wrath" ${selSins.includes("wrath") ? "checked" : ""}> 暴怒</label>
+          <label class="ae-cond-cat-cb"><input type="checkbox" class="cond-usesin-cb" value="lust" ${selSins.includes("lust") ? "checked" : ""}> 色欲</label>
+          <label class="ae-cond-cat-cb"><input type="checkbox" class="cond-usesin-cb" value="sloth" ${selSins.includes("sloth") ? "checked" : ""}> 怠惰</label>
+          <label class="ae-cond-cat-cb"><input type="checkbox" class="cond-usesin-cb" value="gluttony" ${selSins.includes("gluttony") ? "checked" : ""}> 暴食</label>
+          <label class="ae-cond-cat-cb"><input type="checkbox" class="cond-usesin-cb" value="gloom" ${selSins.includes("gloom") ? "checked" : ""}> 忧郁</label>
+          <label class="ae-cond-cat-cb"><input type="checkbox" class="cond-usesin-cb" value="pride" ${selSins.includes("pride") ? "checked" : ""}> 傲慢</label>
+          <label class="ae-cond-cat-cb"><input type="checkbox" class="cond-usesin-cb" value="envy" ${selSins.includes("envy") ? "checked" : ""}> 嫉妒</label>
+        </span>
+        <!-- 装备分类：某个部位上装备的物品，其分类是否命中（如"武器的分类是弓刀"）。
+             部位留空 = 不限部位；分类可用 / 分隔多个，任一命中即可。 -->
+        <span class="ae-cond-slotcat-sec" ${condType === "equipSlotCategory" ? "" : 'style="display:none"'}>
+          <label>部位</label>
+          <select class="ae-sel cond-equip-slot">
+            <option value=""          ${!cond?.equipSlot ? "selected" : ""}>不限</option>
+            <option value="weapon"    ${cond?.equipSlot === "weapon"    ? "selected" : ""}>武器</option>
+            <option value="upper"     ${cond?.equipSlot === "upper"     ? "selected" : ""}>上装</option>
+            <option value="lower"     ${cond?.equipSlot === "lower"     ? "selected" : ""}>下装</option>
+            <option value="accessory" ${cond?.equipSlot === "accessory" ? "selected" : ""}>饰品</option>
+          </select>
+          <label>分类</label>
+          <input class="ae-input cond-slot-category" type="text" style="width:130px;"
+                 value="${_esc(cond?.equipCategory ?? "")}"
+                 placeholder="如：弓刀（多个用 / 分隔）">
         </span>
         <!-- 已装备：数名称/标签/分类符合的装备件数；三个筛选可任意组合、留空即不限。
              勾选"每"时，件数还会成为后续效果的倍数（每装备 1 件 → 加 3 层 …）-->
@@ -2549,6 +2739,7 @@ function _buildTargetOptions(selected) {
   return [
     ["self",          "自己"],
     ["target",        "目标"],
+    ["covered",       "被援护的队友"],
     ["allTeam",       "本队全部"],
     ["allTeamOther",  "本队其他全部"],
     ["allEnemy",      "敌对全部"],
@@ -2609,6 +2800,8 @@ function _buildCostRow(cost, idx, cfg) {
   const isDiscard  = selType === "discard";
   const isPerStack = selType === "perStack";
   const isRandom   = selType === "random";
+  // 「扣光」只对 BUFF 类的强制消耗有意义（每/随机/属性/丢弃都有各自的语义）
+  const isConsumeAllable = !isPerStack && !isRandom && !isAttr && !isDiscard;
   const costPerNDim = cost?.perNDim === "intensity" ? "intensity" : "stacks";
   const costPerNDimOpts = [
     ["stacks","层数"],["intensity","强度"],
@@ -2675,7 +2868,7 @@ function _buildCostRow(cost, idx, cfg) {
             <input class="ae-input-sm cost-sin-max-times" type="number" value="${cost?.maxTimes ?? 0}" min="0" placeholder="0=无限">
           </span>
         </span>
-        <!-- 随机消耗：从候选池中随机抽一条来扣（扣不起的候选自动排除；全都扣不起则整条消耗跳过，不阻断效果）
+        <!-- 随机消耗：从候选池中随机抽一条来扣（扣不起的候选自动排除；全都扣不起则整条 Activity 不成立，与强制消耗一致）
              每条候选可分别指定按「层数」或按「强度(级)」扣除，
              例：随机消耗 1 层 或 1 级【生蝶·亡蝶】= 两条候选，同一BUFF、维度分别为层/级 -->
         <span class="ae-cost-random-sec" ${isRandom ? "" : 'style="display:none"'}>
@@ -2690,7 +2883,14 @@ function _buildCostRow(cost, idx, cfg) {
           <input class="ae-input cost-buff" type="text" list="ae-buff-dl"
                  placeholder="输入或选择BUFF…" autocomplete="off" style="width:100px;"
                  value="${_esc(_keyToLabel(cost?.buff ?? "", cost?.buffCustom ?? ""))}">
-          <span class="ae-cost-intensity-sec" ${isPerStack ? 'style="display:none"' : ""}>
+          <!-- 扣光：「消耗所有 X」的正确写法。勾上后忽略强度/层数，有多少扣多少，
+               一层都没有也不会让整条 Activity 失败。不要再用 stacks:99 之类的大数——
+               那是强制消耗，预检查要求真有 99 层，永远付不起 -->
+          <span class="ae-cost-all-sec" ${isConsumeAllable ? "" : 'style="display:none"'}>
+            <label title="消耗所有：有多少扣多少，没有也不算失败（忽略强度/层数）">扣光</label>
+            <input class="cost-consume-all" type="checkbox" ${cost?.consumeAll ? "checked" : ""}>
+          </span>
+          <span class="ae-cost-intensity-sec" ${(isPerStack || cost?.consumeAll) ? 'style="display:none"' : ""}>
             <label>强度</label>
             <input class="ae-input-sm cost-intensity" type="number" value="${cost?.intensity ?? 0}" min="0">
           </span>
@@ -2698,8 +2898,10 @@ function _buildCostRow(cost, idx, cfg) {
             <label>维度</label>
             <select class="ae-sel cost-pern-dim">${costPerNDimOpts}</select>
           </span>
-          <label class="cost-stacks-label">${isPerStack ? (costPerNDim === "intensity" ? "每N级" : "每N层") : "层数"}</label>
-          <input class="ae-input-sm cost-stacks"    type="number" value="${cost?.stacks ?? 0}"    min="0">
+          <span class="ae-cost-stacks-sec" ${cost?.consumeAll ? 'style="display:none"' : ""}>
+            <label class="cost-stacks-label">${isPerStack ? (costPerNDim === "intensity" ? "每N级" : "每N层") : "层数"}</label>
+            <input class="ae-input-sm cost-stacks"    type="number" value="${cost?.stacks ?? 0}"    min="0">
+          </span>
           <span class="ae-cost-pern-max" ${isPerStack ? "" : 'style="display:none"'}>
             <label>最大倍数</label>
             <input class="ae-input-sm cost-max-times" type="number" value="${cost?.maxTimes ?? 0}" min="0" placeholder="0=无限">
@@ -2716,7 +2918,9 @@ function _buildCostRow(cost, idx, cfg) {
           <select class="ae-sel cost-discard-mode">${discardModeOpts}</select>
           <span class="ae-cost-discard-level-sec" ${discardModeIsLevel ? "" : 'style="display:none"'}>
             <label>Lv.</label>
-            <input class="ae-input-sm cost-discard-level" type="number" value="${cost?.discardLevel ?? 1}" min="1" max="3">
+            <!-- 多个等级用 "/" 分隔表示"或"，例：2/3 = 丢弃 Lv.2 或 Lv.3 -->
+            <input class="ae-input-sm cost-discard-level" type="text" value="${Array.isArray(cost?.discardLevel) ? cost.discardLevel.join("/") : (cost?.discardLevel ?? 1)}"
+                   placeholder="2 或 2/3" title="单个等级填数字；多个等级用 / 分隔表示「或」">
           </span>
         </span>
         </div>
@@ -2751,6 +2955,7 @@ function _buildEffectRow(eff, idx, cfg) {
   // 来源只保留 [标签+等级] 与 [技能名字]；旧数据的 uuid / equipped 一律回落为标签模式
   const useSkillRef    = eff?.skillRef === "name" ? "name" : "tag";
   const isDiceTypeChg  = type === "diceTypeChg";
+  const isRangeChg     = type === "rangeChg";
   const isExtraDamage  = type === "extraDamage";
   const isRelConvert   = type === "relatedSkillConvert";
   const isFieldEff     = type === "fieldResource";
@@ -2858,12 +3063,13 @@ function _buildEffectRow(eff, idx, cfg) {
             <input class="ae-input eff-skill-name" type="text" list="ae-owned-skill-dl"
                    value="${_esc(eff?.skillName ?? "")}" placeholder="技能名字（在背包/技能列表中检索）" style="width:130px;" autocomplete="off">
           </span>
-          <!-- [反应] 里用这个技能打谁：默认打"触发者攻击的那个目标"（补刀），
-               其余触发时机下该选项不起作用 -->
-          <label>[反应]对谁</label>
+          <!-- 用这个技能打谁：预先锁定对抗卡的目标。任何触发时机都生效——
+               [反应] 里"触发者"＝引发反应的那次对抗的攻/守方；
+               其余时机里则是本次结算的攻击方 / 防守方（如 [拼点失败] 选"攻击方"＝反打赢了自己的人） -->
+          <label title="预先锁定这次对抗打谁；选「不指定」则由玩家在对抗卡上自行响应">对谁使用</label>
           <select class="ae-sel eff-react-target">
-            <option value="defender" ${(eff?.reactTarget ?? "defender") === "defender" ? "selected" : ""}>触发者的目标</option>
-            <option value="attacker" ${eff?.reactTarget === "attacker" ? "selected" : ""}>触发者本人</option>
+            <option value="defender" ${(eff?.reactTarget ?? "defender") === "defender" ? "selected" : ""}>防守方（触发者的目标）</option>
+            <option value="attacker" ${eff?.reactTarget === "attacker" ? "selected" : ""}>攻击方（触发者本人）</option>
             <option value="none"     ${eff?.reactTarget === "none"     ? "selected" : ""}>不指定</option>
           </select>
         </span>
@@ -2873,6 +3079,16 @@ function _buildEffectRow(eff, idx, cfg) {
             <option value="normal"      ${(eff?.diceTypeVal ?? "normal") === "normal"      ? "selected" : ""}>一般骰子</option>
             <option value="unbreakable" ${(eff?.diceTypeVal ?? "normal") === "unbreakable" ? "selected" : ""}>不可摧毁</option>
           </select>
+        </span>
+        <span class="ae-eff-rangechg-sec" ${isRangeChg ? "" : 'style="display:none"'}>
+          <label>攻击方式</label>
+          <select class="ae-sel eff-range-mode">
+            <option value="melee"  ${(eff?.rangeMode ?? "melee") === "melee"  ? "selected" : ""}>近战</option>
+            <option value="ranged" ${eff?.rangeMode === "ranged" ? "selected" : ""}>远程</option>
+          </select>
+          <label>范围（格）</label>
+          <input class="ae-input-sm eff-range-value" type="number" min="0" max="99"
+                 value="${eff?.rangeValue ?? 1}" title="只作用于已装备的武器，其他部位忽略">
         </span>
         <span class="ae-eff-extradmg-sec" ${isExtraDamage ? "" : 'style="display:none"'}>
           <label>物理分类</label>
@@ -2894,7 +3110,17 @@ function _buildEffectRow(eff, idx, cfg) {
           <label>技能名字</label>
           <input class="ae-input eff-relconvert-name" type="text" list="ae-owned-skill-dl"
                  value="${_esc(eff?.relSkillName ?? "")}" placeholder="技能名字（在背包/技能列表中检索）" style="width:130px;" autocomplete="off">
-          <span class="ae-eff-relconvert-hint">永久替换本技能在角色技能槽中的位置（在背包/技能列表按名字检索目标技能）</span>
+          <label>时长</label>
+          <select class="ae-sel eff-relconvert-duration">${
+            [["permanent","永久"],["afterUse","使用一次后还原"],
+             ["afterClash","本次结算后还原"],["endOfTurn","本回合结束时还原"]]
+              .map(([v,l]) => `<option value="${v}" ${(eff?.relDuration ?? "permanent") === v ? "selected" : ""}>${l}</option>`)
+              .join("")
+          }</select>
+          <span class="ae-eff-relconvert-hint">替换本技能在角色技能槽中的位置（在背包/技能列表按名字检索目标技能）。
+          「还原」由这条转换自己负责，目标技能上<strong>不需要</strong>再写一条转回去——那样会让共用同一强化形态的其他路径也被一起还原。
+          <br>【使用一次后还原】：换上来的形态被真正投出去一次后还原；多个槽位（如基础槽＋守备槽）换成同一张时，
+          任一边用掉，另一边也一并还原——整体只算一次。</span>
         </span>
         </div>
       </div>
@@ -3066,11 +3292,13 @@ function _bindCondType(html) {
     row.find(".ae-cond-attr-sec").toggle(isAttrSec);
     row.find(".ae-cond-skill-sec").toggle(isSkillSec);
     row.find(".ae-cond-category-sec").toggle(isCatSec);
+    row.find(".ae-cond-usesin-sec").toggle(type === "useSin");
     row.find(".ae-cond-field-sec").toggle(isFieldSec);
     row.find(".ae-cond-sin-sec").toggle(isSinSec);
     row.find(".ae-cond-bg-sec").toggle(isBgSec);
     row.find(".ae-cond-equip-sec").toggle(isEquipSec);
-    row.find(".ae-cond-target-sec").toggle(!isCatSec && !isFieldSec && !isSinSec);
+    row.find(".ae-cond-slotcat-sec").toggle(type === "equipSlotCategory");
+    row.find(".ae-cond-target-sec").toggle(!isCatSec && !isFieldSec && !isSinSec && type !== "useSin");
     row.find(".ae-cond-pern-max").toggle(isPerN);
     row.find(".ae-cond-pern-dim-sec").toggle(isPerN);
     row.find(".ae-cond-intensity-sec").toggle(!isCompare && !isPerN);
@@ -3111,7 +3339,12 @@ function _bindCostType(html) {
     row.find(".cost-stacks-label").text(isPerStack ? (perNDim === "intensity" ? "每N级" : "每N层") : "层数");
     row.find(".ae-cost-pern-max").toggle(isPerStack);
     row.find(".ae-cost-pern-dim-sec").toggle(isPerStack);
-    row.find(".ae-cost-intensity-sec").toggle(!isPerStack);
+    // 扣光：只对 BUFF 强制消耗开放；勾上后强度/层数没有意义，一并隐藏
+    const canAll = !isPerStack && !isRandom && !isAttr && !isDiscard && !isField && !isSin;
+    const isAll  = canAll && row.find(".cost-consume-all").prop("checked");
+    row.find(".ae-cost-all-sec").toggle(canAll);
+    row.find(".ae-cost-intensity-sec").toggle(!isPerStack && !isAll);
+    row.find(".ae-cost-stacks-sec").toggle(!isAll);
   };
   html.find(".cost-type").off("change").on("change", function () {
     refreshRow($(this).closest(".ae-cost-row"));
@@ -3124,6 +3357,9 @@ function _bindCostType(html) {
     if (row.find(".cost-type").val() !== "perStack") return;
     const dim = $(this).val() === "intensity" ? "intensity" : "stacks";
     row.find(".cost-stacks-label").text(dim === "intensity" ? "每N级" : "每N层");
+  });
+  html.find(".cost-consume-all").off("change").on("change", function () {
+    refreshRow($(this).closest(".ae-cost-row"));
   });
   html.find(".cost-discard-mode").off("change").on("change", function () {
     const row     = $(this).closest(".ae-cost-row");
@@ -3189,6 +3425,7 @@ function _bindEffType(html) {
     row.find(".ae-eff-random-sec").toggle(isRandomBuff);
     row.find(".ae-eff-useskill-sec").toggle(isUseSkill);
     row.find(".ae-eff-dicetypechg-sec").toggle(isDiceTypeChg);
+    row.find(".ae-eff-rangechg-sec").toggle(type === "rangeChg");
     row.find(".ae-eff-extradmg-sec").toggle(isExtraDamage);
     row.find(".ae-eff-relconvert-sec").toggle(isRelConvert);
   });
@@ -3229,6 +3466,9 @@ function _readActivityForm(html, original) {
     } else if (condType === "category") {
       const cats = $r.find(".cond-category-cb:checked").map((_, el) => el.value).get();
       preconditions.push({ type: "category", categories: cats });
+    } else if (condType === "useSin") {
+      const sins = $r.find(".cond-usesin-cb:checked").map((_, el) => el.value).get();
+      preconditions.push({ type: "useSin", sinTypes: sins });
     } else if (condType === "equipped") {
       preconditions.push({
         type:          "equipped",
@@ -3239,6 +3479,21 @@ function _readActivityForm(html, original) {
         count:         Math.max(1, parseInt($r.find(".cond-equip-count").val()) || 1),
         perEach:       $r.find(".cond-equip-pereach").is(":checked"),
         maxTimes:      parseInt($r.find(".cond-equip-max").val()) || 0,
+      });
+    } else if (condType === "allyTag") {
+      // 友方存在：目标选 bgTag / bgTagOther 等群体目标，人数门槛用「至少人数」
+      preconditions.push({
+        type:   "allyTag",
+        target: $r.find(".cond-target").val() || "bgTagOther",
+        ..._readBgTagMeta($r, "cond"),
+      });
+    } else if (condType === "equipSlotCategory") {
+      // 【装备分类】：某个部位上装备的物品，其分类是否命中
+      preconditions.push({
+        type:          "equipSlotCategory",
+        target:        $r.find(".cond-target").val() || "self",
+        equipSlot:     $r.find(".cond-equip-slot").val() || "",
+        equipCategory: $r.find(".cond-slot-category").val()?.trim() || "",
       });
     } else if (condType === "background") {
       preconditions.push({
@@ -3326,7 +3581,10 @@ function _readActivityForm(html, original) {
       costs.push({
         type,
         discardMode,
-        ...(discardMode === "level" ? { discardLevel: parseInt($r.find(".cost-discard-level").val()) || 1 } : {}),
+        // 等级可以是 "2" 或 "2/3"（或），统一存成数组
+        ...(discardMode === "level"
+          ? { discardLevel: ClashManager._parseDiscardLevels($r.find(".cost-discard-level").val()) }
+          : {}),
       });
     } else if (target === "field") {
       costs.push({
@@ -3350,6 +3608,8 @@ function _readActivityForm(html, original) {
         target,
         buff:       resolveKey($r.find(".cost-buff").val()),
         buffCustom: "",
+        // 扣光：忽略强度/层数，执行时整条 BUFF 移除
+        consumeAll: type !== "perStack" && $r.find(".cost-consume-all").prop("checked") === true,
         intensity:  type === "perStack" ? 0 : (parseInt($r.find(".cost-intensity").val()) || 0),
         stacks:     parseInt($r.find(".cost-stacks").val())    || 0,
         ..._readBgTagMeta($r, "cost"),
@@ -3415,6 +3675,14 @@ function _readActivityForm(html, original) {
       });
       return;
     }
+    if (type === "rangeChg") {
+      effects.push({
+        type,
+        rangeMode:  $r.find(".eff-range-mode").val() || "melee",
+        rangeValue: Math.max(0, parseInt($r.find(".eff-range-value").val()) || 0),
+      });
+      return;
+    }
     if (type === "fieldResource") {
       effects.push({
         type,
@@ -3428,6 +3696,7 @@ function _readActivityForm(html, original) {
         type,
         relMode:      "byName",
         relSkillName: $r.find(".eff-relconvert-name").val()?.trim() || "",
+        relDuration:  $r.find(".eff-relconvert-duration").val() || "permanent",
       });
       return;
     }

@@ -7,7 +7,13 @@
  *   · 败方背后是墙就推不动 → 撞墙，触发【震颤引爆】
  *   · 随后胜方瞬移追上去，重新贴身（【伤害计算】那一下不追击）
  *
- * 只有"面对面"（正交相邻一格）才会触发；隔着距离的攻击视为远程，不产生斥力。
+ * 只有"面对面"（正交相邻一格）才会触发；隔着距离的近战攻击不产生斥力。
+ *
+ * ── 远程武器（system.rangeType = "ranged"）另有一套 ─────────────────────
+ *   · 远程方**不会被击退**——人在老远，推不动
+ *   · 远程方获胜时**照样能把目标击退**，哪怕不贴身（沿连线方向推）
+ *   · 远程方落败、而胜方是近战时，近战方会**瞬移到它面前**再结算
+ * 这些判定全部在 repel() 内部按双方武器自动完成，调用方不必传参。
  * 移动一律是瞬移——不做补间，避免和拼点演出的节奏打架。
  *
  * 墙体判定走 Foundry 的移动多边形后端（只看 wall.move，因此窗户之类"能看不能
@@ -139,6 +145,26 @@ export class ClashKnockback {
   }
 
   /**
+   * 读一个角色当前装备武器的攻击方式。
+   * 多把武器时优先取已激活（isActive）的那把，与 ClashManager._activeWeaponOf 同口径。
+   * @returns {{ranged: boolean, range: number}}
+   */
+  static weaponRangeOf(actor) {
+    const eq = actor?.system?.equipment ?? {};
+    const weapons = [];
+    for (let i = 0; i < 9; i++) {
+      const id = eq[`slot${i}`];
+      const it = id ? actor.items.get(id) : null;
+      if (it && it.type === "equipment" && it.system?.subtype === "weapon") weapons.push(it);
+    }
+    const w = weapons.find(x => x.system?.isActive) ?? weapons[0];
+    return {
+      ranged: w?.system?.rangeType === "ranged",
+      range:  Math.max(0, w?.system?.range ?? 1),
+    };
+  }
+
+  /**
    * 让 token 瞬移到 target 的旁边（贴身），带风线。
    * @returns {boolean} 是否成功贴上
    */
@@ -201,10 +227,15 @@ export class ClashKnockback {
     const loseTok = this._tokenOf(loser);
     if (!winTok || !loseTok) return;
 
-    // 面对面才有斥力，隔空对拼视为远程
+    const winRanged  = this.weaponRangeOf(winner).ranged;
+    const loseRanged = this.weaponRangeOf(loser).ranged;
+
+    // 面对面才有斥力
     let facing = this._facing(winTok, loseTok);
-    if (!facing && approachFirst) {
-      // 反击：被打退开了就反手扑回去——这一步与点数无关，够不够击退都要贴上去
+
+    // 近战胜方 vs 远程败方：不贴身就先瞬移到它面前，再做最后结算
+    // （反击的 approachFirst 也走这条路）
+    if (!facing && (approachFirst || (!winRanged && loseRanged))) {
       await this._wait(this.DELAY_CHASE);
       if (await this.approach(winTok, loseTok)) facing = this._facing(winTok, loseTok);
     }
@@ -212,6 +243,18 @@ export class ClashKnockback {
     // 点数不够就只是贴身，不产生击退
     const cells = this.cellsFor(winScore);
     if (cells <= 0) return;
+
+    // 远程方落败：人在老远，推不动
+    if (loseRanged && !facing) { this._log("败方是远程且未贴身，不受击退"); return; }
+    if (loseRanged) { this._log("败方持远程武器，不受击退"); return; }
+
+    // 远程方获胜：哪怕隔着距离也能把目标推开，沿"胜方 → 败方"的连线方向
+    if (!facing && winRanged) {
+      const dir = this._dirTo(winTok.center, loseTok.center);
+      facing = { dx: dir.dx, dy: dir.dy };
+      this._log("远程胜方：隔空击退");
+    }
+
     if (!facing) { this._log("双方并非贴身，跳过斥力"); return; }
 
     this._log(`斥力：点数 ${winScore} → 击退 ${cells} 格`);
@@ -230,7 +273,8 @@ export class ClashKnockback {
     }
 
     // ③ 胜方瞬移追上去，重新贴身（【伤害计算】那一下不追）
-    if (!chase) return;
+    // 远程胜方不追——把人推远正是它想要的
+    if (!chase || winRanged) return;
     await this._wait(this.DELAY_CHASE);
     const gs = canvas.grid.size;
     // 用推算出来的坐标，而不是 token.center——委托 GM 移动时本地未必已经刷新
