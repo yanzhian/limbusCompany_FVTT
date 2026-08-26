@@ -8,9 +8,9 @@
  *   · 混乱阈值刻度：越过的变灰（对应 chaosThresholds[i].triggered）
  *   · 生命值数字 / 理智圆形徽章 / BUFF 图标行（每行 6 个，不足一行居中）
  *
- * 「躺在地面上」是靠把 y 坐标乘 flatten 压扁模拟的——Foundry 的画布是
- * 正俯视 2D，没有真正的 3D，压扁就是这个视角下的等效结果。
- * flatten = 100 就是不压扁的正多边形。
+ * 「躺在地面上」是靠纵向半径小于横向半径做出来的——Foundry 的画布是
+ * 正俯视 2D，没有真正的 3D，扁环就是这个视角下的等效结果。
+ * 两个半径相等就是不压扁的正多边形。
  *
  * 所有尺寸以 100px 网格为基准（原型里 token 边长＝一格＝100px），
  * 实际按 canvas.grid.size / 100 缩放，换网格大小不用重调。
@@ -37,10 +37,10 @@ export class TokenRingHUD {
   /* ─── 配置（原型面板导出的那份） ──────────────────────────────────────── */
 
   static CFG = {
-    // 长度单位＝「一格 100px 时的像素」，实际按 grid.size/100 缩放
-    sides: 7, radius: 83, thickness: 22,
-    // 纵向压扁百分比：100 = 正多边形，越小越扁（模拟贴地的透视）
-    flatten: 37,
+    // 长度单位＝「一格 100px 时的像素」，实际按 grid.size/100 缩放。
+    // 环是个椭圆多边形：横向、纵向半径分开给，两个相等即正多边形，
+    // 纵向小于横向就是"贴地"的扁环——比给一个抽象的压扁百分比好调。
+    sides: 7, radiusX: 83, radiusY: 31, thickness: 22,
     startDeg: 193, ccw: true,
     arcStart: 0, arcEnd: 50,
     showThres: true,
@@ -94,20 +94,19 @@ export class TokenRingHUD {
   /* ─── 几何 ────────────────────────────────────────────────────────────── */
 
   /**
-   * 多边形顶点（已按 flatten 压扁）。
+   * 椭圆多边形的顶点。
    * 与原型同一套：起点角 startDeg，ccw 决定步进方向；y 轴向下，
    * 所以角度递减看起来才是逆时针。
    */
   static _polygon(scale) {
     const c = TokenRingHUD.CFG;
-    const r = c.radius * scale;
-    const flat = c.flatten / 100;
+    const rx = c.radiusX * scale, ry = c.radiusY * scale;
     const a0 = c.startDeg * Math.PI / 180;
     const step = (2 * Math.PI / c.sides) * (c.ccw ? -1 : 1);
     const pts = [];
     for (let i = 0; i < c.sides; i++) {
       const a = a0 + i * step;
-      pts.push({ x: r * Math.cos(a), y: r * Math.sin(a) * flat });
+      pts.push({ x: rx * Math.cos(a), y: ry * Math.sin(a) });
     }
     pts.push({ ...pts[0] });      // 闭合
     return pts;

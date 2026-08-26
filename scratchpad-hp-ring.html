@@ -96,15 +96,18 @@
 
   <h2>环形</h2>
   <div class="row"><label>边数</label><input type="range" id="sides" min="3" max="16" value="7"><span class="num" id="sidesN">7</span></div>
-  <div class="row"><label>半径(px)</label><input type="range" id="radius" min="30" max="200" value="83"><span class="num" id="radiusN">83</span></div>
+  <div class="row"><label>横向半径</label><input type="range" id="radiusX" min="20" max="220" value="83"><span class="num" id="radiusXN">83</span></div>
+  <div class="row"><label>纵向半径</label><input type="range" id="radiusY" min="6"  max="220" value="31"><span class="num" id="radiusYN">31</span></div>
   <div class="row"><label>线粗(px)</label><input type="range" id="thick" min="2" max="40" value="22"><span class="num" id="thickN">22</span></div>
-  <div class="row"><label>压扁(%)</label><input type="range" id="flat" min="10" max="100" value="37"><span class="num" id="flatN">37</span></div>
+  <div class="btns">
+    <button id="linkBtn">↔ 拉成正多边形</button>
+    <span class="hint" style="align-self:center">两个半径相等 ＝ 不压扁</span>
+  </div>
   <div class="row"><label>起点角</label><input type="range" id="start" min="0" max="359" value="193"><span class="num" id="startN">193</span></div>
   <div class="row"><label>血条起点</label><input type="range" id="arcStart" min="0" max="100" value="0"><span class="num" id="arcStartN">0</span></div>
   <div class="row"><label>血条终点</label><input type="range" id="arcEnd" min="0" max="100" value="50"><span class="num" id="arcEndN">50</span></div>
   <div class="btns">
     <button id="dirBtn" class="on">逆时针 ↺</button>
-    <span class="hint" style="align-self:center">压扁 100% ＝ 正多边形</span>
   </div>
   <p class="hint" id="scaleHint">—</p>
 
@@ -147,8 +150,9 @@ const SW = 520, CX = SW / 2, CY = SW / 2;
 
 const cfg = {
   cell: 100,
-  sides: 7, radius: 83, thickness: 22,
-  flatten: 37,            // 纵向压扁百分比：100 = 正多边形
+  // 环是个椭圆多边形：横向、纵向半径分开给（都是 px）。
+  // 两个相等就是正多边形；纵向小于横向就是"贴地"的那种扁环。
+  sides: 7, radiusX: 83, radiusY: 31, thickness: 22,
   startDeg: 193, ccw: true,
   arcStart: 0, arcEnd: 50,
   thresholds: [60, 30], showThres: true,
@@ -165,14 +169,13 @@ const fillEl = $("fill"), trackEl = $("track"), thresG = $("thresGroup");
 
 /* ── 几何：多边形顶点（已压扁），单位就是屏幕 px ── */
 function polygonPts(){
-  const r = cfg.radius, flat = cfg.flatten / 100;
   const a0 = cfg.startDeg * Math.PI / 180;
   const step = (2*Math.PI/cfg.sides) * (cfg.ccw ? -1 : 1);
   const ox = CX + cfg.pos.ring.x, oy = CY + cfg.pos.ring.y;   // 环自己的偏移
   const pts = [];
   for (let i = 0; i < cfg.sides; i++){
     const a = a0 + i*step;
-    pts.push({ x: ox + r*Math.cos(a), y: oy + r*Math.sin(a)*flat });
+    pts.push({ x: ox + cfg.radiusX*Math.cos(a), y: oy + cfg.radiusY*Math.sin(a) });
   }
   pts.push({ ...pts[0] });
   return pts;
@@ -272,10 +275,9 @@ function render(){
     el.style.top  = (CY + p.y) + "px";
   });
 
-  const d = cfg.radius * 2;
+  const w = cfg.radiusX * 2, h = cfg.radiusY * 2;
   $("scaleHint").textContent =
-    `环宽 ${d}px ＝ ${(d/cfg.cell).toFixed(2)} 格；`
-  + `压扁后高 ${(d*cfg.flatten/100).toFixed(0)}px ＝ ${(d*cfg.flatten/100/cfg.cell).toFixed(2)} 格`;
+    `环宽 ${w}px ＝ ${(w/cfg.cell).toFixed(2)} 格　·　环高 ${h}px ＝ ${(h/cfg.cell).toFixed(2)} 格`;
 }
 
 /* ── 控件 ── */
@@ -285,9 +287,9 @@ function slider(id, key, after){
 }
 slider("cell",       v => cfg.cell = v,       () => { drawGrid(); render(); });
 slider("sides",      v => cfg.sides = v);
-slider("radius",     v => cfg.radius = v);
+slider("radiusX",    v => cfg.radiusX = v);
+slider("radiusY",    v => cfg.radiusY = v);
 slider("thick",      v => cfg.thickness = v);
-slider("flat",       v => cfg.flatten = v);
 slider("start",      v => cfg.startDeg = v);
 slider("arcStart",   v => cfg.arcStart = v);
 slider("arcEnd",     v => cfg.arcEnd = v);
@@ -300,6 +302,11 @@ slider("buffPerRow", v => cfg.buffPerRow = v);
 slider("posX",       v => cfg.pos[posKey].x = v);
 slider("posY",       v => cfg.pos[posKey].y = v);
 
+$("linkBtn").onclick = () => {
+  cfg.radiusY = cfg.radiusX;
+  $("radiusY").value = cfg.radiusY; $("radiusYN").textContent = cfg.radiusY;
+  render();
+};
 $("dirBtn").onclick = e => {
   cfg.ccw = !cfg.ccw;
   e.target.textContent = cfg.ccw ? "逆时针 ↺" : "顺时针 ↻";
@@ -350,10 +357,10 @@ addEventListener("pointermove", ev => {
 addEventListener("pointerup", () => { if (drag) drag.el.classList.remove("dragging"); drag = null; });
 
 $("dump").onclick = () => {
-  const { sides, radius, thickness, flatten, startDeg, ccw, arcStart, arcEnd,
+  const { sides, radiusX, radiusY, thickness, startDeg, ccw, arcStart, arcEnd,
           thresholds, showThres, buffIcon, buffGap, buffPerRow, pos } = cfg;
   $("out").textContent = JSON.stringify(
-    { sides, radius, thickness, flatten, startDeg, ccw, arcStart, arcEnd,
+    { sides, radiusX, radiusY, thickness, startDeg, ccw, arcStart, arcEnd,
       thresholds, showThres, buffIcon, buffGap, buffPerRow, pos }, null, 2);
 };
 
