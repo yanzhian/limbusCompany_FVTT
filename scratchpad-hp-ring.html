@@ -121,13 +121,13 @@
   <h1>七边形生命环 · 原型</h1>
 
   <h2>环形</h2>
-  <div class="row"><label>线粗细</label><input type="range" id="thick" min="2" max="30" step="1" value="13"><span class="num" id="thickN">13</span></div>
+  <div class="row"><label>线粗细</label><input type="range" id="thick" min="2" max="30" step="1" value="18"><span class="num" id="thickN">18</span></div>
   <div class="row"><label>边数</label><input type="range" id="sides" min="3" max="12" value="7"><span class="num" id="sidesN">7</span></div>
-  <div class="row"><label>半径</label><input type="range" id="radius" min="50" max="95" value="88"><span class="num" id="radiusN">88</span></div>
-  <div class="row"><label>倾斜角</label><input type="range" id="tilt" min="0" max="75" value="58"><span class="num" id="tiltN">58</span></div>
-  <div class="row"><label>起点角</label><input type="range" id="start" min="0" max="359" value="180"><span class="num" id="startN">180</span></div>
+  <div class="row"><label>半径</label><input type="range" id="radius" min="50" max="95" value="69"><span class="num" id="radiusN">69</span></div>
+  <div class="row"><label>倾斜角</label><input type="range" id="tilt" min="0" max="75" value="68"><span class="num" id="tiltN">68</span></div>
+  <div class="row"><label>起点角</label><input type="range" id="start" min="0" max="359" value="193"><span class="num" id="startN">193</span></div>
   <div class="row"><label>血条起点</label><input type="range" id="arcStart" min="0" max="100" value="0"><span class="num" id="arcStartN">0</span></div>
-  <div class="row"><label>血条终点</label><input type="range" id="arcEnd" min="0" max="100" value="100"><span class="num" id="arcEndN">100</span></div>
+  <div class="row"><label>血条终点</label><input type="range" id="arcEnd" min="0" max="100" value="50"><span class="num" id="arcEndN">50</span></div>
   <div class="btns">
     <button id="dirBtn" class="on">逆时针 ↺</button>
     <span class="hint" style="align-self:center">起点角 180° = 9 点方向；血条起点/终点是沿环走过的百分比</span>
@@ -156,8 +156,8 @@
     <button data-key="san">理智值</button>
     <button data-key="buff">BUFF</button>
   </div>
-  <div class="row"><label>X 偏移</label><input type="range" id="posX" min="-170" max="170" value="-105"><span class="num" id="posXN">-105</span></div>
-  <div class="row"><label>Y 偏移</label><input type="range" id="posY" min="-170" max="170" value="18"><span class="num" id="posYN">18</span></div>
+  <div class="row"><label>X 偏移</label><input type="range" id="posX" min="-170" max="170" value="-81"><span class="num" id="posXN">-81</span></div>
+  <div class="row"><label>Y 偏移</label><input type="range" id="posY" min="-170" max="170" value="-13"><span class="num" id="posYN">-13</span></div>
 
   <h2>导出配置</h2>
   <div class="btns"><button id="dump">生成 JSON</button></div>
@@ -167,13 +167,14 @@
 <script>
 const CX = 100, CY = 100;
 const cfg = {
-  sides: 7, radius: 88, thickness: 13, tilt: 58,
-  startDeg: 180,          // 180° = 9 点方向
+  sides: 7, radius: 69, thickness: 18, tilt: 68,
+  startDeg: 193,          // 9 点略偏下
   ccw: true,              // 逆时针
-  // 血条占环的哪一段（沿 ccw 方向走过的百分比）。0→100 就是整圈。
-  arcStart: 0, arcEnd: 100,
+  // 血条占环的哪一段（沿 ccw 方向走过的百分比）。0→100 就是整圈；
+  // 现在只用前半圈，后半圈留白给 BUFF 那一行。
+  arcStart: 0, arcEnd: 50,
   thresholds: [60, 30], showThres: true,
-  pos: { hp:{x:-105,y:18}, san:{x:0,y:96}, buff:{x:0,y:-118} },
+  pos: { hp:{x:-81,y:-13}, san:{x:75,y:-8}, buff:{x:2,y:68} },
   hp: 278, hpMax: 278,
   san: 50, sanMin: 5, sanMax: 95
 };
