@@ -494,7 +494,15 @@ export class PanicData extends foundry.abstract.TypeDataModel {
       // 描述（显示在恐慌卡上）
       description: new fields.HTMLField({ required: false, initial: "" }),
       tags:        new fields.StringField({ required: false, initial: "" }),
-      // 效果触发器（使用触发时机「恐慌触发时」，槽位决定何时触发）
+      // 恐慌类型：这张卡是给哪个槽位用的。
+      //   lowMorale 士气低落 —— 理智首次跌破 30 时触发，一场遭遇战只触发一次
+      //   panic     陷入恐慌 —— 走坚定/恐慌鉴定那一套，规则另计
+      // 空字符串＝未指定（老数据）：两个槽位都能选，避免历史恐慌卡凭空消失
+      panicType:   new fields.StringField({
+        required: false, initial: "",
+        choices: { "": "未指定", lowMorale: "士气低落", panic: "陷入恐慌" },
+      }),
+      // 效果触发器（使用触发时机「恐慌触发时」/「坚定触发时」，槽位决定何时触发）
       activities:  new fields.ArrayField(makeActivitySchema(), { required: true, initial: [] }),
     };
   }

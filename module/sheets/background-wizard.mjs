@@ -78,26 +78,29 @@ export class BackgroundWizard extends Application {
     const out  = [];
     const seen = new Set();
 
-    const pushItem = (uuid, name, img, category, subtitle) => {
+    const pushItem = (uuid, name, img, category, subtitle, panicType = "") => {
       if (seen.has(uuid)) return;
       seen.add(uuid);
-      out.push({ uuid, name, img, category: category || "未分类", subtitle: subtitle || "" });
+      out.push({ uuid, name, img, category: category || "未分类", subtitle: subtitle || "", panicType });
     };
 
     for (const item of game.items) {
       if (item.type !== type) continue;
       const category = item.folder?.name || item.system?.category || "";
-      pushItem(item.uuid, item.name, item.img, category, item.system?.subtitle ?? "");
+      pushItem(item.uuid, item.name, item.img, category, item.system?.subtitle ?? "",
+               item.system?.panicType ?? "");
     }
 
     for (const pack of game.packs) {
       if (pack.documentName !== "Item") continue;
-      const index = await pack.getIndex({ fields: ["type", "system.category", "system.subtitle", "img", "folder"] });
+      const index = await pack.getIndex({
+        fields: ["type", "system.category", "system.subtitle", "system.panicType", "img", "folder"] });
       for (const entry of index) {
         if (entry.type !== type) continue;
         const folder = entry.folder ? pack.folders.get(entry.folder) : null;
         const category = folder?.name || entry.system?.category || "";
-        pushItem(entry.uuid, entry.name, entry.img, category, entry.system?.subtitle ?? "");
+        pushItem(entry.uuid, entry.name, entry.img, category, entry.system?.subtitle ?? "",
+                 entry.system?.panicType ?? "");
       }
     }
 
@@ -111,10 +114,18 @@ export class BackgroundWizard extends Application {
    * @param {string} search
    * @param {Set<string>} [categoryFilter]  为空表示不筛选（显示全部合集）
    */
-  async _gatherItems(type, search = "", categoryFilter = null) {
+  /**
+   * @param {string}      type            物品类型
+   * @param {string}      search          搜索词
+   * @param {Set|null}    categoryFilter  分类白名单
+   * @param {string}      panicType       只保留该恐慌类型的卡；未指定类型（"")的
+   *                                      老数据两个槽位都保留，免得历史卡凭空消失
+   */
+  async _gatherItems(type, search = "", categoryFilter = null, panicType = "") {
     const all  = await this._gatherAll(type);
     const term = search.trim().toLowerCase();
     return all.filter((it) => {
+      if (panicType && it.panicType && it.panicType !== panicType) return false;
       if (categoryFilter && categoryFilter.size && !categoryFilter.has(it.category)) return false;
       if (term && !it.name.toLowerCase().includes(term) && !it.category.toLowerCase().includes(term)) return false;
       return true;
@@ -151,8 +162,9 @@ export class BackgroundWizard extends Application {
 
     if (this.step === 3) {
       ctx.panicSearch = this.panicSearch;
-      ctx.lowMoraleList = await this._gatherItems("panic", this.panicSearch.lowMorale);
-      ctx.panicList     = await this._gatherItems("panic", this.panicSearch.panic);
+      // 两个槽位各按恐慌类型过滤，不再混在一起选
+      ctx.lowMoraleList = await this._gatherItems("panic", this.panicSearch.lowMorale, null, "lowMorale");
+      ctx.panicList     = await this._gatherItems("panic", this.panicSearch.panic,     null, "panic");
       ctx.panicSelected = this.panicSelected;
       ctx.canNext = !!this.panicSelected.lowMorale && !!this.panicSelected.panic;
     }

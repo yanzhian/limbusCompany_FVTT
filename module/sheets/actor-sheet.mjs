@@ -2262,6 +2262,14 @@ export class LimbusActorSheet extends ActorSheet {
       ui.notifications.warn("只能放入「恐慌」类型的物品。");
       return;
     }
+    // 恐慌卡分【士气低落】【陷入恐慌】两种，槽位对应类型。
+    // 未指定类型的老数据放行，只有明确标了另一种类型才拦。
+    const dropType = dropped.system?.panicType ?? "";
+    if (dropType && dropType !== slot) {
+      const L = CONFIG.LIMBUSCOMPANY?.PANIC_TYPES ?? {};
+      ui.notifications.warn(`【${dropped.name}】是「${L[dropType] ?? dropType}」卡，放不进「${L[slot] ?? slot}」槽。`);
+      return;
+    }
 
     let itemId = dropped.id;
     if (dropped.parent?.id !== this.actor.id) {

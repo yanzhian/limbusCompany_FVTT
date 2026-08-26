@@ -142,6 +142,12 @@ export class LimbusItemSheet extends ItemSheet {
     context.isEditable = this.isEditable;
     context.activitiesExpanded = this.activitiesExpanded;
 
+    // ── 恐慌卡：类型（士气低落 / 陷入恐慌）──────────────────────────────
+    if (item.type === "panic") {
+      context.panicTypes = cfg.PANIC_TYPES ?? {};
+      context.panicTypeLabel = (cfg.PANIC_TYPES ?? {})[sys.panicType] ?? "未指定类型";
+    }
+
     // ── 活动列表 ─────────────────────────────────────────────────────────
     // EGO 处于【侵蚀】编辑形态时，编辑的是 system.corrode.activities
     // 注意 _actField 可能是 "corrode.activities" 这种带点路径，不能直接方括号取值

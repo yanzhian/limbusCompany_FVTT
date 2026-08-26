@@ -30,7 +30,16 @@
           {{/if}}
         </div>
         <div class="equip-type-row">
-          <span class="equip-subtype-label">士气低落 / 陷入恐慌 效果配置</span>
+          {{#if (and isEditable (not isLocked))}}
+            <select name="system.panicType" class="equip-subtype-sel">
+              <option value="" {{#eq system.panicType ""}}selected{{/eq}}>未指定类型</option>
+              {{#each panicTypes}}
+                <option value="{{@key}}" {{#eq @key ../system.panicType}}selected{{/eq}}>{{this}}</option>
+              {{/each}}
+            </select>
+          {{else}}
+            <span class="equip-subtype-label">{{panicTypeLabel}}</span>
+          {{/if}}
         </div>
       </div>
     </div>
