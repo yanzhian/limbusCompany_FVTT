@@ -2987,13 +2987,22 @@ export class ClashManager {
       });
     }
 
+    // 排版与【装备激活】【反应触发】同一套：头 + 角色名 + 金线 + 内容 + 金线
     const covered = game.actors.get(initFlags.targetActorId ?? "");
     await ClashManager._safeChatCreate({
       speaker: ChatMessage.getSpeaker({ actor }),
-      content: `<div class="limbuscompany chat-clash">
-        <strong>${actor.name}</strong> 发动【援护防御】，替 <strong>${covered?.name ?? "队友"}</strong>
-        接下这次对抗（使用 <strong>${skill.name}</strong>）。
-      </div>`,
+      content: `
+        <div class="limbus-clash-card" data-clash-type="cover">
+          ${ClashManager._chatHeader(actor, "援护防御")}
+          ${ClashManager._goldDivider()}
+          <div style="font-size:.82rem;color:#E8C9A2;margin:6px 0 2px;">
+            <strong>「${skill.name}」</strong>：<span style="color:#9A8462;">替 ${covered?.name ?? "队友"} 接下这次对抗</span>
+          </div>
+          <div style="font-size:.78rem;color:#9A8462;line-height:1.7;margin:0 0 6px;">
+            <div>本次对抗的目标改为 <strong>${actor.name}</strong></div>
+          </div>
+          ${ClashManager._goldDivider()}
+        </div>`,
     });
 
     await ClashManager.showPerformDialog(actor, skill, msgId, newFlags, -1);
