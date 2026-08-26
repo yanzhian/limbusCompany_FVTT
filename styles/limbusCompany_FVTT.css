@@ -3792,6 +3792,20 @@ body.game .limbuscompany.app img {
 /* 类型 + 分类行 */
 .limbuscompany .equip-type-row {
   display: flex; align-items: center; gap: 6px; font-size: .8rem;
+  flex-wrap: nowrap; min-width: 0;
+}
+/* 解锁态：下拉框被挤窄后选项文字换行/截断，给它一个不被压缩的下限，
+   分类输入框吃掉剩下的宽度 */
+.limbuscompany .equip-type-row .equip-subtype-sel {
+  flex: 0 0 auto; min-width: 96px;
+}
+.limbuscompany .equip-type-row .equip-category-input {
+  flex: 1 1 auto; min-width: 0; width: auto;
+}
+/* 锁定态：标签不折行，分类过长时用省略号而不是撑开 */
+.limbuscompany .equip-subtype-label { white-space: nowrap; }
+.limbuscompany .equip-category {
+  min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 /* 数值 + 链接行 */
 .limbuscompany .equip-stats-links-row {

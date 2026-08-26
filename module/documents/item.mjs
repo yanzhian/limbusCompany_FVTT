@@ -403,6 +403,9 @@ export class ContainerData extends foundry.abstract.TypeDataModel {
         { required: true, initial: [] }
       ),
       favorited: new fields.BooleanField({ required: true, initial: false }),
+      // 分类 / 标签（与消耗品、材料一致，供存放限制与检索使用）
+      category: new fields.StringField({ required: false, initial: "" }),
+      tags:     new fields.StringField({ required: false, initial: "" }),
       // 物品容量（容器本身占用角色背包格数，与内部 gridSize 无关）
       capacity: new fields.SchemaField({
         w: new fields.NumberField({ required: true, integer: true, min: 1, max: 10, initial: 1 }),
@@ -491,7 +494,17 @@ export class PanicData extends foundry.abstract.TypeDataModel {
       // 描述（显示在恐慌卡上）
       description: new fields.HTMLField({ required: false, initial: "" }),
       tags:        new fields.StringField({ required: false, initial: "" }),
-      // 效果触发器（使用触发时机「恐慌触发时」，槽位决定何时触发）
+      // 恐慌类型：这张卡是给哪个槽位用的。
+      //   lowMorale 士气低落 —— 理智首次跌破 30 时触发，一场遭遇战只触发一次
+      //   panic     陷入恐慌 —— 走坚定/恐慌鉴定那一套，规则另计
+      // 空字符串＝未指定（老数据）：两个槽位都能选，避免历史恐慌卡凭空消失
+      // blank:true 必须显式给出——StringField 一旦带 choices，Foundry 默认
+      // blank:false，空串（未指定）会被判成校验失败，新建恐慌卡直接创建不出来
+      panicType:   new fields.StringField({
+        required: false, initial: "", blank: true,
+        choices: { "": "未指定", lowMorale: "士气低落", panic: "陷入恐慌" },
+      }),
+      // 效果触发器（使用触发时机「恐慌触发时」/「坚定触发时」，槽位决定何时触发）
       activities:  new fields.ArrayField(makeActivitySchema(), { required: true, initial: [] }),
     };
   }
