@@ -731,7 +731,12 @@ export class ClashManager {
               ? ClashManager._parseResistance(targetActor.system?.egoResistances?.[sinType] ?? "x1.0")
               : 1.0;
             const dmg = Math.max(0, Math.round(roll.total * physMult * sinMult));
-            await ClashManager._applyAndSendTake(targetActor, dmg, { attacker: owner, category, sinType });
+            // 与 ④效果的 [追加伤害] 同路：对抗结算中先排队，等【结算结果】
+            // 一起落进承受结算卡，不在按钮之前自己冒一张
+            if (!ClashManager.queueExtraDamage(targetActor, dmg, { attacker: owner, category, sinType, item })) {
+              await ClashManager._applyAndSendTake(targetActor, dmg,
+                { attacker: owner, takeLabel: "追加伤害", category, sinType, item });
+            }
             return dmg;
           },
         });
