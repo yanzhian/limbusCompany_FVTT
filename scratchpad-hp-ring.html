@@ -37,12 +37,22 @@
   .thres{stroke:#fff;stroke-width:2;opacity:.85}
   .thres.done{stroke:#7a6b8c;opacity:.5}
 
+  /* FVTT 的一格：正方形，平躺在地面平面上（和环同一个 rotateX），
+     用来量环、HUD 相对于一格有多大 */
+  .cell{
+    position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
+    width:100px;height:100px;
+    border:1px dashed rgba(255,255,255,.4);
+    background:rgba(255,255,255,.05);
+    box-sizing:border-box;
+  }
+  /* Token 立牌：正方形，边长＝一格 */
   .token{
     position:absolute;left:50%;top:50%;
-    transform:translate(-50%,-72%) rotateX(-58deg);transform-origin:50% 100%;
-    width:88px;height:114px;
+    transform:translate(-50%,-100%) rotateX(-58deg);transform-origin:50% 100%;
+    width:100px;height:100px;
     background:linear-gradient(180deg,#4a5a8a,#1d2440);
-    border:2px solid rgba(255,255,255,.25);border-radius:6px;
+    border:2px solid rgba(255,255,255,.25);border-radius:4px;
     display:grid;place-items:center;font-size:12px;color:#cfd6ee;
     box-shadow:0 12px 22px rgba(0,0,0,.5);
   }
@@ -98,7 +108,8 @@
         <path class="fill"  id="fill"></path>
         <g id="thresGroup"></g>
       </svg>
-      <div class="token">TOKEN</div>
+      <div class="cell" id="cellEl"></div>
+      <div class="token" id="tokenEl">TOKEN</div>
     </div>
   </div>
 
@@ -116,6 +127,8 @@
   <div class="row"><label>线粗细</label><input type="range" id="thick" min="2" max="30" step="1" value="18"><span class="num" id="thickN">18</span></div>
   <div class="row"><label>边数</label><input type="range" id="sides" min="3" max="12" value="7"><span class="num" id="sidesN">7</span></div>
   <div class="row"><label>半径</label><input type="range" id="radius" min="50" max="95" value="69"><span class="num" id="radiusN">69</span></div>
+  <div class="row"><label>格子(px)</label><input type="range" id="cell" min="60" max="160" value="100"><span class="num" id="cellN">100</span></div>
+  <p class="hint" id="scaleHint">—</p>
   <div class="row"><label>倾斜角</label><input type="range" id="tilt" min="0" max="75" value="68"><span class="num" id="tiltN">68</span></div>
   <div class="row"><label>起点角</label><input type="range" id="start" min="0" max="359" value="193"><span class="num" id="startN">193</span></div>
   <div class="row"><label>血条起点</label><input type="range" id="arcStart" min="0" max="100" value="0"><span class="num" id="arcStartN">0</span></div>
@@ -160,6 +173,7 @@
 const CX = 100, CY = 100;
 const cfg = {
   sides: 7, radius: 69, thickness: 18, tilt: 68,
+  cell: 100,              // FVTT 一格的像素边长（默认网格 100px）
   startDeg: 193,          // 9 点略偏下
   ccw: true,              // 逆时针
   // 血条占环的哪一段（沿 ccw 方向走过的百分比）。0→100 就是整圈；
@@ -188,6 +202,17 @@ function polygonPath(n, r, startDeg, ccw){
   return "M" + pts.map(p => p.map(v => v.toFixed(2)).join(",")).join("L") + "Z";
 }
 
+/* SVG viewBox 是 200 宽，画在 240px 的 .ground 上 → 1 单位 = 1.2px。
+   把环的实际直径换算成像素与"格"，好判断它相对 token 有多大。 */
+const UNIT_PX = 240 / 200;
+function updateScaleHint(){
+  const el = $("scaleHint");
+  if (!el) return;
+  const dPx = cfg.radius * 2 * UNIT_PX;
+  el.textContent = `环直径 ≈ ${dPx.toFixed(0)}px ＝ ${(dPx / cfg.cell).toFixed(2)} 格`
+    + `（token 边长 ＝ 1 格 ＝ ${cfg.cell}px）`;
+}
+
 function rebuild(){
   const d = polygonPath(cfg.sides, cfg.radius, cfg.startDeg, cfg.ccw);
   trackEl.setAttribute("d", d);
@@ -196,6 +221,7 @@ function rebuild(){
   fillEl.style.strokeWidth  = cfg.thickness;
   const len = fillEl.getTotalLength();
   fillEl.dataset.len = len;
+  updateScaleHint();
   render();
 }
 
@@ -259,7 +285,16 @@ function render(){
 function applyTilt(){
   document.querySelector(".ground").style.transform = `rotateX(${cfg.tilt}deg)`;
   document.querySelector(".token").style.transform =
-    `translate(-50%,-72%) rotateX(-${cfg.tilt}deg)`;
+    `translate(-50%,-100%) rotateX(-${cfg.tilt}deg)`;
+}
+
+/* 一格的边长：地面上的方格与 token 立牌都按它走（token 边长＝一格） */
+function applyCell(){
+  const px = cfg.cell + "px";
+  const c = $("cellEl"), t = $("tokenEl");
+  if (c){ c.style.width = px; c.style.height = px; }
+  if (t){ t.style.width = px; t.style.height = px; }
+  updateScaleHint();
 }
 
 /* ── 控件绑定 ── */
@@ -274,6 +309,7 @@ slider("start",  v => cfg.startDeg = v,  rebuild);
 slider("arcStart", v => cfg.arcStart = v);
 slider("arcEnd",   v => cfg.arcEnd   = v);
 slider("tilt",   v => cfg.tilt = v,      applyTilt);
+slider("cell",   v => cfg.cell = v,      applyCell);
 slider("hp",     v => cfg.hp = v);
 slider("san",    v => cfg.san = v);
 slider("posX",   v => cfg.pos[posKey].x = v);
@@ -333,15 +369,16 @@ addEventListener("pointermove", ev => {
 addEventListener("pointerup", () => { if (drag) drag.el.classList.remove("dragging"); drag = null; });
 
 $("dump").onclick = () => {
-  const { sides, radius, thickness, tilt, startDeg, ccw,
+  const { sides, radius, thickness, tilt, cell, startDeg, ccw,
           arcStart, arcEnd, thresholds, showThres, pos, sanMin, sanMax } = cfg;
   $("out").textContent = JSON.stringify(
-    { sides, radius, thickness, tilt, startDeg, ccw, arcStart, arcEnd,
+    { sides, radius, thickness, tilt, cell, startDeg, ccw, arcStart, arcEnd,
       thresholds, showThres, sanMin, sanMax, pos }, null, 2);
 };
 
 selectKey("hp");
 applyTilt();
+applyCell();
 rebuild();
 </script>
 </body>
