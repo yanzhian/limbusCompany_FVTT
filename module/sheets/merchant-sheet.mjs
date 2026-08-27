@@ -109,7 +109,6 @@ export class LimbusMerchantSheet extends ActorSheet {
   static _buildTradeChatContent({ kind, merchant, char, items }) {
     const buy   = kind === "buy";
     const title = buy ? "购买清单" : "出售清单";
-    const total = items.reduce((a, i) => a + i.price * (i.qty ?? 1), 0);
     const rows  = items.map(i => `
       <div style="display:flex;align-items:center;gap:6px;padding:2px 0;">
         <img src="${i.img}" style="width:22px;height:22px;object-fit:cover;border:1px solid #5F3E22;" alt="">
@@ -126,11 +125,6 @@ export class LimbusMerchantSheet extends ActorSheet {
         </div>
         <div style="font-size:.72rem;color:#C9A84C;margin:2px 0;">${title}</div>
         ${rows}
-        <div style="display:flex;justify-content:space-between;margin-top:4px;
-                    border-top:1px solid rgba(201,168,76,.35);padding-top:3px;">
-          <span style="color:#9A8462;font-size:.8rem;">合计</span>
-          <span style="color:${buy ? "#E5BA25" : "#7AAB6A"};">${buy ? "−" : "+"}${LimbusMerchantSheet.eyeHtml(total)}</span>
-        </div>
       </div>`;
   }
 
@@ -140,7 +134,8 @@ export class LimbusMerchantSheet extends ActorSheet {
     list.push({ name, img, price, qty });
     LimbusMerchantSheet._chatSessions.set(key, list);
 
-    clearTimeout(LimbusMerchantSheet._chatTimers.get(key));
+    // 固定 30 秒窗口：从第一笔开始计时，期间的买卖全部并进同一条卡
+    if (LimbusMerchantSheet._chatTimers.has(key)) return;
     LimbusMerchantSheet._chatTimers.set(key, setTimeout(async () => {
       const items = LimbusMerchantSheet._chatSessions.get(key) ?? [];
       LimbusMerchantSheet._chatSessions.delete(key);
@@ -149,7 +144,7 @@ export class LimbusMerchantSheet extends ActorSheet {
       await ChatMessage.create({
         content: LimbusMerchantSheet._buildTradeChatContent({ kind, merchant, char, items }),
       });
-    }, 1200));
+    }, 30000));
   }
 
   /* ─── 价格 ───────────────────────────────────────────────────────────── */
