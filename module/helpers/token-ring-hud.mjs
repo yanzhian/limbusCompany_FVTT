@@ -3,7 +3,9 @@
  *
  * 原型见 scratchpad-hp-ring.html，这里是它的 Foundry 实装。
  *
- * 画的东西（全部挂在 Token 自己的 PIXI 容器上，跟着 Token 移动/缩放）：
+ * **只在遭遇战期间显示**（game.combat.started）——平时满屏的环与 BUFF 是噪音。
+ *
+ * 画的东西（跟着 Token 移动/缩放）：
  *   · 多边形生命环：只占 [arcStart, arcEnd] 那一段，扣血时空缺从段首长出
  *   · 混乱阈值刻度：越过的变灰（对应 chaosThresholds[i].triggered）
  *   · 生命值数字 / 理智圆形徽章 / BUFF 图标行（每行 6 个，不足一行居中）
@@ -92,7 +94,7 @@ export class TokenRingHUD {
   static init() {
     game.settings.register("limbusCompany_FVTT", "tokenRingHud", {
       name: "Token 生命环 HUD",
-      hint: "在 Token 脚下显示生命环、生命值、理智与 BUFF 图标。",
+      hint: "遭遇战期间在 Token 脚下显示生命环、生命值、理智与 BUFF 图标。",
       scope: "client", config: true, type: Boolean, default: true,
       onChange: (v) => { TokenRingHUD._enabled = v; TokenRingHUD.refreshAll(); },
     });
@@ -104,6 +106,12 @@ export class TokenRingHUD {
     Hooks.on("drawToken",    (token) => TokenRingHUD.draw(token));
     Hooks.on("refreshToken", (token) => TokenRingHUD.draw(token));
     Hooks.on("destroyToken", (token) => TokenRingHUD._destroy(token));
+    // 遭遇战开始/结束 → 整场重画（开战才显示，脱战即收起）
+    Hooks.on("combatStart",  () => TokenRingHUD.refreshAll());
+    Hooks.on("createCombat", () => TokenRingHUD.refreshAll());
+    Hooks.on("updateCombat", () => TokenRingHUD.refreshAll());
+    Hooks.on("deleteCombat", () => TokenRingHUD.refreshAll());
+    Hooks.on("canvasReady",  () => TokenRingHUD.refreshAll());
     // 选中/取消选中 → 只改层级，不用整个重画
     Hooks.on("controlToken", (token) => TokenRingHUD._applySort(token));
     Hooks.on("hoverToken",   (token) => TokenRingHUD._applySort(token));
@@ -128,6 +136,16 @@ export class TokenRingHUD {
     box.elevation = doc?.elevation ?? 0;
     box.sort      = on ? 1e6 : (doc?.sort ?? 0) - 1;
     if (canvas?.primary) canvas.primary.sortDirty = true;
+  }
+
+  /**
+   * 是否处于遭遇战中。生命环只在开战后显示——平时满屏的环和 BUFF 图标
+   * 是纯噪音，探索/演出阶段不需要。
+   * 判的是 `started` 而不是「战斗文档存在」：GM 把人拖进战斗追踪器、
+   * 还没点【开始战斗】的布置阶段也不显示。
+   */
+  static _inCombat() {
+    return !!(game.combat?.started);
   }
 
   static refreshAll() {
@@ -242,7 +260,7 @@ export class TokenRingHUD {
   static draw(token) {
     if (!token || token.destroyed) return;
     const actor = token.actor;
-    if (!TokenRingHUD._enabled || actor?.type !== "character") {
+    if (!TokenRingHUD._enabled || !TokenRingHUD._inCombat() || actor?.type !== "character") {
       TokenRingHUD._destroy(token);
       return;
     }
