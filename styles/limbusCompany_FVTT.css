@@ -4478,14 +4478,14 @@ body.cg-dragging-active .limbuscompany .cg-item-tile:hover {
   gap: 2px; padding: 6px 10px;
 }
 .limbuscompany .container-cell {
-  aspect-ratio: 1; background: rgba(95,62,33,.1);
+  aspect-ratio: 1; background: #3F2C1B;
   border: 1px solid rgba(95,62,33,.3); border-radius: 2px;
   display: flex; flex-direction: column; align-items: center; justify-content: center;
   overflow: hidden; cursor: pointer; position: relative;
   transition: border-color .15s;
 }
 .limbuscompany .container-cell:hover { border-color: var(--gold-active); }
-.limbuscompany .container-cell.cell-filled { background: rgba(95,62,33,.2); border-color: var(--border-gold); }
+.limbuscompany .container-cell.cell-filled { background: #4B3623; border-color: var(--border-gold); }
 .limbuscompany .container-cell-icon { width: 80%; height: 80%; object-fit: contain; }
 .limbuscompany .container-cell-name { font-size: .5rem; color: var(--text-sub); text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
 
