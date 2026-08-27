@@ -132,7 +132,26 @@
   "compareDim": "stacks", "comparison": "gte", "stacks": 10,
   "targetTag": "", "targetTagCount": 1, "targetTagMax": 0 }
 ```
-`comparison`：`gt` / `gte` / `lt` / `lte` / `eq`。未拥有视为 0。
+`comparison`：`gt` / `gte` / `lt` / `lte` / `eq`。
+
+> #### ⚠ **没有这条 BUFF ≠ 这条 BUFF 为 0 层**
+>
+> 【比较值】只在**身上确实有这条 BUFF** 时才判定；根本没有的一律不成立
+>（引擎两处判定 `_applyActivities` / `_evalReactionPrecond` 都是这个规矩）。
+>
+> 所以写「拥有 0 层【光札】」这种条件时，**再加一条【拥有】前置**把存在性钉死：
+>
+> ```json
+> "preconditions": [
+>   { "type": "hasBuff",     "target": "self", "buff": "lightCard", "intensity": 0, "stacks": 0 },
+>   { "type": "buffCompare", "target": "self", "buff": "lightCard",
+>     "compareDim": "stacks", "comparison": "eq", "stacks": 0 }
+> ]
+> ```
+>
+> 【拥有】填 `intensity: 0, stacks: 0` 就是纯粹的「身上有这条」，不带任何阈值。
+> 少了它的话，从没拿过这条 BUFF 的人也会被判成「0 层」，[反应] 之类会无限触发。
+> 真要表达「没有」，用【未拥有】(`noBuff`)，别用【比较值】= 0。
 
 ### 4.4 基础属性
 
@@ -452,6 +471,7 @@
 | 「最大值」直接填进 `maxTimes` | 单次效果值 >1 时上限翻倍（+2 × 6 = +12） |
 | 用中文名当 `buff` | 除非配 `custom`，否则匹配不到注册表，上限等特性失效 |
 | 写 `[攻击后]` 把骰数改回去 | 多余，系统已自动还原 |
+| 【比较值】= 0 当成「没有」 | 没有该 BUFF 时本条不成立；要「有且为 0」就再加一条【拥有】 |
 | **自己改 `round`** | 需求没提回合就是 `本回合`；写了「下回合」就填 `下回合`，不许推断 |
 | **数值不带正负号** | `"1"` 是**赋值**不是加值，且不吃「每」的倍数——一律写 `"+1"` |
 | 给 `value` 填数字而非字符串 | 建议统一写字符串，公式（`"1D6"`）才不会出错 |

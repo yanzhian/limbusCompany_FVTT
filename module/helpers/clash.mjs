@@ -6972,8 +6972,11 @@ export class ClashManager {
       if (!targetActor || !pre.buff) return false;
       const buffs = targetActor.system?.buffs ?? [];
       const found = buffs.find(b => b.type === pre.buff || b.name === pre.buff);
+      // 没有这条 BUFF ≠ 这条 BUFF 为 0（与 _applyActivities 里的判定保持一致）：
+      // 身上根本没有时本条不成立，否则「拥有 0 层【光札】」对谁都恒真，[反应] 会一直触发
+      if (!found) return false;
       const have  = (pre.compareDim ?? "stacks") === "intensity"
-        ? (found?.intensity ?? 0) : (found?.stacks ?? 0);
+        ? (found.intensity ?? 0) : (found.stacks ?? 0);
       return ClashManager._cmp(have, pre.comparison ?? "eq", pre.stacks ?? 0);
     }
 
