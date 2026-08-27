@@ -106,45 +106,74 @@ export class LimbusMerchantSheet extends ActorSheet {
       + `<img class="mc-eye-ic" src="${EYE_ICON}" alt="眼">`;
   }
 
-  static _buildTradeChatContent({ kind, merchant, char, items }) {
-    const buy   = kind === "buy";
-    const title = buy ? "购买清单" : "出售清单";
-    const rows  = items.map(i => `
+  static _buildTradeChatContent({ merchant, char, items }) {
+    const rows = items.map(i => {
+      const buy = i.kind === "buy";
+      return `
       <div style="display:flex;align-items:center;gap:6px;padding:2px 0;">
         <img src="${i.img}" style="width:22px;height:22px;object-fit:cover;border:1px solid #5F3E22;" alt="">
+        <span style="flex:0 0 auto;font-size:.72rem;color:${buy ? "#E5BA25" : "#7AAB6A"};">${buy ? "买入" : "卖出"}</span>
         <span style="flex:1;color:#E8C9A2;font-size:.82rem;">${i.name}${i.qty > 1 ? ` ×${i.qty}` : ""}</span>
-        <span style="font-size:.82rem;color:${buy ? "#E5BA25" : "#7AAB6A"};">
+        <span style="font-size:.82rem;color:${buy ? "#E5BA25" : "#7AAB6A"};white-space:nowrap;">
           ${buy ? "−" : "+"}${i.price * (i.qty ?? 1)}</span>
-      </div>`).join("");
+      </div>`;
+    }).join("");
     return `
       <div class="limbus-clash-card" data-clash-type="trade">
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
           <img src="${merchant.img}" style="width:28px;height:28px;object-fit:cover;border:1px solid #5F3E22;" alt="">
           <b style="color:#E8C9A2;">${char.name}</b>
-          <span style="color:#9A8462;font-size:.8rem;">在 ${merchant.name} ${buy ? "购买" : "出售"}</span>
+          <span style="color:#9A8462;font-size:.8rem;">在 ${merchant.name} 交易</span>
         </div>
-        <div style="font-size:.72rem;color:#C9A84C;margin:2px 0;">${title}</div>
+        <div style="font-size:.72rem;color:#C9A84C;margin:2px 0;">交易清单</div>
         ${rows}
       </div>`;
   }
 
+  /**
+   * 同一个商人 × 同一个角色的连续交易共用一条聊天信息：
+   * 第一笔立刻发卡，之后 30 秒内的买/卖都往这条卡里追加行（不再新开卡）。
+   * 计时器每笔刷新，只要还在买卖就一直是这条；停手 30 秒后结束会话。
+   */
   static _scheduleTradeMsg(kind, merchant, char, name, img, price, qty = 1) {
-    const key = `${kind}:${merchant.id}:${char.id}`;
-    const list = LimbusMerchantSheet._chatSessions.get(key) ?? [];
-    list.push({ name, img, price, qty });
-    LimbusMerchantSheet._chatSessions.set(key, list);
+    const key  = `${merchant.id}:${char.id}`;
+    const sess = LimbusMerchantSheet._chatSessions.get(key)
+      ?? { items: [], msgId: null, busy: false, rendered: 0 };
+    sess.items.push({ kind, name, img, price, qty });
+    LimbusMerchantSheet._chatSessions.set(key, sess);
 
-    // 固定 30 秒窗口：从第一笔开始计时，期间的买卖全部并进同一条卡
-    if (LimbusMerchantSheet._chatTimers.has(key)) return;
-    LimbusMerchantSheet._chatTimers.set(key, setTimeout(async () => {
-      const items = LimbusMerchantSheet._chatSessions.get(key) ?? [];
+    clearTimeout(LimbusMerchantSheet._chatTimers.get(key));
+    LimbusMerchantSheet._chatTimers.set(key, setTimeout(() => {
       LimbusMerchantSheet._chatSessions.delete(key);
       LimbusMerchantSheet._chatTimers.delete(key);
-      if (!items.length) return;
-      await ChatMessage.create({
-        content: LimbusMerchantSheet._buildTradeChatContent({ kind, merchant, char, items }),
-      });
     }, 30000));
+
+    LimbusMerchantSheet._syncTradeMsg(key, merchant, char);
+  }
+
+  /** 串行化建卡/改卡，避免同一会话里两笔并发各建一张卡 */
+  static async _syncTradeMsg(key, merchant, char) {
+    const sess = LimbusMerchantSheet._chatSessions.get(key);
+    if (!sess || sess.busy) return;   // 正在写的那一趟结束后会自己补上
+    sess.busy = true;
+    try {
+      // 每一趟都以「当前全部条目」重建，写完发现又多了就再来一趟
+      while (sess.rendered !== sess.items.length) {
+        const n = sess.items.length;
+        const content = LimbusMerchantSheet._buildTradeChatContent({
+          merchant, char, items: sess.items.slice(0, n),
+        });
+        const msg = sess.msgId ? game.messages.get(sess.msgId) : null;
+        if (msg) await msg.update({ content });
+        else {
+          const created = await ChatMessage.create({ content });
+          sess.msgId = created?.id ?? null;
+        }
+        sess.rendered = n;
+      }
+    } finally {
+      sess.busy = false;
+    }
   }
 
   /* ─── 价格 ───────────────────────────────────────────────────────────── */
