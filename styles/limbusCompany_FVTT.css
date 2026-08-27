@@ -4065,7 +4065,7 @@ body.game .limbuscompany.app img {
   cursor: default;
 }
 .limbuscompany .cg-cell.cg-occupied {
-  background: #3F2C1B;
+  background: rgba(95,62,33,.25);
 }
 .limbuscompany .cg-cell.cg-locked {
   background: #15110E;
@@ -4089,7 +4089,7 @@ body.game .limbuscompany.app img {
 
 /* 物品图块（跨格，z-index 叠在格子上方）*/
 .limbuscompany .cg-item-tile {
-  background: rgba(24,15,8,.9);
+  background: #3F2C1B;
   border: 1px solid var(--border-gold);
   border-radius: 3px;
   box-shadow: inset 0 0 0 1px rgba(95,62,33,.4);
@@ -6745,7 +6745,7 @@ input.item-piles-quantity {
 /* 两块网格共用 44px 格；grid-dnd 从 --cg-cell 读格距，必须给上 */
 .mc-cg { --cg-cell: 44px; --cg-gap: 2px; }
 .mc-cg--bag .cg-cell { background: #5F3E22; border-color: rgba(95,62,34,.45); }
-.mc-cg--bag .cg-cell.cg-occupied { background: #3F2C1B; }
+.mc-cg--bag .cg-cell.cg-occupied { background: rgba(95,62,34,.25); }
 
 /* ── 图块角标 ─────────────────────────────────────────────────── */
 .mc-tile .mc-price {
