@@ -1597,10 +1597,14 @@ export class ClashManager {
       // 丢掉激活槽 0 之后预备槽的牌会左移进 1，而它在旧表里同样是"合法下标"，
       // 于是「丢弃 Lv.1 + 丢弃 Lv.2」的第二条就把刚补上来的预备牌吃掉了。
       // 分成两张表后：level/another 只认宣言时就在 0/1 的两张，reserve 只认槽 2。
-      let declaredActive     = [0, 1];
-      let declaredReserve    = [2];
-      let declaredActiveExec = [0, 1];
-      let declaredReserveExec = [2];
+      // 冻结表挂在 ctx 上而不是这条 activity 的局部变量：同一次结算里
+      // 「丢弃 Lv.1」「丢弃 Lv.2」常常被拆成两条独立 activity（缺一张时另一张
+      // 仍要能丢），局部变量会让第二条重新拿到 [0,1]，刚补位上来的牌又变成合法目标。
+      ctx._declActiveExec  ??= [0, 1];
+      ctx._declReserveExec ??= [2];
+      // 预检查在真丢之前按顺序模拟，用的是执行表的副本
+      let declaredActive  = [...ctx._declActiveExec];
+      let declaredReserve = [...ctx._declReserveExec];
       for (const cost of costs) {
         if (!cost) continue;
         if (cost.type === "attribute") {
@@ -1741,10 +1745,10 @@ export class ClashManager {
             const currentId = ctx._currentItemId ?? item?.id ?? "";
             const { discardedIds = [], slotIndices = [] } =
               await ownerSheet._discardCombatSkill(mode, level, currentId,
-                mode === "reserve" ? declaredReserveExec : declaredActiveExec);
+                mode === "reserve" ? ctx._declReserveExec : ctx._declActiveExec);
             for (const idx of [...slotIndices].reverse()) {
-              declaredActiveExec  = ClashManager._shiftDeclaredIdx(declaredActiveExec,  idx);
-              declaredReserveExec = ClashManager._shiftDeclaredIdx(declaredReserveExec, idx);
+              ctx._declActiveExec  = ClashManager._shiftDeclaredIdx(ctx._declActiveExec,  idx);
+              ctx._declReserveExec = ClashManager._shiftDeclaredIdx(ctx._declReserveExec, idx);
             }
             // 日志：丢弃是「只填消耗、不填效果」也能成立的一条 activity，
             // 不记一行的话卡面上什么都看不到，出问题根本无从查起
