@@ -1,0 +1,710 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>商人面板 · 网格版原型 v2</title>
+<style>
+  /* 色板取自 styles/limbusCompany_FVTT.css，保证观感一致 */
+  :root{
+    --bg-darkest:#0B0707; --bg-panel:#201D1A; --bg-mid:#171310;
+    --border-gold:#0A0605; --gold-active:#E5BA25;
+    --text-main:#E8CAA2; --text-sub:#9B6839; --text-dim:#6B5A42;
+    --red-danger:#E94745; --green-ok:#7AAB6A; --blue-pl:#5B7FBF;
+    --cell:52px; --gap:2px;
+    --font-main:"Noto Sans SC","Microsoft YaHei",sans-serif;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0;min-height:100vh;padding:18px;
+    background:linear-gradient(180deg,var(--bg-darkest) 0%,var(--bg-mid) 50%,var(--bg-darkest) 100%);
+    color:var(--text-main);font:13px/1.55 var(--font-main);
+  }
+  .stage{display:flex;gap:14px;align-items:flex-start;justify-content:center;flex-wrap:wrap}
+
+  /* ── 面板 ── */
+  .panel{
+    background:linear-gradient(180deg,#1A1512,#120E0C);
+    border:1px solid #3A2A1C;border-radius:4px;
+    box-shadow:0 8px 26px rgba(0,0,0,.6);width:462px;
+  }
+  .panel.pl  .panel-hd{border-bottom-color:#2E4A6E}
+  .panel-hd{display:flex;align-items:center;gap:10px;padding:8px 12px;
+            border-bottom:1px solid #3A2A1C;background:rgba(0,0,0,.25)}
+  .panel-hd .av{width:34px;height:34px;border-radius:3px;display:grid;place-items:center;
+                font-size:15px;border:1px solid #5F3E22;background:#2b1f14}
+  .panel.pl .panel-hd .av{border-color:#2E4A6E;background:#182534}
+  .panel-hd .t{font-size:15px;font-weight:bold;letter-spacing:.04em}
+  .panel-hd .sub{font-size:11.5px;color:var(--text-sub)}
+  .panel-hd .spacer{flex:1}
+  .purse{display:flex;align-items:center;gap:5px;font-size:13px;font-weight:bold;white-space:nowrap;
+         background:rgba(0,0,0,.35);border:1px solid #5F3E22;border-radius:999px;padding:3px 11px}
+  .purse .eye{color:var(--gold-active)}
+  .bar{display:flex;gap:6px;align-items:center;padding:7px 12px;border-bottom:1px solid #2b2119}
+  .bar input[type=text]{flex:1;min-width:0;background:#15110E;border:1px solid #3A2A1C;border-radius:3px;
+                        color:var(--text-main);font:12px var(--font-main);padding:4px 8px}
+  .panel-bd{padding:8px 10px 12px;display:grid;place-items:center}
+
+  .chip{font-size:11.5px;color:var(--text-sub);border:1px solid #3A2A1C;border-radius:999px;
+        padding:2px 9px;cursor:pointer;user-select:none;background:#15110E;white-space:nowrap}
+  .chip:hover{color:var(--text-main)}
+  .chip.on{color:#15110E;background:var(--gold-active);border-color:var(--gold-active);font-weight:bold}
+  .chip.blue.on{background:var(--blue-pl);border-color:var(--blue-pl);color:#fff}
+
+  /* ── 网格 ── */
+  .cg-wrap{display:grid;gap:var(--gap);padding:6px;width:fit-content;position:relative;
+           grid-template-columns:repeat(8,var(--cell));grid-template-rows:repeat(5,var(--cell))}
+  .cg-cell{background:#5F3E22;border:1px solid rgba(95,62,33,.45)}
+  .cg-cell.occ{background:rgba(95,62,33,.25)}
+  .cg-cell.drop-ok{background:rgba(229,186,37,.20);border-color:var(--gold-active)}
+  .cg-cell.drop-no{background:rgba(233,71,69,.20);border-color:var(--red-danger)}
+  .cg-cell.drop-sell{background:rgba(122,171,106,.22);border-color:var(--green-ok)}
+  #bagGrid .cg-cell{background:#3A4A5F;border-color:rgba(58,74,95,.45)}
+  #bagGrid .cg-cell.occ{background:rgba(58,74,95,.25)}
+
+  .tile{background:rgba(24,15,8,.92);border:1px solid #5F3E22;border-radius:3px;
+        box-shadow:inset 0 0 0 1px rgba(95,62,33,.4);
+        display:flex;flex-direction:column;align-items:center;justify-content:center;
+        overflow:hidden;position:relative;z-index:10;user-select:none;
+        transition:border-color .1s,box-shadow .1s}
+  .tile:hover{border-color:var(--gold-active);box-shadow:inset 0 0 0 1px var(--gold-active),0 0 6px rgba(229,186,37,.3)}
+  .tile .ic{font-size:22px;line-height:1}
+  .tile .nm{font-size:9.5px;text-align:center;line-height:1.1;padding:0 2px;max-width:100%;
+            overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .tile .qty{position:absolute;right:2px;top:1px;font-size:9.5px;font-weight:bold;color:var(--text-main);
+             background:rgba(0,0,0,.55);border-radius:2px;padding:0 3px}
+  .tile .price{position:absolute;left:0;right:0;bottom:0;font-size:9.5px;font-weight:bold;
+               text-align:center;color:var(--gold-active);background:rgba(0,0,0,.62);line-height:1.35}
+  .tile.mine{cursor:grab;border-color:#3A4A5F;box-shadow:inset 0 0 0 1px rgba(58,74,95,.5)}
+  .tile.mine:hover{border-color:var(--blue-pl);box-shadow:inset 0 0 0 1px var(--blue-pl),0 0 6px rgba(91,127,191,.35)}
+  .tile.mine .price{color:var(--green-ok)}
+  .tile.dragging{visibility:hidden}
+  .tile.shop{cursor:pointer}
+  .tile.shop.locked::after{content:"";position:absolute;inset:0;pointer-events:none;
+    background:repeating-linear-gradient(45deg,transparent 0 6px,rgba(229,186,37,.05) 6px 12px)}
+  .tile.afford-no .price{color:var(--red-danger)}
+  .tile.dim{opacity:.22}
+  /* 多选 */
+  .tile.sel{outline:2px solid var(--gold-active);outline-offset:-2px}
+  .tile.mine.sel{outline-color:var(--blue-pl)}
+  .tile .tick{position:absolute;left:2px;top:1px;font-size:11px;font-weight:bold;
+              color:var(--gold-active);display:none}
+  .tile.sel .tick{display:block}
+  .tile.mine.sel .tick{color:var(--blue-pl)}
+
+  body.dragging{user-select:none;cursor:grabbing}
+  .ghost{position:fixed;left:-9999px;top:-9999px;pointer-events:none;z-index:999;opacity:.92}
+
+  /* ── GM 条 ── */
+  .gmbar{background:var(--bg-panel);border:1px solid #3A2A1C;border-radius:4px;
+         padding:9px 12px;margin:0 auto 14px;max-width:952px}
+  .gmrow{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+  .gmrow + .gmrow{margin-top:8px;padding-top:8px;border-top:1px dashed #2b2119}
+  .gmrow label{color:var(--text-sub);font-size:12px;white-space:nowrap}
+  #discount{flex:1;min-width:160px}
+  .dnum{width:52px;text-align:right;font-weight:bold;color:var(--gold-active);
+        font-variant-numeric:tabular-nums}
+  .pool{display:flex;gap:6px;flex-wrap:wrap}
+  .pool .pitem{display:flex;align-items:center;gap:5px;background:#15110E;border:1px solid #3A2A1C;
+               border-radius:3px;padding:3px 8px;cursor:grab;font-size:12px}
+  .pool .pitem:hover{border-color:var(--gold-active)}
+  .pool .pitem .sz{color:var(--text-dim);font-size:10.5px}
+
+  /* ── 弹窗 ── */
+  .mask{position:fixed;inset:0;background:rgba(0,0,0,.55);display:none;place-items:center;z-index:500}
+  .mask.on{display:grid}
+  .dlg{width:352px;background:linear-gradient(180deg,#1A1512,#120E0C);
+       border:1px solid #5F3E22;border-radius:5px;box-shadow:0 10px 30px rgba(0,0,0,.7)}
+  .dlg-hd{display:flex;align-items:center;gap:9px;padding:10px 12px;border-bottom:1px solid #3A2A1C}
+  .dlg-hd .ic{font-size:26px}
+  .dlg-hd .nm{font-size:14px;font-weight:bold}
+  .dlg-hd .cat{font-size:11px;color:var(--text-sub)}
+  .dlg-bd{padding:10px 12px;font-size:12.5px;max-height:300px;overflow:auto}
+  .kv{display:flex;justify-content:space-between;padding:3px 0;color:var(--text-sub)}
+  .kv b{color:var(--text-main);font-variant-numeric:tabular-nums}
+  .kv.total b{color:var(--gold-active);font-size:15px}
+  .kv.bad b{color:var(--red-danger)}
+  .kv .strike{text-decoration:line-through;color:var(--text-dim);margin-right:5px;font-weight:normal}
+  .qty-row{display:flex;align-items:center;gap:8px;margin:8px 0 4px}
+  .qty-row input[type=range]{flex:1;min-width:0}
+  .qty-row .n{width:34px;text-align:right;font-weight:bold;font-variant-numeric:tabular-nums}
+  .lst{margin:4px 0 8px;border:1px solid #2b2119;border-radius:3px}
+  .lst .h{padding:3px 8px;background:rgba(0,0,0,.3);font-size:11.5px;color:var(--text-sub)}
+  .lst .r{display:flex;justify-content:space-between;padding:3px 8px;border-top:1px solid #221a13}
+  .dlg-ft{display:flex;gap:8px;padding:10px 12px;border-top:1px solid #3A2A1C}
+  .btn{flex:1;height:30px;border-radius:2px;cursor:pointer;font:12.5px var(--font-main);
+       background:#241B12;color:#9A8462;border:1px solid #5A3A1A}
+  .btn:hover{background:#2f2317}
+  .btn.primary{background:#5F3E22;color:var(--text-main);border-color:#C9A84C}
+  .btn.primary:hover{background:#6f4a2a}
+  .btn.blue{background:#243247;color:#cfe0ff;border-color:#5B7FBF}
+  .btn:disabled{opacity:.45;cursor:not-allowed}
+
+  .log{max-width:952px;margin:14px auto 0;background:var(--bg-panel);border:1px solid #3A2A1C;
+       border-radius:4px;padding:10px 12px;font-size:12px;max-height:190px;overflow:auto}
+  .log h3{margin:0 0 6px;font-size:13px;color:var(--gold-active)}
+  .log div{padding:2px 0;border-bottom:1px dashed #2b2119;color:var(--text-sub)}
+  .log b{color:var(--text-main)}
+  .hint{color:var(--text-dim);font-size:11.5px;max-width:952px;margin:8px auto 0}
+</style>
+</head>
+<body>
+
+<!-- ════ GM 工具条 ════ -->
+<div class="gmbar">
+  <div class="gmrow">
+    <span class="chip" id="gmToggle">GM 模式</span>
+    <span class="chip" id="saleToggle">打折开关</span>
+    <label>折扣</label>
+    <input type="range" id="discount" min="1" max="10" step="0.5" value="10">
+    <span class="dnum" id="discountN">10 折</span>
+    <span class="hint" style="margin:0">10 折 ＝ 原价，1 折 ＝ 一折价</span>
+  </div>
+  <div class="gmrow" id="poolRow">
+    <label>世界物品</label>
+    <div class="pool" id="pool"></div>
+    <span class="hint" style="margin:0">拖进右侧货架即可上架（模拟从 FVTT 侧栏拖入）</span>
+  </div>
+</div>
+
+<div class="stage">
+
+  <!-- ════ 左：PL ════ -->
+  <div class="panel pl" id="bagPanel">
+    <div class="panel-hd">
+      <div class="av">我</div>
+      <div>
+        <div class="t">黎明沙包 · 背包</div>
+        <div class="sub">拖到右边货架＝出售</div>
+      </div>
+      <div class="spacer"></div>
+      <div class="purse">持有 <span class="eye" id="myEye">380</span> 眼</div>
+    </div>
+    <div class="bar">
+      <span class="chip blue" id="multiToggle">多选</span>
+      <span class="chip" id="tradeBtn" style="display:none">一键买卖</span>
+      <span class="chip" id="clearSel" style="display:none">清空选择</span>
+      <span class="spacer" style="flex:1"></span>
+      <span class="hint" style="margin:0" id="selInfo">双击商品可单件买卖</span>
+    </div>
+    <div class="panel-bd"><div class="cg-wrap" id="bagGrid"></div></div>
+  </div>
+
+  <!-- ════ 右：商人 ════ -->
+  <div class="panel" id="shopPanel">
+    <div class="panel-hd">
+      <div class="av">商</div>
+      <div>
+        <div class="t">灰烬街 · 杂货铺</div>
+        <div class="sub" id="shopSub">双击商品购买</div>
+      </div>
+      <div class="spacer"></div>
+      <div class="purse">商人 <span class="eye" id="shopEye">1200</span> 眼</div>
+    </div>
+    <div class="bar">
+      <input type="text" id="shopSearch" placeholder="搜索商品…">
+      <span class="chip on" data-cat="">全部</span>
+      <span class="chip" data-cat="武器">武器</span>
+      <span class="chip" data-cat="消耗品">消耗品</span>
+      <span class="chip" data-cat="材料">材料</span>
+    </div>
+    <div class="panel-bd"><div class="cg-wrap" id="shopGrid"></div></div>
+  </div>
+
+</div>
+
+<div class="log"><h3>交易记录</h3><div id="logList"></div></div>
+<p class="hint">
+  · 只有<b>材料</b>与<b>消耗品</b>有数量，其余物品一件就是一件，没有库存/缺货的说法。<br>
+  · PL 拖自己的物品到货架＝出售；卖错了双击那件商品就能买回来。<br>
+  · GM 模式下才能拖动/整理货架、从「世界物品」上架、双击改价。
+</p>
+
+<!-- ════ 单件买卖 ════ -->
+<div class="mask" id="mask">
+  <div class="dlg">
+    <div class="dlg-hd">
+      <span class="ic" id="dIc">🗡</span>
+      <div><div class="nm" id="dNm">—</div><div class="cat" id="dCat">—</div></div>
+    </div>
+    <div class="dlg-bd">
+      <div class="kv"><span id="dUnitLbl">单价</span><b id="dUnit">0</b></div>
+      <div class="qty-row" id="dQtyRow">
+        <span>数量</span>
+        <input type="range" id="dQty" min="1" max="1" value="1">
+        <span class="n" id="dQtyN">1</span>
+      </div>
+      <div class="kv total"><span id="dTotalLbl">合计</span><b id="dTotal">0</b></div>
+      <div class="kv" id="dAfterRow"><span>交易后持有</span><b id="dAfter">0</b></div>
+    </div>
+    <div class="dlg-ft">
+      <button class="btn" id="dCancel">取消</button>
+      <button class="btn primary" id="dOk">购买</button>
+    </div>
+  </div>
+</div>
+
+<!-- ════ 批量买卖 ════ -->
+<div class="mask" id="mask2">
+  <div class="dlg">
+    <div class="dlg-hd"><span class="ic">🧾</span><div><div class="nm">一键买卖</div>
+      <div class="cat" id="b2Sub">—</div></div></div>
+    <div class="dlg-bd" id="b2Body"></div>
+    <div class="dlg-ft">
+      <button class="btn" id="b2Cancel">取消</button>
+      <button class="btn primary" id="b2Ok">成交</button>
+    </div>
+  </div>
+</div>
+
+<!-- ════ GM 改价 ════ -->
+<div class="mask" id="mask3">
+  <div class="dlg" style="width:280px">
+    <div class="dlg-hd"><span class="ic" id="p3Ic">🗡</span><div>
+      <div class="nm" id="p3Nm">—</div><div class="cat">GM · 设定原价</div></div></div>
+    <div class="dlg-bd">
+      <div class="qty-row"><span>原价</span>
+        <input type="number" id="p3Price" min="0" step="5" style="flex:1;min-width:0;background:#15110E;
+               border:1px solid #3A2A1C;border-radius:3px;color:var(--text-main);
+               font:13px var(--font-main);padding:4px 8px"><span>眼</span></div>
+      <div class="qty-row" id="p3QtyRow"><span>数量</span>
+        <input type="number" id="p3Qty" min="1" step="1" style="flex:1;min-width:0;background:#15110E;
+               border:1px solid #3A2A1C;border-radius:3px;color:var(--text-main);
+               font:13px var(--font-main);padding:4px 8px"></div>
+    </div>
+    <div class="dlg-ft">
+      <button class="btn" id="p3Del">下架</button>
+      <button class="btn primary" id="p3Ok">保存</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ══════════════════════════════════════════════════════════════════════
+   网格模型与 camp/loot 一致：物品带 {x,y,w,h}，格子只是背景，
+   图块用 grid-column: x+1 / span w 定位。两侧都是固定 8×5。
+
+   数量规则：**只有材料与消耗品有数量**（HAS_QTY）。其余物品一件就是一件，
+   没有库存/缺货概念——卖掉即从货架消失，买走即从货架消失。
+   ══════════════════════════════════════════════════════════════════════ */
+const COLS = 8, ROWS = 5;
+const HAS_QTY = new Set(["材料", "消耗品"]);
+const hasQty = it => HAS_QTY.has(it.cat);
+
+const state = {
+  gm: false,            // GM 模式
+  sale: false,          // 打折开关
+  discount: 10,         // 10 折 = 原价
+  multi: false,         // 多选模式
+  myEye: 380,
+  shopEye: 1200,
+  sel: new Set(),       // 选中的 uid（"shop:xx" / "bag:xx"）
+};
+
+let uidSeq = 100;
+const mk = (o) => ({ id: "i" + (++uidSeq), qty: 1, ...o });
+
+let shopItems = [
+  mk({ nm:"锈蚀短剑", ic:"🗡", cat:"武器",   w:1,h:2, x:0,y:0, price:120 }),
+  mk({ nm:"猎人长弓", ic:"🏹", cat:"武器",   w:1,h:3, x:1,y:0, price:260 }),
+  mk({ nm:"厚重盾牌", ic:"🛡", cat:"武器",   w:2,h:2, x:2,y:0, price:340 }),
+  mk({ nm:"止血绷带", ic:"🩹", cat:"消耗品", w:1,h:1, x:4,y:0, price:25, qty:9 }),
+  mk({ nm:"镇静剂",   ic:"💉", cat:"消耗品", w:1,h:1, x:5,y:0, price:60, qty:4 }),
+  mk({ nm:"铁锭",     ic:"🧱", cat:"材料",   w:2,h:1, x:6,y:0, price:45, qty:6 }),
+  mk({ nm:"油灯",     ic:"🕯", cat:"材料",   w:1,h:2, x:4,y:1, price:80, qty:3 }),
+  mk({ nm:"皮甲",     ic:"🥋", cat:"武器",   w:2,h:2, x:0,y:2, price:210 }),
+];
+let bagItems = [
+  mk({ nm:"旧手枪", ic:"🔫", cat:"武器",   w:1,h:2, x:0,y:0, price:150 }),
+  mk({ nm:"绷带",   ic:"🩹", cat:"消耗品", w:1,h:1, x:1,y:0, price:25, qty:3 }),
+  mk({ nm:"齿轮",   ic:"⚙",  cat:"材料",   w:1,h:1, x:2,y:0, price:30, qty:5 }),
+  mk({ nm:"短匕",   ic:"🔪", cat:"武器",   w:1,h:1, x:3,y:0, price:70 }),
+];
+/* GM 侧「世界物品」：模拟从 FVTT 侧栏拖进来的东西 */
+const POOL = [
+  { nm:"链锯剑", ic:"🪚", cat:"武器",   w:2,h:3, price:520 },
+  { nm:"急救包", ic:"🧰", cat:"消耗品", w:2,h:1, price:90,  qty:2 },
+  { nm:"符文石", ic:"🔮", cat:"材料",   w:1,h:1, price:150, qty:4 },
+  { nm:"长柄斧", ic:"🪓", cat:"武器",   w:1,h:3, price:300 },
+];
+
+const $ = id => document.getElementById(id);
+const log = (html) => { const d = document.createElement("div"); d.innerHTML = html; $("logList").prepend(d); };
+
+/* ── 价格：折扣只作用于**买入**；回收价固定半价 ── */
+const buyPrice  = it => state.sale ? Math.max(1, Math.round(it.price * state.discount / 10)) : it.price;
+const sellPrice = it => Math.floor(it.price / 2);
+
+/* ── 占位 ── */
+function fits(list, box, x, y, ignoreId){
+  if (x < 0 || y < 0 || x + box.w > COLS || y + box.h > ROWS) return false;
+  return !list.some(o => o.id !== ignoreId &&
+    x < o.x + o.w && x + box.w > o.x && y < o.y + o.h && y + box.h > o.y);
+}
+function findSlot(list, w, h){
+  for (let y = 0; y <= ROWS - h; y++)
+    for (let x = 0; x <= COLS - w; x++)
+      if (fits(list, { w, h }, x, y, null)) return { x, y };
+  return null;
+}
+
+/* ══ 渲染 ══════════════════════════════════════════════════════════════ */
+function renderGrid(el, list, side){
+  el.innerHTML = "";
+  const occ = new Set();
+  for (const it of list)
+    for (let dy = 0; dy < it.h; dy++)
+      for (let dx = 0; dx < it.w; dx++) occ.add(`${it.x+dx},${it.y+dy}`);
+
+  for (let y = 0; y < ROWS; y++) for (let x = 0; x < COLS; x++){
+    const c = document.createElement("div");
+    c.className = "cg-cell" + (occ.has(`${x},${y}`) ? " occ" : "");
+    c.style.gridColumn = x + 1; c.style.gridRow = y + 1;
+    c.dataset.x = x; c.dataset.y = y;
+    el.appendChild(c);
+  }
+
+  const isShop = side === "shop";
+  const term = isShop ? $("shopSearch").value.trim().toLowerCase() : "";
+  const cat  = isShop ? (document.querySelector("#shopPanel .chip[data-cat].on")?.dataset.cat ?? "") : "";
+
+  for (const it of list){
+    const dim = isShop && ((term && !it.nm.toLowerCase().includes(term)) || (cat && it.cat !== cat));
+    const price = isShop ? buyPrice(it) : sellPrice(it);
+    const t = document.createElement("div");
+    t.className = "tile " + (isShop ? "shop" : "mine")
+      + (isShop && !state.gm ? " locked" : "")
+      + (isShop && price > state.myEye ? " afford-no" : "")
+      + (dim ? " dim" : "")
+      + (state.sel.has(side + ":" + it.id) ? " sel" : "");
+    t.style.gridColumn = `${it.x+1} / span ${it.w}`;
+    t.style.gridRow    = `${it.y+1} / span ${it.h}`;
+    t.dataset.id = it.id; t.dataset.side = side;
+    t.title = `${it.nm}（${it.cat}）`;
+    const disc = isShop && state.sale && price !== it.price
+      ? `<span style="text-decoration:line-through;color:#8a7a5c;font-weight:normal">${it.price}</span> ` : "";
+    t.innerHTML = `<span class="tick">✔</span><span class="ic">${it.ic}</span>`
+      + `<span class="nm">${it.nm}</span>`
+      + (hasQty(it) && it.qty > 1 ? `<span class="qty">×${it.qty}</span>` : "")
+      + `<span class="price">${disc}${price}</span>`;
+    el.appendChild(t);
+  }
+}
+function renderPool(){
+  $("pool").innerHTML = POOL.map((p, i) =>
+    `<div class="pitem" data-pool="${i}"><span>${p.ic}</span><span>${p.nm}</span>`
+    + `<span class="sz">${p.w}×${p.h} · ${p.price}眼</span></div>`).join("");
+}
+function renderAll(){
+  renderGrid($("bagGrid"),  bagItems,  "bag");
+  renderGrid($("shopGrid"), shopItems, "shop");
+  $("myEye").textContent   = state.myEye;
+  $("shopEye").textContent = state.shopEye;
+  $("gmToggle").classList.toggle("on", state.gm);
+  $("saleToggle").classList.toggle("on", state.sale);
+  $("multiToggle").classList.toggle("on", state.multi);
+  $("poolRow").style.display = state.gm ? "" : "none";
+  $("shopSub").textContent = state.gm ? "GM：可拖动整理、双击改价/下架" : "双击商品购买";
+  $("discountN").textContent = state.discount + " 折";
+  $("tradeBtn").style.display = state.multi ? "" : "none";
+  $("clearSel").style.display = state.multi ? "" : "none";
+  const n = state.sel.size;
+  $("selInfo").textContent = state.multi
+    ? (n ? `已选 ${n} 件（可同时选两边）` : "点击图块选择，可同时选两边")
+    : "双击商品可单件买卖";
+}
+
+/* ══ 拖放 ══════════════════════════════════════════════════════════════
+   PL：只能抓 .tile.mine；拖到自家格＝挪位，拖到货架＝出售。
+   GM：还能抓 .tile.shop 整理货架，以及从「世界物品」拖进货架上架。 */
+let drag = null;
+
+document.addEventListener("pointerdown", ev => {
+  if (state.multi) return;                       // 多选模式下不拖
+  const pool = ev.target.closest(".pitem");
+  if (pool && state.gm){ startPoolDrag(ev, +pool.dataset.pool); return; }
+  const t = ev.target.closest(".tile");
+  if (!t) return;
+  const side = t.dataset.side;
+  if (side === "shop" && !state.gm) return;      // 商人物品：PL 抓不动
+  const list = side === "shop" ? shopItems : bagItems;
+  const it = list.find(i => i.id === t.dataset.id);
+  if (!it) return;
+  beginDrag(ev, it, side, t);
+});
+
+function beginDrag(ev, it, side, tileEl){
+  const r = tileEl.getBoundingClientRect();
+  const g = tileEl.cloneNode(true);
+  g.className = tileEl.className.replace("dragging","") + " ghost";
+  g.style.width = r.width + "px"; g.style.height = r.height + "px";
+  document.body.appendChild(g);
+  drag = { it, side, el: tileEl, ghost: g, ox: ev.clientX - r.left, oy: ev.clientY - r.top, pool: null };
+  tileEl.classList.add("dragging");
+  document.body.classList.add("dragging");
+  moveGhost(ev);
+}
+function startPoolDrag(ev, idx){
+  const p = POOL[idx];
+  const g = document.createElement("div");
+  g.className = "tile shop ghost";
+  g.style.width = (p.w * 52 + (p.w - 1) * 2) + "px";
+  g.style.height = (p.h * 52 + (p.h - 1) * 2) + "px";
+  g.innerHTML = `<span class="ic">${p.ic}</span><span class="nm">${p.nm}</span>`;
+  document.body.appendChild(g);
+  drag = { it: { ...p, id: "new" }, side: "pool", el: null, ghost: g, ox: 20, oy: 20, pool: idx };
+  document.body.classList.add("dragging");
+  moveGhost(ev);
+}
+function moveGhost(ev){
+  if (!drag) return;
+  drag.ghost.style.left = (ev.clientX - drag.ox) + "px";
+  drag.ghost.style.top  = (ev.clientY - drag.oy) + "px";
+}
+function cellUnder(ev){
+  drag.ghost.style.visibility = "hidden";
+  const el = document.elementFromPoint(ev.clientX, ev.clientY);
+  drag.ghost.style.visibility = "";
+  const c = el?.closest?.(".cg-cell");
+  if (!c) return null;
+  return { cell: c, side: $("bagGrid").contains(c) ? "bag" : "shop" };
+}
+
+addEventListener("pointermove", ev => {
+  if (!drag) return;
+  moveGhost(ev);
+  document.querySelectorAll(".cg-cell").forEach(c => c.classList.remove("drop-ok","drop-no","drop-sell"));
+  const hit = cellUnder(ev);
+  if (!hit) return;
+  const { cell, side } = hit;
+  // 目标网格 + 是否属于「跨边交易」
+  const target = side === "bag" ? bagItems : shopItems;
+  const cross  = drag.side !== side && drag.side !== "pool";
+  const x = +cell.dataset.x, y = +cell.dataset.y;
+  const ok = fits(target, drag.it, x, y, cross ? null : drag.it.id)
+    && !(side === "shop" && drag.side === "bag" && sellPrice(drag.it) > state.shopEye)
+    && !(side === "shop" && drag.side === "pool" && !state.gm)
+    && !(side === "bag"  && drag.side === "shop");        // 商人 → 背包不走拖拽（买要走弹窗）
+  const cls = ok ? (cross ? "drop-sell" : "drop-ok") : "drop-no";
+  const grid = side === "bag" ? $("bagGrid") : $("shopGrid");
+  for (let dy = 0; dy < drag.it.h; dy++) for (let dx = 0; dx < drag.it.w; dx++){
+    const c = grid.querySelector(`.cg-cell[data-x="${x+dx}"][data-y="${y+dy}"]`);
+    if (c) c.classList.add(cls);
+  }
+});
+
+addEventListener("pointerup", ev => {
+  if (!drag) return;
+  const hit = cellUnder(ev);
+  const d = drag;
+  cleanupDrag();
+  if (hit){
+    const { cell, side } = hit;
+    const x = +cell.dataset.x, y = +cell.dataset.y;
+
+    if (d.side === "pool" && side === "shop" && state.gm){
+      // GM 上架
+      if (fits(shopItems, d.it, x, y, null)){
+        const it = mk({ ...POOL[d.pool], x, y });
+        shopItems.push(it);
+        log(`GM 上架 <b>${it.nm}</b>　原价 ${it.price} 眼`);
+      }
+    } else if (d.side === side){
+      // 同侧挪位
+      const list = side === "bag" ? bagItems : shopItems;
+      if (fits(list, d.it, x, y, d.it.id)){ d.it.x = x; d.it.y = y; }
+    } else if (d.side === "bag" && side === "shop"){
+      // 出售：拖自己的东西给商人
+      if (fits(shopItems, d.it, x, y, null)) openSellDrop(d.it, x, y);
+    }
+  }
+  renderAll();
+});
+function cleanupDrag(){
+  drag.ghost.remove();
+  drag.el?.classList.remove("dragging");
+  document.body.classList.remove("dragging");
+  document.querySelectorAll(".cg-cell").forEach(c => c.classList.remove("drop-ok","drop-no","drop-sell"));
+  drag = null;
+}
+
+/* ══ 多选 ══════════════════════════════════════════════════════════════ */
+document.addEventListener("click", ev => {
+  if (!state.multi) return;
+  const t = ev.target.closest(".tile");
+  if (!t) return;
+  const key = t.dataset.side + ":" + t.dataset.id;
+  state.sel.has(key) ? state.sel.delete(key) : state.sel.add(key);
+  renderAll();
+});
+$("multiToggle").onclick = () => { state.multi = !state.multi; state.sel.clear(); renderAll(); };
+$("clearSel").onclick    = () => { state.sel.clear(); renderAll(); };
+
+/* ══ 单件买卖弹窗 ══════════════════════════════════════════════════════ */
+let dlg = null;   // { mode:"buy"|"sell", it, dropAt }
+
+document.addEventListener("dblclick", ev => {
+  const t = ev.target.closest(".tile");
+  if (!t || state.multi) return;
+  const side = t.dataset.side;
+  const list = side === "shop" ? shopItems : bagItems;
+  const it = list.find(i => i.id === t.dataset.id);
+  if (!it) return;
+  if (side === "shop" && state.gm) return openPriceDialog(it);
+  openDialog(side === "shop" ? "buy" : "sell", it);
+});
+
+function openDialog(mode, it, dropAt){
+  dlg = { mode, it, dropAt };
+  const buy = mode === "buy";
+  const unit = buy ? buyPrice(it) : sellPrice(it);
+  const max  = hasQty(it) ? it.qty : 1;
+
+  $("dIc").textContent  = it.ic;
+  $("dNm").textContent  = it.nm;
+  $("dCat").textContent = it.cat + (buy ? "" : "　·　出售");
+  $("dUnitLbl").textContent = buy ? (state.sale ? `单价（${state.discount} 折）` : "单价") : "回收单价";
+  $("dUnit").textContent    = unit + " 眼";
+  $("dTotalLbl").textContent = buy ? "合计支出" : "合计收入";
+  $("dOk").textContent = buy ? "购买" : "出售";
+  // 没有数量概念的物品不显示数量行
+  $("dQtyRow").style.display = hasQty(it) ? "" : "none";
+  const q = $("dQty"); q.min = 1; q.max = Math.max(1, max); q.value = max > 1 ? 1 : 1;
+  updateDialog();
+  $("mask").classList.add("on");
+}
+function openSellDrop(it, x, y){ openDialog("sell", it, { x, y }); }
+
+function updateDialog(){
+  if (!dlg) return;
+  const { mode, it } = dlg;
+  const buy = mode === "buy";
+  const unit = buy ? buyPrice(it) : sellPrice(it);
+  const n = hasQty(it) ? +$("dQty").value : 1;
+  const total = unit * n;
+  const after = buy ? state.myEye - total : state.myEye + total;
+  $("dQtyN").textContent  = n;
+  $("dTotal").textContent = total + " 眼";
+  $("dAfter").textContent = after + " 眼";
+  const bad = buy ? total > state.myEye : total > state.shopEye;
+  $("dTotal").parentElement.classList.toggle("bad", bad);
+  $("dAfterRow").classList.toggle("bad", bad);
+  $("dOk").disabled = bad;
+  $("dAfterRow").querySelector("span").textContent =
+    bad && !buy ? "商人的钱不够" : "交易后持有";
+}
+$("dQty").oninput = updateDialog;
+$("dCancel").onclick = () => { $("mask").classList.remove("on"); dlg = null; renderAll(); };
+$("mask").onclick = e => { if (e.target === $("mask")) $("dCancel").click(); };
+
+$("dOk").onclick = () => {
+  const { mode, it, dropAt } = dlg;
+  const n = hasQty(it) ? +$("dQty").value : 1;
+  if (mode === "buy") doBuy(it, n); else doSell(it, n, dropAt);
+  $("dCancel").click();
+};
+
+/* ── 成交：买 ── */
+function doBuy(it, n){
+  const unit = buyPrice(it), total = unit * n;
+  const slot = findSlot(bagItems, it.w, it.h);
+  if (!slot){ log(`<b style="color:var(--red-danger)">背包放不下</b> ${it.nm}`); return; }
+  state.myEye -= total; state.shopEye += total;
+  const same = hasQty(it) ? bagItems.find(b => b.nm === it.nm) : null;
+  if (same) same.qty += n;
+  else bagItems.push(mk({ ...it, id: undefined, x: slot.x, y: slot.y, qty: hasQty(it) ? n : 1 }));
+  if (hasQty(it)) { it.qty -= n; if (it.qty <= 0) shopItems = shopItems.filter(s => s.id !== it.id); }
+  else shopItems = shopItems.filter(s => s.id !== it.id);
+  log(`买入 <b>${it.nm}</b>${n > 1 ? " ×" + n : ""}　−${total} 眼`);
+}
+/* ── 成交：卖（dropAt 为拖放落点；没有就自动找位） ── */
+function doSell(it, n, dropAt){
+  const unit = sellPrice(it), total = unit * n;
+  const slot = dropAt && fits(shopItems, it, dropAt.x, dropAt.y, null)
+    ? dropAt : findSlot(shopItems, it.w, it.h);
+  if (!slot){ log(`<b style="color:var(--red-danger)">货架放不下</b> ${it.nm}`); return; }
+  state.myEye += total; state.shopEye -= total;
+  const same = hasQty(it) ? shopItems.find(s => s.nm === it.nm) : null;
+  if (same) same.qty += n;
+  else shopItems.push(mk({ ...it, id: undefined, x: slot.x, y: slot.y, qty: hasQty(it) ? n : 1 }));
+  if (hasQty(it)) { it.qty -= n; if (it.qty <= 0) bagItems = bagItems.filter(b => b.id !== it.id); }
+  else bagItems = bagItems.filter(b => b.id !== it.id);
+  log(`卖出 <b>${it.nm}</b>${n > 1 ? " ×" + n : ""}　+${total} 眼`);
+}
+
+/* ══ 一键买卖 ══════════════════════════════════════════════════════════ */
+$("tradeBtn").onclick = () => {
+  const buys  = shopItems.filter(i => state.sel.has("shop:" + i.id));
+  const sells = bagItems .filter(i => state.sel.has("bag:"  + i.id));
+  if (!buys.length && !sells.length) return;
+  const cost   = buys .reduce((a, i) => a + buyPrice(i)  * (hasQty(i) ? i.qty : 1), 0);
+  const income = sells.reduce((a, i) => a + sellPrice(i) * (hasQty(i) ? i.qty : 1), 0);
+  const net    = cost - income;
+
+  const rows = (list, f, cls) => list.map(i =>
+    `<div class="r"><span>${i.ic} ${i.nm}${hasQty(i) && i.qty > 1 ? " ×" + i.qty : ""}</span>`
+    + `<b style="color:${cls}">${f(i) * (hasQty(i) ? i.qty : 1)}</b></div>`).join("");
+
+  $("b2Sub").textContent = `买入 ${buys.length} 件 · 卖出 ${sells.length} 件`;
+  $("b2Body").innerHTML =
+      (buys.length  ? `<div class="lst"><div class="h">买入</div>${rows(buys, buyPrice, "var(--gold-active)")}</div>` : "")
+    + (sells.length ? `<div class="lst"><div class="h">卖出</div>${rows(sells, sellPrice, "var(--green-ok)")}</div>` : "")
+    + `<div class="kv"><span>支出</span><b>${cost} 眼</b></div>`
+    + `<div class="kv"><span>收入</span><b>${income} 眼</b></div>`
+    + `<div class="kv total"><span>${net >= 0 ? "净支出" : "净收入"}</span><b>${Math.abs(net)} 眼</b></div>`
+    + `<div class="kv${net > state.myEye ? " bad" : ""}"><span>交易后持有</span>`
+    + `<b>${state.myEye - net} 眼</b></div>`;
+  $("b2Ok").disabled = net > state.myEye;
+  $("mask2").classList.add("on");
+};
+$("b2Cancel").onclick = () => { $("mask2").classList.remove("on"); };
+$("mask2").onclick = e => { if (e.target === $("mask2")) $("b2Cancel").click(); };
+$("b2Ok").onclick = () => {
+  // 先卖后买：卖完手里有钱，买得起的概率更高
+  for (const i of bagItems .filter(i => state.sel.has("bag:"  + i.id))) doSell(i, hasQty(i) ? i.qty : 1);
+  for (const i of shopItems.filter(i => state.sel.has("shop:" + i.id))) doBuy (i, hasQty(i) ? i.qty : 1);
+  state.sel.clear();
+  $("b2Cancel").click();
+  renderAll();
+};
+
+/* ══ GM：改价 / 下架 ═══════════════════════════════════════════════════ */
+let priceIt = null;
+function openPriceDialog(it){
+  priceIt = it;
+  $("p3Ic").textContent = it.ic;
+  $("p3Nm").textContent = it.nm;
+  $("p3Price").value = it.price;
+  $("p3QtyRow").style.display = hasQty(it) ? "" : "none";
+  $("p3Qty").value = it.qty;
+  $("mask3").classList.add("on");
+}
+$("p3Ok").onclick = () => {
+  priceIt.price = Math.max(0, +$("p3Price").value || 0);
+  if (hasQty(priceIt)) priceIt.qty = Math.max(1, +$("p3Qty").value || 1);
+  log(`GM 改价 <b>${priceIt.nm}</b> → ${priceIt.price} 眼`);
+  $("mask3").classList.remove("on"); renderAll();
+};
+$("p3Del").onclick = () => {
+  shopItems = shopItems.filter(s => s.id !== priceIt.id);
+  log(`GM 下架 <b>${priceIt.nm}</b>`);
+  $("mask3").classList.remove("on"); renderAll();
+};
+$("mask3").onclick = e => { if (e.target === $("mask3")) $("mask3").classList.remove("on"); };
+
+/* ══ GM 工具条 ══════════════════════════════════════════════════════════ */
+$("gmToggle").onclick   = () => { state.gm = !state.gm; renderAll(); };
+$("saleToggle").onclick = () => { state.sale = !state.sale; renderAll(); };
+$("discount").oninput   = e => { state.discount = +e.target.value; renderAll(); };
+
+/* ── 搜索 / 分类（只影响货架） ── */
+$("shopSearch").oninput = renderAll;
+document.querySelectorAll("#shopPanel .chip[data-cat]").forEach(c => c.onclick = () => {
+  document.querySelectorAll("#shopPanel .chip[data-cat]").forEach(o => o.classList.remove("on"));
+  c.classList.add("on"); renderAll();
+});
+
+renderPool();
+renderAll();
+</script>
+</body>
+</html>

@@ -30,7 +30,16 @@
           {{/if}}
         </div>
         <div class="equip-type-row">
-          <span class="equip-subtype-label">士气低落 / 陷入恐慌 效果配置</span>
+          {{#if (and isEditable (not isLocked))}}
+            <select name="system.panicType" class="equip-subtype-sel">
+              <option value="" {{#eq system.panicType ""}}selected{{/eq}}>未指定类型</option>
+              {{#each panicTypes}}
+                <option value="{{@key}}" {{#eq @key ../system.panicType}}selected{{/eq}}>{{this}}</option>
+              {{/each}}
+            </select>
+          {{else}}
+            <span class="equip-subtype-label">{{panicTypeLabel}}</span>
+          {{/if}}
         </div>
       </div>
     </div>
@@ -61,8 +70,11 @@
 
     <div class="equip-divider"></div>
 
-    {{!-- ── 效果触发编辑器（触发时机使用「恐慌触发时」） ────────────── --}}
-    {{> systems/limbusCompany_FVTT/templates/partials/activity-editor.hbs}}
+    {{!-- ── 效果触发编辑器（触发时机使用「恐慌触发时」/「坚定触发时」） ──
+         与技能卡/装备卡一致：默认收起，由底部【编辑激活效果】按钮展开 --}}
+    {{#if activitiesExpanded}}
+      {{> systems/limbusCompany_FVTT/templates/partials/activity-editor.hbs}}
+    {{/if}}
 
   </div>{{!-- /equip-body --}}
 
@@ -70,6 +82,7 @@
   <div class="item-sheet-footer">
     <div class="footer-actions">
       <button class="item-send-chat sheet-btn">发送聊天框</button>
+      <button class="activity-edit-toggle sheet-btn">编辑激活效果 {{#if activitiesExpanded}}▼{{else}}▲{{/if}}</button>
     </div>
   </div>
 

@@ -13,17 +13,21 @@
  *     refreshOnGain: true,       // 可选：获得时刷新（不叠加层数，直接替换）
  *     keepAtZero:    true,       // 可选：层数减至 0 时不自动清除（仍以 0 层留在状态栏，
  *                                //       需手动 removeBuff 或其他效果移除）
+ *   ⚠ 处理器一律**不要**自己 ChatMessage.create：所有钩子的消息都靠**返回字符串**
+ *     交给派发处，由它并进当前那张卡（对抗卡的详细信息 / 承受结算 / 先攻骰掷的折叠）。
+ *     自己发消息会插在结算流程中间，也绕过【结算结果】的延后。
+ *
  *     onRoundEnd(actor, buff) {},           // 回合结束时回调；返回字符串则并入「回合结束时」折叠汇总消息
  *     onRoundStart(actor, buff) {},         // 回合开始时回调（在同一轮的 onRoundEnd 之后执行，
  *                                             // 因此回合结束时被移除的 BUFF 不会再触发）；
  *                                             // 返回字符串则并入「回合开始时」折叠汇总消息
  *     modifySpeedRoll(actor, ctx) {},       // 速度骰结果修正 → 返回最终 total（Number）
- *     onClashWin(carrier, opponent, buff) {},  // 拼点胜利时回调 → 返回 Promise
+ *     onClashWin(carrier, opponent, buff) {},  // 拼点胜利时回调；返回字符串则并进对抗卡的详细信息
  *     onClashLose(carrier, winner, buff) {},   // 拼点失败时回调（与 onClashWin 对称）
  *     onBuffGained(actor, buff, ctx) {},    // 该角色获得任意 BUFF 后调用（不只是自己这条），
- *                                             // ctx = { type, intensity, stacks }
+ *                                             // ctx = { type, intensity, stacks }；返回字符串则并进当前卡
  *     onBuffLost(actor, buff, ctx) {},      // 该角色失去/减少任意 BUFF 后调用，
- *                                             // ctx = { type, amount, stacks, removed }
+ *                                             // ctx = { type, amount, stacks, removed }；返回字符串则并进当前卡
  *     modifyDiceRoll(actor, buff, ctx) {},  // 拼点骰/防守骰结果修正 → 返回数字或 { total, note }；
  *                                             // ctx = { roll, total, item, isDefense }
  *     beforeChaos(actor, buff, ctx) {},     // 混乱触发前检查 → 返回 { immune: bool }；
@@ -51,6 +55,7 @@
  *                                             // 因此"友方受到攻击时我获得…"挂在自己身上即可。
  *                                             // 只认攻击伤害（对抗/反击/承受/容量扩散/追加伤害），
  *                                             // 烧伤流血破裂等跳动伤害不触发。
+ *                                             // 返回字符串则并进当前卡。
  *                                             // ctx = { victim, amount, attacker,
  *                                             //          addBuff, addBuffTo, getBuff }
  *                                             // amount = 实际掉血量（护盾/下限保护之后）
@@ -262,13 +267,9 @@ registerCustomBuff("defensiveStance", {
     const { blasts, msgs } = await ClashManager.seismicBlast(opponent, 1, { attacker: carrier });
     if (blasts <= 0) return;
 
-    await ChatMessage.create({
-      speaker: ChatMessage.getSpeaker({ actor: carrier }),
-      content: `<div class="limbuscompany chat-clash">
-        <strong>${carrier.name}</strong>【防御姿态】触发：对 <strong>${opponent.name}</strong> 震颤引爆！<br>
-        ${msgs.join("<br>")}
-      </div>`,
-    });
+    // 返回字符串 → 并进【拼点对抗】卡的「详细信息」，不再自己单发一条
+    return `【防御姿态】触发：对 <strong>${opponent.name}</strong> 震颤引爆！`
+      + (msgs.length ? `<br>${msgs.join("<br>")}` : "");
   },
 
   /** 免疫因受到伤害触发的混乱（beforeChaos 返回 { immune: true }） */

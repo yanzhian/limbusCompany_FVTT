@@ -36,6 +36,17 @@
           {{/if}}
         </div>
 
+        {{!-- 类型 + 分类 --}}
+        <div class="equip-type-row">
+          <span class="equip-subtype-label">容器</span>
+          {{#if (and isEditable (not isLocked))}}
+            <input type="text" name="system.category" value="{{system.category}}" class="equip-category-input" placeholder="分类"/>
+          {{else}}
+            <span class="equip-sep">　</span>
+            <span class="equip-category">{{system.category}}</span>
+          {{/if}}
+        </div>
+
         {{!-- 内部容量（网格尺寸） --}}
         <div class="container-size-row">
           <span class="container-size-label">内部容量</span>

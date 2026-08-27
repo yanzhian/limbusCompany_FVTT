@@ -562,12 +562,18 @@ export class ClashManager {
       for (const buff of foundry.utils.deepClone(ally.system?.buffs ?? [])) {
         const handler = resolveBuffHandler(buff);
         if (typeof handler?.onAllyHpDamage !== "function") continue;
-        await handler.onAllyHpDamage(ally, buff, {
+        const note = await handler.onAllyHpDamage(ally, buff, {
           victim, amount, attacker,
           addBuff:   (type, i, st, when) => ClashManager._addBuff(ally, type, i, st, when),
           addBuffTo: (tgt, type, i, st, when) => ClashManager._addBuff(tgt, type, i, st, when),
           getBuff:   (type) => ClashManager._getBuff(ally, type),
         });
+        // 同上：返回字符串并进当前卡（承受结算那张），处理器不自己发消息
+        if (typeof note === "string" && note) {
+          const line = [{ trigger: "BUFF触发", itemName: handler.label ?? buff.name ?? buff.type,
+                          ownerName: ally.name, msgs: [note] }];
+          if (!ClashManager.pushAmbient(line)) await ClashManager._flushActMsgs(line, ally);
+        }
       }
     }
   }
@@ -731,7 +737,14 @@ export class ClashManager {
               ? ClashManager._parseResistance(targetActor.system?.egoResistances?.[sinType] ?? "x1.0")
               : 1.0;
             const dmg = Math.max(0, Math.round(roll.total * physMult * sinMult));
-            await ClashManager._applyAndSendTake(targetActor, dmg, { attacker: owner, category, sinType });
+            // 与 ④效果的 [追加伤害] 同路：对抗结算中先排队，等【结算结果】
+            // 一起落进承受结算卡，不在按钮之前自己冒一张
+            const src = handler.label ?? buff.name ?? buff.type ?? "";
+            if (!ClashManager.queueExtraDamage(targetActor, dmg,
+                  { attacker: owner, category, sinType, item, source: src })) {
+              await ClashManager._applyAndSendTake(targetActor, dmg,
+                { attacker: owner, takeLabel: ClashManager.extraDmgLabel(src), category, sinType, item });
+            }
             return dmg;
           },
         });
@@ -1028,16 +1041,26 @@ export class ClashManager {
    */
   static async _dispatchBuffChange(actor, event, ctx) {
     if (!actor || ctx?._internal) return;
+    const lines = [];
     for (const buff of foundry.utils.deepClone(actor.system?.buffs ?? [])) {
       const handler = resolveBuffHandler(buff);
       const fn = handler?.[event];
       if (typeof fn !== "function") continue;
       try {
-        await fn(actor, buff, ctx);
+        const note = await fn(actor, buff, ctx);
+        // 与其余钩子同一约定：返回字符串就并进当前这张卡，绝不自己发消息。
+        // 这两个钩子（onBuffGained/onBuffLost）原先直接丢掉返回值——处理器
+        // 想报点什么只能自己 ChatMessage.create，那正是要杜绝的写法。
+        if (typeof note === "string" && note) {
+          lines.push({ trigger: "BUFF触发", itemName: handler.label ?? buff.name ?? buff.type,
+                       ownerName: actor.name, msgs: [note] });
+        }
       } catch (err) {
         console.error(`ClashManager: BUFF【${buff.name ?? buff.type}】${event} 执行出错`, err);
       }
     }
+    if (!lines.length) return;
+    if (!ClashManager.pushAmbient(lines)) await ClashManager._flushActMsgs(lines, actor);
   }
 
   /**
@@ -2105,9 +2128,40 @@ export class ClashManager {
             const sinLabel = eff.dmgSinType   ? `【${ClashManager._sinLabel(eff.dmgSinType)}】`   : "";
             descStr = `对【${effTgt.name}】造成 ${dmg} 点${catLabel}${sinLabel}追加伤害（结算详情见承受结算消息）`;
             if (dmg > 0) {
-              await ClashManager._applyAndSendTake(effTgt, dmg, { attacker: owner, takeLabel: "追加伤害",
-                category: eff.dmgCategory ?? "", sinType: eff.dmgSinType ?? "", item });
+              // 对抗结算中：排队等【结算结果】，不在按钮之前就把血扣了
+              const _src = (act?.name ?? "").trim() || item?.name || "";
+              const queued = ClashManager.queueExtraDamage(effTgt, dmg, {
+                attacker: owner, category: eff.dmgCategory ?? "", sinType: eff.dmgSinType ?? "",
+                item, source: _src });
+              if (!queued) {
+                await ClashManager._applyAndSendTake(effTgt, dmg,
+                  { attacker: owner, takeLabel: ClashManager.extraDmgLabel(_src),
+                    category: eff.dmgCategory ?? "", sinType: eff.dmgSinType ?? "", item });
+              }
             }
+            break;
+          }
+          case "panicCardSwap": {
+            // 替换恐慌卡：按名字在世界物品 / 合集包里检索一张恐慌卡，
+            // 嵌入目标角色并占住对应槽位（BOSS 的"给你换一张陷入恐慌"）
+            const pcName = (eff.panicCardName ?? "").trim();
+            if (!pcName) { descStr = "替换恐慌卡：未配置卡名"; break; }
+            const pcSlot = eff.panicSlot === "lowMorale" ? "lowMorale" : "panic";
+            const pcLabel = (CONFIG.LIMBUSCOMPANY?.PANIC_TYPES ?? {})[pcSlot] ?? pcSlot;
+            if (!effTgt) { descStr = "替换恐慌卡：没有目标"; break; }
+            const src = await ClashManager._findPanicCardByName(pcName);
+            if (!src) { descStr = `替换恐慌卡：找不到恐慌卡【${pcName}】`; break; }
+            // 卡上标了另一种类型就不给放，和角色卡拖放同一套校验
+            const srcType = src.system?.panicType ?? "";
+            if (srcType && srcType !== pcSlot) {
+              descStr = `替换恐慌卡：【${src.name}】是「`
+                + `${(CONFIG.LIMBUSCOMPANY?.PANIC_TYPES ?? {})[srcType] ?? srcType}」卡，放不进「${pcLabel}」槽`;
+              break;
+            }
+            const ok = await ClashManager.swapPanicCard(effTgt, pcSlot, src);
+            descStr = ok
+              ? `【${effTgt.name}】的「${pcLabel}」更换为【${src.name}】`
+              : `替换恐慌卡：无法写入【${effTgt.name}】`;
             break;
           }
           case "diceTypeChg": {
@@ -2426,9 +2480,14 @@ export class ClashManager {
     });
   }
 
-  /** 没有【结算结果】按钮的分支：当场结算并单独出一张承受结算卡 */
+  /**
+   * 没有【结算结果】按钮的分支：当场结算流血。
+   * 外层聚合还开着（建卡时调用就是这种情况）就只记账，交给外层那次 flush ——
+   * 自己再 _beginTakeAgg 会把外层攒的记录整个顶掉。
+   */
   static async settleBleedNow(entries) {
     if (!entries?.length) return;
+    if (ClashManager._takeAgg) { await ClashManager.settleBleed(entries); return; }
     ClashManager._beginTakeAgg();
     await ClashManager.settleBleed(entries);
     await ClashManager._flushTakeAgg();
@@ -2507,6 +2566,18 @@ export class ClashManager {
     if (t === "diceFacesAdj"){ const v = eff.value ?? eff.intensity ?? 0; return `技能面数 → d${v}`; }
     if (t === "baseValue")   { const v = eff.value ?? eff.intensity ?? 0; return `技能基础值 ${v >= 0 ? "+" : ""}${v}`; }
     if (t === "seismicBlast") return `对${tgt}触发震颤引爆 ×${eff.value ?? 1}`;
+    if (t === "panicCardSwap") {
+      const slotLabel = (CONFIG.LIMBUSCOMPANY?.PANIC_TYPES ?? {})[eff.panicSlot ?? "panic"] ?? "陷入恐慌";
+      return `将${tgt}的「${slotLabel}」更换为【${(eff.panicCardName ?? "").trim() || "?"}】`;
+    }
+    if (t === "panicCardSwap") {
+      const slotLabel = (CONFIG.LIMBUSCOMPANY?.PANIC_TYPES ?? {})[eff.panicSlot ?? "panic"] ?? "陷入恐慌";
+      return `将${tgt}的「${slotLabel}」更换为【${(eff.panicCardName ?? "").trim() || "?"}】`;
+    }
+    if (t === "panicCardSwap") {
+      const sl = (CONFIG.LIMBUSCOMPANY?.PANIC_TYPES ?? {})[eff.panicSlot ?? "panic"] ?? "陷入恐慌";
+      return `将${tgt}的「${sl}」更换为【${eff.panicCardName || "?"}】`;
+    }
     if (t === "triggerBuff") {
       const bn = eff.trigBuff === "custom" ? (eff.trigBuffCustom || "自定义") : ClashManager._buffLabel(eff.trigBuff ?? "");
       return `触发${tgt} ${eff.trigStacks ?? 1} 层 ${bn}`;
@@ -2972,13 +3043,22 @@ export class ClashManager {
       });
     }
 
+    // 排版与【装备激活】【反应触发】同一套：头 + 角色名 + 金线 + 内容 + 金线
     const covered = game.actors.get(initFlags.targetActorId ?? "");
     await ClashManager._safeChatCreate({
       speaker: ChatMessage.getSpeaker({ actor }),
-      content: `<div class="limbuscompany chat-clash">
-        <strong>${actor.name}</strong> 发动【援护防御】，替 <strong>${covered?.name ?? "队友"}</strong>
-        接下这次对抗（使用 <strong>${skill.name}</strong>）。
-      </div>`,
+      content: `
+        <div class="limbus-clash-card" data-clash-type="cover">
+          ${ClashManager._chatHeader(actor, "援护防御")}
+          ${ClashManager._goldDivider()}
+          <div style="font-size:.82rem;color:#E8C9A2;margin:6px 0 2px;">
+            <strong>「${skill.name}」</strong>：<span style="color:#9A8462;">替 ${covered?.name ?? "队友"} 接下这次对抗</span>
+          </div>
+          <div style="font-size:.78rem;color:#9A8462;line-height:1.7;margin:0 0 6px;">
+            <div>本次对抗的目标改为 <strong>${actor.name}</strong></div>
+          </div>
+          ${ClashManager._goldDivider()}
+        </div>`,
     });
 
     await ClashManager.showPerformDialog(actor, skill, msgId, newFlags, -1);
@@ -3408,6 +3488,11 @@ export class ClashManager {
     ClashManager._beginTakeAgg();
     // ④效果 useSkill 发起的新对抗排队，等【结算结果】之后再弹
     ClashManager._beginSkillLaunchQueue();
+    // [追加伤害] 同样排队，和主伤害一起落进承受结算卡
+    ClashManager._beginExtraDmgQueue();
+    // 拼点理智变化可能把人打进【士气低落】，进而弹出一张【恐慌鉴定】卡。
+    // 开着聚合，这些行就并成一张、排在对抗卡之后，而不是插在中间。
+    ClashManager._beginPanicAgg();
     // 本场对抗中的【流血】发作先攒起来，等【结算结果】之后再公示
     ClashManager._beginBleedBuf();
     // [受到伤害时] 的效果带到承受结算卡上（伤害要等【结算结果】才应用，
@@ -3590,12 +3675,15 @@ export class ClashManager {
       await ClashManager._applyActivitiesAndEquip(defItem,  "攻击后", defCtx);
       await ClashManager._restoreAllItemMods(atkItem, defItem);
       await ClashManager.restoreItemSnaps(_statSnap);
-      await ClashManager._flushTakeAgg();
       ClashManager._armReactionCheck({ lastSkillUuid: atkItem?.uuid ?? null, attacker: atkActor, defender: defActor });
       await ClashManager._resolveDirectCounter(atkActor, defActor, effectiveInitFlags, defItem, defFinalRoll, defFinalFormula, _actMsgs);
+      // 结算过程中的零散承受（追击、追加伤害、引爆…）排在结算卡**之后**发，
+      // 否则聊天里会先冒出两张【承受结算】、再出【反击】，读起来是倒的
+      await ClashManager._flushExtraDmg();
+      await ClashManager._flushTakeAgg();
+      await ClashManager._flushPanicAgg();
       await ClashManager._flushSkillLaunches();
-      await ClashManager._flushSkillLaunches();
-    await ClashManager._flushReactionCheck();
+      await ClashManager._flushReactionCheck();
       return;
     }
     if (defCategory === "block") {
@@ -3605,12 +3693,13 @@ export class ClashManager {
       await ClashManager._applyActivitiesAndEquip(defItem,  "攻击后", defCtx);
       await ClashManager._restoreAllItemMods(atkItem, defItem);
       await ClashManager.restoreItemSnaps(_statSnap);
-      await ClashManager._flushTakeAgg();
       ClashManager._armReactionCheck({ lastSkillUuid: atkItem?.uuid ?? null, attacker: atkActor, defender: defActor });
       await ClashManager._resolveDirectBlock(atkActor, defActor, effectiveInitFlags, defItem, defFinalRoll, defFinalFormula, _actMsgs);
+      await ClashManager._flushExtraDmg();
+      await ClashManager._flushTakeAgg();
+      await ClashManager._flushPanicAgg();
       await ClashManager._flushSkillLaunches();
-      await ClashManager._flushSkillLaunches();
-    await ClashManager._flushReactionCheck();
+      await ClashManager._flushReactionCheck();
       return;
     }
 
@@ -3715,17 +3804,25 @@ export class ClashManager {
       const winner = atkWins ? atkActor : defActor;
       const loser  = atkWins ? defActor : atkActor;
       if (winner && loser) {
+        // 与 onRoundEnd 同一约定：返回字符串则并进本次对抗卡的「详细信息」，
+        // 处理器不再自己发 ChatMessage（【防御姿态】原先就是自己发的）
         for (const buff of [...(winner.system?.buffs ?? [])]) {
           const handler = resolveBuffHandler(buff);
-          if (typeof handler?.onClashWin === "function") {
-            await handler.onClashWin(winner, loser, buff);
+          if (typeof handler?.onClashWin !== "function") continue;
+          const line = await handler.onClashWin(winner, loser, buff);
+          if (typeof line === "string" && line) {
+            _actMsgs.push({ trigger: "拼点成功", itemName: handler.label ?? buff.name ?? "",
+                            ownerName: winner.name, msgs: [line] });
           }
         }
         // 败者侧的 onClashLose（与 onClashWin 对称）
         for (const buff of [...(loser.system?.buffs ?? [])]) {
           const handler = resolveBuffHandler(buff);
-          if (typeof handler?.onClashLose === "function") {
-            await handler.onClashLose(loser, winner, buff);
+          if (typeof handler?.onClashLose !== "function") continue;
+          const line = await handler.onClashLose(loser, winner, buff);
+          if (typeof line === "string" && line) {
+            _actMsgs.push({ trigger: "拼点失败", itemName: handler.label ?? buff.name ?? "",
+                            ownerName: loser.name, msgs: [line] });
           }
         }
       }
@@ -3756,11 +3853,14 @@ export class ClashManager {
       ? await ClashManager._computeUnbreakableCounter(..._unbreakableCounterArgs)
       : null;
 
-    await ClashManager._flushTakeAgg();
     ClashManager._armReactionCheck({ lastSkillUuid: atkItem?.uuid ?? null, attacker: atkActor, defender: defActor });
     await ClashManager._sendResolveMsg(
       resolution, finalInitFlags, defActor, defItem, defFormula, sanityNotes, _actMsgs, _takeEffectRows,
       _ubCounter);
+    // 结算过程中的零散承受排在【拼点对抗】之后
+    await ClashManager._flushExtraDmg();
+    await ClashManager._flushTakeAgg();
+    await ClashManager._flushPanicAgg();
     await ClashManager._flushSkillLaunches();
     await ClashManager._flushReactionCheck();
   }
@@ -4171,9 +4271,11 @@ export class ClashManager {
     const isClashCounterWin = !atkWins && defCat === "clashCounter";
     const isClashBlockWin   = !atkWins && defCat === "clashBlock";
     const isDodgeWin        = !!dodgeWin;
-    // 拼点本身没伤害，但【不可摧毁】反击有——照样得给个【结算结果】把它落地
+    // 拼点本身没伤害，但【不可摧毁】反击 / [追加伤害] 有——照样得给个
+    // 【结算结果】把它们落地
     const ubDmg             = ubCounter?.finalDmg ?? 0;
-    const noTake            = (isDodgeWin || isClashBlockWin) && ubDmg <= 0;
+    const _extraDmg         = ClashManager._takeExtraDmg();
+    const noTake            = (isDodgeWin || isClashBlockWin) && ubDmg <= 0 && !_extraDmg;
 
     const atkTotalStyle = atkWins
       ? "font-size:2rem;font-weight:bold;color:#E8C9A2;"
@@ -4323,6 +4425,8 @@ export class ClashManager {
           // 反应检查交给【结算结果】：扣完血再扫，前置条件读到的才是新数值
           reactionCheck: noTake ? null : ClashManager._takeReactionCheck(),
           skillLaunches: noTake ? null : ClashManager._takeSkillLaunches(),
+          // [追加伤害]：和主伤害一起落进同一张承受结算卡
+          extraDmg:      noTake ? null : _extraDmg,
           // 【不可摧毁】反击的伤害跟着同一个【结算结果】一起落地
           unbreakable:   ubCounter ? {
             targetActorId: ubCounter.targetActor?.id ?? "",
@@ -4792,6 +4896,8 @@ export class ClashManager {
 
     ClashManager._beginTakeAgg();
     ClashManager._beginSkillLaunchQueue();
+    ClashManager._beginExtraDmgQueue();
+    ClashManager._beginPanicAgg();
     // 单方面攻击同样是攻击动作，攻击方的【流血】要发作（守方没出手，不发作）
     ClashManager._beginBleedBuf();
     const _takeEffectRows2 = [];
@@ -4952,7 +5058,6 @@ export class ClashManager {
 
     // 单方面攻击卡：与拼点对抗卡同一套流程——先把结果摆出来，
     // 扣血、破裂/沉沦/震颤引爆等等都等【结算结果】按下去才发生。
-    await ClashManager._flushTakeAgg();
     ClashManager._armReactionCheck({ lastSkillUuid: atkItem2?.uuid ?? null, attacker: atkActor, defender: defActor });
     await ClashManager._sendDirectTakeMsg({
       actMsgs: _actMsgs2, takeEffects: _takeEffectRows2,
@@ -4971,6 +5076,10 @@ export class ClashManager {
       } : null,
     });
 
+    // 结算过程中的零散承受排在【单方面攻击】之后
+    await ClashManager._flushExtraDmg();
+    await ClashManager._flushTakeAgg();
+    await ClashManager._flushPanicAgg();
     await ClashManager._flushSkillLaunches();
     await ClashManager._flushReactionCheck();
   }
@@ -5075,6 +5184,7 @@ export class ClashManager {
           bleedMsgs:     ClashManager._takeBleedBuf(),
           reactionCheck: ClashManager._takeReactionCheck(),
           skillLaunches: ClashManager._takeSkillLaunches(),
+          extraDmg:      ClashManager._takeExtraDmg(),
           directRedo:    { initFlags },
         },
       },
@@ -5754,7 +5864,9 @@ export class ClashManager {
     } else {
       rec.newHp = res.finalHp;          // 先前取第一次、现在取最后一次
     }
-    const label = takeLabel && takeLabel !== "承受结算" ? takeLabel : "追加伤害";
+    // 主伤害（takeLabel 就是默认的「承受结算」）那一行叫「承受」；
+    // 其余带来源的（追加伤害·XXX、容量扩散-承受…）原样用它自己的名字
+    const label = takeLabel && takeLabel !== "承受结算" ? takeLabel : "承受";
     if (res.damage > 0) rec.triggers.push({ k: label, v: `承受 <b>${res.damage}</b> 点` });
     if (res.ruptureDmg)      rec.triggers.push({ k: "破裂触发", v: `附加 <b>${res.ruptureDmg}</b> 点固定伤害` });
     if (res.sanityDmg)       rec.triggers.push({ k: "沉沦触发", v: `${res.sanityDmg} 点侵蚀度（理智 −${res.sanityDmg}）` });
@@ -5961,9 +6073,10 @@ export class ClashManager {
       const lines = tremorMsgs?.length ? tremorMsgs : ["消耗 1 层【震颤】，混乱阈值前移"];
       for (const l of lines) triggers.push({ k: "震颤引爆", v: l });
     }
-    // 追加伤害走的是独立的一次承受结算，takeLabel 会带「追加伤害」
+    // 追加伤害走的是独立的一次承受结算，takeLabel 会带「追加伤害」——
+    // 连来源一起（追加伤害·本国剑术），一屏几条时才分得清是哪一条
     if (takeLabel.includes("追加伤害")) {
-      triggers.unshift({ k: "追加伤害", v: `承受 <b>${damage}</b> 点` });
+      triggers.unshift({ k: takeLabel, v: `承受 <b>${damage}</b> 点` });
     }
     // BUFF 钩子（护盾吸收、onTakeDamage 等）。烧伤这类也可能由技能效果在此刻触发，
     // 所以不写死类型，来什么列什么。
@@ -6161,6 +6274,7 @@ export class ClashManager {
           bleedMsgs:      ClashManager._takeBleedBuf(),
           reactionCheck:  ClashManager._takeReactionCheck(),
           skillLaunches:  ClashManager._takeSkillLaunches(),
+          extraDmg:       ClashManager._takeExtraDmg(),
           // 整局重掷（仅 GM）：与拼点对抗卡同一套
           redoData: {
             defActorId: defActor?.id ?? "",
@@ -6335,6 +6449,7 @@ export class ClashManager {
           bleedMsgs:     finalDamage > 0 ? _bleed : [],
           reactionCheck: finalDamage > 0 ? ClashManager._takeReactionCheck() : null,
           skillLaunches: finalDamage > 0 ? ClashManager._takeSkillLaunches() : null,
+          extraDmg:      finalDamage > 0 ? ClashManager._takeExtraDmg() : null,
         },
       },
     });
@@ -6466,6 +6581,132 @@ export class ClashManager {
           ${ClashManager._goldDivider()}
         </div>`,
     });
+  }
+
+  /* ─── 恐慌卡替换 ───────────────────────────────────────────────────────
+   * ④效果【替换恐慌卡】：BOSS 的特殊能力给目标换一张【陷入恐慌】（或士气低落）。
+   * 恐慌卡不像技能那样"角色本来就带着"，所以检索范围是世界物品 + 全部合集包，
+   * 按名字精确匹配（合集包 UUID 提取后会变，名字不会）。
+   * ──────────────────────────────────────────────────────────────────── */
+
+  /**
+   * 按名字检索一张恐慌卡：先世界物品，再逐个合集包。
+   * @param {string} name
+   * @returns {Promise<Item|null>}
+   */
+  static async _findPanicCardByName(name) {
+    const want = (name ?? "").trim();
+    if (!want) return null;
+
+    const world = game.items?.find(it => it.type === "panic" && it.name === want);
+    if (world) return world;
+
+    for (const pack of (game.packs ?? [])) {
+      if (pack.documentName !== "Item") continue;
+      const index = await pack.getIndex({ fields: ["type"] });
+      const entry = index.find(e => e.type === "panic" && e.name === want);
+      if (!entry) continue;
+      const doc = await pack.getDocument(entry._id).catch(() => null);
+      if (doc) return doc;
+    }
+    return null;
+  }
+
+  /**
+   * 把 src 这张恐慌卡嵌入 actor 并占住 slot，旧卡若没有别的槽还在用就删掉。
+   * 与角色卡上手动拖放同一套流程。写权限不足时委托 GM 代执行。
+   * @param {Actor}  actor
+   * @param {"lowMorale"|"panic"} slot
+   * @param {Item}   src
+   * @returns {Promise<boolean>}
+   */
+  static async swapPanicCard(actor, slot, src) {
+    if (!actor || !src) return false;
+
+    if (!actor.canUserModify?.(game.user, "update")) {
+      // 嵌入物品要在目标角色上建文档，玩家端多半没权限——整件事交给 GM
+      game.socket.emit("system.limbusCompany_FVTT", {
+        type: "gmPanicSwap", actorId: actor.id, slot, srcUuid: src.uuid,
+      });
+      return true;
+    }
+
+    const data = src.toObject();
+    delete data._id;
+    const [newItem] = await actor.createEmbeddedDocuments("Item", [data]);
+    if (!newItem) return false;
+
+    const oldId = actor.system?.panicSlots?.[slot] ?? "";
+    await ClashManager._safeDocUpdate(actor, { [`system.panicSlots.${slot}`]: newItem.id });
+    if (oldId && oldId !== newItem.id) {
+      const stillUsed = Object.entries(actor.system?.panicSlots ?? {})
+        .some(([k, v]) => k !== slot && v === oldId);
+      if (!stillUsed) await actor.items.get(oldId)?.delete();
+    }
+    return true;
+  }
+
+  /* ─── [追加伤害] 的延后 ─────────────────────────────────────────────────
+   * extraDamage 原先当场走 _applyAndSendTake，于是伤害在【结算结果】之前就
+   * 落地了，还各自冒一张【承受结算】。与拼点伤害、流血一致：对抗结算中先排队，
+   * 按下【结算结果】时和主伤害一起落进同一张承受结算卡。
+   * ──────────────────────────────────────────────────────────────────── */
+
+  /** @type {object[]|null} */
+  static _pendingExtraDmg = null;
+
+  static _beginExtraDmgQueue() { ClashManager._pendingExtraDmg = []; }
+
+  /** 效果侧调用：排得进队列返回 true（已延后），否则调用方当场结算 */
+  static queueExtraDamage(target, dmg, { attacker = null, category = "", sinType = "", item = null, source = "" } = {}) {
+    if (!ClashManager._pendingExtraDmg || !target || !(dmg > 0)) return false;
+    ClashManager._pendingExtraDmg.push({
+      targetId:   target.id,
+      attackerId: attacker?.id ?? "",
+      itemId:     item?.id ?? "",
+      itemOwnerId: item?.parent?.id ?? "",
+      dmg, category, sinType, source,
+    });
+    return true;
+  }
+
+  /** 承受结算里那一行的名字：来源写进去，好分辨是哪一条追加伤害 */
+  static extraDmgLabel(source = "") {
+    return source ? `追加伤害·${source}` : "追加伤害";
+  }
+
+  static _takeExtraDmg() {
+    const q = ClashManager._pendingExtraDmg;
+    ClashManager._pendingExtraDmg = null;
+    return q?.length ? q : null;
+  }
+
+  /** 建卡之后：没被卡片接走（无结算按钮）就当场结算 */
+  static async _flushExtraDmg() {
+    const q = ClashManager._takeExtraDmg();
+    if (q) await ClashManager.runExtraDamage(q);
+  }
+
+  /**
+   * 结算排队的 [追加伤害]。外层聚合开着就并进同一张承受结算卡，
+   * 没开就自己开一次（无【结算结果】按钮的分支）。
+   */
+  static async runExtraDamage(list) {
+    if (!list?.length) return;
+    const own = !ClashManager._takeAgg;
+    if (own) ClashManager._beginTakeAgg();
+    for (const e of list) {
+      const target   = game.actors.get(e?.targetId ?? "");
+      if (!target || !(e.dmg > 0)) continue;
+      const attacker = e.attackerId ? game.actors.get(e.attackerId) : null;
+      const owner    = e.itemOwnerId ? game.actors.get(e.itemOwnerId) : null;
+      const item     = e.itemId ? (owner?.items?.get(e.itemId) ?? null) : null;
+      await ClashManager._applyAndSendTake(target, e.dmg, {
+        attacker, takeLabel: ClashManager.extraDmgLabel(e.source),
+        category: e.category ?? "", sinType: e.sinType ?? "", item,
+      });
+    }
+    if (own) await ClashManager._flushTakeAgg();
   }
 
   /* ─── 由效果发起的新对抗的延后 ─────────────────────────────────────────
@@ -7003,6 +7244,19 @@ export class ClashManager {
       const attacker = attackerId ? game.actors.get(attackerId) : null;
       const defender = defenderId ? game.actors.get(defenderId) : null;
       await ClashManager._checkAndOfferReactions({ lastSkillUuid, attacker, defender });
+      return;
+    }
+
+    // 玩家无权限时委托 GM 替目标角色更换恐慌卡（要在别人身上建嵌入文档）
+    if (msg.type === "gmPanicSwap") {
+      if (!game.user.isGM) return;
+      try {
+        const actor = msg.actorId ? game.actors.get(msg.actorId) : null;
+        const src   = msg.srcUuid ? await fromUuid(msg.srcUuid) : null;
+        if (actor && src) await ClashManager.swapPanicCard(actor, msg.slot, src);
+      } catch (err) {
+        console.error("[ClashManager] gmPanicSwap 失败:", err);
+      }
       return;
     }
 

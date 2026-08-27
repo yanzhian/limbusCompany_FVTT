@@ -331,6 +331,36 @@ export class MerchantData extends foundry.abstract.TypeDataModel {
 
       // 商人自己持有的货币（眼），显示在 GM 底栏
       merchantCurrency: new fields.NumberField({ required: true, integer: true, min: 0, initial: 0 }),
+
+      // ── 货架网格 ────────────────────────────────────────────────────────
+      // 尺寸固定 8×5（面板按这个排版），留成字段只是为了以后要改时不用动 schema
+      shelfSize: new fields.SchemaField({
+        width:  new fields.NumberField({ required: true, integer: true, min: 1, max: 20, initial: 8 }),
+        height: new fields.NumberField({ required: true, integer: true, min: 1, max: 20, initial: 5 }),
+      }),
+      // 货架摆放记录，格式与营地仓库 warehouseContents 一致（buildPlacementGrid 直接吃）
+      // 多一个 price：**这一件商品的原价**，与物品自身的 system.price 解耦——
+      // 同一件物品在不同商人那里可以卖不同价，玩家卖过来的东西也不该改写原物品。
+      shelfContents: new fields.ArrayField(
+        new fields.SchemaField({
+          uuid:    new fields.StringField({ required: true, initial: "" }),
+          x:       new fields.NumberField({ required: true, integer: true, min: 0, initial: 0 }),
+          y:       new fields.NumberField({ required: true, integer: true, min: 0, initial: 0 }),
+          w:       new fields.NumberField({ required: true, integer: true, min: 1, initial: 1 }),
+          h:       new fields.NumberField({ required: true, integer: true, min: 1, initial: 1 }),
+          rotated: new fields.BooleanField({ initial: false }),
+          price:   new fields.NumberField({ required: true, integer: true, min: 0, initial: 0 }),
+        }),
+        { required: true, initial: [] }
+      ),
+
+      // ── 折扣 ────────────────────────────────────────────────────────────
+      // enabled 是总闸；rate 用「折」计：10 = 原价，1 = 一折。只作用于**买入**，
+      // 回收价恒定半价（折扣是买方的事，压低回收价只会让人不想卖）。
+      sale: new fields.SchemaField({
+        enabled: new fields.BooleanField({ initial: false }),
+        rate:    new fields.NumberField({ required: true, min: 1, max: 10, initial: 10 }),
+      }),
     };
   }
 }

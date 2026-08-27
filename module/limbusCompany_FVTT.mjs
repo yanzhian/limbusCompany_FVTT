@@ -38,6 +38,7 @@ import { ChaosTokenLabel }   from "./helpers/chaos-token-label.mjs";
 import { ClashTotalFX }     from "./helpers/clash-total-fx.mjs";
 import { ClashKnockback } from "./helpers/knockback.mjs";
 import { ClashVFX }       from "./helpers/clash-vfx.mjs";
+import { TokenRingHUD }   from "./helpers/token-ring-hud.mjs";
 
 /* ─── Item Piles 联动注册 ─────────────────────────────────────────────────── */
 
@@ -199,6 +200,9 @@ Hooks.once("init", () => {
   // 注册小队 HUD 世界设置
   SquadHUD.init();
 
+  // Token 生命环 HUD（客户端开关）
+  TokenRingHUD.init();
+
   // ── 预加载 HBS 模板 ───────────────────────────────────────────────────
   _preloadTemplates();
 
@@ -219,6 +223,12 @@ Hooks.once("ready", () => {
 
   // 显示全局罪孽资源 HUD
   SinResourceHUD.create();
+
+  // Token 生命环 HUD：挂钩子并画一遍现有 Token
+  TokenRingHUD.ready();
+
+  // 商人卡左栏画的是玩家角色的背包，那边变了要跟着刷新
+  LimbusMerchantSheet.init();
 
   // 创建快捷操作 HUD 单例（选中 Token 时自动渲染）
   QuickActionHUD.create();
@@ -462,9 +472,12 @@ Hooks.on("renderChatMessage", (_message, html, _data) => {
       // 本场对抗的全部承受合并成一张卡：【流血】要排在拼点伤害之前记账，
       // 血条的「先前生命值」才是流血之前那个数
       ClashManager._beginTakeAgg();
+      // 沉沦降理智可能把人打进【士气低落】——聚合成一张【恐慌鉴定】卡
+      ClashManager._beginPanicAgg();
       await ClashManager.settleBleed(flags.bleedMsgs ?? []);
-      // 闪避/完全格挡 + 【不可摧毁】反击：拼点本身 0 伤害，只落反击那份
-      if (damage > 0 || !flags.unbreakable) {
+      // 闪避/完全格挡 + 【不可摧毁】反击 / [追加伤害]：拼点本身 0 伤害，
+      // 只落挂在后面那几份
+      if (damage > 0 || !(flags.unbreakable || flags.extraDmg)) {
         await ClashManager.handleApplyDamage(targetActorId, damage, flags.takeEffects ?? []);
       }
       // 【不可摧毁】拼点失败反击：和拼点伤害同一个按钮一起结算
@@ -472,10 +485,13 @@ Hooks.on("renderChatMessage", (_message, html, _data) => {
       if (ub?.targetActorId && (ub.damage ?? 0) > 0) {
         await ClashManager.handleApplyDamage(ub.targetActorId, ub.damage);
       }
+      // [追加伤害]：时间上在主伤害之后，排在最后记账
+      await ClashManager.runExtraDamage(flags.extraDmg ?? []);
       await ClashManager._flushTakeAgg();
-      // 反应检查：延后到伤害落地之后，前置条件读到的才是结算后的数值
+      await ClashManager._flushPanicAgg();
       // [拼点失败] 之类的效果发起的新对抗：排到这里，伤害落地之后再弹
       if (flags.skillLaunches) await ClashManager.runSkillLaunches(flags.skillLaunches);
+      // 反应检查：延后到伤害落地之后，前置条件读到的才是结算后的数值
       if (flags.reactionCheck) await ClashManager.runReactionCheck(flags.reactionCheck);
       // 容量扩散：打出伤害的一方攻击容量 >=2 时，在扣血后发出扩散承受卡
       const ws = flags.weightSpread;
@@ -501,10 +517,14 @@ Hooks.on("renderChatMessage", (_message, html, _data) => {
     // 一个【结算结果】把双方的伤害一起落地，不再拆成两个按钮各点各的
     html.find(".clash-btn-settle").on("click", async () => {
       ClashManager._beginTakeAgg();
+      // 沉沦降理智可能把人打进【士气低落】——聚合成一张【恐慌鉴定】卡
+      ClashManager._beginPanicAgg();
       await ClashManager.settleBleed(flags.bleedMsgs ?? []);
       await ClashManager.handleApplyDamage(flags.defActorId, flags.damageToDefActor ?? 0);
       await ClashManager.handleApplyDamage(flags.atkActorId, flags.damageToAtkActor ?? 0);
+      await ClashManager.runExtraDamage(flags.extraDmg ?? []);
       await ClashManager._flushTakeAgg();
+      await ClashManager._flushPanicAgg();
       // [拼点失败] 之类的效果发起的新对抗：排到这里，伤害落地之后再弹
       if (flags.skillLaunches) await ClashManager.runSkillLaunches(flags.skillLaunches);
       if (flags.reactionCheck) await ClashManager.runReactionCheck(flags.reactionCheck);
@@ -527,9 +547,13 @@ Hooks.on("renderChatMessage", (_message, html, _data) => {
       const targetActorId = e.currentTarget.dataset.targetActorId ?? flags.targetActorId;
       const damage        = parseInt(e.currentTarget.dataset.damage ?? flags.damage) || 0;
       ClashManager._beginTakeAgg();
+      // 沉沦降理智可能把人打进【士气低落】——聚合成一张【恐慌鉴定】卡
+      ClashManager._beginPanicAgg();
       await ClashManager.settleBleed(flags.bleedMsgs ?? []);
       await ClashManager.handleApplyDamage(targetActorId, damage);
+      await ClashManager.runExtraDamage(flags.extraDmg ?? []);
       await ClashManager._flushTakeAgg();
+      await ClashManager._flushPanicAgg();
       // [拼点失败] 之类的效果发起的新对抗：排到这里，伤害落地之后再弹
       if (flags.skillLaunches) await ClashManager.runSkillLaunches(flags.skillLaunches);
       if (flags.reactionCheck) await ClashManager.runReactionCheck(flags.reactionCheck);
