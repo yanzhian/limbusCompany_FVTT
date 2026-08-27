@@ -1609,11 +1609,25 @@ export class ClashManager {
         } else if (cost.type === "discard") {
           // 验证丢弃目标是否存在于战斗槽（按顺序模拟，前一条丢掉的牌不能再被后一条算上）
           const bagState = owner?.sheet?._combatBagState;
-          if (!bagState) { forcedFail = true; break; }
+          if (!bagState) {
+            console.warn("limbusCompany_FVTT | 丢弃消耗跳过：战斗袋未初始化",
+              { item: item?.name, trigger, owner: owner?.name });
+            forcedFail = true; break;
+          }
           if (!discardSim) discardSim = { slots: [...bagState.slots], pool: [...(bagState.pool ?? [])] };
           const selfId = ctx._currentItemId ?? item?.id ?? "";
           const idxs = ClashManager._findDiscardSlots(owner, discardSim.slots, cost, selfId, declaredIdx);
-          if (!idxs.length) { forcedFail = true; break; }
+          if (!idxs.length) {
+            console.warn("limbusCompany_FVTT | 丢弃消耗跳过：战斗槽里没有符合条件的技能",
+              { item: item?.name, trigger, owner: owner?.name,
+                mode: cost.discardMode ?? "level", level: cost.discardLevel ?? 1,
+                declaredIdx,
+                slots: discardSim.slots.map(id => {
+                  const it = owner?.items?.get?.(id);
+                  return it ? `Lv.${it.system?.level ?? "?"}${it.name}` : null;
+                }) });
+            forcedFail = true; break;
+          }
           // 模拟丢弃：从后往前删，每删一张就在尾部补一张
           //（预备池空了则补一张未知牌，不参与等级判定）
           for (const idx of [...idxs].reverse()) {
@@ -1716,6 +1730,18 @@ export class ClashManager {
             for (const idx of [...slotIndices].reverse()) {
               declaredIdxExec = ClashManager._shiftDeclaredIdx(declaredIdxExec, idx);
             }
+            // 日志：丢弃是「只填消耗、不填效果」也能成立的一条 activity，
+            // 不记一行的话卡面上什么都看不到，出问题根本无从查起
+            const names = discardedIds
+              .map(id => owner?.items?.get?.(id))
+              .filter(Boolean)
+              .map(it => `Lv.${it.system?.level ?? "?"}【${it.name}】`);
+            const modeLabel = mode === "another" ? "另一个"
+              : mode === "reserve" ? "预备区" : `Lv.${level}`;
+            msgs.push(names.length
+              ? `消耗：丢弃${names.join("、")}。`
+              : `消耗：丢弃（${modeLabel}）——没有可丢弃的技能。`);
+
             const discardedId = discardedIds[0] ?? null;
             _discardedItemId = discardedId;
             // 触发被丢弃技能的【丢弃时】活动——两张一起丢时也只触发一次
