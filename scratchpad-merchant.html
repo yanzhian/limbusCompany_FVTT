@@ -1,0 +1,464 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>商人面板 · 网格版原型</title>
+<style>
+  /* 取自 styles/limbusCompany_FVTT.css 的主色板，保证观感一致 */
+  :root{
+    --bg-darkest:#0B0707; --bg-panel:#201D1A; --bg-mid:#171310;
+    --border-gold:#0A0605; --gold-active:#E5BA25;
+    --text-main:#E8CAA2; --text-sub:#9B6839; --text-dim:#6B5A42;
+    --red-danger:#E94745; --green-ok:#7AAB6A;
+    --cell:52px; --gap:2px;
+    --font-main:"Noto Sans SC","Microsoft YaHei",sans-serif;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0;min-height:100vh;padding:22px;
+    background:linear-gradient(180deg,var(--bg-darkest) 0%,var(--bg-mid) 50%,var(--bg-darkest) 100%);
+    color:var(--text-main);font:13px/1.55 var(--font-main);
+    display:flex;gap:18px;align-items:flex-start;flex-wrap:wrap;justify-content:center;
+  }
+
+  /* ── 面板外框 ── */
+  .panel{
+    background:linear-gradient(180deg,#1A1512,#120E0C);
+    border:1px solid #3A2A1C;border-radius:4px;
+    display:flex;flex-direction:column;
+    box-shadow:0 8px 26px rgba(0,0,0,.6);
+  }
+  .panel-hd{
+    display:flex;align-items:center;gap:10px;
+    padding:8px 12px;border-bottom:1px solid #3A2A1C;
+    background:rgba(0,0,0,.25);
+  }
+  .panel-hd img{width:34px;height:34px;object-fit:cover;border:1px solid #5F3E22;border-radius:3px}
+  .panel-hd .t{font-size:15px;font-weight:bold;letter-spacing:.04em}
+  .panel-hd .sub{font-size:11.5px;color:var(--text-sub)}
+  .panel-hd .spacer{flex:1}
+  .purse{
+    display:flex;align-items:center;gap:5px;font-size:13px;font-weight:bold;
+    background:rgba(0,0,0,.35);border:1px solid #5F3E22;border-radius:999px;padding:3px 11px;
+  }
+  .purse .eye{color:var(--gold-active)}
+  .panel-bd{padding:8px 10px 12px}
+  .toolbar{display:flex;gap:6px;align-items:center;padding:0 12px 8px}
+  .toolbar input[type=text]{
+    flex:1;min-width:0;background:#15110E;border:1px solid #3A2A1C;border-radius:3px;
+    color:var(--text-main);font:12px var(--font-main);padding:4px 8px;
+  }
+  .chip{
+    font-size:11.5px;color:var(--text-sub);border:1px solid #3A2A1C;border-radius:999px;
+    padding:2px 9px;cursor:pointer;user-select:none;background:#15110E;
+  }
+  .chip.on{color:#15110E;background:var(--gold-active);border-color:var(--gold-active);font-weight:bold}
+
+  /* ── 网格 ── */
+  .cg-wrap{
+    display:grid;gap:var(--gap);padding:6px;width:fit-content;
+    grid-template-columns:repeat(var(--cols),var(--cell));
+    grid-template-rows:repeat(var(--rows),var(--cell));
+    position:relative;
+  }
+  .cg-cell{background:#5F3E22;border:1px solid rgba(95,62,33,.45)}
+  .cg-cell.occ{background:rgba(95,62,33,.25)}
+  .cg-cell.drop-ok{background:rgba(229,186,37,.20);border-color:var(--gold-active)}
+  .cg-cell.drop-no{background:rgba(233,71,69,.20);border-color:var(--red-danger)}
+
+  .tile{
+    background:rgba(24,15,8,.92);border:1px solid #5F3E22;border-radius:3px;
+    box-shadow:inset 0 0 0 1px rgba(95,62,33,.4);
+    display:flex;flex-direction:column;align-items:center;justify-content:center;
+    overflow:hidden;position:relative;z-index:10;user-select:none;
+    transition:border-color .1s,box-shadow .1s;
+  }
+  .tile:hover{border-color:var(--gold-active);box-shadow:inset 0 0 0 1px var(--gold-active),0 0 6px rgba(229,186,37,.3)}
+  .tile .ic{font-size:22px;line-height:1}
+  .tile .nm{font-size:9.5px;color:var(--text-main);text-align:center;line-height:1.1;
+            padding:0 2px;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .tile .qty{position:absolute;right:2px;bottom:1px;font-size:9.5px;color:var(--text-sub)}
+  .tile .price{
+    position:absolute;left:0;right:0;bottom:0;font-size:9.5px;font-weight:bold;
+    text-align:center;color:var(--gold-active);background:rgba(0,0,0,.62);line-height:1.35;
+  }
+  /* 我方物品：可拖 */
+  .tile.mine{cursor:grab}
+  .tile.mine.dragging{visibility:hidden}
+  /* 商人物品：不可拖，双击购买 */
+  .tile.shop{cursor:pointer}
+  .tile.shop::after{
+    content:"";position:absolute;inset:0;pointer-events:none;
+    background:repeating-linear-gradient(45deg,transparent 0 6px,rgba(229,186,37,.045) 6px 12px);
+  }
+  .tile.afford-no .price{color:var(--red-danger)}
+
+  body.dragging{user-select:none;cursor:grabbing}
+  .ghost{position:fixed;left:-9999px;top:-9999px;pointer-events:none;z-index:999;opacity:.92}
+
+  /* ── 购买弹窗 ── */
+  .mask{position:fixed;inset:0;background:rgba(0,0,0,.55);display:none;place-items:center;z-index:500}
+  .mask.on{display:grid}
+  .dlg{
+    width:330px;background:linear-gradient(180deg,#1A1512,#120E0C);
+    border:1px solid #5F3E22;border-radius:5px;box-shadow:0 10px 30px rgba(0,0,0,.7);
+  }
+  .dlg-hd{display:flex;align-items:center;gap:9px;padding:10px 12px;border-bottom:1px solid #3A2A1C}
+  .dlg-hd .ic{font-size:26px}
+  .dlg-hd .nm{font-size:14px;font-weight:bold}
+  .dlg-hd .cat{font-size:11px;color:var(--text-sub)}
+  .dlg-bd{padding:10px 12px;font-size:12.5px}
+  .kv{display:flex;justify-content:space-between;padding:3px 0;color:var(--text-sub)}
+  .kv b{color:var(--text-main);font-variant-numeric:tabular-nums}
+  .kv.total b{color:var(--gold-active);font-size:15px}
+  .kv.bad b{color:var(--red-danger)}
+  .qty-row{display:flex;align-items:center;gap:8px;margin:8px 0 4px}
+  .qty-row input[type=range]{flex:1;min-width:0}
+  .qty-row .n{width:34px;text-align:right;font-weight:bold;font-variant-numeric:tabular-nums}
+  .dlg-ft{display:flex;gap:8px;padding:10px 12px;border-top:1px solid #3A2A1C}
+  .btn{
+    flex:1;height:30px;border-radius:2px;cursor:pointer;font:12.5px var(--font-main);
+    background:#241B12;color:#9A8462;border:1px solid #5A3A1A;
+  }
+  .btn:hover{background:#2f2317}
+  .btn.primary{background:#5F3E22;color:var(--text-main);border-color:#C9A84C}
+  .btn.primary:hover{background:#6f4a2a}
+  .btn:disabled{opacity:.45;cursor:not-allowed}
+
+  /* ── 日志 ── */
+  .log{
+    flex:0 0 260px;background:var(--bg-panel);border:1px solid #3A2A1C;border-radius:4px;
+    padding:10px 12px;font-size:12px;max-height:640px;overflow:auto;
+  }
+  .log h3{margin:0 0 8px;font-size:13px;color:var(--gold-active)}
+  .log div{padding:2px 0;border-bottom:1px dashed #2b2119;color:var(--text-sub)}
+  .log b{color:var(--text-main)}
+  .hint{color:var(--text-dim);font-size:11.5px;margin:6px 0 0}
+</style>
+</head>
+<body>
+
+<div style="display:flex;flex-direction:column;gap:14px">
+
+  <!-- ════ 商人 ════ -->
+  <div class="panel" id="shopPanel">
+    <div class="panel-hd">
+      <img src="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='34' height='34'><rect width='34' height='34' fill='%235F3E22'/><text x='17' y='23' font-size='16' text-anchor='middle' fill='%23E8CAA2'>商</text></svg>" alt="">
+      <div>
+        <div class="t">灰烬街 · 杂货铺</div>
+        <div class="sub">双击商品查看价格并购买</div>
+      </div>
+      <div class="spacer"></div>
+      <div class="purse">商人 <span class="eye" id="shopEye">1200</span> 眼</div>
+    </div>
+    <div class="toolbar">
+      <input type="text" id="shopSearch" placeholder="搜索商品…">
+      <span class="chip on" data-cat="">全部</span>
+      <span class="chip" data-cat="武器">武器</span>
+      <span class="chip" data-cat="消耗品">消耗品</span>
+      <span class="chip" data-cat="材料">材料</span>
+    </div>
+    <div class="panel-bd"><div class="cg-wrap" id="shopGrid"></div></div>
+  </div>
+
+  <!-- ════ 角色 ════ -->
+  <div class="panel" id="bagPanel">
+    <div class="panel-hd">
+      <img src="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='34' height='34'><rect width='34' height='34' fill='%232E4A6E'/><text x='17' y='23' font-size='16' text-anchor='middle' fill='%23E8CAA2'>我</text></svg>" alt="">
+      <div>
+        <div class="t">黎明沙包 · 背包</div>
+        <div class="sub">只能拖动自己的物品；双击可出售</div>
+      </div>
+      <div class="spacer"></div>
+      <div class="purse">持有 <span class="eye" id="myEye">380</span> 眼</div>
+    </div>
+    <div class="panel-bd"><div class="cg-wrap" id="bagGrid"></div></div>
+  </div>
+
+</div>
+
+<div class="log">
+  <h3>交易记录</h3>
+  <div id="logList"></div>
+  <p class="hint">原型说明：<br>
+    · 商人格子带斜纹底，<b>拖不动</b>，双击弹价格窗。<br>
+    · 背包格子可自由拖放（占位冲突会红框拒绝）。<br>
+    · 买入后自动落到背包第一个放得下的位置。<br>
+    · 钱不够时价格转红、购买按钮禁用。</p>
+</div>
+
+<!-- ════ 购买 / 出售弹窗 ════ -->
+<div class="mask" id="mask">
+  <div class="dlg">
+    <div class="dlg-hd">
+      <span class="ic" id="dIc">🗡</span>
+      <div>
+        <div class="nm" id="dNm">—</div>
+        <div class="cat" id="dCat">—</div>
+      </div>
+    </div>
+    <div class="dlg-bd">
+      <div class="kv"><span id="dUnitLbl">单价</span><b id="dUnit">0</b></div>
+      <div class="kv"><span>库存</span><b id="dStock">0</b></div>
+      <div class="qty-row">
+        <span>数量</span>
+        <input type="range" id="dQty" min="1" max="1" value="1">
+        <span class="n" id="dQtyN">1</span>
+      </div>
+      <div class="kv total"><span id="dTotalLbl">合计</span><b id="dTotal">0</b></div>
+      <div class="kv" id="dAfterRow"><span>交易后持有</span><b id="dAfter">0</b></div>
+    </div>
+    <div class="dlg-ft">
+      <button class="btn" id="dCancel">取消</button>
+      <button class="btn primary" id="dOk">购买</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ══════════════════════════════════════════════════════════════════════
+   网格数据模型：与 camp/loot 一致 —— 物品带 { x, y, w, h }，
+   格子只是背景，图块用 grid-column: x+1 / span w 定位。
+   ══════════════════════════════════════════════════════════════════════ */
+const SHOP = { cols: 8, rows: 5, eye: 1200 };
+const BAG  = { cols: 8, rows: 4, eye: 380  };
+
+let shopItems = [
+  { id:"s1", nm:"锈蚀短剑", ic:"🗡", cat:"武器",   w:1,h:2, x:0,y:0, price:120, stock:2 },
+  { id:"s2", nm:"猎人长弓", ic:"🏹", cat:"武器",   w:1,h:3, x:1,y:0, price:260, stock:1 },
+  { id:"s3", nm:"止血绷带", ic:"🩹", cat:"消耗品", w:1,h:1, x:2,y:0, price:25,  stock:9 },
+  { id:"s4", nm:"镇静剂",   ic:"💉", cat:"消耗品", w:1,h:1, x:3,y:0, price:60,  stock:4 },
+  { id:"s5", nm:"铁锭",     ic:"🧱", cat:"材料",   w:2,h:1, x:4,y:0, price:45,  stock:6 },
+  { id:"s6", nm:"油灯",     ic:"🕯", cat:"材料",   w:1,h:2, x:6,y:0, price:80,  stock:3 },
+  { id:"s7", nm:"厚重盾牌", ic:"🛡", cat:"武器",   w:2,h:2, x:2,y:1, price:340, stock:1 },
+  { id:"s8", nm:"干粮",     ic:"🍞", cat:"消耗品", w:1,h:1, x:4,y:1, price:12,  stock:20 },
+];
+let bagItems = [
+  { id:"b1", nm:"旧手枪",   ic:"🔫", cat:"武器",   w:1,h:2, x:0,y:0, price:150, qty:1 },
+  { id:"b2", nm:"绷带",     ic:"🩹", cat:"消耗品", w:1,h:1, x:1,y:0, price:25,  qty:3 },
+  { id:"b3", nm:"齿轮",     ic:"⚙",  cat:"材料",   w:1,h:1, x:2,y:0, price:30,  qty:5 },
+];
+
+const $  = id => document.getElementById(id);
+const log = (html) => {
+  const d = document.createElement("div");
+  d.innerHTML = html;
+  $("logList").prepend(d);
+};
+
+/* ── 占位检查：矩形是否越界 / 与他人重叠 ── */
+function fits(list, item, x, y, cols, rows, ignoreId){
+  if (x < 0 || y < 0 || x + item.w > cols || y + item.h > rows) return false;
+  return !list.some(o => o.id !== ignoreId &&
+    x < o.x + o.w && x + item.w > o.x && y < o.y + o.h && y + item.h > o.y);
+}
+/* ── 找第一个放得下的位置（买入落袋用） ── */
+function findSlot(list, w, h, cols, rows){
+  for (let y = 0; y <= rows - h; y++)
+    for (let x = 0; x <= cols - w; x++)
+      if (fits(list, { w, h }, x, y, cols, rows, null)) return { x, y };
+  return null;
+}
+
+/* ══ 渲染 ══════════════════════════════════════════════════════════════ */
+function renderGrid(el, cfg, list, kind){
+  el.style.setProperty("--cols", cfg.cols);
+  el.style.setProperty("--rows", cfg.rows);
+  el.innerHTML = "";
+
+  const occ = new Set();
+  for (const it of list)
+    for (let dy = 0; dy < it.h; dy++)
+      for (let dx = 0; dx < it.w; dx++) occ.add(`${it.x+dx},${it.y+dy}`);
+
+  for (let y = 0; y < cfg.rows; y++){
+    for (let x = 0; x < cfg.cols; x++){
+      const c = document.createElement("div");
+      c.className = "cg-cell" + (occ.has(`${x},${y}`) ? " occ" : "");
+      c.style.gridColumn = x + 1; c.style.gridRow = y + 1;
+      c.dataset.x = x; c.dataset.y = y;
+      el.appendChild(c);
+    }
+  }
+
+  const term = (kind === "shop" ? $("shopSearch").value.trim() : "").toLowerCase();
+  const cat  = kind === "shop" ? (document.querySelector("#shopPanel .chip.on")?.dataset.cat ?? "") : "";
+
+  for (const it of list){
+    const dim = kind === "shop" &&
+      ((term && !it.nm.toLowerCase().includes(term)) || (cat && it.cat !== cat));
+    const t = document.createElement("div");
+    t.className = "tile " + (kind === "shop" ? "shop" : "mine")
+      + (kind === "shop" && it.price > BAG.eye ? " afford-no" : "");
+    t.style.gridColumn = `${it.x+1} / span ${it.w}`;
+    t.style.gridRow    = `${it.y+1} / span ${it.h}`;
+    t.style.opacity    = dim ? .25 : 1;
+    t.dataset.id = it.id; t.dataset.kind = kind;
+    t.title = `${it.nm}（${it.cat}）`;
+    t.innerHTML = `<span class="ic">${it.ic}</span><span class="nm">${it.nm}</span>`
+      + (kind === "shop"
+          ? `<span class="qty">×${it.stock}</span><span class="price">${it.price} 眼</span>`
+          : (it.qty > 1 ? `<span class="qty">×${it.qty}</span>` : ""));
+    el.appendChild(t);
+  }
+}
+function renderAll(){
+  renderGrid($("shopGrid"), SHOP, shopItems, "shop");
+  renderGrid($("bagGrid"),  BAG,  bagItems,  "bag");
+  $("shopEye").textContent = SHOP.eye;
+  $("myEye").textContent   = BAG.eye;
+}
+
+/* ══ 拖放：只对背包生效 ══════════════════════════════════════════════════
+   商人格子的图块 class 是 .shop，pointerdown 直接不接管，于是它拖不动。 */
+let drag = null;
+document.addEventListener("pointerdown", ev => {
+  const t = ev.target.closest(".tile.mine");
+  if (!t) return;
+  const it = bagItems.find(i => i.id === t.dataset.id);
+  if (!it) return;
+  const r = t.getBoundingClientRect();
+  const g = t.cloneNode(true);
+  g.className = "tile mine ghost";
+  g.style.width = r.width + "px"; g.style.height = r.height + "px";
+  document.body.appendChild(g);
+  drag = { it, el: t, ghost: g, ox: ev.clientX - r.left, oy: ev.clientY - r.top };
+  t.classList.add("dragging");
+  document.body.classList.add("dragging");
+  moveGhost(ev);
+});
+function moveGhost(ev){
+  if (!drag) return;
+  drag.ghost.style.left = (ev.clientX - drag.ox) + "px";
+  drag.ghost.style.top  = (ev.clientY - drag.oy) + "px";
+}
+addEventListener("pointermove", ev => {
+  if (!drag) return;
+  moveGhost(ev);
+  document.querySelectorAll(".cg-cell").forEach(c => c.classList.remove("drop-ok","drop-no"));
+  const cell = cellUnder(ev);
+  if (!cell) return;
+  const x = +cell.dataset.x, y = +cell.dataset.y;
+  const ok = fits(bagItems, drag.it, x, y, BAG.cols, BAG.rows, drag.it.id);
+  // 高亮整个落点矩形，而不是只亮一格——多格物品才看得出放不放得下
+  for (let dy = 0; dy < drag.it.h; dy++)
+    for (let dx = 0; dx < drag.it.w; dx++){
+      const c = $("bagGrid").querySelector(`.cg-cell[data-x="${x+dx}"][data-y="${y+dy}"]`);
+      if (c) c.classList.add(ok ? "drop-ok" : "drop-no");
+    }
+});
+function cellUnder(ev){
+  drag.ghost.style.visibility = "hidden";
+  const el = document.elementFromPoint(ev.clientX, ev.clientY);
+  drag.ghost.style.visibility = "";
+  const c = el?.closest?.(".cg-cell");
+  return (c && $("bagGrid").contains(c)) ? c : null;   // 只认背包的格子
+}
+addEventListener("pointerup", ev => {
+  if (!drag) return;
+  const cell = cellUnder(ev);
+  if (cell){
+    const x = +cell.dataset.x, y = +cell.dataset.y;
+    if (fits(bagItems, drag.it, x, y, BAG.cols, BAG.rows, drag.it.id)){
+      drag.it.x = x; drag.it.y = y;
+    }
+  }
+  drag.ghost.remove();
+  drag.el.classList.remove("dragging");
+  document.body.classList.remove("dragging");
+  drag = null;
+  document.querySelectorAll(".cg-cell").forEach(c => c.classList.remove("drop-ok","drop-no"));
+  renderAll();
+});
+
+/* ══ 双击 → 购买 / 出售弹窗 ═══════════════════════════════════════════ */
+let dlg = null;   // { mode:"buy"|"sell", item }
+
+document.addEventListener("dblclick", ev => {
+  const t = ev.target.closest(".tile");
+  if (!t) return;
+  const kind = t.dataset.kind;
+  const list = kind === "shop" ? shopItems : bagItems;
+  const it = list.find(i => i.id === t.dataset.id);
+  if (it) openDialog(kind === "shop" ? "buy" : "sell", it);
+});
+
+function openDialog(mode, it){
+  dlg = { mode, it };
+  const buy = mode === "buy";
+  const unit = buy ? it.price : Math.floor(it.price / 2);   // 卖价 = 半价（占位规则）
+  const max  = buy ? it.stock : it.qty;
+
+  $("dIc").textContent  = it.ic;
+  $("dNm").textContent  = it.nm;
+  $("dCat").textContent = it.cat + (buy ? "" : "　·　出售");
+  $("dUnitLbl").textContent = buy ? "单价" : "回收单价";
+  $("dUnit").textContent    = unit + " 眼";
+  $("dStock").textContent   = (buy ? "库存 " : "持有 ") + max;
+  $("dTotalLbl").textContent = buy ? "合计支出" : "合计收入";
+  $("dOk").textContent = buy ? "购买" : "出售";
+
+  const q = $("dQty");
+  q.min = 1; q.max = Math.max(1, max); q.value = 1;
+  updateDialog();
+  $("mask").classList.add("on");
+}
+function updateDialog(){
+  if (!dlg) return;
+  const { mode, it } = dlg;
+  const buy  = mode === "buy";
+  const unit = buy ? it.price : Math.floor(it.price / 2);
+  const n    = +$("dQty").value;
+  const total = unit * n;
+  const after = buy ? BAG.eye - total : BAG.eye + total;
+
+  $("dQtyN").textContent  = n;
+  $("dTotal").textContent = total + " 眼";
+  $("dAfter").textContent = after + " 眼";
+  const bad = buy && total > BAG.eye;
+  $("dTotal").parentElement.classList.toggle("bad", bad);
+  $("dAfterRow").classList.toggle("bad", bad);
+  $("dOk").disabled = bad || n < 1;
+}
+$("dQty").oninput = updateDialog;
+$("dCancel").onclick = () => { $("mask").classList.remove("on"); dlg = null; };
+$("mask").onclick = e => { if (e.target === $("mask")) $("dCancel").click(); };
+
+$("dOk").onclick = () => {
+  const { mode, it } = dlg;
+  const n = +$("dQty").value;
+  if (mode === "buy"){
+    const total = it.price * n;
+    const slot = findSlot(bagItems, it.w, it.h, BAG.cols, BAG.rows);
+    if (!slot){ log(`<b style="color:var(--red-danger)">背包放不下</b> ${it.nm}`); return; }
+    BAG.eye -= total; SHOP.eye += total;
+    it.stock -= n;
+    const exist = bagItems.find(b => b.nm === it.nm);
+    if (exist && it.w === 1 && it.h === 1) exist.qty += n;
+    else bagItems.push({ id:"b"+Date.now(), nm:it.nm, ic:it.ic, cat:it.cat,
+                         w:it.w, h:it.h, x:slot.x, y:slot.y, price:it.price, qty:n });
+    if (it.stock <= 0) shopItems = shopItems.filter(s => s.id !== it.id);
+    log(`买入 <b>${it.nm}</b> ×${n}　−${total} 眼`);
+  } else {
+    const unit = Math.floor(it.price / 2), total = unit * n;
+    BAG.eye += total; SHOP.eye -= total;
+    it.qty -= n;
+    if (it.qty <= 0) bagItems = bagItems.filter(b => b.id !== it.id);
+    log(`卖出 <b>${it.nm}</b> ×${n}　+${total} 眼`);
+  }
+  $("dCancel").click();
+  renderAll();
+};
+
+/* ── 搜索 / 分类筛选（只影响商人格） ── */
+$("shopSearch").oninput = renderAll;
+document.querySelectorAll("#shopPanel .chip").forEach(c => c.onclick = () => {
+  document.querySelectorAll("#shopPanel .chip").forEach(o => o.classList.remove("on"));
+  c.classList.add("on");
+  renderAll();
+});
+
+renderAll();
+</script>
+</body>
+</html>
