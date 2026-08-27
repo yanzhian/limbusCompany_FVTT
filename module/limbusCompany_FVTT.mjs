@@ -227,6 +227,9 @@ Hooks.once("ready", () => {
   // Token 生命环 HUD：挂钩子并画一遍现有 Token
   TokenRingHUD.ready();
 
+  // 商人卡左栏画的是玩家角色的背包，那边变了要跟着刷新
+  LimbusMerchantSheet.init();
+
   // 创建快捷操作 HUD 单例（选中 Token 时自动渲染）
   QuickActionHUD.create();
 
