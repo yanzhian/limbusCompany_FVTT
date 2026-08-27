@@ -6731,10 +6731,6 @@ input.item-piles-quantity {
 }
 
 .mc-toolbar { display: flex; align-items: center; gap: 6px; padding: 6px 10px; flex-wrap: wrap; }
-.mc-search {
-  flex: 1; min-width: 90px; background: #15110E; border: 1px solid #3A2A1C; border-radius: 3px;
-  color: var(--text-main); font: 12px var(--font-main); padding: 3px 7px;
-}
 .mc-chip {
   font-size: 11.5px; color: var(--text-sub); background: #15110E;
   border: 1px solid #3A2A1C; border-radius: 999px; padding: 2px 9px;

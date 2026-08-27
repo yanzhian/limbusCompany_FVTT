@@ -68,8 +68,8 @@ export class LimbusMerchantSheet extends ActorSheet {
     return foundry.utils.mergeObject(super.defaultOptions, {
       classes:  ["limbuscompany", "sheet", "actor", "merchant-sheet"],
       template: "systems/limbusCompany_FVTT/templates/actor/merchant-sheet.hbs",
-      width:    1010,
-      height:   660,
+      width:    600,
+      height:   650,
       resizable: true,
     });
   }
@@ -77,7 +77,6 @@ export class LimbusMerchantSheet extends ActorSheet {
   /* ─── 界面状态（不持久化） ───────────────────────────────────────────── */
 
   _editUnlocked = false;
-  _shelfSearch  = "";
   _catFilter    = "";
   _multi        = false;
   /** 选中的图块：`shop:<placementIdx>` / `bag:<itemId>` */
@@ -248,7 +247,6 @@ export class LimbusMerchantSheet extends ActorSheet {
     ctx.isGM         = isGM;
     ctx.editUnlocked = this._editUnlocked;
     ctx.system       = sys;
-    ctx.shelfSearch  = this._shelfSearch;
     ctx.multi        = this._multi;
     ctx.saleRateLabel = `${sys.sale?.rate ?? 10} 折`;
     ctx.eyeIcon      = EYE_ICON;
@@ -299,14 +297,12 @@ export class LimbusMerchantSheet extends ActorSheet {
     }
 
     const purse = ctx.myChar?.currency ?? 0;
-    const term  = this._shelfSearch.trim().toLowerCase();
     ctx.shelfItems = placedItems.map(p => {
       const doc  = actor.items.get(String(p.uuid ?? "").split(".").pop());
       const pl   = placements[p.idx] ?? {};
       const base = pl.price ?? 0;
       const buy  = LimbusMerchantSheet.buyPriceOf(actor, pl);
-      const show = (!term || (p.name ?? "").toLowerCase().includes(term))
-                && (!this._catFilter || doc?.type === this._catFilter);
+      const show = !this._catFilter || doc?.type === this._catFilter;
       return {
         ...p,
         // buildPlacementGrid 把名字/图标放在 entry.item 下，摊平给模板
@@ -368,7 +364,6 @@ export class LimbusMerchantSheet extends ActorSheet {
     });
 
     // 搜索 / 分类
-    this._bindSearch(html);
     html.find(".mc-cat").on("click", (ev) => {
       this._catFilter = ev.currentTarget.dataset.cat ?? "";
       this.render(false);
@@ -463,26 +458,6 @@ export class LimbusMerchantSheet extends ActorSheet {
     }
 
     if (isGM && this._editUnlocked) html.find(".cg-wrap").addClass("cg-edit-unlocked");
-  }
-
-  /** 搜索框：跳过 IME 组字 + 防抖 + 还原焦点，见 BackgroundWizard 的同名坑 */
-  _bindSearch(html) {
-    const el = html.find(".mc-search")[0];
-    if (!el) return;
-    let composing = false, timer = null;
-    el.addEventListener("compositionstart", () => { composing = true; });
-    el.addEventListener("compositionend",   () => { composing = false; el.dispatchEvent(new Event("input")); });
-    el.addEventListener("input", () => {
-      if (composing) return;
-      clearTimeout(timer);
-      const { selectionStart: s, selectionEnd: e, value } = el;
-      timer = setTimeout(async () => {
-        this._shelfSearch = value;
-        await this.render(false);
-        const nx = this.element?.find?.(".mc-search")[0];
-        if (nx) { nx.focus(); nx.setSelectionRange(s, e); }
-      }, 120);
-    });
   }
 
   /* ─── 悬停预览 ───────────────────────────────────────────────────────── */
