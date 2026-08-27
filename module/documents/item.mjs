@@ -318,6 +318,9 @@ export class ConsumableData extends foundry.abstract.TypeDataModel {
       category: new fields.StringField({ required: false, initial: "" }),
       typeName: new fields.StringField({ required: false, initial: "" }),
       quantity: new fields.NumberField({ required: true, integer: true, min: 0, initial: 1 }),
+      // 可堆叠：这件东西才有「数量」的说法（丹药、弹药、饮料这类）。
+      // 关掉就是一件即一件——买卖时不问数量，货架上也不显示 ×N。
+      stackable: new fields.BooleanField({ required: true, initial: true }),
       reusable: new fields.BooleanField({ required: true, initial: false }),
       infinite: new fields.BooleanField({ required: true, initial: false }),
       tags:     new fields.StringField({ required: false, initial: "" }),
@@ -357,6 +360,8 @@ export class MaterialData extends foundry.abstract.TypeDataModel {
       reusable:    new fields.BooleanField({ required: true, initial: false }),
       infinite:    new fields.BooleanField({ required: true, initial: false }),
       quantity:    new fields.NumberField({ required: true, integer: true, min: 0, initial: 1 }),
+      // 可堆叠：见 ConsumableData 同名字段
+      stackable:   new fields.BooleanField({ required: true, initial: true }),
       favorited:   new fields.BooleanField({ required: true, initial: false }),
       // 物品容量
       capacity: new fields.SchemaField({

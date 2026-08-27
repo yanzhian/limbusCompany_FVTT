@@ -333,10 +333,11 @@ export class MerchantData extends foundry.abstract.TypeDataModel {
       merchantCurrency: new fields.NumberField({ required: true, integer: true, min: 0, initial: 0 }),
 
       // ── 货架网格 ────────────────────────────────────────────────────────
-      // 尺寸固定 8×5（面板按这个排版），留成字段只是为了以后要改时不用动 schema
+      // 留成字段只是为了以后要改时不用动 schema
+      // 与玩家背包同尺寸（5 宽 × 8 高），两边并排看着才对称
       shelfSize: new fields.SchemaField({
-        width:  new fields.NumberField({ required: true, integer: true, min: 1, max: 20, initial: 8 }),
-        height: new fields.NumberField({ required: true, integer: true, min: 1, max: 20, initial: 5 }),
+        width:  new fields.NumberField({ required: true, integer: true, min: 1, max: 20, initial: 5 }),
+        height: new fields.NumberField({ required: true, integer: true, min: 1, max: 20, initial: 8 }),
       }),
       // 货架摆放记录，格式与营地仓库 warehouseContents 一致（buildPlacementGrid 直接吃）
       // 多一个 price：**这一件商品的原价**，与物品自身的 system.price 解耦——
