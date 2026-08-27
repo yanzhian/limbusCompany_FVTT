@@ -3828,6 +3828,8 @@ body.game .limbuscompany.app img {
   width: 100px; height: 100px; object-fit: cover; border-radius: 3px;
   border: 1px solid var(--border-gold); cursor: pointer; flex-shrink: 0;
   transition: opacity 0.15s, filter 0.15s;
+  /* 透明背景的物品图常驻光晕（原先只在悬停时出现）*/
+  filter: brightness(1.25) drop-shadow(0 0 5px rgba(232, 201, 162, 0.75));
 }
 .limbuscompany .equipment-sheet .item-sheet-icon {
   width: 100px; height: 100px;
@@ -3838,7 +3840,7 @@ body.game .limbuscompany.app img {
 }
 .item-sheet-locked .item-sheet-icon:hover {
   opacity: 0.85;
-  filter: brightness(1.25) drop-shadow(0 0 5px rgba(232, 201, 162, 0.75));
+  filter: brightness(1.4) drop-shadow(0 0 9px rgba(232, 201, 162, 0.9));
 }
 .limbuscompany .item-name-input {
   flex: 1; background: transparent; border: none;
