@@ -4065,7 +4065,7 @@ body.game .limbuscompany.app img {
   cursor: default;
 }
 .limbuscompany .cg-cell.cg-occupied {
-  background: rgba(95,62,33,.25);
+  background: #3F2C1B;
 }
 .limbuscompany .cg-cell.cg-locked {
   background: #15110E;
@@ -4478,14 +4478,14 @@ body.cg-dragging-active .limbuscompany .cg-item-tile:hover {
   gap: 2px; padding: 6px 10px;
 }
 .limbuscompany .container-cell {
-  aspect-ratio: 1; background: #3F2C1B;
+  aspect-ratio: 1; background: #5F3E22;
   border: 1px solid rgba(95,62,33,.3); border-radius: 2px;
   display: flex; flex-direction: column; align-items: center; justify-content: center;
   overflow: hidden; cursor: pointer; position: relative;
   transition: border-color .15s;
 }
 .limbuscompany .container-cell:hover { border-color: var(--gold-active); }
-.limbuscompany .container-cell.cell-filled { background: #4B3623; border-color: var(--border-gold); }
+.limbuscompany .container-cell.cell-filled { background: #3F2C1B; border-color: var(--border-gold); }
 .limbuscompany .container-cell-icon { width: 80%; height: 80%; object-fit: contain; }
 .limbuscompany .container-cell-name { font-size: .5rem; color: var(--text-sub); text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
 
@@ -6745,7 +6745,7 @@ input.item-piles-quantity {
 /* 两块网格共用 44px 格；grid-dnd 从 --cg-cell 读格距，必须给上 */
 .mc-cg { --cg-cell: 44px; --cg-gap: 2px; }
 .mc-cg--bag .cg-cell { background: #5F3E22; border-color: rgba(95,62,34,.45); }
-.mc-cg--bag .cg-cell.cg-occupied { background: rgba(95,62,34,.25); }
+.mc-cg--bag .cg-cell.cg-occupied { background: #3F2C1B; }
 
 /* ── 图块角标 ─────────────────────────────────────────────────── */
 .mc-tile .mc-price {
