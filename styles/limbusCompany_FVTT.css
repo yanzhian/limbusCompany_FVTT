@@ -4128,21 +4128,23 @@ body.game .limbuscompany.app img {
 
 /* ── 稀有度光晕 ────────────────────────────────────────────────────
    网格图块正中间往外的圆形渐变（里亮 → 外透明）。边框一律不跟稀有度走。
-   颜色单一来源：CONFIG.LIMBUSCOMPANY.RARITY_COLORS（module/config.mjs），
-   两边改动要同步。技能等没有 rarity 字段的类型渲染成 .rarity-（空），不匹配任何规则。 */
-.limbuscompany .cg-item-tile.rarity-common   { --rc: #4E9A5B; }
-.limbuscompany .cg-item-tile.rarity-fine     { --rc: #3D7BC4; }
-.limbuscompany .cg-item-tile.rarity-epic     { --rc: #9A5CC7; }
-.limbuscompany .cg-item-tile.rarity-artistic { --rc: #E5BA25; }
-.limbuscompany .cg-item-tile.rarity-mythic   { --rc: #E94745; }
+   浓度按稀有度逐级提亮（--g1 中心 / --g2 中段，每级 +8 / +5），
+   所以平装几乎只是一层底色，神话才真的会"发光"。
+   颜色单一来源：CONFIG.LIMBUSCOMPANY.RARITY_COLORS（module/config.mjs），两边改动要同步。
+   技能等没有 rarity 字段的类型渲染成 .rarity-（空），有兜底规则不画。 */
+.limbuscompany .cg-item-tile.rarity-common   { --rc: #4E9A5B; --g1: 34%; --g2: 19%; }
+.limbuscompany .cg-item-tile.rarity-fine     { --rc: #3D7BC4; --g1: 42%; --g2: 24%; }
+.limbuscompany .cg-item-tile.rarity-epic     { --rc: #9A5CC7; --g1: 50%; --g2: 29%; }
+.limbuscompany .cg-item-tile.rarity-artistic { --rc: #E5BA25; --g1: 58%; --g2: 34%; }
+.limbuscompany .cg-item-tile.rarity-mythic   { --rc: #E94745; --g1: 66%; --g2: 39%; }
 
 .limbuscompany .cg-item-tile[class*="rarity-"]::before {
   content: "";
   position: absolute; inset: 0; z-index: 0; pointer-events: none;
   background: radial-gradient(circle at 50% 50%,
-    color-mix(in srgb, var(--rc) 72%, transparent) 0%,
-    color-mix(in srgb, var(--rc) 29%, transparent) 90%,
-    transparent 120%);
+    color-mix(in srgb, var(--rc) var(--g1), transparent) 0%,
+    color-mix(in srgb, var(--rc) var(--g2), transparent) 28%,
+    transparent 74%);
 }
 /* --rc 没定义时（rarity 为空）整条渐变会失效，但保险起见直接不画 */
 .limbuscompany .cg-item-tile.rarity-::before { display: none; }
