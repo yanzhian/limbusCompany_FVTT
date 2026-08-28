@@ -280,20 +280,72 @@ registerCustomBuff("defensiveStance", {
 
 /**
  * 【蝶】
- * - 最大值：10 层 10 级
- * - 受到伤害时，**随机**消耗 1 层 或 1 级：
- *     · 消耗 1 层 → 为伤害来源恢复 1D6 理智值
- *     · 消耗 1 级 → 为自己添加 1 层 2 级【沉沦】
+ * - 最大值：15 层、强度上限 15 级
+ * - 层数为 0 时不消失（keepAtZero）
+ * - [回合结束时]：若**层数为 0**，把强度全部换成层数——
+ *     每有 1 级【蝶】→ 自己 +1 级【沉沦】，且每消耗 1 级【蝶】→ 自己 +1 层【蝶】
+ *   （结算完强度归 0、层数 +N，蝶本身留在场上）
+ * - [受到伤害时]：**随机**消耗 1 层 或 1 级：
+ *     · 消耗 1 层 → 为伤害来源恢复 1D4 理智值
+ *     · 消耗 1 级 → 为自己添加 2 级【沉沦】
  *   两种代价只会二选一，付不起的那种（层或级已归零）不会被抽中。
+ *
+ * 注：本 BUFF 的层与级是两种独立资源，所以消耗后一律不整条移除（keepAtZero），
+ * 由回合结束的转换重新把级变回层。
  */
+
+/** 给自己叠【沉沦】强度：没有就新建一条（至少 1 层，否则强度挂不住） */
+function _addSinkingIntensity(buffs, amount) {
+  if (amount <= 0) return;
+  const si = buffs.findIndex(b => b.type === "sinking");
+  if (si >= 0) {
+    buffs[si].intensity = (buffs[si].intensity ?? 0) + amount;
+    buffs[si].stacks    = Math.max(1, buffs[si].stacks ?? 0);
+  } else {
+    buffs.push({
+      id:        foundry.utils.randomID(),
+      type:      "sinking",
+      name:      "沉沦",
+      intensity: amount,
+      stacks:    1,
+      whenAdded: "本回合",
+    });
+  }
+}
+
 registerCustomBuff("butterfly", {
   label:        "蝶",
-  maxStacks:    10,
-  maxIntensity: 10,
-  description: "- 最大值：10 层 10 级\n"
+  maxStacks:    15,
+  maxIntensity: 15,
+  keepAtZero:   true,
+  description: "- 最大值：15 层、强度上限 15 级\n"
+    + "- 层数为 0 时不消失\n"
+    + "- 回合结束时：若层数为 0，每有 1 级【蝶】为自己添加 1 级【沉沦】，"
+    + "并且每消耗 1 级【蝶】添加 1 层【蝶】\n"
     + "- 受到伤害时，随机消耗 1 层 或 1 级：\n"
-    + "  · 消耗 1 层 → 为目标恢复 1D6 的理智值\n"
-    + "  · 消耗 1 级 → 为自己添加 1 层 2 级【沉沦】",
+    + "  · 消耗 1 层 → 为目标恢复 1D4 的理智值\n"
+    + "  · 消耗 1 级 → 为自己添加 2 级【沉沦】",
+
+  /** 回合结束：层数见底时，把攒下的强度整体换成层数 */
+  async onRoundEnd(actor, buff) {
+    if ((buff.stacks ?? 0) !== 0) return "";
+    const intensity = buff.intensity ?? 0;
+    if (intensity <= 0) return "";
+
+    const buffs = foundry.utils.deepClone(actor.system?.buffs ?? []);
+    const idx   = buffs.findIndex(b => b.id === buff.id);
+    if (idx < 0) return "";
+
+    // 消耗掉全部强度：每 1 级 → 1 级【沉沦】+ 1 层【蝶】
+    buffs[idx].intensity = 0;
+    buffs[idx].stacks    = Math.min(15, (buffs[idx].stacks ?? 0) + intensity);
+    _addSinkingIntensity(buffs, intensity);
+    await _safeUpdate(actor, { "system.buffs": buffs });
+
+    return `【蝶】层数归零，消耗 <strong>${intensity}</strong> 级：`
+      + ` 自身获得 <strong>${intensity}</strong> 级【沉沦】，`
+      + ` 并重新展开 <strong>${intensity}</strong> 层【蝶】。`;
+  },
 
   async onTakeDamage(actor, buff, ctx) {
     const stacks    = buff.stacks    ?? 0;
@@ -313,40 +365,24 @@ registerCustomBuff("butterfly", {
 
     let restStacks = stacks;
     let restInt    = intensity;
+    // 层与级各自见底都不移除本条（keepAtZero）：回合结束还要靠它做转换
     if (pay === "stack") {
-      restStacks = stacks - 1;
-      if (restStacks <= 0) buffs.splice(idx, 1);
-      else                 buffs[idx].stacks = restStacks;
+      restStacks = Math.max(0, stacks - 1);
+      buffs[idx].stacks = restStacks;
     } else {
-      restInt = intensity - 1;
-      // 强度归零的蝶不再是蝶，整条移除
-      if (restInt <= 0) buffs.splice(idx, 1);
-      else              buffs[idx].intensity = restInt;
+      restInt = Math.max(0, intensity - 1);
+      buffs[idx].intensity = restInt;
     }
 
-    // 消耗 1 级 → 自己吃 1 层 2 级【沉沦】
-    if (pay === "level") {
-      const si = buffs.findIndex(b => b.type === "sinking");
-      if (si >= 0) {
-        buffs[si].stacks = (buffs[si].stacks ?? 0) + 1;
-      } else {
-        buffs.push({
-          id:        foundry.utils.randomID(),
-          type:      "sinking",
-          name:      "沉沦",
-          intensity: 2,
-          stacks:    1,
-          whenAdded: "本回合",
-        });
-      }
-    }
+    // 消耗 1 级 → 自己吃 2 级【沉沦】
+    if (pay === "level") _addSinkingIntensity(buffs, 2);
     await _safeUpdate(actor, { "system.buffs": buffs });
 
-    // 消耗 1 层 → 为伤害来源恢复 1D6 理智
+    // 消耗 1 层 → 为伤害来源恢复 1D4 理智
     const target = ctx?.attacker ?? null;
     let sanHeal  = 0;
     if (pay === "stack" && target) {
-      const healRoll = new Roll("1d6");
+      const healRoll = new Roll("1d4");
       await healRoll.evaluate();
       sanHeal = healRoll.total;
       const curSan = target.system?.sanity?.value ?? 50;
@@ -360,7 +396,7 @@ registerCustomBuff("butterfly", {
         + (target ? ` 为 <strong>${target.name}</strong> 恢复 <strong>${sanHeal}</strong> 点理智。`
                   : ` 但没有可恢复的目标。`);
     }
-    return `【蝶】触发，消耗 1 级${rest}：自身获得 1 层【沉沦】（强度 2）。`;
+    return `【蝶】触发，消耗 1 级${rest}：自身获得 2 级【沉沦】。`;
   },
 });
 
