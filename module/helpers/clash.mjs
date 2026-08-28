@@ -2098,7 +2098,12 @@ export class ClashManager {
               } else {
                 await ClashManager._addBuff(effTgt, b, n, s, round);
               }
-              appliedLabels.push(`【${ClashManager._buffLabel(b)}】×${s}`);
+              // 层/级分开报：池子里常有「同一条 BUFF，一个只给层、一个只给级」的写法，
+              // 一律写成 ×N 的话，抽到只给级的那条会显示成「×0」，看着像没生效
+              const parts = [];
+              if (s > 0) parts.push(`×${s}`);
+              if (n > 0) parts.push(`${n} 级`);
+              appliedLabels.push(`【${ClashManager._buffLabel(b)}】${parts.join(" ") || "×0"}`);
             }
             const roundLabel = round === "本回合" ? "" : `（${round}）`;
             descStr = `为【${effTgt.name}】随机添加 ${appliedLabels.join("、")}${roundLabel}`;

@@ -3716,7 +3716,10 @@ function _readActivityForm(html, original) {
           buff:       resolveKey($pr.find(".ae-pool-buff-input").val()),
           buffCustom: "",
           intensity:  parseInt($pr.find(".ae-pool-intensity").val()) || 0,
-          stacks:     parseInt($pr.find(".ae-pool-stacks").val())    || 1,
+          // 0 层是合法值（「只加 N 级、不加层」），不能用 || 1 兜底——
+          // 那会让一条只给强度的池子项在编辑器里存一次就变成额外 +1 层
+          stacks:     (() => { const v = parseInt($pr.find(".ae-pool-stacks").val());
+                               return Number.isFinite(v) ? Math.max(0, v) : 1; })(),
         });
       });
       effects.push({
