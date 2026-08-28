@@ -2939,6 +2939,15 @@ function _buildCostRow(cost, idx, cfg) {
               .map(entry => _buildCostPoolRow(entry, cfg)).join("")}
           </div>
           <button type="button" class="ae-add-cost-pool ae-add-btn">＋ 添加候选</button>
+          <!-- 「每随机消耗」：能扣几次就扣几次（每次独立抽一条候选），
+               扣成功的次数即为后续效果的倍数；最多次数留 0 表示扣到扣不动为止 -->
+          <label title="每随机消耗：能扣几次扣几次，扣成功的次数作为效果倍数">每</label>
+          <input class="cost-random-pereach" type="checkbox" ${cost?.perEach ? "checked" : ""}>
+          <span class="ae-cost-random-max" ${cost?.perEach ? "" : 'style="display:none"'}>
+            <label>最多次数</label>
+            <input class="ae-input-sm cost-random-max-times" type="number"
+                   value="${cost?.maxTimes ?? 0}" min="0" placeholder="0=无限">
+          </span>
         </span>
         <span class="ae-cost-buff-sec" ${(isAttr || isDiscard || isField || isSin || isRandom) ? 'style="display:none"' : ""}>
           <label>BUFF</label>
@@ -3396,6 +3405,11 @@ function _bindCondType(html) {
 }
 
 function _bindCostType(html) {
+  html.on("change", ".cost-random-pereach", function () {
+    $(this).closest(".ae-cost-random-sec").find(".ae-cost-random-max")
+      .toggle($(this).prop("checked") === true);
+  });
+
   const refreshRow = (row) => {
     const val        = row.find(".cost-type").val();
     const tgt         = row.find(".cost-target").val();
@@ -3407,6 +3421,7 @@ function _bindCostType(html) {
     const isRandom    = val === "random";
     const perNDim     = row.find(".cost-pern-dim").val() === "intensity" ? "intensity" : "stacks";
     row.find(".ae-cost-random-sec").toggle(isRandom);
+    row.find(".ae-cost-random-max").toggle(isRandom && row.find(".cost-random-pereach").prop("checked") === true);
     row.find(".ae-cost-field-sec").toggle(isField && !isRandom);
     row.find(".ae-cost-sin-sec").toggle(isSin && !isRandom);
     row.find(".ae-cost-sin-max").toggle(isSin && !isRandom && isPerStack);
@@ -3642,10 +3657,13 @@ function _readActivityForm(html, original) {
           amount: Math.max(1, parseInt($pr.find(".ae-cost-pool-amount").val()) || 1),
         });
       });
+      const rndPerEach = $r.find(".cost-random-pereach").prop("checked") === true;
       costs.push({
         type,
         target,
         randomPool,
+        perEach:  rndPerEach,
+        maxTimes: rndPerEach ? (parseInt($r.find(".cost-random-max-times").val()) || 0) : 0,
         ..._readBgTagMeta($r, "cost"),
       });
     } else if (type === "attribute") {

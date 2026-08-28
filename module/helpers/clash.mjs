@@ -1706,24 +1706,37 @@ export class ClashManager {
           // 强制：候选全都不足时整条 Activity 不成立（已在上面的预检查里拦下）。
           const pool = Array.isArray(cost.randomPool) ? cost.randomPool.filter(e => e?.buff) : [];
           if (!pool.length) continue;
+          // 【每随机消耗】(perEach)：能扣几次就扣几次，每次独立抽一条候选；
+          // maxTimes 为上限（0 = 扣到扣不动为止）。扣成功的次数即后续效果的倍数。
+          const rndPerEach = cost.perEach === true;
+          const rndCap     = rndPerEach ? (cost.maxTimes > 0 ? cost.maxTimes : Infinity) : 1;
+
           const costTgts = await ClashManager._resolveTargets(cost.target ?? "self", owner, other, cost, ctx);
+          const rndTimes = [];
           for (const tgt of costTgts) {
-            const affordable = pool.filter(e => {
-              const type     = e.buff === "custom" ? (e.buffCustom || "custom") : e.buff;
-              const existing = ClashManager._getBuff(tgt, type);
-              const have     = e.dim === "intensity" ? (existing?.intensity ?? 0) : (existing?.stacks ?? 0);
-              return have >= Math.max(1, e.amount ?? 1);
-            });
-            if (!affordable.length) continue;
-            const pick     = affordable[Math.floor(Math.random() * affordable.length)];
-            const pickType = pick.buff === "custom" ? (pick.buffCustom || "custom") : pick.buff;
-            const amount   = Math.max(1, pick.amount ?? 1);
-            if (pick.dim === "intensity") {
-              await ClashManager._reduceBuffIntensity(tgt, pickType, amount);
-            } else {
-              await ClashManager._reduceBuffStacks(tgt, pickType, amount);
+            let paid = 0;
+            while (paid < rndCap) {
+              const affordable = pool.filter(e => {
+                const type     = e.buff === "custom" ? (e.buffCustom || "custom") : e.buff;
+                const existing = ClashManager._getBuff(tgt, type);
+                const have     = e.dim === "intensity" ? (existing?.intensity ?? 0) : (existing?.stacks ?? 0);
+                return have >= Math.max(1, e.amount ?? 1);
+              });
+              if (!affordable.length) break;
+              const pick     = affordable[Math.floor(Math.random() * affordable.length)];
+              const pickType = pick.buff === "custom" ? (pick.buffCustom || "custom") : pick.buff;
+              const amount   = Math.max(1, pick.amount ?? 1);
+              if (pick.dim === "intensity") {
+                await ClashManager._reduceBuffIntensity(tgt, pickType, amount);
+              } else {
+                await ClashManager._reduceBuffStacks(tgt, pickType, amount);
+              }
+              paid++;
             }
+            rndTimes.push(paid);
           }
+          // 只有【每】模式才把次数当倍数用；普通随机消耗照旧不影响倍数
+          if (rndPerEach) costMultipliers.push(rndTimes.length ? Math.min(...rndTimes) : 0);
         } else if (cost.type === "discard") {
           const ownerSheet = owner?.sheet;
           if (ownerSheet?._discardCombatSkill) {
@@ -2064,15 +2077,20 @@ export class ClashManager {
             const pool  = eff.buffPool ?? [];
             if (!pool.length) { descStr = "随机BUFF：未配置BUFF池"; break; }
             const count = Math.min(Math.max(1, Math.round(Number(eff.count ?? 1))), pool.length);
-            // Fisher-Yates 部分洗牌取前 count 项
-            const shuffled = pool.slice();
-            for (let i = 0; i < count; i++) {
-              const j = i + Math.floor(Math.random() * (shuffled.length - i));
-              [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-            }
-            const chosen = shuffled.slice(0, count);
             const round  = eff.round ?? "本回合";
             const appliedLabels = [];
+            // 「每」倍数：整轮抽取重复 N 次，每轮独立洗牌——
+            // 「每随机消耗 1 → 随机添加 1」的语义就是抽 N 次，而不是一次抽 N 条
+            const draws = Math.max(1, Math.round(perStackMultiplier));
+            const chosen = [];
+            for (let d = 0; d < draws; d++) {
+              const sh = pool.slice();
+              for (let i = 0; i < count; i++) {
+                const j = i + Math.floor(Math.random() * (sh.length - i));
+                [sh[i], sh[j]] = [sh[j], sh[i]];
+              }
+              chosen.push(...sh.slice(0, count));
+            }
             for (const entry of chosen) {
               const b = entry.buff === "custom" ? (entry.buffCustom?.trim() || "custom") : (entry.buff ?? "");
               const n = entry.intensity ?? 1;
