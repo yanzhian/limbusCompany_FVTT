@@ -47,7 +47,8 @@ h2{font-size:13px;color:var(--gold-active);margin:24px 0 10px;font-weight:normal
     transparent var(--glow-size));
 }
 .tile > *{position:relative;z-index:1;}
-.tile .ic{width:38px;height:38px;border-radius:2px;background:#2a1f18;border:1px solid #3A2A1C;}
+.tile .ic{width:38px;height:38px;border-radius:2px;background:#2a1f18;border:1px solid #3A2A1C;
+  object-fit:cover;display:block;}
 .tile .nm{font-size:10.5px;color:var(--text-main);text-align:center;line-height:1.2;padding:2px 4px 0;
   text-shadow:0 1px 2px rgba(0,0,0,.9);}
 .tile .px{position:absolute;left:0;right:0;bottom:0;background:rgba(0,0,0,.62);
@@ -90,6 +91,11 @@ h2{font-size:13px;color:var(--gold-active);margin:24px 0 10px;font-weight:normal
   <div class="r"><label>中心浓度</label><input type="range" id="cin" min="0" max="100" step="1" value="85"><b id="cin-n">.85</b></div>
   <div class="r"><label>中段浓度</label><input type="range" id="cmid" min="0" max="100" step="1" value="28"><b id="cmid-n">.28</b></div>
   <div class="r"><label>中段位置</label><input type="range" id="stop" min="5" max="90" step="1" value="38"><b id="stop-n">38%</b></div>
+  <div class="r"><label>物品图标</label>
+    <input type="file" id="pic" accept="image/*" style="flex:1;font-size:11px;color:var(--text-sub);">
+    <b id="pic-n" style="width:auto;">未选</b></div>
+  <div class="r"><label>图标尺寸</label><input type="range" id="isz" min="16" max="88" step="1" value="38"><b id="isz-n">38px</b></div>
+  <div class="r"><label>图标铺满格子</label><input type="checkbox" id="fill"><b id="fill-n" style="width:auto;">否</b></div>
   <textarea id="out" readonly></textarea>
 </div>
 
@@ -111,7 +117,7 @@ const PRICE = [12,40,150,600,2400];
 document.getElementById("tiles").innerHTML = R.map(([k,l],i)=>`
   <div class="col">
     <div class="tile s1 c-${k}">
-      <div class="ic"></div><div class="nm">${NAMES[i]}</div><div class="px">${PRICE[i]}</div>
+      <img class="ic" alt=""><div class="nm">${NAMES[i]}</div><div class="px">${PRICE[i]}</div>
     </div>
     <div class="lab">${l}</div>
   </div>`).join("");
@@ -128,7 +134,7 @@ const PLACE = [
 ];
 grid.insertAdjacentHTML("beforeend", PLACE.map(([x,y,k,w],i)=>`
   <div class="tile c-${k}" style="grid-column:${x} / span ${w};grid-row:${y};width:auto;height:auto;">
-    <div class="ic" style="width:22px;height:22px;"></div>
+    <img class="ic" alt="" style="width:22px;height:22px;">
   </div>`).join(""));
 
 const $ = id => document.getElementById(id);
@@ -150,5 +156,43 @@ function apply(){
   transparent ${size}%);`;
 }
 ["size","cin","cmid","stop"].forEach(id => $(id).addEventListener("input", apply));
+
+// ── 换图：本地读取，不上传任何地方 ──────────────────────────────
+let iconSrc = "";
+function paintIcons(){
+  const fill = $("fill").checked;
+  const sz   = $("isz").value;
+  document.querySelectorAll(".tile .ic").forEach(img => {
+    if (iconSrc) img.src = iconSrc;
+    img.style.background = iconSrc ? "none" : "#2a1f18";
+    img.style.border     = iconSrc ? "none" : "1px solid #3A2A1C";
+    if (fill) {
+      // 铺满：图标占满整格，光晕盖在图上（实战里最接近的观感）
+      img.style.position = "absolute";
+      img.style.inset = "0"; img.style.width = "100%"; img.style.height = "100%";
+      img.style.borderRadius = "0"; img.style.zIndex = "0";
+    } else {
+      img.style.position = ""; img.style.inset = "";
+      img.style.zIndex = "";
+      // 小图标：大格用滑块尺寸，44px 实际尺寸格固定 22px
+      const small = img.closest(".grid") !== null;
+      img.style.width = img.style.height = (small ? 22 : sz) + "px";
+      img.style.borderRadius = "2px";
+    }
+  });
+  $("isz-n").textContent  = sz + "px";
+  $("fill-n").textContent = fill ? "是" : "否";
+}
+$("pic").addEventListener("change", (ev) => {
+  const f = ev.target.files?.[0];
+  if (!f) return;
+  const fr = new FileReader();
+  fr.onload = () => { iconSrc = fr.result; $("pic-n").textContent = f.name; paintIcons(); };
+  fr.readAsDataURL(f);
+});
+$("isz").addEventListener("input", paintIcons);
+$("fill").addEventListener("change", paintIcons);
+
 apply();
+paintIcons();
 </script>
