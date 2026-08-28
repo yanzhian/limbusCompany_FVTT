@@ -22,6 +22,7 @@ import { buildItemTitleCard, toggleTitleCardLock } from "./item-sheet.mjs";
 import { GridDnD } from "../helpers/grid-dnd.mjs";
 import { canPlace, autoPlace, buildPlacementGrid } from "../helpers/grid-layout.mjs";
 import { getBagItems, packBagGrid, BAG_COLS, BAG_ROWS } from "../helpers/bag-grid.mjs";
+import { guardInteractRange } from "../helpers/proximity.mjs";
 
 /**
  * 这件东西有没有「数量」的说法。
@@ -46,6 +47,16 @@ const CAT_FILTERS = [
 ];
 
 export class LimbusMerchantSheet extends ActorSheet {
+
+  /**
+   * 距离守卫：玩家的 Token 得走到 商人 旁边（默认 3 格内）才能开面板。
+   * GM 不受限；设置里把「交互距离」调成 0 即可整场关闭。见 helpers/proximity.mjs。
+   */
+  async _render(force, options = {}) {
+    if (!guardInteractRange(this.actor, "商人")) return;
+    return super._render(force, options);
+  }
+
 
   /**
    * 左栏画的是**别的 Actor**（玩家角色）的背包，那边变了不会自动重渲染这张卡。

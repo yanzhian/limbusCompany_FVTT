@@ -1135,6 +1135,19 @@ function _registerSettings() {
     default: true,
   });
 
+  // 营地 / 商人的「站得够近才能开」判定半径
+  game.settings.register("limbusCompany_FVTT", "interactRange", {
+    name:    "营地 / 商人 交互距离（格）",
+    hint:    "玩家的 Token 与营地 / 商人 Token 之间不超过这个格数才能打开面板"
+           + "（按 Token 占地的边缘算，紧贴＝1 格，斜向也算 1 格）。"
+           + "填 0 关闭距离限制。GM 永远不受限；任一方在当前场景没有 Token 时也放行。",
+    scope:   "world",
+    config:  true,
+    type:    Number,
+    range:   { min: 0, max: 20, step: 1 },
+    default: 3,
+  });
+
   // 稀有度光晕：纯装饰，GM 可以整场关掉（不想用稀有度、或不想让玩家一眼看穿箱子里的货色）
   game.settings.register("limbusCompany_FVTT", "showRarity", {
     name:    "展示稀有度",
