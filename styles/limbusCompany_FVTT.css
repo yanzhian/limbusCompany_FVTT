@@ -4105,6 +4105,54 @@ body.game .limbuscompany.app img {
   transition: border-color .1s, box-shadow .1s;
   user-select: none;
 }
+/* ── 物品卡上的稀有度选择器（装备/消耗品/材料/容器）────────────────── */
+.limbuscompany .item-rarity-group {
+  display: flex; align-items: center; gap: 5px; margin-left: 10px;
+}
+.limbuscompany .item-rarity-group.rarity-common   { --rc: #4E9A5B; }
+.limbuscompany .item-rarity-group.rarity-fine     { --rc: #3D7BC4; }
+.limbuscompany .item-rarity-group.rarity-epic     { --rc: #9A5CC7; }
+.limbuscompany .item-rarity-group.rarity-artistic { --rc: #E5BA25; }
+.limbuscompany .item-rarity-group.rarity-mythic   { --rc: #E94745; }
+.limbuscompany .item-rarity-group .rarity-dot {
+  width: 9px; height: 9px; border-radius: 50%;
+  background: var(--rc, #4E9A5B); box-shadow: 0 0 6px -1px var(--rc, #4E9A5B);
+}
+.limbuscompany .item-rarity-group .rarity-display {
+  font-size: 13px; font-weight: bold; color: var(--rc, var(--text-main));
+}
+.limbuscompany .item-rarity-group .rarity-select {
+  background: #15110E; border: 1px solid #3A2A1C; border-radius: 3px;
+  color: var(--rc, var(--text-main)); font: bold 12px var(--font-main); padding: 1px 4px;
+}
+
+/* ── 稀有度光晕 ────────────────────────────────────────────────────
+   网格图块正中间往外的圆形渐变（里亮 → 外透明）。边框一律不跟稀有度走。
+   浓度按稀有度逐级提亮（--g1 中心 / --g2 中段，每级 +8 / +5），
+   所以平装几乎只是一层底色，神话才真的会"发光"。
+   颜色单一来源：CONFIG.LIMBUSCOMPANY.RARITY_COLORS（module/config.mjs），两边改动要同步。
+   技能等没有 rarity 字段的类型渲染成 .rarity-（空），有兜底规则不画。 */
+.limbuscompany .cg-item-tile.rarity-common   { --rc: #4E9A5B; --g1: 34%; --g2: 19%; }
+.limbuscompany .cg-item-tile.rarity-fine     { --rc: #3D7BC4; --g1: 42%; --g2: 24%; }
+.limbuscompany .cg-item-tile.rarity-epic     { --rc: #9A5CC7; --g1: 50%; --g2: 29%; }
+.limbuscompany .cg-item-tile.rarity-artistic { --rc: #E5BA25; --g1: 58%; --g2: 34%; }
+.limbuscompany .cg-item-tile.rarity-mythic   { --rc: #E94745; --g1: 66%; --g2: 39%; }
+
+.limbuscompany .cg-item-tile[class*="rarity-"]::before {
+  content: "";
+  position: absolute; inset: 0; z-index: 0; pointer-events: none;
+  background: radial-gradient(circle at 50% 50%,
+    color-mix(in srgb, var(--rc) var(--g1), transparent) 0%,
+    color-mix(in srgb, var(--rc) var(--g2), transparent) 28%,
+    transparent 74%);
+}
+/* --rc 没定义时（rarity 为空）整条渐变会失效，但保险起见直接不画 */
+.limbuscompany .cg-item-tile.rarity-::before { display: none; }
+/* 设置里关掉【展示稀有度】：body 挂 .limbus-no-rarity，一条规则全场熄灯 */
+body.limbus-no-rarity .limbuscompany .cg-item-tile::before { display: none; }
+/* 图标/名字/角标都得压在光晕之上 */
+.limbuscompany .cg-item-tile > * { position: relative; z-index: 1; }
+
 .limbuscompany .cg-item-tile:hover {
   border-color: var(--gold-active);
   box-shadow: inset 0 0 0 1px var(--gold-active), 0 0 6px rgba(229,186,37,.3);
@@ -6661,8 +6709,36 @@ input.item-piles-quantity {
   width: 100%; background: #15110E; border: 1px solid #3A2A1C; border-radius: 3px;
   color: var(--text-main); font: 12px var(--font-main); padding: 3px 6px; resize: vertical;
 }
-.mc-lock { cursor: pointer; color: var(--text-sub); padding: 2px 4px; }
-.mc-lock.unlocked { color: var(--gold-active); }
+/* 立绘容器：锁按钮钉在立绘右上角 */
+.mc-portrait-wrap { position: relative; flex: 0 0 54px; line-height: 0; }
+.mc-portrait-edit { cursor: pointer; }
+.mc-portrait-edit:hover { border-color: var(--gold-active); }
+.mc-lock {
+  position: absolute; top: -4px; right: -6px; z-index: 2;
+  cursor: pointer; color: var(--text-sub); font-size: 11px; line-height: 1;
+  padding: 2px 3px; border: 1px solid #3A2A1C; border-radius: 3px;
+  background: rgba(10,8,6,.85);
+}
+.mc-lock.unlocked { color: var(--gold-active); border-color: var(--gold-active); }
+.mc-name-input {
+  width: 100%; background: #15110E; border: 1px solid #3A2A1C; border-radius: 3px;
+  color: var(--text-main); font: bold 15px var(--font-main); padding: 2px 6px;
+}
+.mc-token-row { display: flex; align-items: center; gap: 6px; margin: 3px 0; }
+.mc-token-img {
+  width: 28px; height: 28px; object-fit: cover; cursor: pointer;
+  border: 1px solid #5F3E22; border-radius: 3px;
+}
+.mc-token-img:hover { border-color: var(--gold-active); }
+.mc-token-tip { font-size: 11px; color: var(--text-dim); }
+/* 「眼」图标：跟在数字后面 */
+/* 数字与图标必须并排：Foundry 核心把 img 设成 block，这里强制回内联 */
+.mc-eye-ic {
+  display: inline-block; flex: 0 0 auto;
+  width: 13px; height: 13px; min-width: 13px; object-fit: contain;
+  vertical-align: -2px; margin-left: 2px; border: none;
+}
+.mc-eye, .mc-price, .mc-purse, .mc-total, .mc-after { white-space: nowrap; }
 
 /* ── GM 工具条 ─────────────────────────────────────────────────── */
 .mc-gmbar {
@@ -6703,10 +6779,6 @@ input.item-piles-quantity {
 }
 
 .mc-toolbar { display: flex; align-items: center; gap: 6px; padding: 6px 10px; flex-wrap: wrap; }
-.mc-search {
-  flex: 1; min-width: 90px; background: #15110E; border: 1px solid #3A2A1C; border-radius: 3px;
-  color: var(--text-main); font: 12px var(--font-main); padding: 3px 7px;
-}
 .mc-chip {
   font-size: 11.5px; color: var(--text-sub); background: #15110E;
   border: 1px solid #3A2A1C; border-radius: 999px; padding: 2px 9px;
@@ -6720,9 +6792,8 @@ input.item-piles-quantity {
 .mc-grid-box { padding: 0 10px 10px; display: grid; place-items: center; }
 /* 两块网格共用 44px 格；grid-dnd 从 --cg-cell 读格距，必须给上 */
 .mc-cg { --cg-cell: 44px; --cg-gap: 2px; }
-/* 玩家侧的格子换成蓝调，一眼分得清哪边是自己的 */
-.mc-cg--bag .cg-cell { background: #3A4A5F; border-color: rgba(58,74,95,.45); }
-.mc-cg--bag .cg-cell.cg-occupied { background: rgba(58,74,95,.25); }
+.mc-cg--bag .cg-cell { background: #5F3E22; border-color: rgba(95,62,34,.45); }
+.mc-cg--bag .cg-cell.cg-occupied { background: rgba(95,62,34,.25); }
 
 /* ── 图块角标 ─────────────────────────────────────────────────── */
 .mc-tile .mc-price {
@@ -6731,6 +6802,7 @@ input.item-piles-quantity {
   color: var(--gold-active); background: rgba(0,0,0,.62);
 }
 .mc-tile .mc-price s { color: #8a7a5c; font-weight: normal; }
+.mc-tile .mc-eye-ic { width: 10px; height: 10px; vertical-align: -1px; margin-left: 1px; }
 .mc-tile--bag .mc-price { color: #7AAB6A; }
 .mc-tile .mc-qty {
   position: absolute; right: 2px; top: 1px; font-size: 9.5px; font-weight: bold;

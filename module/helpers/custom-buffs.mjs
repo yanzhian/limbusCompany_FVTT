@@ -569,15 +569,19 @@ function makeFlowerCard({ label, color, sin, sinLabel }) {
     maxStacks: 1,
     async onHit(actor, buff, ctx) {
       if (ctx?.sinType !== sin) return "";
-      await ctx.addBuff("光札", 1, 0, "本回合");
+      // 注意：第一个参数是 BUFF 的 **type**（注册键），不是显示名。
+      // 写成 "光札" 会新建一条 type="光札" 的独立 BUFF，既不与面板/效果编辑器
+      // 加的 lightCard 合并（状态栏上出现两条光札），也读不到所有
+      // 「拥有 / 每 N 级【光札】」前置——那些一律按 type 精确匹配。
+      await ctx.addBuff("lightCard", 1, 0, "本回合");
       return `【${label}】对上【${sinLabel}】——【光札】强度 +1`;
     },
   };
 }
 
-registerCustomBuff("craneOnPine",  makeFlowerCard({ label: "松上鹤", color: "红", sin: "gluttony", sinLabel: "暴食" }));
-registerCustomBuff("moonOnSusuki", makeFlowerCard({ label: "芒上月", color: "黄", sin: "sloth",    sinLabel: "怠惰" }));
-registerCustomBuff("indigoSakura", makeFlowerCard({ label: "青染樱", color: "蓝", sin: "gloom",    sinLabel: "忧郁" }));
+registerCustomBuff("craneOnPine",  makeFlowerCard({ label: "松上鹤", color: "红", sin: "wrath", sinLabel: "暴怒" }));
+registerCustomBuff("moonOnSusuki", makeFlowerCard({ label: "芒上月", color: "黄", sin: "sloth", sinLabel: "怠惰" }));
+registerCustomBuff("indigoSakura", makeFlowerCard({ label: "青染樱", color: "蓝", sin: "gloom", sinLabel: "忧郁" }));
 
 /**
  * 【光札】

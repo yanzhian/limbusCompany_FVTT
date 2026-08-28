@@ -142,6 +142,9 @@ export class LimbusItemSheet extends ItemSheet {
     context.isEditable = this.isEditable;
     context.activitiesExpanded = this.activitiesExpanded;
 
+    // ── 稀有度标签（锁定时显示中文名）────────────────────────────────
+    context.rarityLabel = (cfg.RARITY_LABELS ?? {})[sys.rarity] ?? "";
+
     // ── 恐慌卡：类型（士气低落 / 陷入恐慌）──────────────────────────────
     if (item.type === "panic") {
       context.panicTypes = cfg.PANIC_TYPES ?? {};
@@ -447,6 +450,7 @@ export class LimbusItemSheet extends ItemSheet {
     html.find(".cg-cell").on("click",     this._onCgCellClick.bind(this));
     html.find(".cg-item-tile").on("dragstart",   this._onCgTileDragStart.bind(this));
     html.find(".cg-item-tile").on("contextmenu", this._onCgTileMenu.bind(this));
+    html.find(".cg-item-tile").on("dblclick",    this._onCgTileDblClick.bind(this));
     // pointer 自绘拖放：图块的拖动交给 GridDnD（幽灵块 / 落点预览 / R 旋转），
     // 格子上的原生 drop 监听保留不动——侧边栏、合集包拖进来仍走原生 DnD，
     // GridDnD 松手时也是合成一个原生 drop 事件投给格子，复用同一套转移逻辑。
@@ -1747,6 +1751,41 @@ export class LimbusItemSheet extends ItemSheet {
   _forceCloseAllTitleCards() {
     for (const ctrl of this._titleCardCtrls) ctrl.close();
     this._titleCardCtrls = [];
+  }
+
+  /* ─── 物品格：双击打开物品卡 ────────────────────────────────────────────── */
+
+  /**
+   * 容器网格里双击图块 → 打开该物品的物品卡（等同右键菜单的「编辑 / 查看」）。
+   * 嵌套容器同样直接打开自己的卡（卡上就是它的网格）。
+   * 世界金库物品只有 itemData、没有 UUID，临时造一份只读物品来渲染。
+   */
+  async _onCgTileDblClick(event) {
+    event.preventDefault();
+    const tile = event.currentTarget;
+    const idx  = parseInt(tile.dataset.placementIdx ?? -1);
+    const uuid = tile.dataset.itemUuid ?? "";
+    if (idx < 0) return;
+
+    // 拖动刚结束时浏览器仍可能补一发 dblclick，别把卡开出来
+    if (GridDnD.dragging) return;
+
+    if (uuid) {
+      const itm = await fromUuid(uuid).catch(() => null);
+      if (!itm) {
+        ui.notifications.warn(`找不到物品「${tile.dataset.itemName ?? ""}」，可能已被删除。`);
+        return;
+      }
+      itm.sheet?.render(true, { focus: true });
+      return;
+    }
+
+    const entry = this.item.system?.contents?.[idx] ?? {};
+    if (!entry.itemData) return;
+    const tempData = foundry.utils.deepClone(entry.itemData);
+    delete tempData._id;
+    const tempItem = await Item.create(tempData, { temporary: true });
+    tempItem?.sheet?.render(true);
   }
 
   /* ─── 物品格：右键菜单 ──────────────────────────────────────────────────── */

@@ -1539,7 +1539,11 @@ export class ClashManager {
         const buff    = precTgt ? ClashManager._getBuff(precTgt, preBuffType) : null;
 
         if (pre.type === "buffCompare") {
-          // 【比较值】：BUFF 层数或强度（compareDim）与指定值比较（未拥有视为 0）
+          // 【比较值】：BUFF 层数或强度（compareDim）与指定值比较。
+          // **没有这条 BUFF ≠ 这条 BUFF 为 0**——身上根本没有时本条一律不成立，
+          // 否则「拥有 0 层【光札】」会对所有从没拿过光札的人恒真、反复触发。
+          // 需要"没有"语义请用【未拥有】(noBuff)。
+          if (!buff) { precondFail = true; break; }
           const have = (pre.compareDim ?? "stacks") === "intensity"
             ? (buff?.intensity ?? 0) : (buff?.stacks ?? 0);
           if (!ClashManager._cmp(have, pre.comparison ?? "eq", pre.stacks ?? 0)) { precondFail = true; break; }
@@ -1589,8 +1593,18 @@ export class ClashManager {
       // 宣言时可被丢弃的槽位下标（激活槽 0/1 + 预备槽 2）。牌是会重复的，
       // 光记 id 认不出"补位顶上来的那张恰好同名"，所以按位置跟踪：
       // 每丢掉一格，右边的下标整体 -1，尾部补进来的新牌永远不在表里。
-      let declaredIdx = [0, 1, 2];
-      let declaredIdxExec = [0, 1, 2];
+      // 【激活槽】与【预备槽】必须分开冻结：合成一张 [0,1,2] 表时，
+      // 丢掉激活槽 0 之后预备槽的牌会左移进 1，而它在旧表里同样是"合法下标"，
+      // 于是「丢弃 Lv.1 + 丢弃 Lv.2」的第二条就把刚补上来的预备牌吃掉了。
+      // 分成两张表后：level/another 只认宣言时就在 0/1 的两张，reserve 只认槽 2。
+      // 冻结表挂在 ctx 上而不是这条 activity 的局部变量：同一次结算里
+      // 「丢弃 Lv.1」「丢弃 Lv.2」常常被拆成两条独立 activity（缺一张时另一张
+      // 仍要能丢），局部变量会让第二条重新拿到 [0,1]，刚补位上来的牌又变成合法目标。
+      ctx._declActiveExec  ??= [0, 1];
+      ctx._declReserveExec ??= [2];
+      // 预检查在真丢之前按顺序模拟，用的是执行表的副本
+      let declaredActive  = [...ctx._declActiveExec];
+      let declaredReserve = [...ctx._declReserveExec];
       for (const cost of costs) {
         if (!cost) continue;
         if (cost.type === "attribute") {
@@ -1609,17 +1623,35 @@ export class ClashManager {
         } else if (cost.type === "discard") {
           // 验证丢弃目标是否存在于战斗槽（按顺序模拟，前一条丢掉的牌不能再被后一条算上）
           const bagState = owner?.sheet?._combatBagState;
-          if (!bagState) { forcedFail = true; break; }
+          if (!bagState) {
+            console.warn("limbusCompany_FVTT | 丢弃消耗跳过：战斗袋未初始化",
+              { item: item?.name, trigger, owner: owner?.name });
+            forcedFail = true; break;
+          }
           if (!discardSim) discardSim = { slots: [...bagState.slots], pool: [...(bagState.pool ?? [])] };
           const selfId = ctx._currentItemId ?? item?.id ?? "";
-          const idxs = ClashManager._findDiscardSlots(owner, discardSim.slots, cost, selfId, declaredIdx);
-          if (!idxs.length) { forcedFail = true; break; }
+          const isReserve = (cost.discardMode ?? "level") === "reserve";
+          const idxs = ClashManager._findDiscardSlots(
+            owner, discardSim.slots, cost, selfId,
+            isReserve ? declaredReserve : declaredActive);
+          if (!idxs.length) {
+            console.warn("limbusCompany_FVTT | 丢弃消耗跳过：战斗槽里没有符合条件的技能",
+              { item: item?.name, trigger, owner: owner?.name,
+                mode: cost.discardMode ?? "level", level: cost.discardLevel ?? 1,
+                declaredActive, declaredReserve,
+                slots: discardSim.slots.map(id => {
+                  const it = owner?.items?.get?.(id);
+                  return it ? `Lv.${it.system?.level ?? "?"}${it.name}` : null;
+                }) });
+            forcedFail = true; break;
+          }
           // 模拟丢弃：从后往前删，每删一张就在尾部补一张
           //（预备池空了则补一张未知牌，不参与等级判定）
           for (const idx of [...idxs].reverse()) {
             discardSim.slots.splice(idx, 1);
             discardSim.slots.push(discardSim.pool.shift() ?? null);
-            declaredIdx = ClashManager._shiftDeclaredIdx(declaredIdx, idx);
+            declaredActive  = ClashManager._shiftDeclaredIdx(declaredActive,  idx);
+            declaredReserve = ClashManager._shiftDeclaredIdx(declaredReserve, idx);
           }
         } else if (cost.type === "random") {
           // 随机消耗：与强制消耗同级——候选池里一条都付不起就跳过整条 Activity
@@ -1712,10 +1744,24 @@ export class ClashManager {
             const level = cost.discardLevel ?? 1;
             const currentId = ctx._currentItemId ?? item?.id ?? "";
             const { discardedIds = [], slotIndices = [] } =
-              await ownerSheet._discardCombatSkill(mode, level, currentId, declaredIdxExec);
+              await ownerSheet._discardCombatSkill(mode, level, currentId,
+                mode === "reserve" ? ctx._declReserveExec : ctx._declActiveExec);
             for (const idx of [...slotIndices].reverse()) {
-              declaredIdxExec = ClashManager._shiftDeclaredIdx(declaredIdxExec, idx);
+              ctx._declActiveExec  = ClashManager._shiftDeclaredIdx(ctx._declActiveExec,  idx);
+              ctx._declReserveExec = ClashManager._shiftDeclaredIdx(ctx._declReserveExec, idx);
             }
+            // 日志：丢弃是「只填消耗、不填效果」也能成立的一条 activity，
+            // 不记一行的话卡面上什么都看不到，出问题根本无从查起
+            const names = discardedIds
+              .map(id => owner?.items?.get?.(id))
+              .filter(Boolean)
+              .map(it => `Lv.${it.system?.level ?? "?"}【${it.name}】`);
+            const modeLabel = mode === "another" ? "另一个"
+              : mode === "reserve" ? "预备区" : `Lv.${level}`;
+            msgs.push(names.length
+              ? `消耗：丢弃${names.join("、")}。`
+              : `消耗：丢弃（${modeLabel}）——没有可丢弃的技能。`);
+
             const discardedId = discardedIds[0] ?? null;
             _discardedItemId = discardedId;
             // 触发被丢弃技能的【丢弃时】活动——两张一起丢时也只触发一次
@@ -6926,8 +6972,11 @@ export class ClashManager {
       if (!targetActor || !pre.buff) return false;
       const buffs = targetActor.system?.buffs ?? [];
       const found = buffs.find(b => b.type === pre.buff || b.name === pre.buff);
+      // 没有这条 BUFF ≠ 这条 BUFF 为 0（与 _applyActivities 里的判定保持一致）：
+      // 身上根本没有时本条不成立，否则「拥有 0 层【光札】」对谁都恒真，[反应] 会一直触发
+      if (!found) return false;
       const have  = (pre.compareDim ?? "stacks") === "intensity"
-        ? (found?.intensity ?? 0) : (found?.stacks ?? 0);
+        ? (found.intensity ?? 0) : (found.stacks ?? 0);
       return ClashManager._cmp(have, pre.comparison ?? "eq", pre.stacks ?? 0);
     }
 

@@ -4,9 +4,30 @@
 
   {{!-- ── 顶部：立绘 + 店名 + 描述 ─────────────────────────────────── --}}
   <div class="mc-head">
-    <img src="{{actor.img}}" class="mc-portrait" alt="{{actor.name}}">
+    <div class="mc-portrait-wrap">
+      {{#if (and isGM editUnlocked)}}
+        <img src="{{actor.img}}" class="mc-portrait mc-portrait-edit" data-edit="img"
+             title="点击更换商人立绘" alt="{{actor.name}}">
+      {{else}}
+        <img src="{{actor.img}}" class="mc-portrait" alt="{{actor.name}}">
+      {{/if}}
+      {{#if isGM}}
+        <span class="sheet-lock-toggle mc-lock {{#if editUnlocked}}unlocked{{else}}locked{{/if}}"
+              title="{{#if editUnlocked}}点击锁定{{else}}点击解锁（GM 编辑立绘 / Token / 店名）{{/if}}">
+          <i class="fas fa-{{#if editUnlocked}}lock-open{{else}}lock{{/if}}"></i>
+        </span>
+      {{/if}}
+    </div>
     <div class="mc-head-info">
-      <div class="mc-name">{{actor.name}}</div>
+      {{#if (and isGM editUnlocked)}}
+        <input type="text" name="name" value="{{actor.name}}" class="mc-name-input">
+        <div class="mc-token-row">
+          <img src="{{tokenImg}}" class="mc-token-img mc-token-edit" title="点击更换 Token 图" alt="token">
+          <span class="mc-token-tip">Token 图</span>
+        </div>
+      {{else}}
+        <div class="mc-name">{{actor.name}}</div>
+      {{/if}}
       {{#if (and isGM editUnlocked)}}
         <textarea name="system.shopDesc" class="mc-desc-input" rows="2"
                   placeholder="店铺描述…">{{system.shopDesc}}</textarea>
@@ -14,12 +35,6 @@
         <div class="mc-desc">{{{linkify system.shopDesc}}}</div>
       {{/if}}
     </div>
-    {{#if isGM}}
-      <span class="sheet-lock-toggle mc-lock {{#if editUnlocked}}unlocked{{else}}locked{{/if}}"
-            title="{{#if editUnlocked}}点击锁定{{else}}点击解锁（GM 编辑）{{/if}}">
-        <i class="fas fa-{{#if editUnlocked}}lock-open{{else}}lock{{/if}}"></i>
-      </span>
-    {{/if}}
   </div>
 
   {{!-- ── GM 工具条：折扣 / 上架提示 ───────────────────────────────── --}}
@@ -46,7 +61,8 @@
             <b>{{myChar.name}}</b>
             <span>拖到右边货架＝出售</span>
           </div>
-          <div class="mc-purse">持有 <b class="mc-eye">{{myChar.currency}}</b> 眼</div>
+          <div class="mc-purse">持有 <b class="mc-eye">{{myChar.currency}}</b>
+            <img class="mc-eye-ic" src="{{eyeIcon}}" alt="眼"></div>
         {{else}}
           <div class="mc-col-t"><b>未指定角色</b><span>在用户配置里选一个主控角色</span></div>
         {{/if}}
@@ -71,7 +87,7 @@
                    data-x="{{x}}" data-y="{{y}}"></div>
             {{/each}}
             {{#each myChar.tiles}}
-              <div class="cg-item-tile mc-tile mc-tile--bag {{#if selected}}mc-sel{{/if}}"
+              <div class="cg-item-tile mc-tile mc-tile--bag rarity-{{rarity}} {{#if selected}}mc-sel{{/if}}"
                    style="grid-column:{{col}} / span {{w}};grid-row:{{row}} / span {{h}}"
                    data-item-uuid="{{uuid}}" data-item-id="{{id}}" data-side="bag"
                    title="{{name}}">
@@ -79,7 +95,7 @@
                 <img src="{{img}}" class="cg-tile-icon" alt="{{name}}">
                 <span class="cg-tile-name">{{name}}</span>
                 {{#if showQty}}<span class="mc-qty">×{{quantity}}</span>{{/if}}
-                <span class="mc-price mc-price--sell">{{sellPrice}}</span>
+                <span class="mc-price mc-price--sell">{{sellPrice}}<img class="mc-eye-ic" src="{{../eyeIcon}}" alt="眼"></span>
               </div>
             {{/each}}
           </div>
@@ -95,18 +111,17 @@
           <b>货架</b>
           <span>{{#if isGM}}GM：可整理、双击改价/下架{{else}}双击商品购买{{/if}}</span>
         </div>
-        <div class="mc-purse">商人
+        <div class="mc-purse">
           {{#if (and isGM editUnlocked)}}
             <input type="number" name="system.merchantCurrency" class="mc-eye-input"
                    value="{{system.merchantCurrency}}" min="0">
           {{else}}
             <b class="mc-eye">{{system.merchantCurrency}}</b>
           {{/if}}
-          眼</div>
+          <img class="mc-eye-ic" src="{{eyeIcon}}" alt="眼"></div>
       </header>
 
       <div class="mc-toolbar">
-        <input type="text" class="mc-search" placeholder="搜索商品…" value="{{shelfSearch}}">
         {{#each catFilters}}
           <span class="mc-cat mc-chip {{#if on}}on{{/if}}" data-cat="{{key}}">{{label}}</span>
         {{/each}}
@@ -121,7 +136,7 @@
                  data-x="{{x}}" data-y="{{y}}"></div>
           {{/each}}
           {{#each shelfItems}}
-            <div class="cg-item-tile mc-tile mc-tile--shop
+            <div class="cg-item-tile mc-tile mc-tile--shop rarity-{{rarity}}
                         {{#unless show}}mc-dim{{/unless}}
                         {{#if selected}}mc-sel{{/if}}
                         {{#unless affordable}}mc-poor{{/unless}}"
@@ -133,7 +148,7 @@
               <span class="cg-tile-name">{{name}}</span>
               {{#if showQty}}<span class="mc-qty">×{{quantity}}</span>{{/if}}
               <span class="mc-price">
-                {{#if discounted}}<s>{{basePrice}}</s> {{/if}}{{buyPrice}}
+                {{#if discounted}}<s>{{basePrice}}</s> {{/if}}{{buyPrice}}<img class="mc-eye-ic" src="{{../eyeIcon}}" alt="眼">
               </span>
             </div>
           {{/each}}

@@ -93,6 +93,8 @@ export function packBagGrid(items, cols = BAG_COLS, minRows = BAG_ROWS, layout =
       img:         item.img,
       quantity:    item.system?.quantity ?? 1,
       isContainer: item.type === "container",
+      // 稀有度：只有装备/消耗品/材料/容器有这个字段，其余类型给空串（模板不上光晕类）
+      rarity:      item.system?.rarity ?? "",
       rotated:     !!place.rotated,
       x: place.x, y: place.y, w: place.w, h: place.h,
       col: place.x + 1, row: place.y + 1,

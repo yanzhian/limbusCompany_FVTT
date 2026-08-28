@@ -22,10 +22,20 @@ import { buildItemTitleCard, toggleTitleCardLock } from "./item-sheet.mjs";
 import { GridDnD } from "../helpers/grid-dnd.mjs";
 import { canPlace, autoPlace, buildPlacementGrid } from "../helpers/grid-layout.mjs";
 import { getBagItems, packBagGrid, BAG_COLS, BAG_ROWS } from "../helpers/bag-grid.mjs";
+import { guardInteractRange } from "../helpers/proximity.mjs";
 
-/** 只有这两类物品有「数量」概念；其余物品一件就是一件，没有库存/缺货 */
-const QTY_TYPES = new Set(["consumable", "material"]);
-export const hasQty = (item) => QTY_TYPES.has(item?.type);
+/**
+ * 这件东西有没有「数量」的说法。
+ * 由物品自己的【可堆叠】开关决定（只有消耗品/材料有这个字段）——
+ * 同是消耗品，丹药可以堆、一次性的护符就不该堆，光看类型判断不了。
+ */
+export const hasQty = (item) => !!item?.system?.stackable;
+
+/** 货架尺寸：与玩家背包一致的竖版 5 宽 × 8 高，两边看着才对称 */
+export const EYE_ICON = "systems/limbusCompany_FVTT/assets/icons/Base_icon/眼.webp";
+
+export const SHELF_COLS = BAG_COLS;
+export const SHELF_ROWS = BAG_ROWS;
 
 /** 货架分类筛选（按物品 type） */
 const CAT_FILTERS = [
@@ -37,6 +47,16 @@ const CAT_FILTERS = [
 ];
 
 export class LimbusMerchantSheet extends ActorSheet {
+
+  /**
+   * 距离守卫：玩家的 Token 得走到 商人 旁边（默认 3 格内）才能开面板。
+   * GM 不受限；设置里把「交互距离」调成 0 即可整场关闭。见 helpers/proximity.mjs。
+   */
+  async _render(force, options = {}) {
+    if (!guardInteractRange(this.actor, "商人")) return;
+    return super._render(force, options);
+  }
+
 
   /**
    * 左栏画的是**别的 Actor**（玩家角色）的背包，那边变了不会自动重渲染这张卡。
@@ -59,8 +79,8 @@ export class LimbusMerchantSheet extends ActorSheet {
     return foundry.utils.mergeObject(super.defaultOptions, {
       classes:  ["limbuscompany", "sheet", "actor", "merchant-sheet"],
       template: "systems/limbusCompany_FVTT/templates/actor/merchant-sheet.hbs",
-      width:    1010,
-      height:   660,
+      width:    600,
+      height:   650,
       resizable: true,
     });
   }
@@ -68,7 +88,6 @@ export class LimbusMerchantSheet extends ActorSheet {
   /* ─── 界面状态（不持久化） ───────────────────────────────────────────── */
 
   _editUnlocked = false;
-  _shelfSearch  = "";
   _catFilter    = "";
   _multi        = false;
   /** 选中的图块：`shop:<placementIdx>` / `bag:<itemId>` */
@@ -91,50 +110,123 @@ export class LimbusMerchantSheet extends ActorSheet {
   static _chatSessions = new Map();
   static _chatTimers   = new Map();
 
-  static _buildTradeChatContent({ kind, merchant, char, items }) {
-    const buy   = kind === "buy";
-    const title = buy ? "购买清单" : "出售清单";
-    const total = items.reduce((a, i) => a + i.price * (i.qty ?? 1), 0);
-    const rows  = items.map(i => `
-      <div style="display:flex;align-items:center;gap:6px;padding:2px 0;">
-        <img src="${i.img}" style="width:22px;height:22px;object-fit:cover;border:1px solid #5F3E22;" alt="">
-        <span style="flex:1;color:#E8C9A2;font-size:.82rem;">${i.name}${i.qty > 1 ? ` ×${i.qty}` : ""}</span>
-        <span style="font-size:.82rem;color:${buy ? "#E5BA25" : "#7AAB6A"};">
-          ${buy ? "−" : "+"}${i.price * (i.qty ?? 1)}</span>
-      </div>`).join("");
+  /** 「数字 + 眼图标」，代替到处写「xxx 眼」 */
+  static eyeHtml(n, cls = "") {
+    return `<b class="mc-eye ${cls}">${n}</b>`
+      + `<img class="mc-eye-ic" src="${EYE_ICON}" alt="眼">`;
+  }
+
+  /**
+   * 卡片结构：
+   *   商人立绘(55px) │ 【商人名】
+   *                  │ 购买清单
+   *   ──────── 金线 ────────
+   *   购买方 PL
+   *     [图标] 物品名          价格
+   *     总计                   价格
+   *   （每个 PL 一组，组间空一行）
+   */
+  static _buildTradeChatContent({ merchant, items }) {
+    const gold = `<div style="height:1px;background:linear-gradient(90deg,
+      rgba(201,168,76,0),rgba(201,168,76,.75),rgba(201,168,76,0));margin:5px 0;"></div>`;
+
+    // 按 PL 分组，保持首次出现的顺序
+    const groups = new Map();
+    for (const i of items) {
+      if (!groups.has(i.charId)) groups.set(i.charId, { name: i.charName, list: [] });
+      groups.get(i.charId).list.push(i);
+    }
+
+    const hasSell = items.some(i => i.kind !== "buy");
+    const title   = hasSell ? "交易清单" : "购买清单";
+
+    const blocks = [...groups.values()].map(g => {
+      let total = 0;
+      const rows = g.list.map(i => {
+        const buy = i.kind === "buy";
+        const sum = i.price * (i.qty ?? 1);
+        total += buy ? sum : -sum;
+        return `
+        <div style="display:flex;align-items:center;gap:6px;padding:1px 0;">
+          <img src="${i.img}" style="width:26px;height:26px;object-fit:cover;border:1px solid #5F3E22;" alt="">
+          <span style="flex:1;color:#E8C9A2;font-size:.82rem;">${
+            buy ? "" : `<span style="color:#7AAB6A;font-size:.72rem;">卖出 </span>`
+          }${i.name}${i.qty > 1 ? ` ×${i.qty}` : ""}</span>
+          <span style="font-size:.82rem;white-space:nowrap;color:${buy ? "#E5BA25" : "#7AAB6A"};">
+            ${LimbusMerchantSheet.eyeHtml(sum)}</span>
+        </div>`;
+      }).join("");
+      return `
+        <div style="margin-bottom:6px;">
+          <div style="color:#C9A84C;font-size:.78rem;margin-bottom:2px;">${g.name}</div>
+          ${rows}
+          <div style="display:flex;justify-content:space-between;align-items:center;padding-top:2px;">
+            <span style="color:#9A8462;font-size:.78rem;">总计</span>
+            <span style="font-size:.82rem;white-space:nowrap;color:${total >= 0 ? "#E5BA25" : "#7AAB6A"};">
+              ${LimbusMerchantSheet.eyeHtml(Math.abs(total))}</span>
+          </div>
+        </div>`;
+    }).join("");
+
     return `
       <div class="limbus-clash-card" data-clash-type="trade">
-        <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
-          <img src="${merchant.img}" style="width:28px;height:28px;object-fit:cover;border:1px solid #5F3E22;" alt="">
-          <b style="color:#E8C9A2;">${char.name}</b>
-          <span style="color:#9A8462;font-size:.8rem;">在 ${merchant.name} ${buy ? "购买" : "出售"}</span>
+        <div style="display:flex;align-items:center;gap:10px;">
+          <img src="${merchant.img}" style="width:55px;height:55px;object-fit:cover;
+               border:1px solid #5F3E22;border-radius:3px;flex:0 0 55px;" alt="">
+          <div style="display:flex;flex-direction:column;gap:2px;min-width:0;">
+            <b style="color:#E8C9A2;">【${merchant.name}】</b>
+            <span style="color:#C9A84C;font-size:.78rem;">${title}</span>
+          </div>
         </div>
-        <div style="font-size:.72rem;color:#C9A84C;margin:2px 0;">${title}</div>
-        ${rows}
-        <div style="display:flex;justify-content:space-between;margin-top:4px;
-                    border-top:1px solid rgba(201,168,76,.35);padding-top:3px;">
-          <span style="color:#9A8462;font-size:.8rem;">合计</span>
-          <b style="color:${buy ? "#E5BA25" : "#7AAB6A"};">${buy ? "−" : "+"}${total} 眼</b>
-        </div>
+        ${gold}
+        ${blocks}
       </div>`;
   }
 
+  /**
+   * 同一个商人的连续交易共用一条聊天信息：
+   * 第一笔立刻发卡，之后 30 秒内所有 PL 在这个商人处的买/卖都往这条卡里追加
+   * （按 PL 分组，各自带总计）。计时器每笔刷新，停手满 30 秒才结束会话。
+   */
   static _scheduleTradeMsg(kind, merchant, char, name, img, price, qty = 1) {
-    const key = `${kind}:${merchant.id}:${char.id}`;
-    const list = LimbusMerchantSheet._chatSessions.get(key) ?? [];
-    list.push({ name, img, price, qty });
-    LimbusMerchantSheet._chatSessions.set(key, list);
+    const key  = `${merchant.id}`;
+    const sess = LimbusMerchantSheet._chatSessions.get(key)
+      ?? { items: [], msgId: null, busy: false, rendered: 0 };
+    sess.items.push({ kind, name, img, price, qty, charId: char.id, charName: char.name });
+    LimbusMerchantSheet._chatSessions.set(key, sess);
 
     clearTimeout(LimbusMerchantSheet._chatTimers.get(key));
-    LimbusMerchantSheet._chatTimers.set(key, setTimeout(async () => {
-      const items = LimbusMerchantSheet._chatSessions.get(key) ?? [];
+    LimbusMerchantSheet._chatTimers.set(key, setTimeout(() => {
       LimbusMerchantSheet._chatSessions.delete(key);
       LimbusMerchantSheet._chatTimers.delete(key);
-      if (!items.length) return;
-      await ChatMessage.create({
-        content: LimbusMerchantSheet._buildTradeChatContent({ kind, merchant, char, items }),
-      });
-    }, 1200));
+    }, 30000));
+
+    LimbusMerchantSheet._syncTradeMsg(key, merchant);
+  }
+
+  /** 串行化建卡/改卡，避免同一会话里两笔并发各建一张卡 */
+  static async _syncTradeMsg(key, merchant) {
+    const sess = LimbusMerchantSheet._chatSessions.get(key);
+    if (!sess || sess.busy) return;   // 正在写的那一趟结束后会自己补上
+    sess.busy = true;
+    try {
+      // 每一趟都以「当前全部条目」重建，写完发现又多了就再来一趟
+      while (sess.rendered !== sess.items.length) {
+        const n = sess.items.length;
+        const content = LimbusMerchantSheet._buildTradeChatContent({
+          merchant, items: sess.items.slice(0, n),
+        });
+        const msg = sess.msgId ? game.messages.get(sess.msgId) : null;
+        if (msg) await msg.update({ content });
+        else {
+          const created = await ChatMessage.create({ content });
+          sess.msgId = created?.id ?? null;
+        }
+        sess.rendered = n;
+      }
+    } finally {
+      sess.busy = false;
+    }
   }
 
   /* ─── 价格 ───────────────────────────────────────────────────────────── */
@@ -146,9 +238,13 @@ export class LimbusMerchantSheet extends ActorSheet {
     if (!sale.enabled) return base;
     return Math.max(1, Math.round(base * (sale.rate ?? 10) / 10));
   }
+  /** 物品的基础价格：物品卡上「眼」那一栏（cost-display 显示的就是它） */
+  static baseCostOf(item) {
+    return item?.system?.cost ?? 0;
+  }
   /** 回收价固定半价，不吃折扣——压低回收价只会让人不想卖 */
   static sellPriceOf(item) {
-    return Math.floor((item?.system?.price ?? 0) / 2);
+    return Math.floor(LimbusMerchantSheet.baseCostOf(item) / 2);
   }
 
   /* ─── getData ────────────────────────────────────────────────────────── */
@@ -162,9 +258,10 @@ export class LimbusMerchantSheet extends ActorSheet {
     ctx.isGM         = isGM;
     ctx.editUnlocked = this._editUnlocked;
     ctx.system       = sys;
-    ctx.shelfSearch  = this._shelfSearch;
     ctx.multi        = this._multi;
     ctx.saleRateLabel = `${sys.sale?.rate ?? 10} 折`;
+    ctx.eyeIcon      = EYE_ICON;
+    ctx.tokenImg     = actor.prototypeToken?.texture?.src || actor.img;
 
     // ── 左：当前玩家主控角色的背包 ──────────────────────────────────────
     // GM 通常拥有全部角色，回退查找只对玩家生效，避免 GM 随机显示一个角色
@@ -193,8 +290,8 @@ export class LimbusMerchantSheet extends ActorSheet {
     }
 
     // ── 右：货架 ────────────────────────────────────────────────────────
-    const cols = Math.max(1, sys.shelfSize?.width  ?? 8);
-    const rows = Math.max(1, sys.shelfSize?.height ?? 5);
+    const cols = Math.max(1, sys.shelfSize?.width  ?? SHELF_COLS);
+    const rows = Math.max(1, sys.shelfSize?.height ?? SHELF_ROWS);
     ctx.shelfCols = cols;
     ctx.shelfRows = rows;
 
@@ -211,14 +308,12 @@ export class LimbusMerchantSheet extends ActorSheet {
     }
 
     const purse = ctx.myChar?.currency ?? 0;
-    const term  = this._shelfSearch.trim().toLowerCase();
     ctx.shelfItems = placedItems.map(p => {
       const doc  = actor.items.get(String(p.uuid ?? "").split(".").pop());
       const pl   = placements[p.idx] ?? {};
       const base = pl.price ?? 0;
       const buy  = LimbusMerchantSheet.buyPriceOf(actor, pl);
-      const show = (!term || (p.name ?? "").toLowerCase().includes(term))
-                && (!this._catFilter || doc?.type === this._catFilter);
+      const show = !this._catFilter || doc?.type === this._catFilter;
       return {
         ...p,
         // buildPlacementGrid 把名字/图标放在 entry.item 下，摊平给模板
@@ -256,6 +351,17 @@ export class LimbusMerchantSheet extends ActorSheet {
       this.render(false);
     });
 
+    // 解锁后：点 Token 图换图（立绘走 data-edit="img" 的原生流程）
+    html.find(".mc-token-edit").on("click", (ev) => {
+      ev.preventDefault();
+      const cur = this.actor.prototypeToken?.texture?.src || "";
+      const FP  = foundry.applications?.apps?.FilePicker?.implementation ?? FilePicker;
+      new FP({
+        type: "image", current: cur,
+        callback: (path) => this.actor.update({ "prototypeToken.texture.src": path }),
+      }).browse(cur);
+    });
+
     // 折扣
     html.find(".mc-sale-toggle").on("click", async () => {
       await this.actor.update({ "system.sale.enabled": !(this.actor.system.sale?.enabled) });
@@ -269,7 +375,6 @@ export class LimbusMerchantSheet extends ActorSheet {
     });
 
     // 搜索 / 分类
-    this._bindSearch(html);
     html.find(".mc-cat").on("click", (ev) => {
       this._catFilter = ev.currentTarget.dataset.cat ?? "";
       this.render(false);
@@ -366,26 +471,6 @@ export class LimbusMerchantSheet extends ActorSheet {
     if (isGM && this._editUnlocked) html.find(".cg-wrap").addClass("cg-edit-unlocked");
   }
 
-  /** 搜索框：跳过 IME 组字 + 防抖 + 还原焦点，见 BackgroundWizard 的同名坑 */
-  _bindSearch(html) {
-    const el = html.find(".mc-search")[0];
-    if (!el) return;
-    let composing = false, timer = null;
-    el.addEventListener("compositionstart", () => { composing = true; });
-    el.addEventListener("compositionend",   () => { composing = false; el.dispatchEvent(new Event("input")); });
-    el.addEventListener("input", () => {
-      if (composing) return;
-      clearTimeout(timer);
-      const { selectionStart: s, selectionEnd: e, value } = el;
-      timer = setTimeout(async () => {
-        this._shelfSearch = value;
-        await this.render(false);
-        const nx = this.element?.find?.(".mc-search")[0];
-        if (nx) { nx.focus(); nx.setSelectionRange(s, e); }
-      }, 120);
-    });
-  }
-
   /* ─── 悬停预览 ───────────────────────────────────────────────────────── */
 
   async _onTileHover(event) {
@@ -455,8 +540,8 @@ export class LimbusMerchantSheet extends ActorSheet {
       const w = rot === p.rotated ? p.w : p.h;
       const h = rot === p.rotated ? p.h : p.w;
       if (!canPlace(list, x, y, w, h,
-            this.actor.system.shelfSize?.width ?? 8,
-            this.actor.system.shelfSize?.height ?? 5, { excludeIdx: idx })) {
+            this.actor.system.shelfSize?.width ?? SHELF_COLS,
+            this.actor.system.shelfSize?.height ?? SHELF_ROWS, { excludeIdx: idx })) {
         return void ui.notifications.warn("此位置放不下（越界或与其他商品重叠）");
       }
       list[idx] = { ...p, x, y, w, h, rotated: rot };
@@ -472,8 +557,8 @@ export class LimbusMerchantSheet extends ActorSheet {
 
   /** GM：把一件物品放上货架（复制成商人的嵌入物品） */
   async _listItem(srcItem, x, y) {
-    const cols = this.actor.system.shelfSize?.width  ?? 8;
-    const rows = this.actor.system.shelfSize?.height ?? 5;
+    const cols = this.actor.system.shelfSize?.width  ?? SHELF_COLS;
+    const rows = this.actor.system.shelfSize?.height ?? SHELF_ROWS;
     const cap  = srcItem.system?.capacity ?? {};
     const w = Math.max(1, cap.w ?? 1), h = Math.max(1, cap.h ?? 1);
     const list = foundry.utils.deepClone(this.actor.system.shelfContents ?? []);
@@ -491,7 +576,8 @@ export class LimbusMerchantSheet extends ActorSheet {
     list.push({
       uuid: made.uuid, x: spot.x, y: spot.y, w: spot.w, h: spot.h,
       rotated: !!spot.rotated,
-      price: srcItem.system?.price ?? 0,
+      // GM 拖入默认取物品卡上的基础价格（cost），之后可双击手动改
+      price: LimbusMerchantSheet.baseCostOf(srcItem),
     });
     await this.actor.update({ "system.shelfContents": list });
   }
@@ -562,14 +648,16 @@ export class LimbusMerchantSheet extends ActorSheet {
           <img src="${item.img}" style="width:34px;height:34px;object-fit:cover;border:1px solid #5F3E22;" alt="">
           <b>${item.name}</b>
         </div>
-        <div style="display:flex;justify-content:space-between;"><span>${unitLabel}</span><b>${unit} 眼</b></div>
+        <div style="display:flex;justify-content:space-between;"><span>${unitLabel}</span>
+          <span>${LimbusMerchantSheet.eyeHtml(unit)}</span></div>
         ${qtyRow}
         <div style="display:flex;justify-content:space-between;margin-top:4px;">
-          <span>${buy ? "合计支出" : "合计收入"}</span><b class="mc-total">${unit} 眼</b>
+          <span>${buy ? "合计支出" : "合计收入"}</span>
+          <span class="mc-total">${LimbusMerchantSheet.eyeHtml(unit)}</span>
         </div>
         <div style="display:flex;justify-content:space-between;color:#9A8462;">
           <span>${buy ? "交易后持有" : "商人余额"}</span>
-          <b class="mc-after">${buy ? purse - unit : purse - unit} 眼</b>
+          <span class="mc-after">${LimbusMerchantSheet.eyeHtml(purse - unit)}</span>
         </div>
       </div>`;
 
@@ -588,8 +676,8 @@ export class LimbusMerchantSheet extends ActorSheet {
             const n = parseInt(html.find("[name=qty]").val() ?? "1") || 1;
             const total = unit * n;
             html.find(".mc-qty-n").text(n);
-            html.find(".mc-total").text(`${total} 眼`);
-            html.find(".mc-after").text(`${purse - total} 眼`);
+            html.find(".mc-total").html(LimbusMerchantSheet.eyeHtml(total));
+            html.find(".mc-after").html(LimbusMerchantSheet.eyeHtml(purse - total));
             const bad = total > purse;
             html.find(".mc-total").css("color", bad ? "#E94745" : "");
             // Foundry 的 Dialog 按钮带 data-button，别按 class 找
@@ -642,9 +730,10 @@ export class LimbusMerchantSheet extends ActorSheet {
         ${sells.length ? `<div style="color:#C9A84C;margin-top:4px;">卖出</div>${rows(sells, "#7AAB6A")}` : ""}
         <div style="display:flex;justify-content:space-between;margin-top:6px;
                     border-top:1px solid rgba(201,168,76,.35);padding-top:4px;">
-          <span>${net >= 0 ? "净支出" : "净收入"}</span><b>${Math.abs(net)} 眼</b></div>
+          <span>${net >= 0 ? "净支出" : "净收入"}</span>
+          <span>${LimbusMerchantSheet.eyeHtml(Math.abs(net))}</span></div>
         <div style="display:flex;justify-content:space-between;color:${net > purse ? "#E94745" : "#9A8462"};">
-          <span>交易后持有</span><b>${purse - net} 眼</b></div>
+          <span>交易后持有</span><span>${LimbusMerchantSheet.eyeHtml(purse - net)}</span></div>
       </div>`,
     });
     if (!ok) return;
@@ -788,8 +877,8 @@ export class LimbusMerchantSheet extends ActorSheet {
       return void LimbusMerchantSheet._fail(userId, `商人资金不足（${mPurse} 眼），收不下。`);
     }
 
-    const cols = merchant.system.shelfSize?.width  ?? 8;
-    const rows = merchant.system.shelfSize?.height ?? 5;
+    const cols = merchant.system.shelfSize?.width  ?? SHELF_COLS;
+    const rows = merchant.system.shelfSize?.height ?? SHELF_ROWS;
     const list = foundry.utils.deepClone(merchant.system.shelfContents ?? []);
     const cap  = item.system?.capacity ?? {};
     const w = Math.max(1, cap.w ?? 1), h = Math.max(1, cap.h ?? 1);

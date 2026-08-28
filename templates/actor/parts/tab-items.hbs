@@ -75,7 +75,7 @@
                data-x="{{x}}" data-y="{{y}}"></div>
         {{/each}}
         {{#each bagGrid.tiles}}
-          <div class="cg-item-tile {{#if isContainer}}cg-tile-container{{/if}}"
+          <div class="cg-item-tile rarity-{{rarity}} {{#if isContainer}}cg-tile-container{{/if}}"
                style="grid-column:{{col}} / span {{w}}; grid-row:{{row}} / span {{h}}"
                data-item-id="{{id}}"
                data-item-uuid="{{uuid}}"
