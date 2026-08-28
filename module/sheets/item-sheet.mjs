@@ -125,6 +125,18 @@ export class LimbusItemSheet extends ItemSheet {
         "system.corrode.activities":  foundry.utils.deepClone(sys.activities ?? []),
       });
     }
+    // 扩散设置一律"落成实值"再切形态：留 null 的话侵蚀会沿用觉醒那一套，
+    // 而下拉框显示的就是继承来的值——此时选同一个选项不触发 change，
+    // 玩家会以为设过了，实际上还是 null，改觉醒时侵蚀跟着一起变。
+    if (next === "corrode") {
+      const c = sys.corrode ?? {};
+      if (c.spreadMode  === null || c.spreadMode  === undefined) {
+        update["system.corrode.spreadMode"]  = sys.spreadMode  ?? "chain";
+      }
+      if (c.spreadRange === null || c.spreadRange === undefined) {
+        update["system.corrode.spreadRange"] = sys.spreadRange ?? 1;
+      }
+    }
     await this.item.update(update);
   }
 
