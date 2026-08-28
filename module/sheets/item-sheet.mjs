@@ -125,6 +125,18 @@ export class LimbusItemSheet extends ItemSheet {
         "system.corrode.activities":  foundry.utils.deepClone(sys.activities ?? []),
       });
     }
+    // 扩散设置一律"落成实值"再切形态：留 null 的话侵蚀会沿用觉醒那一套，
+    // 而下拉框显示的就是继承来的值——此时选同一个选项不触发 change，
+    // 玩家会以为设过了，实际上还是 null，改觉醒时侵蚀跟着一起变。
+    if (next === "corrode") {
+      const c = sys.corrode ?? {};
+      if (c.spreadMode  === null || c.spreadMode  === undefined) {
+        update["system.corrode.spreadMode"]  = sys.spreadMode  ?? "chain";
+      }
+      if (c.spreadRange === null || c.spreadRange === undefined) {
+        update["system.corrode.spreadRange"] = sys.spreadRange ?? 1;
+      }
+    }
     await this.item.update(update);
   }
 
@@ -141,6 +153,9 @@ export class LimbusItemSheet extends ItemSheet {
     context.isLocked  = this.isLocked;
     context.isEditable = this.isEditable;
     context.activitiesExpanded = this.activitiesExpanded;
+
+    // ── 稀有度标签（锁定时显示中文名）────────────────────────────────
+    context.rarityLabel = (cfg.RARITY_LABELS ?? {})[sys.rarity] ?? "";
 
     // ── 恐慌卡：类型（士气低落 / 陷入恐慌）──────────────────────────────
     if (item.type === "panic") {
@@ -223,10 +238,16 @@ export class LimbusItemSheet extends ItemSheet {
       // 攻击容量 >= 2 时才给扩散方式 / 范围（1 格 = 5ft，半径 N → N×5+2.5 ft）。
       // 基础容量只有 1、靠效果临时增容的技能也可能需要指定方式，因此只要已经
       // 设过非默认值（广域乱射 / 范围 >1），这一栏就一直显示出来可编辑。
-      const spreadSet = sys.spreadMode === "spray" || (sys.spreadRange ?? 1) > 1;
-      context.showSpread      = (context.form.weight ?? 0) >= 2 || spreadSet;
-      context.spreadModeLabel = sys.spreadMode === "spray" ? "广域乱射" : "链式扩散";
-      context.spreadFt        = `${((sys.spreadRange ?? 1) * 5 + 2.5).toFixed(1)}ft`;
+      // 扩散方式/范围与其它字段一样分形态：侵蚀填了就用侵蚀的，没填沿用觉醒的
+      context.formSpreadMode  = pick("spreadMode")  ?? "chain";
+      context.formSpreadRange = pick("spreadRange") ?? 1;
+      const spreadSet = context.formSpreadMode === "spray" || context.formSpreadRange > 1;
+      // E.G.O 一律显示：两套形态各有各的扩散方式，而侵蚀常常是"容量 1 + 链式"
+      // ——只按 weight>=2 || 非默认值 判断的话，一旦把侵蚀设成【链式扩散】(默认值)
+      // 这一栏就消失了，再也改不回来。
+      context.showSpread      = (context.form.weight ?? 0) >= 2 || spreadSet || context.isEgo;
+      context.spreadModeLabel = context.formSpreadMode === "spray" ? "广域乱射" : "链式扩散";
+      context.spreadFt        = `${(context.formSpreadRange * 5 + 2.5).toFixed(1)}ft`;
 
       // 图标边框：与 HUD / 技能槽同一套（罪孽+等级空心框，EGO 为圆环）
       context.skillFrame = ClashManager._skillFrameIcon(item);
@@ -447,6 +468,7 @@ export class LimbusItemSheet extends ItemSheet {
     html.find(".cg-cell").on("click",     this._onCgCellClick.bind(this));
     html.find(".cg-item-tile").on("dragstart",   this._onCgTileDragStart.bind(this));
     html.find(".cg-item-tile").on("contextmenu", this._onCgTileMenu.bind(this));
+    html.find(".cg-item-tile").on("dblclick",    this._onCgTileDblClick.bind(this));
     // pointer 自绘拖放：图块的拖动交给 GridDnD（幽灵块 / 落点预览 / R 旋转），
     // 格子上的原生 drop 监听保留不动——侧边栏、合集包拖进来仍走原生 DnD，
     // GridDnD 松手时也是合成一个原生 drop 事件投给格子，复用同一套转移逻辑。
@@ -515,17 +537,35 @@ export class LimbusItemSheet extends ItemSheet {
     html.find(".ego-form-toggle").on("click", this._onEgoFormToggle.bind(this));
 
     // 攻击容量输入时即时切换扩散设置的显隐（不等重渲染）
+    // 扩散设置写哪一套：EGO 在侵蚀形态下写 system.corrode.*，其余写 system.*
+    // （不加这一层的话，改侵蚀的扩散方式会把觉醒的也一起改掉）
+    const _spreadPath = (key) => {
+      const corrode = this.item.type === "ego" && this.item.system?.egoForm === "corrode";
+      return corrode ? `system.corrode.${key}` : `system.${key}`;
+    };
+    const _curSpread = (key, dflt) => {
+      const sys = this.item.system ?? {};
+      const corrode = this.item.type === "ego" && sys.egoForm === "corrode";
+      const cv = corrode ? sys.corrode?.[key] : null;
+      return (cv !== null && cv !== undefined) ? cv : (sys[key] ?? dflt);
+    };
+
     html.find(".weight-input[name$='weight']").on("input", (ev) => {
       const n = parseInt(ev.currentTarget.value) || 0;
-      const set = this.item.system?.spreadMode === "spray"
-               || (this.item.system?.spreadRange ?? 1) > 1;
+      const set = _curSpread("spreadMode", "chain") === "spray"
+               || _curSpread("spreadRange", 1) > 1;
       html.find(".spread-box").toggleClass("on", n >= 2 || set);
     });
     // 扩散方式 / 范围：不走表单提交，直接写回物品（避免与其它提交逻辑互相覆盖）
+    // render:false —— 让这次写库不要触发重渲染。
+    // 带渲染的话会和物品卡自身的 submitOnChange 重绘撞车：重绘用的是上一次的
+    // 快照，选中的值会先被弹回旧值，得再点一次才生效（症状：选链式先跳成乱射）。
+    // DOM 这边我们自己同步，值本来就已经是用户选的那个了。
     html.find(".spread-mode-sel").on("change", async (ev) => {
       ev.stopPropagation();
       const v = ev.currentTarget.value === "spray" ? "spray" : "chain";
-      await this.item.update({ "system.spreadMode": v });
+      ev.currentTarget.value = v;
+      await this.item.update({ [_spreadPath("spreadMode")]: v }, { render: false });
     });
     html.find(".spread-range-input").on("input", (ev) => {
       const n = Math.min(6, Math.max(1, parseInt(ev.currentTarget.value) || 1));
@@ -535,7 +575,8 @@ export class LimbusItemSheet extends ItemSheet {
       ev.stopPropagation();
       const n = Math.min(6, Math.max(1, parseInt(ev.currentTarget.value) || 1));
       ev.currentTarget.value = n;                      // 空值/越界时回填合法值
-      await this.item.update({ "system.spreadRange": n });
+      html.find(".spread-ft").text(`${(n * 5 + 2.5).toFixed(1)}ft`);
+      await this.item.update({ [_spreadPath("spreadRange")]: n }, { render: false });
     });
 
     // ── 图标点击：锁定时查看插图，解锁时由 Foundry data-edit 处理 ─────────
@@ -1749,6 +1790,41 @@ export class LimbusItemSheet extends ItemSheet {
     this._titleCardCtrls = [];
   }
 
+  /* ─── 物品格：双击打开物品卡 ────────────────────────────────────────────── */
+
+  /**
+   * 容器网格里双击图块 → 打开该物品的物品卡（等同右键菜单的「编辑 / 查看」）。
+   * 嵌套容器同样直接打开自己的卡（卡上就是它的网格）。
+   * 世界金库物品只有 itemData、没有 UUID，临时造一份只读物品来渲染。
+   */
+  async _onCgTileDblClick(event) {
+    event.preventDefault();
+    const tile = event.currentTarget;
+    const idx  = parseInt(tile.dataset.placementIdx ?? -1);
+    const uuid = tile.dataset.itemUuid ?? "";
+    if (idx < 0) return;
+
+    // 拖动刚结束时浏览器仍可能补一发 dblclick，别把卡开出来
+    if (GridDnD.dragging) return;
+
+    if (uuid) {
+      const itm = await fromUuid(uuid).catch(() => null);
+      if (!itm) {
+        ui.notifications.warn(`找不到物品「${tile.dataset.itemName ?? ""}」，可能已被删除。`);
+        return;
+      }
+      itm.sheet?.render(true, { focus: true });
+      return;
+    }
+
+    const entry = this.item.system?.contents?.[idx] ?? {};
+    if (!entry.itemData) return;
+    const tempData = foundry.utils.deepClone(entry.itemData);
+    delete tempData._id;
+    const tempItem = await Item.create(tempData, { temporary: true });
+    tempItem?.sheet?.render(true);
+  }
+
   /* ─── 物品格：右键菜单 ──────────────────────────────────────────────────── */
 
   async _onCgTileMenu(event) {
@@ -2475,7 +2551,7 @@ function _buffLabelMap() {
 function _buildTriggerOpts(selected) {
   const groups = [
     { label: "── 使用 ──",  values: ["使用时", "攻击前", "攻击时", "攻击后",
-                                       "拼点时", "拼点成功", "拼点失败",
+                                       "拼点时", "拼点胜利", "拼点失败",
                                        "命中时", "暴击命中时"] },
     { label: "── 通用 ──",  values: ["回合开始时", "回合结束时", "受到伤害时"] },
     { label: "── 反应 ──",  values: ["反应"] },
@@ -2884,6 +2960,15 @@ function _buildCostRow(cost, idx, cfg) {
               .map(entry => _buildCostPoolRow(entry, cfg)).join("")}
           </div>
           <button type="button" class="ae-add-cost-pool ae-add-btn">＋ 添加候选</button>
+          <!-- 「每随机消耗」：能扣几次就扣几次（每次独立抽一条候选），
+               扣成功的次数即为后续效果的倍数；最多次数留 0 表示扣到扣不动为止 -->
+          <label title="每随机消耗：能扣几次扣几次，扣成功的次数作为效果倍数">每</label>
+          <input class="cost-random-pereach" type="checkbox" ${cost?.perEach ? "checked" : ""}>
+          <span class="ae-cost-random-max" ${cost?.perEach ? "" : 'style="display:none"'}>
+            <label>最多次数</label>
+            <input class="ae-input-sm cost-random-max-times" type="number"
+                   value="${cost?.maxTimes ?? 0}" min="0" placeholder="0=无限">
+          </span>
         </span>
         <span class="ae-cost-buff-sec" ${(isAttr || isDiscard || isField || isSin || isRandom) ? 'style="display:none"' : ""}>
           <label>BUFF</label>
@@ -3341,6 +3426,11 @@ function _bindCondType(html) {
 }
 
 function _bindCostType(html) {
+  html.on("change", ".cost-random-pereach", function () {
+    $(this).closest(".ae-cost-random-sec").find(".ae-cost-random-max")
+      .toggle($(this).prop("checked") === true);
+  });
+
   const refreshRow = (row) => {
     const val        = row.find(".cost-type").val();
     const tgt         = row.find(".cost-target").val();
@@ -3352,6 +3442,7 @@ function _bindCostType(html) {
     const isRandom    = val === "random";
     const perNDim     = row.find(".cost-pern-dim").val() === "intensity" ? "intensity" : "stacks";
     row.find(".ae-cost-random-sec").toggle(isRandom);
+    row.find(".ae-cost-random-max").toggle(isRandom && row.find(".cost-random-pereach").prop("checked") === true);
     row.find(".ae-cost-field-sec").toggle(isField && !isRandom);
     row.find(".ae-cost-sin-sec").toggle(isSin && !isRandom);
     row.find(".ae-cost-sin-max").toggle(isSin && !isRandom && isPerStack);
@@ -3587,10 +3678,13 @@ function _readActivityForm(html, original) {
           amount: Math.max(1, parseInt($pr.find(".ae-cost-pool-amount").val()) || 1),
         });
       });
+      const rndPerEach = $r.find(".cost-random-pereach").prop("checked") === true;
       costs.push({
         type,
         target,
         randomPool,
+        perEach:  rndPerEach,
+        maxTimes: rndPerEach ? (parseInt($r.find(".cost-random-max-times").val()) || 0) : 0,
         ..._readBgTagMeta($r, "cost"),
       });
     } else if (type === "attribute") {
@@ -3661,7 +3755,10 @@ function _readActivityForm(html, original) {
           buff:       resolveKey($pr.find(".ae-pool-buff-input").val()),
           buffCustom: "",
           intensity:  parseInt($pr.find(".ae-pool-intensity").val()) || 0,
-          stacks:     parseInt($pr.find(".ae-pool-stacks").val())    || 1,
+          // 0 层是合法值（「只加 N 级、不加层」），不能用 || 1 兜底——
+          // 那会让一条只给强度的池子项在编辑器里存一次就变成额外 +1 层
+          stacks:     (() => { const v = parseInt($pr.find(".ae-pool-stacks").val());
+                               return Number.isFinite(v) ? Math.max(0, v) : 1; })(),
         });
       });
       effects.push({

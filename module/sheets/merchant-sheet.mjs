@@ -1,659 +1,913 @@
 /**
- * merchant-sheet.mjs — NPC 商人角色卡 Sheet
+ * merchant-sheet.mjs — 商人（网格版）
  *
- * 两栏式布局：
- *   左栏：Tab（买入/卖出 或 正在出售/填充物品）+ 立绘 + 描述
- *   右栏：货物表格
+ * 左＝当前玩家主控角色的背包网格，右＝商人货架网格，两块都用
+ * helpers/grid-layout + grid-dnd 那一套（与营地仓库、容器完全同源）。
  *
- * 权限区分：
- *   GM   → 正在出售（只读货架）/ 填充物品（可拖入）+ 编辑/隐藏/删除操作
- *   玩家 → 买入 / 卖出
+ * ── 交互约定 ────────────────────────────────────────────────────────────
+ *   · 玩家只能拖动**自己**的物品：货架图块的 payloadFor 对非 GM 返回 null，
+ *     于是它在 GridDnD 眼里根本不可拖。
+ *   · 拖自己的物品到货架 = 出售，落点就是它在货架上的位置；卖错了双击那件
+ *     商品原价买回来（卖出时会把回收价写成新的上架原价）。
+ *   · 双击货架商品 = 购买；GM 双击 = 改价 / 改数量 / 下架。
+ *   · 【多选】开启后点击选择（两边都能选），【一键买卖】汇总成一笔。
  *
- * 交易一致性：买入/卖出均由 GM 端权威执行（socket merchantBuy /
- * merchantSell），按 merchantId 串行队列防并发超卖；库存/货币校验
- * 以 GM 端数据为准，客户端校验仅作友好提示。
+ * ── 权限 ────────────────────────────────────────────────────────────────
+ * 玩家对商人 Actor 通常只有「查看」权限，所有会改数据的操作一律经 socket
+ * 交给 GM 端执行（`_gmExecute*`），并按 merchantId 串行排队防止并发超卖。
+ * 这与营地仓库同一套路子。
  */
-import { buildItemTitleCard, closeTitleCardUnlessLocked, toggleTitleCardLock } from "./item-sheet.mjs";
+
+import { buildItemTitleCard, toggleTitleCardLock } from "./item-sheet.mjs";
+import { GridDnD } from "../helpers/grid-dnd.mjs";
+import { canPlace, autoPlace, buildPlacementGrid } from "../helpers/grid-layout.mjs";
+import { getBagItems, packBagGrid, BAG_COLS, BAG_ROWS } from "../helpers/bag-grid.mjs";
+import { guardInteractRange } from "../helpers/proximity.mjs";
+
+/**
+ * 这件东西有没有「数量」的说法。
+ * 由物品自己的【可堆叠】开关决定（只有消耗品/材料有这个字段）——
+ * 同是消耗品，丹药可以堆、一次性的护符就不该堆，光看类型判断不了。
+ */
+export const hasQty = (item) => !!item?.system?.stackable;
+
+/** 货架尺寸：与玩家背包一致的竖版 5 宽 × 8 高，两边看着才对称 */
+export const EYE_ICON = "systems/limbusCompany_FVTT/assets/icons/Base_icon/眼.webp";
+
+export const SHELF_COLS = BAG_COLS;
+export const SHELF_ROWS = BAG_ROWS;
+
+/** 货架分类筛选（按物品 type） */
+const CAT_FILTERS = [
+  { key: "",           label: "全部" },
+  { key: "equipment",  label: "装备" },
+  { key: "consumable", label: "消耗品" },
+  { key: "material",   label: "材料" },
+  { key: "skillbook",  label: "技能书" },
+];
 
 export class LimbusMerchantSheet extends ActorSheet {
 
-  /** @override */
+  /**
+   * 距离守卫：玩家的 Token 得走到 商人 旁边（默认 3 格内）才能开面板。
+   * GM 不受限；设置里把「交互距离」调成 0 即可整场关闭。见 helpers/proximity.mjs。
+   */
+  async _render(force, options = {}) {
+    if (!guardInteractRange(this.actor, "商人")) return;
+    return super._render(force, options);
+  }
+
+
+  /**
+   * 左栏画的是**别的 Actor**（玩家角色）的背包，那边变了不会自动重渲染这张卡。
+   * 在 ready 里挂一次钩子，角色的钱/物品/摆放一变就刷新所有打开着的商人卡。
+   */
+  static init() {
+    const refresh = (actor) => {
+      if (actor?.type !== "character") return;
+      for (const app of Object.values(ui.windows)) {
+        if (app instanceof LimbusMerchantSheet) app.render(false);
+      }
+    };
+    Hooks.on("updateActor", refresh);
+    Hooks.on("createItem", (item) => refresh(item?.parent));
+    Hooks.on("deleteItem", (item) => refresh(item?.parent));
+    Hooks.on("updateItem", (item) => refresh(item?.parent));
+  }
+
   static get defaultOptions() {
     return foundry.utils.mergeObject(super.defaultOptions, {
-      classes:   ["limbuscompany", "sheet", "actor", "merchant"],
-      template:  "systems/limbusCompany_FVTT/templates/actor/merchant-sheet.hbs",
-      width:     760,
-      height:    560,
+      classes:  ["limbuscompany", "sheet", "actor", "merchant-sheet"],
+      template: "systems/limbusCompany_FVTT/templates/actor/merchant-sheet.hbs",
+      width:    600,
+      height:   650,
       resizable: true,
-      tabs: [{ navSelector: ".merchant-tabs", contentSelector: ".merchant-tab-body", initial: "sell" }],
-      // 重渲染（买卖后）保持各 Tab 表格的滚动位置
-      scrollY:   [".merchant-tab-content", ".merchant-desc-wrap"],
     });
   }
 
-  /* ─── 状态（每个 Sheet 实例独立） ──────────────────────────────────────── */
+  /* ─── 界面状态（不持久化） ───────────────────────────────────────────── */
 
-  /** 当前激活 Tab（"sell" | "stock" | "buy" | "player-sell"） */
-  _activeTab = "sell";
-
-  /** 是否显示隐藏物品（GM专用，默认只显示未隐藏） */
-  _showHidden = false;
-
-  /** 玩家选择的购买角色 ID */
-  _selectedCharId = null;
-
-  /** 编辑锁（false = 锁定，true = 解锁可编辑） */
   _editUnlocked = false;
+  _catFilter    = "";
+  _multi        = false;
+  /** 选中的图块：`shop:<placementIdx>` / `bag:<itemId>` */
+  _sel          = new Set();
+  _charGrid     = null;
+  _titleCard    = null;
 
-  /** 每个商人 Actor 的 GM 端操作串行队列（防并发超卖） */
+  /* ─── 并发与聊天播报（沿用旧版） ─────────────────────────────────────── */
+
+  /** merchantId → 串行队列，防止两个人同时买最后一件 */
   static _opQueues = new Map();
+  static _enqueue(merchantId, fn) {
+    const prev = LimbusMerchantSheet._opQueues.get(merchantId) ?? Promise.resolve();
+    const next = prev.then(fn).catch(err => console.error("[商人] 操作失败", err));
+    LimbusMerchantSheet._opQueues.set(merchantId, next);
+    return next;
+  }
 
-  /**
-   * 交易聊天消息实时聚合器（与战利品 _scheduleChatMsg 同机制）
-   * key: `${kind}_${charId}_${merchantId}`（kind = buy | sell，买入卖出分开聚合）
-   * 首笔交易立即创建聊天消息，30 秒内后续交易 update 追加到同一条；
-   * 所有异步操作经 entry.chain 串行化防竞态。
-   */
+  /** 30 秒内的连续买/卖合并成一条聊天卡，避免刷屏 */
   static _chatSessions = new Map();
   static _chatTimers   = new Map();
 
-  /** 构建聚合交易消息 HTML（同名物品合并计数、金额累加） */
-  static _buildTradeChatContent({ kind, merchant, char, items }) {
-    const merged = [];
-    const seen   = new Map();
+  /** 「数字 + 眼图标」，代替到处写「xxx 眼」 */
+  static eyeHtml(n, cls = "") {
+    return `<b class="mc-eye ${cls}">${n}</b>`
+      + `<img class="mc-eye-ic" src="${EYE_ICON}" alt="眼">`;
+  }
+
+  /**
+   * 卡片结构：
+   *   商人立绘(55px) │ 【商人名】
+   *                  │ 购买清单
+   *   ──────── 金线 ────────
+   *   购买方 PL
+   *     [图标] 物品名          价格
+   *     总计                   价格
+   *   （每个 PL 一组，组间空一行）
+   */
+  static _buildTradeChatContent({ merchant, items }) {
+    const gold = `<div style="height:1px;background:linear-gradient(90deg,
+      rgba(201,168,76,0),rgba(201,168,76,.75),rgba(201,168,76,0));margin:5px 0;"></div>`;
+
+    // 按 PL 分组，保持首次出现的顺序
+    const groups = new Map();
     for (const i of items) {
-      if (seen.has(i.name)) {
-        const m = merged[seen.get(i.name)];
-        m.qty   += i.qty;
-        m.total += i.total;
-      } else {
-        seen.set(i.name, merged.length);
-        merged.push({ ...i });
-      }
+      if (!groups.has(i.charId)) groups.set(i.charId, { name: i.charName, list: [] });
+      groups.get(i.charId).list.push(i);
     }
-    const verb = kind === "buy" ? "花费" : "获得";
-    const rows = merged.map(i => `
-      <div class="purchase-item-row">
-        <img src="${i.img}" class="purchase-item-icon" alt="${i.name}">
-        <span class="purchase-item-name">${i.name}${i.qty > 1 ? ` ×${i.qty}` : ""}</span>
-        <span class="purchase-item-price">${verb} <strong>${i.total}</strong> 眼</span>
-      </div>`).join("");
+
+    const hasSell = items.some(i => i.kind !== "buy");
+    const title   = hasSell ? "交易清单" : "购买清单";
+
+    const blocks = [...groups.values()].map(g => {
+      let total = 0;
+      const rows = g.list.map(i => {
+        const buy = i.kind === "buy";
+        const sum = i.price * (i.qty ?? 1);
+        total += buy ? sum : -sum;
+        return `
+        <div style="display:flex;align-items:center;gap:6px;padding:1px 0;">
+          <img src="${i.img}" style="width:26px;height:26px;object-fit:cover;border:1px solid #5F3E22;" alt="">
+          <span style="flex:1;color:#E8C9A2;font-size:.82rem;">${
+            buy ? "" : `<span style="color:#7AAB6A;font-size:.72rem;">卖出 </span>`
+          }${i.name}${i.qty > 1 ? ` ×${i.qty}` : ""}</span>
+          <span style="font-size:.82rem;white-space:nowrap;color:${buy ? "#E5BA25" : "#7AAB6A"};">
+            ${LimbusMerchantSheet.eyeHtml(sum)}</span>
+        </div>`;
+      }).join("");
+      return `
+        <div style="margin-bottom:6px;">
+          <div style="color:#C9A84C;font-size:.78rem;margin-bottom:2px;">${g.name}</div>
+          ${rows}
+          <div style="display:flex;justify-content:space-between;align-items:center;padding-top:2px;">
+            <span style="color:#9A8462;font-size:.78rem;">总计</span>
+            <span style="font-size:.82rem;white-space:nowrap;color:${total >= 0 ? "#E5BA25" : "#7AAB6A"};">
+              ${LimbusMerchantSheet.eyeHtml(Math.abs(total))}</span>
+          </div>
+        </div>`;
+    }).join("");
+
     return `
-      <div class="limbus-merchant-purchase-card">
-        <div class="purchase-header">
-          <img src="${merchant.img}" class="purchase-merchant-img" alt="${merchant.name}">
-          <div class="purchase-title">
-            <span class="purchase-name">${char.name}</span>
-            <span class="purchase-sub">${kind === "buy" ? `从 ${merchant.name} 购买` : `卖给 ${merchant.name}`}</span>
+      <div class="limbus-clash-card" data-clash-type="trade">
+        <div style="display:flex;align-items:center;gap:10px;">
+          <img src="${merchant.img}" style="width:55px;height:55px;object-fit:cover;
+               border:1px solid #5F3E22;border-radius:3px;flex:0 0 55px;" alt="">
+          <div style="display:flex;flex-direction:column;gap:2px;min-width:0;">
+            <b style="color:#E8C9A2;">【${merchant.name}】</b>
+            <span style="color:#C9A84C;font-size:.78rem;">${title}</span>
           </div>
         </div>
-        <div class="ic-gold-divider"></div>
-        ${rows}
-        <div class="ic-gold-divider"></div>
+        ${gold}
+        ${blocks}
       </div>`;
   }
 
-  /** 记录一笔交易：首笔创建消息，30 秒内后续交易追加到同一条 */
-  static _scheduleTradeMsg(kind, merchant, char, itemName, itemImg, price) {
-    const key = `${kind}_${char.id}_${merchant.id}`;
-
-    let entry = LimbusMerchantSheet._chatSessions.get(key);
-    if (!entry) {
-      entry = { kind, merchant, char, items: [], msg: null, chain: Promise.resolve() };
-      LimbusMerchantSheet._chatSessions.set(key, entry);
-    }
-    entry.items.push({ name: itemName, img: itemImg, qty: 1, total: price });
-
-    entry.chain = entry.chain.then(async () => {
-      const content = LimbusMerchantSheet._buildTradeChatContent(entry);
-      if (!entry.msg) {
-        entry.msg = await ChatMessage.create({
-          content, speaker: ChatMessage.getSpeaker({ actor: entry.char }),
-        });
-      } else {
-        await entry.msg.update({ content });
-      }
-    });
+  /**
+   * 同一个商人的连续交易共用一条聊天信息：
+   * 第一笔立刻发卡，之后 30 秒内所有 PL 在这个商人处的买/卖都往这条卡里追加
+   * （按 PL 分组，各自带总计）。计时器每笔刷新，停手满 30 秒才结束会话。
+   */
+  static _scheduleTradeMsg(kind, merchant, char, name, img, price, qty = 1) {
+    const key  = `${merchant.id}`;
+    const sess = LimbusMerchantSheet._chatSessions.get(key)
+      ?? { items: [], msgId: null, busy: false, rendered: 0 };
+    sess.items.push({ kind, name, img, price, qty, charId: char.id, charName: char.name });
+    LimbusMerchantSheet._chatSessions.set(key, sess);
 
     clearTimeout(LimbusMerchantSheet._chatTimers.get(key));
     LimbusMerchantSheet._chatTimers.set(key, setTimeout(() => {
       LimbusMerchantSheet._chatSessions.delete(key);
       LimbusMerchantSheet._chatTimers.delete(key);
-    }, 30_000));
+    }, 30000));
+
+    LimbusMerchantSheet._syncTradeMsg(key, merchant);
+  }
+
+  /** 串行化建卡/改卡，避免同一会话里两笔并发各建一张卡 */
+  static async _syncTradeMsg(key, merchant) {
+    const sess = LimbusMerchantSheet._chatSessions.get(key);
+    if (!sess || sess.busy) return;   // 正在写的那一趟结束后会自己补上
+    sess.busy = true;
+    try {
+      // 每一趟都以「当前全部条目」重建，写完发现又多了就再来一趟
+      while (sess.rendered !== sess.items.length) {
+        const n = sess.items.length;
+        const content = LimbusMerchantSheet._buildTradeChatContent({
+          merchant, items: sess.items.slice(0, n),
+        });
+        const msg = sess.msgId ? game.messages.get(sess.msgId) : null;
+        if (msg) await msg.update({ content });
+        else {
+          const created = await ChatMessage.create({ content });
+          sess.msgId = created?.id ?? null;
+        }
+        sess.rendered = n;
+      }
+    } finally {
+      sess.busy = false;
+    }
+  }
+
+  /* ─── 价格 ───────────────────────────────────────────────────────────── */
+
+  /** 折扣只作用于买入；rate 以「折」计（10 = 原价） */
+  static buyPriceOf(merchant, placement) {
+    const base = placement?.price ?? 0;
+    const sale = merchant?.system?.sale ?? {};
+    if (!sale.enabled) return base;
+    return Math.max(1, Math.round(base * (sale.rate ?? 10) / 10));
+  }
+  /** 物品的基础价格：物品卡上「眼」那一栏（cost-display 显示的就是它） */
+  static baseCostOf(item) {
+    return item?.system?.cost ?? 0;
+  }
+  /** 回收价固定半价，不吃折扣——压低回收价只会让人不想卖 */
+  static sellPriceOf(item) {
+    return Math.floor(LimbusMerchantSheet.baseCostOf(item) / 2);
   }
 
   /* ─── getData ────────────────────────────────────────────────────────── */
 
-  /** @override */
   async getData(options = {}) {
-    const ctx    = await super.getData(options);
-    const actor  = this.actor;
-    const sys    = actor.system;
-    const isGM   = game.user.isGM;
+    const ctx   = await super.getData(options);
+    const actor = this.actor;
+    const sys   = actor.system;
+    const isGM  = game.user.isGM;
 
-    ctx.isGM             = isGM;
-    ctx.showHidden       = this._showHidden;
-    ctx.editUnlocked     = this._editUnlocked; // 编辑锁：true = 可编辑
-    ctx.shopDesc         = sys.shopDesc ?? "";
-    ctx.merchantCurrency = sys.merchantCurrency ?? 0;
+    ctx.isGM         = isGM;
+    ctx.editUnlocked = this._editUnlocked;
+    ctx.system       = sys;
+    ctx.multi        = this._multi;
+    ctx.saleRateLabel = `${sys.sale?.rate ?? 10} 折`;
+    ctx.eyeIcon      = EYE_ICON;
+    ctx.tokenImg     = actor.prototypeToken?.texture?.src || actor.img;
 
-    // ── 货物列表 ─────────────────────────────────────────────────────────
-    let items = actor.items.contents.map(item => ({
-      id:       item.id,
-      name:     item.name,
-      img:      item.img,
-      type:     item.type,
-      price:    item.system.price  ?? 0,
-      stock:    item.system.stock  ?? -1,
-      hidden:   item.system.hidden ?? false,
-      isSoldOut: (item.system.stock !== -1 && item.system.stock <= 0),
-    }));
-
-    if (!isGM) {
-      // 玩家：过滤隐藏物品
-      items = items.filter(i => !i.hidden);
-    } else if (!this._showHidden) {
-      // GM 未开启"显示隐藏"过滤时，仍显示全部（只是视觉标记 hidden=true 的行）
-      // 不过滤，保留全部，仅在模板中加半透明样式
-    }
-
-    ctx.shopItems = items;
-
-    // ── 玩家持有的角色列表（用于选择购买身份） ───────────────────────────
-    if (!isGM) {
-      ctx.ownedCharacters = game.actors.contents.filter(
-        a => a.type === "character" && a.testUserPermission(game.user, "OWNER")
-      );
-      // 初始化选中角色（优先记忆，否则取第一个）
-      if (!this._selectedCharId && ctx.ownedCharacters.length > 0) {
-        this._selectedCharId = ctx.ownedCharacters[0].id;
+    // ── 左：当前玩家主控角色的背包 ──────────────────────────────────────
+    // GM 通常拥有全部角色，回退查找只对玩家生效，避免 GM 随机显示一个角色
+    const myChar = game.user.character
+      ?? (isGM ? null : game.actors.find(a => a.type === "character" && a.isOwner));
+    if (myChar) {
+      const items = getBagItems(myChar);
+      const { tiles, rows, cells, usedCells } =
+        packBagGrid(items, BAG_COLS, BAG_ROWS, myChar.system?.bagLayout ?? []);
+      for (const t of tiles) {
+        const doc = myChar.items.get(t.id);
+        t.showQty   = hasQty(doc) && (doc?.system?.quantity ?? 1) > 1;
+        t.quantity  = doc?.system?.quantity ?? 1;
+        t.sellPrice = LimbusMerchantSheet.sellPriceOf(doc);
+        t.selected  = this._sel.has(`bag:${t.id}`);
       }
-      ctx.selectedCharId       = this._selectedCharId;
-      const selectedChar = game.actors.get(this._selectedCharId);
-      ctx.selectedCharCurrency = selectedChar?.system?.currency ?? 0;
-      ctx.selectedCharName     = selectedChar?.name ?? "—";
-
-      // ── 卖出Tab：读取选中角色的背包物品 ─────────────────────────────────
-      ctx.sellItems = (selectedChar?.items.contents ?? [])
-        .map(item => ({
-          id:        item.id,
-          name:      item.name,
-          img:       item.img,
-          type:      item.type,
-          sellPrice: item.system.cost ?? 0,   // item-cost-group 字段
-          quantity:  item.system.quantity ?? 1,
-        }))
-        .filter(i => i.type !== "skill");      // 技能不可出售（无实体）
+      this._charGrid = { tiles, rows, actorId: myChar.id };
+      ctx.myChar = {
+        id: myChar.id, name: myChar.name, img: myChar.img,
+        currency: myChar.system?.currency ?? 0,
+        tiles, rows, cells, cols: BAG_COLS, used: usedCells,
+      };
+    } else {
+      this._charGrid = null;
+      ctx.myChar = null;
     }
+
+    // ── 右：货架 ────────────────────────────────────────────────────────
+    const cols = Math.max(1, sys.shelfSize?.width  ?? SHELF_COLS);
+    const rows = Math.max(1, sys.shelfSize?.height ?? SHELF_ROWS);
+    ctx.shelfCols = cols;
+    ctx.shelfRows = rows;
+
+    const placements = sys.shelfContents ?? [];
+    const { placedItems, allCells, orphanedIndices } =
+      await buildPlacementGrid(placements, { cols, rows, keepOrphanOccupancy: true });
+
+    // 孤儿条目（物品被删了但摆放记录还在）：GM 端延迟清掉，defer 出本次 getData
+    if (orphanedIndices.length && isGM) {
+      const dead = new Set(orphanedIndices);
+      setTimeout(() => this.actor.update({
+        "system.shelfContents": placements.filter((_, i) => !dead.has(i)),
+      }), 0);
+    }
+
+    const purse = ctx.myChar?.currency ?? 0;
+    ctx.shelfItems = placedItems.map(p => {
+      const doc  = actor.items.get(String(p.uuid ?? "").split(".").pop());
+      const pl   = placements[p.idx] ?? {};
+      const base = pl.price ?? 0;
+      const buy  = LimbusMerchantSheet.buyPriceOf(actor, pl);
+      const show = !this._catFilter || doc?.type === this._catFilter;
+      return {
+        ...p,
+        // buildPlacementGrid 把名字/图标放在 entry.item 下，摊平给模板
+        name: p.item?.name ?? "", img: p.item?.img ?? "",
+        basePrice: base, buyPrice: buy,
+        discounted: buy !== base,
+        affordable: buy <= purse,
+        showQty:  hasQty(doc) && (doc?.system?.quantity ?? 1) > 1,
+        quantity: doc?.system?.quantity ?? 1,
+        selected: this._sel.has(`shop:${p.idx}`),
+        show,
+      };
+    });
+    ctx.shelfCells = allCells;
+    ctx.catFilters = CAT_FILTERS.map(c => ({ ...c, on: c.key === this._catFilter }));
+
+    const n = this._sel.size;
+    ctx.selInfo = this._multi
+      ? (n ? `已选 ${n} 件（两边都能选）` : "点击图块选择，两边都能选")
+      : "双击商品可单件买卖";
 
     return ctx;
   }
 
-  /* ─── _onRender ──────────────────────────────────────────────────────── */
+  /* ─── 监听 ───────────────────────────────────────────────────────────── */
 
-  /** @override */
   activateListeners(html) {
     super.activateListeners(html);
 
     const isGM = game.user.isGM;
 
-    // Foundry v13 base class 在 !isEditable（Limited 权限）时会将所有 button/input
-    // 设为 disabled。对玩家而言，购买/卖出/角色选择框不依赖 merchant 的编辑权限
-    // （修改的是玩家自己的角色，库存扣减通过 socket 委托 GM），需手动恢复。
-    if (!isGM && !this.isEditable) {
-      html.find(".merchant-item-buy, .merchant-item-sell, .merchant-char-select")
-          .prop("disabled", false);
-    }
-
-    // ── 悬停 Title 卡（货物行 & 卖出行） ──────────────────────────────────
-    html.find(".merchant-item-row").on("mouseenter", this._onRowHoverStart.bind(this));
-    html.find(".merchant-item-row").on("mousedown", (ev) => {
-      if (ev.button !== 1) return;
-      ev.preventDefault();
-      toggleTitleCardLock(this._merchantTitleCard);
-    });
-    html.find(".merchant-item-row").on("mouseleave", () => this._onRowHoverEnd());
-
-    // ── 编辑锁（GM 专用）────────────────────────────────────────────────
-    if (isGM) {
-      html.find(".merchant-lock-toggle").on("click", () => {
-        this._editUnlocked = !this._editUnlocked;
-        this._applyEditLockState(html);
-      });
-      // 渲染完成后立即应用当前锁状态（保持上次的 unlock 状态）
-      this._applyEditLockState(html);
-      this._activateGMListeners(html);
-    } else {
-      this._activatePlayerListeners(html);
-    }
-  }
-
-  /* ─── 悬停 Title 卡 ──────────────────────────────────────────────────── */
-
-  _onRowHoverStart(event) {
-    const row = event.currentTarget;
-    // 货物行（商人物品）或卖出行（角色物品）
-    let item = null;
-    if (row.dataset.itemId) {
-      item = this.actor.items.get(row.dataset.itemId);
-    } else if (row.dataset.charItemId) {
-      item = game.actors.get(this._selectedCharId)?.items.get(row.dataset.charItemId);
-    }
-    if (!item) return;
-
-    this._onRowHoverEnd(true);
-    this._merchantTitleCard = buildItemTitleCard(item);
-    if (!this._merchantTitleCard) return;
-
-    const rect  = this.element[0].getBoundingClientRect();
-    const cardW = 280, cardH = 500;
-    let left = rect.right + 8;
-    if (left + cardW > window.innerWidth - 8) left = rect.left - cardW - 8;
-    const top = Math.max(8, Math.min(rect.top, window.innerHeight - cardH - 8));
-    this._merchantTitleCard.css({ position: "fixed", left, top, zIndex: 99998 });
-    $("body").append(this._merchantTitleCard);
-    this._merchantTitleCard.on("mouseenter", () => clearTimeout(this._merchantCloseTimer));
-    this._merchantTitleCard.on("mouseleave", () => this._onRowHoverEnd());
-  }
-
-  /**
-   * @param {boolean} [force=false]  true=立即强制关闭（忽略锁定）；
-   *   false=延迟 150ms 软关闭（锁定的卡片会被 closeTitleCardUnlessLocked 拦下）
-   */
-  _onRowHoverEnd(force = false) {
-    if (!force) {
-      clearTimeout(this._merchantCloseTimer);
-      this._merchantCloseTimer = setTimeout(() => this._onRowHoverEnd(true), 150);
-      return;
-    }
-    clearTimeout(this._merchantCloseTimer);
-    closeTitleCardUnlessLocked(this._merchantTitleCard);
-    if (!this._merchantTitleCard?.data("tcLocked")) this._merchantTitleCard = null;
-  }
-
-  /** @override 关闭时清理悬浮卡 */
-  async close(options) {
-    this._onRowHoverEnd(true);
-    return super.close(options);
-  }
-
-  /* ─── 编辑锁 ─────────────────────────────────────────────────────────── */
-
-  _applyEditLockState(html) {
-    const root = html?.find ? html : this.element;
-    if (!root?.length) return;
-
-    const btn = root.find(".merchant-lock-toggle");
-    if (this._editUnlocked) {
-      btn.removeClass("locked").html('<i class="fas fa-lock-open"></i>');
-      root.find(".merchant-editable-only").show();
-      root.find(".merchant-locked-only").hide();
-      root.find(".merchant-editable-field").prop("disabled", false);
-    } else {
-      btn.addClass("locked").html('<i class="fas fa-lock"></i>');
-      root.find(".merchant-editable-only").hide();
-      root.find(".merchant-locked-only").show();
-      root.find(".merchant-editable-field").prop("disabled", true);
-    }
-  }
-
-  /** GM 专属交互 */
-  _activateGMListeners(html) {
-    // 立绘点击 → 弹出图片选择器
-    html.find('[data-action="portrait"]').on("click", () => {
-      const fp = new FilePicker({
-        type: "image",
-        current: this.actor.img,
-        callback: async (path) => {
-          await this.actor.update({ img: path });
-        },
-      });
-      fp.browse();
-    });
-
-    // 切换"显示隐藏物品"锁图标
-    html.find(".merchant-hidden-toggle").on("click", () => {
-      this._showHidden = !this._showHidden;
+    // GM 编辑锁
+    html.find(".sheet-lock-toggle").on("click", () => {
+      this._editUnlocked = !this._editUnlocked;
       this.render(false);
     });
 
-    // [编辑] 按钮 → 弹出 price/stock 编辑对话框
-    html.find(".merchant-item-edit").on("click", async (e) => {
-      const itemId = e.currentTarget.closest("[data-item-id]").dataset.itemId;
-      const item   = this.actor.items.get(itemId);
-      if (!item) return;
-      await this._onEditItemDialog(item);
+    // 解锁后：点 Token 图换图（立绘走 data-edit="img" 的原生流程）
+    html.find(".mc-token-edit").on("click", (ev) => {
+      ev.preventDefault();
+      const cur = this.actor.prototypeToken?.texture?.src || "";
+      const FP  = foundry.applications?.apps?.FilePicker?.implementation ?? FilePicker;
+      new FP({
+        type: "image", current: cur,
+        callback: (path) => this.actor.update({ "prototypeToken.texture.src": path }),
+      }).browse(cur);
     });
 
-    // [隐藏/显示] 按钮 → 切换 hidden 状态
-    html.find(".merchant-item-hide").on("click", async (e) => {
-      const itemId = e.currentTarget.closest("[data-item-id]").dataset.itemId;
-      const item   = this.actor.items.get(itemId);
-      if (!item) return;
-      await item.update({ "system.hidden": !item.system.hidden });
+    // 折扣
+    html.find(".mc-sale-toggle").on("click", async () => {
+      await this.actor.update({ "system.sale.enabled": !(this.actor.system.sale?.enabled) });
+    });
+    html.find(".mc-sale-rate").on("change", async (ev) => {
+      await this.actor.update({ "system.sale.rate": Number(ev.currentTarget.value) || 10 });
+    });
+    // 拖动过程中只更新读数，松手才写库（避免每一像素一次 update）
+    html.find(".mc-sale-rate").on("input", (ev) => {
+      html.find(".mc-sale-num").text(`${ev.currentTarget.value} 折`);
     });
 
-    // [移除] 按钮 → 从商人库存中删除该商品
-    html.find(".merchant-item-remove").on("click", async (e) => {
-      const itemId = e.currentTarget.closest("[data-item-id]").dataset.itemId;
-      const item   = this.actor.items.get(itemId);
-      if (!item) return;
-      const confirmed = await Dialog.confirm({
-        title: "移除商品",
-        content: `<p>确定要从货物列表中移除「${item.name}」吗？</p>`,
+    // 搜索 / 分类
+    html.find(".mc-cat").on("click", (ev) => {
+      this._catFilter = ev.currentTarget.dataset.cat ?? "";
+      this.render(false);
+    });
+
+    // 多选
+    html.find(".mc-multi-toggle").on("click", () => {
+      this._multi = !this._multi;
+      this._sel.clear();
+      this.render(false);
+    });
+    html.find(".mc-clear-sel").on("click", () => { this._sel.clear(); this.render(false); });
+    html.find(".mc-trade-btn").on("click", () => this._onBatchTrade());
+
+    // 图块：点击（多选）/ 双击（买卖或 GM 改价）
+    html.find(".mc-tile").on("click", (ev) => {
+      if (!this._multi) return;
+      const el = ev.currentTarget;
+      const key = el.dataset.side === "shop"
+        ? `shop:${el.dataset.placementIdx}` : `bag:${el.dataset.itemId}`;
+      this._sel.has(key) ? this._sel.delete(key) : this._sel.add(key);
+      this.render(false);
+    });
+    html.find(".mc-tile").on("dblclick", (ev) => {
+      if (this._multi) return;
+      const el = ev.currentTarget;
+      if (el.dataset.side === "shop") {
+        const idx = parseInt(el.dataset.placementIdx ?? "-1");
+        if (isGM) this._onGMEditListing(idx);
+        else      this._onBuy(idx);
+      } else {
+        this._onSell(el.dataset.itemId);
+      }
+    });
+
+    // 悬停 Title 卡
+    html.find(".mc-tile").on("mouseenter", this._onTileHover.bind(this));
+    html.find(".mc-tile").on("mouseleave", () => this._closeTitleCard());
+    html.find(".mc-tile").on("mousedown", (ev) => {
+      if (ev.button === 1) { ev.preventDefault(); toggleTitleCardLock(this._titleCard); }
+    });
+
+    // ── 网格拖放 ────────────────────────────────────────────────────────
+    const bagRoot   = html.find(".mc-cg--bag")[0];
+    const shelfRoot = html.find(".mc-cg--shop")[0];
+
+    if (bagRoot && this._charGrid) {
+      const grid  = this._charGrid;
+      const owner = game.actors.get(grid.actorId);
+      html.find(".mc-cg--bag .cg-cell").on("dragover", (ev) => ev.preventDefault());
+      html.find(".mc-cg--bag .cg-cell").on("drop", this._onBagDrop.bind(this));
+      GridDnD.register(bagRoot, {
+        key:        `merchantBag:${owner?.uuid ?? grid.actorId}`,
+        cols:       BAG_COLS,
+        rows:       grid.rows ?? BAG_ROWS,
+        editable:   () => !!owner?.isOwner && !this._multi,
+        placements: () => (grid.tiles ?? []).map(t => ({ x: t.x, y: t.y, w: t.w, h: t.h })),
+        payloadFor: (tile) => {
+          const t = (grid.tiles ?? []).find(x => x.uuid === tile.dataset.itemUuid);
+          if (!t) return null;
+          return {
+            type: "Item", uuid: t.uuid,
+            x: t.x, y: t.y, w: t.w, h: t.h,
+            fromBag: { actorId: grid.actorId, itemId: t.id },
+          };
+        },
       });
-      if (confirmed) await item.delete();
-    });
+    }
 
-    // [+补充货币] 按钮
-    html.find(".merchant-restock-currency").on("click", async () => {
-      await this._onRestockCurrencyDialog();
-    });
+    if (shelfRoot) {
+      html.find(".mc-cg--shop .cg-cell").on("dragover", (ev) => ev.preventDefault());
+      html.find(".mc-cg--shop .cg-cell").on("drop", this._onShelfDrop.bind(this));
+      GridDnD.register(shelfRoot, {
+        key:        `merchantShelf:${this.actor.uuid}`,
+        cols:       this.actor.system.shelfSize?.width  ?? 8,
+        rows:       this.actor.system.shelfSize?.height ?? 5,
+        // 玩家动不了货架：不可编辑 → 货架图块拖不起来（这就是"只能移动自己的物品"）
+        editable:   () => isGM && !this._multi,
+        placements: () => this.actor.system.shelfContents ?? [],
+        payloadFor: (tile) => {
+          if (!isGM) return null;
+          const idx = parseInt(tile.dataset.placementIdx ?? "-1");
+          const p   = this.actor.system.shelfContents?.[idx];
+          if (idx < 0 || !p) return null;
+          return {
+            type: "Item", uuid: p.uuid,
+            x: p.x, y: p.y, w: p.w ?? 1, h: p.h ?? 1,
+            fromShelf: { merchantId: this.actor.id, placementIdx: idx },
+          };
+        },
+      });
+    }
 
-    // 物品图标点击 → 打开物品卡
-    html.find(".merchant-item-icon").on("click", (e) => {
-      const itemId = e.currentTarget.closest("[data-item-id]").dataset.itemId;
-      const item   = this.actor.items.get(itemId);
-      item?.sheet?.render(true);
-    });
+    if (isGM && this._editUnlocked) html.find(".cg-wrap").addClass("cg-edit-unlocked");
   }
 
-  /** 玩家专属交互 */
-  _activatePlayerListeners(html) {
-    // 角色选择器变化 → 更新货币显示
-    html.find(".merchant-char-select").on("change", (e) => {
-      this._selectedCharId = e.target.value;
-      // 更新底栏货币数字（无需完整 render，直接改 DOM）
-      const char     = game.actors.get(this._selectedCharId);
-      const currency = char?.system?.currency ?? 0;
-      html.find(".merchant-player-currency").text(currency.toLocaleString());
-    });
+  /* ─── 悬停预览 ───────────────────────────────────────────────────────── */
 
-    // [购买] 按钮
-    html.find(".merchant-item-buy").on("click", async (e) => {
-      const itemId = e.currentTarget.closest("[data-item-id]").dataset.itemId;
-      await this._onPurchase(itemId);
-    });
+  async _onTileHover(event) {
+    this._closeTitleCard();
+    const uuid = event.currentTarget.dataset.itemUuid;
+    const item = uuid ? await fromUuid(uuid).catch(() => null) : null;
+    if (!item) return;
+    const card = buildItemTitleCard(item);
+    if (!card) return;
+    const r = event.currentTarget.getBoundingClientRect();
+    card.css({ position: "fixed", left: `${r.right + 8}px`, top: `${r.top}px`, zIndex: 200 });
+    $("body").append(card);
+    this._titleCard = card;
+  }
+  _closeTitleCard() { this._titleCard?.remove?.(); this._titleCard = null; }
+  async close(options) { this._closeTitleCard(); return super.close(options); }
 
-    // [卖出] 按钮
-    html.find(".merchant-item-sell").on("click", async (e) => {
-      const row    = e.currentTarget.closest("[data-char-item-id]");
-      const itemId = row.dataset.charItemId;
-      await this._onSell(itemId);
-    });
+  /* ─── 拖放落点 ───────────────────────────────────────────────────────── */
+
+  /** 落在背包格：自家挪位（货架 → 背包不走拖拽，买必须经过弹窗） */
+  async _onBagDrop(event) {
+    event.preventDefault(); event.stopPropagation();
+    let raw; try { raw = JSON.parse(event.originalEvent.dataTransfer.getData("text/plain")); } catch { return; }
+    const grid = this._charGrid;
+    if (!grid || raw?.fromBag?.actorId !== grid.actorId) return;
+
+    const actor = game.actors.get(grid.actorId);
+    const item  = actor?.items.get(raw.fromBag.itemId);
+    if (!actor?.isOwner || !item) return;
+
+    const x = raw.dropX ?? parseInt(event.currentTarget.dataset.x ?? 0);
+    const y = raw.dropY ?? parseInt(event.currentTarget.dataset.y ?? 0);
+    const layout = foundry.utils.deepClone(actor.system.bagLayout ?? []);
+    const entry  = layout.find(e => e.itemId === item.id) ?? null;
+    const rot    = raw.rotatePending ? !(entry?.rotated ?? false) : (entry?.rotated ?? false);
+    const cap    = item.system?.capacity ?? {};
+    const w = Math.max(1, rot ? (cap.h ?? 1) : (cap.w ?? 1));
+    const h = Math.max(1, rot ? (cap.w ?? 1) : (cap.h ?? 1));
+    const others = (grid.tiles ?? []).filter(t => t.id !== item.id)
+      .map(t => ({ x: t.x, y: t.y, w: t.w, h: t.h }));
+    if (!canPlace(others, x, y, w, h, BAG_COLS, grid.rows ?? BAG_ROWS)) {
+      return void ui.notifications.warn("此位置放不下（越界或与其他物品重叠）");
+    }
+    if (entry) { entry.x = x; entry.y = y; entry.rotated = rot; }
+    else       layout.push({ itemId: item.id, x, y, rotated: rot });
+    await actor.update({ "system.bagLayout": layout });
   }
 
-  /* ─── 购买逻辑 ───────────────────────────────────────────────────────── */
+  /** 落在货架格：自家物品 → 出售；GM 拖货架内物品 → 挪位；GM 外部拖入 → 上架 */
+  async _onShelfDrop(event) {
+    event.preventDefault(); event.stopPropagation();
+    let raw; try { raw = JSON.parse(event.originalEvent.dataTransfer.getData("text/plain")); } catch { return; }
+    const x = raw.dropX ?? parseInt(event.currentTarget.dataset.x ?? 0);
+    const y = raw.dropY ?? parseInt(event.currentTarget.dataset.y ?? 0);
 
-  async _onPurchase(itemId) {
-    const item = this.actor.items.get(itemId);
+    // ① 玩家出售
+    if (raw?.fromBag?.actorId) return void this._onSell(raw.fromBag.itemId, { x, y });
+
+    // ② GM：货架内挪位
+    if (raw?.fromShelf?.merchantId === this.actor.id) {
+      if (!game.user.isGM) return;
+      const idx  = raw.fromShelf.placementIdx;
+      const list = foundry.utils.deepClone(this.actor.system.shelfContents ?? []);
+      const p    = list[idx];
+      if (!p) return;
+      const rot = raw.rotatePending ? !p.rotated : p.rotated;
+      const w = rot === p.rotated ? p.w : p.h;
+      const h = rot === p.rotated ? p.h : p.w;
+      if (!canPlace(list, x, y, w, h,
+            this.actor.system.shelfSize?.width ?? SHELF_COLS,
+            this.actor.system.shelfSize?.height ?? SHELF_ROWS, { excludeIdx: idx })) {
+        return void ui.notifications.warn("此位置放不下（越界或与其他商品重叠）");
+      }
+      list[idx] = { ...p, x, y, w, h, rotated: rot };
+      return void await this.actor.update({ "system.shelfContents": list });
+    }
+
+    // ③ GM：从侧栏/合集包拖入 → 上架
+    if (!game.user.isGM) return;
+    const doc = raw?.uuid ? await fromUuid(raw.uuid).catch(() => null) : null;
+    if (!doc || doc.documentName !== "Item") return;
+    await this._listItem(doc, x, y);
+  }
+
+  /** GM：把一件物品放上货架（复制成商人的嵌入物品） */
+  async _listItem(srcItem, x, y) {
+    const cols = this.actor.system.shelfSize?.width  ?? SHELF_COLS;
+    const rows = this.actor.system.shelfSize?.height ?? SHELF_ROWS;
+    const cap  = srcItem.system?.capacity ?? {};
+    const w = Math.max(1, cap.w ?? 1), h = Math.max(1, cap.h ?? 1);
+    const list = foundry.utils.deepClone(this.actor.system.shelfContents ?? []);
+
+    // autoPlace 返回的 w/h 已经是旋转后的尺寸，直接用，别再自己换算
+    let spot = canPlace(list, x, y, w, h, cols, rows)
+      ? { x, y, w, h, rotated: false }
+      : autoPlace(list, w, h, cols, rows);
+    if (!spot) return void ui.notifications.warn("货架放不下了");
+
+    const data = srcItem.toObject();
+    delete data._id;
+    const [made] = await this.actor.createEmbeddedDocuments("Item", [data]);
+    if (!made) return;
+    list.push({
+      uuid: made.uuid, x: spot.x, y: spot.y, w: spot.w, h: spot.h,
+      rotated: !!spot.rotated,
+      // GM 拖入默认取物品卡上的基础价格（cost），之后可双击手动改
+      price: LimbusMerchantSheet.baseCostOf(srcItem),
+    });
+    await this.actor.update({ "system.shelfContents": list });
+  }
+
+  /** 侧栏原生拖放（Foundry 的默认入口，落到面板空白处时也能上架） */
+  async _onDropItem(event, data) {
+    if (!game.user.isGM) return;
+    const item = await Item.fromDropData(data);
+    if (!item) return;
+    await this._listItem(item, 0, 0);
+  }
+
+  /* ─── 买 / 卖 ────────────────────────────────────────────────────────── */
+
+  _myChar() {
+    return game.user.character
+      ?? (game.user.isGM ? null : game.actors.find(a => a.type === "character" && a.isOwner));
+  }
+
+  async _onBuy(placementIdx) {
+    const char = this._myChar();
+    if (!char) return void ui.notifications.warn("没有主控角色，无法购买。");
+    const p    = this.actor.system.shelfContents?.[placementIdx];
+    const item = p ? this.actor.items.get(String(p.uuid).split(".").pop()) : null;
     if (!item) return;
 
-    const char = game.actors.get(this._selectedCharId);
-    if (!char) { ui.notifications.warn("请先选择购买角色！"); return; }
-
-    // 客户端友好校验（权威校验在 GM 端执行器内再做一次）
-    const price = item.system.price ?? 0;
-    const stock = item.system.stock ?? -1;
-    if (stock === 0) { ui.notifications.warn(`${item.name} 已售罄！`); return; }
-    const currency = char.system?.currency ?? 0;
-    if (currency < price) {
-      ui.notifications.warn(`眼不足！需要 ${price} 眼，当前持有 ${currency} 眼。`);
-      return;
-    }
-
-    const payload = {
-      type:       "merchantBuy",
-      merchantId: this.actor.id,
-      itemId,
-      charId:     char.id,
-      userId:     game.user.id,
-    };
-    if (game.user.isGM) await LimbusMerchantSheet.handleSocketMsg(payload);
-    else game.socket.emit("system.limbusCompany_FVTT", payload);
+    const unit = LimbusMerchantSheet.buyPriceOf(this.actor, p);
+    const max  = hasQty(item) ? (item.system?.quantity ?? 1) : 1;
+    const qty  = await this._askQty({
+      title: "购买", item, unitLabel: this.actor.system.sale?.enabled
+        ? `单价（${this.actor.system.sale.rate} 折）` : "单价",
+      unit, max, purse: char.system?.currency ?? 0, mode: "buy",
+    });
+    if (!qty) return;
+    this._send({ type: "merchantBuy", merchantId: this.actor.id, charId: char.id,
+                 placementIdx, qty, userId: game.user.id });
   }
 
-  /* ─── 卖出逻辑 ───────────────────────────────────────────────────────── */
+  async _onSell(itemId, dropAt = null) {
+    const char = this._myChar();
+    const item = char?.items.get(itemId);
+    if (!char || !item) return;
+    const unit = LimbusMerchantSheet.sellPriceOf(item);
+    if (unit <= 0) return void ui.notifications.warn(`「${item.name}」没有定价，无法出售。`);
 
-  async _onSell(itemId) {
-    const char = game.actors.get(this._selectedCharId);
-    if (!char) { ui.notifications.warn("请先选择卖出角色！"); return; }
+    const max = hasQty(item) ? (item.system?.quantity ?? 1) : 1;
+    const qty = await this._askQty({
+      title: "出售", item, unitLabel: "回收单价", unit, max,
+      purse: this.actor.system.merchantCurrency ?? 0, mode: "sell",
+    });
+    if (!qty) return;
+    this._send({ type: "merchantSell", merchantId: this.actor.id, charId: char.id,
+                 itemId, qty, dropAt, userId: game.user.id });
+  }
 
-    const item = char.items.get(itemId);
+  /** 数量 / 确认弹窗；没有数量概念的物品直接只问确认 */
+  async _askQty({ title, item, unitLabel, unit, max, purse, mode }) {
+    const buy = mode === "buy";
+    const qtyRow = max > 1 ? `
+      <div style="display:flex;align-items:center;gap:8px;margin:8px 0 4px;">
+        <span>数量</span>
+        <input type="range" name="qty" min="1" max="${max}" value="1" style="flex:1;">
+        <b class="mc-qty-n" style="width:34px;text-align:right;">1</b>
+      </div>` : "";
+    const content = `
+      <div class="limbuscompany" style="font-size:.85rem;">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+          <img src="${item.img}" style="width:34px;height:34px;object-fit:cover;border:1px solid #5F3E22;" alt="">
+          <b>${item.name}</b>
+        </div>
+        <div style="display:flex;justify-content:space-between;"><span>${unitLabel}</span>
+          <span>${LimbusMerchantSheet.eyeHtml(unit)}</span></div>
+        ${qtyRow}
+        <div style="display:flex;justify-content:space-between;margin-top:4px;">
+          <span>${buy ? "合计支出" : "合计收入"}</span>
+          <span class="mc-total">${LimbusMerchantSheet.eyeHtml(unit)}</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;color:#9A8462;">
+          <span>${buy ? "交易后持有" : "商人余额"}</span>
+          <span class="mc-after">${LimbusMerchantSheet.eyeHtml(purse - unit)}</span>
+        </div>
+      </div>`;
+
+    return new Promise(resolve => {
+      const dlg = new Dialog({
+        title: `${title}：${item.name}`,
+        content,
+        buttons: {
+          ok: { label: title, callback: (html) => resolve(parseInt(html.find("[name=qty]").val() ?? "1") || 1) },
+          no: { label: "取消", callback: () => resolve(0) },
+        },
+        default: "ok",
+        close: () => resolve(0),
+        render: (html) => {
+          const upd = () => {
+            const n = parseInt(html.find("[name=qty]").val() ?? "1") || 1;
+            const total = unit * n;
+            html.find(".mc-qty-n").text(n);
+            html.find(".mc-total").html(LimbusMerchantSheet.eyeHtml(total));
+            html.find(".mc-after").html(LimbusMerchantSheet.eyeHtml(purse - total));
+            const bad = total > purse;
+            html.find(".mc-total").css("color", bad ? "#E94745" : "");
+            // Foundry 的 Dialog 按钮带 data-button，别按 class 找
+            $(html).closest(".app").find('[data-button="ok"]').prop("disabled", bad);
+          };
+          html.find("[name=qty]").on("input", upd);
+          upd();
+        },
+      });
+      dlg.render(true);
+    });
+  }
+
+  /* ─── 一键买卖 ───────────────────────────────────────────────────────── */
+
+  async _onBatchTrade() {
+    const char = this._myChar();
+    if (!char) return void ui.notifications.warn("没有主控角色。");
+
+    const buys = [], sells = [];
+    for (const key of this._sel) {
+      const [side, id] = key.split(":");
+      if (side === "shop") {
+        const idx = parseInt(id);
+        const p   = this.actor.system.shelfContents?.[idx];
+        const doc = p ? this.actor.items.get(String(p.uuid).split(".").pop()) : null;
+        if (doc) buys.push({ idx, doc, qty: hasQty(doc) ? (doc.system?.quantity ?? 1) : 1,
+                             unit: LimbusMerchantSheet.buyPriceOf(this.actor, p) });
+      } else {
+        const doc = char.items.get(id);
+        if (doc) sells.push({ id, doc, qty: hasQty(doc) ? (doc.system?.quantity ?? 1) : 1,
+                              unit: LimbusMerchantSheet.sellPriceOf(doc) });
+      }
+    }
+    if (!buys.length && !sells.length) return;
+
+    const cost   = buys .reduce((a, i) => a + i.unit * i.qty, 0);
+    const income = sells.reduce((a, i) => a + i.unit * i.qty, 0);
+    const net    = cost - income;
+    const purse  = char.system?.currency ?? 0;
+    const rows = (list, color) => list.map(i => `
+      <div style="display:flex;justify-content:space-between;padding:1px 0;">
+        <span>${i.doc.name}${i.qty > 1 ? ` ×${i.qty}` : ""}</span>
+        <b style="color:${color}">${i.unit * i.qty}</b></div>`).join("");
+
+    const ok = await Dialog.confirm({
+      title: "一键买卖",
+      content: `<div class="limbuscompany" style="font-size:.85rem;">
+        ${buys.length  ? `<div style="color:#C9A84C;">买入</div>${rows(buys,  "#E5BA25")}` : ""}
+        ${sells.length ? `<div style="color:#C9A84C;margin-top:4px;">卖出</div>${rows(sells, "#7AAB6A")}` : ""}
+        <div style="display:flex;justify-content:space-between;margin-top:6px;
+                    border-top:1px solid rgba(201,168,76,.35);padding-top:4px;">
+          <span>${net >= 0 ? "净支出" : "净收入"}</span>
+          <span>${LimbusMerchantSheet.eyeHtml(Math.abs(net))}</span></div>
+        <div style="display:flex;justify-content:space-between;color:${net > purse ? "#E94745" : "#9A8462"};">
+          <span>交易后持有</span><span>${LimbusMerchantSheet.eyeHtml(purse - net)}</span></div>
+      </div>`,
+    });
+    if (!ok) return;
+    if (net > purse) return void ui.notifications.warn("眼不够，交易取消。");
+
+    // 先卖后买：卖完手里有钱，买得起的概率更高
+    for (const s of sells) {
+      this._send({ type: "merchantSell", merchantId: this.actor.id, charId: char.id,
+                   itemId: s.id, qty: s.qty, dropAt: null, userId: game.user.id });
+    }
+    // 买入按 placementIdx 从大到小送，GM 端按序删除时下标不会互相错位
+    for (const b of buys.sort((a, c) => c.idx - a.idx)) {
+      this._send({ type: "merchantBuy", merchantId: this.actor.id, charId: char.id,
+                   placementIdx: b.idx, qty: b.qty, userId: game.user.id });
+    }
+    this._sel.clear();
+  }
+
+  /* ─── GM：改价 / 改数量 / 下架 ───────────────────────────────────────── */
+
+  async _onGMEditListing(idx) {
+    const list = this.actor.system.shelfContents ?? [];
+    const p    = list[idx];
+    const item = p ? this.actor.items.get(String(p.uuid).split(".").pop()) : null;
     if (!item) return;
+    const qtyRow = hasQty(item) ? `
+      <div class="form-group"><label>数量</label>
+        <input type="number" name="qty" min="1" value="${item.system?.quantity ?? 1}"></div>` : "";
 
-    const sellPrice = item.system.cost ?? 0;
-    if (sellPrice <= 0) { ui.notifications.warn("该物品未设定出售价格。"); return; }
-
-    // 客户端友好校验：商人资金上限（权威校验在 GM 端再做一次）
-    if ((this.actor.system.merchantCurrency ?? 0) < sellPrice) {
-      ui.notifications.warn(`商人资金不足（${this.actor.system.merchantCurrency ?? 0} 眼），无法收购。`);
-      return;
-    }
-
-    const confirmed = await Dialog.confirm({
-      title:   "确认出售",
-      content: `<p>确定以 <strong>${sellPrice}</strong> 眼出售「${item.name}」？</p>
-                <p style="font-size:.78rem;color:#7a6a58">出售后物品会以原价停留在商人货架，可以买回。</p>`,
-    });
-    if (!confirmed) return;
-
-    const payload = {
-      type:       "merchantSell",
-      merchantId: this.actor.id,
-      charItemId: itemId,
-      charId:     char.id,
-      userId:     game.user.id,
-    };
-    if (game.user.isGM) await LimbusMerchantSheet.handleSocketMsg(payload);
-    else game.socket.emit("system.limbusCompany_FVTT", payload);
+    new Dialog({
+      title: `GM · ${item.name}`,
+      content: `<form class="limbuscompany">
+        <div class="form-group"><label>原价（眼）</label>
+          <input type="number" name="price" min="0" step="5" value="${p.price ?? 0}"></div>
+        ${qtyRow}
+      </form>`,
+      buttons: {
+        save: {
+          label: "保存",
+          callback: async (html) => {
+            const price = Math.max(0, parseInt(html.find("[name=price]").val()) || 0);
+            const next  = foundry.utils.deepClone(this.actor.system.shelfContents ?? []);
+            if (next[idx]) next[idx].price = price;
+            await this.actor.update({ "system.shelfContents": next });
+            const q = html.find("[name=qty]").val();
+            if (q != null) await item.update({ "system.quantity": Math.max(1, parseInt(q) || 1) });
+          },
+        },
+        remove: {
+          label: "下架",
+          callback: async () => {
+            const next = (this.actor.system.shelfContents ?? []).filter((_, i) => i !== idx);
+            await this.actor.update({ "system.shelfContents": next });
+            await item.delete();
+          },
+        },
+      },
+      default: "save",
+    }).render(true);
   }
 
-  /* ─── GM 端权威执行：购买 ────────────────────────────────────────────── */
+  /* ─── socket：玩家端只发消息，GM 端权威执行 ─────────────────────────── */
 
-  static async _gmExecuteBuy({ merchantId, itemId, charId, userId }) {
-    const merchant = game.actors.get(merchantId);
-    const item     = merchant?.items.get(itemId);
-    const char     = game.actors.get(charId);
-    if (!merchant || !item || !char) return;
-
-    const fail = (reason) => ChatMessage.create({
-      content: `<div class="limbuscompany chat-clash">购买失败：${reason}</div>`,
-      whisper: [userId],
-    });
-
-    // 权威校验（GM 端最新数据）
-    const price = item.system.price ?? 0;
-    const stock = item.system.stock ?? -1;
-    if (stock === 0) return void fail(`「${item.name}」已售罄。`);
-    const currency = char.system?.currency ?? 0;
-    if (currency < price) return void fail(`眼不足（需要 ${price}，持有 ${currency}）。`);
-
-    // ① 扣角色货币，商人收款
-    await char.update({ "system.currency": currency - price });
-    await merchant.update({
-      "system.merchantCurrency": (merchant.system.merchantCurrency ?? 0) + price,
-    });
-
-    // ② 物品复制进背包（重置商人字段）
-    const itemData = item.toObject();
-    itemData.system.stock  = -1;
-    itemData.system.hidden = false;
-    await char.createEmbeddedDocuments("Item", [itemData]);
-
-    // ③ 扣库存
-    if (stock !== -1) {
-      await item.update({ "system.stock": Math.max(0, stock - 1) });
-    }
-
-    // ④ 聚合聊天卡（30 秒内连续购买合并到一条消息）
-    LimbusMerchantSheet._scheduleTradeMsg("buy", merchant, char, item.name, item.img, price);
+  _send(msg) {
+    if (game.user.isGM) return void LimbusMerchantSheet.handleSocketMsg(msg);
+    game.socket.emit("system.limbusCompany_FVTT", msg);
   }
-
-  /* ─── GM 端权威执行：卖出（物品原价上架商人货架，可买回） ─────────────── */
-
-  static async _gmExecuteSell({ merchantId, charItemId, charId, userId }) {
-    const merchant = game.actors.get(merchantId);
-    const char     = game.actors.get(charId);
-    const item     = char?.items.get(charItemId);
-    if (!merchant || !char || !item) return;
-
-    const fail = (reason) => ChatMessage.create({
-      content: `<div class="limbuscompany chat-clash">出售失败：${reason}</div>`,
-      whisper: [userId],
-    });
-
-    const sellPrice = item.system.cost ?? 0;
-    if (sellPrice <= 0) return void fail("该物品未设定出售价格。");
-
-    // 权威校验：商人资金上限
-    const mCurrency = merchant.system.merchantCurrency ?? 0;
-    if (mCurrency < sellPrice) return void fail(`商人资金不足（${mCurrency} 眼），无法收购。`);
-
-    const itemName = item.name;
-    const itemImg  = item.img;
-    const itemData = item.toObject();
-    delete itemData._id;
-
-    // ① 从角色移除物品，结算货币
-    await item.delete();
-    await char.update({ "system.currency": (char.system.currency ?? 0) + sellPrice });
-    await merchant.update({ "system.merchantCurrency": mCurrency - sellPrice });
-
-    // ② 原价上架商人货架（可买回反悔）：售价=收购价，库存=数量
-    itemData.system.price  = sellPrice;
-    itemData.system.stock  = itemData.system.quantity ?? 1;
-    itemData.system.hidden = false;
-    await merchant.createEmbeddedDocuments("Item", [itemData]);
-
-    // ③ 聚合聊天卡（30 秒内连续卖出合并到一条消息，与买入分开）
-    LimbusMerchantSheet._scheduleTradeMsg("sell", merchant, char, itemName, itemImg, sellPrice);
-  }
-
-  /* ─── Socket 消息处理（按 merchantId 串行队列，防并发超卖） ───────────── */
 
   static async handleSocketMsg(msg) {
     if (!game.user.isGM) return;
-    const merchantId = msg.merchantId;
-    if (!merchantId) return;
-    if (msg.type !== "merchantBuy" && msg.type !== "merchantSell") return;
-
-    const prev = LimbusMerchantSheet._opQueues.get(merchantId) ?? Promise.resolve();
-    const next = prev.catch(() => {}).then(async () => {
-      if      (msg.type === "merchantBuy")  await LimbusMerchantSheet._gmExecuteBuy(msg);
-      else if (msg.type === "merchantSell") await LimbusMerchantSheet._gmExecuteSell(msg);
-    }).finally(() => {
-      if (LimbusMerchantSheet._opQueues.get(merchantId) === next)
-        LimbusMerchantSheet._opQueues.delete(merchantId);
-    });
-    LimbusMerchantSheet._opQueues.set(merchantId, next);
-    return next;
+    if (msg?.type !== "merchantBuy" && msg?.type !== "merchantSell") return;
+    if (!msg.merchantId) return;
+    LimbusMerchantSheet._enqueue(msg.merchantId, () =>
+      msg.type === "merchantBuy"
+        ? LimbusMerchantSheet._gmBuy(msg)
+        : LimbusMerchantSheet._gmSell(msg));
   }
 
-  /* ─── GM 对话框：编辑价格/库存 ──────────────────────────────────────── */
-
-  async _onEditItemDialog(item) {
-    const currentPrice = item.system.price ?? 0;
-    const currentStock = item.system.stock ?? -1;
-
-    return new Promise((resolve) => {
-      new Dialog({
-        title:   `编辑：${item.name}`,
-        content: `
-          <form class="merchant-edit-dialog">
-            <div class="form-group">
-              <label>价格（眼）</label>
-              <input type="number" name="price" value="${currentPrice}" min="0" step="1">
-            </div>
-            <div class="form-group">
-              <label>库存（-1 = 无限）</label>
-              <input type="number" name="stock" value="${currentStock}" min="-1" step="1">
-            </div>
-          </form>`,
-        buttons: {
-          save: {
-            icon:  '<i class="fas fa-save"></i>',
-            label: "保存",
-            callback: async (html) => {
-              const price = parseInt(html.find('[name="price"]').val()) || 0;
-              const stock = parseInt(html.find('[name="stock"]').val());
-              await item.update({
-                "system.price": Math.max(0, price),
-                "system.stock": isNaN(stock) ? -1 : Math.max(-1, stock),
-              });
-              resolve();
-            },
-          },
-          cancel: {
-            icon:  '<i class="fas fa-times"></i>',
-            label: "取消",
-            callback: () => resolve(),
-          },
-        },
-        default: "save",
-      }).render(true);
+  static _fail(userId, text) {
+    ChatMessage.create({
+      content: `<div class="limbuscompany chat-clash">${text}</div>`,
+      whisper: [userId],
     });
   }
 
-  /* ─── GM 对话框：补充货币 ────────────────────────────────────────────── */
+  static async _gmBuy({ merchantId, charId, placementIdx, qty = 1, userId }) {
+    const merchant = game.actors.get(merchantId);
+    const char     = game.actors.get(charId);
+    if (!merchant || !char) return;
+    const list = foundry.utils.deepClone(merchant.system.shelfContents ?? []);
+    const p    = list[placementIdx];
+    const item = p ? merchant.items.get(String(p.uuid).split(".").pop()) : null;
+    if (!item) return void LimbusMerchantSheet._fail(userId, "商品已经不在货架上了。");
 
-  async _onRestockCurrencyDialog() {
-    return new Promise((resolve) => {
-      new Dialog({
-        title:   "补充货币",
-        content: `
-          <form class="merchant-edit-dialog">
-            <div class="form-group">
-              <label>增加眼的数量</label>
-              <input type="number" name="amount" value="0" min="0" step="1" autofocus>
-            </div>
-          </form>`,
-        buttons: {
-          add: {
-            icon:  '<i class="fas fa-plus"></i>',
-            label: "添加",
-            callback: async (html) => {
-              const amount = parseInt(html.find('[name="amount"]').val()) || 0;
-              if (amount <= 0) return resolve();
-              const current = this.actor.system.merchantCurrency ?? 0;
-              await this.actor.update({ "system.merchantCurrency": current + amount });
-              resolve();
-            },
-          },
-          cancel: {
-            icon:  '<i class="fas fa-times"></i>',
-            label: "取消",
-            callback: () => resolve(),
-          },
-        },
-        default: "add",
-      }).render(true);
+    const per   = hasQty(item);
+    const stock = per ? (item.system?.quantity ?? 1) : 1;
+    const n     = Math.max(1, Math.min(qty, stock));
+    const unit  = LimbusMerchantSheet.buyPriceOf(merchant, p);
+    const total = unit * n;
+    const purse = char.system?.currency ?? 0;
+    if (purse < total) {
+      return void LimbusMerchantSheet._fail(userId, `眼不足（需要 ${total}，持有 ${purse}）。`);
+    }
+
+    await char.update({ "system.currency": purse - total });
+    await merchant.update({
+      "system.merchantCurrency": (merchant.system.merchantCurrency ?? 0) + total,
     });
+
+    const data = item.toObject();
+    delete data._id;
+    if (per) data.system.quantity = n;
+    await char.createEmbeddedDocuments("Item", [data]);
+
+    // 有数量的扣数量、扣完下架；没数量的一件即一件，直接下架
+    if (per && stock > n) {
+      await item.update({ "system.quantity": stock - n });
+    } else {
+      await merchant.update({
+        "system.shelfContents": list.filter((_, i) => i !== placementIdx),
+      });
+      await item.delete();
+    }
+    LimbusMerchantSheet._scheduleTradeMsg("buy", merchant, char, item.name, item.img, unit, n);
   }
 
-  /* ─── 拖拽接收（仅 GM + 填充物品 Tab 激活时） ───────────────────────── */
+  static async _gmSell({ merchantId, charId, itemId, qty = 1, dropAt, userId }) {
+    const merchant = game.actors.get(merchantId);
+    const char     = game.actors.get(charId);
+    const item     = char?.items.get(itemId);
+    if (!merchant || !char || !item) return;
 
-  /** @override */
-  async _onDropItem(event, data) {
-    if (!game.user.isGM) return false;
-    // 只在"填充物品" Tab 激活时接受拖入
-    if (this._activeTab !== "stock") return false;
+    const per   = hasQty(item);
+    const have  = per ? (item.system?.quantity ?? 1) : 1;
+    const n     = Math.max(1, Math.min(qty, have));
+    const unit  = LimbusMerchantSheet.sellPriceOf(item);
+    const total = unit * n;
+    if (unit <= 0) return void LimbusMerchantSheet._fail(userId, "该物品没有定价，无法出售。");
+    const mPurse = merchant.system.merchantCurrency ?? 0;
+    if (mPurse < total) {
+      return void LimbusMerchantSheet._fail(userId, `商人资金不足（${mPurse} 眼），收不下。`);
+    }
 
-    const item = await Item.fromDropData(data);
-    if (!item) return false;
+    const cols = merchant.system.shelfSize?.width  ?? SHELF_COLS;
+    const rows = merchant.system.shelfSize?.height ?? SHELF_ROWS;
+    const list = foundry.utils.deepClone(merchant.system.shelfContents ?? []);
+    const cap  = item.system?.capacity ?? {};
+    const w = Math.max(1, cap.w ?? 1), h = Math.max(1, cap.h ?? 1);
 
-    // 将物品嵌入商人，并设置商人专属默认值
-    const itemData = item.toObject();
-    itemData.system.price  = itemData.system.price  ?? 0;
-    itemData.system.stock  = itemData.system.stock  ?? -1;
-    itemData.system.hidden = false;
+    const spot = dropAt && canPlace(list, dropAt.x, dropAt.y, w, h, cols, rows)
+      ? { x: dropAt.x, y: dropAt.y, w, h, rotated: false }
+      : autoPlace(list, w, h, cols, rows);
+    if (!spot) return void LimbusMerchantSheet._fail(userId, "货架放不下了。");
 
-    return this.actor.createEmbeddedDocuments("Item", [itemData]);
-  }
+    // 结算
+    await char.update({ "system.currency": (char.system?.currency ?? 0) + total });
+    await merchant.update({ "system.merchantCurrency": mPurse - total });
 
-  /** @override 拦截 Tab 切换事件，同步 _activeTab */
-  _onChangeTab(event, tabs, active) {
-    this._activeTab = active;
-    super._onChangeTab(event, tabs, active);
+    const name = item.name, img = item.img;
+    const data = item.toObject();
+    delete data._id;
+    if (per) data.system.quantity = n;
+    const [made] = await merchant.createEmbeddedDocuments("Item", [data]);
+
+    if (per && have > n) await item.update({ "system.quantity": have - n });
+    else await item.delete();
+
+    list.push({
+      uuid: made.uuid, x: spot.x, y: spot.y, w: spot.w, h: spot.h,
+      rotated: !!spot.rotated,
+      // 上架原价 = 回收价：玩家想反悔就按原样买回来，不亏不赚
+      price: unit,
+    });
+    await merchant.update({ "system.shelfContents": list });
+    LimbusMerchantSheet._scheduleTradeMsg("sell", merchant, char, name, img, unit, n);
   }
 }

@@ -16,8 +16,19 @@ import { buildPlacementGrid, canPlace, autoPlace, makeLockedSet } from "../helpe
 import { GridDnD } from "../helpers/grid-dnd.mjs";
 import { canContainerAccept, wouldNest } from "../helpers/container-rules.mjs";
 import { buildItemTitleCard, closeTitleCardUnlessLocked, toggleTitleCardLock } from "./item-sheet.mjs";
+import { guardInteractRange } from "../helpers/proximity.mjs";
 
 export class LimbusCampSheet extends ActorSheet {
+
+  /**
+   * 距离守卫：玩家的 Token 得走到 营地 旁边（默认 3 格内）才能开面板。
+   * GM 不受限；设置里把「交互距离」调成 0 即可整场关闭。见 helpers/proximity.mjs。
+   */
+  async _render(force, options = {}) {
+    if (!guardInteractRange(this.actor, "营地")) return;
+    return super._render(force, options);
+  }
+
 
   /** @override */
   static get defaultOptions() {

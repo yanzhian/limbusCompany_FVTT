@@ -63,7 +63,7 @@
 
           {{!-- 物品图块 --}}
           {{#each placedItems}}
-            <div class="cg-item-tile {{#unless show}}cg-hidden{{/unless}} {{#if masked}}loot-tile--silhouette{{/if}}"
+            <div class="cg-item-tile rarity-{{rarity}} {{#unless show}}cg-hidden{{/unless}} {{#if masked}}loot-tile--silhouette{{/if}}"
                  style="grid-column:{{col}} / span {{w}}; grid-row:{{row}} / span {{h}}"
                  data-placement-idx="{{idx}}"
                  data-item-uuid="{{uuid}}"

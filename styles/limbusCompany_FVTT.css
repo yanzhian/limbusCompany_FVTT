@@ -4105,6 +4105,54 @@ body.game .limbuscompany.app img {
   transition: border-color .1s, box-shadow .1s;
   user-select: none;
 }
+/* ── 物品卡上的稀有度选择器（装备/消耗品/材料/容器）────────────────── */
+.limbuscompany .item-rarity-group {
+  display: flex; align-items: center; gap: 5px; margin-left: 10px;
+}
+.limbuscompany .item-rarity-group.rarity-common   { --rc: #4E9A5B; }
+.limbuscompany .item-rarity-group.rarity-fine     { --rc: #3D7BC4; }
+.limbuscompany .item-rarity-group.rarity-epic     { --rc: #9A5CC7; }
+.limbuscompany .item-rarity-group.rarity-artistic { --rc: #E5BA25; }
+.limbuscompany .item-rarity-group.rarity-mythic   { --rc: #E94745; }
+.limbuscompany .item-rarity-group .rarity-dot {
+  width: 9px; height: 9px; border-radius: 50%;
+  background: var(--rc, #4E9A5B); box-shadow: 0 0 6px -1px var(--rc, #4E9A5B);
+}
+.limbuscompany .item-rarity-group .rarity-display {
+  font-size: 13px; font-weight: bold; color: var(--rc, var(--text-main));
+}
+.limbuscompany .item-rarity-group .rarity-select {
+  background: #15110E; border: 1px solid #3A2A1C; border-radius: 3px;
+  color: var(--rc, var(--text-main)); font: bold 12px var(--font-main); padding: 1px 4px;
+}
+
+/* ── 稀有度光晕 ────────────────────────────────────────────────────
+   网格图块正中间往外的圆形渐变（里亮 → 外透明）。边框一律不跟稀有度走。
+   浓度按稀有度逐级提亮（--g1 中心 / --g2 中段，每级 +8 / +5），
+   所以平装几乎只是一层底色，神话才真的会"发光"。
+   颜色单一来源：CONFIG.LIMBUSCOMPANY.RARITY_COLORS（module/config.mjs），两边改动要同步。
+   技能等没有 rarity 字段的类型渲染成 .rarity-（空），有兜底规则不画。 */
+.limbuscompany .cg-item-tile.rarity-common   { --rc: #4E9A5B; --g1: 34%; --g2: 19%; }
+.limbuscompany .cg-item-tile.rarity-fine     { --rc: #3D7BC4; --g1: 42%; --g2: 24%; }
+.limbuscompany .cg-item-tile.rarity-epic     { --rc: #9A5CC7; --g1: 50%; --g2: 29%; }
+.limbuscompany .cg-item-tile.rarity-artistic { --rc: #E5BA25; --g1: 58%; --g2: 34%; }
+.limbuscompany .cg-item-tile.rarity-mythic   { --rc: #E94745; --g1: 66%; --g2: 39%; }
+
+.limbuscompany .cg-item-tile[class*="rarity-"]::before {
+  content: "";
+  position: absolute; inset: 0; z-index: 0; pointer-events: none;
+  background: radial-gradient(circle at 50% 50%,
+    color-mix(in srgb, var(--rc) var(--g1), transparent) 0%,
+    color-mix(in srgb, var(--rc) var(--g2), transparent) 28%,
+    transparent 74%);
+}
+/* --rc 没定义时（rarity 为空）整条渐变会失效，但保险起见直接不画 */
+.limbuscompany .cg-item-tile.rarity-::before { display: none; }
+/* 设置里关掉【展示稀有度】：body 挂 .limbus-no-rarity，一条规则全场熄灯 */
+body.limbus-no-rarity .limbuscompany .cg-item-tile::before { display: none; }
+/* 图标/名字/角标都得压在光晕之上 */
+.limbuscompany .cg-item-tile > * { position: relative; z-index: 1; }
+
 .limbuscompany .cg-item-tile:hover {
   border-color: var(--gold-active);
   box-shadow: inset 0 0 0 1px var(--gold-active), 0 0 6px rgba(229,186,37,.3);
@@ -6628,535 +6676,153 @@ input.item-piles-quantity {
 }
 
 /* ============================================================
-   §4  NPC 商人角色卡（.merchant-sheet）
+   §4  NPC 商人角色卡（.merchant-sheet · 网格版）
    ============================================================
-
-   布局：
-     .merchant-sheet
-       .merchant-header        — 标题栏（商人名）
-       .merchant-body          — 主体两栏
-         .merchant-left        — 左栏（Tab导航 + 立绘 + 描述）
-         .merchant-right       — 右栏（搜索 + Tab内容）
-       .merchant-footer        — 底栏（货币 / 购买角色选择）
+   左＝玩家背包网格，右＝商人货架网格，两块都复用 .cg-* 那套
+   （helpers/grid-layout + grid-dnd），这里只补商人自己的外壳与图块角标。
    ============================================================ */
 
-/* ── 窗体整体 ──────────────────────────────────────────────── */
 .app.sheet.actor.merchant {
   background: var(--bg-darkest);
-  border:     1px solid #3B2412;
-  color:      var(--text-main);
+  border: 1px solid #3B2412;
+  color: var(--text-main);
   font-family: inherit;
 }
-
-.merchant-sheet {
-  display:        flex;
-  flex-direction: column;
-  height:         100%;
-  overflow:       hidden;
-  background:     var(--bg-darkest);
-  color:          var(--text-main);
+.mc-sheet {
+  display: flex; flex-direction: column; height: 100%; overflow: hidden;
+  background: var(--bg-darkest); color: var(--text-main);
 }
 
-/* ── 标题栏 ────────────────────────────────────────────────── */
-.merchant-header {
-  background:    var(--bg-title-bar);
-  border-bottom: 1px solid #3B2412;
-  padding:       6px 12px;
-  flex-shrink:   0;
-  display:       flex;
-  align-items:   center;
-  gap:           8px;
+/* ── 顶部 ─────────────────────────────────────────────────────── */
+.mc-head {
+  display: flex; align-items: flex-start; gap: 10px;
+  padding: 8px 12px; border-bottom: 1px solid #3A2A1C; background: rgba(0,0,0,.25);
+}
+.mc-portrait {
+  width: 54px; height: 54px; object-fit: cover; flex: 0 0 54px;
+  border: 1px solid #5F3E22; border-radius: 3px;
+}
+.mc-head-info { flex: 1; min-width: 0; }
+.mc-name { font-size: 16px; font-weight: bold; letter-spacing: .04em; }
+.mc-desc { font-size: 12px; color: var(--text-sub); max-height: 42px; overflow: auto; }
+.mc-desc-input {
+  width: 100%; background: #15110E; border: 1px solid #3A2A1C; border-radius: 3px;
+  color: var(--text-main); font: 12px var(--font-main); padding: 3px 6px; resize: vertical;
+}
+/* 立绘容器：锁按钮钉在立绘右上角 */
+.mc-portrait-wrap { position: relative; flex: 0 0 54px; line-height: 0; }
+.mc-portrait-edit { cursor: pointer; }
+.mc-portrait-edit:hover { border-color: var(--gold-active); }
+.mc-lock {
+  position: absolute; top: -4px; right: -6px; z-index: 2;
+  cursor: pointer; color: var(--text-sub); font-size: 11px; line-height: 1;
+  padding: 2px 3px; border: 1px solid #3A2A1C; border-radius: 3px;
+  background: rgba(10,8,6,.85);
+}
+.mc-lock.unlocked { color: var(--gold-active); border-color: var(--gold-active); }
+.mc-name-input {
+  width: 100%; background: #15110E; border: 1px solid #3A2A1C; border-radius: 3px;
+  color: var(--text-main); font: bold 15px var(--font-main); padding: 2px 6px;
+}
+.mc-token-row { display: flex; align-items: center; gap: 6px; margin: 3px 0; }
+.mc-token-img {
+  width: 28px; height: 28px; object-fit: cover; cursor: pointer;
+  border: 1px solid #5F3E22; border-radius: 3px;
+}
+.mc-token-img:hover { border-color: var(--gold-active); }
+.mc-token-tip { font-size: 11px; color: var(--text-dim); }
+/* 「眼」图标：跟在数字后面 */
+/* 数字与图标必须并排：Foundry 核心把 img 设成 block，这里强制回内联 */
+.mc-eye-ic {
+  display: inline-block; flex: 0 0 auto;
+  width: 13px; height: 13px; min-width: 13px; object-fit: contain;
+  vertical-align: -2px; margin-left: 2px; border: none;
+}
+.mc-eye, .mc-price, .mc-purse, .mc-total, .mc-after { white-space: nowrap; }
+
+/* ── GM 工具条 ─────────────────────────────────────────────────── */
+.mc-gmbar {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 6px 12px; border-bottom: 1px solid #2b2119; background: rgba(0,0,0,.18);
+  font-size: 12px;
+}
+.mc-gmbar label { color: var(--text-sub); }
+.mc-sale-rate { flex: 0 0 160px; }
+.mc-sale-num { font-weight: bold; color: var(--gold-active); min-width: 46px; }
+.mc-gm-hint { color: var(--text-dim); font-size: 11.5px; }
+
+/* ── 主体两栏 ─────────────────────────────────────────────────── */
+.mc-body { flex: 1; display: flex; gap: 10px; padding: 8px 10px; overflow: auto; }
+.mc-col {
+  flex: 1 1 0; min-width: 0; display: flex; flex-direction: column;
+  background: linear-gradient(180deg,#1A1512,#120E0C);
+  border: 1px solid #3A2A1C; border-radius: 4px;
+}
+.mc-col-hd {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 10px; border-bottom: 1px solid #2b2119;
+}
+.mc-col--pl .mc-col-hd { border-bottom-color: #2E4A6E; }
+.mc-av { width: 28px; height: 28px; object-fit: cover; border: 1px solid #5F3E22; border-radius: 3px; }
+.mc-col--pl .mc-av { border-color: #2E4A6E; }
+.mc-col-t { flex: 1; min-width: 0; display: flex; flex-direction: column; line-height: 1.25; }
+.mc-col-t b { font-size: 13px; }
+.mc-col-t span { font-size: 11px; color: var(--text-sub); }
+.mc-purse {
+  display: flex; align-items: center; gap: 4px; white-space: nowrap; font-size: 12px;
+  background: rgba(0,0,0,.35); border: 1px solid #5F3E22; border-radius: 999px; padding: 2px 9px;
+}
+.mc-eye { color: var(--gold-active); font-weight: bold; }
+.mc-eye-input {
+  width: 68px; background: #15110E; border: 1px solid #3A2A1C; border-radius: 3px;
+  color: var(--gold-active); font: bold 12px var(--font-main); padding: 0 4px; text-align: right;
 }
 
-/* 编辑锁按钮（标题栏右侧） */
-.merchant-lock-toggle {
-  flex-shrink:   0;
-  background:    none;
-  border:        1px solid #3B2412;
-  border-radius: 3px;
-  color:         var(--text-sub);
-  padding:       3px 8px;
-  cursor:        pointer;
-  font-size:     0.82rem;
-  line-height:   1;
-  transition:    color .15s, border-color .15s;
-  margin-left:   auto; /* 推到最右侧 */
-  max-width: 20px;
+.mc-toolbar { display: flex; align-items: center; gap: 6px; padding: 6px 10px; flex-wrap: wrap; }
+.mc-chip {
+  font-size: 11.5px; color: var(--text-sub); background: #15110E;
+  border: 1px solid #3A2A1C; border-radius: 999px; padding: 2px 9px;
+  cursor: pointer; user-select: none; white-space: nowrap;
 }
-.merchant-lock-toggle:hover        { color: var(--text-main); border-color: var(--text-sub); }
-.merchant-lock-toggle.locked       { color: var(--text-dim); }
-.merchant-lock-toggle:not(.locked) { color: var(--gold-active); border-color: var(--gold-active); }
+.mc-chip:hover { color: var(--text-main); }
+.mc-chip.on { color: #15110E; background: var(--gold-active); border-color: var(--gold-active); font-weight: bold; }
+.mc-chip.on.blue { background: #5B7FBF; border-color: #5B7FBF; color: #fff; }
+.mc-tip { color: var(--text-dim); font-size: 11px; margin-left: auto; }
 
-.merchant-title {
-  margin:      0;
-  font-size:   1.1rem;
-  color:       var(--text-main);
-  font-weight: 600;
-  letter-spacing: 0.05em;
-}
+.mc-grid-box { padding: 0 10px 10px; display: grid; place-items: center; }
+/* 两块网格共用 44px 格；grid-dnd 从 --cg-cell 读格距，必须给上 */
+.mc-cg { --cg-cell: 44px; --cg-gap: 2px; }
+.mc-cg--bag .cg-cell { background: #5F3E22; border-color: rgba(95,62,34,.45); }
+.mc-cg--bag .cg-cell.cg-occupied { background: rgba(95,62,34,.25); }
 
-.merchant-name-input {
-  background:  transparent;
-  border:      none;
-  border-bottom: 1px solid var(--text-sub);
-  color:       var(--text-main);
-  font-size:   1.1rem;
-  font-weight: 600;
-  width:       100%;
-  padding:     2px 4px;
-  letter-spacing: 0.05em;
+/* ── 图块角标 ─────────────────────────────────────────────────── */
+.mc-tile .mc-price {
+  position: absolute; left: 0; right: 0; bottom: 0; line-height: 1.35;
+  font-size: 9.5px; font-weight: bold; text-align: center;
+  color: var(--gold-active); background: rgba(0,0,0,.62);
 }
-.merchant-name-input:focus { outline: none; border-color: var(--gold-active); }
+.mc-tile .mc-price s { color: #8a7a5c; font-weight: normal; }
+.mc-tile .mc-eye-ic { width: 10px; height: 10px; vertical-align: -1px; margin-left: 1px; }
+.mc-tile--bag .mc-price { color: #7AAB6A; }
+.mc-tile .mc-qty {
+  position: absolute; right: 2px; top: 1px; font-size: 9.5px; font-weight: bold;
+  color: var(--text-main); background: rgba(0,0,0,.55); border-radius: 2px; padding: 0 3px;
+}
+.mc-tile.mc-poor .mc-price { color: var(--red-danger); }
+.mc-tile.mc-dim { opacity: .22; }
+/* 多选 */
+.mc-tile .mc-tick {
+  position: absolute; left: 2px; top: 1px; font-size: 11px; font-weight: bold;
+  color: var(--gold-active); display: none;
+}
+.mc-tile.mc-sel { outline: 2px solid var(--gold-active); outline-offset: -2px; }
+.mc-tile.mc-sel .mc-tick { display: block; }
+.mc-tile--bag.mc-sel { outline-color: #5B7FBF; }
+.mc-tile--bag.mc-sel .mc-tick { color: #5B7FBF; }
+/* 货架图块玩家拖不动，光标别给 grab 的错觉 */
+.mc-tile--shop { cursor: pointer; }
 
-/* ── 主体两栏 ──────────────────────────────────────────────── */
-.merchant-body {
-  display:    flex;
-  flex:       1;
-  overflow:   hidden;
-  min-height: 0;
-}
-
-/* ── 左栏 ──────────────────────────────────────────────────── */
-.merchant-left {
-  width:          200px;
-  min-width:      180px;
-  max-width:      220px;
-  flex-shrink:    0;
-  display:        flex;
-  flex-direction: column;
-  background:     var(--bg-mid);
-  border-right:   1px solid #3B2412;
-  overflow:       hidden;
-}
-
-/* Tab 导航（左栏顶部） */
-.merchant-tabs.tabs {
-  display:     flex;
-  flex-shrink: 0;
-  border-bottom: 1px solid #3B2412;
-}
-
-.merchant-tabs .item {
-  flex:          1;
-  text-align:    center;
-  padding:       6px 4px;
-  font-size:     0.78rem;
-  color:         var(--text-sub);
-  cursor:        pointer;
-  border-bottom: 2px solid transparent;
-  transition:    color .15s, border-color .15s;
-  white-space:   nowrap;
-  overflow:      hidden;
-  text-overflow: ellipsis;
-}
-.merchant-tabs .item:hover  { color: var(--text-main); }
-.merchant-tabs .item.active {
-  color:        var(--gold-active);
-  border-color: var(--gold-active);
-}
-
-/* 立绘 */
-.merchant-portrait-wrap {
-  flex-shrink: 0;
-  padding:     8px;
-}
-
-.merchant-portrait {
-  width:         100%;
-  aspect-ratio:  3/4;
-  object-fit:    cover;
-  object-position: center top;
-  border:        1px solid #3B2412;
-  border-radius: 2px;
-  display:       block;
-  cursor:        pointer;
-}
-.merchant-portrait:hover { border-color: var(--gold-active); }
-
-/* 描述区 */
-.merchant-desc-wrap {
-  flex:       1;
-  overflow-y: auto;
-  padding:    6px 8px;
-  font-size:  0.78rem;
-  line-height: 1.5;
-  color:      var(--text-main);
-}
-
-.merchant-desc-text {
-  white-space: pre-wrap;
-}
-
-/* 普通文本编辑框（替代富文本编辑器） */
-.merchant-desc-edit {
-  width:       100%;
-  height:      100%;
-  min-height:  80px;
-  resize:      none;
-  background:  var(--bg-panel);
-  border:      1px solid var(--border-gold);
-  border-radius: 3px;
-  color:       var(--text-main);
-  font-size:   0.78rem;
-  line-height: 1.5;
-  padding:     4px 6px;
-}
-
-/* 富文本编辑器（ProseMirror） */
-.merchant-desc-wrap .editor {
-  height: 100%;
-}
-/* 工具栏 */
-.merchant-desc-wrap .editor-menu {
-  background: #201D1A;
-  border-bottom: 1px solid #3B2412;
-}
-.merchant-desc-wrap .editor-menu button,
-.merchant-desc-wrap .editor-menu select {
-  background:  #201D1A !important;
-  color:       #E8C9A2 !important;
-  border-color: #3B2412 !important;
-}
-/* 编辑区 */
-.merchant-desc-wrap .editor-content,
-.merchant-desc-wrap .prosemirror,
-.merchant-desc-wrap div[contenteditable] {
-  min-height: 60px;
-  font-size:  0.78rem;
-  color:      #E8C9A2 !important;
-  background: #201D1A !important;
-  caret-color: #E8C9A2;
-}
-/* ProseMirror 内段落/文字继承 */
-.merchant-desc-wrap .prosemirror p,
-.merchant-desc-wrap .prosemirror span,
-.merchant-desc-wrap div[contenteditable] p {
-  color: #E8C9A2;
-}
-
-/* ── 右栏 ──────────────────────────────────────────────────── */
-.merchant-right {
-  flex:           1;
-  display:        flex;
-  flex-direction: column;
-  overflow:       hidden;
-  min-width:      0;
-}
-
-/* 搜索栏 */
-.merchant-search-bar {
-  display:      flex;
-  align-items:  center;
-  gap:          6px;
-  padding:      6px 10px;
-  border-bottom: 1px solid #3B2412;
-  flex-shrink:  0;
-  background:   var(--bg-mid);
-}
-
-.merchant-search {
-  flex:        1;
-  background:  rgba(255,255,255,0.04);
-  border:      1px solid #3B2412;
-  border-radius: 3px;
-  color:       var(--text-main);
-  padding:     3px 8px;
-  font-size:   0.82rem;
-}
-.merchant-search::placeholder { color: var(--text-dim); }
-.merchant-search:focus        { outline: none; border-color: var(--gold-active); }
-
-.merchant-search-icon { color: var(--text-dim); font-size: 0.8rem; }
-
-/* 隐藏物品切换按钮 */
-.merchant-hidden-toggle {
-  background:  none;
-  border:      1px solid #3B2412;
-  border-radius: 3px;
-  color:       var(--text-sub);
-  padding:     3px 7px;
-  cursor:      pointer;
-  font-size:   0.78rem;
-  line-height: 1;
-  transition:  color .15s, border-color .15s;
-  max-width: 10px;
-}
-.merchant-hidden-toggle:hover  { color: var(--text-main); border-color: var(--text-sub); }
-.merchant-hidden-toggle.active { color: var(--gold-active); border-color: var(--gold-active); }
-
-/* ── Tab 内容区 ──────────────────────────────────────────────── */
-.merchant-tab-body {
-  flex:       1;
-  overflow:   hidden;
-  position:   relative;
-  min-height: 0;
-}
-
-.merchant-tab-content {
-  display:    none;
-  height:     100%;
-  overflow-y: auto;
-  padding:    0;
-}
-.merchant-tab-content.active { display: block; }
-
-/* ── 货物表格 ────────────────────────────────────────────────── */
-.merchant-table {
-  width:           100%;
-  border-collapse: collapse;
-  font-size:       0.82rem;
-}
-
-.merchant-table thead tr {
-  background:    var(--bg-mid);
-  border-bottom: 1px solid #3B2412;
-  position:      sticky;
-  top:           0;
-  z-index:       1;
-}
-
-.merchant-table th {
-  padding:    6px 8px;
-  font-weight: 600;
-  color:       var(--text-sub);
-  text-align:  left;
-  font-size:   0.75rem;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
-
-.merchant-table td {
-  padding:       5px 8px;
-  border-bottom: 1px solid rgba(59,36,18,0.4);
-  vertical-align: middle;
-}
-
-/* 列宽 */
-.merchant-table .col-icon    { width: 36px; }
-.merchant-table .col-name    { }              /* 弹性宽 */
-.merchant-table .col-stock   { width: 60px; text-align: center; }
-.merchant-table .col-price   { width: 64px; text-align: right; }
-.merchant-table .col-actions { width: 180px; text-align: right; white-space: nowrap; }
-
-/* 行悬停 */
-.merchant-item-row {
-  transition: background .1s;
-}
-.merchant-item-row:hover { background: rgba(59,36,18,0.35); }
-
-/* 隐藏物品行（GM视图半透明） */
-.merchant-item-row.is-hidden { opacity: 0.45; }
-.merchant-item-row.is-hidden:hover { opacity: 0.75; }
-
-/* 售罄行 */
-.merchant-item-row.is-soldout .col-name { color: var(--text-dim); text-decoration: line-through; }
-
-/* 空状态 */
-.merchant-empty-row td {
-  text-align:  center;
-  padding:     24px;
-  color:       var(--text-dim);
-  font-size:   0.82rem;
-  border:      none;
-}
-
-/* 物品图标 */
-.merchant-item-icon {
-  width:         28px;
-  height:        28px;
-  object-fit:    cover;
-  border:        1px solid #3B2412;
-  border-radius: 2px;
-  cursor:        pointer;
-  display:       block;
-}
-.merchant-item-icon:hover { border-color: var(--gold-active); }
-
-/* 隐藏标记图标 */
-.hidden-badge {
-  margin-left: 4px;
-  font-size:   0.72rem;
-  color:       var(--text-dim);
-  vertical-align: middle;
-}
-
-/* 库存 */
-.stock-unlimited { color: var(--gold-active); font-weight: 700; }
-.stock-soldout   { color: var(--red-danger);  font-size: 0.75rem; }
-
-/* ── 按钮 ─────────────────────────────────────────────────────── */
-.btn-sm {
-  padding:       2px 8px;
-  font-size:     0.72rem;
-  border:        1px solid #3B2412;
-  border-radius: 2px;
-  background:    rgba(59,36,18,0.5);
-  color:         var(--text-main);
-  cursor:        pointer;
-  transition:    background .15s, border-color .15s;
-  line-height:   1.5;
-  max-width:     50px;
-}
-.btn-sm:hover           { background: rgba(59,36,18,0.9); border-color: var(--text-sub); }
-.btn-sm:disabled        { color: var(--text-dim); cursor: not-allowed; opacity: 0.5; }
-.btn-sm.btn-show        { border-color: #2a4a2a; color: #6ec26e; }
-.btn-sm.btn-show:hover  { background: rgba(42,74,42,0.5); }
-
-.merchant-item-buy {
-  background: rgba(40,25,10,0.7);
-  border-color: var(--gold-mid);
-  color:        var(--gold-active);
-  font-weight:  600;
-}
-.merchant-item-buy:hover {
-  background:   rgba(60,40,10,0.9);
-  border-color: var(--gold-active);
-}
-
-/* ── 填充物品 Tab 拖拽区 ─────────────────────────────────────── */
-.merchant-dropzone {
-  min-height: 100%;
-  position:   relative;
-}
-
-.merchant-dropzone-hint {
-  display:       flex;
-  flex-direction: column;
-  align-items:   center;
-  gap:           8px;
-  padding:       20px;
-  color:         var(--text-dim);
-  font-size:     0.82rem;
-}
-.merchant-dropzone-hint i { font-size: 1.4rem; }
-
-.merchant-dropzone.dragover {
-  outline:          2px dashed var(--gold-active);
-  outline-offset:  -4px;
-  background:       rgba(229,186,37,0.04);
-}
-
-/* ── 卖出 Tab ─────────────────────────────────────────────────── */
-
-/* 卖出按钮（绿色调强调） */
-.merchant-item-sell {
-  background:   rgba(20,50,20,0.7);
-  border-color: #2a6a2a;
-  color:        #6ec26e;
-  font-weight:  600;
-}
-.merchant-item-sell:hover {
-  background:   rgba(30,70,30,0.9);
-  border-color: #4ec24e;
-}
-
-/* 类型标签 */
-.sell-type-label {
-  font-size:  0.75rem;
-  color:      var(--text-sub);
-}
-
-/* 未设定价格提示 */
-.sell-no-price {
-  color:     var(--text-dim);
-  font-size: 0.82rem;
-}
-
-/* ── （保留旧占位选择器） ──────────────────────────────────────── */
-.merchant-coming-soon {
-  display:        flex;
-  flex-direction: column;
-  align-items:    center;
-  justify-content: center;
-  height:         100%;
-  gap:            12px;
-  color:          var(--text-dim);
-  font-size:      0.9rem;
-  min-height:     120px;
-}
-.merchant-coming-soon i { font-size: 1.8rem; }
-
-/* ── 底栏 ─────────────────────────────────────────────────────── */
-.merchant-footer {
-  display:       flex;
-  align-items:   center;
-  justify-content: space-between;
-  gap:           12px;
-  padding:       6px 12px;
-  border-top:    1px solid #3B2412;
-  background:    var(--bg-bottom);
-  flex-shrink:   0;
-  min-height:    36px;
-}
-
-.btn-footer {
-  padding:       4px 12px;
-  font-size:     0.8rem;
-  border:        1px solid #3B2412;
-  border-radius: 2px;
-  background:    rgba(59,36,18,0.5);
-  color:         var(--text-main);
-  cursor:        pointer;
-  transition:    background .15s;
-  max-width: 140px;
-}
-.btn-footer:hover { background: rgba(59,36,18,0.9); }
-
-/* 货币显示区 */
-.merchant-currency-display {
-  display:     flex;
-  align-items: center;
-  gap:         5px;
-  font-size:   0.9rem;
-  font-weight: 600;
-  color:       var(--gold-active);
-}
-
-.currency-icon {
-  width:  18px;
-  height: 18px;
-  object-fit: contain;
-}
-
-.merchant-currency-value,
-.merchant-player-currency {
-  min-width: 40px;
-  text-align: right;
-}
-
-.merchant-currency-input {
-  width: 70px;
-  text-align: right;
-  background: transparent;
-  border: 1px solid var(--gold-active);
-  color: var(--gold-active);
-  font-size: 0.9rem;
-  font-weight: 600;
-  padding: 0 2px;
-}
-
-/* 玩家角色选择器 */
-.merchant-buyer-select {
-  display:     flex;
-  align-items: center;
-  gap:         6px;
-  font-size:   0.82rem;
-  color:       var(--text-sub);
-}
-
-.merchant-char-select {
-  background:    rgba(59,36,18,0.6);
-  border:        1px solid #3B2412;
-  border-radius: 2px;
-  color:         var(--text-main);
-  padding:       2px 4px;
-  font-size:     0.82rem;
-  cursor:        pointer;
-  max-width:     130px;
-}
-.merchant-char-select:focus { outline: none; border-color: var(--gold-active); }
-
-/* ── 购买聊天卡 ──────────────────────────────────────────────── */
+/* ── 购买/取出播报卡（camp-sheet 与 loot-sheet 也在用，别跟着商人一起删） ── */
 .limbus-merchant-purchase-card {
   background:    var(--bg-card);
   border:        1px solid #3B2412;
@@ -7225,33 +6891,6 @@ input.item-piles-quantity {
 .purchase-item-price strong {
   color:       var(--gold-active);
   font-weight: 700;
-}
-
-/* ── 商人编辑对话框 ─────────────────────────────────────────── */
-.merchant-edit-dialog .form-group {
-  display:     flex;
-  align-items: center;
-  gap:         10px;
-  margin:      8px 0;
-}
-.merchant-edit-dialog label {
-  width:       120px;
-  font-size:   0.85rem;
-  color:       var(--text-sub);
-  flex-shrink: 0;
-}
-.merchant-edit-dialog input[type="number"] {
-  flex:        1;
-  background:  rgba(255,255,255,0.05);
-  border:      1px solid #3B2412;
-  border-radius: 2px;
-  color:       var(--text-main);
-  padding:     4px 8px;
-  font-size:   0.85rem;
-}
-.merchant-edit-dialog input[type="number"]:focus {
-  outline:      none;
-  border-color: var(--gold-active);
 }
 
 /* ══════════════════════════════════════════════════════════════

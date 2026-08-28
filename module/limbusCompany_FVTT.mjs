@@ -221,11 +221,17 @@ Hooks.once("setup", () => {
 Hooks.once("ready", () => {
   console.log("limbusCompany_FVTT | 系统已就绪。");
 
+  // 【展示稀有度】：开关状态落到 body 上
+  _applyRarityDisplay(game.settings.get("limbusCompany_FVTT", "showRarity"));
+
   // 显示全局罪孽资源 HUD
   SinResourceHUD.create();
 
   // Token 生命环 HUD：挂钩子并画一遍现有 Token
   TokenRingHUD.ready();
+
+  // 商人卡左栏画的是玩家角色的背包，那边变了要跟着刷新
+  LimbusMerchantSheet.init();
 
   // 创建快捷操作 HUD 单例（选中 Token 时自动渲染）
   QuickActionHUD.create();
@@ -475,12 +481,13 @@ Hooks.on("renderChatMessage", (_message, html, _data) => {
       // 闪避/完全格挡 + 【不可摧毁】反击 / [追加伤害]：拼点本身 0 伤害，
       // 只落挂在后面那几份
       if (damage > 0 || !(flags.unbreakable || flags.extraDmg)) {
-        await ClashManager.handleApplyDamage(targetActorId, damage, flags.takeEffects ?? []);
+        await ClashManager.handleApplyDamage(targetActorId, damage, flags.takeEffects ?? [],
+          flags.attackerId ?? "");
       }
       // 【不可摧毁】拼点失败反击：和拼点伤害同一个按钮一起结算
       const ub = flags.unbreakable;
       if (ub?.targetActorId && (ub.damage ?? 0) > 0) {
-        await ClashManager.handleApplyDamage(ub.targetActorId, ub.damage);
+        await ClashManager.handleApplyDamage(ub.targetActorId, ub.damage, [], ub.attackerId ?? "");
       }
       // [追加伤害]：时间上在主伤害之后，排在最后记账
       await ClashManager.runExtraDamage(flags.extraDmg ?? []);
@@ -517,8 +524,9 @@ Hooks.on("renderChatMessage", (_message, html, _data) => {
       // 沉沦降理智可能把人打进【士气低落】——聚合成一张【恐慌鉴定】卡
       ClashManager._beginPanicAgg();
       await ClashManager.settleBleed(flags.bleedMsgs ?? []);
-      await ClashManager.handleApplyDamage(flags.defActorId, flags.damageToDefActor ?? 0);
-      await ClashManager.handleApplyDamage(flags.atkActorId, flags.damageToAtkActor ?? 0);
+      // 反击是一次交锋两边同时挨打：各自的伤害来源就是对面
+      await ClashManager.handleApplyDamage(flags.defActorId, flags.damageToDefActor ?? 0, [], flags.atkActorId ?? "");
+      await ClashManager.handleApplyDamage(flags.atkActorId, flags.damageToAtkActor ?? 0, [], flags.defActorId ?? "");
       await ClashManager.runExtraDamage(flags.extraDmg ?? []);
       await ClashManager._flushTakeAgg();
       await ClashManager._flushPanicAgg();
@@ -547,7 +555,7 @@ Hooks.on("renderChatMessage", (_message, html, _data) => {
       // 沉沦降理智可能把人打进【士气低落】——聚合成一张【恐慌鉴定】卡
       ClashManager._beginPanicAgg();
       await ClashManager.settleBleed(flags.bleedMsgs ?? []);
-      await ClashManager.handleApplyDamage(targetActorId, damage);
+      await ClashManager.handleApplyDamage(targetActorId, damage, [], flags.atkActorId ?? "");
       await ClashManager.runExtraDamage(flags.extraDmg ?? []);
       await ClashManager._flushTakeAgg();
       await ClashManager._flushPanicAgg();
@@ -1129,6 +1137,32 @@ function _registerSettings() {
     default: true,
   });
 
+  // 营地 / 商人的「站得够近才能开」判定半径
+  game.settings.register("limbusCompany_FVTT", "interactRange", {
+    name:    "营地 / 商人 交互距离（格）",
+    hint:    "玩家的 Token 与营地 / 商人 Token 之间不超过这个格数才能打开面板"
+           + "（按 Token 占地的边缘算，紧贴＝1 格，斜向也算 1 格）。"
+           + "填 0 关闭距离限制。GM 永远不受限；任一方在当前场景没有 Token 时也放行。",
+    scope:   "world",
+    config:  true,
+    type:    Number,
+    range:   { min: 0, max: 20, step: 1 },
+    default: 3,
+  });
+
+  // 稀有度光晕：纯装饰，GM 可以整场关掉（不想用稀有度、或不想让玩家一眼看穿箱子里的货色）
+  game.settings.register("limbusCompany_FVTT", "showRarity", {
+    name:    "展示稀有度",
+    hint:    "在背包 / 货架 / 仓库 / 战利品箱的物品格上，按稀有度画一层中心光晕"
+           + "（平装绿 → 精良蓝 → 史诗紫 → 艺术金 → 神话红，越稀有越亮）。"
+           + "关闭后只是不画光晕，物品卡上的稀有度仍可正常设置。由 GM 设定，对全场生效。",
+    scope:   "world",
+    config:  true,
+    type:    Boolean,
+    default: true,
+    onChange: (v) => _applyRarityDisplay(v),
+  });
+
   game.settings.register("limbusCompany_FVTT", "clashTotalFxSpeed", {
     name:    "拼点 TOTAL 演出节奏",
     hint:    "缩放演出各阶段的时长（不含骰子动画本身——那取决于 Dice So Nice 的动画速度设置）。",
@@ -1142,6 +1176,14 @@ function _registerSettings() {
     },
     default: "standard",
   });
+}
+
+/**
+ * 【展示稀有度】开关落到 <body> 上：关掉时挂 .limbus-no-rarity，
+ * CSS 那边一条规则把所有格子的光晕 display:none，不用重渲染任何面板。
+ */
+function _applyRarityDisplay(enabled) {
+  document.body?.classList.toggle("limbus-no-rarity", !enabled);
 }
 
 /**

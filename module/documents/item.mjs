@@ -50,6 +50,11 @@ export class EquipmentData extends foundry.abstract.TypeDataModel {
   static defineSchema() {
     const fields = foundry.data.fields;
     return {
+      // 稀有度：平装/精良/史诗/艺术/神话。**只管随机池权重与卡面配色**，
+      // 与价格（cost）无关——定价永远只看 cost 那一栏。
+      rarity: new fields.StringField({ required: true, initial: "common",
+        choices: ["common", "fine", "epic", "artistic", "mythic"] }),
+
       // 子类型：上装 / 下装 / 武器 / 饰品
       subtype:  new fields.StringField({ required: true, initial: "weapon",
         choices: ["upper", "lower", "weapon", "accessory"] }),
@@ -193,6 +198,12 @@ export class SkillData extends foundry.abstract.TypeDataModel {
         negativeDice: new fields.BooleanField({ required: false, nullable: true, initial: null }),
         // 侵蚀形态可以单独开【无差别攻击】（null = 沿用觉醒形态的设置）
         indiscriminate: new fields.BooleanField({ required: false, nullable: true, initial: null }),
+        // 侵蚀形态可以单独设扩散方式 / 范围（null = 沿用觉醒形态的设置）
+        // 不给 choices：这里合法值是 null / "chain" / "spray"，而 choices 数组里混 null
+        // 会让校验把 null 判成非法，整条 corrode 更新被丢掉（症状：怎么改都存不进去）
+        spreadMode:  new fields.StringField({ required: false, nullable: true, initial: null }),
+        spreadRange: new fields.NumberField({ required: false, nullable: true, integer: true,
+          min: 1, max: 6, initial: null }),
         weight:      new fields.NumberField({ required: false, nullable: true, integer: true, min: 0, initial: null }),
         sanityCost:  new fields.NumberField({ required: false, nullable: true, integer: true, min: 0, initial: null }),
         effectDesc:  new fields.HTMLField({ required: false, initial: "" }),
@@ -288,7 +299,8 @@ export class SkillData extends foundry.abstract.TypeDataModel {
     // 没填的字段照旧沿用【觉醒】的数值。
     if (this.type === "ego" && this.corrode?.initialized && this._ownerInPanic) {
       const c = this.corrode;
-      for (const key of ["category", "baseValue", "diceCount", "diceFaces", "weight", "sanityCost", "negativeDice", "indiscriminate"]) {
+      for (const key of ["category", "baseValue", "diceCount", "diceFaces", "weight", "sanityCost",
+                         "negativeDice", "indiscriminate", "spreadMode", "spreadRange"]) {
         if (c[key] !== null && c[key] !== undefined) this[key] = c[key];
       }
       if (c.effectDesc) this.effectDesc = c.effectDesc;
@@ -315,9 +327,17 @@ export class ConsumableData extends foundry.abstract.TypeDataModel {
   static defineSchema() {
     const fields = foundry.data.fields;
     return {
+      // 稀有度：平装/精良/史诗/艺术/神话。**只管随机池权重与卡面配色**，
+      // 与价格（cost）无关——定价永远只看 cost 那一栏。
+      rarity: new fields.StringField({ required: true, initial: "common",
+        choices: ["common", "fine", "epic", "artistic", "mythic"] }),
+
       category: new fields.StringField({ required: false, initial: "" }),
       typeName: new fields.StringField({ required: false, initial: "" }),
       quantity: new fields.NumberField({ required: true, integer: true, min: 0, initial: 1 }),
+      // 可堆叠：这件东西才有「数量」的说法（丹药、弹药、饮料这类）。
+      // 关掉就是一件即一件——买卖时不问数量，货架上也不显示 ×N。
+      stackable: new fields.BooleanField({ required: true, initial: true }),
       reusable: new fields.BooleanField({ required: true, initial: false }),
       infinite: new fields.BooleanField({ required: true, initial: false }),
       tags:     new fields.StringField({ required: false, initial: "" }),
@@ -350,6 +370,11 @@ export class MaterialData extends foundry.abstract.TypeDataModel {
   static defineSchema() {
     const fields = foundry.data.fields;
     return {
+      // 稀有度：平装/精良/史诗/艺术/神话。**只管随机池权重与卡面配色**，
+      // 与价格（cost）无关——定价永远只看 cost 那一栏。
+      rarity: new fields.StringField({ required: true, initial: "common",
+        choices: ["common", "fine", "epic", "artistic", "mythic"] }),
+
       category:    new fields.StringField({ required: false, initial: "" }),
       typeName:    new fields.StringField({ required: false, initial: "" }),
       effect:      new fields.HTMLField({ required: false, initial: "" }),
@@ -357,6 +382,8 @@ export class MaterialData extends foundry.abstract.TypeDataModel {
       reusable:    new fields.BooleanField({ required: true, initial: false }),
       infinite:    new fields.BooleanField({ required: true, initial: false }),
       quantity:    new fields.NumberField({ required: true, integer: true, min: 0, initial: 1 }),
+      // 可堆叠：见 ConsumableData 同名字段
+      stackable:   new fields.BooleanField({ required: true, initial: true }),
       favorited:   new fields.BooleanField({ required: true, initial: false }),
       // 物品容量
       capacity: new fields.SchemaField({
@@ -383,6 +410,11 @@ export class ContainerData extends foundry.abstract.TypeDataModel {
   static defineSchema() {
     const fields = foundry.data.fields;
     return {
+      // 稀有度：平装/精良/史诗/艺术/神话。**只管随机池权重与卡面配色**，
+      // 与价格（cost）无关——定价永远只看 cost 那一栏。
+      rarity: new fields.StringField({ required: true, initial: "common",
+        choices: ["common", "fine", "epic", "artistic", "mythic"] }),
+
       // 网格尺寸
       gridSize: new fields.SchemaField({
         width:  new fields.NumberField({ required: true, integer: true, min: 1, max: 10, initial: 3 }),
