@@ -557,10 +557,15 @@ export class LimbusItemSheet extends ItemSheet {
       html.find(".spread-box").toggleClass("on", n >= 2 || set);
     });
     // 扩散方式 / 范围：不走表单提交，直接写回物品（避免与其它提交逻辑互相覆盖）
+    // render:false —— 让这次写库不要触发重渲染。
+    // 带渲染的话会和物品卡自身的 submitOnChange 重绘撞车：重绘用的是上一次的
+    // 快照，选中的值会先被弹回旧值，得再点一次才生效（症状：选链式先跳成乱射）。
+    // DOM 这边我们自己同步，值本来就已经是用户选的那个了。
     html.find(".spread-mode-sel").on("change", async (ev) => {
       ev.stopPropagation();
       const v = ev.currentTarget.value === "spray" ? "spray" : "chain";
-      await this.item.update({ [_spreadPath("spreadMode")]: v });
+      ev.currentTarget.value = v;
+      await this.item.update({ [_spreadPath("spreadMode")]: v }, { render: false });
     });
     html.find(".spread-range-input").on("input", (ev) => {
       const n = Math.min(6, Math.max(1, parseInt(ev.currentTarget.value) || 1));
@@ -570,7 +575,8 @@ export class LimbusItemSheet extends ItemSheet {
       ev.stopPropagation();
       const n = Math.min(6, Math.max(1, parseInt(ev.currentTarget.value) || 1));
       ev.currentTarget.value = n;                      // 空值/越界时回填合法值
-      await this.item.update({ [_spreadPath("spreadRange")]: n });
+      html.find(".spread-ft").text(`${(n * 5 + 2.5).toFixed(1)}ft`);
+      await this.item.update({ [_spreadPath("spreadRange")]: n }, { render: false });
     });
 
     // ── 图标点击：锁定时查看插图，解锁时由 Foundry data-edit 处理 ─────────
