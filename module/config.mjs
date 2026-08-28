@@ -218,6 +218,9 @@ LIMBUSCOMPANY.BUFF_TYPES = {
   moonOnSusuki:    "芒上月",
   indigoSakura:    "青染樱",
   lightCard:       "光札",
+  // 庄严哀悼（特殊子弹 + 装填标记）
+  mourningAmmo:    "生蝶·亡蝶",
+  mourningReload:  "重新装填·生蝶·亡蝶",
 };
 
 /**
@@ -262,7 +265,8 @@ LIMBUSCOMPANY.BUFF_GROUPS = {
   special:  ["burn", "bleed", "tremor", "rupture", "sinking", "breathing", "charge", "chaos", "panic", "lowMorale"],
   other:    ["custom"],
   custom:   ["defensiveStance", "butterfly", "piercingArrow",
-             "craneOnPine", "moonOnSusuki", "indigoSakura", "lightCard"],
+             "craneOnPine", "moonOnSusuki", "indigoSakura", "lightCard",
+             "mourningAmmo", "mourningReload"],
 };
 
 /**

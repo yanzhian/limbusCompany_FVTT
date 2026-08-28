@@ -401,6 +401,60 @@ registerCustomBuff("butterfly", {
 });
 
 /**
+ * 【生蝶·亡蝶】——「庄严哀悼」的特殊子弹
+ * - 最大值：10 层、强度上限 10 级（层＝生蝶，级＝亡蝶，两种弹药各自计数）
+ * - 层数为 0 时不消失：打空了弹匣还在，等【重新装填·生蝶·亡蝶】把它填满
+ *
+ * 装填本身写在下面的【重新装填·生蝶·亡蝶】里，而不是这条。
+ * 原因：onRoundStart 只会对**角色身上已有的** BUFF 触发，子弹要是被整条清掉，
+ * 挂在子弹上的装填钩子也就跟着消失了，永远填不回来；写在装填标记上则一定跑得到。
+ */
+registerCustomBuff("mourningAmmo", {
+  label:        "生蝶·亡蝶",
+  maxStacks:    10,
+  maxIntensity: 10,
+  keepAtZero:   true,
+  description:  "- 特殊子弹\n- 最大值：10 层\n- 强度上限 10 级\n- 层数为 0 时不消失",
+});
+
+/**
+ * 【重新装填·生蝶·亡蝶】
+ * - 一次性标记（最大 1 层），由「庄严哀悼-西服」在解除【陷入混乱】时获得
+ * - 回合开始时：消耗掉自己，把【生蝶·亡蝶】填成 10 层 10 级
+ */
+registerCustomBuff("mourningReload", {
+  label:        "重新装填·生蝶·亡蝶",
+  maxStacks:    1,
+  description:  "- 回合开始时：消耗所有【重新装填·生蝶·亡蝶】，为自己添加 10 层 10 级【生蝶·亡蝶】",
+
+  async onRoundStart(actor, buff) {
+    const buffs = foundry.utils.deepClone(actor.system?.buffs ?? []);
+    const idx   = buffs.findIndex(b => b.id === buff.id);
+    if (idx < 0) return "";
+
+    buffs.splice(idx, 1);   // 消耗掉装填标记
+
+    // 子弹填满（不是叠加，是装满一匣）
+    const ai = buffs.findIndex(b => b.type === "mourningAmmo");
+    if (ai >= 0) {
+      buffs[ai].stacks    = 10;
+      buffs[ai].intensity = 10;
+    } else {
+      buffs.push({
+        id:        foundry.utils.randomID(),
+        type:      "mourningAmmo",
+        name:      "生蝶·亡蝶",
+        intensity: 10,
+        stacks:    10,
+        whenAdded: "本回合",
+      });
+    }
+    await _safeUpdate(actor, { "system.buffs": buffs });
+    return "【重新装填·生蝶·亡蝶】消耗完毕：装填 <strong>10</strong> 层 <strong>10</strong> 级【生蝶·亡蝶】。";
+  },
+});
+
+/**
  * 【百折不挠】
  * - 最大值：1 层
  * - 获得层数时刷新（替换），不叠加
