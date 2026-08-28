@@ -4470,6 +4470,8 @@ export class ClashManager {
         limbusCompany_FVTT: {
           type:          "clash-resolve",
           targetActorId: loser?.id ?? "",
+          // 谁打出的这份伤害——【结算结果】里 onTakeDamage 钩子要靠它认伤害来源
+          attackerId:    winner?.id ?? "",
           damage:        finalDamage,
           takeEffects,
           weightSpread,
@@ -4483,6 +4485,7 @@ export class ClashManager {
           // 【不可摧毁】反击的伤害跟着同一个【结算结果】一起落地
           unbreakable:   ubCounter ? {
             targetActorId: ubCounter.targetActor?.id ?? "",
+            attackerId:    atkActor?.id ?? "",
             damage:        ubCounter.finalDmg,
           } : null,
           // 整局重掷所需：重新骰一次双方，再跑一遍完整流程（仅 GM）
@@ -5237,6 +5240,7 @@ export class ClashManager {
         limbusCompany_FVTT: {
           type:          "clash-resolve",   // 复用拼点对抗卡的按钮处理器
           targetActorId: defActor?.id ?? "",
+          attackerId:    atkActor?.id ?? "",
           damage:        finalDamage,
           takeEffects,
           weightSpread,
@@ -5752,7 +5756,7 @@ export class ClashManager {
 
   /* ─── 阶段七：承受结算（应用伤害 + 发送聊天框） ─────────────────────── */
 
-  static async handleApplyDamage(targetActorId, damage, takeEffects = []) {
+  static async handleApplyDamage(targetActorId, damage, takeEffects = [], attackerId = "") {
     // 优先使用 flags 记录的 base actor（更新后 linked tokens 自动同步）
     const baseActor = game.actors.get(targetActorId);
     const selToken  = canvas.tokens?.controlled?.[0];
@@ -5767,7 +5771,10 @@ export class ClashManager {
     // 收集护盾吸收、onTakeDamage 等 BUFF 钩子消息——【结算结果】按钮这条路径上
     // 没有别的地方会汇总它们，不收就彻底没人报了
     const hookMsgs = [];
-    await ClashManager._applyAndSendTake(actor, damage, { hookMsgs, takeEffects });
+    // attacker 一定要传：BUFF 的 onTakeDamage 靠它认「伤害来源」，
+    // 不给的话【蝶】这类「为伤害来源恢复理智」的效果会报「没有可恢复的目标」
+    const attacker = attackerId ? (game.actors.get(attackerId) ?? null) : null;
+    await ClashManager._applyAndSendTake(actor, damage, { hookMsgs, takeEffects, attacker });
 
     // 若选中的是非 linked token actor（与 base actor 为不同文档），额外同步该 token 的 HP
     if (selActor && selActor !== actor && selActor.isToken) {
@@ -6508,6 +6515,7 @@ export class ClashManager {
         limbusCompany_FVTT: {
           type:          "clash-block",
           targetActorId: defActor?.id ?? "",
+          atkActorId:    atkActor?.id ?? "",
           damage:        finalDamage,
           bleedMsgs:     finalDamage > 0 ? _bleed : [],
           reactionCheck: finalDamage > 0 ? ClashManager._takeReactionCheck() : null,

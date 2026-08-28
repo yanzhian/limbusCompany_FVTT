@@ -481,12 +481,13 @@ Hooks.on("renderChatMessage", (_message, html, _data) => {
       // 闪避/完全格挡 + 【不可摧毁】反击 / [追加伤害]：拼点本身 0 伤害，
       // 只落挂在后面那几份
       if (damage > 0 || !(flags.unbreakable || flags.extraDmg)) {
-        await ClashManager.handleApplyDamage(targetActorId, damage, flags.takeEffects ?? []);
+        await ClashManager.handleApplyDamage(targetActorId, damage, flags.takeEffects ?? [],
+          flags.attackerId ?? "");
       }
       // 【不可摧毁】拼点失败反击：和拼点伤害同一个按钮一起结算
       const ub = flags.unbreakable;
       if (ub?.targetActorId && (ub.damage ?? 0) > 0) {
-        await ClashManager.handleApplyDamage(ub.targetActorId, ub.damage);
+        await ClashManager.handleApplyDamage(ub.targetActorId, ub.damage, [], ub.attackerId ?? "");
       }
       // [追加伤害]：时间上在主伤害之后，排在最后记账
       await ClashManager.runExtraDamage(flags.extraDmg ?? []);
@@ -523,8 +524,9 @@ Hooks.on("renderChatMessage", (_message, html, _data) => {
       // 沉沦降理智可能把人打进【士气低落】——聚合成一张【恐慌鉴定】卡
       ClashManager._beginPanicAgg();
       await ClashManager.settleBleed(flags.bleedMsgs ?? []);
-      await ClashManager.handleApplyDamage(flags.defActorId, flags.damageToDefActor ?? 0);
-      await ClashManager.handleApplyDamage(flags.atkActorId, flags.damageToAtkActor ?? 0);
+      // 反击是一次交锋两边同时挨打：各自的伤害来源就是对面
+      await ClashManager.handleApplyDamage(flags.defActorId, flags.damageToDefActor ?? 0, [], flags.atkActorId ?? "");
+      await ClashManager.handleApplyDamage(flags.atkActorId, flags.damageToAtkActor ?? 0, [], flags.defActorId ?? "");
       await ClashManager.runExtraDamage(flags.extraDmg ?? []);
       await ClashManager._flushTakeAgg();
       await ClashManager._flushPanicAgg();
@@ -553,7 +555,7 @@ Hooks.on("renderChatMessage", (_message, html, _data) => {
       // 沉沦降理智可能把人打进【士气低落】——聚合成一张【恐慌鉴定】卡
       ClashManager._beginPanicAgg();
       await ClashManager.settleBleed(flags.bleedMsgs ?? []);
-      await ClashManager.handleApplyDamage(targetActorId, damage);
+      await ClashManager.handleApplyDamage(targetActorId, damage, [], flags.atkActorId ?? "");
       await ClashManager.runExtraDamage(flags.extraDmg ?? []);
       await ClashManager._flushTakeAgg();
       await ClashManager._flushPanicAgg();
