@@ -87,6 +87,34 @@ LIMBUSCOMPANY.EGO_COSTS = {
   ALEPH: 15,
 };
 
+// ─── 稀有度 ───────────────────────────────────────────────────────────────────
+// 装备 / 消耗品 / 材料 / 容器 专用（技能、EGO 不参与）。
+// 只有两个用途：战利品随机池的抽取权重、卡面配色。**不参与定价**——价格永远看 cost。
+// 与 EGO 的 ZAYIN~ALEPH（危险等级）是两套完全独立的东西，别混用。
+
+LIMBUSCOMPANY.RARITIES = ["common", "fine", "epic", "artistic", "mythic"];
+
+LIMBUSCOMPANY.RARITY_LABELS = {
+  common:   "平装",
+  fine:     "精良",
+  epic:     "史诗",
+  artistic: "艺术",
+  mythic:   "神话",
+};
+
+LIMBUSCOMPANY.RARITY_COLORS = {
+  common:   "#4E9A5B",   // 绿
+  fine:     "#3D7BC4",   // 蓝
+  epic:     "#9A5CC7",   // 紫
+  artistic: "#E5BA25",   // 金
+  mythic:   "#E94745",   // 红
+};
+
+/** 战利品随机抽取的默认权重（越稀有越少见）；GM 可在战利品面板覆盖 */
+LIMBUSCOMPANY.RARITY_WEIGHTS = {
+  common: 40, fine: 25, epic: 12, artistic: 5, mythic: 1,
+};
+
 // ─── 恐慌卡类型 ─────────────────────────────────────────────────────────────
 // 恐慌卡分两种，各自对应角色卡上的一个槽位；空串＝未指定（老数据）。
 //   lowMorale 士气低落：理智首次跌破 30 时触发，一场遭遇战只触发一次

@@ -1,0 +1,136 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>稀有度卡面配色样板</title>
+<style>
+:root{
+  --bg-darkest:#0B0707; --bg-mid:#1A1210; --text-main:#E8CAA2; --text-sub:#9B6839;
+  --text-dim:#6E5540; --gold-active:#E5BA25; --border-gold:#5F3E22;
+  --font-main:"Noto Sans SC","Microsoft YaHei",sans-serif;
+
+  /* ── 五档稀有度（唯一的真源，改这里即可） ── */
+  --r-common:#4E9A5B;  --r-fine:#3D7BC4;  --r-epic:#9A5CC7;
+  --r-artistic:#E5BA25; --r-mythic:#E94745;
+}
+body{margin:0;padding:22px;background:#0B0707;color:var(--text-main);font-family:var(--font-main);}
+h1{font-size:17px;margin:0 0 4px;letter-spacing:.06em;}
+p.sub{margin:0 0 18px;font-size:12px;color:var(--text-dim);}
+h2{font-size:13px;color:var(--gold-active);margin:26px 0 10px;font-weight:normal;letter-spacing:.08em;}
+
+.row{display:flex;gap:14px;flex-wrap:wrap;align-items:flex-start;}
+
+/* ══ 1. Title Card（悬停预览卡） ══ */
+.tc{
+  width:210px;background:linear-gradient(180deg,var(--bg-darkest) 0%,var(--bg-mid) 50%,var(--bg-darkest) 100%);
+  border:1px solid var(--rc);border-radius:4px;overflow:hidden;
+  /* 稀有度只加一层极淡的外辉光，卡还是那张卡 */
+  box-shadow:0 0 0 1px rgba(0,0,0,.6),0 0 14px -4px var(--rc),0 8px 32px rgba(0,0,0,.85);
+}
+.tc-hd{
+  padding:9px 11px 7px;font-size:21px;font-weight:bold;line-height:1.1;color:#E8CAA1;
+  /* 标题条：稀有度色压暗后与原本的 #5F3E21 叠一层 */
+  background:linear-gradient(180deg,color-mix(in srgb,var(--rc) 42%,#5F3E21),#5F3E21);
+  border-bottom:1px solid var(--rc);
+}
+.tc-rar{
+  display:flex;align-items:center;gap:5px;padding:4px 11px;font-size:11px;
+  border-bottom:1px solid rgba(95,62,33,.4);
+}
+.tc-rar b{color:var(--rc);letter-spacing:.1em;}
+.tc-rar .dots{margin-left:auto;display:flex;gap:2px;}
+.tc-rar .dots i{width:6px;height:6px;border-radius:50%;background:#2b2119;display:block;}
+.tc-rar .dots i.on{background:var(--rc);box-shadow:0 0 4px var(--rc);}
+.tc-body{padding:7px 11px;font-size:11.5px;color:var(--text-sub);line-height:1.55;min-height:74px;}
+.tc-ft{
+  padding:4px 11px;border-top:1px solid rgba(95,62,33,.4);
+  font-size:12px;color:var(--gold-active);display:flex;justify-content:flex-end;gap:3px;
+}
+
+/* ══ 2. 网格图块（背包 / 商人货架 / 战利品） ══ */
+.tiles{display:flex;gap:10px;flex-wrap:wrap;}
+.tile{
+  position:relative;width:88px;height:88px;border-radius:3px;
+  background:#151010;border:1px solid var(--rc);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;
+  box-shadow:inset 0 0 16px -6px var(--rc);
+}
+/* 左上角小三角：一眼看出稀有度，不占地方 */
+.tile::before{
+  content:"";position:absolute;left:0;top:0;
+  border-width:11px 11px 0 0;border-style:solid;border-color:var(--rc) transparent transparent transparent;
+}
+.tile .ic{width:34px;height:34px;border-radius:2px;background:#2a1f18;border:1px solid #3A2A1C;}
+.tile .nm{font-size:10.5px;color:var(--rc);text-align:center;line-height:1.2;padding:0 4px;}
+.tile .px{position:absolute;left:0;right:0;bottom:0;background:rgba(0,0,0,.62);
+  font-size:9.5px;font-weight:bold;color:var(--gold-active);text-align:center;line-height:1.35;}
+
+/* ══ 3. 名字着色（列表 / 聊天卡里） ══ */
+.list{display:flex;flex-direction:column;gap:5px;font-size:13px;}
+.list div{display:flex;align-items:center;gap:7px;}
+.list .sw{width:9px;height:9px;border-radius:2px;background:var(--rc);}
+.list .nm{color:var(--rc);font-weight:bold;}
+.list .lab{color:var(--text-dim);font-size:11px;margin-left:auto;}
+
+.c-common{--rc:var(--r-common);} .c-fine{--rc:var(--r-fine);} .c-epic{--rc:var(--r-epic);}
+.c-artistic{--rc:var(--r-artistic);} .c-mythic{--rc:var(--r-mythic);}
+
+.note{margin-top:26px;padding:11px 13px;border:1px solid #2b2119;border-radius:4px;
+  font-size:12px;color:var(--text-dim);line-height:1.75;max-width:760px;}
+.note b{color:var(--text-sub);}
+</style>
+
+<h1>稀有度卡面配色样板</h1>
+<p class="sub">平装(绿) · 精良(蓝) · 史诗(紫) · 艺术(金) · 神话(红)　—　只影响配色与随机池权重，不参与任何数值</p>
+
+<h2>① Title Card（悬停预览）</h2>
+<div class="row" id="cards"></div>
+
+<h2>② 网格图块（背包 / 货架 / 战利品箱）</h2>
+<div class="tiles" id="tiles"></div>
+
+<h2>③ 名字着色（列表 · 聊天卡）</h2>
+<div class="list" id="list"></div>
+
+<div class="note">
+  <b>三处配色是同一个变量 <code>--rc</code></b>，实装时就是给卡片根节点挂一个
+  <code>class="rarity-epic"</code>，CSS 里五条规则各自定义 <code>--rc</code>，其余样式一行都不用改。<br>
+  <b>标题条</b>用 <code>color-mix</code> 把稀有度色按 42% 压进原来的棕色 <code>#5F3E21</code>，
+  所以卡还是那张卡，只是"泛"了点颜色；不喜欢可以把百分比调到 0（＝完全不变）或 100（＝纯稀有度色）。<br>
+  <b>网格图块</b>只加了左上角小三角 + 边框 + 内发光，因为 88px 的格子上文字已经很挤了。<br>
+  <b>金色（艺术）</b>和界面本来的高亮金 <code>--gold-active</code> 是同一个值，
+  所以"艺术"级在价格数字旁边可能不够跳——真觉得糊就把它调成偏橙的 <code>#E09A2B</code>。
+</div>
+
+<script>
+const R = [
+  ["common",  "平装", 1],
+  ["fine",    "精良", 2],
+  ["epic",    "史诗", 3],
+  ["artistic","艺术", 4],
+  ["mythic",  "神话", 5],
+];
+const NAMES = ["旅人短刀","定制军刀","裂空之刃","黄昏协奏","终末·无音"];
+
+document.getElementById("cards").innerHTML = R.map(([k,l,n],i)=>`
+  <div class="tc c-${k}">
+    <div class="tc-hd">${NAMES[i]}</div>
+    <div class="tc-rar">
+      <b>${l}</b>
+      <span class="dots">${[1,2,3,4,5].map(d=>`<i class="${d<=n?"on":""}"></i>`).join("")}</span>
+    </div>
+    <div class="tc-body">武器 · 单手刀<br>攻击容量 2　骰数 1　面数 6<br>命中时：为目标添加 1 层【流血】。</div>
+    <div class="tc-ft">${[12,40,150,600,2400][i]} 眼</div>
+  </div>`).join("");
+
+document.getElementById("tiles").innerHTML = R.map(([k,l],i)=>`
+  <div class="tile c-${k}">
+    <div class="ic"></div>
+    <div class="nm">${NAMES[i]}</div>
+    <div class="px">${[12,40,150,600,2400][i]}</div>
+  </div>`).join("");
+
+document.getElementById("list").innerHTML = R.map(([k,l],i)=>`
+  <div class="c-${k}">
+    <span class="sw"></span><span class="nm">${NAMES[i]}</span>
+    <span class="lab">${l}　权重 ${[40,25,12,5,1][i]}</span>
+  </div>`).join("");
+</script>
