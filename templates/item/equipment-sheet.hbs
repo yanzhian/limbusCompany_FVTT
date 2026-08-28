@@ -169,6 +169,23 @@
           <span class="cost-display">{{system.cost}}</span>
         {{/if}}
       </div>
+      {{!-- 稀有度：只管战利品随机池权重与网格光晕，不参与定价 --}}
+      <div class="item-rarity-group rarity-{{system.rarity}}">
+        <span class="rarity-dot"></span>
+        {{#if (and isEditable (not isLocked))}}
+          <select name="system.rarity" class="rarity-select">
+            {{#select system.rarity}}
+              <option value="common">平装</option>
+              <option value="fine">精良</option>
+              <option value="epic">史诗</option>
+              <option value="artistic">艺术</option>
+              <option value="mythic">神话</option>
+            {{/select}}
+          </select>
+        {{else}}
+          <span class="rarity-display">{{rarityLabel}}</span>
+        {{/if}}
+      </div>
     </div>
 
     {{!-- ── 分割线 ──────────────────────────────────────────────────── --}}

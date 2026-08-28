@@ -33,7 +33,7 @@
                    data-x="{{x}}" data-y="{{y}}"></div>
             {{/each}}
             {{#each myChar.tiles}}
-              <div class="cg-item-tile"
+              <div class="cg-item-tile rarity-{{rarity}}"
                    style="grid-column:{{col}} / span {{w}}; grid-row:{{row}} / span {{h}}"
                    data-item-uuid="{{uuid}}"
                    data-item-name="{{name}}"
@@ -91,7 +91,7 @@
 
           {{!-- 物品图块 --}}
           {{#each placedItems}}
-            <div class="cg-item-tile {{#if isContainer}}cg-tile-container{{/if}} {{#unless show}}cg-hidden{{/unless}}"
+            <div class="cg-item-tile rarity-{{rarity}} {{#if isContainer}}cg-tile-container{{/if}} {{#unless show}}cg-hidden{{/unless}}"
                  style="grid-column:{{col}} / span {{w}}; grid-row:{{row}} / span {{h}}"
                  data-placement-idx="{{idx}}"
                  data-item-uuid="{{uuid}}"

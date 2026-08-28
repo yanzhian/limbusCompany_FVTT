@@ -142,6 +142,9 @@ export class LimbusItemSheet extends ItemSheet {
     context.isEditable = this.isEditable;
     context.activitiesExpanded = this.activitiesExpanded;
 
+    // ── 稀有度标签（锁定时显示中文名）────────────────────────────────
+    context.rarityLabel = (cfg.RARITY_LABELS ?? {})[sys.rarity] ?? "";
+
     // ── 恐慌卡：类型（士气低落 / 陷入恐慌）──────────────────────────────
     if (item.type === "panic") {
       context.panicTypes = cfg.PANIC_TYPES ?? {};

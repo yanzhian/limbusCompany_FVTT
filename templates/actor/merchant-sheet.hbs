@@ -87,7 +87,7 @@
                    data-x="{{x}}" data-y="{{y}}"></div>
             {{/each}}
             {{#each myChar.tiles}}
-              <div class="cg-item-tile mc-tile mc-tile--bag {{#if selected}}mc-sel{{/if}}"
+              <div class="cg-item-tile mc-tile mc-tile--bag rarity-{{rarity}} {{#if selected}}mc-sel{{/if}}"
                    style="grid-column:{{col}} / span {{w}};grid-row:{{row}} / span {{h}}"
                    data-item-uuid="{{uuid}}" data-item-id="{{id}}" data-side="bag"
                    title="{{name}}">
@@ -136,7 +136,7 @@
                  data-x="{{x}}" data-y="{{y}}"></div>
           {{/each}}
           {{#each shelfItems}}
-            <div class="cg-item-tile mc-tile mc-tile--shop
+            <div class="cg-item-tile mc-tile mc-tile--shop rarity-{{rarity}}
                         {{#unless show}}mc-dim{{/unless}}
                         {{#if selected}}mc-sel{{/if}}
                         {{#unless affordable}}mc-poor{{/unless}}"

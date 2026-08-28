@@ -4105,6 +4105,50 @@ body.game .limbuscompany.app img {
   transition: border-color .1s, box-shadow .1s;
   user-select: none;
 }
+/* ── 物品卡上的稀有度选择器（装备/消耗品/材料/容器）────────────────── */
+.limbuscompany .item-rarity-group {
+  display: flex; align-items: center; gap: 5px; margin-left: 10px;
+}
+.limbuscompany .item-rarity-group.rarity-common   { --rc: #4E9A5B; }
+.limbuscompany .item-rarity-group.rarity-fine     { --rc: #3D7BC4; }
+.limbuscompany .item-rarity-group.rarity-epic     { --rc: #9A5CC7; }
+.limbuscompany .item-rarity-group.rarity-artistic { --rc: #E5BA25; }
+.limbuscompany .item-rarity-group.rarity-mythic   { --rc: #E94745; }
+.limbuscompany .item-rarity-group .rarity-dot {
+  width: 9px; height: 9px; border-radius: 50%;
+  background: var(--rc, #4E9A5B); box-shadow: 0 0 6px -1px var(--rc, #4E9A5B);
+}
+.limbuscompany .item-rarity-group .rarity-display {
+  font-size: 13px; font-weight: bold; color: var(--rc, var(--text-main));
+}
+.limbuscompany .item-rarity-group .rarity-select {
+  background: #15110E; border: 1px solid #3A2A1C; border-radius: 3px;
+  color: var(--rc, var(--text-main)); font: bold 12px var(--font-main); padding: 1px 4px;
+}
+
+/* ── 稀有度光晕 ────────────────────────────────────────────────────
+   网格图块正中间往外的圆形渐变（里亮 → 外透明）。边框一律不跟稀有度走。
+   颜色单一来源：CONFIG.LIMBUSCOMPANY.RARITY_COLORS（module/config.mjs），
+   两边改动要同步。技能等没有 rarity 字段的类型渲染成 .rarity-（空），不匹配任何规则。 */
+.limbuscompany .cg-item-tile.rarity-common   { --rc: #4E9A5B; }
+.limbuscompany .cg-item-tile.rarity-fine     { --rc: #3D7BC4; }
+.limbuscompany .cg-item-tile.rarity-epic     { --rc: #9A5CC7; }
+.limbuscompany .cg-item-tile.rarity-artistic { --rc: #E5BA25; }
+.limbuscompany .cg-item-tile.rarity-mythic   { --rc: #E94745; }
+
+.limbuscompany .cg-item-tile[class*="rarity-"]::before {
+  content: "";
+  position: absolute; inset: 0; z-index: 0; pointer-events: none;
+  background: radial-gradient(circle at 50% 50%,
+    color-mix(in srgb, var(--rc) 72%, transparent) 0%,
+    color-mix(in srgb, var(--rc) 29%, transparent) 90%,
+    transparent 120%);
+}
+/* --rc 没定义时（rarity 为空）整条渐变会失效，但保险起见直接不画 */
+.limbuscompany .cg-item-tile.rarity-::before { display: none; }
+/* 图标/名字/角标都得压在光晕之上 */
+.limbuscompany .cg-item-tile > * { position: relative; z-index: 1; }
+
 .limbuscompany .cg-item-tile:hover {
   border-color: var(--gold-active);
   box-shadow: inset 0 0 0 1px var(--gold-active), 0 0 6px rgba(229,186,37,.3);

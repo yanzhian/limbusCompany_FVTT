@@ -167,6 +167,8 @@ export async function buildPlacementGrid(placements, {
       rotated:     p.rotated ?? false,
       show:        !q || (item.name ?? "").toLowerCase().includes(q),
       isContainer: item.type === "container",
+      // 稀有度：见 bag-grid.mjs 同名字段
+      rarity:      item.system?.rarity ?? "",
       item: {
         _id:      item.id,
         name:     item.name,
