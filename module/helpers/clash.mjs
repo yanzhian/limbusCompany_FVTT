@@ -5099,6 +5099,11 @@ export class ClashManager {
       onWallHit: (a) => ClashManager._wallSeismicBlast(a, { attacker: atkActor, bucket: _actMsgs2 }),
     });
 
+    // 攻击容量得在还原临时改动**之前**取——[攻击前] 的 weightAdj 写在 item 上，
+    // _restoreAllItemMods 一跑就被还原了，再读就永远是宣言时的旧值，
+    // 容量扩散会因此判不出来（与 resolveClash 里的 effectiveInitFlags 同理）。
+    const atkWeightCur2 = atkItem2?.system?.weight ?? initFlags.weight ?? 1;
+
     // [攻击后]：必须在建卡之前跑完，详细信息才收得全（与拼点对抗卡同理）
     await ClashManager._applyActivitiesAndEquip(atkItem2, "攻击后", atkCtx2);
     await ClashManager._restoreAllItemMods(atkItem2);
@@ -5111,13 +5116,14 @@ export class ClashManager {
       actMsgs: _actMsgs2, takeEffects: _takeEffectRows2,
       scoreRows: { atkLv, defLv, roll: finalRollTotal, lvBonus, mod: atkDiceMod },
       atkActor, defActor: baseActor, item: atkItem2,
-      finalDamage, calcNotes, initFlags,
-      weightSpread: (initFlags.weight ?? 1) >= 2 ? {
+      finalDamage, calcNotes,
+      initFlags: { ...initFlags, weight: atkWeightCur2 },
+      weightSpread: atkWeightCur2 >= 2 ? {
         attackerId: atkActor?.id     ?? "",
         rollTotal:  initFlags.rollTotal ?? 0,
         category:   initFlags.category  ?? "",
         sinType:    initFlags.sinType   ?? "",
-        weight:     initFlags.weight    ?? 1,
+        weight:     atkWeightCur2,
         itemId:     initFlags.itemId    ?? "",
         itemName:   initFlags.itemName  ?? "",
         itemImg:    initFlags.itemImg   ?? "",
