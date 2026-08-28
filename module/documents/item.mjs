@@ -199,8 +199,9 @@ export class SkillData extends foundry.abstract.TypeDataModel {
         // 侵蚀形态可以单独开【无差别攻击】（null = 沿用觉醒形态的设置）
         indiscriminate: new fields.BooleanField({ required: false, nullable: true, initial: null }),
         // 侵蚀形态可以单独设扩散方式 / 范围（null = 沿用觉醒形态的设置）
-        spreadMode:  new fields.StringField({ required: false, nullable: true, initial: null,
-          choices: [null, "chain", "spray"] }),
+        // 不给 choices：这里合法值是 null / "chain" / "spray"，而 choices 数组里混 null
+        // 会让校验把 null 判成非法，整条 corrode 更新被丢掉（症状：怎么改都存不进去）
+        spreadMode:  new fields.StringField({ required: false, nullable: true, initial: null }),
         spreadRange: new fields.NumberField({ required: false, nullable: true, integer: true,
           min: 1, max: 6, initial: null }),
         weight:      new fields.NumberField({ required: false, nullable: true, integer: true, min: 0, initial: null }),
