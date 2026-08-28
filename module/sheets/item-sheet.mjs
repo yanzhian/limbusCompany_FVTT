@@ -2514,7 +2514,7 @@ function _buffLabelMap() {
 function _buildTriggerOpts(selected) {
   const groups = [
     { label: "── 使用 ──",  values: ["使用时", "攻击前", "攻击时", "攻击后",
-                                       "拼点时", "拼点成功", "拼点失败",
+                                       "拼点时", "拼点胜利", "拼点失败",
                                        "命中时", "暴击命中时"] },
     { label: "── 通用 ──",  values: ["回合开始时", "回合结束时", "受到伤害时"] },
     { label: "── 反应 ──",  values: ["反应"] },

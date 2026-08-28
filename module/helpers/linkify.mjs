@@ -15,7 +15,7 @@
  * 那样会把属性值当成"物品名"误替换，破坏原有 HTML 结构。
  */
 
-const TRIGGER_COLORS = { "激活": "blue", "拼点成功": "orange", "拼点失败": "red" };
+const TRIGGER_COLORS = { "激活": "blue", "拼点胜利": "orange", "拼点失败": "red" };
 
 /**
  * @param {string} raw  原始 HTML（通常来自 ProseMirror 富文本字段）

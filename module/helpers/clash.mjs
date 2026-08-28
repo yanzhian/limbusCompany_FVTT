@@ -1386,7 +1386,9 @@ export class ClashManager {
     const firedActs = [];
 
     for (const act of acts) {
-      if (!act?.trigger || act.trigger !== trigger) continue;
+      // 兼容：旧数据里这个触发时机叫「拼点成功」，现统一为「拼点胜利」
+      const actTrigger = act?.trigger === "拼点成功" ? "拼点胜利" : act?.trigger;
+      if (!actTrigger || actTrigger !== trigger) continue;
       const _msgMark = msgs.length;
 
       // ── 次数限制（perTurn / perEncounter）────────────────────────────────
@@ -3712,7 +3714,7 @@ export class ClashManager {
     // 与拼点对抗卡同理。
     if (defCategory === "counter") {
       // 反击：守方拼点胜/主动命中攻方，攻方拼点败/被命中
-      await ClashManager._applyActivitiesAndEquip(defItem,  "拼点成功", defCtx);
+      await ClashManager._applyActivitiesAndEquip(defItem,  "拼点胜利", defCtx);
       await ClashManager._applyActivitiesAndEquip(atkItem,  "拼点失败", atkCtx);
       // 双方互相命中（攻方命中守方 + 守方反击命中攻方）
       await ClashManager._applyActivitiesAndEquip(atkItem,  "命中时", atkCtx);
@@ -3807,14 +3809,14 @@ export class ClashManager {
       await ClashManager._reduceBuffStacks(resolution.winner, "breathing");
     }
 
-    // ── [拼点成功/失败] / [命中时] / [暴击命中时] / [受到伤害时] ────────
+    // ── [拼点胜利/失败] / [命中时] / [暴击命中时] / [受到伤害时] ────────
     const { atkWins, dodgeWin, breatheCrit } = resolution;
     // 【不可摧毁】反击暂存，稍后在 _sendResolveMsg 后触发
     let _unbreakableCounterArgs = null;
     {
       if (atkWins) {
         // 攻击方拼点胜
-        await ClashManager._applyActivitiesAndEquip(atkItem, "拼点成功", atkCtx);
+        await ClashManager._applyActivitiesAndEquip(atkItem, "拼点胜利", atkCtx);
         await ClashManager._applyActivitiesAndEquip(defItem,  "拼点失败", defCtx);
         // 【不可摧毁】：防守方拼点失败后自动反击攻击方（延迟到 _sendResolveMsg 后）
         if (defItem?.system?.diceType === "unbreakable") {
@@ -3832,7 +3834,7 @@ export class ClashManager {
       } else {
         // 防守方拼点胜（攻击方落败）
         await ClashManager._applyActivitiesAndEquip(atkItem, "拼点失败", atkCtx);
-        await ClashManager._applyActivitiesAndEquip(defItem,  "拼点成功", defCtx);
+        await ClashManager._applyActivitiesAndEquip(defItem,  "拼点胜利", defCtx);
         // 【不可摧毁】：攻击方拼点失败后自动反击防守方（延迟到 _sendResolveMsg 后）
         if (atkItem?.system?.diceType === "unbreakable") {
           _unbreakableCounterArgs = [atkItem, atkActor, defActor, atkCtx];
@@ -3857,7 +3859,7 @@ export class ClashManager {
           if (typeof handler?.onClashWin !== "function") continue;
           const line = await handler.onClashWin(winner, loser, buff);
           if (typeof line === "string" && line) {
-            _actMsgs.push({ trigger: "拼点成功", itemName: handler.label ?? buff.name ?? "",
+            _actMsgs.push({ trigger: "拼点胜利", itemName: handler.label ?? buff.name ?? "",
                             ownerName: winner.name, msgs: [line] });
           }
         }
@@ -3923,7 +3925,7 @@ export class ClashManager {
    * 【不可摧毁】是个例外：它拼点失败照样能给对面造成伤害，所以只要它的币被
    * 打坏一枚，连击就当场结束——先由胜方结算伤害，随后再由【不可摧毁】那一方
    * 结算自己的反击伤害（见 _computeUnbreakableCounter）。连击途中只重新结算 [拼点时]（连带【流血】），其余触发时机
-   * （命中时 / 拼点成功失败 / 攻击后 等）仍然只在最后结算一次，不会滚雪球。
+   * （命中时 / 拼点胜利失败 / 攻击后 等）仍然只在最后结算一次，不会滚雪球。
    *
    * DiceSoNice 只在第一次交锋播放；胜负决出后，再单独为胜方演一次
    * 【伤害计算】——点数就是决出胜负那一次的点数，不重掷，只是把用来结算
@@ -4170,7 +4172,7 @@ export class ClashManager {
     const totalMult    = critMult * physMult * sinMult;
     const adjustedBase = Math.max(0, Math.round(winScore * critMult) + fragile - guard);
 
-    // 闪避：拼点成功或平局 → 躲开，无伤害
+    // 闪避：拼点胜利或平局 → 躲开，无伤害
     const dodgeWin  = defCategory === "dodge" && !atkWins;
 
     let finalDamage;
@@ -4178,7 +4180,7 @@ export class ClashManager {
       finalDamage = 0;
     } else if (defCategory === "clashBlock") {
       if (!atkWins) {
-        // 强化防御拼点成功：完全格挡，无伤害
+        // 强化防御拼点胜利：完全格挡，无伤害
         finalDamage = 0;
       } else {
         // 强化防御拼点失败：伤害减去格挡骰数
@@ -4494,7 +4496,7 @@ export class ClashManager {
 
   /** 卡面上的触发时机顺序，详细信息按它排序 */
   static TRIGGER_ORDER = [
-    "攻击前", "攻击时", "拼点时", "拼点成功", "拼点失败",
+    "攻击前", "攻击时", "拼点时", "拼点胜利", "拼点失败",
     "命中时", "暴击命中时", "攻击后",
   ];
 
