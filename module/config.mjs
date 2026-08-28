@@ -220,7 +220,7 @@ LIMBUSCOMPANY.BUFF_TYPES = {
   lightCard:       "光札",
   // 庄严哀悼（特殊子弹 + 装填标记）
   mourningAmmo:    "生蝶·亡蝶",
-  mourningReload:  "重新装填·生蝶·亡蝶",
+  mourningReload:  "再次装填·生蝶·亡蝶",
 };
 
 /**
