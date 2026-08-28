@@ -609,14 +609,12 @@ export class ClashManager {
   }
 
   /**
-   * [受到伤害时] 的统一派发：受伤者的技能 + 装备格物品的 Activity，
-   * 外加自定义 BUFF 的 onTakeDamage 钩子（返回字符串则并入本次结算的活动消息）。
+   * [受到伤害时]：只派发受伤者的技能 + 装备格物品的 Activity。
+   * BUFF 的 onTakeDamage 钩子归 _applyAndSendTake 管（扣血那一刻触发一次）。
+   *
    * @param {Item}  item     受伤方本次用的技能（可能为 null）
    * @param {Actor} actor    受伤的人
-   * @param {Actor} attacker 打伤他的人
-   */
-  /**
-   * [受到伤害时]：技能 + 装备格物品的 Activity，以及各 BUFF 的 onTakeDamage 钩子。
+   * @param {Actor} attacker 打伤他的人（当前仅保留签名，钩子已移走）
    *
    * @param {object[]} [effectRows] 给了就把结果收进这里（`{k,v}` 触发行），
    *   由承受结算卡以「效果」行呈现——这些效果本就跟着伤害走，
@@ -638,23 +636,10 @@ export class ClashManager {
       }
     }
 
-    for (const buff of foundry.utils.deepClone(actor?.system?.buffs ?? [])) {
-      const handler = resolveBuffHandler(buff);
-      if (typeof handler?.onTakeDamage !== "function") continue;
-      const note = await handler.onTakeDamage(actor, buff, {
-        attacker,
-        addBuff:   (type, i, st, when) => ClashManager._addBuff(actor, type, i, st, when),
-        addBuffTo: (tgt, type, i, st, when) => ClashManager._addBuff(tgt, type, i, st, when),
-        getBuff:   (type) => ClashManager._getBuff(actor, type),
-      });
-      if (typeof note !== "string" || !note) continue;
-      const src = handler.label ?? buff.name ?? buff.type;
-      if (effectRows) {
-        effectRows.push({ k: "效果", v: `${note} <span style="color:#6A5A48;">· ${src}</span>` });
-      } else {
-        (ctx?._actMsgs ?? []).push({ trigger: "受到伤害时", itemName: src, msgs: [note] });
-      }
-    }
+    // BUFF 的 onTakeDamage **不在这里跑**：真正扣血的 _applyAndSendTake 里已经有
+    // 一份（见「自定义 BUFF onTakeDamage 钩子」那段）。两边都跑的话，一次命中
+    // 会触发两遍——【蝶】就会一击扣掉 2 层/2 级。
+    // 扣血那一份还能拿到实际伤害与最终 HP，是更准的落点，所以保留那边。
   }
 
   /**
