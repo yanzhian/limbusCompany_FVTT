@@ -4148,6 +4148,8 @@ body.game .limbuscompany.app img {
 }
 /* --rc 没定义时（rarity 为空）整条渐变会失效，但保险起见直接不画 */
 .limbuscompany .cg-item-tile.rarity-::before { display: none; }
+/* 设置里关掉【展示稀有度】：body 挂 .limbus-no-rarity，一条规则全场熄灯 */
+body.limbus-no-rarity .limbuscompany .cg-item-tile::before { display: none; }
 /* 图标/名字/角标都得压在光晕之上 */
 .limbuscompany .cg-item-tile > * { position: relative; z-index: 1; }
 

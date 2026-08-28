@@ -221,6 +221,9 @@ Hooks.once("setup", () => {
 Hooks.once("ready", () => {
   console.log("limbusCompany_FVTT | 系统已就绪。");
 
+  // 【展示稀有度】：开关状态落到 body 上
+  _applyRarityDisplay(game.settings.get("limbusCompany_FVTT", "showRarity"));
+
   // 显示全局罪孽资源 HUD
   SinResourceHUD.create();
 
@@ -1132,6 +1135,19 @@ function _registerSettings() {
     default: true,
   });
 
+  // 稀有度光晕：纯装饰，GM 可以整场关掉（不想用稀有度、或不想让玩家一眼看穿箱子里的货色）
+  game.settings.register("limbusCompany_FVTT", "showRarity", {
+    name:    "展示稀有度",
+    hint:    "在背包 / 货架 / 仓库 / 战利品箱的物品格上，按稀有度画一层中心光晕"
+           + "（平装绿 → 精良蓝 → 史诗紫 → 艺术金 → 神话红，越稀有越亮）。"
+           + "关闭后只是不画光晕，物品卡上的稀有度仍可正常设置。由 GM 设定，对全场生效。",
+    scope:   "world",
+    config:  true,
+    type:    Boolean,
+    default: true,
+    onChange: (v) => _applyRarityDisplay(v),
+  });
+
   game.settings.register("limbusCompany_FVTT", "clashTotalFxSpeed", {
     name:    "拼点 TOTAL 演出节奏",
     hint:    "缩放演出各阶段的时长（不含骰子动画本身——那取决于 Dice So Nice 的动画速度设置）。",
@@ -1145,6 +1161,14 @@ function _registerSettings() {
     },
     default: "standard",
   });
+}
+
+/**
+ * 【展示稀有度】开关落到 <body> 上：关掉时挂 .limbus-no-rarity，
+ * CSS 那边一条规则把所有格子的光晕 display:none，不用重渲染任何面板。
+ */
+function _applyRarityDisplay(enabled) {
+  document.body?.classList.toggle("limbus-no-rarity", !enabled);
 }
 
 /**
