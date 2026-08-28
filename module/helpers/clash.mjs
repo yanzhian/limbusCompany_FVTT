@@ -5571,8 +5571,12 @@ export class ClashManager {
       const tgtActor = tgtTok.actor;
 
       // ① 瞬移到目标身边（风线由 approach 负责）
-      // 乱射：绕到目标背后，一发一发换位置；链式：正面扑上去
-      await ClashKnockback.approach(atkTok, tgtTok, { behind: mode === "spray" });
+      // 乱射：绕到目标背后，一发一发换位置；链式：正面扑上去。
+      // 远程武器不挪窝——跟出手前的站位同一条规矩（见 resolveClash 的
+      // weaponRangeOf 判断），否则拿枪的会一发一发瞬移到每个目标脸上。
+      if (!ClashKnockback.weaponRangeOf(atkActor).ranged) {
+        await ClashKnockback.approach(atkTok, tgtTok, { behind: mode === "spray" });
+      }
       await new Promise(r => setTimeout(r, ClashManager.SPREAD_STEP_MS));
 
       // ② 伤害计算（乱射每发重投，链式沿用拼点骰点）

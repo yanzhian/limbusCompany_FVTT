@@ -198,6 +198,11 @@ export class SkillData extends foundry.abstract.TypeDataModel {
         negativeDice: new fields.BooleanField({ required: false, nullable: true, initial: null }),
         // 侵蚀形态可以单独开【无差别攻击】（null = 沿用觉醒形态的设置）
         indiscriminate: new fields.BooleanField({ required: false, nullable: true, initial: null }),
+        // 侵蚀形态可以单独设扩散方式 / 范围（null = 沿用觉醒形态的设置）
+        spreadMode:  new fields.StringField({ required: false, nullable: true, initial: null,
+          choices: [null, "chain", "spray"] }),
+        spreadRange: new fields.NumberField({ required: false, nullable: true, integer: true,
+          min: 1, max: 6, initial: null }),
         weight:      new fields.NumberField({ required: false, nullable: true, integer: true, min: 0, initial: null }),
         sanityCost:  new fields.NumberField({ required: false, nullable: true, integer: true, min: 0, initial: null }),
         effectDesc:  new fields.HTMLField({ required: false, initial: "" }),
@@ -293,7 +298,8 @@ export class SkillData extends foundry.abstract.TypeDataModel {
     // 没填的字段照旧沿用【觉醒】的数值。
     if (this.type === "ego" && this.corrode?.initialized && this._ownerInPanic) {
       const c = this.corrode;
-      for (const key of ["category", "baseValue", "diceCount", "diceFaces", "weight", "sanityCost", "negativeDice", "indiscriminate"]) {
+      for (const key of ["category", "baseValue", "diceCount", "diceFaces", "weight", "sanityCost",
+                         "negativeDice", "indiscriminate", "spreadMode", "spreadRange"]) {
         if (c[key] !== null && c[key] !== undefined) this[key] = c[key];
       }
       if (c.effectDesc) this.effectDesc = c.effectDesc;

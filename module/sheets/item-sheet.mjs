@@ -226,10 +226,13 @@ export class LimbusItemSheet extends ItemSheet {
       // 攻击容量 >= 2 时才给扩散方式 / 范围（1 格 = 5ft，半径 N → N×5+2.5 ft）。
       // 基础容量只有 1、靠效果临时增容的技能也可能需要指定方式，因此只要已经
       // 设过非默认值（广域乱射 / 范围 >1），这一栏就一直显示出来可编辑。
-      const spreadSet = sys.spreadMode === "spray" || (sys.spreadRange ?? 1) > 1;
+      // 扩散方式/范围与其它字段一样分形态：侵蚀填了就用侵蚀的，没填沿用觉醒的
+      context.formSpreadMode  = pick("spreadMode")  ?? "chain";
+      context.formSpreadRange = pick("spreadRange") ?? 1;
+      const spreadSet = context.formSpreadMode === "spray" || context.formSpreadRange > 1;
       context.showSpread      = (context.form.weight ?? 0) >= 2 || spreadSet;
-      context.spreadModeLabel = sys.spreadMode === "spray" ? "广域乱射" : "链式扩散";
-      context.spreadFt        = `${((sys.spreadRange ?? 1) * 5 + 2.5).toFixed(1)}ft`;
+      context.spreadModeLabel = context.formSpreadMode === "spray" ? "广域乱射" : "链式扩散";
+      context.spreadFt        = `${(context.formSpreadRange * 5 + 2.5).toFixed(1)}ft`;
 
       // 图标边框：与 HUD / 技能槽同一套（罪孽+等级空心框，EGO 为圆环）
       context.skillFrame = ClashManager._skillFrameIcon(item);
@@ -519,17 +522,30 @@ export class LimbusItemSheet extends ItemSheet {
     html.find(".ego-form-toggle").on("click", this._onEgoFormToggle.bind(this));
 
     // 攻击容量输入时即时切换扩散设置的显隐（不等重渲染）
+    // 扩散设置写哪一套：EGO 在侵蚀形态下写 system.corrode.*，其余写 system.*
+    // （不加这一层的话，改侵蚀的扩散方式会把觉醒的也一起改掉）
+    const _spreadPath = (key) => {
+      const corrode = this.item.type === "ego" && this.item.system?.egoForm === "corrode";
+      return corrode ? `system.corrode.${key}` : `system.${key}`;
+    };
+    const _curSpread = (key, dflt) => {
+      const sys = this.item.system ?? {};
+      const corrode = this.item.type === "ego" && sys.egoForm === "corrode";
+      const cv = corrode ? sys.corrode?.[key] : null;
+      return (cv !== null && cv !== undefined) ? cv : (sys[key] ?? dflt);
+    };
+
     html.find(".weight-input[name$='weight']").on("input", (ev) => {
       const n = parseInt(ev.currentTarget.value) || 0;
-      const set = this.item.system?.spreadMode === "spray"
-               || (this.item.system?.spreadRange ?? 1) > 1;
+      const set = _curSpread("spreadMode", "chain") === "spray"
+               || _curSpread("spreadRange", 1) > 1;
       html.find(".spread-box").toggleClass("on", n >= 2 || set);
     });
     // 扩散方式 / 范围：不走表单提交，直接写回物品（避免与其它提交逻辑互相覆盖）
     html.find(".spread-mode-sel").on("change", async (ev) => {
       ev.stopPropagation();
       const v = ev.currentTarget.value === "spray" ? "spray" : "chain";
-      await this.item.update({ "system.spreadMode": v });
+      await this.item.update({ [_spreadPath("spreadMode")]: v });
     });
     html.find(".spread-range-input").on("input", (ev) => {
       const n = Math.min(6, Math.max(1, parseInt(ev.currentTarget.value) || 1));
@@ -539,7 +555,7 @@ export class LimbusItemSheet extends ItemSheet {
       ev.stopPropagation();
       const n = Math.min(6, Math.max(1, parseInt(ev.currentTarget.value) || 1));
       ev.currentTarget.value = n;                      // 空值/越界时回填合法值
-      await this.item.update({ "system.spreadRange": n });
+      await this.item.update({ [_spreadPath("spreadRange")]: n });
     });
 
     // ── 图标点击：锁定时查看插图，解锁时由 Foundry data-edit 处理 ─────────
