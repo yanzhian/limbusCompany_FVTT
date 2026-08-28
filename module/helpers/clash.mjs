@@ -1875,7 +1875,12 @@ export class ClashManager {
       }
 
       if (costMultipliers.length) {
-        perStackMultiplier = Math.min(precondMultiplier, ...costMultipliers);
+        // precondMultiplier 没有「每」前置时恒为 1，直接参与 min 会把消耗算出的
+        // 倍数一律压回 1（「每消耗 1 层 → 容量 +1」永远只 +1）。
+        // 只有真的写了「每」前置时，两个倍数才取小的那个。
+        perStackMultiplier = perMultipliers.length
+          ? Math.min(precondMultiplier, ...costMultipliers)
+          : Math.min(...costMultipliers);
       }
 
       // ── 效果（effects）────────────────────────────────────────────────
