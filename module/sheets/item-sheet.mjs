@@ -230,7 +230,10 @@ export class LimbusItemSheet extends ItemSheet {
       context.formSpreadMode  = pick("spreadMode")  ?? "chain";
       context.formSpreadRange = pick("spreadRange") ?? 1;
       const spreadSet = context.formSpreadMode === "spray" || context.formSpreadRange > 1;
-      context.showSpread      = (context.form.weight ?? 0) >= 2 || spreadSet;
+      // E.G.O 一律显示：两套形态各有各的扩散方式，而侵蚀常常是"容量 1 + 链式"
+      // ——只按 weight>=2 || 非默认值 判断的话，一旦把侵蚀设成【链式扩散】(默认值)
+      // 这一栏就消失了，再也改不回来。
+      context.showSpread      = (context.form.weight ?? 0) >= 2 || spreadSet || context.isEgo;
       context.spreadModeLabel = context.formSpreadMode === "spray" ? "广域乱射" : "链式扩散";
       context.spreadFt        = `${(context.formSpreadRange * 5 + 2.5).toFixed(1)}ft`;
 
