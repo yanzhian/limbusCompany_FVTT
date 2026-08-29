@@ -50,10 +50,18 @@ export class EquipmentData extends foundry.abstract.TypeDataModel {
   static defineSchema() {
     const fields = foundry.data.fields;
     return {
-      // 稀有度：平装/精良/史诗/艺术/神话。**只管随机池权重与卡面配色**，
-      // 与价格（cost）无关——定价永远只看 cost 那一栏。
-      rarity: new fields.StringField({ required: true, initial: "common",
-        choices: ["common", "fine", "epic", "artistic", "mythic"] }),
+      // 形象（纸娃娃）摆放：这件装备贴在角色立绘上的位置/角度/大小/层级。
+      // 存在**装备自己身上**而不是角色上——脱下来再穿回去要保留上次调好的样子，
+      // 换个角色穿也一样（同一件衣服的挂法是衣服的属性，不是人的）。
+      // x/y 是相对立绘框的百分比，rot 为角度，scale 为倍率，z 为叠放层级。
+      doll: new fields.SchemaField({
+        x:     new fields.NumberField({ required: true, initial: 50 }),
+        y:     new fields.NumberField({ required: true, initial: 50 }),
+        scale: new fields.NumberField({ required: true, initial: 1, min: 0.05, max: 8 }),
+        rot:   new fields.NumberField({ required: true, initial: 0 }),
+        z:     new fields.NumberField({ required: true, integer: true, initial: 0 }),
+        hidden: new fields.BooleanField({ required: true, initial: false }),
+      }),
 
       // 子类型：上装 / 下装 / 武器 / 饰品
       subtype:  new fields.StringField({ required: true, initial: "weapon",

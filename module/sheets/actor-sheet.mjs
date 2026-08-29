@@ -148,6 +148,34 @@ export class LimbusActorSheet extends ActorSheet {
       context.equipmentGrid.push({ slotIndex: i, item, itemId: id });
     }
 
+    // ── 形象（纸娃娃）视图 ────────────────────────────────────────────────
+    // 与九宫格共用左栏，同一份 equipment 槽位数据的两种画法。
+    // 摆放参数存在装备自己身上（EquipmentData.doll），脱下再穿会保留。
+    context.dollView = this._dollView ?? false;
+    context.dollEdit = this._dollEdit ?? false;
+    context.dollMode = this._dollMode ?? "move";
+    context.dollModeLabel = { move: "移动", rotate: "旋转", scale: "缩放" }[context.dollMode] ?? "移动";
+    if (context.dollView) {
+      context.dollLayers = context.equipmentGrid
+        .filter(e => e.item && e.item.type === "equipment")
+        .map(e => {
+          const d = e.item.system?.doll ?? {};
+          return {
+            itemId: e.item.id,
+            name:   e.item.name,
+            img:    e.item.img,
+            slot:   e.slotIndex,
+            x: d.x ?? 50, y: d.y ?? 50,
+            scale: d.scale ?? 1, rot: d.rot ?? 0,
+            // 没单独设过层级就按槽位顺序叠，先装的在下面
+            z: (d.z ?? 0) || e.slotIndex,
+            hidden: !!d.hidden,
+            selected: this._dollSel === e.item.id,
+          };
+        })
+        .sort((a, b) => a.z - b.z);
+    }
+
     // ── 技能槽 ────────────────────────────────────────────────────────────
     const basicIds = system.skills?.basic ?? [null, null, null, null, null, null];
     context.basicSkills = basicIds.map((id, idx) => {
@@ -710,6 +738,19 @@ export class LimbusActorSheet extends ActorSheet {
       const next  = cur === index ? index - 1 : index;
       await this.actor.setPanicCounter?.(side, next);
     });
+
+    // ── 物品 Tab：左栏 九宫格 ↔ 形象 ────────────────────────────────────
+    html.find(".doll-view-toggle").on("click", () => {
+      this._dollView = !(this._dollView ?? false);
+      if (!this._dollView) this._dollEdit = false;
+      this.render(false);
+    });
+    html.find(".doll-edit-toggle").on("click", () => {
+      this._dollEdit = !(this._dollEdit ?? false);
+      this._dollMode = "move";
+      this.render(false);
+    });
+    this._bindDollEditor(html);
 
     // ── 物品 Tab：网格/列表视图切换 ──────────────────────────────────────
     html.find(".item-view-toggle").on("click", () => {
@@ -1713,6 +1754,118 @@ export class LimbusActorSheet extends ActorSheet {
 
     // 【大招就绪】星芒：槽位 DOM 是复用的，每次重绘都先清后挂
     refreshReadySlots(html, this.actor);
+  }
+
+  /** @override 关卡时摘掉形象编辑挂在 window 上的键盘监听 */
+  async close(options = {}) {
+    if (this._dollKeyHandler) {
+      window.removeEventListener("keydown", this._dollKeyHandler);
+      this._dollKeyHandler = null;
+    }
+    return super.close(options);
+  }
+
+  /**
+   * 形象编辑：拖动摆放装备贴图。
+   *
+   * 三种模式共用一次拖动——按下选中图层，移动时按当前模式改一个参数：
+   *   移动(move)   → 改 x/y（百分比，跟着立绘框缩放走）
+   *   旋转(rotate) → 改 rot（按指针绕图层中心的夹角，所见即所得）
+   *   缩放(scale)  → 改 scale（上下拖，往上变大）
+   * R / E 切换到旋转 / 缩放，再按一次回到移动。
+   * 松手才写库（render:false，避免重绘打断连续操作）。
+   */
+  _bindDollEditor(html) {
+    const stage = html.find(".doll-stage")[0];
+    if (!stage || !this._dollEdit) return;
+
+    const applyStyle = (el, st) => {
+      el.style.left = `${st.x}%`;
+      el.style.top  = `${st.y}%`;
+      el.style.transform = `translate(-50%,-50%) rotate(${st.rot}deg) scale(${st.scale})`;
+    };
+
+    let drag = null;
+
+    const onMove = (ev) => {
+      if (!drag) return;
+      ev.preventDefault();
+      const mode = this._dollMode ?? "move";
+      if (mode === "move") {
+        drag.st.x = drag.base.x + ((ev.clientX - drag.startX) / drag.rect.width)  * 100;
+        drag.st.y = drag.base.y + ((ev.clientY - drag.startY) / drag.rect.height) * 100;
+      } else if (mode === "rotate") {
+        const cx = drag.rect.left + (drag.base.x / 100) * drag.rect.width;
+        const cy = drag.rect.top  + (drag.base.y / 100) * drag.rect.height;
+        const a0 = Math.atan2(drag.startY - cy, drag.startX - cx);
+        const a1 = Math.atan2(ev.clientY  - cy, ev.clientX  - cx);
+        drag.st.rot = Math.round(drag.base.rot + (a1 - a0) * 180 / Math.PI);
+      } else {
+        // 往上拖变大：每 120px 一倍
+        const k = 1 + (drag.startY - ev.clientY) / 120;
+        drag.st.scale = Math.min(8, Math.max(0.05, Math.round(drag.base.scale * k * 100) / 100));
+      }
+      applyStyle(drag.el, drag.st);
+    };
+
+    const onUp = async () => {
+      if (!drag) return;
+      const { item, st } = drag;
+      drag = null;
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      await item?.update({
+        "system.doll.x":     Math.round(st.x * 100) / 100,
+        "system.doll.y":     Math.round(st.y * 100) / 100,
+        "system.doll.rot":   st.rot,
+        "system.doll.scale": st.scale,
+      }, { render: false });
+    };
+
+    html.find(".doll-layer").on("pointerdown", (ev) => {
+      ev.preventDefault();
+      const el   = ev.currentTarget;
+      const item = this.actor.items.get(el.dataset.itemId ?? "");
+      if (!item) return;
+      this._dollSel = item.id;
+      html.find(".doll-layer").removeClass("doll-sel");
+      el.classList.add("doll-sel");
+      const d = item.system?.doll ?? {};
+      const base = { x: d.x ?? 50, y: d.y ?? 50, rot: d.rot ?? 0, scale: d.scale ?? 1 };
+      drag = {
+        el, item, base, st: { ...base },
+        rect: stage.getBoundingClientRect(),
+        startX: ev.clientX, startY: ev.clientY,
+      };
+      window.addEventListener("pointermove", onMove);
+      window.addEventListener("pointerup", onUp);
+    });
+
+    // R / E 切换模式：只在编辑模式下、且焦点不在输入框里时响应
+    if (this._dollKeyHandler) window.removeEventListener("keydown", this._dollKeyHandler);
+    this._dollKeyHandler = (ev) => {
+      if (!this._dollEdit || !this.rendered) return;
+      const tag = document.activeElement?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || document.activeElement?.isContentEditable) return;
+      const k = ev.key?.toLowerCase();
+      if (k !== "r" && k !== "e") return;
+      ev.preventDefault();
+      const want = k === "r" ? "rotate" : "scale";
+      this._dollMode = (this._dollMode === want) ? "move" : want;
+      const lbl = { move: "移动", rotate: "旋转", scale: "缩放" }[this._dollMode];
+      this.element?.find(".doll-hint b").first().text(lbl);
+    };
+    window.addEventListener("keydown", this._dollKeyHandler);
+
+    // 重置选中的那件
+    html.find(".doll-reset").on("click", async () => {
+      const item = this.actor.items.get(this._dollSel ?? "");
+      if (!item) return void ui.notifications.info("先点一下要重置的部件。");
+      await item.update({
+        "system.doll.x": 50, "system.doll.y": 50,
+        "system.doll.rot": 0, "system.doll.scale": 1,
+      });
+    });
   }
 
   // 从 pool 中取下一张牌补充到 slots[5]

@@ -1,9 +1,28 @@
 {{!-- tab-items.hbs — 物品 Tab：九宫格装备栏 + 物品列表 --}}
 <div class="tab-inner tab-items-inner">
 
-  {{!-- ── 左侧：九宫格装备栏 ──────────────────────────────────────── --}}
+  {{!-- ── 左侧：九宫格装备栏 / 形象（两种视图切换） ──────────────── --}}
   <div class="equip-panel">
-    <div class="equip-panel-label">装备栏</div>
+    <div class="equip-panel-label">{{#if dollView}}形象{{else}}装备栏{{/if}}</div>
+
+    {{#if dollView}}
+      {{!-- 形象：立绘 + 各装备贴图，摆放参数存在装备自己身上 --}}
+      <div class="doll-stage{{#if dollEdit}} doll-editing{{/if}}">
+        <img src="{{actor.img}}" class="doll-portrait" alt="{{actor.name}}">
+        {{#each dollLayers}}
+          <img src="{{img}}" class="doll-layer{{#if selected}} doll-sel{{/if}}{{#if hidden}} doll-hidden{{/if}}"
+               data-item-id="{{itemId}}" title="{{name}}"
+               style="left:{{x}}%;top:{{y}}%;z-index:{{z}};
+                      transform:translate(-50%,-50%) rotate({{rot}}deg) scale({{scale}});">
+        {{/each}}
+      </div>
+      {{#if dollEdit}}
+        <div class="doll-hint">
+          当前：<b>{{dollModeLabel}}</b>　·　拖动＝生效　·　<b>R</b> 旋转　<b>E</b> 缩放（再按一次回到移动）
+          <span class="doll-reset" title="把选中的这件恢复默认摆放">重置</span>
+        </div>
+      {{/if}}
+    {{else}}
     <div class="equip-grid">
       {{#each equipmentGrid}}
         <div class="equip-slot {{#if item}}equip-slot-filled{{else}}equip-slot-empty{{/if}}"
@@ -21,6 +40,19 @@
           {{/if}}
         </div>
       {{/each}}
+    </div>
+    {{/if}}
+
+    {{!-- 视图切换：九宫格 ↔ 形象；形象下再多一个「编辑形象」开关 --}}
+    <div class="equip-panel-foot">
+      <button type="button" class="doll-view-toggle toolbar-btn">
+        {{#if dollView}}装备栏{{else}}形象{{/if}}
+      </button>
+      {{#if dollView}}
+        <button type="button" class="doll-edit-toggle toolbar-btn{{#if dollEdit}} active{{/if}}">
+          {{#if dollEdit}}完成{{else}}编辑形象{{/if}}
+        </button>
+      {{/if}}
     </div>
   </div>
 
