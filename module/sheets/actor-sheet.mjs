@@ -156,32 +156,42 @@ export class LimbusActorSheet extends ActorSheet {
     context.dollMode = this._dollMode ?? "move";
     context.dollModeLabel = { move: "移动", rotate: "旋转", scale: "缩放" }[context.dollMode] ?? "移动";
     if (context.dollView) {
+      const DEF = CONFIG.LIMBUSCOMPANY?.DOLL_DEFAULTS ?? {};
       context.dollLayers = context.equipmentGrid
         .filter(e => e.item && e.item.type === "equipment")
         .map(e => {
-          const d = e.item.system?.doll ?? {};
+          const d   = e.item.system?.doll ?? {};
+          // 没亲手摆过就用按子类型的默认位（config.mjs 的 DOLL_DEFAULTS）
+          const def = DEF[e.item.system?.subtype ?? ""] ?? {};
+          const placed = !!d.placed;
           return {
             itemId: e.item.id,
             name:   e.item.name,
             img:    e.item.img,
             slot:   e.slotIndex,
-            x: d.x ?? 50, y: d.y ?? 50,
-            scale: d.scale ?? 1, rot: d.rot ?? 0,
-            // 没单独设过层级就按槽位顺序叠，先装的在下面
-            z: (d.z ?? 0) || e.slotIndex,
+            x:     placed ? (d.x ?? 50) : (def.x ?? 50),
+            y:     placed ? (d.y ?? 50) : (def.y ?? 50),
+            scale: placed ? (d.scale ?? 1) : (def.scale ?? 1),
+            rot:   placed ? (d.rot ?? 0)   : (def.rot ?? 0),
+            w:     def.w ?? 42,
+            // 没单独设过层级就用默认层级，再退回槽位顺序（先装的在下面）
+            z: (d.z ?? 0) || def.z || e.slotIndex,
             hidden: !!d.hidden,
             selected: this._dollSel === e.item.id,
           };
         })
         .sort((a, b) => a.z - b.z);
       // 头：单独一张图，永远压在所有装备之上（z 固定给个大数）
-      const h = system.dollHead ?? {};
+      const h    = system.dollHead ?? {};
+      const hDef = DEF.head ?? {};
       context.dollHead = {
         img: h.img ?? "",
-        x: h.x ?? 50, y: h.y ?? 22,
-        scale: h.scale ?? 1, rot: h.rot ?? 0,
+        x: h.x ?? hDef.x ?? 50, y: h.y ?? hDef.y ?? 22,
+        scale: h.scale ?? 1, rot: h.rot ?? 0, w: hDef.w ?? 30,
         selected: this._dollSel === "__head__",
       };
+      // 底图：优先单独设的立绘，其次 actor.img（很多角色这一栏是空的）
+      context.dollBody = system.dollBodyImg || actor.img || "";
     }
 
     // ── 技能槽 ────────────────────────────────────────────────────────────
@@ -1838,6 +1848,7 @@ export class LimbusActorSheet extends ActorSheet {
         await item?.update({
           "system.doll.x": data.x, "system.doll.y": data.y,
           "system.doll.rot": data.rot, "system.doll.scale": data.scale,
+          "system.doll.placed": true,     // 亲手摆过，之后不再套用默认位
         }, { render: false });
       }
     };
@@ -1892,6 +1903,16 @@ export class LimbusActorSheet extends ActorSheet {
       await item.update({ "system.doll.z": nz }, { render: false });
     });
 
+    // 设置 / 更换立绘底图（很多角色的 actor.img 是空的，这里可以单独指一张）
+    html.find(".doll-body-pick").on("click", () => {
+      const cur = this.actor.system?.dollBodyImg || this.actor.img || "";
+      const FP  = foundry.applications?.apps?.FilePicker?.implementation ?? FilePicker;
+      new FP({
+        type: "image", current: cur,
+        callback: (path) => this.actor.update({ "system.dollBodyImg": path }),
+      }).browse(cur);
+    });
+
     // 添加 / 更换头像：单独一张图，永远画在所有装备之上
     html.find(".doll-head-pick").on("click", () => {
       const cur = this.actor.system?.dollHead?.img ?? "";
@@ -1912,9 +1933,11 @@ export class LimbusActorSheet extends ActorSheet {
       }
       const item = this.actor.items.get(this._dollSel ?? "");
       if (!item) return void ui.notifications.info("先点一下要重置的部件。");
+      // 重置＝退回"没摆过"，重新套用该子类型的默认位
       await item.update({
         "system.doll.x": 50, "system.doll.y": 50,
         "system.doll.rot": 0, "system.doll.scale": 1,
+        "system.doll.z": 0, "system.doll.placed": false,
       });
     });
   }
