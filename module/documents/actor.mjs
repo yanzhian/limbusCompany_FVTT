@@ -149,6 +149,17 @@ export class CharacterData extends foundry.abstract.TypeDataModel {
         { required: true, initial: [] }
       ),
 
+      // ── 形象·头部图层 ──────────────────────────────────────────────
+      // 立绘（actor.img）是底图；「头」是单独一张图，永远画在所有装备之上。
+      // 摆放参数与装备的 doll 同构，编辑方式也一样。
+      dollHead: new fields.SchemaField({
+        img:   new fields.StringField({ required: false, initial: "" }),
+        x:     new fields.NumberField({ required: true, initial: 50 }),
+        y:     new fields.NumberField({ required: true, initial: 22 }),
+        scale: new fields.NumberField({ required: true, initial: 1, min: 0.05, max: 8 }),
+        rot:   new fields.NumberField({ required: true, initial: 0 }),
+      }),
+
       // ── 恐慌类型槽位（战斗 Tab 罪孽抗性下方，存嵌入恐慌卡的 itemId） ──
       panicSlots: new fields.SchemaField({
         lowMorale: new fields.StringField({ required: false, initial: "" }),

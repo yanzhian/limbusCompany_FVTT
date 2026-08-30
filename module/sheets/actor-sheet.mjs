@@ -174,6 +174,14 @@ export class LimbusActorSheet extends ActorSheet {
           };
         })
         .sort((a, b) => a.z - b.z);
+      // 头：单独一张图，永远压在所有装备之上（z 固定给个大数）
+      const h = system.dollHead ?? {};
+      context.dollHead = {
+        img: h.img ?? "",
+        x: h.x ?? 50, y: h.y ?? 22,
+        scale: h.scale ?? 1, rot: h.rot ?? 0,
+        selected: this._dollSel === "__head__",
+      };
     }
 
     // ── 技能槽 ────────────────────────────────────────────────────────────
@@ -1810,30 +1818,43 @@ export class LimbusActorSheet extends ActorSheet {
 
     const onUp = async () => {
       if (!drag) return;
-      const { item, st } = drag;
+      const { item, st, isHead } = drag;
       drag = null;
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", onUp);
-      await item?.update({
-        "system.doll.x":     Math.round(st.x * 100) / 100,
-        "system.doll.y":     Math.round(st.y * 100) / 100,
-        "system.doll.rot":   st.rot,
-        "system.doll.scale": st.scale,
-      }, { render: false });
+      const data = {
+        x:     Math.round(st.x * 100) / 100,
+        y:     Math.round(st.y * 100) / 100,
+        rot:   st.rot,
+        scale: st.scale,
+      };
+      // 头的摆放存在角色身上（它不是某件装备），装备的存在装备自己身上
+      if (isHead) {
+        await this.actor.update({
+          "system.dollHead.x": data.x, "system.dollHead.y": data.y,
+          "system.dollHead.rot": data.rot, "system.dollHead.scale": data.scale,
+        }, { render: false });
+      } else {
+        await item?.update({
+          "system.doll.x": data.x, "system.doll.y": data.y,
+          "system.doll.rot": data.rot, "system.doll.scale": data.scale,
+        }, { render: false });
+      }
     };
 
     html.find(".doll-layer").on("pointerdown", (ev) => {
       ev.preventDefault();
-      const el   = ev.currentTarget;
-      const item = this.actor.items.get(el.dataset.itemId ?? "");
-      if (!item) return;
-      this._dollSel = item.id;
+      const el     = ev.currentTarget;
+      const isHead = el.dataset.head === "1";
+      const item   = isHead ? null : this.actor.items.get(el.dataset.itemId ?? "");
+      if (!isHead && !item) return;
+      this._dollSel = isHead ? "__head__" : item.id;
       html.find(".doll-layer").removeClass("doll-sel");
       el.classList.add("doll-sel");
-      const d = item.system?.doll ?? {};
-      const base = { x: d.x ?? 50, y: d.y ?? 50, rot: d.rot ?? 0, scale: d.scale ?? 1 };
+      const d = isHead ? (this.actor.system?.dollHead ?? {}) : (item.system?.doll ?? {});
+      const base = { x: d.x ?? 50, y: d.y ?? (isHead ? 22 : 50), rot: d.rot ?? 0, scale: d.scale ?? 1 };
       drag = {
-        el, item, base, st: { ...base },
+        el, item, isHead, base, st: { ...base },
         rect: stage.getBoundingClientRect(),
         startX: ev.clientX, startY: ev.clientY,
       };
@@ -1857,8 +1878,38 @@ export class LimbusActorSheet extends ActorSheet {
     };
     window.addEventListener("keydown", this._dollKeyHandler);
 
+    // 滚轮：调整这件装备的图层前后（头恒在最前，不参与）
+    html.find(".doll-layer").on("wheel", async (ev) => {
+      const el = ev.currentTarget;
+      if (el.dataset.head === "1") return;
+      const item = this.actor.items.get(el.dataset.itemId ?? "");
+      if (!item) return;
+      ev.preventDefault();
+      const dir = (ev.originalEvent ?? ev).deltaY < 0 ? 1 : -1;   // 上滚＝往前
+      const cur = Number(el.style.zIndex) || (item.system?.doll?.z ?? 0);
+      const nz  = Math.max(0, Math.min(999, cur + dir));
+      el.style.zIndex = nz;                     // 先动 DOM，手感跟手
+      await item.update({ "system.doll.z": nz }, { render: false });
+    });
+
+    // 添加 / 更换头像：单独一张图，永远画在所有装备之上
+    html.find(".doll-head-pick").on("click", () => {
+      const cur = this.actor.system?.dollHead?.img ?? "";
+      const FP  = foundry.applications?.apps?.FilePicker?.implementation ?? FilePicker;
+      new FP({
+        type: "image", current: cur,
+        callback: (path) => this.actor.update({ "system.dollHead.img": path }),
+      }).browse(cur);
+    });
+
     // 重置选中的那件
     html.find(".doll-reset").on("click", async () => {
+      if (this._dollSel === "__head__") {
+        return void await this.actor.update({
+          "system.dollHead.x": 50, "system.dollHead.y": 22,
+          "system.dollHead.rot": 0, "system.dollHead.scale": 1,
+        });
+      }
       const item = this.actor.items.get(this._dollSel ?? "");
       if (!item) return void ui.notifications.info("先点一下要重置的部件。");
       await item.update({

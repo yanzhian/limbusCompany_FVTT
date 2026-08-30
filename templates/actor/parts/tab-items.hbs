@@ -15,10 +15,20 @@
                style="left:{{x}}%;top:{{y}}%;z-index:{{z}};
                       transform:translate(-50%,-50%) rotate({{rot}}deg) scale({{scale}});">
         {{/each}}
+        {{#if dollHead.img}}
+          {{!-- 头：永远在最上层 --}}
+          <img src="{{dollHead.img}}" class="doll-layer doll-head{{#if dollHead.selected}} doll-sel{{/if}}"
+               data-head="1" title="头"
+               style="left:{{dollHead.x}}%;top:{{dollHead.y}}%;z-index:9999;
+                      transform:translate(-50%,-50%) rotate({{dollHead.rot}}deg) scale({{dollHead.scale}});">
+        {{/if}}
       </div>
       {{#if dollEdit}}
         <div class="doll-hint">
-          当前：<b>{{dollModeLabel}}</b>　·　拖动＝生效　·　<b>R</b> 旋转　<b>E</b> 缩放（再按一次回到移动）
+          当前：<b>{{dollModeLabel}}</b>　·　拖动＝生效　·　<b>R</b> 旋转　<b>E</b> 缩放（再按一次回到移动）<br>
+          滚轮＝调整该装备的图层前后（头永远最前）
+          <span class="doll-head-pick" title="选一张头部图片，画在所有装备之上">
+            {{#if dollHead.img}}更换头像{{else}}添加头像{{/if}}</span>
           <span class="doll-reset" title="把选中的这件恢复默认摆放">重置</span>
         </div>
       {{/if}}

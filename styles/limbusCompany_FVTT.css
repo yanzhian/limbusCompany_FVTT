@@ -9409,7 +9409,11 @@ input.item-piles-quantity {
   margin-top: 4px; font-size: 11px; color: var(--text-dim); line-height: 1.6; text-align: center;
 }
 .limbuscompany .doll-hint b { color: var(--gold-active); }
+.limbuscompany .doll-head-pick,
 .limbuscompany .doll-reset {
   margin-left: 6px; cursor: pointer; color: var(--text-sub); text-decoration: underline;
 }
+.limbuscompany .doll-head-pick:hover { color: var(--gold-active); }
+/* 头图层：永远最前，编辑时可拖 */
+.limbuscompany .doll-layer.doll-head { width: 30%; }
 .limbuscompany .doll-reset:hover { color: var(--red-danger); }
