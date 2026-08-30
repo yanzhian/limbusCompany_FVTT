@@ -1150,13 +1150,13 @@ function _registerSettings() {
     default: 3,
   });
 
-  // 形象底图：默认不画，只用「头 + 装备」拼形象；想拿立绘当参考底图再打开
-  game.settings.register("limbusCompany_FVTT", "dollShowBody", {
-    name:    "形象显示背景立绘",
-    hint:    "在角色卡【物品 → 形象】里，把角色立绘作为底图画在所有部件下方。"
-           + "关闭时形象完全由「头 + 各装备图层」拼成（默认）。"
-           + "底图取【形象背景】里单独指定的图，没指定则用角色头像。",
-    scope:   "client",
+  // 形象（纸娃娃）系统：整套功能的总开关，默认关闭
+  game.settings.register("limbusCompany_FVTT", "dollSystem", {
+    name:    "启用形象系统",
+    hint:    "开启后角色卡【物品】页左栏多一个【形象】视图：把各装备的贴图和一张头部图片"
+           + "拼成角色形象，可拖动摆放、R 旋转、E 缩放、滚轮调图层前后。"
+           + "关闭则左栏只有九宫格装备栏（默认）。由 GM 设定，对全场生效。",
+    scope:   "world",
     config:  true,
     type:    Boolean,
     default: false,

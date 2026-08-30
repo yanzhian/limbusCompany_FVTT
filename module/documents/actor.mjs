@@ -152,9 +152,6 @@ export class CharacterData extends foundry.abstract.TypeDataModel {
       // ── 形象·头部图层 ──────────────────────────────────────────────
       // 立绘（actor.img）是底图；「头」是单独一张图，永远画在所有装备之上。
       // 摆放参数与装备的 doll 同构，编辑方式也一样。
-      // 形象底图（立绘）：留空时退回 actor.img；两者都空则显示占位提示
-      dollBodyImg: new fields.StringField({ required: false, initial: "" }),
-
       dollHead: new fields.SchemaField({
         img:   new fields.StringField({ required: false, initial: "" }),
         x:     new fields.NumberField({ required: true, initial: 50 }),

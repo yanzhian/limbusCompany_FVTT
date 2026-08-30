@@ -151,6 +151,13 @@ export class LimbusActorSheet extends ActorSheet {
     // ── 形象（纸娃娃）视图 ────────────────────────────────────────────────
     // 与九宫格共用左栏，同一份 equipment 槽位数据的两种画法。
     // 摆放参数存在装备自己身上（EquipmentData.doll），脱下再穿会保留。
+    // 形象系统总开关（设置里默认关闭）：关掉时左栏只有九宫格
+    let dollOn = false;
+    try { dollOn = !!game.settings.get("limbusCompany_FVTT", "dollSystem"); }
+    catch { /* 设置未注册时按关闭处理 */ }
+    context.dollEnabled = dollOn;
+    if (!dollOn) { this._dollView = false; this._dollEdit = false; }
+
     context.dollView = this._dollView ?? false;
     context.dollEdit = this._dollEdit ?? false;
     context.dollMode = this._dollMode ?? "move";
@@ -190,13 +197,6 @@ export class LimbusActorSheet extends ActorSheet {
         scale: h.scale ?? 1, rot: h.rot ?? 0, w: hDef.w ?? 30,
         selected: this._dollSel === "__head__",
       };
-      // 底图：默认不画（设置里的【形象显示背景立绘】关着时），
-      // 打开后优先用单独指定的立绘，其次 actor.img（很多角色这一栏是空的）
-      let showBody = false;
-      try { showBody = !!game.settings.get("limbusCompany_FVTT", "dollShowBody"); }
-      catch { /* 设置未注册时按关闭处理 */ }
-      context.dollShowBody = showBody;
-      context.dollBody = showBody ? (system.dollBodyImg || actor.img || "") : "";
     }
 
     // ── 技能槽 ────────────────────────────────────────────────────────────
@@ -1906,16 +1906,6 @@ export class LimbusActorSheet extends ActorSheet {
       const nz  = Math.max(0, Math.min(999, cur + dir));
       el.style.zIndex = nz;                     // 先动 DOM，手感跟手
       await item.update({ "system.doll.z": nz }, { render: false });
-    });
-
-    // 设置 / 更换立绘底图（很多角色的 actor.img 是空的，这里可以单独指一张）
-    html.find(".doll-body-pick").on("click", () => {
-      const cur = this.actor.system?.dollBodyImg || this.actor.img || "";
-      const FP  = foundry.applications?.apps?.FilePicker?.implementation ?? FilePicker;
-      new FP({
-        type: "image", current: cur,
-        callback: (path) => this.actor.update({ "system.dollBodyImg": path }),
-      }).browse(cur);
     });
 
     // 添加 / 更换头像：单独一张图，永远画在所有装备之上
