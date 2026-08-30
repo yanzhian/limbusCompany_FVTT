@@ -1,0 +1,229 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>形象·默认摆放调参</title>
+<style>
+:root{
+  --bg-darkest:#0B0707; --text-main:#E8CAA2; --text-sub:#9B6839; --text-dim:#6E5540;
+  --gold-active:#E5BA25; --border-gold:#5F3E22;
+  --font-main:"Noto Sans SC","Microsoft YaHei",sans-serif;
+}
+body{margin:0;padding:18px;background:#0B0707;color:var(--text-main);font-family:var(--font-main);
+  display:flex;gap:20px;align-items:flex-start;flex-wrap:wrap;}
+h1{font-size:16px;margin:0 0 4px;letter-spacing:.06em;}
+p.sub{margin:0 0 14px;font-size:12px;color:var(--text-dim);max-width:620px;}
+.col{display:flex;flex-direction:column;gap:10px;}
+
+/* ══ 舞台：与 .doll-stage 同规格（3:4，百分比定位） ══ */
+.stage{
+  position:relative;width:320px;aspect-ratio:3/4;overflow:hidden;
+  background:#0e0b09;border:1px solid var(--border-gold);border-radius:3px;
+}
+.stage .portrait{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;pointer-events:none;}
+.stage .empty{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+  font-size:12px;color:var(--text-dim);
+  background:repeating-linear-gradient(45deg,#14100d,#14100d 8px,#171310 8px,#171310 16px);}
+.layer{position:absolute;transform-origin:center center;cursor:grab;user-select:none;}
+.layer:active{cursor:grabbing;}
+.layer.sel{outline:1px dashed var(--gold-active);outline-offset:2px;}
+.layer.off{display:none;}
+
+/* ══ 面板 ══ */
+.panel{border:1px solid #2b2119;border-radius:4px;padding:12px 14px;width:430px;
+  display:flex;flex-direction:column;gap:8px;}
+.row{display:flex;align-items:center;gap:8px;font-size:12px;}
+.row label{width:70px;color:var(--text-sub);}
+.row input[type=range]{flex:1;min-width:120px;}
+.row b{width:52px;text-align:right;color:var(--gold-active);}
+.tabs{display:flex;gap:5px;flex-wrap:wrap;}
+.tab{font-size:11.5px;padding:3px 10px;border-radius:999px;cursor:pointer;
+  border:1px solid #3A2A1C;background:#15110E;color:var(--text-sub);}
+.tab.on{background:var(--gold-active);border-color:var(--gold-active);color:#15110E;font-weight:bold;}
+.files{display:flex;flex-direction:column;gap:5px;font-size:11.5px;color:var(--text-sub);}
+.files input[type=file]{font-size:11px;color:var(--text-sub);}
+textarea{width:100%;height:190px;background:#15110E;border:1px solid #3A2A1C;border-radius:3px;
+  color:var(--text-main);font:11.5px/1.55 monospace;padding:7px;resize:vertical;}
+.note{font-size:11.5px;color:var(--text-dim);line-height:1.7;}
+.note b{color:var(--text-sub);}
+</style>
+
+<div class="col">
+  <h1>形象·默认摆放调参</h1>
+  <p class="sub">调 <code>CONFIG.LIMBUSCOMPANY.DOLL_DEFAULTS</code>：装备第一次穿上时的位置。
+    拖动图层＝移动，<b>R</b>／<b>E</b> 切换旋转／缩放（跟卡面一致）。</p>
+  <div class="stage" id="stage">
+    <div class="empty" id="empty">未设置形象背景</div>
+    <img class="portrait" id="portrait" alt="" style="display:none">
+  </div>
+  <div class="note" id="mode-line">当前：<b id="mode">移动</b></div>
+</div>
+
+<div class="panel">
+  <div class="files">
+    <div>形象背景　<input type="file" id="f-body" accept="image/*"></div>
+    <div>头　　　　<input type="file" id="f-head" accept="image/*"></div>
+    <div>上装　　　<input type="file" id="f-upper" accept="image/*"></div>
+    <div>下装　　　<input type="file" id="f-lower" accept="image/*"></div>
+    <div>武器　　　<input type="file" id="f-weapon" accept="image/*"></div>
+    <div>饰品　　　<input type="file" id="f-accessory" accept="image/*"></div>
+  </div>
+
+  <div class="tabs" id="tabs"></div>
+
+  <div class="row"><label>X（%）</label><input type="range" id="x" min="0" max="100" step="0.5"><b id="x-n"></b></div>
+  <div class="row"><label>Y（%）</label><input type="range" id="y" min="0" max="100" step="0.5"><b id="y-n"></b></div>
+  <div class="row"><label>宽度 w（%）</label><input type="range" id="w" min="3" max="100" step="0.5"><b id="w-n"></b></div>
+  <div class="row"><label>缩放</label><input type="range" id="scale" min="5" max="300" step="1"><b id="scale-n"></b></div>
+  <div class="row"><label>旋转</label><input type="range" id="rot" min="-180" max="180" step="1"><b id="rot-n"></b></div>
+  <div class="row"><label>层级 z</label><input type="range" id="z" min="0" max="200" step="1"><b id="z-n"></b></div>
+
+  <textarea id="out" readonly></textarea>
+  <div class="note">
+    <b>w</b> 是贴图宽度占框宽的百分比，<b>缩放</b> 是在 w 之上的额外倍率——
+    先用 w 定"这件东西多大"，再留 scale 给玩家微调。<br>
+    <b>头</b> 的 z 固定 9999（永远最前），面板里改它不会导出。<br>
+    调好把下面的 JSON 覆盖 <code>module/config.mjs</code> 里的 <code>DOLL_DEFAULTS</code>。
+  </div>
+</div>
+
+<script>
+const KEYS = [
+  ["head", "头"], ["upper", "上装"], ["lower", "下装"],
+  ["weapon", "武器"], ["accessory", "饰品"],
+];
+// 与 config.mjs 的 DOLL_DEFAULTS 初始值保持一致
+const D = {
+  head:      { x: 50, y: 22, w: 30, scale: 1, rot: 0, z: 9999 },
+  upper:     { x: 50, y: 45, w: 42, scale: 1, rot: 0, z: 20 },
+  lower:     { x: 50, y: 70, w: 38, scale: 1, rot: 0, z: 10 },
+  weapon:    { x: 72, y: 55, w: 34, scale: 1, rot: 0, z: 30 },
+  accessory: { x: 50, y: 33, w: 20, scale: 1, rot: 0, z: 40 },
+};
+const $ = id => document.getElementById(id);
+const stage = $("stage");
+let cur  = "upper";
+let mode = "move";
+
+// ── 图层 DOM ───────────────────────────────────────────────
+const els = {};
+for (const [k] of KEYS) {
+  const img = document.createElement("img");
+  img.className = "layer off";
+  img.dataset.key = k;
+  stage.appendChild(img);
+  els[k] = img;
+}
+
+function paint(k) {
+  const d = D[k], el = els[k];
+  el.style.left = d.x + "%";
+  el.style.top = d.y + "%";
+  el.style.width = d.w + "%";
+  el.style.zIndex = d.z;
+  el.style.transform = `translate(-50%,-50%) rotate(${d.rot}deg) scale(${d.scale})`;
+  el.classList.toggle("sel", k === cur);
+}
+function paintAll() { for (const [k] of KEYS) paint(k); }
+
+function syncPanel() {
+  const d = D[cur];
+  $("x").value = d.x;         $("x-n").textContent = d.x + "%";
+  $("y").value = d.y;         $("y-n").textContent = d.y + "%";
+  $("w").value = d.w;         $("w-n").textContent = d.w + "%";
+  $("scale").value = d.scale * 100; $("scale-n").textContent = d.scale.toFixed(2);
+  $("rot").value = d.rot;     $("rot-n").textContent = d.rot + "°";
+  $("z").value = Math.min(200, d.z); $("z-n").textContent = d.z;
+  dump();
+}
+function dump() {
+  const body = KEYS.map(([k]) => {
+    const d = D[k];
+    return `  ${k}:${" ".repeat(10 - k.length)}{ x: ${d.x}, y: ${d.y}, w: ${d.w}, `
+         + `scale: ${d.scale}, rot: ${d.rot}, z: ${d.z} },`;
+  }).join("\n");
+  $("out").value = `LIMBUSCOMPANY.DOLL_DEFAULTS = {\n${body}\n};`;
+}
+
+// ── 分类切换 ───────────────────────────────────────────────
+$("tabs").innerHTML = KEYS.map(([k, l]) =>
+  `<span class="tab${k === cur ? " on" : ""}" data-k="${k}">${l}</span>`).join("");
+$("tabs").addEventListener("click", (ev) => {
+  const k = ev.target?.dataset?.k;
+  if (!k) return;
+  cur = k;
+  [...$("tabs").children].forEach(c => c.classList.toggle("on", c.dataset.k === k));
+  paintAll(); syncPanel();
+});
+
+// ── 滑块 ───────────────────────────────────────────────────
+const bind = (id, apply) => $(id).addEventListener("input", () => {
+  apply(Number($(id).value));
+  paint(cur); syncPanel();
+});
+bind("x",     v => D[cur].x = v);
+bind("y",     v => D[cur].y = v);
+bind("w",     v => D[cur].w = v);
+bind("scale", v => D[cur].scale = Math.round(v) / 100);
+bind("rot",   v => D[cur].rot = v);
+bind("z",     v => { if (cur !== "head") D[cur].z = v; });
+
+// ── 换图（本地读取，不上传） ────────────────────────────────
+const pick = (inputId, onLoad) => $(inputId).addEventListener("change", (ev) => {
+  const f = ev.target.files?.[0];
+  if (!f) return;
+  const fr = new FileReader();
+  fr.onload = () => onLoad(fr.result);
+  fr.readAsDataURL(f);
+});
+pick("f-body", (src) => {
+  $("portrait").src = src;
+  $("portrait").style.display = "";
+  $("empty").style.display = "none";
+});
+for (const [k] of KEYS) {
+  pick("f-" + k, (src) => { els[k].src = src; els[k].classList.remove("off"); paint(k); });
+}
+
+// ── 拖动 / R / E：与角色卡里的操作一致 ──────────────────────
+let drag = null;
+stage.addEventListener("pointerdown", (ev) => {
+  const k = ev.target?.dataset?.key;
+  if (!k) return;
+  ev.preventDefault();
+  cur = k;
+  [...$("tabs").children].forEach(c => c.classList.toggle("on", c.dataset.k === k));
+  paintAll(); syncPanel();
+  const r = stage.getBoundingClientRect();
+  drag = { k, rect: r, sx: ev.clientX, sy: ev.clientY, base: { ...D[k] } };
+});
+window.addEventListener("pointermove", (ev) => {
+  if (!drag) return;
+  const d = D[drag.k], b = drag.base;
+  if (mode === "move") {
+    d.x = Math.round((b.x + ((ev.clientX - drag.sx) / drag.rect.width)  * 100) * 2) / 2;
+    d.y = Math.round((b.y + ((ev.clientY - drag.sy) / drag.rect.height) * 100) * 2) / 2;
+  } else if (mode === "rotate") {
+    const cx = drag.rect.left + (b.x / 100) * drag.rect.width;
+    const cy = drag.rect.top  + (b.y / 100) * drag.rect.height;
+    const a0 = Math.atan2(drag.sy - cy, drag.sx - cx);
+    const a1 = Math.atan2(ev.clientY - cy, ev.clientX - cx);
+    d.rot = Math.round(b.rot + (a1 - a0) * 180 / Math.PI);
+  } else {
+    const k2 = 1 + (drag.sy - ev.clientY) / 120;
+    d.scale = Math.min(8, Math.max(0.05, Math.round(b.scale * k2 * 100) / 100));
+  }
+  paint(drag.k); syncPanel();
+});
+window.addEventListener("pointerup", () => { drag = null; });
+window.addEventListener("keydown", (ev) => {
+  const t = document.activeElement?.tagName;
+  if (t === "INPUT" || t === "TEXTAREA") return;
+  const k = ev.key?.toLowerCase();
+  if (k !== "r" && k !== "e") return;
+  ev.preventDefault();
+  const want = k === "r" ? "rotate" : "scale";
+  mode = (mode === want) ? "move" : want;
+  $("mode").textContent = { move: "移动", rotate: "旋转", scale: "缩放" }[mode];
+});
+
+paintAll(); syncPanel();
+</script>
