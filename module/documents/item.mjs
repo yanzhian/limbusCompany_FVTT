@@ -61,6 +61,9 @@ export class EquipmentData extends foundry.abstract.TypeDataModel {
         rot:   new fields.NumberField({ required: true, initial: 0 }),
         z:     new fields.NumberField({ required: true, integer: true, initial: 0 }),
         hidden: new fields.BooleanField({ required: true, initial: false }),
+        // 玩家有没有亲手摆过：false 时渲染用 CONFIG.LIMBUSCOMPANY.DOLL_DEFAULTS
+        // 里按子类型给的默认位，拖动一次就落成 true，之后只认自己存的值
+        placed: new fields.BooleanField({ required: true, initial: false }),
       }),
 
       // 子类型：上装 / 下装 / 武器 / 饰品
