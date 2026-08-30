@@ -993,6 +993,7 @@ Hooks.on("updateCombat", async (combat, changed) => {
       const finalTotal = roll.finalTotal ?? roll.total;
       initiativeUpdates.push({ _id: combatant.id, initiative: finalTotal });
       initiativeRows.push({
+        id:       combatant.id,
         img:      actor.img,
         name:     actor.name,
         speedMin: roll.speedMin ?? 0,
@@ -1002,9 +1003,32 @@ Hooks.on("updateCombat", async (combat, changed) => {
     }
     if (initiativeUpdates.length > 0) {
       await combat.updateEmbeddedDocuments("Combatant", initiativeUpdates);
-      // 全体先攻汇总为一张卡
+
+      // ── 重掷之后必须把行动指针拨回新顺序的第一位 ──────────────────────
+      // Combat#_onUpdateDescendantDocuments 在 Combatant 改动后会重排 turns，
+      // 并把 turn 调成「原来那个当前角色」在新顺序里的下标——那是为"战斗中途
+      // 手改某人先攻、不该打断当前行动者"设计的。但本系统是每轮重掷全员先攻，
+      // nextRound() 刚把 turn 归 0（旧顺序的第一位 A），重排后 Foundry 又把
+      // turn 拨回 A 在新顺序里的位置，于是「新顺序是 B,D,A,C 却从 A 开始」。
+      // 这里在重排落地后再显式写一次 turn，覆盖掉那次自动校正。
+      // 注意：此刻本地 combat.turn 仍是 0（那次自动 update 尚未回程），
+      // 必须 diff:false，否则会被差分成空更新而发不出去。
+      // turn === null 表示"当前没有轮到任何人"（nextRound 会原样保留），不干预。
+      if (combat.turn !== null) {
+        let newTurn = 0;
+        if (combat.settings?.skipDefeated) {
+          const alive = combat.turns.findIndex(t => !t.isDefeated);
+          if (alive > 0) newTurn = alive;
+        }
+        await combat.update({ turn: newTurn }, { diff: false });
+      }
+
+      // 全体先攻汇总为一张卡：按战斗跟踪器重排后的真实顺序列出（含序号）
+      const turnOrder = new Map(combat.turns.map((t, i) => [t.id, i]));
+      initiativeRows.sort((a, b) => (turnOrder.get(a.id) ?? 0) - (turnOrder.get(b.id) ?? 0));
       const rowsHtml = initiativeRows.map(r => `
         <div style="display:flex;align-items:center;gap:8px;margin:4px 0;">
+          <span style="color:#E8C9A2;opacity:.6;font-size:.8rem;min-width:1.2em;text-align:right;">${(turnOrder.get(r.id) ?? 0) + 1}</span>
           <img src="${r.img}" alt="${r.name}"
                style="width:30px;height:30px;object-fit:cover;border-radius:50%;border:2px solid #3A5A1A;">
           <span style="color:#E8C9A2;font-size:.85rem;flex:1;">${r.name}</span>
