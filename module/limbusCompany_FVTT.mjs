@@ -1150,6 +1150,18 @@ function _registerSettings() {
     default: 3,
   });
 
+  // 形象底图：默认不画，只用「头 + 装备」拼形象；想拿立绘当参考底图再打开
+  game.settings.register("limbusCompany_FVTT", "dollShowBody", {
+    name:    "形象显示背景立绘",
+    hint:    "在角色卡【物品 → 形象】里，把角色立绘作为底图画在所有部件下方。"
+           + "关闭时形象完全由「头 + 各装备图层」拼成（默认）。"
+           + "底图取【形象背景】里单独指定的图，没指定则用角色头像。",
+    scope:   "client",
+    config:  true,
+    type:    Boolean,
+    default: false,
+  });
+
   // 稀有度光晕：纯装饰，GM 可以整场关掉（不想用稀有度、或不想让玩家一眼看穿箱子里的货色）
   game.settings.register("limbusCompany_FVTT", "showRarity", {
     name:    "展示稀有度",
