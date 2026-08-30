@@ -8,11 +8,7 @@
     {{#if dollView}}
       {{!-- 形象：立绘 + 各装备贴图，摆放参数存在装备自己身上 --}}
       <div class="doll-stage{{#if dollEdit}} doll-editing{{/if}}">
-        {{#if dollBody}}
-          <img src="{{dollBody}}" class="doll-portrait" alt="{{actor.name}}">
-        {{else}}
-          <div class="doll-portrait doll-portrait-empty">未设置形象背景</div>
-        {{/if}}
+        {{!-- 形象不画底图：角色形象完全由「头 + 各装备图层」拼出来 --}}
         {{#each dollLayers}}
           <img src="{{img}}" class="doll-layer{{#if selected}} doll-sel{{/if}}{{#if hidden}} doll-hidden{{/if}}"
                data-item-id="{{itemId}}" title="{{name}}"
@@ -31,7 +27,6 @@
         <div class="doll-hint">
           当前：<b>{{dollModeLabel}}</b>　·　拖动＝生效　·　<b>R</b> 旋转　<b>E</b> 缩放（再按一次回到移动）<br>
           滚轮＝调整该装备的图层前后（头永远最前）
-          <span class="doll-body-pick" title="形象的背景立绘（角色头像为空时用这个）">形象背景</span>
           <span class="doll-head-pick" title="选一张头部图片，画在所有装备之上">
             {{#if dollHead.img}}更换头像{{else}}添加头像{{/if}}</span>
           <span class="doll-reset" title="把选中的这件恢复默认摆放">重置</span>
