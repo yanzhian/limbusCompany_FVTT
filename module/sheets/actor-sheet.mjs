@@ -190,8 +190,13 @@ export class LimbusActorSheet extends ActorSheet {
         scale: h.scale ?? 1, rot: h.rot ?? 0, w: hDef.w ?? 30,
         selected: this._dollSel === "__head__",
       };
-      // 底图：优先单独设的立绘，其次 actor.img（很多角色这一栏是空的）
-      context.dollBody = system.dollBodyImg || actor.img || "";
+      // 底图：默认不画（设置里的【形象显示背景立绘】关着时），
+      // 打开后优先用单独指定的立绘，其次 actor.img（很多角色这一栏是空的）
+      let showBody = false;
+      try { showBody = !!game.settings.get("limbusCompany_FVTT", "dollShowBody"); }
+      catch { /* 设置未注册时按关闭处理 */ }
+      context.dollShowBody = showBody;
+      context.dollBody = showBody ? (system.dollBodyImg || actor.img || "") : "";
     }
 
     // ── 技能槽 ────────────────────────────────────────────────────────────
