@@ -92,11 +92,11 @@ LIMBUSCOMPANY.EGO_COSTS = {
 // x/y = 相对立绘框的百分比（中心点），w = 贴图宽度占框宽的百分比，
 // scale/rot 是在 w 之上的额外缩放与旋转。用 scratchpad-doll.html 调，导出后贴这里。
 LIMBUSCOMPANY.DOLL_DEFAULTS = {
-  head:      { x: 50, y: 22, w: 30, scale: 1, rot: 0, z: 9999 },
-  upper:     { x: 50, y: 45, w: 42, scale: 1, rot: 0, z: 20 },
-  lower:     { x: 50, y: 70, w: 38, scale: 1, rot: 0, z: 10 },
-  weapon:    { x: 72, y: 55, w: 34, scale: 1, rot: 0, z: 30 },
-  accessory: { x: 50, y: 33, w: 20, scale: 1, rot: 0, z: 40 },
+  head:      { x: 50.5, y: 16.5, w: 30,   scale: 1.35, rot: 0,   z: 9999 },
+  upper:     { x: 47,   y: 50.5, w: 42,   scale: 1.7,  rot: 0,   z: 20 },
+  lower:     { x: 50.5, y: 60,   w: 100,  scale: 1,    rot: 0,   z: 10 },
+  weapon:    { x: 45,   y: 79.5, w: 34,   scale: 1.86, rot: 0,   z: 0 },
+  accessory: { x: 28.5, y: 57,   w: 22.5, scale: 1.47, rot: -15, z: 7 },
 };
 
 // ─── 稀有度 ───────────────────────────────────────────────────────────────────
