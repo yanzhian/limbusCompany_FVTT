@@ -124,7 +124,7 @@ textarea{width:100%;height:230px;background:var(--bg-panel);border:1px solid #3A
   <p class="sub">调好后把下面导出的整段 CSS 贴到 <code>styles/limbusCompany_FVTT.css</code> <b>末尾</b>
     （同名规则后写的赢，会盖掉现在那版）。上面预览里第 2、5 行是「已装备」态。</p>
   <div class="mock" id="mock">
-    <div class="list-header" id="hdr"></div>
+    <div class="list-header" id="hdrRow"></div>
     <div class="group-header"><span>▼</span><span class="group-label" id="grp1">武器</span><span class="group-count">(3)</span></div>
     <ul class="item-list" id="list1"></ul>
     <div class="group-header"><span>▼</span><span class="group-label" id="grp2">消耗品</span><span class="group-count">(2)</span></div>
@@ -180,7 +180,7 @@ const P = [
   ["cat-size","--cat-size","n",70,"分类字号"],
   ["num","--num","c","#9B8060","数值色"],
   ["num-size","--num-size","n",72,"数值字号"],
-  ["hdr","--hdr","c","#6E5540","表头色"],
+  ["hdr-col","--hdr","c","#B08A5E","表头色"],
   ["hdr-size","--hdr-size","n",62,"表头字号"],
 
   ["H5","","h",0,"图标 / 操作按钮"],
@@ -233,7 +233,7 @@ function px(i){ // 占位图标
 }
 function renderList(){
   $("mock").classList.toggle("skill-mode", mode === "skill");
-  $("hdr").innerHTML = mode === "item"
+  $("hdrRow").innerHTML = mode === "item"
     ? `<span></span><span>名称</span><span>分类</span><span>数量</span><span>容量</span><span>星芒</span><span>操作</span>`
     : `<span></span><span>名称</span><span>分类</span><span>罪孽</span><span>数量</span><span>星芒</span><span>操作</span>`;
   $("grp1").textContent = mode === "item" ? "武器" : "基本技能";
@@ -303,7 +303,7 @@ function dump(){
 .limbuscompany .group-count { opacity: .75; }
 
 .limbuscompany .list-header {
-  color: ${V("hdr")}; font-size: ${(N("hdr-size")/100).toFixed(2)}rem; letter-spacing: .12em;
+  color: ${V("hdr-col")}; font-size: ${(N("hdr-size")/100).toFixed(2)}rem; letter-spacing: .12em;
   padding-bottom: 3px; border-bottom-color: ${rgba(V("grp-line"), .5)};
 }
 

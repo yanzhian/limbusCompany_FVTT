@@ -9412,44 +9412,43 @@ input.item-piles-quantity {
 .limbuscompany .doll-head-pick:hover { color: var(--gold-active); }
 /* 头图层：永远最前，编辑时可拖 */
 
+
 .limbuscompany .doll-reset:hover { color: var(--red-danger); }
 
-/* ══ 物品栏 / 技能栏 列表行·观感优化（沿用 Tab 的金线语言） ═════════════ */
-
-/* 分组标题：吸顶 + 左侧金色竖条，取代整条棕底 */
+/* ══ 物品栏 / 技能栏 列表行·配色（调参台导出） ══ */
 .limbuscompany .item-list-panel .group-header,
 .limbuscompany .skill-list-panel .group-header {
   position: sticky; top: 0; z-index: 2;
   padding: 3px 6px 3px 8px;
-  background: linear-gradient(90deg, rgba(95,62,33,.34), rgba(95,62,33,.06) 60%, transparent);
-  border-top: none; border-bottom: 1px solid rgba(95,62,33,.35);
-  font-size: .72rem; letter-spacing: .1em; color: #B08A5E;
+  background: linear-gradient(90deg, rgba(59,36,18,1.00),
+    rgba(59,36,18,0.18) 60%, transparent);
+  border-top: none;
+  border-bottom: 1px solid rgba(95,62,34,0.35);
+  font-size: .72rem; letter-spacing: 0.10em; color: #b08a5e;
 }
 .limbuscompany .item-list-panel .group-header::before,
 .limbuscompany .skill-list-panel .group-header::before {
-  content: ""; width: 2px; height: 11px; flex: 0 0 2px; border-radius: 1px;
-  background: linear-gradient(180deg, #E7B956, rgba(231,185,86,.15));
+  content: ""; width: 2px; flex: 0 0 2px; height: 11px; border-radius: 1px;
+  background: linear-gradient(180deg, #e7b956, rgba(231,185,86,0.15));
 }
 .limbuscompany .item-list-panel .group-header:hover,
 .limbuscompany .skill-list-panel .group-header:hover {
-  background: linear-gradient(90deg, rgba(95,62,33,.5), rgba(95,62,33,.12) 60%, transparent);
+  background: linear-gradient(90deg, rgba(59,36,18,1.00),
+    rgba(59,36,18,0.35) 60%, transparent);
   color: var(--text-main);
 }
 .limbuscompany .group-count { opacity: .75; }
 
-/* 表头：与行同一网格，字更淡更细 */
 .limbuscompany .list-header {
-  color: #6E5540; font-size: .62rem; letter-spacing: .12em;
-  padding-bottom: 3px; border-bottom-color: rgba(95,62,33,.5);
+  color: #b08a5e; font-size: 0.80rem; letter-spacing: .12em;
+  padding-bottom: 3px; border-bottom-color: rgba(95,62,34,0.50);
 }
 
-/* 行：细分隔线 + 左侧 hover 指示条，去掉整行大色块 */
 .limbuscompany .item-row,
 .limbuscompany .skill-row {
-  position: relative;
-  min-height: 32px; padding: 0 4px 0 8px;
-  border-bottom: 1px solid rgba(95,62,33,.14);
-  transition: background .12s, box-shadow .12s;
+  position: relative; min-height: 32px; padding: 0 4px 0 8px;
+  border-bottom: 1px solid rgba(95,62,34,0.14);
+  transition: background .12s;
 }
 .limbuscompany .item-row::before,
 .limbuscompany .skill-row::before {
@@ -9457,76 +9456,75 @@ input.item-piles-quantity {
   background: transparent; border-radius: 1px; transition: background .12s;
 }
 .limbuscompany .item-row:hover,
-.limbuscompany .skill-row:hover { background: rgba(95,62,33,.16); }
+.limbuscompany .skill-row:hover { background: rgba(95,62,34,0.35); }
 .limbuscompany .item-row:hover::before,
-.limbuscompany .skill-row:hover::before { background: rgba(231,185,86,.55); }
+.limbuscompany .skill-row:hover::before { background: rgba(95,62,34,0.11); }
 
-/* 已装备：改为淡金底 + 常亮金条，不再是深棕整块 */
 .limbuscompany .item-row.item-row-equipped,
 .limbuscompany .item-row.skill-row-equipped,
 .limbuscompany .skill-row.skill-row-equipped {
-  background: linear-gradient(90deg, rgba(231,185,86,.13), rgba(231,185,86,.03) 55%, transparent);
+  background: linear-gradient(90deg, rgba(89,62,38,1.00),
+    rgba(89,62,38,0.23) 55%, transparent);
 }
 .limbuscompany .item-row.item-row-equipped::before,
 .limbuscompany .item-row.skill-row-equipped::before,
 .limbuscompany .skill-row.skill-row-equipped::before {
-  background: linear-gradient(180deg, #E7B956, #8A6427);
-  box-shadow: 0 0 5px rgba(231,185,86,.4);
+  background: linear-gradient(180deg, #e7b956, #e7b956);
+  box-shadow: 0 0 5px rgba(231,185,86,0.90);
 }
 .limbuscompany .item-row.item-row-equipped:hover,
 .limbuscompany .item-row.skill-row-equipped:hover,
 .limbuscompany .skill-row.skill-row-equipped:hover {
-  background: linear-gradient(90deg, rgba(231,185,86,.22), rgba(231,185,86,.06) 55%, transparent);
+  background: linear-gradient(90deg, rgba(89,62,38,1.00),
+    rgba(89,62,38,0.46) 55%, transparent);
 }
 
-/* 图标：无框，hover 微亮 */
 .limbuscompany .item-row .item-icon,
 .limbuscompany .skill-row .item-icon {
-  width: 26px; height: 26px; border: none; border-radius: 3px;
-  filter: saturate(.9) brightness(.94); transition: filter .12s, transform .12s;
+  width: 24px; height: 24px; border: none; border-radius: 3px;
+  filter: saturate(.9) brightness(0.91);
+  transition: filter .12s, transform .12s;
 }
 .limbuscompany .item-row:hover .item-icon,
 .limbuscompany .skill-row:hover .item-icon {
   filter: saturate(1.05) brightness(1.06); transform: scale(1.06);
 }
 
-/* 名称：主色、字距略开；数值列等宽数字、更淡 */
 .limbuscompany .item-row .col-name,
 .limbuscompany .skill-row .col-name {
-  color: var(--text-main); font-size: .78rem; letter-spacing: .03em;
+  color: #e8caa2; font-size: 0.70rem; letter-spacing: .03em;
 }
 .limbuscompany .item-row .col-cat,
-.limbuscompany .skill-row .col-cat { color: #8A7156; font-size: .7rem; }
+.limbuscompany .skill-row .col-cat { color: #e7b956; font-size: 0.70rem; }
 .limbuscompany .item-row .col-qty,
 .limbuscompany .item-row .col-cap,
 .limbuscompany .item-row .col-stellar,
 .limbuscompany .skill-row .col-qty,
 .limbuscompany .skill-row .col-stellar {
-  color: #9B8060; font-size: .72rem;
+  color: #e7b956; font-size: 0.70rem;
   font-variant-numeric: tabular-nums; font-feature-settings: "tnum";
 }
-/* 数量为 0 / 空值时更淡，一眼扫过不抢视线 */
 .limbuscompany .item-row .col-cap:empty::after,
-.limbuscompany .item-row .col-stellar:empty::after { content: "—"; color: #5A4835; }
+.limbuscompany .item-row .col-stellar:empty::after { content: "—"; color: rgba(231,185,86,0.50); }
 
-/* 罪孽列：小圆点 + 文字，颜色仍走行内 sinColor */
 .limbuscompany .skill-row .col-sin {
   display: inline-flex; align-items: center; justify-content: center; gap: 4px;
-  font-size: .72rem;
+  font-size: 0.70rem;
 }
 .limbuscompany .skill-row .col-sin::before {
   content: ""; width: 6px; height: 6px; border-radius: 50%;
   background: currentColor; box-shadow: 0 0 4px currentColor; opacity: .85;
 }
 
-/* 操作列：按钮平时半隐，hover 行才完全显形，减少噪点 */
 .limbuscompany .item-row .col-actions .action-btn,
 .limbuscompany .skill-row .col-actions .action-btn {
   width: 24px; height: 24px; flex: 0 0 24px;
-  opacity: .45; transition: opacity .12s, color .12s, background .12s;
+  opacity: 0.35; transition: opacity .12s, color .12s, background .12s;
 }
 .limbuscompany .item-row:hover .col-actions .action-btn,
 .limbuscompany .skill-row:hover .col-actions .action-btn { opacity: 1; }
 .limbuscompany .item-row .col-actions .action-btn.fav-active,
 .limbuscompany .skill-row .col-actions .action-btn.fav-active { opacity: 1; }
-.limbuscompany .action-btn:hover { background: rgba(231,185,86,.16); }
+.limbuscompany .action-btn:hover {
+  color: #e7b956; background: rgba(231,185,86,0.18);
+}
