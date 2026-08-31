@@ -9538,3 +9538,15 @@ input.item-piles-quantity {
 .limbuscompany .skill-row:hover .col-sin .sin-icon {
   filter: brightness(1.1); transform: scale(1.06);
 }
+
+/* 盖掉 Foundry 核心的 button:hover/:focus 红色发光描边 */
+.limbuscompany .action-btn,
+.limbuscompany .action-btn:hover,
+.limbuscompany .action-btn:focus,
+.limbuscompany .action-btn:active,
+.limbuscompany .toolbar-btn:hover,
+.limbuscompany .toolbar-btn:focus {
+  outline: none; border-color: transparent;
+  box-shadow: none !important; text-shadow: none;
+}
+.limbuscompany .action-btn:focus-visible { outline: 1px solid var(--gold-active); outline-offset: -1px; }
