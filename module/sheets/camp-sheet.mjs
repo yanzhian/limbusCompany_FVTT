@@ -19,6 +19,28 @@ import { canContainerAccept, wouldNest } from "../helpers/container-rules.mjs";
 import { buildItemTitleCard, closeTitleCardUnlessLocked, toggleTitleCardLock } from "./item-sheet.mjs";
 import { guardInteractRange } from "../helpers/proximity.mjs";
 
+/** 制作进行中的营地 id：期间禁止孤儿清理写回 warehouseContents（见下方说明） */
+const _CRAFTING = new Set();
+
+// ── 调试：任何人改动营地仓库摆放记录都打一条日志（含调用栈）──────────────
+// 排查"产出闪一下就没了"用；查完可以整段删掉。
+Hooks.on("updateActor", (actor, changes) => {
+  const next = changes?.system?.warehouseContents;
+  if (!next || actor.type !== "camp") return;
+  console.debug("[营地|仓库写入]", {
+    camp: actor.name, 条数: next.length,
+    uuids: next.map(p => p.uuid),
+    调用栈: new Error("warehouseContents 被写入").stack,
+  });
+});
+Hooks.on("deleteItem", (item) => {
+  if (item.parent?.type !== "camp") return;
+  console.debug("[营地|物品被删]", {
+    camp: item.parent.name, item: item.name, uuid: item.uuid,
+    调用栈: new Error("营地物品被删除").stack,
+  });
+});
+
 export class LimbusCampSheet extends ActorSheet {
 
   /**
@@ -213,19 +235,26 @@ export class LimbusCampSheet extends ActorSheet {
     if (orphanedIndices.length > 0 && game.user.isGM) {
       const deadUuids = orphanedIndices
         .map(i => placements[i]?.uuid).filter(Boolean);
+      console.debug("[营地|孤儿] 本次渲染发现孤儿记录", { campId: this.actor.id, deadUuids });
       setTimeout(async () => {
-        const cur  = this.actor.system.warehouseContents ?? [];
+        // 制作中一律不清：制作会先删原料再写 contents，这中间的任何整数组写回
+        // 都可能把刚做出来的产出物一起覆盖掉
+        if (_CRAFTING.has(this.actor.id)) {
+          console.debug("[营地|孤儿] 制作进行中，跳过本次清理");
+          return;
+        }
         const gone = [];
         for (const uuid of deadUuids) {
-          if (!cur.some(p => p.uuid === uuid)) continue;      // 已经不在了
-          const doc = await fromUuid(uuid).catch(() => null);
-          if (!doc) gone.push(uuid);                          // 复核：确实没了才删
+          if (!(await fromUuid(uuid).catch(() => null))) gone.push(uuid);
         }
-        if (!gone.length) return;
+        if (!gone.length) return void console.debug("[营地|孤儿] 复核后没有需要清理的");
+        // 写之前再读一次最新值（前面有 await，期间可能已被制作流程改写）
+        const cur  = this.actor.system.warehouseContents ?? [];
         const dead = new Set(gone);
-        await this.actor.update({
-          "system.warehouseContents": cur.filter(p => !dead.has(p.uuid)),
-        });
+        const next = cur.filter(p => !dead.has(p.uuid));
+        if (next.length === cur.length) return;
+        console.debug("[营地|孤儿] 清理", { gone, before: cur.length, after: next.length });
+        await this.actor.update({ "system.warehouseContents": next });
       }, 0);
     }
 
@@ -1118,6 +1147,10 @@ export class LimbusCampSheet extends ActorSheet {
     const campActor = game.actors.get(campActorId);
     const recipe    = (campActor?.system?.recipes ?? []).find(r => r.id === recipeId);
     if (!campActor || !recipe) return;
+    _CRAFTING.add(campActorId);
+    console.debug("[营地|制作] 开始", { camp: campActor.name, recipe: recipe.name,
+      contentsBefore: (campActor.system.warehouseContents ?? []).length });
+    try {
 
     // ── 1. 检查原料（只计算实际放置在仓库格中的物品，与 getData 逻辑一致） ──
     const placedIds    = new Set(
@@ -1219,10 +1252,23 @@ export class LimbusCampSheet extends ActorSheet {
 
     if (place) {
       newContents.push({ uuid: outItem.uuid, ...place });
+      console.debug("[营地|制作] 产出已放置", { uuid: outItem.uuid, place, total: newContents.length });
     } else {
       ui.notifications.warn(`[营地] 产出 ${recipe.outputName} 无法放入仓库（空间不足），已创建为悬空物品。`);
     }
     await campActor.update({ "system.warehouseContents": newContents });
+    console.debug("[营地|制作] contents 已写回", {
+      写入条数: newContents.length,
+      实际读回: (campActor.system.warehouseContents ?? []).length,
+      产出还在: (campActor.system.warehouseContents ?? []).some(p => p.uuid === outItem.uuid),
+    });
+    // 写回后再抽查一次：谁把它删了就能在这条日志上抓现行
+    const _outUuid = outItem.uuid;
+    setTimeout(() => {
+      const still = (campActor.system.warehouseContents ?? []).some(p => p.uuid === _outUuid);
+      const alive = !!campActor.items.get(_outUuid.split(".").pop());
+      console.debug("[营地|制作] 1 秒后复查", { 摆放记录还在: still, 物品还在: alive });
+    }, 1000);
 
     // 制作聊天卡（商人交易卡同款风格）
     const triggerUser = game.users.get(userId);
@@ -1246,6 +1292,10 @@ export class LimbusCampSheet extends ActorSheet {
         </div>`,
       speaker: triggerChar ? ChatMessage.getSpeaker({ actor: triggerChar }) : undefined,
     });
+    } finally {
+      // 闸门再多留一会儿：制作触发的那几次重渲染的孤儿清理都排在后面
+      setTimeout(() => _CRAFTING.delete(campActorId), 1500);
+    }
   }
 
   /* ─── 静态：GM 端执行取出物品 ──────────────────────────────────────── */
