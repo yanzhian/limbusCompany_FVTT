@@ -35,7 +35,7 @@ export class LimbusCampSheet extends ActorSheet {
     return foundry.utils.mergeObject(super.defaultOptions, {
       classes:   ["limbuscompany", "sheet", "actor", "camp"],
       template:  "systems/limbusCompany_FVTT/templates/actor/camp-sheet.hbs",
-      width:     880,
+      width:     1080,   /* 265(角色) + 400(仓库) + 400(配方) + 边距 */
       height:    580,
       resizable: true,
       // 重渲染时保持这些容器的滚动位置（拖动仓库物品后不回顶）

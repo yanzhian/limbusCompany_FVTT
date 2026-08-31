@@ -7089,8 +7089,8 @@ input.item-piles-quantity {
   box-shadow:   0 0 5px rgba(93, 173, 226, .7);
 }
 .camp-warehouse-panel {
-  flex:            1;           /* 唯一随窗口缩放变化的面板 */
-  min-width:       0;
+  flex:            1 1 400px;   /* 唯一随窗口缩放变化的面板；起始至少 400px */
+  min-width:       400px;
   border-right:    1px solid var(--border-gold);
 }
 .camp-recipe-panel {
