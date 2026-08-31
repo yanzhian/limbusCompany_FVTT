@@ -33,6 +33,11 @@ export function collapseWindowHeader(app) {
 
   // 模块的按钮可能比我们晚一点才插进来：搬完之后再看一眼有没有新的
   const run = () => {
+    // v13 把「复制文档 ID / UUID」那个小图标放在 .window-title 里面，
+    // 标题一 display:none 它就跟着没了 —— 先把它捞出来放回标题栏。
+    const idLink = header.querySelector(".window-title .document-id-link, .window-title a[data-action='copyUuid']");
+    if (idLink) header.insertBefore(idLink, header.querySelector(".lc-hd-dots") ?? null);
+
     const buttons = [...header.querySelectorAll("a.header-button, .header-control")]
       .filter(el => !el.dataset.lcCollapsed && !_isClose(el) && !el.classList.contains("lc-hd-dots"));
     if (!buttons.length) return;

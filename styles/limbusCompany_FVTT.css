@@ -9706,3 +9706,20 @@ input.item-piles-quantity {
 .window-app .lc-hd-menu li > .header-control { font-size: 11.5px !important; }
 .window-app .lc-hd-menu li > a > i,
 .window-app .lc-hd-menu li > .header-control > i { font-size: 12px; }
+
+/* 「复制 UUID」小图标：从被隐藏的标题里捞出来后按普通标题栏按钮处理 */
+.window-app.lc-hd-collapsed .window-header > .document-id-link,
+.window-app.lc-hd-collapsed .window-header > a[data-action="copyUuid"] {
+  width: 22px; height: 22px; flex: 0 0 auto; font-size: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 3px; color: #7A6249; opacity: .35;
+  transition: opacity .14s, color .14s, background .14s;
+}
+.window-app.lc-hd-collapsed .window-header > .document-id-link > i,
+.window-app.lc-hd-collapsed .window-header > a[data-action="copyUuid"] > i { font-size: 12px; }
+.window-app.lc-hd-collapsed:hover .window-header > .document-id-link,
+.window-app.lc-hd-collapsed:hover .window-header > a[data-action="copyUuid"] { opacity: 1; }
+.window-app.lc-hd-collapsed .window-header > .document-id-link:hover,
+.window-app.lc-hd-collapsed .window-header > a[data-action="copyUuid"]:hover {
+  color: #E7B956; background: rgba(231,185,86,.14);
+}
