@@ -9528,3 +9528,13 @@ input.item-piles-quantity {
 .limbuscompany .action-btn:hover {
   color: #e7b956; background: rgba(231,185,86,0.18);
 }
+
+/* 罪孽列改用图标（24px），去掉原来的文字与小圆点 */
+.limbuscompany .skill-row .col-sin::before { content: none; }
+.limbuscompany .skill-row .col-sin .sin-icon {
+  width: 24px; height: 24px; object-fit: contain; display: block;
+  filter: brightness(.95); transition: filter .12s, transform .12s;
+}
+.limbuscompany .skill-row:hover .col-sin .sin-icon {
+  filter: brightness(1.1); transform: scale(1.06);
+}
