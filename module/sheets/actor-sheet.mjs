@@ -745,9 +745,6 @@ export class LimbusActorSheet extends ActorSheet {
     // ── 物品行操作 ────────────────────────────────────────────────────────
     html.find(".item-activate").on("click",   this._onItemActivate.bind(this));
     html.find(".item-learn-skillbook").on("click", this._onSkillBookLearn.bind(this));
-    html.find(".item-use-recipebook").on("click", this._onUseRecipeBook.bind(this));
-    // 双击配方表那一行 = 在营地使用（右键菜单里也有一条）
-    html.find(".item-row[data-type='recipebook']").on("dblclick", this._onUseRecipeBook.bind(this));
     html.find(".item-favorite").on("click",   this._onItemFavorite.bind(this));
     html.find(".item-more-menu").on("click",  this._onItemContextMenu.bind(this));
     html.find(".item-row .item-name").on("click", this._onItemOpen.bind(this));
@@ -1582,13 +1579,6 @@ export class LimbusActorSheet extends ActorSheet {
       { name: "发送聊天框",icon: "<i class='fas fa-comment'></i>", callback: () => item.sendToChat?.() },
       { name: "删除",      icon: "<i class='fas fa-trash'></i>",   callback: () => item.delete() },
     ];
-    // 配方表：右键多一条「添加营地配方」
-    if (item.type === "recipebook") {
-      menuItems.splice(1, 0, {
-        name: "添加营地配方", icon: "<i class='fas fa-scroll'></i>",
-        callback: () => this._useRecipeBook(item),
-      });
-    }
     this._renderContextMenu(event, menuItems);
   }
 
@@ -2571,52 +2561,6 @@ export class LimbusActorSheet extends ActorSheet {
   }
 
   /** 物品列表：技能书「学习技能」按钮（确认后学习全部技能并消耗技能书） */
-  /**
-   * 配方表：只能在营地使用。把表内配方录进身边那座营地的配方列表。
-   * 同名配方视为已有，不重复录入；配方表本身不消耗（是"表"不是"卷轴"）。
-   */
-  async _onUseRecipeBook(event) {
-    event.preventDefault(); event.stopPropagation();
-    const itemId = event.currentTarget.closest("[data-item-id]")?.dataset.itemId ?? "";
-    return this._useRecipeBook(this.actor.items.get(itemId));
-  }
-
-  async _useRecipeBook(book) {
-    if (!book || book.type !== "recipebook") return;
-
-    const recipes = book.system.recipes ?? [];
-    if (!recipes.length) return void ui.notifications.warn(`「${book.name}」里还没有配方。`);
-
-    // 身边的营地：优先取距离最近且在交互范围内的那座
-    const { isWithinInteractRange } = await import("../helpers/proximity.mjs");
-    const camps = game.actors.filter(a => a.type === "camp" && isWithinInteractRange(a).ok);
-    if (!camps.length) {
-      return void ui.notifications.warn("配方表只能在营地使用：走到营地旁边再试。");
-    }
-    const camp = camps[0];
-
-    const have = new Set((camp.system.recipes ?? []).map(r => (r.name ?? "").trim()));
-    const add  = recipes
-      .filter(r => !have.has((r.name ?? "").trim()))
-      .map(r => ({ ...foundry.utils.deepClone(r), id: foundry.utils.randomID() }));
-
-    if (!add.length) {
-      return void ui.notifications.info(`营地「${camp.name}」已经有这张表上的全部配方了。`);
-    }
-
-    const payload = { "system.recipes": [...(camp.system.recipes ?? []), ...add] };
-    if (camp.canUserModify(game.user, "update")) await camp.update(payload);
-    else game.socket.emit("system.limbusCompany_FVTT",
-      { type: "gmDocUpdate", uuid: camp.uuid, data: payload });
-
-    ui.notifications.info(`已向营地「${camp.name}」录入 ${add.length} 条配方。`);
-    ChatMessage.create({
-      speaker: ChatMessage.getSpeaker({ actor: this.actor }),
-      content: `<p><b>${this.actor.name}</b> 在营地「${camp.name}」翻开了《${book.name}》，`
-             + `录入了 ${add.length} 条新配方：${add.map(r => r.name).join("、")}。</p>`,
-    });
-  }
-
   async _onSkillBookLearn(event) {
     const itemId = event.currentTarget.dataset.itemId ?? "";
     const book   = this.actor.items.get(itemId);

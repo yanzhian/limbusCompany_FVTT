@@ -7355,6 +7355,18 @@ export class ClashManager {
       return;
     }
 
+    // 玩家无权限时委托 GM 删除文档（例：营地仓库里的配方表用完即焚）
+    if (msg.type === "gmDocDelete") {
+      if (!game.user.isGM) return;
+      try {
+        const doc = msg.uuid ? await fromUuid(msg.uuid) : null;
+        if (doc) await doc.delete();
+      } catch (err) {
+        console.error("[ClashManager] gmDocDelete 失败:", err);
+      }
+      return;
+    }
+
     // 玩家无权限时委托 GM 执行任意文档更新（跨所有权 Actor/Item 写入）
     if (msg.type === "gmDocUpdate") {
       if (!game.user.isGM) return;

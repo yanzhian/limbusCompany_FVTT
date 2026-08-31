@@ -358,7 +358,16 @@ export class LimbusCampSheet extends ActorSheet {
     html.find(".camp-char-cg .cg-item-tile").on("dblclick", async (event) => {
       const uuid = event.currentTarget.dataset.itemUuid ?? "";
       const item = await fromUuid(uuid).catch(() => null);
+      if (item?.type === "recipebook") return void this._useRecipeBook(item);
       item?.sheet?.render(true);
+    });
+    // 背包图块右键：配方表多一条「添加营地配方」
+    html.find(".camp-char-cg .cg-item-tile").on("contextmenu", async (event) => {
+      const uuid = event.currentTarget.dataset.itemUuid ?? "";
+      const item = await fromUuid(uuid).catch(() => null);
+      if (item?.type !== "recipebook") return;
+      event.preventDefault();
+      this._showRecipeBookMenu(event, item);
     });
     // 背包图块悬停：Title 卡
     html.find(".camp-char-cg .cg-item-tile").on("mouseenter", this._onCgTileHoverStart.bind(this));
@@ -738,6 +747,8 @@ export class LimbusCampSheet extends ActorSheet {
   async _onCgTileDblClick(event) {
     const uuid = event.currentTarget.dataset.itemUuid ?? "";
     const item = await fromUuid(uuid).catch(() => null);
+    // 配方表只能在营地用：双击即把表内配方录进这座营地
+    if (item?.type === "recipebook") return void this._useRecipeBook(item);
     if (item?.type !== "container") return;
     // 强制重新渲染（重读 contents），避免已打开的容器卡持有过期的
     // 放置索引导致"此位置无法放置"误报
@@ -844,7 +855,12 @@ export class LimbusCampSheet extends ActorSheet {
 
     $(".cg-ctx-menu").remove();
 
+    const tileItem = await fromUuid(uuid).catch(() => null);
+    const recipeRow = tileItem?.type === "recipebook"
+      ? `<li data-action="userecipe"><i class="fas fa-scroll"></i> 添加营地配方</li>` : "";
+
     const menu = $(`<ul class="cg-ctx-menu">
+      ${recipeRow}
       <li data-action="takeout"><i class="fas fa-box-open"></i> 取出到我的角色</li>
       <li data-action="edit"><i class="fas fa-edit"></i> 编辑 / 查看</li>
       <li data-action="chat"><i class="fas fa-comment"></i> 发送聊天框</li>
@@ -861,6 +877,11 @@ export class LimbusCampSheet extends ActorSheet {
       e.stopPropagation();
       const action = $(e.currentTarget).data("action");
       close();
+
+      if (action === "userecipe") {
+        const item = await fromUuid(uuid).catch(() => null);
+        return void sheet._useRecipeBook(item);
+      }
 
       if (action === "takeout") {
         const item = await fromUuid(uuid).catch(() => null);
@@ -932,6 +953,72 @@ export class LimbusCampSheet extends ActorSheet {
         charId: myChar.id,
       });
     }
+  }
+
+  /* ─── 配方表：在营地使用 ─────────────────────────────────────────── */
+
+  /** 右键配方表图块时的小菜单（背包侧用；仓库侧并进原有菜单） */
+  _showRecipeBookMenu(event, item) {
+    $(".cg-ctx-menu").remove();
+    const menu = $(`<ul class="cg-ctx-menu">
+      <li data-action="userecipe"><i class="fas fa-scroll"></i> 添加营地配方</li>
+      <li data-action="edit"><i class="fas fa-edit"></i> 编辑 / 查看</li>
+    </ul>`).css({ top: event.clientY, left: event.clientX });
+    $("body").append(menu);
+    const close = () => { menu.remove(); $(document).off("click.cgctx", close); };
+    setTimeout(() => $(document).on("click.cgctx", close), 10);
+    menu.on("click", "li[data-action]", (e) => {
+      e.stopPropagation();
+      const action = $(e.currentTarget).data("action");
+      close();
+      if (action === "userecipe") this._useRecipeBook(item);
+      else item.sheet?.render(true);
+    });
+  }
+
+  /**
+   * 把配方表里的配方录入**这座**营地（营地不止一座，所以入口只在营地面板内）。
+   * 同名配方视为已有，不重复录入；配方表本身不消耗。
+   */
+  async _useRecipeBook(book) {
+    if (!book || book.type !== "recipebook") return;
+    const recipes = book.system.recipes ?? [];
+    if (!recipes.length) return void ui.notifications.warn(`「${book.name}」里还没有配方。`);
+
+    const camp = this.actor;
+    const have = new Set((camp.system.recipes ?? []).map(r => (r.name ?? "").trim()));
+    const add  = recipes
+      .filter(r => !have.has((r.name ?? "").trim()))
+      .map(r => ({ ...foundry.utils.deepClone(r), id: foundry.utils.randomID() }));
+
+    if (!add.length) {
+      return void ui.notifications.info(`营地「${camp.name}」已经有这张表上的全部配方了。`);
+    }
+
+    const payload = { "system.recipes": [...(camp.system.recipes ?? []), ...add] };
+    if (camp.canUserModify(game.user, "update")) await camp.update(payload);
+    else game.socket.emit("system.limbusCompany_FVTT",
+      { type: "gmDocUpdate", uuid: camp.uuid, data: payload });
+
+    ui.notifications.info(`已向营地「${camp.name}」录入 ${add.length} 条配方，配方表已用尽。`);
+    ChatMessage.create({
+      content: `<p>在营地「${camp.name}」翻开了《${book.name}》，`
+             + `录入了 ${add.length} 条新配方：${add.map(r => r.name).join("、")}。</p>`,
+    });
+
+    // 用过即销毁：若它就摆在本营地仓库里，先把摆放记录摘掉再删物品
+    const bookUuid = book.uuid;
+    const shelf    = camp.system.warehouseContents ?? [];
+    if (shelf.some(p => p.uuid === bookUuid)) {
+      const rest = { "system.warehouseContents": shelf.filter(p => p.uuid !== bookUuid) };
+      if (camp.canUserModify(game.user, "update")) await camp.update(rest);
+      else game.socket.emit("system.limbusCompany_FVTT",
+        { type: "gmDocUpdate", uuid: camp.uuid, data: rest });
+    }
+    if (book.canUserModify?.(game.user, "delete") ?? book.isOwner) await book.delete();
+    else game.socket.emit("system.limbusCompany_FVTT", { type: "gmDocDelete", uuid: bookUuid });
+
+    this.render(false);
   }
 
   /* ─── 配方操作 ─────────────────────────────────────────────────────── */

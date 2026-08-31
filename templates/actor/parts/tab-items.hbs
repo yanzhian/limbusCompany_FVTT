@@ -181,8 +181,6 @@
               <span class="col-actions">
                 {{#if (eq type 'skillbook')}}
                   <button class="item-learn-skillbook action-btn" data-item-id="{{_id}}" title="学习技能">▶</button>
-                {{else if (eq type 'recipebook')}}
-                  <button class="item-use-recipebook action-btn" data-item-id="{{_id}}" title="在营地使用（录入配方）">▶</button>
                 {{else}}
                   {{#unless (eq type 'material')}}
                     {{#unless (eq type 'container')}}
