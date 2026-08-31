@@ -9582,3 +9582,16 @@ input.item-piles-quantity {
 .limbuscompany nav.sheet-tabs:has(.item:nth-child(2).active)::after { transform: translateX(100%); }
 .limbuscompany nav.sheet-tabs:has(.item:nth-child(3).active)::after { transform: translateX(200%); }
 .limbuscompany nav.sheet-tabs:has(.item:nth-child(4).active)::after { transform: translateX(300%); }
+
+/* 商人打烊 */
+.limbuscompany .mc-chip.mc-closed-toggle.on {
+  background: rgba(150, 40, 40, .35); border-color: #A24B3C; color: #F0B9A8;
+}
+.limbuscompany .mc-grid-box { position: relative; }
+.limbuscompany .mc-closed-veil {
+  position: absolute; inset: 0; z-index: 5;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(8, 6, 5, .82);
+  color: #8A6E52; font-size: 26px; letter-spacing: .5em; text-indent: .5em;
+  border: 1px solid var(--border-gold); border-radius: 3px; user-select: none;
+}

@@ -211,7 +211,13 @@ function _updateHover(clientX, clientY) {
   if (!hit) { _drag.hover = null; return; }
 
   const { root, adapter } = hit;
-  if (adapter.editable?.() === false) { _drag.hover = null; return; }
+  // editable 管的是"这个网格里的图块能不能被拖起来"，不该顺带禁掉"能不能放进来"
+  // （商人货架就是这种：玩家拖不动货架上的商品，但必须能把自己的东西丢进去出售）。
+  // 提供 droppable 的适配器由它说了算，没提供的沿用旧行为。
+  const canDrop = adapter.droppable
+    ? !!adapter.droppable(_drag.payload)
+    : adapter.editable?.() !== false;
+  if (!canDrop) { _drag.hover = null; return; }
 
   // 容器图块：整块视为一个"存进去"的投放点（自动寻位由接收端负责），
   // 不参与格子碰撞——否则永远压在容器自己身上，判成红色放不进去。

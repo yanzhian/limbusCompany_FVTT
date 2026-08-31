@@ -373,6 +373,10 @@ export class MerchantData extends foundry.abstract.TypeDataModel {
         enabled: new fields.BooleanField({ initial: false }),
         rate:    new fields.NumberField({ required: true, min: 1, max: 10, initial: 10 }),
       }),
+
+      // ── 打烊 ────────────────────────────────────────────────────────────
+      // GM 一键歇业：玩家看不到货架上的商品，也不能买、不能卖。GM 端不受影响。
+      closed: new fields.BooleanField({ initial: false }),
     };
   }
 }
