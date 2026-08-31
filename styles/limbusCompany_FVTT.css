@@ -9685,3 +9685,24 @@ input.item-piles-quantity {
 .window-app .lc-hd-menu li > .header-control:hover {
   background: rgba(95,62,33,.35) !important; color: #E8CAA2 !important;
 }
+
+/* 标题栏：按钮右对齐、去掉底部分割线、关闭按钮只留 ✕ */
+.window-app.lc-hd-collapsed .window-header {
+  justify-content: flex-end;
+  border-bottom: none !important;
+  box-shadow: none !important;
+}
+/* 标题隐藏后没有撑开的元素了，补一个弹性占位把按钮顶到最右 */
+.window-app.lc-hd-collapsed .window-header::before {
+  content: ""; flex: 1 1 auto; align-self: stretch;
+}
+/* 关闭按钮的「关闭」二字是裸文本节点，用 font-size:0 抹掉，只留图标 */
+.window-app.lc-hd-collapsed .window-header a.header-button,
+.window-app.lc-hd-collapsed .window-header .header-control { font-size: 0; }
+.window-app.lc-hd-collapsed .window-header a.header-button > i,
+.window-app.lc-hd-collapsed .window-header .header-control > i { font-size: 12px; }
+/* 菜单里要看得见文字 */
+.window-app .lc-hd-menu li > a,
+.window-app .lc-hd-menu li > .header-control { font-size: 11.5px !important; }
+.window-app .lc-hd-menu li > a > i,
+.window-app .lc-hd-menu li > .header-control > i { font-size: 12px; }
