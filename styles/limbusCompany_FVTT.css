@@ -9574,3 +9574,9 @@ input.item-piles-quantity {
 @media (prefers-reduced-motion: reduce) {
   .limbuscompany nav.sheet-tabs::after { transition: none; }
 }
+
+/* 不依赖 JS 的兜底：直接按第几个 .item 处于 .active 定位金线 */
+.limbuscompany nav.sheet-tabs:has(.item:nth-child(1).active)::after { transform: translateX(0%); }
+.limbuscompany nav.sheet-tabs:has(.item:nth-child(2).active)::after { transform: translateX(100%); }
+.limbuscompany nav.sheet-tabs:has(.item:nth-child(3).active)::after { transform: translateX(200%); }
+.limbuscompany nav.sheet-tabs:has(.item:nth-child(4).active)::after { transform: translateX(300%); }
