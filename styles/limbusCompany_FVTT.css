@@ -9735,3 +9735,19 @@ input.item-piles-quantity {
 .window-app.lc-hd-collapsed .window-header .lc-hd-dots:hover {
   opacity: 1; color: #E7B956; background: rgba(231,185,86,.14);
 }
+
+/* 【制作】按钮内部的本地进度条（只有点的人看得见，不写文档） */
+.camp-craft-btn { position: relative; overflow: hidden; }
+.camp-craft-btn.crafting { pointer-events: none; color: #F0C96E; }
+.camp-craft-btn.crafting::before {
+  content: ""; position: absolute; left: 0; top: 0; bottom: 0;
+  width: var(--craft-p, 0%);
+  background: linear-gradient(90deg, rgba(231,185,86,.30), rgba(231,185,86,.55));
+  box-shadow: 0 0 8px rgba(231,185,86,.35) inset;
+  pointer-events: none; z-index: 0;
+}
+.camp-craft-btn.crafting::after {
+  content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 2px;
+  background: linear-gradient(90deg, #E7B956 var(--craft-p, 0%), transparent 0);
+}
+.camp-craft-btn > * { position: relative; z-index: 1; }

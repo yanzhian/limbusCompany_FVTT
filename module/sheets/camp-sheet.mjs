@@ -22,25 +22,6 @@ import { guardInteractRange } from "../helpers/proximity.mjs";
 /** 制作进行中的营地 id：期间禁止孤儿清理写回 warehouseContents（见下方说明） */
 const _CRAFTING = new Set();
 
-// ── 调试：任何人改动营地仓库摆放记录都打一条日志（含调用栈）──────────────
-// 排查"产出闪一下就没了"用；查完可以整段删掉。
-Hooks.on("updateActor", (actor, changes) => {
-  const next = changes?.system?.warehouseContents;
-  if (!next || actor.type !== "camp") return;
-  console.debug("[营地|仓库写入]", {
-    camp: actor.name, 条数: next.length,
-    uuids: next.map(p => p.uuid),
-    调用栈: new Error("warehouseContents 被写入").stack,
-  });
-});
-Hooks.on("deleteItem", (item) => {
-  if (item.parent?.type !== "camp") return;
-  console.debug("[营地|物品被删]", {
-    camp: item.parent.name, item: item.name, uuid: item.uuid,
-    调用栈: new Error("营地物品被删除").stack,
-  });
-});
-
 export class LimbusCampSheet extends ActorSheet {
 
   /**
@@ -235,25 +216,20 @@ export class LimbusCampSheet extends ActorSheet {
     if (orphanedIndices.length > 0 && game.user.isGM) {
       const deadUuids = orphanedIndices
         .map(i => placements[i]?.uuid).filter(Boolean);
-      console.debug("[营地|孤儿] 本次渲染发现孤儿记录", { campId: this.actor.id, deadUuids });
       setTimeout(async () => {
         // 制作中一律不清：制作会先删原料再写 contents，这中间的任何整数组写回
         // 都可能把刚做出来的产出物一起覆盖掉
-        if (_CRAFTING.has(this.actor.id)) {
-          console.debug("[营地|孤儿] 制作进行中，跳过本次清理");
-          return;
-        }
+        if (_CRAFTING.has(this.actor.id)) return;
         const gone = [];
         for (const uuid of deadUuids) {
           if (!(await fromUuid(uuid).catch(() => null))) gone.push(uuid);
         }
-        if (!gone.length) return void console.debug("[营地|孤儿] 复核后没有需要清理的");
+        if (!gone.length) return;
         // 写之前再读一次最新值（前面有 await，期间可能已被制作流程改写）
         const cur  = this.actor.system.warehouseContents ?? [];
         const dead = new Set(gone);
         const next = cur.filter(p => !dead.has(p.uuid));
         if (next.length === cur.length) return;
-        console.debug("[营地|孤儿] 清理", { gone, before: cur.length, after: next.length });
         await this.actor.update({ "system.warehouseContents": next });
       }, 0);
     }
@@ -1112,18 +1088,38 @@ export class LimbusCampSheet extends ActorSheet {
 
   /* ─── 制作 ─────────────────────────────────────────────────────────── */
 
+  /**
+   * 点【制作】：先问产出放哪儿，再在按钮内部走一条**只有自己看得见**的进度条，
+   * 进度条走满才真正制作（发聊天卡 + 生成物品）。
+   * 进度条纯本地：不写文档、不发 socket，所以别人的界面不会动。
+   */
   async _onCraft(event) {
-    const recipeId = event.currentTarget.dataset.recipeId;
+    const btn      = event.currentTarget;
+    const recipeId = btn.dataset.recipeId;
     if (this._pendingCraftIds.has(recipeId)) return;
 
-    // 乐观锁：立即禁用按钮，防止重复点击
+    const dest = await this._askCraftDestination();
+    if (!dest) return;                       // 取消
+
+    // 乐观锁：本地立刻锁住这条配方，防止重复点击
     this._pendingCraftIds.add(recipeId);
+    const ok = await this._runCraftProgress(btn);
+    if (!ok) {                               // 进度条中途被打断（面板重渲染/关闭）
+      this._pendingCraftIds.delete(recipeId);
+      return;
+    }
     this.render(false);
+
+    const charId = this._craftCharId();
+    if (dest === "bag" && !charId) {
+      this._pendingCraftIds.delete(recipeId);
+      return void ui.notifications.warn("没有主控角色，无法放进背包。");
+    }
 
     if (game.user.isGM) {
       try {
         await LimbusCampSheet._gmExecuteCraft({
-          campActorId: this.actor.id, recipeId, userId: game.user.id,
+          campActorId: this.actor.id, recipeId, userId: game.user.id, dest, charId,
         });
       } finally {
         // GM 侧：制作完成（成功或失败）后立即解锁
@@ -1132,7 +1128,7 @@ export class LimbusCampSheet extends ActorSheet {
       }
     } else {
       game.socket.emit("system.limbusCompany_FVTT", {
-        type: "campCraft", campActorId: this.actor.id, recipeId, userId: game.user.id,
+        type: "campCraft", campActorId: this.actor.id, recipeId, userId: game.user.id, dest, charId,
       });
       // 玩家侧：1 秒超时保底解锁（正常情况下服务端同步会更新按钮状态）
       setTimeout(() => {
@@ -1141,15 +1137,60 @@ export class LimbusCampSheet extends ActorSheet {
     }
   }
 
+  /** 当前用户用来收物品的角色 */
+  _craftCharId() {
+    const c = game.user.character
+      ?? game.actors.find(a => a.type === "character" && a.isOwner);
+    return c?.id ?? "";
+  }
+
+  /** 产出去向选择 → "camp" | "bag" | null（取消） */
+  async _askCraftDestination() {
+    const hasChar = !!this._craftCharId();
+    return new Promise((resolve) => {
+      new Dialog({
+        title: "制作",
+        content: `<div class="limbuscompany" style="padding:4px 2px">
+            <p style="margin:0 0 6px">做好的东西放到哪儿？</p>
+          </div>`,
+        buttons: {
+          camp: { label: "营地仓库", callback: () => resolve("camp") },
+          bag:  { label: hasChar ? "角色背包" : "角色背包（无主控角色）",
+                  callback: () => resolve(hasChar ? "bag" : null) },
+        },
+        default: "camp",
+        close: () => resolve(null),
+      }).render(true);
+    });
+  }
+
+  /**
+   * 按钮内部的本地进度条。用 CSS 变量 --craft-p 驱动一层伪元素宽度。
+   * @returns {Promise<boolean>} 走满 = true；中途按钮从 DOM 消失 = false
+   */
+  _runCraftProgress(btn, duration = 1600) {
+    return new Promise((resolve) => {
+      const $btn = $(btn).addClass("crafting");
+      const t0   = performance.now();
+      const tick = () => {
+        if (!document.body.contains(btn)) return resolve(false);
+        const p = Math.min(1, (performance.now() - t0) / duration);
+        $btn.css("--craft-p", `${(p * 100).toFixed(1)}%`);
+        if (p < 1) return requestAnimationFrame(tick);
+        $btn.removeClass("crafting").css("--craft-p", "");
+        resolve(true);
+      };
+      requestAnimationFrame(tick);
+    });
+  }
+
   /* ─── 静态：GM 端执行制作 ────────────────────────────────────────────── */
 
-  static async _gmExecuteCraft({ campActorId, recipeId, userId }) {
+  static async _gmExecuteCraft({ campActorId, recipeId, userId, dest = "camp", charId = "" }) {
     const campActor = game.actors.get(campActorId);
     const recipe    = (campActor?.system?.recipes ?? []).find(r => r.id === recipeId);
     if (!campActor || !recipe) return;
     _CRAFTING.add(campActorId);
-    console.debug("[营地|制作] 开始", { camp: campActor.name, recipe: recipe.name,
-      contentsBefore: (campActor.system.warehouseContents ?? []).length });
     try {
 
     // ── 1. 检查原料（只计算实际放置在仓库格中的物品，与 getData 逻辑一致） ──
@@ -1213,6 +1254,24 @@ export class LimbusCampSheet extends ActorSheet {
     const outData = foundry.utils.deepClone(recipe.outputItemData);
     delete outData._id;
     if (outData.system?.quantity !== undefined) outData.system.quantity = recipe.outputQuantity;
+
+    // 产出去向：角色背包 / 营地仓库（背包分支不碰 warehouseContents）
+    const toBagActor = dest === "bag" ? game.actors.get(charId) : null;
+    if (dest === "bag" && !toBagActor) {
+      ui.notifications.warn("[营地] 找不到目标角色，产出改存营地仓库。");
+    }
+    if (toBagActor) {
+      await toBagActor.createEmbeddedDocuments("Item", [outData]);
+      // 原料记录仍要从仓库摘掉
+      const deadIds = new Set(idsToDelete);
+      await campActor.update({
+        "system.warehouseContents": (campActor.system.warehouseContents ?? [])
+          .filter(p => !deadIds.has(p.uuid.split(".").pop())),
+      });
+      await LimbusCampSheet._sendCraftCard(campActor, recipe, userId, "背包");
+      return;
+    }
+
     const [outItem] = await campActor.createEmbeddedDocuments("Item", [outData]);
 
     // ── 5. 用预先计算的 idsToDelete 集合过滤 warehouseContents ──────
@@ -1252,25 +1311,20 @@ export class LimbusCampSheet extends ActorSheet {
 
     if (place) {
       newContents.push({ uuid: outItem.uuid, ...place });
-      console.debug("[营地|制作] 产出已放置", { uuid: outItem.uuid, place, total: newContents.length });
     } else {
       ui.notifications.warn(`[营地] 产出 ${recipe.outputName} 无法放入仓库（空间不足），已创建为悬空物品。`);
     }
     await campActor.update({ "system.warehouseContents": newContents });
-    console.debug("[营地|制作] contents 已写回", {
-      写入条数: newContents.length,
-      实际读回: (campActor.system.warehouseContents ?? []).length,
-      产出还在: (campActor.system.warehouseContents ?? []).some(p => p.uuid === outItem.uuid),
-    });
-    // 写回后再抽查一次：谁把它删了就能在这条日志上抓现行
-    const _outUuid = outItem.uuid;
-    setTimeout(() => {
-      const still = (campActor.system.warehouseContents ?? []).some(p => p.uuid === _outUuid);
-      const alive = !!campActor.items.get(_outUuid.split(".").pop());
-      console.debug("[营地|制作] 1 秒后复查", { 摆放记录还在: still, 物品还在: alive });
-    }, 1000);
 
-    // 制作聊天卡（商人交易卡同款风格）
+    await LimbusCampSheet._sendCraftCard(campActor, recipe, userId, "营地仓库");
+    } finally {
+      // 闸门再多留一会儿：制作触发的那几次重渲染的孤儿清理都排在后面
+      setTimeout(() => _CRAFTING.delete(campActorId), 1500);
+    }
+  }
+
+  /** 制作完成的聊天卡（商人交易卡同款风格） */
+  static async _sendCraftCard(campActor, recipe, userId, whereLabel) {
     const triggerUser = game.users.get(userId);
     const triggerChar = triggerUser?.character;
     await ChatMessage.create({
@@ -1280,7 +1334,7 @@ export class LimbusCampSheet extends ActorSheet {
             <img src="${campActor.img}" class="purchase-merchant-img" alt="${campActor.name}">
             <div class="purchase-title">
               <span class="purchase-name">${triggerChar?.name ?? triggerUser?.name ?? "营地"}</span>
-              <span class="purchase-sub">在营地【${campActor.name}】制作，已存入仓库</span>
+              <span class="purchase-sub">在营地【${campActor.name}】制作，已存入${whereLabel}</span>
             </div>
           </div>
           <div class="ic-gold-divider"></div>
@@ -1292,10 +1346,6 @@ export class LimbusCampSheet extends ActorSheet {
         </div>`,
       speaker: triggerChar ? ChatMessage.getSpeaker({ actor: triggerChar }) : undefined,
     });
-    } finally {
-      // 闸门再多留一会儿：制作触发的那几次重渲染的孤儿清理都排在后面
-      setTimeout(() => _CRAFTING.delete(campActorId), 1500);
-    }
   }
 
   /* ─── 静态：GM 端执行取出物品 ──────────────────────────────────────── */
