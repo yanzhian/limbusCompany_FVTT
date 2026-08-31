@@ -497,7 +497,7 @@ export class LimbusActorSheet extends ActorSheet {
       isFavorite:  this._favorites.has(item.id),
       sinColor:    cfg.SIN_COLORS?.[sys.sinType] ?? "#E8CAA2",
       sinLabel,
-      sinIcon:     cfg.SIN_ICON_PATHS?.[sys.sinType] ?? "",
+      sinIconPath: cfg.SIN_ICON_PATHS?.[sys.sinType] ?? "",
       catLabel,
       skillIcon:   item.img,
       capacityLabel: `${capW}×${capH}`,

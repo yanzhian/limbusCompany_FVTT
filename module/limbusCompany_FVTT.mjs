@@ -1436,7 +1436,8 @@ Hooks.once("init", () => {
 
   /** 返回罪孽图标路径 */
   Handlebars.registerHelper("sinIcon", (sinType) => {
-    const sin = sinType?.charAt(0).toUpperCase() + sinType?.slice(1);
+    if (typeof sinType !== "string" || !sinType) return "";
+    const sin = sinType.charAt(0).toUpperCase() + sinType.slice(1);
     return `systems/limbusCompany_FVTT/assets/icons/Base_icon/${sin}_icon.webp`;
   });
 });
