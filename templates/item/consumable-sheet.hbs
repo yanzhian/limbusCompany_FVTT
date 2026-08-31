@@ -107,13 +107,14 @@
         <span class="rarity-dot"></span>
         {{#if (and isEditable (not isLocked))}}
           <select name="system.rarity" class="rarity-select">
-            {{#select system.rarity}}
-              <option value="common">平装</option>
-              <option value="fine">精良</option>
-              <option value="epic">史诗</option>
-              <option value="artistic">艺术</option>
-              <option value="mythic">神话</option>
-            {{/select}}
+            {{!-- v13 移除了内置的 select 块助手：助手不存在时整块被当成假值跳过，
+                  下拉里一个 option 都不会渲染（表现就是"选不了也存不上"）。
+                  改用本系统自己注册的 eq 助手逐个标 selected。 --}}
+            <option value="common"   {{#eq system.rarity "common"}}selected{{/eq}}>平装</option>
+            <option value="fine"     {{#eq system.rarity "fine"}}selected{{/eq}}>精良</option>
+            <option value="epic"     {{#eq system.rarity "epic"}}selected{{/eq}}>史诗</option>
+            <option value="artistic" {{#eq system.rarity "artistic"}}selected{{/eq}}>艺术</option>
+            <option value="mythic"   {{#eq system.rarity "mythic"}}selected{{/eq}}>神话</option>
           </select>
         {{else}}
           <span class="rarity-display">{{rarityLabel}}</span>
