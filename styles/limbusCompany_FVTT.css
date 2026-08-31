@@ -2566,19 +2566,6 @@ body.game .limbuscompany.app img {
 /* 列通用 */
 .limbuscompany .header-col { display: flex; flex-direction: column; gap: 4px; }
 
-/* ① 分区托底：三列各自坐在一块极淡的底板上，视觉上把「资源 / 信息 / 属性」
-   分成三块，而不是一片浮在同一个背景上的零散控件。底色很淡（3% 白），
-   靠 1px 描边和圆角拉开层次，不抢原有的棕金配色。 */
-.limbuscompany .header-left,
-.limbuscompany .header-mid,
-.limbuscompany .header-right {
-  background: rgba(255, 255, 255, .022);
-  border: 1px solid rgba(95, 62, 33, .35);
-  border-radius: 4px;
-  padding: 6px 8px;
-  box-sizing: border-box;
-}
-
 /* 左列：260px 固定 */
 .limbuscompany .header-left {
   width: 260px; flex-shrink: 0;
@@ -2586,7 +2573,7 @@ body.game .limbuscompany.app img {
 
 /* 中列：220px 固定 */
 .limbuscompany .header-mid {
-  width: 240px; flex-shrink: 0;
+  width: 240px; flex-shrink: 0; padding: 0 4px;
 }
 
 /* 右列：剩余空间，最小 370px */
@@ -2784,17 +2771,10 @@ body.game .limbuscompany.app img {
 }
 
 /* 内容行：220×50px，图标32px，字体32px */
-/* ② 三对「图标 + 数值」用固定网格排：基础信息与抗性信息两行的图标、
-   数字因此上下严格对齐（flex + space-around 会因数字宽度不同而错位）。
-   列宽写死 32px（图标）+ 1fr（数值），两行共用同一套列。 */
 .limbuscompany .info-row {
-  display: grid;
-  grid-template-columns: 32px 1fr 32px 1fr 32px 1fr;
-  align-items: center;
-  gap: 0 4px;
-  width: 220px; height: 50px;
+  display: flex; align-items: center; gap: 6px;
+  width: 220px; height: 50px; flex-wrap: nowrap;justify-content: space-around;
 }
-.limbuscompany .info-row > span { text-align: center; }
 .limbuscompany .info-icon   { width: 32px; height: 32px; object-fit: contain; flex-shrink: 0; }
 .limbuscompany .resist-icon { width: 32px; height: 32px; object-fit: contain; flex-shrink: 0; }
 .limbuscompany .info-val    { 
@@ -2883,16 +2863,14 @@ body.game .limbuscompany.app img {
   width: 50px; height: 70px; background: #5F3E22; border-radius: 3px;
   gap: 2px; flex-shrink: 0;
 }
-/* ② 字号层级：名字是标签、数值才是要读的东西——原本两者同为 16px 粗体，
-   一格里两行一样重，扫一眼分不出主次。名字降到 12px、去粗、用次要色；
-   数值提到 22px 保持粗体，主次立刻分开。 */
+/* 属性名：16px #E8C9A2 */
 .limbuscompany .attr-label {
-  font-size: 12px; color: #C0A183; text-align: center; line-height: 1;
-  font-weight: normal; letter-spacing: .04em;
+  font-size: 16px; color: #E8C9A2; text-align: center; line-height: 1; font-weight: bold;
 }
+/* 属性数值：16px */
 .limbuscompany .attr-value {
-  font-size: 22px; font-weight: bold; color: var(--text-main);
-  width: 44px; text-align: center; background: transparent;
+  font-size: 16px; font-weight: bold; color: var(--text-main);
+  width: 36px; text-align: center; background: transparent;
   border: none; font-family: var(--font-main); line-height: 1;
 }
 .limbuscompany .attr-value:disabled { border: none; cursor: default; }
@@ -2966,23 +2944,7 @@ body.game .limbuscompany.app img {
   height: 36px; display: flex; align-items: center; justify-content: center;
 }
 .limbuscompany .sheet-tabs .item:hover { color: var(--text-main); }
-
-/* ③ 选中态指示器：原来只靠文字变金色，扫一眼认不出在哪个 Tab
-   （border-bottom 那行早被注释掉了，border-bottom-color 是空设的）。
-   改用 ::after 画一条贴底的金条 + 一点点底色，选中的那格立刻跳出来。 */
-.limbuscompany .sheet-tabs .item { position: relative; }
-.limbuscompany .sheet-tabs .item::after {
-  content: ""; position: absolute; left: 12%; right: 12%; bottom: 0;
-  height: 2px; border-radius: 1px; background: transparent;
-  transition: background .15s;
-}
-.limbuscompany .sheet-tabs .item.active {
-  color: var(--gold-active); font-weight: bold;
-  background: linear-gradient(180deg, transparent, rgba(229, 186, 37, .10));
-}
-.limbuscompany .sheet-tabs .item.active::after { background: var(--gold-active); }
-.limbuscompany .sheet-tabs .item:hover::after { background: rgba(229, 186, 37, .35); }
-.limbuscompany .sheet-tabs .item.active:hover::after { background: var(--gold-active); }
+.limbuscompany .sheet-tabs .item.active { color: var(--gold-active); border-bottom-color: var(--gold-active); }
 
 /* ─── §3-D  Tab 内容区 ───────────────────────────────────────────── */
 
