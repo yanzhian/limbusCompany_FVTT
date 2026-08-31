@@ -9551,16 +9551,7 @@ input.item-piles-quantity {
 }
 .limbuscompany .action-btn:focus-visible { outline: 1px solid var(--gold-active); outline-offset: -1px; }
 
-/* Tab 切换过渡：淡入 + 轻微上浮，只作用于刚激活的那一页 */
-.limbuscompany .sheet-body .tab { opacity: 1; }
-.limbuscompany .sheet-body .tab.active {
-  animation: lc-tab-in .22s cubic-bezier(.22,.61,.36,1);
-}
-@keyframes lc-tab-in {
-  from { opacity: 0; transform: translateY(6px); }
-  to   { opacity: 1; transform: translateY(0); }
-}
-/* 选中指示条一并做成滑动感（宽度过渡已有，这里补颜色/辉光的缓动） */
+/* Tab 切换过渡：只有指示条动，内容不做动画 */
 .limbuscompany .sheet-tabs .item::after {
   transition: left .22s cubic-bezier(.22,.61,.36,1),
               right .22s cubic-bezier(.22,.61,.36,1),
@@ -9568,7 +9559,6 @@ input.item-piles-quantity {
 }
 .limbuscompany .sheet-tabs .item { transition: color .18s; }
 
-/* 系统「减少动态效果」时不做位移动画 */
 @media (prefers-reduced-motion: reduce) {
-  .limbuscompany .sheet-body .tab.active { animation: none; }
+  .limbuscompany .sheet-tabs .item::after { transition: none; }
 }
