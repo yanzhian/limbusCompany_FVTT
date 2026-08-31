@@ -58,7 +58,15 @@ export class LimbusActorSheet extends ActorSheet {
   }
 
   get template() {
-    return "systems/limbusCompany_FVTT/templates/actor/character-sheet.hbs";
+    // 【角色卡·改良版外观（调试）】：设置里打开时换用并行的试验模板。
+    // 两套模板复用同一批 parts（header / tab-items / tab-skills / tab-combat），
+    // 功能逻辑与监听完全一致，只有外框和样式不同。
+    let redesign = false;
+    try { redesign = !!game.settings.get("limbusCompany_FVTT", "sheetRedesign"); }
+    catch { /* 设置未注册时用旧版 */ }
+    return redesign
+      ? "systems/limbusCompany_FVTT/templates/actor/character-sheet-redesign.hbs"
+      : "systems/limbusCompany_FVTT/templates/actor/character-sheet.hbs";
   }
 
   /* ─── 数据准备 ──────────────────────────────────────────────────────────── */
@@ -667,7 +675,8 @@ export class LimbusActorSheet extends ActorSheet {
     // Tab 切换时跟踪当前 tab ID（跨重渲染保持状态）
     html.find(".sheet-tabs .item[data-tab]").on("click", (ev) => {
       this._activeTab = ev.currentTarget.dataset.tab;
-      if (this._activeTab === "combat") {
+      // 旧模板的战斗 Tab 写作「战斗」，改良版写作 combat——两个都认
+      if (this._activeTab === "combat" || this._activeTab === "战斗") {
         setTimeout(() => this._syncCombatSlots(this.element), 50);
       }
     });

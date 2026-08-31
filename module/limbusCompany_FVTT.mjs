@@ -1174,6 +1174,25 @@ function _registerSettings() {
     default: 3,
   });
 
+  // 角色卡改良版外观：并行的试验模板，方便边用边调，默认关闭
+  game.settings.register("limbusCompany_FVTT", "sheetRedesign", {
+    name:    "角色卡·改良版外观（调试）",
+    hint:    "换用 character-sheet-redesign.hbs / .css 这套试验外观："
+           + "三层视觉层级（身份区 / 主导航 / 工作区）、带图标的 Tab、底部资源栏。"
+           + "功能与旧版完全一致（复用同一批 parts），只是外框与样式不同；"
+           + "改样式只需刷新页面，不用重启世界。",
+    scope:   "client",
+    config:  true,
+    type:    Boolean,
+    default: false,
+    onChange: () => {
+      // 立刻把已打开的角色卡换成另一套模板
+      for (const app of Object.values(ui.windows)) {
+        if (app?.actor?.type === "character") app.render(true);
+      }
+    },
+  });
+
   // 形象（纸娃娃）系统：整套功能的总开关，默认关闭
   game.settings.register("limbusCompany_FVTT", "dollSystem", {
     name:    "启用形象系统",
@@ -1230,6 +1249,7 @@ async function _preloadTemplates() {
     // Actor sheets
     "systems/limbusCompany_FVTT/templates/actor/merchant-sheet.hbs",
     "systems/limbusCompany_FVTT/templates/actor/character-sheet.hbs",
+    "systems/limbusCompany_FVTT/templates/actor/character-sheet-redesign.hbs",
     "systems/limbusCompany_FVTT/templates/actor/camp-sheet.hbs",
     "systems/limbusCompany_FVTT/templates/actor/parts/header.hbs",
     "systems/limbusCompany_FVTT/templates/actor/parts/tab-items.hbs",
