@@ -710,9 +710,10 @@ export class LimbusActorSheet extends ActorSheet {
 
     // 重渲染后恢复战斗槽（无论当前在哪个 Tab，DOM 元素都存在）：
     // 只要 _combatBagState 存在就恢复，避免 AP/BUFF 等更新触发重渲染时清空槽位。
-    if (this._combatBagState) {
-      setTimeout(() => this._renderCombatSlots(this.element), 80);
-    }
+    // 同步执行（activateListeners 早于 DOM 注入）：以前用 setTimeout(80) 会让槽位
+    // 先按模板默认图渲染一帧、80ms 后才换成真正的技能图 —— 改理智/行动值这种
+    // 频繁重渲染时就表现为【基础技能】闪一下。
+    if (this._combatBagState) this._renderCombatSlots(html);
 
     // ── 非 GM/非编辑：只读分支结束 ────────────────────────────────────────
     if (!this.isEditable) return;
@@ -1758,7 +1759,9 @@ export class LimbusActorSheet extends ActorSheet {
       basicSlots.each((i, wrap) => {
         const $wrap = $(wrap);
         const $slot = $wrap.find(".combat-skill-slot");
-        $slot.find("img").attr("src", defaultImg).show();
+        const $img0 = $slot.find("img");
+        if ($img0.attr("src") !== defaultImg) $img0.attr("src", defaultImg);
+        $img0.show();
         $slot.attr("data-item-id", "");
         $slot.removeClass("slot-active slot-reserve slot-bag").addClass("slot-empty");
         $wrap.find(".slot-state-dot").removeClass("dot-active dot-reserve");
@@ -1779,7 +1782,10 @@ export class LimbusActorSheet extends ActorSheet {
       // 主技能
       const mainItem = id ? this.actor.items.get(id) : null;
 
-      $slot.find("img").attr("src", mainItem?.img ?? "");
+      // 同 src 不重复写，避免浏览器重新解码图片造成的闪烁
+      const $img   = $slot.find("img");
+      const newSrc = mainItem?.img ?? "";
+      if ($img.attr("src") !== newSrc) $img.attr("src", newSrc);
       $slot.attr("data-item-id", id ?? "");
       $slot.attr("data-slot-index", i);
 
@@ -2179,12 +2185,15 @@ export class LimbusActorSheet extends ActorSheet {
   }
 
   _onEgoSkillClick(event) {
-    // EGO / 守备技能：直接发起对抗，不推进 bag，不消耗行动值
     const itemId = event.currentTarget.dataset.itemId;
     if (!itemId) return;
     const item = this.actor.items.get(itemId);
     if (!item) return;
 
+    // 守备技能按规则只能【激活】，不能发起对抗
+    if (item.system?.type === "defense") return this._activateItem(item);
+
+    // EGO 技能：直接发起对抗，不推进 bag，不消耗行动值
     this._showClashDialog(item, -1);  // slotIndex = -1 → 不触发 bag 动画/AP 消耗
   }
 
