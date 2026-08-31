@@ -2066,7 +2066,9 @@ export class LimbusActorSheet extends ActorSheet {
         .css({ transition: "none", transform: "", opacity: "" });
     });
     this._renderCombatSlots(this.element);
-    QuickActionHUD.instance?.render(false);
+    // HUD 也补播一次补位动画，否则它是整块重渲染、看起来在闪
+    const hud = QuickActionHUD.instance;
+    if (hud) { if (slotIndex <= 2) hud._slideFromSlot = slotIndex; hud.render(false); }
 
     // 被丢的那格右边所有牌左移一格，最右边补进来的新牌从右侧推入
     const $after = _wraps();

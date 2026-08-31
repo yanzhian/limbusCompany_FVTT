@@ -407,8 +407,29 @@ export class QuickActionHUD extends Application {
 
   /* ─── 事件监听 ───────────────────────────────────────────────────────────── */
 
+  /**
+   * 重渲染后补播补位动画：被打出格右侧的技能左移，最右格从右侧滑入。
+   * 由 _castSkill 通过 this._slideFromSlot 埋点，播一次即清。
+   */
+  _replaySlotSlide(html) {
+    const from = this._slideFromSlot;
+    if (from == null) return;
+    this._slideFromSlot = null;
+
+    const $slots = html.find(".qa-skill-row .qa-skill-slot");
+    if (!$slots.length) return;
+    const last = $slots.length - 1;
+    $slots.each((i, el) => {
+      if (i < from) return;                       // 左侧的牌原地不动
+      const $s = $(el);
+      $s.addClass(i === last ? "qa-skill-slot--entering" : "qa-skill-slot--shifting");
+      setTimeout(() => $s.removeClass("qa-skill-slot--entering qa-skill-slot--shifting"), 400);
+    });
+  }
+
   activateListeners(html) {
     super.activateListeners(html);
+    this._replaySlotSlide(html);
 
     // ── 【大招就绪】星芒：技能槽与 EGO 槽都参与 ───────────────────────────
     if (this._actor) {
@@ -927,7 +948,13 @@ export class QuickActionHUD extends Application {
         if (idx > slotIndex) $(el).addClass("qa-skill-slot--shifting");
       });
     }
-    setTimeout(() => this.render(false), 430);
+    // 打出动画结束后重渲染。重渲染会整块换掉 DOM，动画类随之丢失 —— 所以把
+    // "从第几格起要补位"记下来，等新 DOM 建好后在 activateListeners 里补播，
+    // 否则新槽位是瞬间出现的，看起来就是闪一下（角色卡那边不重渲染所以顺滑）。
+    setTimeout(() => {
+      if (slotIndex >= 0) this._slideFromSlot = slotIndex;
+      this.render(false);
+    }, 430);
   }
 
   /**
