@@ -115,7 +115,7 @@
             </div>
           </div>
           <div class="rb-out">→ {{outputName}}{{#if outputQuantity}} ×{{outputQuantity}}{{/if}}</div>
-          {{#if (and isEditable (not isLocked))}}
+          {{#if (and @root.isEditable (not @root.isLocked))}}
             <div class="rb-row-actions">
               <button type="button" class="rb-edit action-btn" data-recipe-id="{{id}}" title="编辑">✎</button>
               <button type="button" class="rb-delete action-btn" data-recipe-id="{{id}}" title="删除">×</button>
@@ -123,7 +123,7 @@
           {{/if}}
         </div>
       {{else}}
-        <div class="rb-empty">还没有配方{{#if (and isEditable (not isLocked))}}，点下面的【添加新配方】{{/if}}</div>
+        <div class="rb-empty">还没有配方{{#if (and @root.isEditable (not @root.isLocked))}}，点下面的【添加新配方】{{/if}}</div>
       {{/each}}
     </div>
 

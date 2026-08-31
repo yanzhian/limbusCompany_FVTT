@@ -746,6 +746,8 @@ export class LimbusActorSheet extends ActorSheet {
     html.find(".item-activate").on("click",   this._onItemActivate.bind(this));
     html.find(".item-learn-skillbook").on("click", this._onSkillBookLearn.bind(this));
     html.find(".item-use-recipebook").on("click", this._onUseRecipeBook.bind(this));
+    // 双击配方表那一行 = 在营地使用（右键菜单里也有一条）
+    html.find(".item-row[data-type='recipebook']").on("dblclick", this._onUseRecipeBook.bind(this));
     html.find(".item-favorite").on("click",   this._onItemFavorite.bind(this));
     html.find(".item-more-menu").on("click",  this._onItemContextMenu.bind(this));
     html.find(".item-row .item-name").on("click", this._onItemOpen.bind(this));
@@ -1580,6 +1582,13 @@ export class LimbusActorSheet extends ActorSheet {
       { name: "发送聊天框",icon: "<i class='fas fa-comment'></i>", callback: () => item.sendToChat?.() },
       { name: "删除",      icon: "<i class='fas fa-trash'></i>",   callback: () => item.delete() },
     ];
+    // 配方表：右键多一条「添加营地配方」
+    if (item.type === "recipebook") {
+      menuItems.splice(1, 0, {
+        name: "添加营地配方", icon: "<i class='fas fa-scroll'></i>",
+        callback: () => this._useRecipeBook(item),
+      });
+    }
     this._renderContextMenu(event, menuItems);
   }
 
@@ -2567,8 +2576,12 @@ export class LimbusActorSheet extends ActorSheet {
    * 同名配方视为已有，不重复录入；配方表本身不消耗（是"表"不是"卷轴"）。
    */
   async _onUseRecipeBook(event) {
-    const itemId = event.currentTarget.dataset.itemId ?? "";
-    const book   = this.actor.items.get(itemId);
+    event.preventDefault(); event.stopPropagation();
+    const itemId = event.currentTarget.closest("[data-item-id]")?.dataset.itemId ?? "";
+    return this._useRecipeBook(this.actor.items.get(itemId));
+  }
+
+  async _useRecipeBook(book) {
     if (!book || book.type !== "recipebook") return;
 
     const recipes = book.system.recipes ?? [];
