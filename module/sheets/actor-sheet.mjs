@@ -617,9 +617,35 @@ export class LimbusActorSheet extends ActorSheet {
 
   /* ─── 事件绑定 ──────────────────────────────────────────────────────────── */
 
+  /**
+   * Tab 选中指示条：整条金线在三个 Tab 之间滑动，而不是各自淡入淡出。
+   * 位置只靠 nav 上的 --tab-i / --tab-n 两个 CSS 变量表达，动画交给 CSS transition。
+   */
+  _bindTabIndicator(html) {
+    const nav = html.find("nav.sheet-tabs")[0];
+    if (!nav) return;
+    const items = [...nav.querySelectorAll(".item")];
+    if (!items.length) return;
+
+    const sync = () => {
+      const i = Math.max(0, items.findIndex(el => el.classList.contains("active")));
+      nav.style.setProperty("--tab-n", items.length);
+      nav.style.setProperty("--tab-i", i);
+    };
+
+    // 首次定位不要有滑动动画（否则每次重开卡都会从最左边扫过来）
+    nav.classList.add("tab-nav-init");
+    sync();
+    requestAnimationFrame(() => nav.classList.remove("tab-nav-init"));
+
+    // 点击后 Foundry 才会改 .active，等一帧再读
+    items.forEach(el => el.addEventListener("click", () => requestAnimationFrame(sync)));
+  }
+
   activateListeners(html) {
     super.activateListeners(html);
     this._applyEditLockState(html);
+    this._bindTabIndicator(html);
 
     // ── 只读操作（非编辑模式也可用） ──────────────────────────────────────
 

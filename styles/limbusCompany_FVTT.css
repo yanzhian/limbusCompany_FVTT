@@ -9551,14 +9551,26 @@ input.item-piles-quantity {
 }
 .limbuscompany .action-btn:focus-visible { outline: 1px solid var(--gold-active); outline-offset: -1px; }
 
-/* Tab 切换过渡：只有指示条动，内容不做动画 */
-.limbuscompany .sheet-tabs .item::after {
-  transition: left .22s cubic-bezier(.22,.61,.36,1),
-              right .22s cubic-bezier(.22,.61,.36,1),
-              background .22s, box-shadow .22s;
+/* ══ Tab 指示条：一条金线在 Tab 之间平滑滑动 ══════════════════════ */
+/* 各 Tab 自己的指示条取消，改由 nav 上唯一一条负责移动 */
+.limbuscompany .sheet-tabs .item::after,
+.limbuscompany .sheet-tabs .item:hover::after,
+.limbuscompany .sheet-tabs .item.active::after { content: none; }
+
+.limbuscompany nav.sheet-tabs { position: relative; }
+.limbuscompany nav.sheet-tabs::after {
+  content: ""; position: absolute; bottom: 0; left: 0;
+  width: calc(100% / var(--tab-n, 3)); height: 2px;
+  transform: translateX(calc(var(--tab-i, 0) * 100%));
+  transition: transform .3s cubic-bezier(.4, 0, .2, 1);
+  background: linear-gradient(90deg, transparent 8%, #E7B956 32%, #E7B956 68%, transparent 92%);
+  box-shadow: 0 0 8px rgba(231, 185, 86, .34);
+  pointer-events: none; will-change: transform;
 }
-.limbuscompany .sheet-tabs .item { transition: color .18s; }
+/* 首帧定位不滑动 */
+.limbuscompany nav.sheet-tabs.tab-nav-init::after { transition: none; }
+.limbuscompany .sheet-tabs .item { transition: color .18s, background .18s; }
 
 @media (prefers-reduced-motion: reduce) {
-  .limbuscompany .sheet-tabs .item::after { transition: none; }
+  .limbuscompany nav.sheet-tabs::after { transition: none; }
 }
