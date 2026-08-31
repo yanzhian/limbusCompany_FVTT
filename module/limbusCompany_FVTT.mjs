@@ -9,6 +9,7 @@
  */
 
 import { LIMBUSCOMPANY }   from "./config.mjs";
+import { registerHeaderCollapse } from "./helpers/window-header.mjs";
 import { LimbusActor, CharacterData, MerchantData, CampData, LootData }  from "./documents/actor.mjs";
 import {
   LimbusItem,
@@ -221,6 +222,13 @@ Hooks.once("setup", () => {
 /* ─── Hooks.once("ready") ────────────────────────────────────────────────── */
 
 Hooks.once("ready", () => {
+  // 窗口标题栏整合：隐藏标题，除关闭外的按钮收进右上角 ⋮
+  registerHeaderCollapse([
+    "LimbusActorSheet", "LimbusItemSheet", "LimbusMerchantSheet",
+    "LimbusCampSheet", "LimbusLootSheet",
+    "BackgroundWizard", "LevelUpDialog", "GMConsole", "CSVImportDialog",
+  ]);
+
   console.log("limbusCompany_FVTT | 系统已就绪。");
 
   // 【展示稀有度】：开关状态落到 body 上
