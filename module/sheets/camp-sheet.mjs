@@ -205,12 +205,27 @@ export class LimbusCampSheet extends ActorSheet {
     });
 
     // GM 端：延迟自动清理孤儿条目（defer 出当前 getData 调用栈，避免重入渲染循环）
+    //
+    // 【按 uuid 清，不能按索引清】制作时先删原料、后写 warehouseContents，
+    // 中间那次重渲染会把"物品已删但记录还在"的原料记成孤儿；等 setTimeout 跑到，
+    // 数组已经被换成含产出物的新数组了，旧索引指向的正好是刚做出来的东西——
+    // 于是产出闪一下就被误删。改成记 uuid，并在真正删之前重新确认它解析不到。
     if (orphanedIndices.length > 0 && game.user.isGM) {
-      const orphanSet = new Set(orphanedIndices);
+      const deadUuids = orphanedIndices
+        .map(i => placements[i]?.uuid).filter(Boolean);
       setTimeout(async () => {
-        const cur     = this.actor.system.warehouseContents ?? [];
-        const cleaned = cur.filter((_, i) => !orphanSet.has(i));
-        await this.actor.update({ "system.warehouseContents": cleaned });
+        const cur  = this.actor.system.warehouseContents ?? [];
+        const gone = [];
+        for (const uuid of deadUuids) {
+          if (!cur.some(p => p.uuid === uuid)) continue;      // 已经不在了
+          const doc = await fromUuid(uuid).catch(() => null);
+          if (!doc) gone.push(uuid);                          // 复核：确实没了才删
+        }
+        if (!gone.length) return;
+        const dead = new Set(gone);
+        await this.actor.update({
+          "system.warehouseContents": cur.filter(p => !dead.has(p.uuid)),
+        });
       }, 0);
     }
 

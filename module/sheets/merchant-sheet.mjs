@@ -304,11 +304,22 @@ export class LimbusMerchantSheet extends ActorSheet {
       await buildPlacementGrid(placements, { cols, rows, keepOrphanOccupancy: true });
 
     // 孤儿条目（物品被删了但摆放记录还在）：GM 端延迟清掉，defer 出本次 getData
+    // 同营地：按 uuid 清并复核，索引在这期间可能已经变了
     if (orphanedIndices.length && isGM) {
-      const dead = new Set(orphanedIndices);
-      setTimeout(() => this.actor.update({
-        "system.shelfContents": placements.filter((_, i) => !dead.has(i)),
-      }), 0);
+      const deadUuids = orphanedIndices.map(i => placements[i]?.uuid).filter(Boolean);
+      setTimeout(async () => {
+        const cur  = this.actor.system.shelfContents ?? [];
+        const gone = [];
+        for (const uuid of deadUuids) {
+          if (!cur.some(p => p.uuid === uuid)) continue;
+          if (!(await fromUuid(uuid).catch(() => null))) gone.push(uuid);
+        }
+        if (!gone.length) return;
+        const dead = new Set(gone);
+        await this.actor.update({
+          "system.shelfContents": cur.filter(p => !dead.has(p.uuid)),
+        });
+      }, 0);
     }
 
     const closedForMe = LimbusMerchantSheet.isClosed(actor) && !isGM;
