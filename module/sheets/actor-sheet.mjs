@@ -50,7 +50,7 @@ export class LimbusActorSheet extends ActorSheet {
     return foundry.utils.mergeObject(super.defaultOptions, {
       classes:  ["limbuscompany", "sheet", "actor", "character"],
       width:    880,
-      height:   810,
+      height:   860,
       tabs:     [{ navSelector: ".sheet-tabs", contentSelector: ".sheet-body", initial: "items" }],
       dragDrop: [{ dragSelector: ".equip-slot[data-item-id], .skill-slot-wrap[data-item-id], .item-row .item-icon, .skill-row .item-icon", dropSelector: ".equip-grid, .item-list-panel, .skill-list-panel, .basic-skill-slots, .ego-skill-grid, .defense-skill-slot" }],
       scrollY:  [".item-list-panel", ".skill-list-panel", ".buff-list"],
