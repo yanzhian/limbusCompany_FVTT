@@ -9751,3 +9751,49 @@ input.item-piles-quantity {
   background: linear-gradient(90deg, #E7B956 var(--craft-p, 0%), transparent 0);
 }
 .camp-craft-btn > * { position: relative; z-index: 1; }
+
+/* ══ GM 控制台：角色按文件夹分组 ══════════════════════════════════ */
+.limbuscompany .gmc-section-header .gmc-search {
+  flex: 1; min-width: 80px; margin: 0 4px;
+  background: var(--bg-panel); border: 1px solid var(--border-gold);
+  color: var(--text-main); font-family: var(--font-main); font-size: .72rem;
+  border-radius: 2px; padding: 2px 6px;
+}
+/* 【全选】【清空】改成方形图标按钮 */
+.limbuscompany .gmc-icon-btn {
+  width: 24px; height: 22px; flex: 0 0 24px; padding: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: var(--bg-panel); border: 1px solid var(--border-gold);
+  color: var(--text-sub); border-radius: 2px; cursor: pointer;
+  font-size: .72rem; transition: color .12s, border-color .12s, background .12s;
+}
+.limbuscompany .gmc-icon-btn:hover {
+  color: var(--gold-active); border-color: var(--gold-active);
+  background: rgba(95,62,33,.3);
+}
+
+/* 分组：拖放区改成竖向堆叠的一组组 */
+.limbuscompany .gmc-drop-zone { display: block; }
+.limbuscompany .gmc-folder { margin-bottom: 4px; }
+.limbuscompany .gmc-folder-head {
+  display: flex; align-items: center; gap: 5px; cursor: pointer; user-select: none;
+  padding: 2px 6px 2px 4px; border-radius: 2px;
+  background: linear-gradient(90deg, rgba(95,62,33,.34), rgba(95,62,33,.06) 60%, transparent);
+  border-bottom: 1px solid rgba(95,62,33,.35);
+  font-size: .72rem; letter-spacing: .06em; color: #B08A5E;
+}
+.limbuscompany .gmc-folder-head:hover { color: var(--text-main); }
+.limbuscompany .gmc-folder-caret { font-size: .6rem; width: 10px; }
+.limbuscompany .gmc-folder-ic    { color: #8A6E52; font-size: .7rem; }
+.limbuscompany .gmc-folder-name  { flex: 1; }
+.limbuscompany .gmc-folder-count { color: var(--gold-active); font-size: .66rem; }
+.limbuscompany .gmc-folder-btn {
+  width: 20px; height: 18px; display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 2px; color: #7A6249; font-size: .68rem; cursor: pointer;
+  transition: color .12s, background .12s;
+}
+.limbuscompany .gmc-folder-btn:hover { color: var(--gold-active); background: rgba(231,185,86,.16); }
+.limbuscompany .gmc-folder-body {
+  display: flex; flex-wrap: wrap; gap: 6px; padding: 6px 2px 2px;
+}
+.limbuscompany .gmc-folder-collapsed .gmc-folder-body { display: none; }
