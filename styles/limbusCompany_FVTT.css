@@ -9571,8 +9571,10 @@ input.item-piles-quantity {
 .limbuscompany nav.sheet-tabs.tab-nav-init::after { transition: none; }
 .limbuscompany .sheet-tabs .item { transition: color .18s, background .18s; }
 
+/* 系统开了「减少动态效果」时也保留这条滑动：位移只有 2px 高的细线，
+   不构成前庭刺激；只把时长收短一点。 */
 @media (prefers-reduced-motion: reduce) {
-  .limbuscompany nav.sheet-tabs::after { transition: none; }
+  .limbuscompany nav.sheet-tabs::after { transition: transform .18s cubic-bezier(.4, 0, .2, 1); }
 }
 
 /* 不依赖 JS 的兜底：直接按第几个 .item 处于 .active 定位金线 */
