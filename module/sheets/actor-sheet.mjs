@@ -50,7 +50,7 @@ export class LimbusActorSheet extends ActorSheet {
     return foundry.utils.mergeObject(super.defaultOptions, {
       classes:  ["limbuscompany", "sheet", "actor", "character"],
       width:    880,
-      height:   810,
+      height:   860,
       tabs:     [{ navSelector: ".sheet-tabs", contentSelector: ".sheet-body", initial: "items" }],
       dragDrop: [{ dragSelector: ".equip-slot[data-item-id], .skill-slot-wrap[data-item-id], .item-row .item-icon, .skill-row .item-icon", dropSelector: ".equip-grid, .item-list-panel, .skill-list-panel, .basic-skill-slots, .ego-skill-grid, .defense-skill-slot" }],
       scrollY:  [".item-list-panel", ".skill-list-panel", ".buff-list"],
@@ -58,7 +58,15 @@ export class LimbusActorSheet extends ActorSheet {
   }
 
   get template() {
-    return "systems/limbusCompany_FVTT/templates/actor/character-sheet.hbs";
+    // 【角色卡·改良版外观（调试）】：设置里打开时换用并行的试验模板。
+    // 两套模板复用同一批 parts（header / tab-items / tab-skills / tab-combat），
+    // 功能逻辑与监听完全一致，只有外框和样式不同。
+    let redesign = false;
+    try { redesign = !!game.settings.get("limbusCompany_FVTT", "sheetRedesign"); }
+    catch { /* 设置未注册时用旧版 */ }
+    return redesign
+      ? "systems/limbusCompany_FVTT/templates/actor/character-sheet-redesign.hbs"
+      : "systems/limbusCompany_FVTT/templates/actor/character-sheet.hbs";
   }
 
   /* ─── 数据准备 ──────────────────────────────────────────────────────────── */
@@ -146,6 +154,57 @@ export class LimbusActorSheet extends ActorSheet {
       const id   = system.equipment?.[`slot${i}`] ?? null;
       const item = id ? actor.items.get(id) : null;
       context.equipmentGrid.push({ slotIndex: i, item, itemId: id });
+    }
+
+    // ── 形象（纸娃娃）视图 ────────────────────────────────────────────────
+    // 与九宫格共用左栏，同一份 equipment 槽位数据的两种画法。
+    // 摆放参数存在装备自己身上（EquipmentData.doll），脱下再穿会保留。
+    // 形象系统总开关（设置里默认关闭）：关掉时左栏只有九宫格
+    let dollOn = false;
+    try { dollOn = !!game.settings.get("limbusCompany_FVTT", "dollSystem"); }
+    catch { /* 设置未注册时按关闭处理 */ }
+    context.dollEnabled = dollOn;
+    if (!dollOn) { this._dollView = false; this._dollEdit = false; }
+
+    context.dollView = this._dollView ?? false;
+    context.dollEdit = this._dollEdit ?? false;
+    context.dollMode = this._dollMode ?? "move";
+    context.dollModeLabel = { move: "移动", rotate: "旋转", scale: "缩放" }[context.dollMode] ?? "移动";
+    if (context.dollView) {
+      const DEF = CONFIG.LIMBUSCOMPANY?.DOLL_DEFAULTS ?? {};
+      context.dollLayers = context.equipmentGrid
+        .filter(e => e.item && e.item.type === "equipment")
+        .map(e => {
+          const d   = e.item.system?.doll ?? {};
+          // 没亲手摆过就用按子类型的默认位（config.mjs 的 DOLL_DEFAULTS）
+          const def = DEF[e.item.system?.subtype ?? ""] ?? {};
+          const placed = !!d.placed;
+          return {
+            itemId: e.item.id,
+            name:   e.item.name,
+            img:    e.item.img,
+            slot:   e.slotIndex,
+            x:     placed ? (d.x ?? 50) : (def.x ?? 50),
+            y:     placed ? (d.y ?? 50) : (def.y ?? 50),
+            scale: placed ? (d.scale ?? 1) : (def.scale ?? 1),
+            rot:   placed ? (d.rot ?? 0)   : (def.rot ?? 0),
+            w:     def.w ?? 42,
+            // 没单独设过层级就用默认层级，再退回槽位顺序（先装的在下面）
+            z: (d.z ?? 0) || def.z || e.slotIndex,
+            hidden: !!d.hidden,
+            selected: this._dollSel === e.item.id,
+          };
+        })
+        .sort((a, b) => a.z - b.z);
+      // 头：单独一张图，永远压在所有装备之上（z 固定给个大数）
+      const h    = system.dollHead ?? {};
+      const hDef = DEF.head ?? {};
+      context.dollHead = {
+        img: h.img ?? "",
+        x: h.x ?? hDef.x ?? 50, y: h.y ?? hDef.y ?? 22,
+        scale: h.scale ?? 1, rot: h.rot ?? 0, w: hDef.w ?? 30,
+        selected: this._dollSel === "__head__",
+      };
     }
 
     // ── 技能槽 ────────────────────────────────────────────────────────────
@@ -332,7 +391,7 @@ export class LimbusActorSheet extends ActorSheet {
   _calcInventoryCapacity() {
     const inContainer  = this._getItemsInContainers();
     let total = 0;
-    const nonSkillTypes = ["equipment", "consumable", "material", "container", "skillbook", "background"];
+    const nonSkillTypes = ["equipment", "consumable", "material", "container", "skillbook", "recipebook", "background"];
     for (const item of this.actor.items) {
       if (!nonSkillTypes.includes(item.type)) continue;
       if (inContainer.has(item.uuid)) continue; // 容器内物品不占背包容量
@@ -353,11 +412,12 @@ export class LimbusActorSheet extends ActorSheet {
       material:  "材料",
       container: "容器",
       skillbook: "技能书",
+      recipebook: "配方表",
       background: "背景",
     };
 
     const groups = {};
-    const nonSkillTypes  = ["equipment", "consumable", "material", "container", "skillbook", "background"];
+    const nonSkillTypes  = ["equipment", "consumable", "material", "container", "skillbook", "recipebook", "background"];
     const inContainer    = this._getItemsInContainers();
 
     for (const item of this.actor.items) {
@@ -373,7 +433,7 @@ export class LimbusActorSheet extends ActorSheet {
     }
 
     // Sort by predefined order
-    const order = [...subtypeOrder, "consumable", "material", "container", "skillbook", "background"];
+    const order = [...subtypeOrder, "consumable", "material", "container", "skillbook", "recipebook", "background"];
     return order
       .filter(k => groups[k])
       .map(k => groups[k]);
@@ -438,6 +498,7 @@ export class LimbusActorSheet extends ActorSheet {
       isFavorite:  this._favorites.has(item.id),
       sinColor:    cfg.SIN_COLORS?.[sys.sinType] ?? "#E8CAA2",
       sinLabel,
+      sinIconPath: cfg.SIN_ICON_PATHS?.[sys.sinType] ?? "",
       catLabel,
       skillIcon:   item.img,
       capacityLabel: `${capW}×${capH}`,
@@ -557,9 +618,35 @@ export class LimbusActorSheet extends ActorSheet {
 
   /* ─── 事件绑定 ──────────────────────────────────────────────────────────── */
 
+  /**
+   * Tab 选中指示条：整条金线在三个 Tab 之间滑动，而不是各自淡入淡出。
+   * 位置只靠 nav 上的 --tab-i / --tab-n 两个 CSS 变量表达，动画交给 CSS transition。
+   */
+  _bindTabIndicator(html) {
+    const nav = html.find("nav.sheet-tabs")[0];
+    if (!nav) return;
+    const items = [...nav.querySelectorAll(".item")];
+    if (!items.length) return;
+
+    const sync = () => {
+      const i = Math.max(0, items.findIndex(el => el.classList.contains("active")));
+      nav.style.setProperty("--tab-n", items.length);
+      nav.style.setProperty("--tab-i", i);
+    };
+
+    // 首次定位不要有滑动动画（否则每次重开卡都会从最左边扫过来）
+    nav.classList.add("tab-nav-init");
+    sync();
+    requestAnimationFrame(() => nav.classList.remove("tab-nav-init"));
+
+    // 点击后 Foundry 才会改 .active，等一帧再读
+    items.forEach(el => el.addEventListener("click", () => requestAnimationFrame(sync)));
+  }
+
   activateListeners(html) {
     super.activateListeners(html);
     this._applyEditLockState(html);
+    this._bindTabIndicator(html);
 
     // ── 只读操作（非编辑模式也可用） ──────────────────────────────────────
 
@@ -616,16 +703,18 @@ export class LimbusActorSheet extends ActorSheet {
     // Tab 切换时跟踪当前 tab ID（跨重渲染保持状态）
     html.find(".sheet-tabs .item[data-tab]").on("click", (ev) => {
       this._activeTab = ev.currentTarget.dataset.tab;
-      if (this._activeTab === "combat") {
+      // 旧模板的战斗 Tab 写作「战斗」，改良版写作 combat——两个都认
+      if (this._activeTab === "combat" || this._activeTab === "战斗") {
         setTimeout(() => this._syncCombatSlots(this.element), 50);
       }
     });
 
     // 重渲染后恢复战斗槽（无论当前在哪个 Tab，DOM 元素都存在）：
     // 只要 _combatBagState 存在就恢复，避免 AP/BUFF 等更新触发重渲染时清空槽位。
-    if (this._combatBagState) {
-      setTimeout(() => this._renderCombatSlots(this.element), 80);
-    }
+    // 同步执行（activateListeners 早于 DOM 注入）：以前用 setTimeout(80) 会让槽位
+    // 先按模板默认图渲染一帧、80ms 后才换成真正的技能图 —— 改理智/行动值这种
+    // 频繁重渲染时就表现为【基础技能】闪一下。
+    if (this._combatBagState) this._renderCombatSlots(html);
 
     // ── 非 GM/非编辑：只读分支结束 ────────────────────────────────────────
     if (!this.isEditable) return;
@@ -710,6 +799,19 @@ export class LimbusActorSheet extends ActorSheet {
       const next  = cur === index ? index - 1 : index;
       await this.actor.setPanicCounter?.(side, next);
     });
+
+    // ── 物品 Tab：左栏 九宫格 ↔ 形象 ────────────────────────────────────
+    html.find(".doll-view-toggle").on("click", () => {
+      this._dollView = !(this._dollView ?? false);
+      if (!this._dollView) this._dollEdit = false;
+      this.render(false);
+    });
+    html.find(".doll-edit-toggle").on("click", () => {
+      this._dollEdit = !(this._dollEdit ?? false);
+      this._dollMode = "move";
+      this.render(false);
+    });
+    this._bindDollEditor(html);
 
     // ── 物品 Tab：网格/列表视图切换 ──────────────────────────────────────
     html.find(".item-view-toggle").on("click", () => {
@@ -1658,7 +1760,9 @@ export class LimbusActorSheet extends ActorSheet {
       basicSlots.each((i, wrap) => {
         const $wrap = $(wrap);
         const $slot = $wrap.find(".combat-skill-slot");
-        $slot.find("img").attr("src", defaultImg).show();
+        const $img0 = $slot.find("img");
+        if ($img0.attr("src") !== defaultImg) $img0.attr("src", defaultImg);
+        $img0.show();
         $slot.attr("data-item-id", "");
         $slot.removeClass("slot-active slot-reserve slot-bag").addClass("slot-empty");
         $wrap.find(".slot-state-dot").removeClass("dot-active dot-reserve");
@@ -1679,7 +1783,10 @@ export class LimbusActorSheet extends ActorSheet {
       // 主技能
       const mainItem = id ? this.actor.items.get(id) : null;
 
-      $slot.find("img").attr("src", mainItem?.img ?? "");
+      // 同 src 不重复写，避免浏览器重新解码图片造成的闪烁
+      const $img   = $slot.find("img");
+      const newSrc = mainItem?.img ?? "";
+      if ($img.attr("src") !== newSrc) $img.attr("src", newSrc);
       $slot.attr("data-item-id", id ?? "");
       $slot.attr("data-slot-index", i);
 
@@ -1713,6 +1820,164 @@ export class LimbusActorSheet extends ActorSheet {
 
     // 【大招就绪】星芒：槽位 DOM 是复用的，每次重绘都先清后挂
     refreshReadySlots(html, this.actor);
+  }
+
+  /** @override 关卡时摘掉形象编辑挂在 window 上的键盘监听 */
+  async close(options = {}) {
+    if (this._dollKeyHandler) {
+      window.removeEventListener("keydown", this._dollKeyHandler);
+      this._dollKeyHandler = null;
+    }
+    return super.close(options);
+  }
+
+  /**
+   * 形象编辑：拖动摆放装备贴图。
+   *
+   * 三种模式共用一次拖动——按下选中图层，移动时按当前模式改一个参数：
+   *   移动(move)   → 改 x/y（百分比，跟着立绘框缩放走）
+   *   旋转(rotate) → 改 rot（按指针绕图层中心的夹角，所见即所得）
+   *   缩放(scale)  → 改 scale（上下拖，往上变大）
+   * R / E 切换到旋转 / 缩放，再按一次回到移动。
+   * 松手才写库（render:false，避免重绘打断连续操作）。
+   */
+  _bindDollEditor(html) {
+    const stage = html.find(".doll-stage")[0];
+    if (!stage || !this._dollEdit) return;
+
+    const applyStyle = (el, st) => {
+      el.style.left = `${st.x}%`;
+      el.style.top  = `${st.y}%`;
+      el.style.transform = `translate(-50%,-50%) rotate(${st.rot}deg) scale(${st.scale})`;
+    };
+
+    let drag = null;
+
+    const onMove = (ev) => {
+      if (!drag) return;
+      ev.preventDefault();
+      const mode = this._dollMode ?? "move";
+      if (mode === "move") {
+        drag.st.x = drag.base.x + ((ev.clientX - drag.startX) / drag.rect.width)  * 100;
+        drag.st.y = drag.base.y + ((ev.clientY - drag.startY) / drag.rect.height) * 100;
+      } else if (mode === "rotate") {
+        const cx = drag.rect.left + (drag.base.x / 100) * drag.rect.width;
+        const cy = drag.rect.top  + (drag.base.y / 100) * drag.rect.height;
+        const a0 = Math.atan2(drag.startY - cy, drag.startX - cx);
+        const a1 = Math.atan2(ev.clientY  - cy, ev.clientX  - cx);
+        drag.st.rot = Math.round(drag.base.rot + (a1 - a0) * 180 / Math.PI);
+      } else {
+        // 往上拖变大：每 120px 一倍
+        const k = 1 + (drag.startY - ev.clientY) / 120;
+        drag.st.scale = Math.min(8, Math.max(0.05, Math.round(drag.base.scale * k * 100) / 100));
+      }
+      applyStyle(drag.el, drag.st);
+    };
+
+    const onUp = async () => {
+      if (!drag) return;
+      const { item, st, isHead } = drag;
+      drag = null;
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      const data = {
+        x:     Math.round(st.x * 100) / 100,
+        y:     Math.round(st.y * 100) / 100,
+        rot:   st.rot,
+        scale: st.scale,
+      };
+      // 头的摆放存在角色身上（它不是某件装备），装备的存在装备自己身上
+      if (isHead) {
+        await this.actor.update({
+          "system.dollHead.x": data.x, "system.dollHead.y": data.y,
+          "system.dollHead.rot": data.rot, "system.dollHead.scale": data.scale,
+        }, { render: false });
+      } else {
+        await item?.update({
+          "system.doll.x": data.x, "system.doll.y": data.y,
+          "system.doll.rot": data.rot, "system.doll.scale": data.scale,
+          "system.doll.placed": true,     // 亲手摆过，之后不再套用默认位
+        }, { render: false });
+      }
+    };
+
+    html.find(".doll-layer").on("pointerdown", (ev) => {
+      ev.preventDefault();
+      const el     = ev.currentTarget;
+      const isHead = el.dataset.head === "1";
+      const item   = isHead ? null : this.actor.items.get(el.dataset.itemId ?? "");
+      if (!isHead && !item) return;
+      this._dollSel = isHead ? "__head__" : item.id;
+      html.find(".doll-layer").removeClass("doll-sel");
+      el.classList.add("doll-sel");
+      const d = isHead ? (this.actor.system?.dollHead ?? {}) : (item.system?.doll ?? {});
+      const base = { x: d.x ?? 50, y: d.y ?? (isHead ? 22 : 50), rot: d.rot ?? 0, scale: d.scale ?? 1 };
+      drag = {
+        el, item, isHead, base, st: { ...base },
+        rect: stage.getBoundingClientRect(),
+        startX: ev.clientX, startY: ev.clientY,
+      };
+      window.addEventListener("pointermove", onMove);
+      window.addEventListener("pointerup", onUp);
+    });
+
+    // R / E 切换模式：只在编辑模式下、且焦点不在输入框里时响应
+    if (this._dollKeyHandler) window.removeEventListener("keydown", this._dollKeyHandler);
+    this._dollKeyHandler = (ev) => {
+      if (!this._dollEdit || !this.rendered) return;
+      const tag = document.activeElement?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || document.activeElement?.isContentEditable) return;
+      const k = ev.key?.toLowerCase();
+      if (k !== "r" && k !== "e") return;
+      ev.preventDefault();
+      const want = k === "r" ? "rotate" : "scale";
+      this._dollMode = (this._dollMode === want) ? "move" : want;
+      const lbl = { move: "移动", rotate: "旋转", scale: "缩放" }[this._dollMode];
+      this.element?.find(".doll-hint b").first().text(lbl);
+    };
+    window.addEventListener("keydown", this._dollKeyHandler);
+
+    // 滚轮：调整这件装备的图层前后（头恒在最前，不参与）
+    html.find(".doll-layer").on("wheel", async (ev) => {
+      const el = ev.currentTarget;
+      if (el.dataset.head === "1") return;
+      const item = this.actor.items.get(el.dataset.itemId ?? "");
+      if (!item) return;
+      ev.preventDefault();
+      const dir = (ev.originalEvent ?? ev).deltaY < 0 ? 1 : -1;   // 上滚＝往前
+      const cur = Number(el.style.zIndex) || (item.system?.doll?.z ?? 0);
+      const nz  = Math.max(0, Math.min(999, cur + dir));
+      el.style.zIndex = nz;                     // 先动 DOM，手感跟手
+      await item.update({ "system.doll.z": nz }, { render: false });
+    });
+
+    // 添加 / 更换头像：单独一张图，永远画在所有装备之上
+    html.find(".doll-head-pick").on("click", () => {
+      const cur = this.actor.system?.dollHead?.img ?? "";
+      const FP  = foundry.applications?.apps?.FilePicker?.implementation ?? FilePicker;
+      new FP({
+        type: "image", current: cur,
+        callback: (path) => this.actor.update({ "system.dollHead.img": path }),
+      }).browse(cur);
+    });
+
+    // 重置选中的那件
+    html.find(".doll-reset").on("click", async () => {
+      if (this._dollSel === "__head__") {
+        return void await this.actor.update({
+          "system.dollHead.x": 50, "system.dollHead.y": 22,
+          "system.dollHead.rot": 0, "system.dollHead.scale": 1,
+        });
+      }
+      const item = this.actor.items.get(this._dollSel ?? "");
+      if (!item) return void ui.notifications.info("先点一下要重置的部件。");
+      // 重置＝退回"没摆过"，重新套用该子类型的默认位
+      await item.update({
+        "system.doll.x": 50, "system.doll.y": 50,
+        "system.doll.rot": 0, "system.doll.scale": 1,
+        "system.doll.z": 0, "system.doll.placed": false,
+      });
+    });
   }
 
   // 从 pool 中取下一张牌补充到 slots[5]
@@ -1802,7 +2067,9 @@ export class LimbusActorSheet extends ActorSheet {
         .css({ transition: "none", transform: "", opacity: "" });
     });
     this._renderCombatSlots(this.element);
-    QuickActionHUD.instance?.render(false);
+    // HUD 也补播一次补位动画，否则它是整块重渲染、看起来在闪
+    const hud = QuickActionHUD.instance;
+    if (hud) { if (slotIndex <= 2) hud._slideFromSlot = slotIndex; hud.render(false); }
 
     // 被丢的那格右边所有牌左移一格，最右边补进来的新牌从右侧推入
     const $after = _wraps();
@@ -1921,12 +2188,15 @@ export class LimbusActorSheet extends ActorSheet {
   }
 
   _onEgoSkillClick(event) {
-    // EGO / 守备技能：直接发起对抗，不推进 bag，不消耗行动值
     const itemId = event.currentTarget.dataset.itemId;
     if (!itemId) return;
     const item = this.actor.items.get(itemId);
     if (!item) return;
 
+    // 守备技能按规则只能【激活】，不能发起对抗
+    if (item.system?.type === "defense") return this._activateItem(item);
+
+    // EGO 技能：直接发起对抗，不推进 bag，不消耗行动值
     this._showClashDialog(item, -1);  // slotIndex = -1 → 不触发 bag 动画/AP 消耗
   }
 

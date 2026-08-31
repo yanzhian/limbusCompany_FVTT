@@ -2924,9 +2924,12 @@ body.game .limbuscompany.app img {
 
 /* ─── §3-C  Tab 导航（固定高24px） ──────────────────────────────── */
 
+/* Tab 导航：沿用改良版那套做法——等宽三格、加宽字距、选中时一条会「张开」
+   的金色指示条 + 极淡的金色底。配色仍是本体的棕金，不引入新色系。 */
 .limbuscompany .sheet-tabs {
-  display: flex; border-bottom: none !important;
-  background: var(--bg-darkest); flex-shrink: 0; height: 24px;
+  display: grid; grid-template-columns: repeat(3, 1fr);
+  border-bottom: 1px solid #5C4128 !important;
+  background: #0B0908; flex-shrink: 0; height: 38px;
 }
 
 /* 覆盖 Foundry tabs 默认浅色分隔线（--color-border-light-primary） */
@@ -2937,14 +2940,32 @@ body.game .limbuscompany.app img {
   --color-border-light-primary: transparent;
 }
 .limbuscompany .sheet-tabs .item {
-  flex: 1; text-align: center; padding: 0; line-height: 32px; font-size: .8rem;
-  color: var(--text-sub); cursor: pointer; 
-  /* border-bottom: 2px solid transparent; */
-  transition: all .15s; background: none; border-left: none; border-right: none; border-top: none;
-  height: 36px; display: flex; align-items: center; justify-content: center;
+  position: relative;
+  text-align: center; padding: 0; font-size: 13px; letter-spacing: .16em;
+  color: #876E53; cursor: pointer; transition: color .15s, background .15s;
+  background: none; border: 0;
+  height: 38px; display: flex; align-items: center; justify-content: center; gap: 7px;
 }
-.limbuscompany .sheet-tabs .item:hover { color: var(--text-main); }
-.limbuscompany .sheet-tabs .item.active { color: var(--gold-active); border-bottom-color: var(--gold-active); }
+
+/* 指示条：默认透明且两端内缩，选中时张开并发光——比单纯变色好认得多 */
+.limbuscompany .sheet-tabs .item::after {
+  content: ""; position: absolute; left: 24%; right: 24%; bottom: 0;
+  height: 2px; background: transparent;
+  transition: left .16s, right .16s, background .16s, box-shadow .16s;
+}
+.limbuscompany .sheet-tabs .item:hover {
+  color: var(--text-main); text-shadow: 0 0 10px rgba(232, 202, 162, .22);
+}
+.limbuscompany .sheet-tabs .item:hover::after { background: rgba(229, 186, 37, .3); }
+.limbuscompany .sheet-tabs .item.active {
+  color: #F0C96E;
+  background: linear-gradient(180deg, rgba(201, 155, 82, .03), rgba(201, 155, 82, .10));
+}
+.limbuscompany .sheet-tabs .item.active::after {
+  left: 8%; right: 8%;
+  background: linear-gradient(90deg, transparent, #E7B956, transparent);
+  box-shadow: 0 0 8px rgba(231, 185, 86, .34);
+}
 
 /* ─── §3-D  Tab 内容区 ───────────────────────────────────────────── */
 
@@ -3009,27 +3030,6 @@ body.game .limbuscompany.app img {
 .limbuscompany .list-panel {
   flex: 1; display: flex; flex-direction: column; overflow: hidden;
   padding: 0px 6px 6px 8px;
-}
-
-/* 物品列表滚动条 */
-.limbuscompany .item-list-panel {
-  overflow-y: auto;
-  overflow-x: hidden;
-  padding-right: 4px;
-}
-
-/* 物品列表滚动条 */
-.limbuscompany .item-list-panel {
-  overflow-y: auto;
-  overflow-x: hidden;
-  padding-right: 4px;
-}
-
-/* 物品列表滚动条 */
-.limbuscompany .item-list-panel {
-  overflow-y: auto;
-  overflow-x: hidden;
-  padding-right: 4px;
 }
 
 /* 物品列表滚动条 */
@@ -7089,8 +7089,8 @@ input.item-piles-quantity {
   box-shadow:   0 0 5px rgba(93, 173, 226, .7);
 }
 .camp-warehouse-panel {
-  flex:            1;           /* 唯一随窗口缩放变化的面板 */
-  min-width:       0;
+  flex:            1 1 400px;   /* 唯一随窗口缩放变化的面板；起始至少 400px */
+  min-width:       400px;
   border-right:    1px solid var(--border-gold);
 }
 .camp-recipe-panel {
@@ -9376,3 +9376,378 @@ input.item-piles-quantity {
 }
 .lc-trig-g > .v { color: #E8C9A2; padding-left: 14px; font-size: .78rem; line-height: 1.65; }
 .lc-trig-g > .v .src { color: #6A5A48; }
+
+/* ══ 形象（纸娃娃）：物品 Tab 左栏的第二种视图 ═════════════════════════ */
+.limbuscompany .equip-panel-foot {
+  display: flex; gap: 6px; justify-content: center; margin-top: 6px;
+}
+.limbuscompany .equip-panel-foot .toolbar-btn { padding: 2px 10px; font-size: 12px; }
+.limbuscompany .equip-panel-foot .toolbar-btn.active {
+  color: #15110E; background: var(--gold-active); border-color: var(--gold-active); font-weight: bold;
+}
+
+.limbuscompany .doll-stage {
+  position: relative; width: 100%; aspect-ratio: 3 / 4; overflow: hidden;
+  background: #0e0b09; border: 1px solid var(--border-gold); border-radius: 3px;
+}
+.limbuscompany .doll-layer {
+  position: absolute; width: 42%; height: auto;
+  transform-origin: center center; pointer-events: none; user-select: none;
+}
+.limbuscompany .doll-layer.doll-hidden { display: none; }
+/* 只有编辑模式下图层才可点，平时纯展示 */
+.limbuscompany .doll-stage.doll-editing .doll-layer { pointer-events: auto; cursor: grab; }
+.limbuscompany .doll-stage.doll-editing .doll-layer:active { cursor: grabbing; }
+.limbuscompany .doll-stage.doll-editing .doll-layer.doll-sel {
+  outline: 1px dashed var(--gold-active); outline-offset: 2px;
+}
+.limbuscompany .doll-hint {
+  margin-top: 4px; font-size: 11px; color: var(--text-dim); line-height: 1.6; text-align: center;
+}
+.limbuscompany .doll-hint b { color: var(--gold-active); }
+.limbuscompany .doll-head-pick,
+.limbuscompany .doll-reset {
+  margin-left: 6px; cursor: pointer; color: var(--text-sub); text-decoration: underline;
+}
+.limbuscompany .doll-head-pick:hover { color: var(--gold-active); }
+/* 头图层：永远最前，编辑时可拖 */
+
+
+.limbuscompany .doll-reset:hover { color: var(--red-danger); }
+
+/* ══ 物品栏 / 技能栏 列表行·配色（调参台导出） ══ */
+.limbuscompany .item-list-panel .group-header,
+.limbuscompany .skill-list-panel .group-header {
+  position: sticky; top: 0; z-index: 2;
+  padding: 3px 6px 3px 8px;
+  background: linear-gradient(90deg, rgba(59,36,18,1.00),
+    rgba(59,36,18,0.18) 60%, transparent);
+  border-top: none;
+  border-bottom: 1px solid rgba(95,62,34,0.35);
+  font-size: .72rem; letter-spacing: 0.10em; color: #b08a5e;
+}
+.limbuscompany .item-list-panel .group-header::before,
+.limbuscompany .skill-list-panel .group-header::before {
+  content: ""; width: 2px; flex: 0 0 2px; height: 11px; border-radius: 1px;
+  background: linear-gradient(180deg, #e7b956, rgba(231,185,86,0.15));
+}
+.limbuscompany .item-list-panel .group-header:hover,
+.limbuscompany .skill-list-panel .group-header:hover {
+  background: linear-gradient(90deg, rgba(59,36,18,1.00),
+    rgba(59,36,18,0.35) 60%, transparent);
+  color: var(--text-main);
+}
+.limbuscompany .group-count { opacity: .75; }
+
+.limbuscompany .list-header {
+  color: #b08a5e; font-size: 0.80rem; letter-spacing: .12em;
+  padding-bottom: 3px; border-bottom-color: rgba(95,62,34,0.50);
+}
+
+.limbuscompany .item-row,
+.limbuscompany .skill-row {
+  position: relative; min-height: 32px; padding: 0 4px 0 8px;
+  border-bottom: 1px solid rgba(95,62,34,0.14);
+  transition: background .12s;
+}
+.limbuscompany .item-row::before,
+.limbuscompany .skill-row::before {
+  content: ""; position: absolute; left: 0; top: 4px; bottom: 4px; width: 2px;
+  background: transparent; border-radius: 1px; transition: background .12s;
+}
+.limbuscompany .item-row:hover,
+.limbuscompany .skill-row:hover { background: rgba(95,62,34,0.35); }
+.limbuscompany .item-row:hover::before,
+.limbuscompany .skill-row:hover::before { background: rgba(95,62,34,0.11); }
+
+.limbuscompany .item-row.item-row-equipped,
+.limbuscompany .item-row.skill-row-equipped,
+.limbuscompany .skill-row.skill-row-equipped {
+  background: linear-gradient(90deg, rgba(89,62,38,1.00),
+    rgba(89,62,38,0.23) 55%, transparent);
+}
+.limbuscompany .item-row.item-row-equipped::before,
+.limbuscompany .item-row.skill-row-equipped::before,
+.limbuscompany .skill-row.skill-row-equipped::before {
+  background: linear-gradient(180deg, #e7b956, #e7b956);
+  box-shadow: 0 0 5px rgba(231,185,86,0.90);
+}
+.limbuscompany .item-row.item-row-equipped:hover,
+.limbuscompany .item-row.skill-row-equipped:hover,
+.limbuscompany .skill-row.skill-row-equipped:hover {
+  background: linear-gradient(90deg, rgba(89,62,38,1.00),
+    rgba(89,62,38,0.46) 55%, transparent);
+}
+
+.limbuscompany .item-row .item-icon,
+.limbuscompany .skill-row .item-icon {
+  width: 24px; height: 24px; border: none; border-radius: 3px;
+  filter: saturate(.9) brightness(0.91);
+  transition: filter .12s, transform .12s;
+}
+.limbuscompany .item-row:hover .item-icon,
+.limbuscompany .skill-row:hover .item-icon {
+  filter: saturate(1.05) brightness(1.06); transform: scale(1.06);
+}
+
+.limbuscompany .item-row .col-name,
+.limbuscompany .skill-row .col-name {
+  color: #e8caa2; font-size: 0.70rem; letter-spacing: .03em;
+}
+.limbuscompany .item-row .col-cat,
+.limbuscompany .skill-row .col-cat { color: #e7b956; font-size: 0.70rem; }
+.limbuscompany .item-row .col-qty,
+.limbuscompany .item-row .col-cap,
+.limbuscompany .item-row .col-stellar,
+.limbuscompany .skill-row .col-qty,
+.limbuscompany .skill-row .col-stellar {
+  color: #e7b956; font-size: 0.70rem;
+  font-variant-numeric: tabular-nums; font-feature-settings: "tnum";
+}
+.limbuscompany .item-row .col-cap:empty::after,
+.limbuscompany .item-row .col-stellar:empty::after { content: "—"; color: rgba(231,185,86,0.50); }
+
+.limbuscompany .skill-row .col-sin {
+  display: inline-flex; align-items: center; justify-content: center; gap: 4px;
+  font-size: 0.70rem;
+}
+.limbuscompany .skill-row .col-sin::before {
+  content: ""; width: 6px; height: 6px; border-radius: 50%;
+  background: currentColor; box-shadow: 0 0 4px currentColor; opacity: .85;
+}
+
+.limbuscompany .item-row .col-actions .action-btn,
+.limbuscompany .skill-row .col-actions .action-btn {
+  width: 24px; height: 24px; flex: 0 0 24px;
+  opacity: 0.35; transition: opacity .12s, color .12s, background .12s;
+}
+.limbuscompany .item-row:hover .col-actions .action-btn,
+.limbuscompany .skill-row:hover .col-actions .action-btn { opacity: 1; }
+.limbuscompany .item-row .col-actions .action-btn.fav-active,
+.limbuscompany .skill-row .col-actions .action-btn.fav-active { opacity: 1; }
+.limbuscompany .action-btn:hover {
+  color: #e7b956; background: rgba(231,185,86,0.18);
+}
+
+/* 罪孽列改用图标（24px），去掉原来的文字与小圆点 */
+.limbuscompany .skill-row .col-sin::before { content: none; }
+.limbuscompany .skill-row .col-sin .sin-icon {
+  width: 24px; height: 24px; object-fit: contain; display: block;
+  filter: brightness(.95); transition: filter .12s, transform .12s;
+}
+.limbuscompany .skill-row:hover .col-sin .sin-icon {
+  filter: brightness(1.1); transform: scale(1.06);
+}
+
+/* 盖掉 Foundry 核心的 button:hover/:focus 红色发光描边 */
+.limbuscompany .action-btn,
+.limbuscompany .action-btn:hover,
+.limbuscompany .action-btn:focus,
+.limbuscompany .action-btn:active,
+.limbuscompany .toolbar-btn:hover,
+.limbuscompany .toolbar-btn:focus {
+  outline: none; border-color: transparent;
+  box-shadow: none !important; text-shadow: none;
+}
+.limbuscompany .action-btn:focus-visible { outline: 1px solid var(--gold-active); outline-offset: -1px; }
+
+/* ══ Tab 指示条：一条金线在 Tab 之间平滑滑动 ══════════════════════ */
+/* 各 Tab 自己的指示条取消，改由 nav 上唯一一条负责移动 */
+.limbuscompany .sheet-tabs .item::after,
+.limbuscompany .sheet-tabs .item:hover::after,
+.limbuscompany .sheet-tabs .item.active::after { content: none; }
+
+.limbuscompany nav.sheet-tabs { position: relative; }
+.limbuscompany nav.sheet-tabs::after {
+  content: ""; position: absolute; bottom: 0; left: 0;
+  width: calc(100% / var(--tab-n, 3)); height: 2px;
+  transform: translateX(calc(var(--tab-i, 0) * 100%));
+  transition: transform .3s cubic-bezier(.4, 0, .2, 1);
+  background: linear-gradient(90deg, transparent 8%, #E7B956 32%, #E7B956 68%, transparent 92%);
+  box-shadow: 0 0 8px rgba(231, 185, 86, .34);
+  pointer-events: none; will-change: transform;
+}
+/* 首帧定位不滑动 */
+.limbuscompany nav.sheet-tabs.tab-nav-init::after { transition: none; }
+.limbuscompany .sheet-tabs .item { transition: color .18s, background .18s; }
+
+/* 系统开了「减少动态效果」时也保留这条滑动：位移只有 2px 高的细线，
+   不构成前庭刺激；只把时长收短一点。 */
+@media (prefers-reduced-motion: reduce) {
+  .limbuscompany nav.sheet-tabs::after { transition: transform .18s cubic-bezier(.4, 0, .2, 1); }
+}
+
+/* 不依赖 JS 的兜底：直接按第几个 .item 处于 .active 定位金线 */
+.limbuscompany nav.sheet-tabs:has(.item:nth-child(1).active)::after { transform: translateX(0%); }
+.limbuscompany nav.sheet-tabs:has(.item:nth-child(2).active)::after { transform: translateX(100%); }
+.limbuscompany nav.sheet-tabs:has(.item:nth-child(3).active)::after { transform: translateX(200%); }
+.limbuscompany nav.sheet-tabs:has(.item:nth-child(4).active)::after { transform: translateX(300%); }
+
+/* 商人打烊 */
+.limbuscompany .mc-chip.mc-closed-toggle.on {
+  background: rgba(150, 40, 40, .35); border-color: #A24B3C; color: #F0B9A8;
+}
+.limbuscompany .mc-grid-box { position: relative; }
+.limbuscompany .mc-closed-veil {
+  position: absolute; inset: 0; z-index: 5;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(8, 6, 5, .82);
+  color: #8A6E52; font-size: 26px; letter-spacing: .5em; text-indent: .5em;
+  border: 1px solid var(--border-gold); border-radius: 3px; user-select: none;
+}
+
+/* ══ 配方表物品卡 ═══════════════════════════════════════════════════ */
+.limbuscompany .rb-toolbar {
+  display: flex; align-items: baseline; gap: 10px; padding: 2px 2px 6px;
+}
+.limbuscompany .rb-count { color: var(--gold-active); font-size: .8rem; }
+.limbuscompany .rb-hint  { color: var(--text-dim); font-size: .68rem; }
+
+.limbuscompany .rb-list { display: flex; flex-direction: column; gap: 4px; }
+.limbuscompany .rb-row {
+  display: grid; grid-template-columns: 34px 1fr auto auto; gap: 8px;
+  align-items: center; padding: 5px 6px;
+  background: rgba(95, 62, 33, .10);
+  border: 1px solid rgba(95, 62, 33, .35); border-radius: 3px;
+}
+.limbuscompany .rb-row:hover { background: rgba(95, 62, 33, .2); }
+.limbuscompany .rb-out-img {
+  width: 34px; height: 34px; object-fit: contain; border-radius: 3px;
+  background: #100C0A; border: 1px solid rgba(95, 62, 33, .5);
+}
+.limbuscompany .rb-name { color: var(--text-main); font-size: .82rem; }
+.limbuscompany .rb-ing  { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 2px; }
+.limbuscompany .rb-ing-chip {
+  display: inline-flex; align-items: center; gap: 3px;
+  font-size: .66rem; color: #9B8060;
+  background: rgba(0, 0, 0, .3); border-radius: 2px; padding: 1px 4px;
+}
+.limbuscompany .rb-ing-chip img { width: 13px; height: 13px; object-fit: contain; }
+.limbuscompany .rb-ing-none { font-size: .66rem; color: var(--text-dim); font-style: italic; }
+.limbuscompany .rb-out { font-size: .72rem; color: var(--gold-active); white-space: nowrap; }
+.limbuscompany .rb-row-actions { display: flex; gap: 2px; }
+.limbuscompany .rb-empty {
+  padding: 10px 6px; font-size: .75rem; color: var(--text-dim); font-style: italic;
+}
+
+/* ══ 窗口标题栏整合（方案 B：隐藏标题 + 右上角 ⋮ 收纳） ══════════════ */
+.window-app.lc-hd-collapsed .window-header {
+  height: 30px; padding: 0 6px; gap: 2px;
+  background: #0B0908; border-bottom: 1px solid #5C4128;
+  align-items: center;
+}
+.window-app.lc-hd-collapsed .window-header .window-title { display: none; }
+
+.window-app.lc-hd-collapsed .window-header a.header-button,
+.window-app.lc-hd-collapsed .window-header .header-control {
+  width: 22px; height: 22px; padding: 0; margin: 0; flex: 0 0 auto;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 3px; font-size: 12px; color: #7A6249;
+  opacity: .35; border: none; box-shadow: none !important;
+  transition: opacity .14s, color .14s, background .14s;
+}
+/* 按钮上的文字标签只在标题栏里藏掉；进了 ⋮ 菜单要显示 */
+.window-app.lc-hd-collapsed .window-header a.header-button > span,
+.window-app.lc-hd-collapsed .window-header .header-control > span { display: none; }
+
+.window-app.lc-hd-collapsed:hover .window-header a.header-button,
+.window-app.lc-hd-collapsed:hover .window-header .header-control { opacity: 1; }
+.window-app.lc-hd-collapsed .window-header a.header-button:hover,
+.window-app.lc-hd-collapsed .window-header .header-control:hover {
+  color: #E7B956; background: rgba(231,185,86,.14);
+}
+.window-app.lc-hd-collapsed .window-header .close:hover,
+.window-app.lc-hd-collapsed .window-header [data-action="close"]:hover {
+  color: #E2705C; background: rgba(226,112,92,.16);
+}
+/* ⋮ 本身常亮一点，否则找不到入口 */
+.window-app.lc-hd-collapsed .window-header .lc-hd-dots { opacity: .7; }
+
+/* ⋮ 下拉 */
+.window-app .lc-hd-menu {
+  position: absolute; right: 4px; top: 32px; z-index: 60;
+  width: 150px; padding: 3px; margin: 0; list-style: none;
+  background: #15110E; border: 1px solid #5C4128; border-radius: 3px;
+  box-shadow: 0 6px 18px rgba(0,0,0,.75);
+}
+.window-app .lc-hd-menu[hidden] { display: none !important; }
+.window-app .lc-hd-menu li { display: block; padding: 0; margin: 0; }
+.window-app .lc-hd-menu li > a,
+.window-app .lc-hd-menu li > .header-control {
+  display: flex !important; align-items: center; gap: 7px;
+  width: auto !important; height: auto !important;
+  font-size: 11.5px; color: #9B6839 !important; opacity: 1 !important;
+  padding: 5px 8px !important; border-radius: 2px; white-space: nowrap;
+}
+.window-app .lc-hd-menu li > a > span,
+.window-app .lc-hd-menu li > .header-control > span { display: inline !important; }
+.window-app .lc-hd-menu li > a:hover,
+.window-app .lc-hd-menu li > .header-control:hover {
+  background: rgba(95,62,33,.35) !important; color: #E8CAA2 !important;
+}
+
+/* 标题栏：按钮右对齐、去掉底部分割线、关闭按钮只留 ✕ */
+.window-app.lc-hd-collapsed .window-header {
+  justify-content: flex-end;
+  border-bottom: none !important;
+  box-shadow: none !important;
+}
+/* 标题隐藏后没有撑开的元素了，补一个弹性占位把按钮顶到最右 */
+.window-app.lc-hd-collapsed .window-header::before {
+  content: ""; flex: 1 1 auto; align-self: stretch;
+}
+/* 关闭按钮的「关闭」二字是裸文本节点，用 font-size:0 抹掉，只留图标 */
+.window-app.lc-hd-collapsed .window-header a.header-button,
+.window-app.lc-hd-collapsed .window-header .header-control { font-size: 0; }
+.window-app.lc-hd-collapsed .window-header a.header-button > i,
+.window-app.lc-hd-collapsed .window-header .header-control > i { font-size: 12px; }
+/* 菜单里要看得见文字 */
+.window-app .lc-hd-menu li > a,
+.window-app .lc-hd-menu li > .header-control { font-size: 11.5px !important; }
+.window-app .lc-hd-menu li > a > i,
+.window-app .lc-hd-menu li > .header-control > i { font-size: 12px; }
+
+/* 「复制 UUID」小图标：从被隐藏的标题里捞出来后按普通标题栏按钮处理 */
+.window-app.lc-hd-collapsed .window-header > .document-id-link,
+.window-app.lc-hd-collapsed .window-header > a[data-action="copyUuid"] {
+  width: 22px; height: 22px; flex: 0 0 auto; font-size: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 3px; color: #7A6249; opacity: .35;
+  transition: opacity .14s, color .14s, background .14s;
+}
+.window-app.lc-hd-collapsed .window-header > .document-id-link > i,
+.window-app.lc-hd-collapsed .window-header > a[data-action="copyUuid"] > i { font-size: 12px; }
+.window-app.lc-hd-collapsed:hover .window-header > .document-id-link,
+.window-app.lc-hd-collapsed:hover .window-header > a[data-action="copyUuid"] { opacity: 1; }
+.window-app.lc-hd-collapsed .window-header > .document-id-link:hover,
+.window-app.lc-hd-collapsed .window-header > a[data-action="copyUuid"]:hover {
+  color: #E7B956; background: rgba(231,185,86,.14);
+}
+
+/* ⋮ 自己不带 header-button 类（避免命中 Foundry 的委托监听），样式单独给 */
+.window-app.lc-hd-collapsed .window-header .lc-hd-dots {
+  width: 22px; height: 22px; flex: 0 0 auto; font-size: 0; cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 3px; color: #7A6249; opacity: .7;
+  transition: opacity .14s, color .14s, background .14s;
+}
+.window-app.lc-hd-collapsed .window-header .lc-hd-dots > i { font-size: 12px; }
+.window-app.lc-hd-collapsed .window-header .lc-hd-dots:hover {
+  opacity: 1; color: #E7B956; background: rgba(231,185,86,.14);
+}
+
+/* 【制作】按钮内部的本地进度条（只有点的人看得见，不写文档） */
+.camp-craft-btn { position: relative; overflow: hidden; }
+.camp-craft-btn.crafting { pointer-events: none; color: #F0C96E; }
+.camp-craft-btn.crafting::before {
+  content: ""; position: absolute; left: 0; top: 0; bottom: 0;
+  width: var(--craft-p, 0%);
+  background: linear-gradient(90deg, rgba(231,185,86,.30), rgba(231,185,86,.55));
+  box-shadow: 0 0 8px rgba(231,185,86,.35) inset;
+  pointer-events: none; z-index: 0;
+}
+.camp-craft-btn.crafting::after {
+  content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 2px;
+  background: linear-gradient(90deg, #E7B956 var(--craft-p, 0%), transparent 0);
+}
+.camp-craft-btn > * { position: relative; z-index: 1; }

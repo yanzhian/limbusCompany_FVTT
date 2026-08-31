@@ -87,6 +87,18 @@ LIMBUSCOMPANY.EGO_COSTS = {
   ALEPH: 15,
 };
 
+// ─── 形象（纸娃娃）默认摆放 ───────────────────────────────────────────────────
+// 装备第一次穿上时用的位置/大小；玩家一旦拖过（doll.placed = true）就不再套用。
+// x/y = 相对立绘框的百分比（中心点），w = 贴图宽度占框宽的百分比，
+// scale/rot 是在 w 之上的额外缩放与旋转。用 scratchpad-doll.html 调，导出后贴这里。
+LIMBUSCOMPANY.DOLL_DEFAULTS = {
+  head:      { x: 50.5, y: 16.5, w: 30,   scale: 1.35, rot: 0,   z: 9999 },
+  upper:     { x: 47,   y: 50.5, w: 42,   scale: 1.7,  rot: 0,   z: 20 },
+  lower:     { x: 50.5, y: 60,   w: 100,  scale: 1,    rot: 0,   z: 10 },
+  weapon:    { x: 45,   y: 79.5, w: 34,   scale: 1.86, rot: 0,   z: 0 },
+  accessory: { x: 28.5, y: 57,   w: 22.5, scale: 1.47, rot: -15, z: 7 },
+};
+
 // ─── 稀有度 ───────────────────────────────────────────────────────────────────
 // 装备 / 消耗品 / 材料 / 容器 专用（技能、EGO 不参与）。
 // 只有两个用途：战利品随机池的抽取权重、卡面配色。**不参与定价**——价格永远看 cost。
@@ -218,6 +230,9 @@ LIMBUSCOMPANY.BUFF_TYPES = {
   moonOnSusuki:    "芒上月",
   indigoSakura:    "青染樱",
   lightCard:       "光札",
+  // 庄严哀悼（特殊子弹 + 装填标记）
+  mourningAmmo:    "生蝶·亡蝶",
+  mourningReload:  "再次装填·生蝶·亡蝶",
 };
 
 /**
@@ -262,7 +277,8 @@ LIMBUSCOMPANY.BUFF_GROUPS = {
   special:  ["burn", "bleed", "tremor", "rupture", "sinking", "breathing", "charge", "chaos", "panic", "lowMorale"],
   other:    ["custom"],
   custom:   ["defensiveStance", "butterfly", "piercingArrow",
-             "craneOnPine", "moonOnSusuki", "indigoSakura", "lightCard"],
+             "craneOnPine", "moonOnSusuki", "indigoSakura", "lightCard",
+             "mourningAmmo", "mourningReload"],
 };
 
 /**
@@ -393,7 +409,7 @@ LIMBUSCOMPANY.EQUIPMENT_SUBTYPES = {
 
 LIMBUSCOMPANY.ACTIVITY_TRIGGERS = [
   "使用时", "攻击前", "攻击时", "攻击后",
-  "拼点时", "拼点成功", "拼点失败",
+  "拼点时", "拼点胜利", "拼点失败",
   "命中时", "暴击命中时",
   "回合开始时", "回合结束时", "受到伤害时",
   "反应", "丢弃时", "恐慌触发时", "坚定触发时", "陷入混乱时",

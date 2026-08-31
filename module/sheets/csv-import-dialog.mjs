@@ -62,7 +62,7 @@ export class CSVImportDialog extends Application {
   getData() {
     const typeLabels = {
       equipment: "装备", skill: "技能", consumable: "消耗品", material: "材料",
-      container: "容器", skillbook: "技能书", panic: "恐慌卡", background: "背景",
+      container: "容器", skillbook: "技能书", recipebook: "配方表", panic: "恐慌卡", background: "背景",
     };
     const types = Object.keys(CONFIG.Item?.dataModels ?? typeLabels).map(t => ({
       value:    t,

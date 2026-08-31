@@ -55,6 +55,22 @@ export class EquipmentData extends foundry.abstract.TypeDataModel {
       rarity: new fields.StringField({ required: true, initial: "common",
         choices: ["common", "fine", "epic", "artistic", "mythic"] }),
 
+      // 形象（纸娃娃）摆放：这件装备贴在角色立绘上的位置/角度/大小/层级。
+      // 存在**装备自己身上**而不是角色上——脱下来再穿回去要保留上次调好的样子，
+      // 换个角色穿也一样（同一件衣服的挂法是衣服的属性，不是人的）。
+      // x/y 是相对立绘框的百分比，rot 为角度，scale 为倍率，z 为叠放层级。
+      doll: new fields.SchemaField({
+        x:     new fields.NumberField({ required: true, initial: 50 }),
+        y:     new fields.NumberField({ required: true, initial: 50 }),
+        scale: new fields.NumberField({ required: true, initial: 1, min: 0.05, max: 8 }),
+        rot:   new fields.NumberField({ required: true, initial: 0 }),
+        z:     new fields.NumberField({ required: true, integer: true, initial: 0 }),
+        hidden: new fields.BooleanField({ required: true, initial: false }),
+        // 玩家有没有亲手摆过：false 时渲染用 CONFIG.LIMBUSCOMPANY.DOLL_DEFAULTS
+        // 里按子类型给的默认位，拖动一次就落成 true，之后只认自己存的值
+        placed: new fields.BooleanField({ required: true, initial: false }),
+      }),
+
       // 子类型：上装 / 下装 / 武器 / 饰品
       subtype:  new fields.StringField({ required: true, initial: "weapon",
         choices: ["upper", "lower", "weapon", "accessory"] }),
@@ -198,6 +214,12 @@ export class SkillData extends foundry.abstract.TypeDataModel {
         negativeDice: new fields.BooleanField({ required: false, nullable: true, initial: null }),
         // 侵蚀形态可以单独开【无差别攻击】（null = 沿用觉醒形态的设置）
         indiscriminate: new fields.BooleanField({ required: false, nullable: true, initial: null }),
+        // 侵蚀形态可以单独设扩散方式 / 范围（null = 沿用觉醒形态的设置）
+        // 不给 choices：这里合法值是 null / "chain" / "spray"，而 choices 数组里混 null
+        // 会让校验把 null 判成非法，整条 corrode 更新被丢掉（症状：怎么改都存不进去）
+        spreadMode:  new fields.StringField({ required: false, nullable: true, initial: null }),
+        spreadRange: new fields.NumberField({ required: false, nullable: true, integer: true,
+          min: 1, max: 6, initial: null }),
         weight:      new fields.NumberField({ required: false, nullable: true, integer: true, min: 0, initial: null }),
         sanityCost:  new fields.NumberField({ required: false, nullable: true, integer: true, min: 0, initial: null }),
         effectDesc:  new fields.HTMLField({ required: false, initial: "" }),
@@ -293,7 +315,8 @@ export class SkillData extends foundry.abstract.TypeDataModel {
     // 没填的字段照旧沿用【觉醒】的数值。
     if (this.type === "ego" && this.corrode?.initialized && this._ownerInPanic) {
       const c = this.corrode;
-      for (const key of ["category", "baseValue", "diceCount", "diceFaces", "weight", "sanityCost", "negativeDice", "indiscriminate"]) {
+      for (const key of ["category", "baseValue", "diceCount", "diceFaces", "weight", "sanityCost",
+                         "negativeDice", "indiscriminate", "spreadMode", "spreadRange"]) {
         if (c[key] !== null && c[key] !== undefined) this[key] = c[key];
       }
       if (c.effectDesc) this.effectDesc = c.effectDesc;
@@ -498,6 +521,61 @@ export class SkillBookData extends foundry.abstract.TypeDataModel {
       }),
 
       // 眼价格（供 Item Piles 商人/市场使用）
+      cost: new fields.NumberField({ required: true, integer: true, min: 0, initial: 0 }),
+
+      // ── 商人货架字段 ────────────────────────────────────────────────────
+      price:  new fields.NumberField({ required: true, integer: true, min: 0, initial: 0 }),
+      stock:  new fields.NumberField({ required: true, integer: true, min: -1, initial: -1 }),
+      hidden: new fields.BooleanField({ required: true, initial: false }),
+    };
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  RecipeBookData — 配方表数据模型
+//
+//  只能在营地使用：把表内配方录进营地的配方列表（营地那边就"多出配方"了）。
+//  配方结构与 CampData.recipes 完全一致，编辑界面共用 helpers/recipe-editor.mjs。
+// ═══════════════════════════════════════════════════════════════════════════
+
+export class RecipeBookData extends foundry.abstract.TypeDataModel {
+  static defineSchema() {
+    const fields = foundry.data.fields;
+
+    const ingredientSchema = new fields.SchemaField({
+      name:     new fields.StringField({ required: true, initial: "" }),
+      img:      new fields.StringField({ required: false, initial: "icons/svg/item-bag.svg" }),
+      quantity: new fields.NumberField({ required: true, integer: true, min: 1, initial: 1 }),
+    });
+
+    const recipeSchema = new fields.SchemaField({
+      id:             new fields.StringField({ required: true, initial: () => foundry.utils.randomID() }),
+      name:           new fields.StringField({ required: true, initial: "新配方" }),
+      hidden:         new fields.BooleanField({ required: true, initial: false }),
+      ingredients:    new fields.ArrayField(ingredientSchema, { required: true, initial: [] }),
+      outputName:     new fields.StringField({ required: true, initial: "" }),
+      outputImg:      new fields.StringField({ required: false, initial: "icons/svg/item-bag.svg" }),
+      outputQuantity: new fields.NumberField({ required: true, integer: true, min: 1, initial: 1 }),
+      outputItemData: new fields.ObjectField({ required: false, nullable: true, initial: null }),
+    });
+
+    return {
+      category: new fields.StringField({ required: false, initial: "" }),
+      recipes:  new fields.ArrayField(recipeSchema, { required: true, initial: [] }),
+
+      tags: new fields.ArrayField(
+        new fields.StringField({ required: true }),
+        { required: true, initial: [] }
+      ),
+
+      favorited: new fields.BooleanField({ required: true, initial: false }),
+      rarity:    new fields.StringField({ required: false, initial: "" }),
+
+      capacity: new fields.SchemaField({
+        w: new fields.NumberField({ required: true, integer: true, min: 1, max: 10, initial: 1 }),
+        h: new fields.NumberField({ required: true, integer: true, min: 1, max: 10, initial: 1 }),
+      }),
+
       cost: new fields.NumberField({ required: true, integer: true, min: 0, initial: 0 }),
 
       // ── 商人货架字段 ────────────────────────────────────────────────────
@@ -748,7 +826,7 @@ export class LimbusItem extends Item {
       metaHtml = `<div class="ic-item-meta skill-meta">${catImgTag}<span class="ic-dice">${formula}</span></div>`;
     } else {
       // 物品类：type label + category
-      const typeLabels = { equipment:"装备", consumable:"消耗品", material:"材料", container:"容器", skillbook:"技能书", panic:"恐慌", background:"背景" };
+      const typeLabels = { equipment:"装备", consumable:"消耗品", material:"材料", container:"容器", skillbook:"技能书", recipebook:"配方表", panic:"恐慌", background:"背景" };
       const typeLabel  = typeLabels[this.type] ?? this.type;
       const catLabel   = sys.category ? ` · ${sys.category}` : "";
       metaHtml = `<div class="ic-item-meta">${typeLabel}${catLabel}</div>`;

@@ -44,6 +44,7 @@ const CAT_FILTERS = [
   { key: "consumable", label: "消耗品" },
   { key: "material",   label: "材料" },
   { key: "skillbook",  label: "技能书" },
+  { key: "recipebook", label: "配方表" },
 ];
 
 export class LimbusMerchantSheet extends ActorSheet {
@@ -238,13 +239,16 @@ export class LimbusMerchantSheet extends ActorSheet {
     if (!sale.enabled) return base;
     return Math.max(1, Math.round(base * (sale.rate ?? 10) / 10));
   }
+  /** 商人是否已打烊：打烊后玩家看不到货架、不能买也不能卖 */
+  static isClosed(actor) { return !!actor?.system?.closed; }
+
   /** 物品的基础价格：物品卡上「眼」那一栏（cost-display 显示的就是它） */
   static baseCostOf(item) {
     return item?.system?.cost ?? 0;
   }
-  /** 回收价固定半价，不吃折扣——压低回收价只会让人不想卖 */
+  /** 回收价 = 原价，不吃折扣（折扣只作用于买入） */
   static sellPriceOf(item) {
-    return Math.floor(LimbusMerchantSheet.baseCostOf(item) / 2);
+    return LimbusMerchantSheet.baseCostOf(item);
   }
 
   /* ─── getData ────────────────────────────────────────────────────────── */
@@ -300,15 +304,30 @@ export class LimbusMerchantSheet extends ActorSheet {
       await buildPlacementGrid(placements, { cols, rows, keepOrphanOccupancy: true });
 
     // 孤儿条目（物品被删了但摆放记录还在）：GM 端延迟清掉，defer 出本次 getData
+    // 同营地：按 uuid 清并复核，索引在这期间可能已经变了
     if (orphanedIndices.length && isGM) {
-      const dead = new Set(orphanedIndices);
-      setTimeout(() => this.actor.update({
-        "system.shelfContents": placements.filter((_, i) => !dead.has(i)),
-      }), 0);
+      const deadUuids = orphanedIndices.map(i => placements[i]?.uuid).filter(Boolean);
+      setTimeout(async () => {
+        const cur  = this.actor.system.shelfContents ?? [];
+        const gone = [];
+        for (const uuid of deadUuids) {
+          if (!cur.some(p => p.uuid === uuid)) continue;
+          if (!(await fromUuid(uuid).catch(() => null))) gone.push(uuid);
+        }
+        if (!gone.length) return;
+        const dead = new Set(gone);
+        await this.actor.update({
+          "system.shelfContents": cur.filter(p => !dead.has(p.uuid)),
+        });
+      }, 0);
     }
 
+    const closedForMe = LimbusMerchantSheet.isClosed(actor) && !isGM;
+    ctx.shopClosed  = LimbusMerchantSheet.isClosed(actor);
+    ctx.closedForMe = closedForMe;
+
     const purse = ctx.myChar?.currency ?? 0;
-    ctx.shelfItems = placedItems.map(p => {
+    ctx.shelfItems = closedForMe ? [] : placedItems.map(p => {
       const doc  = actor.items.get(String(p.uuid ?? "").split(".").pop());
       const pl   = placements[p.idx] ?? {};
       const base = pl.price ?? 0;
@@ -365,6 +384,9 @@ export class LimbusMerchantSheet extends ActorSheet {
     // 折扣
     html.find(".mc-sale-toggle").on("click", async () => {
       await this.actor.update({ "system.sale.enabled": !(this.actor.system.sale?.enabled) });
+    });
+    html.find(".mc-closed-toggle").on("click", async () => {
+      await this.actor.update({ "system.closed": !this.actor.system.closed });
     });
     html.find(".mc-sale-rate").on("change", async (ev) => {
       await this.actor.update({ "system.sale.rate": Number(ev.currentTarget.value) || 10 });
@@ -453,6 +475,9 @@ export class LimbusMerchantSheet extends ActorSheet {
         rows:       this.actor.system.shelfSize?.height ?? 5,
         // 玩家动不了货架：不可编辑 → 货架图块拖不起来（这就是"只能移动自己的物品"）
         editable:   () => isGM && !this._multi,
+        // 但玩家必须能把自己背包里的东西丢进货架＝出售（打烊时除外）
+        droppable:  (p) => this._multi ? false
+          : (isGM ? true : (!!p?.fromBag && !LimbusMerchantSheet.isClosed(this.actor))),
         placements: () => this.actor.system.shelfContents ?? [],
         payloadFor: (tile) => {
           if (!isGM) return null;
@@ -598,6 +623,8 @@ export class LimbusMerchantSheet extends ActorSheet {
   }
 
   async _onBuy(placementIdx) {
+    if (LimbusMerchantSheet.isClosed(this.actor) && !game.user.isGM)
+      return void ui.notifications.warn("商人已打烊，暂不营业。");
     const char = this._myChar();
     if (!char) return void ui.notifications.warn("没有主控角色，无法购买。");
     const p    = this.actor.system.shelfContents?.[placementIdx];
@@ -617,6 +644,8 @@ export class LimbusMerchantSheet extends ActorSheet {
   }
 
   async _onSell(itemId, dropAt = null) {
+    if (LimbusMerchantSheet.isClosed(this.actor) && !game.user.isGM)
+      return void ui.notifications.warn("商人已打烊，暂不收货。");
     const char = this._myChar();
     const item = char?.items.get(itemId);
     if (!char || !item) return;

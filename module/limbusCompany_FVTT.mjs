@@ -9,6 +9,7 @@
  */
 
 import { LIMBUSCOMPANY }   from "./config.mjs";
+import { registerHeaderCollapse } from "./helpers/window-header.mjs";
 import { LimbusActor, CharacterData, MerchantData, CampData, LootData }  from "./documents/actor.mjs";
 import {
   LimbusItem,
@@ -18,6 +19,7 @@ import {
   MaterialData,
   ContainerData,
   SkillBookData,
+  RecipeBookData,
   PanicData,
   BackgroundData,
 } from "./documents/item.mjs";
@@ -137,6 +139,7 @@ Hooks.once("init", () => {
     material:   MaterialData,
     container:  ContainerData,
     skillbook:  SkillBookData,
+    recipebook: RecipeBookData,
     panic:      PanicData,
     background: BackgroundData,
   };
@@ -219,6 +222,13 @@ Hooks.once("setup", () => {
 /* ─── Hooks.once("ready") ────────────────────────────────────────────────── */
 
 Hooks.once("ready", () => {
+  // 窗口标题栏整合：隐藏标题，除关闭外的按钮收进右上角 ⋮
+  registerHeaderCollapse([
+    "LimbusActorSheet", "LimbusItemSheet", "LimbusMerchantSheet",
+    "LimbusCampSheet", "LimbusLootSheet",
+    "BackgroundWizard", "LevelUpDialog", "GMConsole", "CSVImportDialog",
+  ]);
+
   console.log("limbusCompany_FVTT | 系统已就绪。");
 
   // 【展示稀有度】：开关状态落到 body 上
@@ -481,12 +491,13 @@ Hooks.on("renderChatMessage", (_message, html, _data) => {
       // 闪避/完全格挡 + 【不可摧毁】反击 / [追加伤害]：拼点本身 0 伤害，
       // 只落挂在后面那几份
       if (damage > 0 || !(flags.unbreakable || flags.extraDmg)) {
-        await ClashManager.handleApplyDamage(targetActorId, damage, flags.takeEffects ?? []);
+        await ClashManager.handleApplyDamage(targetActorId, damage, flags.takeEffects ?? [],
+          flags.attackerId ?? "");
       }
       // 【不可摧毁】拼点失败反击：和拼点伤害同一个按钮一起结算
       const ub = flags.unbreakable;
       if (ub?.targetActorId && (ub.damage ?? 0) > 0) {
-        await ClashManager.handleApplyDamage(ub.targetActorId, ub.damage);
+        await ClashManager.handleApplyDamage(ub.targetActorId, ub.damage, [], ub.attackerId ?? "");
       }
       // [追加伤害]：时间上在主伤害之后，排在最后记账
       await ClashManager.runExtraDamage(flags.extraDmg ?? []);
@@ -523,8 +534,9 @@ Hooks.on("renderChatMessage", (_message, html, _data) => {
       // 沉沦降理智可能把人打进【士气低落】——聚合成一张【恐慌鉴定】卡
       ClashManager._beginPanicAgg();
       await ClashManager.settleBleed(flags.bleedMsgs ?? []);
-      await ClashManager.handleApplyDamage(flags.defActorId, flags.damageToDefActor ?? 0);
-      await ClashManager.handleApplyDamage(flags.atkActorId, flags.damageToAtkActor ?? 0);
+      // 反击是一次交锋两边同时挨打：各自的伤害来源就是对面
+      await ClashManager.handleApplyDamage(flags.defActorId, flags.damageToDefActor ?? 0, [], flags.atkActorId ?? "");
+      await ClashManager.handleApplyDamage(flags.atkActorId, flags.damageToAtkActor ?? 0, [], flags.defActorId ?? "");
       await ClashManager.runExtraDamage(flags.extraDmg ?? []);
       await ClashManager._flushTakeAgg();
       await ClashManager._flushPanicAgg();
@@ -553,7 +565,7 @@ Hooks.on("renderChatMessage", (_message, html, _data) => {
       // 沉沦降理智可能把人打进【士气低落】——聚合成一张【恐慌鉴定】卡
       ClashManager._beginPanicAgg();
       await ClashManager.settleBleed(flags.bleedMsgs ?? []);
-      await ClashManager.handleApplyDamage(targetActorId, damage);
+      await ClashManager.handleApplyDamage(targetActorId, damage, [], flags.atkActorId ?? "");
       await ClashManager.runExtraDamage(flags.extraDmg ?? []);
       await ClashManager._flushTakeAgg();
       await ClashManager._flushPanicAgg();
@@ -991,6 +1003,7 @@ Hooks.on("updateCombat", async (combat, changed) => {
       const finalTotal = roll.finalTotal ?? roll.total;
       initiativeUpdates.push({ _id: combatant.id, initiative: finalTotal });
       initiativeRows.push({
+        id:       combatant.id,
         img:      actor.img,
         name:     actor.name,
         speedMin: roll.speedMin ?? 0,
@@ -1000,9 +1013,32 @@ Hooks.on("updateCombat", async (combat, changed) => {
     }
     if (initiativeUpdates.length > 0) {
       await combat.updateEmbeddedDocuments("Combatant", initiativeUpdates);
-      // 全体先攻汇总为一张卡
+
+      // ── 重掷之后必须把行动指针拨回新顺序的第一位 ──────────────────────
+      // Combat#_onUpdateDescendantDocuments 在 Combatant 改动后会重排 turns，
+      // 并把 turn 调成「原来那个当前角色」在新顺序里的下标——那是为"战斗中途
+      // 手改某人先攻、不该打断当前行动者"设计的。但本系统是每轮重掷全员先攻，
+      // nextRound() 刚把 turn 归 0（旧顺序的第一位 A），重排后 Foundry 又把
+      // turn 拨回 A 在新顺序里的位置，于是「新顺序是 B,D,A,C 却从 A 开始」。
+      // 这里在重排落地后再显式写一次 turn，覆盖掉那次自动校正。
+      // 注意：此刻本地 combat.turn 仍是 0（那次自动 update 尚未回程），
+      // 必须 diff:false，否则会被差分成空更新而发不出去。
+      // turn === null 表示"当前没有轮到任何人"（nextRound 会原样保留），不干预。
+      if (combat.turn !== null) {
+        let newTurn = 0;
+        if (combat.settings?.skipDefeated) {
+          const alive = combat.turns.findIndex(t => !t.isDefeated);
+          if (alive > 0) newTurn = alive;
+        }
+        await combat.update({ turn: newTurn }, { diff: false });
+      }
+
+      // 全体先攻汇总为一张卡：按战斗跟踪器重排后的真实顺序列出（含序号）
+      const turnOrder = new Map(combat.turns.map((t, i) => [t.id, i]));
+      initiativeRows.sort((a, b) => (turnOrder.get(a.id) ?? 0) - (turnOrder.get(b.id) ?? 0));
       const rowsHtml = initiativeRows.map(r => `
         <div style="display:flex;align-items:center;gap:8px;margin:4px 0;">
+          <span style="color:#E8C9A2;opacity:.6;font-size:.8rem;min-width:1.2em;text-align:right;">${(turnOrder.get(r.id) ?? 0) + 1}</span>
           <img src="${r.img}" alt="${r.name}"
                style="width:30px;height:30px;object-fit:cover;border-radius:50%;border:2px solid #3A5A1A;">
           <span style="color:#E8C9A2;font-size:.85rem;flex:1;">${r.name}</span>
@@ -1148,6 +1184,37 @@ function _registerSettings() {
     default: 3,
   });
 
+  // 角色卡改良版外观：并行的试验模板，方便边用边调，默认关闭
+  game.settings.register("limbusCompany_FVTT", "sheetRedesign", {
+    name:    "角色卡·改良版外观（调试）",
+    hint:    "换用 character-sheet-redesign.hbs / .css 这套试验外观："
+           + "三层视觉层级（身份区 / 主导航 / 工作区）、带图标的 Tab、底部资源栏。"
+           + "功能与旧版完全一致（复用同一批 parts），只是外框与样式不同；"
+           + "改样式只需刷新页面，不用重启世界。",
+    scope:   "client",
+    config:  true,
+    type:    Boolean,
+    default: false,
+    onChange: () => {
+      // 立刻把已打开的角色卡换成另一套模板
+      for (const app of Object.values(ui.windows)) {
+        if (app?.actor?.type === "character") app.render(true);
+      }
+    },
+  });
+
+  // 形象（纸娃娃）系统：整套功能的总开关，默认关闭
+  game.settings.register("limbusCompany_FVTT", "dollSystem", {
+    name:    "启用形象系统",
+    hint:    "开启后角色卡【物品】页左栏多一个【形象】视图：把各装备的贴图和一张头部图片"
+           + "拼成角色形象，可拖动摆放、R 旋转、E 缩放、滚轮调图层前后。"
+           + "关闭则左栏只有九宫格装备栏（默认）。由 GM 设定，对全场生效。",
+    scope:   "world",
+    config:  true,
+    type:    Boolean,
+    default: false,
+  });
+
   // 稀有度光晕：纯装饰，GM 可以整场关掉（不想用稀有度、或不想让玩家一眼看穿箱子里的货色）
   game.settings.register("limbusCompany_FVTT", "showRarity", {
     name:    "展示稀有度",
@@ -1192,6 +1259,7 @@ async function _preloadTemplates() {
     // Actor sheets
     "systems/limbusCompany_FVTT/templates/actor/merchant-sheet.hbs",
     "systems/limbusCompany_FVTT/templates/actor/character-sheet.hbs",
+    "systems/limbusCompany_FVTT/templates/actor/character-sheet-redesign.hbs",
     "systems/limbusCompany_FVTT/templates/actor/camp-sheet.hbs",
     "systems/limbusCompany_FVTT/templates/actor/parts/header.hbs",
     "systems/limbusCompany_FVTT/templates/actor/parts/tab-items.hbs",
@@ -1203,6 +1271,7 @@ async function _preloadTemplates() {
     "systems/limbusCompany_FVTT/templates/item/consumable-sheet.hbs",
     "systems/limbusCompany_FVTT/templates/item/container-sheet.hbs",
     "systems/limbusCompany_FVTT/templates/item/skillbook-sheet.hbs",
+    "systems/limbusCompany_FVTT/templates/item/recipebook-sheet.hbs",
     "systems/limbusCompany_FVTT/templates/item/panic-sheet.hbs",
     "systems/limbusCompany_FVTT/templates/item/background-sheet.hbs",
     "systems/limbusCompany_FVTT/templates/apps/background-wizard.hbs",
@@ -1378,7 +1447,8 @@ Hooks.once("init", () => {
 
   /** 返回罪孽图标路径 */
   Handlebars.registerHelper("sinIcon", (sinType) => {
-    const sin = sinType?.charAt(0).toUpperCase() + sinType?.slice(1);
+    if (typeof sinType !== "string" || !sinType) return "";
+    const sin = sinType.charAt(0).toUpperCase() + sinType.slice(1);
     return `systems/limbusCompany_FVTT/assets/icons/Base_icon/${sin}_icon.webp`;
   });
 });

@@ -204,10 +204,10 @@
                 {{!-- 这两个控件不参与表单提交（不写 name），改由 JS 直接 update，
                       免得和骰数公式那套重写逻辑抢同一次提交 --}}
                 <select class="equip-subtype-sel spread-mode-sel">
-                  <option value="chain" {{#eq system.spreadMode "chain"}}selected{{/eq}}>链式扩散</option>
-                  <option value="spray" {{#eq system.spreadMode "spray"}}selected{{/eq}}>广域乱射</option>
+                  <option value="chain" {{#eq formSpreadMode "chain"}}selected{{/eq}}>链式扩散</option>
+                  <option value="spray" {{#eq formSpreadMode "spray"}}selected{{/eq}}>广域乱射</option>
                 </select>
-                <input type="number" value="{{system.spreadRange}}"
+                <input type="number" value="{{formSpreadRange}}"
                        class="weight-input spread-range-input" min="1" max="6" style="width:38px"
                        title="扩散范围（格）"/>
                 <span class="spread-ft">{{spreadFt}}</span>

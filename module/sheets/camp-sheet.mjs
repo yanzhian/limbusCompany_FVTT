@@ -12,11 +12,15 @@
  *         （玩家操作通过 socket 委托 GM 执行）
  */
 import { BAG_COLS, BAG_ROWS, getBagItems, packBagGrid } from "../helpers/bag-grid.mjs";
+import { openRecipeEditor } from "../helpers/recipe-editor.mjs";
 import { buildPlacementGrid, canPlace, autoPlace, makeLockedSet } from "../helpers/grid-layout.mjs";
 import { GridDnD } from "../helpers/grid-dnd.mjs";
 import { canContainerAccept, wouldNest } from "../helpers/container-rules.mjs";
 import { buildItemTitleCard, closeTitleCardUnlessLocked, toggleTitleCardLock } from "./item-sheet.mjs";
 import { guardInteractRange } from "../helpers/proximity.mjs";
+
+/** 制作进行中的营地 id：期间禁止孤儿清理写回 warehouseContents（见下方说明） */
+const _CRAFTING = new Set();
 
 export class LimbusCampSheet extends ActorSheet {
 
@@ -35,7 +39,7 @@ export class LimbusCampSheet extends ActorSheet {
     return foundry.utils.mergeObject(super.defaultOptions, {
       classes:   ["limbuscompany", "sheet", "actor", "camp"],
       template:  "systems/limbusCompany_FVTT/templates/actor/camp-sheet.hbs",
-      width:     880,
+      width:     1080,   /* 265(角色) + 400(仓库) + 400(配方) + 边距 */
       height:    580,
       resizable: true,
       // 重渲染时保持这些容器的滚动位置（拖动仓库物品后不回顶）
@@ -204,12 +208,29 @@ export class LimbusCampSheet extends ActorSheet {
     });
 
     // GM 端：延迟自动清理孤儿条目（defer 出当前 getData 调用栈，避免重入渲染循环）
+    //
+    // 【按 uuid 清，不能按索引清】制作时先删原料、后写 warehouseContents，
+    // 中间那次重渲染会把"物品已删但记录还在"的原料记成孤儿；等 setTimeout 跑到，
+    // 数组已经被换成含产出物的新数组了，旧索引指向的正好是刚做出来的东西——
+    // 于是产出闪一下就被误删。改成记 uuid，并在真正删之前重新确认它解析不到。
     if (orphanedIndices.length > 0 && game.user.isGM) {
-      const orphanSet = new Set(orphanedIndices);
+      const deadUuids = orphanedIndices
+        .map(i => placements[i]?.uuid).filter(Boolean);
       setTimeout(async () => {
-        const cur     = this.actor.system.warehouseContents ?? [];
-        const cleaned = cur.filter((_, i) => !orphanSet.has(i));
-        await this.actor.update({ "system.warehouseContents": cleaned });
+        // 制作中一律不清：制作会先删原料再写 contents，这中间的任何整数组写回
+        // 都可能把刚做出来的产出物一起覆盖掉
+        if (_CRAFTING.has(this.actor.id)) return;
+        const gone = [];
+        for (const uuid of deadUuids) {
+          if (!(await fromUuid(uuid).catch(() => null))) gone.push(uuid);
+        }
+        if (!gone.length) return;
+        // 写之前再读一次最新值（前面有 await，期间可能已被制作流程改写）
+        const cur  = this.actor.system.warehouseContents ?? [];
+        const dead = new Set(gone);
+        const next = cur.filter(p => !dead.has(p.uuid));
+        if (next.length === cur.length) return;
+        await this.actor.update({ "system.warehouseContents": next });
       }, 0);
     }
 
@@ -357,7 +378,16 @@ export class LimbusCampSheet extends ActorSheet {
     html.find(".camp-char-cg .cg-item-tile").on("dblclick", async (event) => {
       const uuid = event.currentTarget.dataset.itemUuid ?? "";
       const item = await fromUuid(uuid).catch(() => null);
+      if (item?.type === "recipebook") return void this._useRecipeBook(item);
       item?.sheet?.render(true);
+    });
+    // 背包图块右键：配方表多一条「添加营地配方」
+    html.find(".camp-char-cg .cg-item-tile").on("contextmenu", async (event) => {
+      const uuid = event.currentTarget.dataset.itemUuid ?? "";
+      const item = await fromUuid(uuid).catch(() => null);
+      if (item?.type !== "recipebook") return;
+      event.preventDefault();
+      this._showRecipeBookMenu(event, item);
     });
     // 背包图块悬停：Title 卡
     html.find(".camp-char-cg .cg-item-tile").on("mouseenter", this._onCgTileHoverStart.bind(this));
@@ -737,6 +767,8 @@ export class LimbusCampSheet extends ActorSheet {
   async _onCgTileDblClick(event) {
     const uuid = event.currentTarget.dataset.itemUuid ?? "";
     const item = await fromUuid(uuid).catch(() => null);
+    // 配方表只能在营地用：双击即把表内配方录进这座营地
+    if (item?.type === "recipebook") return void this._useRecipeBook(item);
     if (item?.type !== "container") return;
     // 强制重新渲染（重读 contents），避免已打开的容器卡持有过期的
     // 放置索引导致"此位置无法放置"误报
@@ -843,7 +875,12 @@ export class LimbusCampSheet extends ActorSheet {
 
     $(".cg-ctx-menu").remove();
 
+    const tileItem = await fromUuid(uuid).catch(() => null);
+    const recipeRow = tileItem?.type === "recipebook"
+      ? `<li data-action="userecipe"><i class="fas fa-scroll"></i> 添加营地配方</li>` : "";
+
     const menu = $(`<ul class="cg-ctx-menu">
+      ${recipeRow}
       <li data-action="takeout"><i class="fas fa-box-open"></i> 取出到我的角色</li>
       <li data-action="edit"><i class="fas fa-edit"></i> 编辑 / 查看</li>
       <li data-action="chat"><i class="fas fa-comment"></i> 发送聊天框</li>
@@ -860,6 +897,11 @@ export class LimbusCampSheet extends ActorSheet {
       e.stopPropagation();
       const action = $(e.currentTarget).data("action");
       close();
+
+      if (action === "userecipe") {
+        const item = await fromUuid(uuid).catch(() => null);
+        return void sheet._useRecipeBook(item);
+      }
 
       if (action === "takeout") {
         const item = await fromUuid(uuid).catch(() => null);
@@ -933,6 +975,72 @@ export class LimbusCampSheet extends ActorSheet {
     }
   }
 
+  /* ─── 配方表：在营地使用 ─────────────────────────────────────────── */
+
+  /** 右键配方表图块时的小菜单（背包侧用；仓库侧并进原有菜单） */
+  _showRecipeBookMenu(event, item) {
+    $(".cg-ctx-menu").remove();
+    const menu = $(`<ul class="cg-ctx-menu">
+      <li data-action="userecipe"><i class="fas fa-scroll"></i> 添加营地配方</li>
+      <li data-action="edit"><i class="fas fa-edit"></i> 编辑 / 查看</li>
+    </ul>`).css({ top: event.clientY, left: event.clientX });
+    $("body").append(menu);
+    const close = () => { menu.remove(); $(document).off("click.cgctx", close); };
+    setTimeout(() => $(document).on("click.cgctx", close), 10);
+    menu.on("click", "li[data-action]", (e) => {
+      e.stopPropagation();
+      const action = $(e.currentTarget).data("action");
+      close();
+      if (action === "userecipe") this._useRecipeBook(item);
+      else item.sheet?.render(true);
+    });
+  }
+
+  /**
+   * 把配方表里的配方录入**这座**营地（营地不止一座，所以入口只在营地面板内）。
+   * 同名配方视为已有，不重复录入；配方表本身不消耗。
+   */
+  async _useRecipeBook(book) {
+    if (!book || book.type !== "recipebook") return;
+    const recipes = book.system.recipes ?? [];
+    if (!recipes.length) return void ui.notifications.warn(`「${book.name}」里还没有配方。`);
+
+    const camp = this.actor;
+    const have = new Set((camp.system.recipes ?? []).map(r => (r.name ?? "").trim()));
+    const add  = recipes
+      .filter(r => !have.has((r.name ?? "").trim()))
+      .map(r => ({ ...foundry.utils.deepClone(r), id: foundry.utils.randomID() }));
+
+    if (!add.length) {
+      return void ui.notifications.info(`营地「${camp.name}」已经有这张表上的全部配方了。`);
+    }
+
+    const payload = { "system.recipes": [...(camp.system.recipes ?? []), ...add] };
+    if (camp.canUserModify(game.user, "update")) await camp.update(payload);
+    else game.socket.emit("system.limbusCompany_FVTT",
+      { type: "gmDocUpdate", uuid: camp.uuid, data: payload });
+
+    ui.notifications.info(`已向营地「${camp.name}」录入 ${add.length} 条配方，配方表已用尽。`);
+    ChatMessage.create({
+      content: `<p>在营地「${camp.name}」翻开了《${book.name}》，`
+             + `录入了 ${add.length} 条新配方：${add.map(r => r.name).join("、")}。</p>`,
+    });
+
+    // 用过即销毁：若它就摆在本营地仓库里，先把摆放记录摘掉再删物品
+    const bookUuid = book.uuid;
+    const shelf    = camp.system.warehouseContents ?? [];
+    if (shelf.some(p => p.uuid === bookUuid)) {
+      const rest = { "system.warehouseContents": shelf.filter(p => p.uuid !== bookUuid) };
+      if (camp.canUserModify(game.user, "update")) await camp.update(rest);
+      else game.socket.emit("system.limbusCompany_FVTT",
+        { type: "gmDocUpdate", uuid: camp.uuid, data: rest });
+    }
+    if (book.canUserModify?.(game.user, "delete") ?? book.isOwner) await book.delete();
+    else game.socket.emit("system.limbusCompany_FVTT", { type: "gmDocDelete", uuid: bookUuid });
+
+    this.render(false);
+  }
+
   /* ─── 配方操作 ─────────────────────────────────────────────────────── */
 
   async _onAddRecipe() {
@@ -969,136 +1077,49 @@ export class LimbusCampSheet extends ActorSheet {
     const recipeId = event.currentTarget.dataset.recipeId;
     const recipe   = (this.actor.system.recipes ?? []).find(r => r.id === recipeId);
     if (!recipe) return;
-
-    const buildIngRow = (ing, idx) => `
-      <div class="camp-recipe-ing-row" data-idx="${idx}">
-        <img src="${ing.img || "icons/svg/item-bag.svg"}" width="22" height="22"
-             class="camp-ing-drag-target" title="拖拽物品到此处自动填入">
-        <input type="text"   class="camp-ing-name" value="${foundry.utils.escapeHTML(ing.name)}" placeholder="原料名称" style="width:130px"/>
-        <span>×</span>
-        <input type="number" class="camp-ing-qty"  value="${ing.quantity}" min="1" style="width:50px"/>
-        <button type="button" class="camp-ing-remove" title="移除">×</button>
-      </div>`;
-
-    let pendingOutputItemData = recipe.outputItemData ? foundry.utils.deepClone(recipe.outputItemData) : null;
-    let pendingOutputImg      = recipe.outputImg || "icons/svg/item-bag.svg";
-    const campActor           = this.actor;
-
-    new Dialog({
-      title:   `编辑配方：${recipe.name}`,
-      content: `
-        <form class="limbuscompany camp-recipe-editor" autocomplete="off">
-          <div class="camp-editor-row">
-            <label>配方名称</label>
-            <input type="text" id="re-name" value="${foundry.utils.escapeHTML(recipe.name)}" style="flex:1"/>
-          </div>
-          <div class="camp-editor-section-title">原料</div>
-          <div id="re-ing-list" class="camp-editor-ing-list">
-            ${(recipe.ingredients ?? []).map((ing, i) => buildIngRow(ing, i)).join("")}
-          </div>
-          <button type="button" id="re-add-ing" class="camp-editor-add-btn">+ 添加原料</button>
-          <div class="camp-editor-section-title">产出</div>
-          <div class="camp-editor-row camp-editor-output-row">
-            <img id="re-output-img" src="${pendingOutputImg}" width="32" height="32"
-                 class="camp-output-drag-target" title="拖拽物品到此处自动填入">
-            <input type="text"   id="re-output-name" value="${foundry.utils.escapeHTML(recipe.outputName || "")}" placeholder="产出物品名称" style="width:140px"/>
-            <span>×</span>
-            <input type="number" id="re-output-qty"  value="${recipe.outputQuantity || 1}" min="1" style="width:50px"/>
-          </div>
-          ${pendingOutputItemData
-            ? `<div class="camp-editor-hint" style="color:#7CFC00" id="re-output-status">✓ 已绑定产出物品</div>`
-            : `<div class="camp-editor-hint" style="color:orange" id="re-output-status">⚠ 尚未绑定产出物品</div>`}
-          <div class="camp-editor-hint">将物品图标拖到产出区域或原料图标处，自动填入名称与图片</div>
-        </form>`,
-      buttons: {
-        save: {
-          label: "保存",
-          callback: async (html) => {
-            const name    = html.find("#re-name").val()?.trim() || recipe.name;
-            const outName = html.find("#re-output-name").val()?.trim() || "";
-            const outQty  = Math.max(1, parseInt(html.find("#re-output-qty").val()) || 1);
-
-            const ingredients = [];
-            html.find(".camp-recipe-ing-row").each((_, row) => {
-              const $row   = $(row);
-              const ingName = $row.find(".camp-ing-name").val()?.trim();
-              const ingQty  = Math.max(1, parseInt($row.find(".camp-ing-qty").val()) || 1);
-              const ingImg  = $row.find("img").attr("src") || "icons/svg/item-bag.svg";
-              if (ingName) ingredients.push({ name: ingName, img: ingImg, quantity: ingQty });
-            });
-
-            await campActor.update({
-              "system.recipes": (campActor.system.recipes ?? []).map(r =>
-                r.id !== recipeId ? r : {
-                  ...r, name, ingredients,
-                  outputName: outName, outputImg: pendingOutputImg,
-                  outputQuantity: outQty, outputItemData: pendingOutputItemData,
-                }),
-            });
-          },
-        },
-        cancel: { label: "取消" },
-      },
-      default: "save",
-      render: (html) => {
-        // 添加原料行
-        html.find("#re-add-ing").on("click", () => {
-          const idx    = html.find(".camp-recipe-ing-row").length;
-          const newRow = $(buildIngRow({ name: "", img: "icons/svg/item-bag.svg", quantity: 1 }, idx));
-          html.find("#re-ing-list").append(newRow);
-          bindRow(newRow);
-        });
-
-        // 绑定原料行事件
-        const bindRow = ($row) => {
-          $row.find(".camp-ing-remove").on("click", () => $row.remove());
-          const imgEl = $row.find("img.camp-ing-drag-target")[0];
-          imgEl.addEventListener("dragover", e => e.preventDefault());
-          imgEl.addEventListener("drop", async e => {
-            e.preventDefault();
-            const data = LimbusCampSheet._getDragData(e);
-            if (!data || data.type !== "Item") return;
-            const itm = await fromUuid(data.uuid);
-            if (!itm) return;
-            $(imgEl).attr("src", itm.img);
-            $row.find(".camp-ing-name").val(itm.name);
-          });
-        };
-        html.find(".camp-recipe-ing-row").each((_, row) => bindRow($(row)));
-
-        // 产出图标拖拽
-        const outImgEl = html.find("#re-output-img")[0];
-        outImgEl.addEventListener("dragover", e => e.preventDefault());
-        outImgEl.addEventListener("drop", async e => {
-          e.preventDefault();
-          const data = LimbusCampSheet._getDragData(e);
-          if (!data || data.type !== "Item") return;
-          const itm = await fromUuid(data.uuid);
-          if (!itm) return;
-          pendingOutputItemData = itm.toObject();
-          pendingOutputImg      = itm.img;
-          $(outImgEl).attr("src", itm.img);
-          html.find("#re-output-name").val(itm.name);
-          html.find("#re-output-status").text("✓ 已绑定产出物品：" + itm.name).css("color", "#7CFC00");
-        });
-      },
-    }).render(true);
+    const campActor = this.actor;
+    // 编辑界面与配方表物品共用（helpers/recipe-editor.mjs）
+    openRecipeEditor(foundry.utils.deepClone(recipe), async (r) => {
+      await campActor.update({
+        "system.recipes": (campActor.system.recipes ?? []).map(x => x.id === r.id ? r : x),
+      });
+    });
   }
 
   /* ─── 制作 ─────────────────────────────────────────────────────────── */
 
+  /**
+   * 点【制作】：先问产出放哪儿，再在按钮内部走一条**只有自己看得见**的进度条，
+   * 进度条走满才真正制作（发聊天卡 + 生成物品）。
+   * 进度条纯本地：不写文档、不发 socket，所以别人的界面不会动。
+   */
   async _onCraft(event) {
-    const recipeId = event.currentTarget.dataset.recipeId;
+    const btn      = event.currentTarget;
+    const recipeId = btn.dataset.recipeId;
     if (this._pendingCraftIds.has(recipeId)) return;
 
-    // 乐观锁：立即禁用按钮，防止重复点击
+    const dest = await this._askCraftDestination();
+    if (!dest) return;                       // 取消
+
+    // 乐观锁：本地立刻锁住这条配方，防止重复点击
     this._pendingCraftIds.add(recipeId);
+    const ok = await this._runCraftProgress(btn);
+    if (!ok) {                               // 进度条中途被打断（面板重渲染/关闭）
+      this._pendingCraftIds.delete(recipeId);
+      return;
+    }
     this.render(false);
+
+    const charId = this._craftCharId();
+    if (dest === "bag" && !charId) {
+      this._pendingCraftIds.delete(recipeId);
+      return void ui.notifications.warn("没有主控角色，无法放进背包。");
+    }
 
     if (game.user.isGM) {
       try {
         await LimbusCampSheet._gmExecuteCraft({
-          campActorId: this.actor.id, recipeId, userId: game.user.id,
+          campActorId: this.actor.id, recipeId, userId: game.user.id, dest, charId,
         });
       } finally {
         // GM 侧：制作完成（成功或失败）后立即解锁
@@ -1107,7 +1128,7 @@ export class LimbusCampSheet extends ActorSheet {
       }
     } else {
       game.socket.emit("system.limbusCompany_FVTT", {
-        type: "campCraft", campActorId: this.actor.id, recipeId, userId: game.user.id,
+        type: "campCraft", campActorId: this.actor.id, recipeId, userId: game.user.id, dest, charId,
       });
       // 玩家侧：1 秒超时保底解锁（正常情况下服务端同步会更新按钮状态）
       setTimeout(() => {
@@ -1116,12 +1137,61 @@ export class LimbusCampSheet extends ActorSheet {
     }
   }
 
+  /** 当前用户用来收物品的角色 */
+  _craftCharId() {
+    const c = game.user.character
+      ?? game.actors.find(a => a.type === "character" && a.isOwner);
+    return c?.id ?? "";
+  }
+
+  /** 产出去向选择 → "camp" | "bag" | null（取消） */
+  async _askCraftDestination() {
+    const hasChar = !!this._craftCharId();
+    return new Promise((resolve) => {
+      new Dialog({
+        title: "制作",
+        content: `<div class="limbuscompany" style="padding:4px 2px">
+            <p style="margin:0 0 6px">做好的东西放到哪儿？</p>
+          </div>`,
+        buttons: {
+          camp: { label: "营地仓库", callback: () => resolve("camp") },
+          bag:  { label: hasChar ? "角色背包" : "角色背包（无主控角色）",
+                  callback: () => resolve(hasChar ? "bag" : null) },
+        },
+        default: "camp",
+        close: () => resolve(null),
+      }).render(true);
+    });
+  }
+
+  /**
+   * 按钮内部的本地进度条。用 CSS 变量 --craft-p 驱动一层伪元素宽度。
+   * @returns {Promise<boolean>} 走满 = true；中途按钮从 DOM 消失 = false
+   */
+  _runCraftProgress(btn, duration = 1600) {
+    return new Promise((resolve) => {
+      const $btn = $(btn).addClass("crafting");
+      const t0   = performance.now();
+      const tick = () => {
+        if (!document.body.contains(btn)) return resolve(false);
+        const p = Math.min(1, (performance.now() - t0) / duration);
+        $btn.css("--craft-p", `${(p * 100).toFixed(1)}%`);
+        if (p < 1) return requestAnimationFrame(tick);
+        $btn.removeClass("crafting").css("--craft-p", "");
+        resolve(true);
+      };
+      requestAnimationFrame(tick);
+    });
+  }
+
   /* ─── 静态：GM 端执行制作 ────────────────────────────────────────────── */
 
-  static async _gmExecuteCraft({ campActorId, recipeId, userId }) {
+  static async _gmExecuteCraft({ campActorId, recipeId, userId, dest = "camp", charId = "" }) {
     const campActor = game.actors.get(campActorId);
     const recipe    = (campActor?.system?.recipes ?? []).find(r => r.id === recipeId);
     if (!campActor || !recipe) return;
+    _CRAFTING.add(campActorId);
+    try {
 
     // ── 1. 检查原料（只计算实际放置在仓库格中的物品，与 getData 逻辑一致） ──
     const placedIds    = new Set(
@@ -1184,6 +1254,24 @@ export class LimbusCampSheet extends ActorSheet {
     const outData = foundry.utils.deepClone(recipe.outputItemData);
     delete outData._id;
     if (outData.system?.quantity !== undefined) outData.system.quantity = recipe.outputQuantity;
+
+    // 产出去向：角色背包 / 营地仓库（背包分支不碰 warehouseContents）
+    const toBagActor = dest === "bag" ? game.actors.get(charId) : null;
+    if (dest === "bag" && !toBagActor) {
+      ui.notifications.warn("[营地] 找不到目标角色，产出改存营地仓库。");
+    }
+    if (toBagActor) {
+      await toBagActor.createEmbeddedDocuments("Item", [outData]);
+      // 原料记录仍要从仓库摘掉
+      const deadIds = new Set(idsToDelete);
+      await campActor.update({
+        "system.warehouseContents": (campActor.system.warehouseContents ?? [])
+          .filter(p => !deadIds.has(p.uuid.split(".").pop())),
+      });
+      await LimbusCampSheet._sendCraftCard(campActor, recipe, userId, "背包");
+      return;
+    }
+
     const [outItem] = await campActor.createEmbeddedDocuments("Item", [outData]);
 
     // ── 5. 用预先计算的 idsToDelete 集合过滤 warehouseContents ──────
@@ -1228,7 +1316,15 @@ export class LimbusCampSheet extends ActorSheet {
     }
     await campActor.update({ "system.warehouseContents": newContents });
 
-    // 制作聊天卡（商人交易卡同款风格）
+    await LimbusCampSheet._sendCraftCard(campActor, recipe, userId, "营地仓库");
+    } finally {
+      // 闸门再多留一会儿：制作触发的那几次重渲染的孤儿清理都排在后面
+      setTimeout(() => _CRAFTING.delete(campActorId), 1500);
+    }
+  }
+
+  /** 制作完成的聊天卡（商人交易卡同款风格） */
+  static async _sendCraftCard(campActor, recipe, userId, whereLabel) {
     const triggerUser = game.users.get(userId);
     const triggerChar = triggerUser?.character;
     await ChatMessage.create({
@@ -1238,7 +1334,7 @@ export class LimbusCampSheet extends ActorSheet {
             <img src="${campActor.img}" class="purchase-merchant-img" alt="${campActor.name}">
             <div class="purchase-title">
               <span class="purchase-name">${triggerChar?.name ?? triggerUser?.name ?? "营地"}</span>
-              <span class="purchase-sub">在营地【${campActor.name}】制作，已存入仓库</span>
+              <span class="purchase-sub">在营地【${campActor.name}】制作，已存入${whereLabel}</span>
             </div>
           </div>
           <div class="ic-gold-divider"></div>

@@ -210,6 +210,7 @@ const TYPE_ALIASES = {
   "材料":    { type: "material",   extra: {} },
   "容器":    { type: "container",  extra: {} },
   "技能书":  { type: "skillbook",  extra: {} },
+  "配方表":  { type: "recipebook", extra: {} },
   "恐慌卡":  { type: "panic",      extra: {} },
   "背景":    { type: "background", extra: {} },
 };
@@ -757,6 +758,7 @@ const TEMPLATE_COLUMNS = {
   material:   ["图标", "完成", "名称", "类型", "分类", "可复用", "无限耐久", "星芒",
                "容量", "标签", "效果", "价格", "内部数量"],
   skillbook:  ["图标", "完成", "名称", "类型", "分类", "标签", "效果", "价格", "容量"],
+  recipebook: ["图标", "完成", "名称", "类型", "分类", "标签", "效果", "价格", "容量"],
   panic:      ["图标", "完成", "名称", "类型", "标签", "效果"],
   background: ["图标", "完成", "名称", "类型", "副标题", "分类", "标签", "简介"],
 };

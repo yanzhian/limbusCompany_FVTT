@@ -1,0 +1,102 @@
+{{!--
+  character-sheet-redesign.hbs — 角色卡改良视觉样板
+
+  说明：
+  1. 这是与 character-sheet.hbs 并行的试验模板，不会被当前 ActorSheet 自动使用。
+  2. 继续复用 header / tab-items / tab-skills / tab-combat，避免功能模板分叉。
+  3. 战斗 Tab 的内部 ID 统一为 combat；显示文字仍然为“战斗”。
+  4. 专属样式全部作用于 .character-sheet-redesign，不会影响现有角色卡。
+--}}
+<form class="limbuscompany actor character-sheet character-sheet-redesign" autocomplete="off">
+  <link rel="stylesheet"
+        href="systems/limbusCompany_FVTT/styles/character-sheet-redesign.css">
+
+  {{!-- 顶部角色信息区 --}}
+  <section class="redesign-identity" aria-label="角色信息">
+    <div class="redesign-identity-rail" aria-hidden="true">
+      <span class="redesign-identity-code">L.C.</span>
+      <span class="redesign-identity-line"></span>
+      <span class="redesign-identity-index">NO.13</span>
+    </div>
+    {{> systems/limbusCompany_FVTT/templates/actor/parts/header.hbs}}
+  </section>
+
+  {{!-- 主导航：内部 ID 全部使用英文，避免模板与脚本状态不一致 --}}
+  <nav class="sheet-tabs tabs redesign-tabs" data-group="main" aria-label="角色卡页面">
+    <a class="item {{#eq activeTab 'items'}}active{{/eq}}"
+       data-tab="items">
+      <i class="fas fa-suitcase" aria-hidden="true"></i>
+      <span>物品</span>
+    </a>
+    <a class="item {{#eq activeTab 'skills'}}active{{/eq}}"
+       data-tab="skills">
+      <i class="fas fa-bolt" aria-hidden="true"></i>
+      <span>技能</span>
+    </a>
+    <a class="item {{#eq activeTab 'combat'}}active{{/eq}}"
+       data-tab="combat">
+      <i class="fas fa-crosshairs" aria-hidden="true"></i>
+      <span>战斗</span>
+    </a>
+  </nav>
+
+  {{!-- Tab 内容区 --}}
+  <main class="sheet-body redesign-body">
+    <section class="tab" data-tab="items" aria-label="物品页面">
+      {{> systems/limbusCompany_FVTT/templates/actor/parts/tab-items.hbs}}
+    </section>
+
+    <section class="tab" data-tab="skills" aria-label="技能页面">
+      {{> systems/limbusCompany_FVTT/templates/actor/parts/tab-skills.hbs}}
+    </section>
+
+    <section class="tab" data-tab="combat" aria-label="战斗页面">
+      {{> systems/limbusCompany_FVTT/templates/actor/parts/tab-combat.hbs}}
+    </section>
+  </main>
+
+  {{!-- 底部资源栏 --}}
+  <footer class="sheet-footer redesign-footer">
+    <div class="footer-left redesign-footer-resource">
+      <img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/眼.webp"
+           class="footer-icon" alt="眼">
+      <span class="redesign-footer-label">眼</span>
+      {{#if isEditable}}
+        <input type="number" name="system.currency" value="{{system.currency}}"
+               class="footer-currency editable-field" min="0" disabled>
+      {{else}}
+        <span class="footer-currency">{{system.currency}}</span>
+      {{/if}}
+    </div>
+
+    <div class="redesign-footer-center" aria-hidden="true">
+      <span></span><i class="fas fa-diamond"></i><span></span>
+    </div>
+
+    <div class="footer-right">
+      <div class="footer-inventory redesign-footer-resource {{#if inventoryOverCapacity}}cap-over{{/if}}"
+           title="背包容量{{#if inventoryOverCapacity}}：已超出！{{/if}}">
+        <img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/bag.webp"
+             class="footer-icon" alt="背包">
+        <span class="redesign-footer-label">容量</span>
+        <span class="footer-inv-val {{#if inventoryOverCapacity}}cap-over-text{{/if}}">{{inventoryUsed}}</span>
+        <span class="footer-stellar-sep">/</span>
+        <span class="footer-inv-max">{{inventoryMax}}</span>
+        {{#if inventoryOverCapacity}}
+          <span class="footer-inv-warn" aria-label="背包已超出容量">⚠</span>
+        {{/if}}
+      </div>
+
+      <div class="footer-sep-v"></div>
+
+      <div class="footer-stellar-group redesign-footer-resource">
+        <img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/Starlight.webp"
+             class="footer-icon" alt="星芒">
+        <span class="redesign-footer-label">星芒</span>
+        <span class="footer-stellar-val">{{footerStellarVal}}</span>
+        <span class="footer-stellar-sep">/</span>
+        <span class="footer-stellar-max">{{footerStellarMax}}</span>
+      </div>
+    </div>
+  </footer>
+</form>

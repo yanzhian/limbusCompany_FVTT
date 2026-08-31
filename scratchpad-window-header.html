@@ -1,0 +1,251 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>窗口标题栏·整合方案</title>
+<style>
+:root{
+  --bg-darkest:#0B0707; --bg-mid:#1A1210; --bg-panel:#15110E;
+  --text-main:#E8CAA2; --text-sub:#9B6839; --text-dim:#6E5540;
+  --gold:#E7B956; --border-gold:#5F3E22;
+  --font-main:"Noto Sans SC","Microsoft YaHei",sans-serif;
+
+  /* ── 可调 ── */
+  --hd-h:30;            /* 标题栏高度 px */
+  --hd-bg:#0B0908;      /* 标题栏底色 */
+  --hd-line:#5C4128;    /* 底部分隔线 */
+  --hd-title:#8A6E52;   /* 标题文字色 */
+  --hd-title-size:12;   /* 标题字号 px（0 = 隐藏标题） */
+  --btn-size:22;        /* 按钮点击区边长 px */
+  --btn-ic:12;          /* 图标字号 px */
+  --btn-col:#7A6249;    /* 按钮常态色 */
+  --btn-hov:#E7B956;    /* 按钮 hover 色 */
+  --btn-gap:2;          /* 按钮间距 px */
+  --menu-w:150;         /* ⋮ 下拉宽度 px */
+  --hd-fade:35;         /* 常态按钮不透明度 %（hover 窗口才全显） */
+}
+body{margin:0;padding:18px;background:#141110;color:var(--text-main);
+  font-family:var(--font-main);display:flex;gap:18px;align-items:flex-start;flex-wrap:wrap;}
+h1{font-size:16px;margin:0 0 3px;letter-spacing:.06em;}
+p.sub{margin:0 0 12px;font-size:12px;color:var(--text-dim);max-width:520px;line-height:1.7;}
+h3{font-size:12px;color:var(--gold);margin:14px 0 6px;font-weight:normal;letter-spacing:.08em;}
+
+/* ══ 假窗口 ══════════════════════════════════════════════ */
+.win{width:430px;border:1px solid #2b2119;border-radius:5px;overflow:hidden;
+  background:linear-gradient(180deg,#0B0707,#1A1210 60%,#0B0707);margin-bottom:6px;}
+.win-hd{
+  display:flex;align-items:center;gap:calc(var(--btn-gap)*1px);
+  height:calc(var(--hd-h)*1px);padding:0 6px;
+  background:var(--hd-bg);border-bottom:1px solid var(--hd-line);
+}
+.win-title{flex:1;font-size:calc(var(--hd-title-size)*1px);color:var(--hd-title);
+  letter-spacing:.1em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.win-title.hide{display:none;}
+.hd-btn{
+  width:calc(var(--btn-size)*1px);height:calc(var(--btn-size)*1px);flex:0 0 auto;
+  display:inline-flex;align-items:center;justify-content:center;border-radius:3px;
+  font-size:calc(var(--btn-ic)*1px);color:var(--btn-col);cursor:pointer;
+  opacity:calc(var(--hd-fade)/100);transition:opacity .14s,color .14s,background .14s;
+}
+.win:hover .hd-btn{opacity:1;}
+.hd-btn:hover{color:var(--btn-hov);background:rgba(231,185,86,.14);}
+.hd-btn.close:hover{color:#E2705C;background:rgba(226,112,92,.16);}
+.hd-spacer{flex:1;}
+.win-body{padding:12px;font-size:12px;color:var(--text-dim);min-height:74px;}
+.win-body .fake-row{height:12px;background:#15110E;border:1px solid #241a13;
+  border-radius:3px;margin:6px 0;}
+
+/* ⋮ 菜单 */
+.hd-menu-wrap{position:relative;}
+.hd-menu{
+  position:absolute;right:0;top:calc(var(--btn-size)*1px + 4px);z-index:20;
+  width:calc(var(--menu-w)*1px);background:var(--bg-panel);
+  border:1px solid var(--border-gold);border-radius:3px;
+  box-shadow:0 6px 18px rgba(0,0,0,.75);padding:3px;display:none;
+}
+.hd-menu.open{display:block;}
+.hd-menu li{list-style:none;font-size:11.5px;color:var(--text-sub);
+  padding:5px 8px;border-radius:2px;cursor:pointer;display:flex;gap:7px;align-items:center;}
+.hd-menu li:hover{background:rgba(95,62,33,.35);color:var(--text-main);}
+
+/* ══ 面板 ══════════════════════════════════════════════ */
+.panel{border:1px solid #2b2119;border-radius:4px;padding:12px 14px;width:400px;
+  display:flex;flex-direction:column;gap:6px;max-height:92vh;overflow:auto;}
+.seg{display:flex;gap:5px;flex-wrap:wrap;margin-bottom:4px;}
+.seg span{font-size:11.5px;padding:3px 10px;border-radius:999px;cursor:pointer;
+  border:1px solid #3A2A1C;background:var(--bg-panel);color:var(--text-sub);}
+.seg span.on{background:var(--gold);border-color:var(--gold);color:#15110E;font-weight:bold;}
+.row{display:flex;align-items:center;gap:8px;font-size:12px;}
+.row label{width:112px;color:var(--text-sub);}
+.row input[type=range]{flex:1;min-width:90px;}
+.row input[type=color]{width:38px;height:22px;padding:0;border:1px solid #3A2A1C;background:none;}
+.row b{width:46px;text-align:right;color:var(--gold);font:11.5px monospace;}
+textarea{width:100%;height:210px;background:var(--bg-panel);border:1px solid #3A2A1C;border-radius:3px;
+  color:var(--text-main);font:11px/1.5 monospace;padding:7px;resize:vertical;margin-top:8px;}
+.note{font-size:11.5px;color:var(--text-dim);line-height:1.7;}
+</style>
+
+<div>
+  <h1>窗口标题栏·整合方案</h1>
+  <p class="sub">Foundry 给每个 Sheet 的标题栏都塞了标题 + 各模块加的按钮（卡模板 / 指示物 / 关闭）。
+    下面三种做法都保留功能，只是收纳方式不同。选一种、调好尺寸，我再实装。</p>
+
+  <h3>A · 现状（标题 + 全部按钮平铺）</h3>
+  <div class="win" id="winA">
+    <div class="win-hd">
+      <span class="win-title">不二</span>
+      <span class="hd-btn">🖼</span>
+      <span class="hd-btn">⚙ 卡模板</span>
+      <span class="hd-btn">👤 指示物</span>
+      <span class="hd-btn close">✕</span>
+    </div>
+    <div class="win-body">窗口内容<div class="fake-row"></div><div class="fake-row"></div></div>
+  </div>
+
+  <h3>B · 隐藏标题 + 右上角 ⋮ 收纳（隔壁系统那种）</h3>
+  <div class="win" id="winB">
+    <div class="win-hd">
+      <span class="hd-spacer"></span>
+      <span class="hd-menu-wrap">
+        <span class="hd-btn" id="dots">⋮</span>
+        <ul class="hd-menu" id="menu">
+          <li>🖼 表单视图</li><li>⚙ 卡模板</li><li>👤 指示物模板</li><li>📋 复制 UUID</li>
+        </ul>
+      </span>
+      <span class="hd-btn">🖼</span>
+      <span class="hd-btn close">✕</span>
+    </div>
+    <div class="win-body">窗口内容<div class="fake-row"></div><div class="fake-row"></div></div>
+  </div>
+
+  <h3>C · 保留标题，但按钮只留图标、平时半隐</h3>
+  <div class="win" id="winC">
+    <div class="win-hd">
+      <span class="win-title">不二</span>
+      <span class="hd-btn">🖼</span>
+      <span class="hd-btn">⚙</span>
+      <span class="hd-btn">👤</span>
+      <span class="hd-btn close">✕</span>
+    </div>
+    <div class="win-body">鼠标移到窗口上按钮才完全显形<div class="fake-row"></div><div class="fake-row"></div></div>
+  </div>
+</div>
+
+<div class="panel">
+  <div class="seg" id="seg">
+    <span class="on" data-v="B">采用 B（⋮ 收纳）</span>
+    <span data-v="C">采用 C（图标半隐）</span>
+    <span data-v="A">维持 A</span>
+  </div>
+
+  <div id="ctrls"></div>
+  <textarea id="out" readonly></textarea>
+  <div class="note">
+    B 和 C 都需要改一点 JS（把模块塞进来的按钮搬进 ⋮ 菜单 / 去掉文字标签），
+    CSS 只管长相。导出的 CSS 可直接贴到 <code>styles/limbusCompany_FVTT.css</code> 末尾。
+  </div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+
+const P = [
+  ["hd-h",          "--hd-h",          "n", 30,        "标题栏高度"],
+  ["hd-title-size", "--hd-title-size", "n", 12,        "标题字号"],
+  ["hd-title",      "--hd-title",      "c", "#8A6E52", "标题颜色"],
+  ["hd-bg",         "--hd-bg",         "c", "#0B0908", "标题栏底色"],
+  ["hd-line",       "--hd-line",       "c", "#5C4128", "底部分隔线"],
+  ["btn-size",      "--btn-size",      "n", 22,        "按钮点击区"],
+  ["btn-ic",        "--btn-ic",        "n", 12,        "图标字号"],
+  ["btn-gap",       "--btn-gap",       "n", 2,         "按钮间距"],
+  ["btn-col",       "--btn-col",       "c", "#7A6249", "按钮常态色"],
+  ["btn-hov",       "--btn-hov",       "c", "#E7B956", "按钮 hover 色"],
+  ["hd-fade",       "--hd-fade",       "n", 35,        "常态不透明度%"],
+  ["menu-w",        "--menu-w",        "n", 150,       "⋮ 菜单宽度"],
+];
+const RANGE = { "hd-h":[20,44], "hd-title-size":[0,18], "btn-size":[16,32],
+                "btn-ic":[8,18], "btn-gap":[0,10], "hd-fade":[10,100], "menu-w":[110,240] };
+
+$("ctrls").innerHTML = P.map(([id,,t,def,zh]) => {
+  if (t === "c") return `<div class="row"><label>${zh}</label>
+    <input type="color" id="${id}" value="${def}"><b id="${id}-n"></b></div>`;
+  const [mn,mx] = RANGE[id] || [0,100];
+  return `<div class="row"><label>${zh}</label>
+    <input type="range" id="${id}" min="${mn}" max="${mx}" step="1" value="${def}"><b id="${id}-n"></b></div>`;
+}).join("");
+
+let mode = "B";
+const V = id => $(id).value, N = id => Number($(id).value);
+function rgba(hex, a){ const n = parseInt(hex.replace("#",""),16);
+  return `rgba(${(n>>16)&255},${(n>>8)&255},${n&255},${(+a).toFixed(2)})`; }
+
+function apply(){
+  const rs = document.documentElement.style;
+  for (const [id, v, t] of P){
+    if (t === "c"){ rs.setProperty(v, V(id)); $(id+"-n").textContent = V(id); }
+    else { rs.setProperty(v, N(id)); $(id+"-n").textContent = N(id); }
+  }
+  // 标题字号 0 = 隐藏标题
+  document.querySelectorAll(".win-title").forEach(el => el.classList.toggle("hide", N("hd-title-size") === 0));
+  dump();
+}
+
+function dump(){
+  const hideTitle = mode === "B" || N("hd-title-size") === 0;
+  $("out").value =
+`/* ══ 窗口标题栏（方案 ${mode}） ══ */
+.limbuscompany.window-app .window-header {
+  height: ${N("hd-h")}px; padding: 0 6px; gap: ${N("btn-gap")}px;
+  background: ${V("hd-bg")}; border-bottom: 1px solid ${V("hd-line")};
+  align-items: center;
+}
+.limbuscompany.window-app .window-header .window-title {
+  ${hideTitle ? "display: none;" : `font-size: ${N("hd-title-size")}px; color: ${V("hd-title")}; letter-spacing: .1em;`}
+}
+.limbuscompany.window-app .window-header a.header-button,
+.limbuscompany.window-app .window-header .header-control {
+  width: ${N("btn-size")}px; height: ${N("btn-size")}px; padding: 0; margin: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 3px; font-size: ${N("btn-ic")}px; color: ${V("btn-col")};
+  opacity: ${(N("hd-fade")/100).toFixed(2)};
+  transition: opacity .14s, color .14s, background .14s;
+  border: none; box-shadow: none !important;
+}
+${mode === "A" ? "" : `/* 只留图标，去掉按钮上的文字标签 */
+.limbuscompany.window-app .window-header a.header-button span,
+.limbuscompany.window-app .window-header .header-control span { display: none; }
+`}.limbuscompany.window-app:hover .window-header a.header-button,
+.limbuscompany.window-app:hover .window-header .header-control { opacity: 1; }
+.limbuscompany.window-app .window-header a.header-button:hover,
+.limbuscompany.window-app .window-header .header-control:hover {
+  color: ${V("btn-hov")}; background: ${rgba(V("btn-hov"), .14)};
+}
+.limbuscompany.window-app .window-header .close:hover,
+.limbuscompany.window-app .window-header [data-action="close"]:hover {
+  color: #E2705C; background: rgba(226,112,92,.16);
+}
+${mode !== "B" ? "" : `
+/* ⋮ 收纳菜单 */
+.limbuscompany .lc-hd-menu {
+  position: absolute; right: 4px; top: ${N("hd-h") + 2}px; z-index: 60;
+  width: ${N("menu-w")}px; padding: 3px; margin: 0; list-style: none;
+  background: #15110E; border: 1px solid ${V("hd-line")}; border-radius: 3px;
+  box-shadow: 0 6px 18px rgba(0,0,0,.75);
+}
+.limbuscompany .lc-hd-menu li {
+  display: flex; align-items: center; gap: 7px;
+  font-size: 11.5px; color: #9B6839; padding: 5px 8px; border-radius: 2px; cursor: pointer;
+}
+.limbuscompany .lc-hd-menu li:hover { background: rgba(95,62,33,.35); color: #E8CAA2; }
+`}`;
+}
+
+for (const [id] of P) $(id).addEventListener("input", apply);
+$("seg").addEventListener("click", ev => {
+  const v = ev.target?.dataset?.v; if (!v) return;
+  [...$("seg").children].forEach(c => c.classList.toggle("on", c.dataset.v === v));
+  mode = v; dump();
+});
+$("dots").addEventListener("click", (e) => { e.stopPropagation(); $("menu").classList.toggle("open"); });
+document.addEventListener("click", () => $("menu").classList.remove("open"));
+
+apply();
+</script>

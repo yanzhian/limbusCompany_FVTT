@@ -175,12 +175,20 @@ export class LimbusLootSheet extends ActorSheet {
 
     // 孤儿条目自动清理（GM 端延迟执行，避免 getData 重入）
     if (orphanedIndices.length > 0 && game.user.isGM) {
-      const orphanSet = new Set(orphanedIndices);
+      // 同营地：按 uuid 清并复核，索引在这期间可能已经变了
+      const deadUuids = orphanedIndices.map(i => placements[i]?.uuid).filter(Boolean);
       setTimeout(async () => {
-        const fresh   = foundry.utils.deepClone(this.actor.system.lootContents ?? []);
-        const cleaned = fresh.filter((_, i) => !orphanSet.has(i));
-        if (cleaned.length !== fresh.length)
-          await this.actor.update({ "system.lootContents": cleaned });
+        const cur  = this.actor.system.lootContents ?? [];
+        const gone = [];
+        for (const uuid of deadUuids) {
+          if (!cur.some(p => p.uuid === uuid)) continue;
+          if (!(await fromUuid(uuid).catch(() => null))) gone.push(uuid);
+        }
+        if (!gone.length) return;
+        const dead = new Set(gone);
+        await this.actor.update({
+          "system.lootContents": cur.filter(p => !dead.has(p.uuid)),
+        });
       }, 0);
     }
 

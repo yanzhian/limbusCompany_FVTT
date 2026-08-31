@@ -41,6 +41,8 @@
   {{#if isGM}}
     <div class="mc-gmbar">
       <span class="mc-sale-toggle mc-chip {{#if system.sale.enabled}}on{{/if}}">打折开关</span>
+      <span class="mc-closed-toggle mc-chip {{#if system.closed}}on closed{{/if}}"
+            title="打烊后玩家看不到货架商品，也不能买卖">{{#if system.closed}}已打烊{{else}}打烊{{/if}}</span>
       <label>折扣</label>
       <input type="range" class="mc-sale-rate" min="1" max="10" step="0.5"
              value="{{system.sale.rate}}">
@@ -128,6 +130,7 @@
       </div>
 
       <div class="mc-grid-box">
+        {{#if closedForMe}}<div class="mc-closed-veil">已 打 烊</div>{{/if}}
         <div class="cg-wrap mc-cg mc-cg--shop"
              style="--grid-cols:{{shelfCols}};--grid-rows:{{shelfRows}}">
           {{#each shelfCells}}
