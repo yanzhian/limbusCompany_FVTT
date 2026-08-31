@@ -4478,8 +4478,9 @@ export class ClashManager {
         limbusCompany_FVTT: {
           type:          "clash-resolve",
           targetActorId: loser?.id ?? "",
-          // 谁打出的这份伤害——【结算结果】里 onTakeDamage 钩子要靠它认伤害来源
-          attackerId:    winner?.id ?? "",
+          // 谁打出的这份伤害——【结算结果】里 onTakeDamage 钩子要靠它认伤害来源。
+          // res 里只给了 loser，赢家按 atkWins 反推（防守方赢＝反击/可拼点反击打的伤害）
+          attackerId:    (atkWins ? atkActor?.id : defActor?.id) ?? "",
           damage:        finalDamage,
           takeEffects,
           weightSpread,
