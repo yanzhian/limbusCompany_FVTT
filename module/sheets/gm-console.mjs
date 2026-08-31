@@ -49,8 +49,8 @@ export class GMConsole extends Application {
     );
     // 长休勾选项
     this._lrOpts = { hp: true, sanity: true, ap: true, chaos: true, buffs: true };
-    // 折叠起来的文件夹名 / 搜索词
-    this._collapsed = new Set();
+    // 展开着的文件夹名（默认全部折叠）/ 搜索词
+    this._expanded = new Set();
     this._search    = "";
   }
 
@@ -101,7 +101,7 @@ export class GMConsole extends Application {
         actors:    list,
         total:     list.length,
         chosen:    list.filter(a => a.selected).length,
-        collapsed: this._collapsed.has(name),
+        collapsed: !this._expanded.has(name),
       }));
 
     return {
@@ -142,8 +142,8 @@ export class GMConsole extends Application {
     html.find(".gmc-folder-head").on("click", e => {
       if ($(e.target).closest(".gmc-folder-btn").length) return;   // 组内按钮不触发折叠
       const key = e.currentTarget.dataset.folder;
-      if (this._collapsed.has(key)) this._collapsed.delete(key);
-      else                          this._collapsed.add(key);
+      if (this._expanded.has(key)) this._expanded.delete(key);
+      else                         this._expanded.add(key);
       this.render(false);
     });
 
@@ -174,6 +174,9 @@ export class GMConsole extends Application {
           if (hit) visible++;
         });
         grp.style.display = visible ? "" : "none";
+        // 搜索时临时展开命中的组（清空搜索词后恢复各自的折叠状态）
+        if (q) grp.classList.remove("gmc-folder-collapsed");
+        else   grp.classList.toggle("gmc-folder-collapsed", !this._expanded.has(grp.dataset.folder));
       });
     });
 
