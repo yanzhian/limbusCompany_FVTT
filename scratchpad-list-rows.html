@@ -1,0 +1,408 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>物品栏 / 技能栏 列表行·配色调参</title>
+<style>
+:root{
+  --bg-darkest:#0B0707; --bg-mid:#1A1210; --bg-panel:#15110E;
+  --text-main:#E8CAA2; --text-sub:#9B6839; --text-dim:#6E5540;
+  --font-main:"Noto Sans SC","Microsoft YaHei",sans-serif;
+
+  /* ── 可调：分组标题 ── */
+  --grp-tint:#5F3E22;   --grp-a:.34;   /* 底色 / 起始透明度 */
+  --grp-bar:#E7B956;    --grp-bar-w:2; /* 左侧竖条颜色 / 粗细px */
+  --grp-text:#B08A5E;   --grp-track:10;/* 文字色 / 字距(÷100em) */
+  --grp-line:#5F3E22;   --grp-line-a:.35;
+
+  /* ── 可调：行 ── */
+  --row-h:32;                              /* 行最小高度 px */
+  --div:#5F3E22;        --div-a:.14;       /* 分隔线 */
+  --hov:#5F3E22;        --hov-a:.16;       /* hover 底 */
+  --hov-bar:#E7B956;    --hov-bar-a:.55;   /* hover 左条 */
+
+  /* ── 可调：已装备行 ── */
+  --eq:#E7B956;         --eq-a:.13;        /* 已装备底色 / 起始透明度 */
+  --eq-bar1:#E7B956;    --eq-bar2:#8A6427; /* 左条渐变 */
+  --eq-glow:.40;                           /* 左条光晕 */
+
+  /* ── 可调：文字 ── */
+  --name:#E8CAA2;   --name-size:78;   /* ÷100 rem */
+  --cat:#8A7156;    --cat-size:70;
+  --num:#9B8060;    --num-size:72;
+  --hdr:#6E5540;    --hdr-size:62;
+
+  /* ── 可调：图标 / 按钮 ── */
+  --ico:26;         /* 图标边长 px */
+  --ico-bright:94;  /* 常态亮度 % */
+  --act-op:45;      /* 操作按钮常态不透明度 % */
+  --act-hov:#E7B956; --act-hov-a:.16;
+}
+body{margin:0;padding:16px;background:var(--bg-darkest);color:var(--text-main);
+  font-family:var(--font-main);display:flex;gap:18px;align-items:flex-start;flex-wrap:wrap;}
+h1{font-size:16px;margin:0 0 3px;letter-spacing:.06em;}
+p.sub{margin:0 0 12px;font-size:12px;color:var(--text-dim);max-width:520px;line-height:1.7;}
+
+/* ══ 预览 ══════════════════════════════════════════════ */
+.mock{width:560px;background:linear-gradient(180deg,#0B0707,#1A1210 50%,#0B0707);
+  border:1px solid #2b2119;border-radius:4px;padding:8px 8px 10px;}
+.list-header{display:grid;grid-template-columns:32px 1fr 130px 40px 45px 70px 100px;gap:4px;
+  color:var(--hdr);font-size:calc(var(--hdr-size)/100*1rem);letter-spacing:.12em;
+  padding:0 4px 3px;border-bottom:1px solid rgba(0,0,0,0);
+  border-bottom:1px solid color-mix(in srgb,var(--grp-line) 50%,transparent);}
+.skill-mode .list-header{grid-template-columns:32px 1fr 80px 60px 50px 50px 100px;}
+.group-header{display:flex;align-items:center;gap:4px;cursor:pointer;
+  padding:3px 6px 3px 8px;
+  background:linear-gradient(90deg,
+    color-mix(in srgb,var(--grp-tint) calc(var(--grp-a)*100%),transparent),
+    color-mix(in srgb,var(--grp-tint) calc(var(--grp-a)*18%),transparent) 60%, transparent);
+  border-bottom:1px solid color-mix(in srgb,var(--grp-line) calc(var(--grp-line-a)*100%),transparent);
+  font-size:.72rem;letter-spacing:calc(var(--grp-track)/100*1em);color:var(--grp-text);user-select:none;}
+.group-header::before{content:"";width:calc(var(--grp-bar-w)*1px);height:11px;border-radius:1px;
+  flex:0 0 calc(var(--grp-bar-w)*1px);
+  background:linear-gradient(180deg,var(--grp-bar),color-mix(in srgb,var(--grp-bar) 15%,transparent));}
+.group-label{flex:1;}
+.group-count{opacity:.75;font-size:.65rem;}
+ul.item-list{list-style:none;margin:0;padding:0;}
+.item-row{position:relative;display:grid;grid-template-columns:32px 1fr 130px 40px 45px 70px 100px;gap:4px;
+  min-height:calc(var(--row-h)*1px);align-items:center;padding:0 4px 0 8px;
+  border-bottom:1px solid color-mix(in srgb,var(--div) calc(var(--div-a)*100%),transparent);
+  transition:background .12s;}
+.skill-mode .item-row{grid-template-columns:32px 1fr 80px 60px 50px 50px 100px;}
+.item-row::before{content:"";position:absolute;left:0;top:4px;bottom:4px;width:2px;border-radius:1px;
+  background:transparent;transition:background .12s;}
+.item-row:hover{background:color-mix(in srgb,var(--hov) calc(var(--hov-a)*100%),transparent);}
+.item-row:hover::before{background:color-mix(in srgb,var(--hov-bar) calc(var(--hov-bar-a)*100%),transparent);}
+.item-row.eq{background:linear-gradient(90deg,
+  color-mix(in srgb,var(--eq) calc(var(--eq-a)*100%),transparent),
+  color-mix(in srgb,var(--eq) calc(var(--eq-a)*23%),transparent) 55%, transparent);}
+.item-row.eq::before{background:linear-gradient(180deg,var(--eq-bar1),var(--eq-bar2));
+  box-shadow:0 0 5px color-mix(in srgb,var(--eq-bar1) calc(var(--eq-glow)*100%),transparent);}
+.item-row.eq:hover{background:linear-gradient(90deg,
+  color-mix(in srgb,var(--eq) calc(var(--eq-a)*170%),transparent),
+  color-mix(in srgb,var(--eq) calc(var(--eq-a)*46%),transparent) 55%, transparent);}
+.col-icon{display:inline-flex;align-items:center;}
+.item-icon{width:calc(var(--ico)*1px);height:calc(var(--ico)*1px);border-radius:3px;object-fit:cover;
+  filter:saturate(.9) brightness(calc(var(--ico-bright)/100));transition:filter .12s,transform .12s;}
+.item-row:hover .item-icon{filter:saturate(1.05) brightness(1.06);transform:scale(1.06);}
+.col-name{color:var(--name);font-size:calc(var(--name-size)/100*1rem);letter-spacing:.03em;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.col-cat{color:var(--cat);font-size:calc(var(--cat-size)/100*1rem);text-align:center;}
+.col-qty,.col-cap,.col-stellar{color:var(--num);font-size:calc(var(--num-size)/100*1rem);
+  text-align:center;font-variant-numeric:tabular-nums;}
+.col-sin{display:inline-flex;align-items:center;justify-content:center;gap:4px;
+  font-size:calc(var(--num-size)/100*1rem);}
+.col-sin::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor;
+  box-shadow:0 0 4px currentColor;opacity:.85;}
+.col-actions{display:flex;align-items:center;justify-content:center;gap:2px;}
+.action-btn{background:none;border:none;cursor:pointer;color:var(--text-sub);font-size:.8rem;
+  width:24px;height:24px;flex:0 0 24px;display:inline-flex;align-items:center;justify-content:center;
+  border-radius:3px;opacity:calc(var(--act-op)/100);transition:opacity .12s,background .12s,color .12s;}
+.item-row:hover .action-btn{opacity:1;}
+.action-btn.fav{opacity:1;color:#E7B956;}
+.action-btn:hover{color:var(--act-hov);
+  background:color-mix(in srgb,var(--act-hov) calc(var(--act-hov-a)*100%),transparent);}
+
+/* ══ 面板 ══════════════════════════════════════════════ */
+.panel{border:1px solid #2b2119;border-radius:4px;padding:12px 14px;width:430px;
+  display:flex;flex-direction:column;gap:6px;max-height:92vh;overflow:auto;}
+.seg{display:flex;gap:5px;margin-bottom:4px;}
+.seg span{font-size:11.5px;padding:3px 10px;border-radius:999px;cursor:pointer;
+  border:1px solid #3A2A1C;background:var(--bg-panel);color:var(--text-sub);}
+.seg span.on{background:#E7B956;border-color:#E7B956;color:#15110E;font-weight:bold;}
+h2{font-size:11.5px;color:#E7B956;margin:8px 0 1px;letter-spacing:.1em;font-weight:normal;}
+.row{display:flex;align-items:center;gap:8px;font-size:12px;}
+.row label{width:118px;color:var(--text-sub);}
+.row input[type=range]{flex:1;min-width:90px;}
+.row input[type=color]{width:38px;height:22px;padding:0;border:1px solid #3A2A1C;background:none;}
+.row b{width:48px;text-align:right;color:#E7B956;font:11.5px monospace;}
+textarea{width:100%;height:230px;background:var(--bg-panel);border:1px solid #3A2A1C;border-radius:3px;
+  color:var(--text-main);font:11px/1.5 monospace;padding:7px;resize:vertical;margin-top:8px;}
+.note{font-size:11.5px;color:var(--text-dim);line-height:1.7;}
+</style>
+
+<div>
+  <h1>物品栏 / 技能栏 列表行·配色调参</h1>
+  <p class="sub">调好后把下面导出的整段 CSS 贴到 <code>styles/limbusCompany_FVTT.css</code> <b>末尾</b>
+    （同名规则后写的赢，会盖掉现在那版）。上面预览里第 2、5 行是「已装备」态。</p>
+  <div class="mock" id="mock">
+    <div class="list-header" id="hdr"></div>
+    <div class="group-header"><span>▼</span><span class="group-label" id="grp1">武器</span><span class="group-count">(3)</span></div>
+    <ul class="item-list" id="list1"></ul>
+    <div class="group-header"><span>▼</span><span class="group-label" id="grp2">消耗品</span><span class="group-count">(2)</span></div>
+    <ul class="item-list" id="list2"></ul>
+  </div>
+</div>
+
+<div class="panel">
+  <div class="seg" id="seg">
+    <span class="on" data-v="item">物品栏</span><span data-v="skill">技能栏</span>
+  </div>
+  <div id="ctrls"></div>
+  <textarea id="out" readonly></textarea>
+  <div class="note">预览用 <code>color-mix()</code> 实时合成颜色，导出时会算成实打实的 <code>rgba()</code>，
+    Foundry 里不依赖 color-mix。</div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+
+/* [id, css变量, 类型, 默认值, 中文名]  type: c=颜色 a=透明度(0-100) n=数值 */
+const P = [
+  ["H","","h",0,"分组标题"],
+  ["grp-tint","--grp-tint","c","#5F3E22","底色"],
+  ["grp-a","--grp-a","a",34,"底色浓度"],
+  ["grp-bar","--grp-bar","c","#E7B956","左竖条色"],
+  ["grp-bar-w","--grp-bar-w","n",2,"左竖条粗细"],
+  ["grp-text","--grp-text","c","#B08A5E","文字色"],
+  ["grp-track","--grp-track","n",10,"字距"],
+  ["grp-line","--grp-line","c","#5F3E22","下边线色"],
+  ["grp-line-a","--grp-line-a","a",35,"下边线浓度"],
+
+  ["H2","","h",0,"行"],
+  ["row-h","--row-h","n",32,"行高"],
+  ["div","--div","c","#5F3E22","分隔线色"],
+  ["div-a","--div-a","a",14,"分隔线浓度"],
+  ["hov","--hov","c","#5F3E22","hover 底色"],
+  ["hov-a","--hov-a","a",16,"hover 浓度"],
+  ["hov-bar","--hov-bar","c","#E7B956","hover 左条色"],
+  ["hov-bar-a","--hov-bar-a","a",55,"hover 左条浓度"],
+
+  ["H3","","h",0,"已装备行"],
+  ["eq","--eq","c","#E7B956","底色"],
+  ["eq-a","--eq-a","a",13,"底色浓度"],
+  ["eq-bar1","--eq-bar1","c","#E7B956","左条上端"],
+  ["eq-bar2","--eq-bar2","c","#8A6427","左条下端"],
+  ["eq-glow","--eq-glow","a",40,"左条光晕"],
+
+  ["H4","","h",0,"文字"],
+  ["name","--name","c","#E8CAA2","名称色"],
+  ["name-size","--name-size","n",78,"名称字号"],
+  ["cat","--cat","c","#8A7156","分类色"],
+  ["cat-size","--cat-size","n",70,"分类字号"],
+  ["num","--num","c","#9B8060","数值色"],
+  ["num-size","--num-size","n",72,"数值字号"],
+  ["hdr","--hdr","c","#6E5540","表头色"],
+  ["hdr-size","--hdr-size","n",62,"表头字号"],
+
+  ["H5","","h",0,"图标 / 操作按钮"],
+  ["ico","--ico","n",26,"图标边长"],
+  ["ico-bright","--ico-bright","a",94,"图标常态亮度"],
+  ["act-op","--act-op","a",45,"按钮常态不透明"],
+  ["act-hov","--act-hov","c","#E7B956","按钮 hover 色"],
+  ["act-hov-a","--act-hov-a","a",16,"按钮 hover 底浓度"],
+];
+
+const RANGE = {
+  "grp-bar-w":[0,6],"grp-track":[0,30],"row-h":[22,48],
+  "name-size":[60,100],"cat-size":[55,90],"num-size":[55,90],"hdr-size":[50,85],
+  "ico":[16,40],
+};
+
+/* —— 建控件 —— */
+$("ctrls").innerHTML = P.map(([id,,t,def,zh]) => {
+  if (t === "h") return `<h2>${zh}</h2>`;
+  if (t === "c") return `<div class="row"><label>${zh}</label>
+    <input type="color" id="${id}" value="${def}">
+    <input type="range" id="${id}-x" style="visibility:hidden;width:0;min-width:0">
+    <b id="${id}-n"></b></div>`;
+  const [mn,mx] = RANGE[id] || [0,100];
+  return `<div class="row"><label>${zh}</label>
+    <input type="range" id="${id}" min="${mn}" max="${mx}" step="1" value="${def}">
+    <b id="${id}-n"></b></div>`;
+}).join("");
+
+/* —— 预览数据 —— */
+const ROWS_ITEM = [
+  ["武",  "定事事务所·打刀",  "武器 / 单手", "1", "2", "3", 0],
+  ["蝶",  "庄严哀悼·生",      "武器 / 双手", "1", "4", "5", 1],
+  ["甲",  "钢制护胸",         "上装",       "1", "3", "2", 0],
+  ["药",  "止血绷带",         "消耗品",     "6", "1", "0", 0],
+  ["核",  "残响核心",         "材料",       "12","1", "0", 1],
+];
+const ROWS_SKILL = [
+  ["斩", "光斩",             "基本", ["色欲","#C86A9E"], "1", "2", 0],
+  ["蝶", "予逝者以祝贺",     "基本", ["忧郁","#5C89C8"], "1", "3", 1],
+  ["守", "花札·守",         "守备", ["嫉妒","#4E9E7E"], "1", "2", 0],
+  ["E",  "蝶自棺中而来",     "E.G.O",["色欲","#C86A9E"], "1", "6", 0],
+  ["斩", "无差别攻击",       "基本", ["暴怒","#C4553D"], "1", "4", 1],
+];
+let mode = "item";
+
+function px(i){ // 占位图标
+  return `data:image/svg+xml;utf8,${encodeURIComponent(
+    `<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40"><rect width="40" height="40" fill="#2A1D12"/><text x="20" y="26" font-size="18" fill="#B08A5E" text-anchor="middle" font-family="sans-serif">${i}</text></svg>`)}`;
+}
+function renderList(){
+  $("mock").classList.toggle("skill-mode", mode === "skill");
+  $("hdr").innerHTML = mode === "item"
+    ? `<span></span><span>名称</span><span>分类</span><span>数量</span><span>容量</span><span>星芒</span><span>操作</span>`
+    : `<span></span><span>名称</span><span>分类</span><span>罪孽</span><span>数量</span><span>星芒</span><span>操作</span>`;
+  $("grp1").textContent = mode === "item" ? "武器" : "基本技能";
+  $("grp2").textContent = mode === "item" ? "消耗品" : "守备 / E.G.O";
+  const rows = mode === "item" ? ROWS_ITEM : ROWS_SKILL;
+  const html = r => {
+    const eq = r[6] ? " eq" : "";
+    const mid = mode === "item"
+      ? `<span class="col-cat">${r[2]}</span><span class="col-qty">${r[3]}</span>
+         <span class="col-cap">${r[4]}</span><span class="col-stellar">${r[5]}</span>`
+      : `<span class="col-cat">${r[2]}</span>
+         <span class="col-sin" style="color:${r[3][1]}">${r[3][0]}</span>
+         <span class="col-qty">${r[4]}</span><span class="col-stellar">${r[5]}</span>`;
+    return `<li class="item-row${eq}">
+      <span class="col-icon"><img class="item-icon" src="${px(r[0])}"></span>
+      <span class="col-name">${r[1]}</span>${mid}
+      <span class="col-actions">
+        <button class="action-btn">▶</button><button class="action-btn">⋮</button>
+        <button class="action-btn${r[6] ? " fav" : ""}">★</button></span></li>`;
+  };
+  $("list1").innerHTML = rows.slice(0,3).map(html).join("");
+  $("list2").innerHTML = rows.slice(3).map(html).join("");
+}
+
+/* —— 应用 & 导出 —— */
+const V = id => $(id).value;
+const N = id => Number($(id).value);
+function rgba(hex, a){
+  const h = hex.replace("#",""); const n = parseInt(h,16);
+  return `rgba(${(n>>16)&255},${(n>>8)&255},${n&255},${(+a).toFixed(2)})`;
+}
+function apply(){
+  const rs = document.documentElement.style;
+  for (const [id, v, t] of P){
+    if (t === "h") continue;
+    if (t === "c"){ rs.setProperty(v, V(id)); $(id+"-n").textContent = V(id); }
+    else if (t === "a"){ rs.setProperty(v, (N(id)/100).toFixed(2)); $(id+"-n").textContent = N(id) + "%"; }
+    else { rs.setProperty(v, N(id)); $(id+"-n").textContent = N(id); }
+  }
+  dump();
+}
+function dump(){
+  const a = id => N(id)/100;
+  $("out").value =
+`/* ══ 物品栏 / 技能栏 列表行·配色（调参台导出，贴到文件末尾） ══ */
+.limbuscompany .item-list-panel .group-header,
+.limbuscompany .skill-list-panel .group-header {
+  position: sticky; top: 0; z-index: 2;
+  padding: 3px 6px 3px 8px;
+  background: linear-gradient(90deg, ${rgba(V("grp-tint"), a("grp-a"))},
+    ${rgba(V("grp-tint"), a("grp-a")*.18)} 60%, transparent);
+  border-top: none;
+  border-bottom: 1px solid ${rgba(V("grp-line"), a("grp-line-a"))};
+  font-size: .72rem; letter-spacing: ${(N("grp-track")/100).toFixed(2)}em; color: ${V("grp-text")};
+}
+.limbuscompany .item-list-panel .group-header::before,
+.limbuscompany .skill-list-panel .group-header::before {
+  content: ""; width: ${N("grp-bar-w")}px; flex: 0 0 ${N("grp-bar-w")}px; height: 11px; border-radius: 1px;
+  background: linear-gradient(180deg, ${V("grp-bar")}, ${rgba(V("grp-bar"), .15)});
+}
+.limbuscompany .item-list-panel .group-header:hover,
+.limbuscompany .skill-list-panel .group-header:hover {
+  background: linear-gradient(90deg, ${rgba(V("grp-tint"), Math.min(1, a("grp-a")*1.5))},
+    ${rgba(V("grp-tint"), a("grp-a")*.35)} 60%, transparent);
+  color: var(--text-main);
+}
+.limbuscompany .group-count { opacity: .75; }
+
+.limbuscompany .list-header {
+  color: ${V("hdr")}; font-size: ${(N("hdr-size")/100).toFixed(2)}rem; letter-spacing: .12em;
+  padding-bottom: 3px; border-bottom-color: ${rgba(V("grp-line"), .5)};
+}
+
+.limbuscompany .item-row,
+.limbuscompany .skill-row {
+  position: relative; min-height: ${N("row-h")}px; padding: 0 4px 0 8px;
+  border-bottom: 1px solid ${rgba(V("div"), a("div-a"))};
+  transition: background .12s;
+}
+.limbuscompany .item-row::before,
+.limbuscompany .skill-row::before {
+  content: ""; position: absolute; left: 0; top: 4px; bottom: 4px; width: 2px;
+  background: transparent; border-radius: 1px; transition: background .12s;
+}
+.limbuscompany .item-row:hover,
+.limbuscompany .skill-row:hover { background: ${rgba(V("hov"), a("hov-a"))}; }
+.limbuscompany .item-row:hover::before,
+.limbuscompany .skill-row:hover::before { background: ${rgba(V("hov-bar"), a("hov-bar-a"))}; }
+
+.limbuscompany .item-row.item-row-equipped,
+.limbuscompany .item-row.skill-row-equipped,
+.limbuscompany .skill-row.skill-row-equipped {
+  background: linear-gradient(90deg, ${rgba(V("eq"), a("eq-a"))},
+    ${rgba(V("eq"), a("eq-a")*.23)} 55%, transparent);
+}
+.limbuscompany .item-row.item-row-equipped::before,
+.limbuscompany .item-row.skill-row-equipped::before,
+.limbuscompany .skill-row.skill-row-equipped::before {
+  background: linear-gradient(180deg, ${V("eq-bar1")}, ${V("eq-bar2")});
+  box-shadow: 0 0 5px ${rgba(V("eq-bar1"), a("eq-glow"))};
+}
+.limbuscompany .item-row.item-row-equipped:hover,
+.limbuscompany .item-row.skill-row-equipped:hover,
+.limbuscompany .skill-row.skill-row-equipped:hover {
+  background: linear-gradient(90deg, ${rgba(V("eq"), Math.min(1, a("eq-a")*1.7))},
+    ${rgba(V("eq"), a("eq-a")*.46)} 55%, transparent);
+}
+
+.limbuscompany .item-row .item-icon,
+.limbuscompany .skill-row .item-icon {
+  width: ${N("ico")}px; height: ${N("ico")}px; border: none; border-radius: 3px;
+  filter: saturate(.9) brightness(${(N("ico-bright")/100).toFixed(2)});
+  transition: filter .12s, transform .12s;
+}
+.limbuscompany .item-row:hover .item-icon,
+.limbuscompany .skill-row:hover .item-icon {
+  filter: saturate(1.05) brightness(1.06); transform: scale(1.06);
+}
+
+.limbuscompany .item-row .col-name,
+.limbuscompany .skill-row .col-name {
+  color: ${V("name")}; font-size: ${(N("name-size")/100).toFixed(2)}rem; letter-spacing: .03em;
+}
+.limbuscompany .item-row .col-cat,
+.limbuscompany .skill-row .col-cat { color: ${V("cat")}; font-size: ${(N("cat-size")/100).toFixed(2)}rem; }
+.limbuscompany .item-row .col-qty,
+.limbuscompany .item-row .col-cap,
+.limbuscompany .item-row .col-stellar,
+.limbuscompany .skill-row .col-qty,
+.limbuscompany .skill-row .col-stellar {
+  color: ${V("num")}; font-size: ${(N("num-size")/100).toFixed(2)}rem;
+  font-variant-numeric: tabular-nums; font-feature-settings: "tnum";
+}
+.limbuscompany .item-row .col-cap:empty::after,
+.limbuscompany .item-row .col-stellar:empty::after { content: "—"; color: ${rgba(V("num"), .5)}; }
+
+.limbuscompany .skill-row .col-sin {
+  display: inline-flex; align-items: center; justify-content: center; gap: 4px;
+  font-size: ${(N("num-size")/100).toFixed(2)}rem;
+}
+.limbuscompany .skill-row .col-sin::before {
+  content: ""; width: 6px; height: 6px; border-radius: 50%;
+  background: currentColor; box-shadow: 0 0 4px currentColor; opacity: .85;
+}
+
+.limbuscompany .item-row .col-actions .action-btn,
+.limbuscompany .skill-row .col-actions .action-btn {
+  width: 24px; height: 24px; flex: 0 0 24px;
+  opacity: ${(N("act-op")/100).toFixed(2)}; transition: opacity .12s, color .12s, background .12s;
+}
+.limbuscompany .item-row:hover .col-actions .action-btn,
+.limbuscompany .skill-row:hover .col-actions .action-btn { opacity: 1; }
+.limbuscompany .item-row .col-actions .action-btn.fav-active,
+.limbuscompany .skill-row .col-actions .action-btn.fav-active { opacity: 1; }
+.limbuscompany .action-btn:hover {
+  color: ${V("act-hov")}; background: ${rgba(V("act-hov"), a("act-hov-a"))};
+}`;
+}
+
+for (const [id,,t] of P){
+  if (t === "h") continue;
+  $(id).addEventListener("input", apply);
+}
+$("seg").addEventListener("click", ev => {
+  const v = ev.target?.dataset?.v; if (!v) return;
+  [...$("seg").children].forEach(c => c.classList.toggle("on", c.dataset.v === v));
+  mode = v; renderList();
+});
+
+renderList();
+apply();
+</script>
