@@ -2924,9 +2924,12 @@ body.game .limbuscompany.app img {
 
 /* ─── §3-C  Tab 导航（固定高24px） ──────────────────────────────── */
 
+/* Tab 导航：沿用改良版那套做法——等宽三格、加宽字距、选中时一条会「张开」
+   的金色指示条 + 极淡的金色底。配色仍是本体的棕金，不引入新色系。 */
 .limbuscompany .sheet-tabs {
-  display: flex; border-bottom: none !important;
-  background: var(--bg-darkest); flex-shrink: 0; height: 24px;
+  display: grid; grid-template-columns: repeat(3, 1fr);
+  border-bottom: 1px solid #5C4128 !important;
+  background: #0B0908; flex-shrink: 0; height: 38px;
 }
 
 /* 覆盖 Foundry tabs 默认浅色分隔线（--color-border-light-primary） */
@@ -2937,14 +2940,32 @@ body.game .limbuscompany.app img {
   --color-border-light-primary: transparent;
 }
 .limbuscompany .sheet-tabs .item {
-  flex: 1; text-align: center; padding: 0; line-height: 32px; font-size: .8rem;
-  color: var(--text-sub); cursor: pointer; 
-  /* border-bottom: 2px solid transparent; */
-  transition: all .15s; background: none; border-left: none; border-right: none; border-top: none;
-  height: 36px; display: flex; align-items: center; justify-content: center;
+  position: relative;
+  text-align: center; padding: 0; font-size: 13px; letter-spacing: .16em;
+  color: #876E53; cursor: pointer; transition: color .15s, background .15s;
+  background: none; border: 0;
+  height: 38px; display: flex; align-items: center; justify-content: center; gap: 7px;
 }
-.limbuscompany .sheet-tabs .item:hover { color: var(--text-main); }
-.limbuscompany .sheet-tabs .item.active { color: var(--gold-active); border-bottom-color: var(--gold-active); }
+
+/* 指示条：默认透明且两端内缩，选中时张开并发光——比单纯变色好认得多 */
+.limbuscompany .sheet-tabs .item::after {
+  content: ""; position: absolute; left: 24%; right: 24%; bottom: 0;
+  height: 2px; background: transparent;
+  transition: left .16s, right .16s, background .16s, box-shadow .16s;
+}
+.limbuscompany .sheet-tabs .item:hover {
+  color: var(--text-main); text-shadow: 0 0 10px rgba(232, 202, 162, .22);
+}
+.limbuscompany .sheet-tabs .item:hover::after { background: rgba(229, 186, 37, .3); }
+.limbuscompany .sheet-tabs .item.active {
+  color: #F0C96E;
+  background: linear-gradient(180deg, rgba(201, 155, 82, .03), rgba(201, 155, 82, .10));
+}
+.limbuscompany .sheet-tabs .item.active::after {
+  left: 8%; right: 8%;
+  background: linear-gradient(90deg, transparent, #E7B956, transparent);
+  box-shadow: 0 0 8px rgba(231, 185, 86, .34);
+}
 
 /* ─── §3-D  Tab 内容区 ───────────────────────────────────────────── */
 
