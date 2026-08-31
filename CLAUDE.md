@@ -20,6 +20,22 @@ There is no npm/build/lint/test tooling in this repo. Workflow instead is:
 - **Check a prototype HTML's script**: the tuning labs (`scratchpad-*.html`) have no build step either — `node -e "const h=require('fs').readFileSync('FILE','utf8'); new Function('document','addEventListener','getComputedStyle','window', h.match(/<script>([\s\S]*)<\/script>/)[1]); console.log('OK')"` parses the inline script without a browser. Also worth a static id sweep: every `slider("x")` / `$("x")` must have a matching `id="x"` in the HTML — a missing one throws while binding and **silently kills every binding after it** (symptom: "only the first two sliders work").
 - **New Item/Actor types must be registered in 3+ places** to work: `system.json` → `documentTypes`, `CONFIG.Actor.dataModels` / `CONFIG.Item.dataModels` in `module/limbusCompany_FVTT.mjs`, and the sheet template type-map in the relevant `*-sheet.mjs` (e.g. `LimbusItemSheet`'s template lookup in `module/sheets/item-sheet.mjs`). `template.json` is a legacy/compat placeholder — the real schema source of truth is the `TypeDataModel` classes in `module/documents/`, but keep `template.json`'s type lists roughly in sync since some Foundry tooling reads it.
 
+## 视觉改动的工作方式（用户约定）
+
+**先出模板，不要直接实装。** 任何改观感的东西（间距、字号、配色、布局、动效），先做一个
+`scratchpad-*.html` 调参台交给用户，等他确认后再落进 `styles/` 或模板。已有的几个可以直接照抄结构：
+
+- `scratchpad-sheet.html` —— 现版角色卡（保持简约棕金），47 项滑块 + 三个可选改良开关
+- `scratchpad-sheet-redesign.html` —— 改良版角色卡（试验外观，默认关闭的那套）
+- `scratchpad-equip-panel.html` —— 物品页左栏（九宫格 / 形象两种视图）
+- `scratchpad-doll.html` —— 形象默认摆放（DOLL_DEFAULTS）
+- `scratchpad-rarity.html` —— 稀有度网格光晕
+- `scratchpad-hp-ring.html` —— Token 生命环
+
+调参台的固定套路：**左边等比预览 + 右边分组滑块 + 底部实时导出可直接粘贴的 CSS/JSON**，
+所有可调项走 CSS 变量；导出的内容必须能整段贴到目标文件**末尾**生效（同名规则后写的赢），
+不要求用户去改文件中间。用户调完把导出内容发回来，那时才动 `styles/`。
+
 ## Architecture
 
 ### Document/data layer (`module/documents/`)

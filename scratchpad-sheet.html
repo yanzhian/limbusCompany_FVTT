@@ -33,7 +33,10 @@
   --attr-w:50px; --attr-h:70px; --attr-gap:6px;
   --attr-label:16px; --attr-value:16px; --attr-label-dim:0;  /* 1=名字降为次要色 */
 
-  --tab-h:36px; --tab-font:12.8px; --tab-bar:0px;   /* 选中条粗细，0=只变色（现状） */
+  --tab-h:38px; --tab-font:13px; --tab-bar:2px;    /* 选中条粗细，0=只变色（旧现状） */
+  --tab-track:16;      /* 字距，÷100 em */
+  --tab-open:8;        /* 选中时指示条两端内缩 %，越小越长 */
+  --tab-rest:24;       /* 未选中时内缩 % */
   --panel-w:275px; --panel-pad:8px;
   --plabel-h:55px; --plabel-font:24px; --plabel-mb:4px;
   --slot:70px; --slot-gap:12px;
@@ -112,13 +115,20 @@ h1{font-size:15px;margin:0 0 8px;letter-spacing:.06em;}
 .attr .btn{width:16px;height:16px;border-radius:50%;background:#9A6839;}
 
 /* Tab */
-.tabs{display:flex;height:var(--tab-h);background:var(--bg-darkest);flex-shrink:0;}
-.tabs a{flex:1;position:relative;display:flex;align-items:center;justify-content:center;
-  font-size:var(--tab-font);color:var(--text-sub);cursor:pointer;}
-.tabs a::after{content:"";position:absolute;left:12%;right:12%;bottom:0;height:var(--tab-bar);
-  background:transparent;border-radius:1px;}
-.tabs a.on{color:var(--gold-active);}
-.tabs a.on::after{background:var(--gold-active);}
+.tabs{display:grid;grid-template-columns:repeat(3,1fr);height:var(--tab-h);
+  background:#0B0908;border-bottom:1px solid #5C4128;flex-shrink:0;}
+.tabs a{position:relative;display:flex;align-items:center;justify-content:center;gap:7px;
+  font-size:var(--tab-font);letter-spacing:calc(var(--tab-track) / 100 * 1em);
+  color:#876E53;cursor:pointer;transition:color .15s,background .15s;}
+.tabs a::after{content:"";position:absolute;bottom:0;height:var(--tab-bar);
+  left:calc(var(--tab-rest) * 1%);right:calc(var(--tab-rest) * 1%);
+  background:transparent;transition:left .16s,right .16s,background .16s,box-shadow .16s;}
+.tabs a:hover{color:var(--text-main);text-shadow:0 0 10px rgba(232,202,162,.22);}
+.tabs a:hover::after{background:rgba(229,186,37,.3);}
+.tabs a.on{color:#F0C96E;background:linear-gradient(180deg,rgba(201,155,82,.03),rgba(201,155,82,.10));}
+.tabs a.on::after{left:calc(var(--tab-open) * 1%);right:calc(var(--tab-open) * 1%);
+  background:linear-gradient(90deg,transparent,#E7B956,transparent);
+  box-shadow:0 0 8px rgba(231,185,86,.34);}
 
 /* 工作区 */
 .body{flex:1;display:flex;min-height:0;overflow:hidden;}
@@ -289,9 +299,12 @@ const GROUPS = [
     ["--attr-label-dim","②名字降为次要",  0,   1, 1, 0],
   ]],
   ["导航 / 左栏 / 底栏", [
-    ["--tab-h",       "Tab 高",        24, 56, 1, 36],
-    ["--tab-font",    "Tab 字号",      10, 20, .1, 12.8],
-    ["--tab-bar",     "③选中条粗细",    0,  5, 1, 0],
+    ["--tab-h",       "Tab 高",        24, 56, 1, 38],
+    ["--tab-font",    "Tab 字号",      10, 20, .1, 13],
+    ["--tab-track",   "③Tab 字距",      0, 40, 1, 16],
+    ["--tab-bar",     "③选中条粗细",    0,  5, 1, 2],
+    ["--tab-rest",    "③常态内缩%",     0, 45, 1, 24],
+    ["--tab-open",    "③选中内缩%",     0, 45, 1, 8],
     ["--panel-w",     "左栏宽",       180, 380, 1, 275],
     ["--panel-pad",   "左栏内边距",     0,  24, 1, 8],
     ["--plabel-h",    "左栏标题高",    20,  80, 1, 55],
@@ -307,7 +320,9 @@ const GROUPS = [
 const $ = id => document.getElementById(id);
 const all = GROUPS.flatMap(([, l]) => l);
 const idOf = v => "p" + v.replace(/-/g, "_");
-const SWITCH = new Set(["--info-align", "--attr-label-dim", "--col-bg", "--col-border", "--tab-bar"]);
+// 这些不是 px：开关（0/1）、浓度、百分比、字距倍数
+const SWITCH = new Set(["--info-align", "--attr-label-dim", "--col-bg", "--col-border",
+                        "--tab-bar", "--tab-track", "--tab-rest", "--tab-open"]);
 
 $("cfg").innerHTML = GROUPS.map(([t, list]) => `<h2>${t}</h2>` + list.map(
   ([v, label, min, max, step, def]) =>
@@ -323,8 +338,9 @@ function apply() {
   const rs = document.documentElement.style;
   for (const [v] of all) {
     const raw = Number($(idOf(v)).value);
-    rs.setProperty(v, SWITCH.has(v) ? raw : raw + "px");
-    $(idOf(v) + "n").textContent = SWITCH.has(v) ? raw : raw + "px";
+    const unit = (v === "--tab-bar") ? "px" : (SWITCH.has(v) ? "" : "px");
+    rs.setProperty(v, raw + unit);
+    $(idOf(v) + "n").textContent = raw + unit;
   }
   // 开关型：换 class
   const gridAlign = Number($(idOf("--info-align")).value) === 1;
@@ -365,8 +381,18 @@ ${S} .attr-item { width: ${p("--attr-w")}; height: ${p("--attr-h")}; }
 ${S} .attr-label { font-size: ${p("--attr-label")};${
   Number($(idOf("--attr-label-dim")).value) === 1 ? " font-weight: normal; color: #C0A183;" : ""} }
 ${S} .attr-value { font-size: ${p("--attr-value")}; }
-${S} .sheet-tabs { height: ${p("--tab-h")}; }
-${S} .sheet-tabs .item { height: ${p("--tab-h")}; font-size: ${n("--tab-font")}px; }
+${S} .sheet-tabs {
+  display: grid; grid-template-columns: repeat(3, 1fr);
+  height: ${p("--tab-h")}; background: #0B0908;
+  border-bottom: 1px solid #5C4128 !important;
+}
+${S} .sheet-tabs .item {
+  position: relative; height: ${p("--tab-h")}; display: flex; gap: 7px;
+  align-items: center; justify-content: center;
+  font-size: ${n("--tab-font")}px; letter-spacing: ${(n("--tab-track") / 100).toFixed(2)}em;
+  color: #876E53; border: 0; background: none;
+  transition: color .15s, background .15s;
+}
 ${S} .equip-panel { width: ${p("--panel-w")}; padding: ${p("--panel-pad")}; }
 ${S} .equip-panel-label { height: ${p("--plabel-h")}; line-height: ${p("--plabel-h")}; font-size: ${p("--plabel-font")}; margin-bottom: ${p("--plabel-mb")}; }
 ${S} .equip-grid { grid-template-columns: repeat(3, ${p("--slot")}); gap: ${p("--slot-gap")}; }
@@ -391,14 +417,25 @@ ${S} .info-row {
 ${S} .info-row > span { text-align: center; }`);
 
   if (n("--tab-bar") > 0) lines.push(
-`/* ③ Tab 选中条 */
-${S} .sheet-tabs .item { position: relative; }
+`/* ③ Tab 选中指示条：默认两端内缩，选中时张开并发光 */
 ${S} .sheet-tabs .item::after {
-  content: ""; position: absolute; left: 12%; right: 12%; bottom: 0;
-  height: ${p("--tab-bar")}; border-radius: 1px; background: transparent; transition: background .15s;
+  content: ""; position: absolute; bottom: 0; height: ${p("--tab-bar")};
+  left: ${n("--tab-rest")}%; right: ${n("--tab-rest")}%; background: transparent;
+  transition: left .16s, right .16s, background .16s, box-shadow .16s;
 }
-${S} .sheet-tabs .item.active::after { background: var(--gold-active); }
-${S} .sheet-tabs .item:hover::after { background: rgba(229,186,37,.35); }`);
+${S} .sheet-tabs .item:hover {
+  color: var(--text-main); text-shadow: 0 0 10px rgba(232, 202, 162, .22);
+}
+${S} .sheet-tabs .item:hover::after { background: rgba(229, 186, 37, .3); }
+${S} .sheet-tabs .item.active {
+  color: #F0C96E;
+  background: linear-gradient(180deg, rgba(201, 155, 82, .03), rgba(201, 155, 82, .10));
+}
+${S} .sheet-tabs .item.active::after {
+  left: ${n("--tab-open")}%; right: ${n("--tab-open")}%;
+  background: linear-gradient(90deg, transparent, #E7B956, transparent);
+  box-shadow: 0 0 8px rgba(231, 185, 86, .34);
+}`);
 
   $("out").value = lines.join("\n\n");
 }
