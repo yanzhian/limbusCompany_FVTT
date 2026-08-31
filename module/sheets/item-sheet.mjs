@@ -15,6 +15,7 @@ import { SKILLBOOK_MAX_SLOTS } from "../documents/item.mjs";
 import { CustomBuffRegistry, normalizeBuffType } from "../helpers/custom-buffs.mjs";
 import { linkifyHtml } from "../helpers/linkify.mjs";
 import { GridDnD } from "../helpers/grid-dnd.mjs";
+import { openRecipeEditor, makeBlankRecipe } from "../helpers/recipe-editor.mjs";
 import { canContainerAccept, wouldNest } from "../helpers/container-rules.mjs";
 import { buildPlacementGrid, canPlace, autoPlace, makeLockedSet } from "../helpers/grid-layout.mjs";
 
@@ -71,6 +72,7 @@ export class LimbusItemSheet extends ItemSheet {
       material:   "consumable-sheet",   // 共用一套模板
       container:  "container-sheet",
       skillbook:  "skillbook-sheet",
+      recipebook: "recipebook-sheet",
       panic:      "panic-sheet",
       background: "background-sheet",
     };
@@ -156,6 +158,12 @@ export class LimbusItemSheet extends ItemSheet {
 
     // ── 稀有度标签（锁定时显示中文名）────────────────────────────────
     context.rarityLabel = (cfg.RARITY_LABELS ?? {})[sys.rarity] ?? "";
+
+    // ── 配方表：配方列表 ─────────────────────────────────────────────
+    if (item.type === "recipebook") {
+      context.recipes     = sys.recipes ?? [];
+      context.recipeCount = (sys.recipes ?? []).length;
+    }
 
     // ── 恐慌卡：类型（士气低落 / 陷入恐慌）──────────────────────────────
     if (item.type === "panic") {
@@ -668,6 +676,16 @@ export class LimbusItemSheet extends ItemSheet {
     html.find(".bg-level-input").on("change", this._onBgLevelChange.bind(this));
     html.find(".bg-edit-rewards-btn").on("click", this._onToggleLock.bind(this));
     html.find(".skillbook-learn-btn").on("click",    this._onSkillBookLearn.bind(this));
+
+    // ── 配方表 ───────────────────────────────────────────────────────────
+    html.find(".rb-toggle-edit").on("click", (ev) => {
+      ev.preventDefault();
+      this.isLocked = !this.isLocked;
+      this.render(false);
+    });
+    html.find(".rb-add").on("click",    this._onRecipeBookAdd.bind(this));
+    html.find(".rb-edit").on("click",   this._onRecipeBookEdit.bind(this));
+    html.find(".rb-delete").on("click", this._onRecipeBookDelete.bind(this));
 
     // ── 物品图块 / 描述文本内 BUFF/物品悬停 chip：统一 Title 卡绑定 ─────────
     this._titleCardCtrls = [];
@@ -1615,6 +1633,45 @@ export class LimbusItemSheet extends ItemSheet {
     });
     if (!confirmed) return;
     await this.item.learnAllSkills();
+  }
+
+  /* ─── 配方表 ─────────────────────────────────────────────────────────── */
+
+  async _onRecipeBookAdd(event) {
+    event.preventDefault();
+    const recipes = foundry.utils.deepClone(this.item.system.recipes ?? []);
+    const fresh   = makeBlankRecipe();
+    recipes.push(fresh);
+    await this.item.update({ "system.recipes": recipes });
+    // 新建后直接打开编辑器，省一次点击
+    openRecipeEditor(fresh, (r) => this._saveRecipe(r), "新建配方");
+  }
+
+  async _onRecipeBookEdit(event) {
+    event.preventDefault(); event.stopPropagation();
+    const id     = event.currentTarget.dataset.recipeId;
+    const recipe = (this.item.system.recipes ?? []).find(r => r.id === id);
+    if (!recipe) return;
+    openRecipeEditor(foundry.utils.deepClone(recipe), (r) => this._saveRecipe(r));
+  }
+
+  async _onRecipeBookDelete(event) {
+    event.preventDefault(); event.stopPropagation();
+    const id = event.currentTarget.dataset.recipeId;
+    const ok = await Dialog.confirm({ title: "删除配方", content: "<p>确定从这张配方表里删掉该配方？</p>" });
+    if (!ok) return;
+    await this.item.update({
+      "system.recipes": (this.item.system.recipes ?? []).filter(r => r.id !== id),
+    });
+  }
+
+  /** 把编辑器交回来的配方写回本物品（不存在则追加） */
+  async _saveRecipe(recipe) {
+    const list = foundry.utils.deepClone(this.item.system.recipes ?? []);
+    const idx  = list.findIndex(r => r.id === recipe.id);
+    if (idx >= 0) list[idx] = recipe;
+    else          list.push(recipe);
+    await this.item.update({ "system.recipes": list });
   }
 
   /* ─── 背景：初始物品 / 升级奖励物品 拖入放置（不移动/删除源物品，仅引用+快照） ── */

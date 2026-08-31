@@ -532,6 +532,61 @@ export class SkillBookData extends foundry.abstract.TypeDataModel {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+//  RecipeBookData — 配方表数据模型
+//
+//  只能在营地使用：把表内配方录进营地的配方列表（营地那边就"多出配方"了）。
+//  配方结构与 CampData.recipes 完全一致，编辑界面共用 helpers/recipe-editor.mjs。
+// ═══════════════════════════════════════════════════════════════════════════
+
+export class RecipeBookData extends foundry.abstract.TypeDataModel {
+  static defineSchema() {
+    const fields = foundry.data.fields;
+
+    const ingredientSchema = new fields.SchemaField({
+      name:     new fields.StringField({ required: true, initial: "" }),
+      img:      new fields.StringField({ required: false, initial: "icons/svg/item-bag.svg" }),
+      quantity: new fields.NumberField({ required: true, integer: true, min: 1, initial: 1 }),
+    });
+
+    const recipeSchema = new fields.SchemaField({
+      id:             new fields.StringField({ required: true, initial: () => foundry.utils.randomID() }),
+      name:           new fields.StringField({ required: true, initial: "新配方" }),
+      hidden:         new fields.BooleanField({ required: true, initial: false }),
+      ingredients:    new fields.ArrayField(ingredientSchema, { required: true, initial: [] }),
+      outputName:     new fields.StringField({ required: true, initial: "" }),
+      outputImg:      new fields.StringField({ required: false, initial: "icons/svg/item-bag.svg" }),
+      outputQuantity: new fields.NumberField({ required: true, integer: true, min: 1, initial: 1 }),
+      outputItemData: new fields.ObjectField({ required: false, nullable: true, initial: null }),
+    });
+
+    return {
+      category: new fields.StringField({ required: false, initial: "" }),
+      recipes:  new fields.ArrayField(recipeSchema, { required: true, initial: [] }),
+
+      tags: new fields.ArrayField(
+        new fields.StringField({ required: true }),
+        { required: true, initial: [] }
+      ),
+
+      favorited: new fields.BooleanField({ required: true, initial: false }),
+      rarity:    new fields.StringField({ required: false, initial: "" }),
+
+      capacity: new fields.SchemaField({
+        w: new fields.NumberField({ required: true, integer: true, min: 1, max: 10, initial: 1 }),
+        h: new fields.NumberField({ required: true, integer: true, min: 1, max: 10, initial: 1 }),
+      }),
+
+      cost: new fields.NumberField({ required: true, integer: true, min: 0, initial: 0 }),
+
+      // ── 商人货架字段 ────────────────────────────────────────────────────
+      price:  new fields.NumberField({ required: true, integer: true, min: 0, initial: 0 }),
+      stock:  new fields.NumberField({ required: true, integer: true, min: -1, initial: -1 }),
+      hidden: new fields.BooleanField({ required: true, initial: false }),
+    };
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 //  PanicData — 恐慌卡数据模型（士气低落/陷入恐慌的可更换效果配置）
 // ═══════════════════════════════════════════════════════════════════════════
 
@@ -771,7 +826,7 @@ export class LimbusItem extends Item {
       metaHtml = `<div class="ic-item-meta skill-meta">${catImgTag}<span class="ic-dice">${formula}</span></div>`;
     } else {
       // 物品类：type label + category
-      const typeLabels = { equipment:"装备", consumable:"消耗品", material:"材料", container:"容器", skillbook:"技能书", panic:"恐慌", background:"背景" };
+      const typeLabels = { equipment:"装备", consumable:"消耗品", material:"材料", container:"容器", skillbook:"技能书", recipebook:"配方表", panic:"恐慌", background:"背景" };
       const typeLabel  = typeLabels[this.type] ?? this.type;
       const catLabel   = sys.category ? ` · ${sys.category}` : "";
       metaHtml = `<div class="ic-item-meta">${typeLabel}${catLabel}</div>`;

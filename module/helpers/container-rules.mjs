@@ -28,6 +28,7 @@ export const ITEM_TYPE_LABELS = {
   material:   "材料",
   container:  "容器",
   skillbook:  "技能书",
+  recipebook: "配方表",
   background: "背景",
   panic:      "恐慌卡",
   skill:      "技能",

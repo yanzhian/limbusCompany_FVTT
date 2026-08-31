@@ -18,6 +18,7 @@ import {
   MaterialData,
   ContainerData,
   SkillBookData,
+  RecipeBookData,
   PanicData,
   BackgroundData,
 } from "./documents/item.mjs";
@@ -137,6 +138,7 @@ Hooks.once("init", () => {
     material:   MaterialData,
     container:  ContainerData,
     skillbook:  SkillBookData,
+    recipebook: RecipeBookData,
     panic:      PanicData,
     background: BackgroundData,
   };
@@ -1261,6 +1263,7 @@ async function _preloadTemplates() {
     "systems/limbusCompany_FVTT/templates/item/consumable-sheet.hbs",
     "systems/limbusCompany_FVTT/templates/item/container-sheet.hbs",
     "systems/limbusCompany_FVTT/templates/item/skillbook-sheet.hbs",
+    "systems/limbusCompany_FVTT/templates/item/recipebook-sheet.hbs",
     "systems/limbusCompany_FVTT/templates/item/panic-sheet.hbs",
     "systems/limbusCompany_FVTT/templates/item/background-sheet.hbs",
     "systems/limbusCompany_FVTT/templates/apps/background-wizard.hbs",

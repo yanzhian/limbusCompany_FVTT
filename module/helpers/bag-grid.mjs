@@ -14,7 +14,7 @@ export const BAG_COLS = 5;
 export const BAG_ROWS = 8;
 
 /** 计入背包容量的物品类型 */
-export const BAG_ITEM_TYPES = ["equipment", "consumable", "material", "container", "skillbook", "background"];
+export const BAG_ITEM_TYPES = ["equipment", "consumable", "material", "container", "skillbook", "recipebook", "background"];
 
 /**
  * 返回 actor 的背包物品（排除已放入容器内的物品）。

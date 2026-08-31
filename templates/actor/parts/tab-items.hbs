@@ -102,6 +102,7 @@
             <button class="filter-category-btn" data-category="material">材料</button>
             <button class="filter-category-btn" data-category="container">容器</button>
             <button class="filter-category-btn" data-category="skillbook">技能书</button>
+            <button class="filter-category-btn" data-category="recipebook">配方表</button>
           </div>
         </div>
         <button class="filter-apply-btn">过滤</button>
@@ -180,6 +181,8 @@
               <span class="col-actions">
                 {{#if (eq type 'skillbook')}}
                   <button class="item-learn-skillbook action-btn" data-item-id="{{_id}}" title="学习技能">▶</button>
+                {{else if (eq type 'recipebook')}}
+                  <button class="item-use-recipebook action-btn" data-item-id="{{_id}}" title="在营地使用（录入配方）">▶</button>
                 {{else}}
                   {{#unless (eq type 'material')}}
                     {{#unless (eq type 'container')}}

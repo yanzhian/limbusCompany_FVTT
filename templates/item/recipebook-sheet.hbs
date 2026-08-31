@@ -1,0 +1,145 @@
+{{!-- recipebook-sheet.hbs — 配方表物品卡 --}}
+<form class="limbuscompany item-sheet recipebook-sheet" autocomplete="off">
+
+  {{!-- ── 标题栏 ──────────────────────────────────────────────────── --}}
+  <div class="item-sheet-titlebar">
+    <span class="sheet-lock-icon {{#if isLocked}}locked{{else}}unlocked{{/if}}" title="{{#if isLocked}}点击解锁{{else}}点击锁定{{/if}}">
+      <i class="fas fa-{{#if isLocked}}lock{{else}}lock-open{{/if}}"></i>
+    </span>
+    <span class="sheet-type-label">配方表</span>
+  </div>
+
+  {{!-- ── 可滚动主体 ──────────────────────────────────────────────── --}}
+  <div class="equip-body">
+
+    {{!-- 顶部：图标（100×100）+ 右侧信息列 --}}
+    <div class="equip-header">
+      <div class="equip-icon-col">
+        {{#if isEditable}}
+          <img src="{{item.img}}" class="item-sheet-icon" data-edit="img" title="更换图标" alt="icon">
+        {{else}}
+          <img src="{{item.img}}" class="item-sheet-icon" alt="icon">
+        {{/if}}
+      </div>
+
+      <div class="equip-info-col">
+        {{!-- 名字 --}}
+        <div class="equip-name-row">
+          {{#if (and isEditable (not isLocked))}}
+            <input type="text" name="name" value="{{item.name}}" class="item-name-input"/>
+          {{else}}
+            <div class="item-name-display">{{item.name}}</div>
+          {{/if}}
+        </div>
+
+        {{!-- 类型 + 分类 --}}
+        <div class="equip-type-row">
+          <span class="equip-subtype-label">配方表</span>
+          <span class="equip-sep">　</span>
+          {{#if (and isEditable (not isLocked))}}
+            <input type="text" name="system.category" value="{{system.category}}" class="equip-category-input" placeholder="分类"/>
+          {{else}}
+            <span class="equip-category">{{system.category}}</span>
+          {{/if}}
+        </div>
+
+      </div>
+    </div>
+
+    {{!-- ── 标签 + 容量 + 眼 ──────────────────────────────────────── --}}
+    <div class="item-tags-row">
+      <div class="tags-area">
+        {{#if (and isEditable (not isLocked))}}
+          <input type="text" name="system.tags" value="{{join system.tags '/'}}" class="tags-input" placeholder="标签1/标签2"/>
+        {{else}}
+          {{#each (split system.tags '/')}}
+            <span class="tag">{{trim this}}</span>
+          {{/each}}
+        {{/if}}
+      </div>
+      <div class="item-capacity-group">
+        <span class="cap-label">容量</span>
+        {{#if (and isEditable (not isLocked))}}
+          <input type="number" name="system.capacity.w" value="{{system.capacity.w}}" class="cap-input" min="1" max="10"/>
+          <span class="cap-sep">×</span>
+          <input type="number" name="system.capacity.h" value="{{system.capacity.h}}" class="cap-input" min="1" max="10"/>
+        {{else}}
+          <span class="cap-display">{{system.capacity.w}}×{{system.capacity.h}}</span>
+        {{/if}}
+      </div>
+      <div class="item-cost-group">
+        <img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/眼.webp" class="cost-eye-icon" alt="眼">
+        {{#if (and isEditable (not isLocked))}}
+          <input type="number" name="system.cost" value="{{system.cost}}" class="cost-input" min="0"/>
+        {{else}}
+          <span class="cost-display">{{system.cost}}</span>
+        {{/if}}
+      </div>
+      {{!-- 稀有度：只管战利品随机池权重与网格光晕，不参与定价 --}}
+      <div class="item-rarity-group rarity-{{system.rarity}}">
+        <span class="rarity-dot"></span>
+        {{#if (and isEditable (not isLocked))}}
+          <select name="system.rarity" class="rarity-select">
+            <option value="common"   {{#eq system.rarity "common"}}selected{{/eq}}>平装</option>
+            <option value="fine"     {{#eq system.rarity "fine"}}selected{{/eq}}>精良</option>
+            <option value="epic"     {{#eq system.rarity "epic"}}selected{{/eq}}>史诗</option>
+            <option value="artistic" {{#eq system.rarity "artistic"}}selected{{/eq}}>艺术</option>
+            <option value="mythic"   {{#eq system.rarity "mythic"}}selected{{/eq}}>神话</option>
+          </select>
+        {{else}}
+          <span class="rarity-display">{{rarityLabel}}</span>
+        {{/if}}
+      </div>
+    </div>
+
+    <div class="equip-divider"></div>
+
+    {{!-- ── 配方列表 ─────────────────────────────────────────────────── --}}
+    <div class="rb-toolbar">
+      <span class="rb-count">配方 {{recipeCount}}</span>
+      <span class="rb-hint">只能在营地使用：使用后这些配方会录入营地</span>
+    </div>
+
+    <div class="rb-list">
+      {{#each recipes}}
+        <div class="rb-row" data-recipe-id="{{id}}">
+          <img src="{{outputImg}}" class="rb-out-img" alt="{{outputName}}">
+          <div class="rb-main">
+            <div class="rb-name">{{name}}</div>
+            <div class="rb-ing">
+              {{#each ingredients}}
+                <span class="rb-ing-chip"><img src="{{img}}" alt="">{{name}}×{{quantity}}</span>
+              {{else}}
+                <span class="rb-ing-none">（无原料）</span>
+              {{/each}}
+            </div>
+          </div>
+          <div class="rb-out">→ {{outputName}}{{#if outputQuantity}} ×{{outputQuantity}}{{/if}}</div>
+          {{#if (and isEditable (not isLocked))}}
+            <div class="rb-row-actions">
+              <button type="button" class="rb-edit action-btn" data-recipe-id="{{id}}" title="编辑">✎</button>
+              <button type="button" class="rb-delete action-btn" data-recipe-id="{{id}}" title="删除">×</button>
+            </div>
+          {{/if}}
+        </div>
+      {{else}}
+        <div class="rb-empty">还没有配方{{#if (and isEditable (not isLocked))}}，点下面的【添加新配方】{{/if}}</div>
+      {{/each}}
+    </div>
+
+    <div class="equip-divider"></div>
+
+  </div>{{!-- /equip-body --}}
+
+  {{!-- ── 固定底部按钮栏 ─────────────────────────────────────────── --}}
+  <div class="item-sheet-footer">
+    <div class="footer-actions">
+      <button type="button" class="item-send-chat sheet-btn">发送聊天框</button>
+      <button type="button" class="rb-toggle-edit sheet-btn">{{#if isLocked}}编辑配方表{{else}}完成编辑{{/if}}</button>
+      {{#if (and isEditable (not isLocked))}}
+        <button type="button" class="rb-add sheet-btn">添加新配方</button>
+      {{/if}}
+    </div>
+  </div>
+
+</form>

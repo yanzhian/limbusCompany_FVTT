@@ -9595,3 +9595,37 @@ input.item-piles-quantity {
   color: #8A6E52; font-size: 26px; letter-spacing: .5em; text-indent: .5em;
   border: 1px solid var(--border-gold); border-radius: 3px; user-select: none;
 }
+
+/* ══ 配方表物品卡 ═══════════════════════════════════════════════════ */
+.limbuscompany .rb-toolbar {
+  display: flex; align-items: baseline; gap: 10px; padding: 2px 2px 6px;
+}
+.limbuscompany .rb-count { color: var(--gold-active); font-size: .8rem; }
+.limbuscompany .rb-hint  { color: var(--text-dim); font-size: .68rem; }
+
+.limbuscompany .rb-list { display: flex; flex-direction: column; gap: 4px; }
+.limbuscompany .rb-row {
+  display: grid; grid-template-columns: 34px 1fr auto auto; gap: 8px;
+  align-items: center; padding: 5px 6px;
+  background: rgba(95, 62, 33, .10);
+  border: 1px solid rgba(95, 62, 33, .35); border-radius: 3px;
+}
+.limbuscompany .rb-row:hover { background: rgba(95, 62, 33, .2); }
+.limbuscompany .rb-out-img {
+  width: 34px; height: 34px; object-fit: contain; border-radius: 3px;
+  background: #100C0A; border: 1px solid rgba(95, 62, 33, .5);
+}
+.limbuscompany .rb-name { color: var(--text-main); font-size: .82rem; }
+.limbuscompany .rb-ing  { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 2px; }
+.limbuscompany .rb-ing-chip {
+  display: inline-flex; align-items: center; gap: 3px;
+  font-size: .66rem; color: #9B8060;
+  background: rgba(0, 0, 0, .3); border-radius: 2px; padding: 1px 4px;
+}
+.limbuscompany .rb-ing-chip img { width: 13px; height: 13px; object-fit: contain; }
+.limbuscompany .rb-ing-none { font-size: .66rem; color: var(--text-dim); font-style: italic; }
+.limbuscompany .rb-out { font-size: .72rem; color: var(--gold-active); white-space: nowrap; }
+.limbuscompany .rb-row-actions { display: flex; gap: 2px; }
+.limbuscompany .rb-empty {
+  padding: 10px 6px; font-size: .75rem; color: var(--text-dim); font-style: italic;
+}

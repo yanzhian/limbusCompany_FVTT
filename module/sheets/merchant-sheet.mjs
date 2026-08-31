@@ -44,6 +44,7 @@ const CAT_FILTERS = [
   { key: "consumable", label: "消耗品" },
   { key: "material",   label: "材料" },
   { key: "skillbook",  label: "技能书" },
+  { key: "recipebook", label: "配方表" },
 ];
 
 export class LimbusMerchantSheet extends ActorSheet {

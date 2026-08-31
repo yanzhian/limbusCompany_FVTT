@@ -391,7 +391,7 @@ export class LimbusActorSheet extends ActorSheet {
   _calcInventoryCapacity() {
     const inContainer  = this._getItemsInContainers();
     let total = 0;
-    const nonSkillTypes = ["equipment", "consumable", "material", "container", "skillbook", "background"];
+    const nonSkillTypes = ["equipment", "consumable", "material", "container", "skillbook", "recipebook", "background"];
     for (const item of this.actor.items) {
       if (!nonSkillTypes.includes(item.type)) continue;
       if (inContainer.has(item.uuid)) continue; // 容器内物品不占背包容量
@@ -412,11 +412,12 @@ export class LimbusActorSheet extends ActorSheet {
       material:  "材料",
       container: "容器",
       skillbook: "技能书",
+      recipebook: "配方表",
       background: "背景",
     };
 
     const groups = {};
-    const nonSkillTypes  = ["equipment", "consumable", "material", "container", "skillbook", "background"];
+    const nonSkillTypes  = ["equipment", "consumable", "material", "container", "skillbook", "recipebook", "background"];
     const inContainer    = this._getItemsInContainers();
 
     for (const item of this.actor.items) {
@@ -432,7 +433,7 @@ export class LimbusActorSheet extends ActorSheet {
     }
 
     // Sort by predefined order
-    const order = [...subtypeOrder, "consumable", "material", "container", "skillbook", "background"];
+    const order = [...subtypeOrder, "consumable", "material", "container", "skillbook", "recipebook", "background"];
     return order
       .filter(k => groups[k])
       .map(k => groups[k]);
@@ -744,6 +745,7 @@ export class LimbusActorSheet extends ActorSheet {
     // ── 物品行操作 ────────────────────────────────────────────────────────
     html.find(".item-activate").on("click",   this._onItemActivate.bind(this));
     html.find(".item-learn-skillbook").on("click", this._onSkillBookLearn.bind(this));
+    html.find(".item-use-recipebook").on("click", this._onUseRecipeBook.bind(this));
     html.find(".item-favorite").on("click",   this._onItemFavorite.bind(this));
     html.find(".item-more-menu").on("click",  this._onItemContextMenu.bind(this));
     html.find(".item-row .item-name").on("click", this._onItemOpen.bind(this));
@@ -2560,6 +2562,48 @@ export class LimbusActorSheet extends ActorSheet {
   }
 
   /** 物品列表：技能书「学习技能」按钮（确认后学习全部技能并消耗技能书） */
+  /**
+   * 配方表：只能在营地使用。把表内配方录进身边那座营地的配方列表。
+   * 同名配方视为已有，不重复录入；配方表本身不消耗（是"表"不是"卷轴"）。
+   */
+  async _onUseRecipeBook(event) {
+    const itemId = event.currentTarget.dataset.itemId ?? "";
+    const book   = this.actor.items.get(itemId);
+    if (!book || book.type !== "recipebook") return;
+
+    const recipes = book.system.recipes ?? [];
+    if (!recipes.length) return void ui.notifications.warn(`「${book.name}」里还没有配方。`);
+
+    // 身边的营地：优先取距离最近且在交互范围内的那座
+    const { isWithinInteractRange } = await import("../helpers/proximity.mjs");
+    const camps = game.actors.filter(a => a.type === "camp" && isWithinInteractRange(a).ok);
+    if (!camps.length) {
+      return void ui.notifications.warn("配方表只能在营地使用：走到营地旁边再试。");
+    }
+    const camp = camps[0];
+
+    const have = new Set((camp.system.recipes ?? []).map(r => (r.name ?? "").trim()));
+    const add  = recipes
+      .filter(r => !have.has((r.name ?? "").trim()))
+      .map(r => ({ ...foundry.utils.deepClone(r), id: foundry.utils.randomID() }));
+
+    if (!add.length) {
+      return void ui.notifications.info(`营地「${camp.name}」已经有这张表上的全部配方了。`);
+    }
+
+    const payload = { "system.recipes": [...(camp.system.recipes ?? []), ...add] };
+    if (camp.canUserModify(game.user, "update")) await camp.update(payload);
+    else game.socket.emit("system.limbusCompany_FVTT",
+      { type: "gmDocUpdate", uuid: camp.uuid, data: payload });
+
+    ui.notifications.info(`已向营地「${camp.name}」录入 ${add.length} 条配方。`);
+    ChatMessage.create({
+      speaker: ChatMessage.getSpeaker({ actor: this.actor }),
+      content: `<p><b>${this.actor.name}</b> 在营地「${camp.name}」翻开了《${book.name}》，`
+             + `录入了 ${add.length} 条新配方：${add.map(r => r.name).join("、")}。</p>`,
+    });
+  }
+
   async _onSkillBookLearn(event) {
     const itemId = event.currentTarget.dataset.itemId ?? "";
     const book   = this.actor.items.get(itemId);
