@@ -36,7 +36,12 @@ export function collapseWindowHeader(app) {
     // v13 把「复制文档 ID / UUID」那个小图标放在 .window-title 里面，
     // 标题一 display:none 它就跟着没了 —— 先把它捞出来放回标题栏。
     const idLink = header.querySelector(".window-title .document-id-link, .window-title a[data-action='copyUuid']");
-    if (idLink) header.insertBefore(idLink, header.querySelector(".lc-hd-dots") ?? null);
+    if (idLink) {
+      // 顺序固定为 🖼 ⋮ ✕：插在 ⋮ 之前；⋮ 还没造出来时插在关闭之前
+      const anchor = header.querySelector(".lc-hd-dots")
+        ?? [...header.children].find(el => _isClose(el)) ?? null;
+      header.insertBefore(idLink, anchor);
+    }
 
     const buttons = [...header.querySelectorAll("a.header-button, .header-control")]
       .filter(el => !el.dataset.lcCollapsed && !_isClose(el) && !el.classList.contains("lc-hd-dots"));
@@ -46,7 +51,7 @@ export function collapseWindowHeader(app) {
     let dots = header.querySelector(".lc-hd-dots");
     if (!dots) {
       dots = document.createElement("a");
-      dots.className = "header-button lc-hd-dots";
+      dots.className = "lc-hd-dots";
       dots.innerHTML = `<i class="fas fa-ellipsis-vertical"></i>`;
       dots.title = "更多";
       // 放在关闭按钮之前

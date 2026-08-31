@@ -9723,3 +9723,15 @@ input.item-piles-quantity {
 .window-app.lc-hd-collapsed .window-header > a[data-action="copyUuid"]:hover {
   color: #E7B956; background: rgba(231,185,86,.14);
 }
+
+/* ⋮ 自己不带 header-button 类（避免命中 Foundry 的委托监听），样式单独给 */
+.window-app.lc-hd-collapsed .window-header .lc-hd-dots {
+  width: 22px; height: 22px; flex: 0 0 auto; font-size: 0; cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 3px; color: #7A6249; opacity: .7;
+  transition: opacity .14s, color .14s, background .14s;
+}
+.window-app.lc-hd-collapsed .window-header .lc-hd-dots > i { font-size: 12px; }
+.window-app.lc-hd-collapsed .window-header .lc-hd-dots:hover {
+  opacity: 1; color: #E7B956; background: rgba(231,185,86,.14);
+}
