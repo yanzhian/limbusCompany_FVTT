@@ -3591,6 +3591,9 @@ export class ClashManager {
     const defBonusPart0 = String(defFormula ?? "").slice(String(defBaseFormulaOrig ?? "").length);
     const defBonusVal   = parseInt(defBonusPart0) || 0;
 
+    // 连击结果：奖励威力 + 由连击循环判定的胜负（含重投惩罚，不能用裸骰值重判）
+    let _comboBonus     = 0;
+    let _forcedAtkWins  = null;
     let atkFinalTotal   = initFlags.rollTotal;
     let atkFinalFormula = initFlags.formula;
     let atkFinalBase    = atkBaseFormulaOrig;
@@ -3789,7 +3792,7 @@ export class ClashManager {
         });
       }
     }
-    // ── 连击：行动值决定还能输几次，输光了才由这一次的胜方结算伤害 ──────
+    // ── 连击：行动币 = 失败重投机会，输光了才由这一次的胜方结算伤害 ──────
     else {
       const combo = await ClashManager._runComboClash({
         atkActor, defActor, atkItem, defItem, atkCtx, defCtx,
@@ -3803,11 +3806,15 @@ export class ClashManager {
       });
       atkFinalTotal = combo.atkTotal;
       defFinalTotal = combo.defTotal;
+      _comboBonus   = combo.comboBonus ?? 0;
+      // 拼点胜负由连击循环判定（含重投惩罚 / 无币 -3），结算不能拿裸骰值重判
+      _forcedAtkWins = combo.atkWins;
     }
     // 连击后攻击方的骰值已变，结算卡片要用最后一次交锋的值
     const finalInitFlags = { ...effectiveInitFlags, rollTotal: atkFinalTotal };
 
     const resolution = ClashManager._computeResolution({
+      comboBonus: _comboBonus, forcedAtkWins: _forcedAtkWins,
       atkActor,    atkTotal:    atkFinalTotal,   atkFormula:  atkFinalFormula,
       atkItemName: initFlags.itemName, atkItemImg: initFlags.itemImg,
       atkCategory: initFlags.category ?? "",           atkSinType:  initFlags.sinType ?? "",
@@ -3929,23 +3936,28 @@ export class ClashManager {
   /* ─── 阶段五a：连击（行动值决定的多次交锋）──────────────────────────── */
 
   /**
-   * 连击：同一次对抗内的多次交锋。
+   * 连击：同一次对抗内的多次交锋（行动币 = 失败重投机会）。
    *
-   * 行动值代表"还能承受几次拼点失败"：每次交锋输的一方扣 1 点行动值，双方
-   * 重新骰掷再拼一次；若输的一方行动值已经是 0，交锋结束，由这一次的胜方
-   * 结算伤害。
+   * 规则（见 策划文件/大纲.txt → 对战 → 拼点）：
+   *   · 第一次投掷免费，双方各投一次；
+   *   · **只有失败方**可以花 1 枚行动币重投，胜方的数值锁定不变；
+   *   · 一般骰每重投一次，自己的拼点威力**累计 -1**；【不可摧毁】骰免这个惩罚；
+   *     威力增减只影响拼点胜负，不影响伤害，且只在本次对抗内有效；
+   *   · 重投后打平＝翻盘失败（本系统没有平局）；首投打平由攻方承担举证责任；
+   *   · 0 币的防守方不能重投，且拼点威力额外 -3；
+   *   · 一方不再重投（无币）时定胜负，胜方再摧毁败方 1 枚币
+   *     （【不可摧毁】骰不被摧毁，对方已 0 币则无事发生）；
+   *   · 连击奖励：本次对抗内每拼点 3 次（含首投、不论胜负）最终威力 +1，不封顶，
+   *     结束时一次性结算给胜方。
    *
-   * 【不可摧毁】是个例外：它拼点失败照样能给对面造成伤害，所以只要它的币被
-   * 打坏一枚，连击就当场结束——先由胜方结算伤害，随后再由【不可摧毁】那一方
-   * 结算自己的反击伤害（见 _computeUnbreakableCounter）。连击途中只重新结算 [拼点时]（连带【流血】），其余触发时机
-   * （命中时 / 拼点胜利失败 / 攻击后 等）仍然只在最后结算一次，不会滚雪球。
+   * 【不可摧毁】拼点彻底失败后仍走既有流程（输了照样反击，见
+   * _computeUnbreakableCounter）。连击途中只重新结算 [拼点时]（连带【流血】），
+   * 其余触发时机仍然只在最后结算一次，不会滚雪球。
    *
-   * DiceSoNice 只在第一次交锋播放；胜负决出后，再单独为胜方演一次
-   * 【伤害计算】——点数就是决出胜负那一次的点数，不重掷，只是把用来结算
-   * 伤害的那一掷郑重地摆出来。
+   * DiceSoNice 只在第一次交锋播放；胜负决出后，再单独为胜方演一次【伤害计算】。
    *
-   * @returns {{atkTotal:number, defTotal:number, rounds:number}}
-   *          最后一次交锋的骰值，用于最终结算
+   * @returns {{atkTotal:number, defTotal:number, rounds:number,
+   *            comboBonus:number, atkWins:boolean}}
    */
   static async _runComboClash(ctx) {
     const { atkActor, defActor, atkItem, defItem, atkCtx, defCtx,
@@ -3968,24 +3980,31 @@ export class ClashManager {
     const sum   = (parts) => parts.reduce((a, p) => a + (p.value ?? 0), 0);
     const apOf  = (actor) => actor?.system?.ap?.value ?? 0;
 
-    const MAX_ROUNDS = 20;           // 平局不扣行动值，兜底防止死循环
-    let round   = 0;
+    const MAX_ROUNDS = 40;           // 兜底防止死循环（正常由行动币耗尽终止）
+    let exchanges = 0;               // 本次对抗的拼点次数（含首投），用于连击奖励
     let atkCur  = atkTotal0;
     let defCur  = defTotal0;
+    let atkRollCur = atkRoll0;
+    let defRollCur = defRoll0;
+    const pen = { atk: 0, def: 0 };  // 重投累计的拼点威力惩罚（仅本次对抗）
+    let lastRerollSide = "";         // 最近一次重投的是谁——平局时判它翻盘失败
+    let rerollSide = "";             // 下一轮要重投的一方（只有它重掷）
     let winSide = "";                // 决出胜负的一方
     let winRoll = null;              // 决胜那一掷（【伤害计算】沿用它，不重掷）
     let winParts = null;
 
-    while (round < MAX_ROUNDS) {
-      round++;
+    const bonusStr = (b) => b ? `${b > 0 ? "+" : ""}${b}` : "";
+
+    while (exchanges < MAX_ROUNDS) {
+      exchanges++;
       // 开场把镜头推给进攻方，让所有人看着同一处开打
-      if (round === 1) ClashVFX.broadcastPan(ClashVFX.centerOf(atkActor));
-      let atkRoll = atkRoll0, defRoll = defRoll0;
-      if (round > 1) {
+      if (exchanges === 1) ClashVFX.broadcastPan(ClashVFX.centerOf(atkActor));
+
+      if (exchanges > 1) {
         // 连击途中只重跑 [拼点时]（【流血】也挂在这里，会再发作一次）；
         // 改写技能自身的效果由 COMBO_ONCE_EFFECTS 拦下，不会重复累加
-        atkCtx._comboRound = round;
-        defCtx._comboRound = round;
+        atkCtx._comboRound = exchanges;
+        defCtx._comboRound = exchanges;
         await ClashManager._applyActivitiesAndEquip(atkItem, "拼点时", atkCtx);
         await ClashManager._applyActivitiesAndEquip(defItem, "拼点时", defCtx);
         await ClashManager._processBleed(atkActor);
@@ -3993,76 +4012,95 @@ export class ClashManager {
         atkCtx._comboRound = 1;
         defCtx._comboRound = 1;
 
-        atkRoll = new Roll(atkFormula + (atkBonus ? `${atkBonus > 0 ? "+" : ""}${atkBonus}` : ""));
-        defRoll = new Roll(defFormula + (defBonus ? `${defBonus > 0 ? "+" : ""}${defBonus}` : ""));
-        await atkRoll.evaluate();
-        await defRoll.evaluate();
-        ClashManager.applyDiceRollMods(atkActor, atkRoll, { item: atkItem, isDefense: false });
-        ClashManager.applyDiceRollMods(defActor, defRoll, { item: defItem, isDefense: true });
-        atkCur = atkRoll.total ?? 0;
-        defCur = defRoll.total ?? 0;
+        // **只有重投方重掷**，另一方的数值锁定
+        if (rerollSide === "atk") {
+          atkRollCur = new Roll(atkFormula + bonusStr(atkBonus));
+          await atkRollCur.evaluate();
+          ClashManager.applyDiceRollMods(atkActor, atkRollCur, { item: atkItem, isDefense: false });
+          atkCur = atkRollCur.total ?? 0;
+        } else {
+          defRollCur = new Roll(defFormula + bonusStr(defBonus));
+          await defRollCur.evaluate();
+          ClashManager.applyDiceRollMods(defActor, defRollCur, { item: defItem, isDefense: true });
+          defCur = defRollCur.total ?? 0;
+        }
       }
 
       const aParts = partsOf("atk", atkCur);
       const dParts = partsOf("def", defCur);
+      // 重投惩罚与「0 币防守」都做成分项，玩家在结算表里看得见扣在哪儿
+      if (pen.atk) aParts.push({ name: `重投×${pen.atk}`, value: -pen.atk });
+      if (pen.def) dParts.push({ name: `重投×${pen.def}`, value: -pen.def });
+      const defBroke = apOf(defActor) <= 0;
+      if (defBroke) dParts.push({ name: "无币", value: -3 });
+
       const aEff = sum(aParts), dEff = sum(dParts);
-      ClashTotalFX._log(`连击第 ${round} 次：` +
-        `攻 ${aEff}（行动值 ${apOf(atkActor)}，公式 ${atkFormula}）` +
-        ` vs 守 ${dEff}（行动值 ${apOf(defActor)}，公式 ${defFormula}）`);
+      ClashTotalFX._log(`拼点第 ${exchanges} 次：` +
+        `攻 ${aEff}（币 ${apOf(atkActor)}，重投罚 -${pen.atk}）` +
+        ` vs 守 ${dEff}（币 ${apOf(defActor)}，重投罚 -${pen.def}${defBroke ? "，无币 -3" : ""}）`);
 
       await ClashTotalFX.play({
         atkParts: aParts, defParts: dParts,
-        rerollSides: round === 1 ? rerollSides : [],
-        // 硬币 = 行动值：还能输几次，每输一次碎一枚
+        rerollSides: exchanges === 1 ? rerollSides : [],
+        // 硬币 = 行动币：还能重投几次
         atkCoins: apOf(atkActor), defCoins: apOf(defActor),
         atkDiceType: atkItem?.system?.diceType ?? "default",
         defDiceType: defItem?.system?.diceType ?? "default",
         // DiceSoNice 只在第一次交锋掷，之后的交锋数字滚一下即可
-        startDice: round === 1
+        startDice: exchanges === 1
           ? () => ClashManager._showDiceEach([
-              { roll: atkRoll, actor: atkActor }, { roll: defRoll, actor: defActor },
+              { roll: atkRollCur, actor: atkActor }, { roll: defRollCur, actor: defActor },
             ])
           : null,
       });
 
-      // 斥力：分出胜负后双方一起被震开，胜方随即瞬移追回贴身；
-      // 撞墙的一方触发【震颤引爆】
-      if (aEff !== dEff) {
-        await ClashKnockback.repel({
-          winner: aEff > dEff ? atkActor : defActor,
-          loser:  aEff > dEff ? defActor : atkActor,
-          winScore: Math.max(aEff, dEff),
-          chase: true,
-          onWallHit: (actor) => ClashManager._wallSeismicBlast(actor,
-            { attacker: aEff > dEff ? atkActor : defActor, bucket: atkCtx._actMsgs }),
-        });
-      }
+      // 平局＝重投方翻盘失败；首投打平则由攻方承担举证责任（他得再投一次）
+      const atkWon = (aEff !== dEff) ? (aEff > dEff) : (lastRerollSide === "def");
 
-      if (aEff === dEff) continue;                  // 平局：不扣行动值，再拼一次
+      // 斥力：分出胜负后双方一起被震开，胜方随即瞬移追回贴身；撞墙触发【震颤引爆】
+      await ClashKnockback.repel({
+        winner: atkWon ? atkActor : defActor,
+        loser:  atkWon ? defActor : atkActor,
+        winScore: Math.max(aEff, dEff),
+        chase: true,
+        onWallHit: (actor) => ClashManager._wallSeismicBlast(actor,
+          { attacker: atkWon ? atkActor : defActor, bucket: atkCtx._actMsgs }),
+      });
 
-      const atkWon = aEff > dEff;
-      const loser  = atkWon ? defActor : atkActor;
-      // 【不可摧毁】：拼点失败照样能打回去，所以它的币只要坏掉一枚，连击当场结束
-      const loserUnbreak =
-        (atkWon ? defItem : atkItem)?.system?.diceType === "unbreakable";
+      const loserSide   = atkWon ? "def" : "atk";
+      const loserActor  = atkWon ? defActor : atkActor;
+      const loserItem   = atkWon ? defItem  : atkItem;
+      const loserUnbreak = loserItem?.system?.diceType === "unbreakable";
+      // 0 币的防守方不能重投；攻方同样要有币才能翻盘
+      const canReroll = apOf(loserActor) > 0;
 
-      // 输掉这一次就要扣一点行动值（币碎一枚）——刀剑相击处炸一朵
-      if (apOf(loser) > 0) {
-        ClashVFX.broadcastBurst(ClashVFX.midPoint(atkActor, defActor));
-        await ClashManager._safeDocUpdate(loser, { "system.ap.value": apOf(loser) - 1 });
-      }
-
-      // 行动值耗尽、或败方用的是【不可摧毁】：这一次定胜负
-      if (loserUnbreak || apOf(loser) <= 0) {
+      if (!canReroll) {
         winSide  = atkWon ? "atk" : "def";
-        winRoll  = atkWon ? atkRoll : defRoll;
+        winRoll  = atkWon ? atkRollCur : defRollCur;
         winParts = atkWon ? aParts : dParts;
-        ClashTotalFX._log(loserUnbreak
-          ? "【不可摧毁】的币被打坏，连击结束，随后由它反击"
-          : "行动值耗尽，连击结束");
+        ClashTotalFX._log(`${loserActor?.name ?? "败方"} 已无行动币可重投，对抗结束`);
+        // 对抗结束：胜方摧毁败方 1 枚币（【不可摧毁】骰不被摧毁；对方 0 币则无事发生）
+        if (!loserUnbreak && apOf(loserActor) > 0) {
+          await ClashManager._safeDocUpdate(loserActor,
+            { "system.ap.value": apOf(loserActor) - 1 });
+          ClashTotalFX._log(`胜方摧毁 ${loserActor?.name ?? "败方"} 1 枚行动币`);
+        }
         break;
       }
+
+      // 花 1 枚币重投——刀剑相击处炸一朵
+      ClashVFX.broadcastBurst(ClashVFX.midPoint(atkActor, defActor));
+      await ClashManager._safeDocUpdate(loserActor,
+        { "system.ap.value": apOf(loserActor) - 1 });
+      // 一般骰重投累计 -1；【不可摧毁】免惩罚
+      if (!loserUnbreak) pen[loserSide] += 1;
+      lastRerollSide = loserSide;
+      rerollSide     = loserSide;
     }
+
+    // 连击奖励：每拼点 3 次（含首投、不论胜负）最终威力 +1，不封顶
+    const comboBonus = Math.floor(exchanges / 3);
+    if (comboBonus) ClashTotalFX._log(`连击奖励：拼点 ${exchanges} 次 → 最终威力 +${comboBonus}`);
 
     // 胜负已定 → 单独为胜方演一次【伤害计算】：点数与决胜那次一致，不重掷，
     // 但这一掷会真的把骰子摆出来（DiceSoNice）
@@ -4086,14 +4124,18 @@ export class ClashManager {
       });
     }
 
-    return { atkTotal: atkCur, defTotal: defCur, rounds: round };
+    return {
+      atkTotal: atkCur, defTotal: defCur, rounds: exchanges,
+      comboBonus, atkWins: winSide === "atk",
+    };
   }
 
   /* ─── 阶段五b：拼点结算逻辑 ────────────────────────────────────────────── */
 
   static _computeResolution({ atkActor, atkTotal, atkFormula, atkItemName, atkItemImg, atkCategory, atkSinType,
                                defActor, defTotal, defFormula, defItemName, defItemImg, defCategory, defSinType,
-                               atkCounterType = "", defCounterType = "" }) {
+                               atkCounterType = "", defCounterType = "",
+                               comboBonus = 0, forcedAtkWins = null }) {
 
     // ── 技能分类分组 ──────────────────────────────────────────────────────
     // 守备技能（全部）→ 使用忍耐/破绽调整骰数
@@ -4143,12 +4185,16 @@ export class ClashManager {
     // ·闪避只拼一次、也不扣行动值，所以平局判**闪避成功**（躲开了，无伤害）——
     //   闪避判定的是"够不够快躲开"，不需要决出胜负。
     // 其余极端情况（连拼 20 次兜底）平局归攻击方。
-    const atkWins  = (defCategory === "dodge")
-      ? atkEffective > defEffective          // 闪避：平局算守方躲开
-      : atkEffective >= defEffective;
+    // forcedAtkWins：连击循环已经按重投惩罚 / 无币 -3 判过胜负，这里直接沿用，
+    // 否则拿裸骰值重判会和刚才演出的结果对不上
+    const atkWins  = (forcedAtkWins !== null) ? !!forcedAtkWins
+      : (defCategory === "dodge")
+        ? atkEffective > defEffective        // 闪避：平局算守方躲开
+        : atkEffective >= defEffective;
     const winner   = atkWins ? atkActor : defActor;
     const loser    = atkWins ? defActor : atkActor;
-    const winScore = atkWins ? atkEffective : defEffective;
+    // 连击奖励：本次对抗内每拼点 3 次 +1 最终威力，对抗结束时一次性加给胜方
+    const winScore = (atkWins ? atkEffective : defEffective) + (comboBonus || 0);
     const winCat   = atkWins ? atkCategory  : defCategory;
     const winSin   = atkWins ? atkSinType   : defSinType;
 
@@ -4267,10 +4313,11 @@ export class ClashManager {
       atkLvBonus, defLvBonus,
       atkMod: atkDiceMod, defMod: defDiceMod + defPwrMod,
       atkSum: atkEffective, defSum: defEffective,
+      comboBonus, comboSide: atkWins ? "atk" : "def",
     };
 
     return {
-      atkWins, winner, loser, scoreRows,
+      atkWins, winner, loser, scoreRows, comboBonus,
       atkTotal: atkEffective, defTotal: defEffective, winScore,
       atkItemName, atkItemImg, atkFormula, atkActor,
       defItemName, defItemImg, defFormula, defActor,
@@ -4317,6 +4364,11 @@ export class ClashManager {
         ${row("骰掷", plain(r.atkRoll), plain(r.defRoll))}
         ${row("等差", sign(r.atkLvBonus), sign(r.defLvBonus))}
         ${row("加成", sign(r.atkMod),     sign(r.defMod))}
+        ${r.comboBonus
+            ? row("连击",
+                r.comboSide === "atk" ? sign(r.comboBonus) : "",
+                r.comboSide === "def" ? sign(r.comboBonus) : "")
+            : ""}
       </div>`;
   }
 
