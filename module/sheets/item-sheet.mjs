@@ -2341,25 +2341,89 @@ function _buildItemTitleCard(item) {
   const cfg = CONFIG.LIMBUSCOMPANY ?? {};
 
   if (item.type === "skill") {
+    const ICON = "systems/limbusCompany_FVTT/assets/icons/Base_icon/";
     const sinColor    = cfg.SIN_COLORS?.[sys.sinType] ?? "#5F3E21";
+    const sinIcon     = cfg.SIN_ICON_PATHS?.[sys.sinType] ?? "";
+    const sinLabel    = cfg.SIN_LABELS_ZH?.[sys.sinType] ?? "";
     const stellarCost = item.getStellarCost?.() ?? sys.stellarCost ?? 0;
     const tags = (Array.isArray(sys.tags) ? sys.tags : String(sys.tags ?? "").split("/"))
       .map(t => String(t).trim()).filter(Boolean);
     const weightCount = Number(sys.weight ?? 0);
     const descText    = linkifyHtml(sys.effectDesc ?? sys.description ?? "");
+
+    // 等级：基础/守备写 Lv.N，EGO 写评级（ZAYIN…）
+    const lvText = sys.type === "ego" ? (sys.egoDiceRating ?? "") : `Lv.${sys.level ?? 1}`;
+
+    // 类型图标：基础 / E.G.O = 攻击等级图；守备 = 格挡图（靠右）
+    const kindIcon  = sys.type === "defense" ? `${ICON}block.webp` : `${ICON}Offense_Level.webp`;
+    const kindLabel = { basic: "基础技能", defense: "守备技能", ego: "E.G.O" }[sys.type] ?? "";
+
+    const catLabel  = cfg.CATEGORY_LABELS_ZH?.[sys.category] ?? sys.category ?? "";
+    const diceLabel = { unbreakable: "不可摧毁", severing: "斩断" }[sys.diceType] ?? "";
+
+    // 容量扩散：攻击容量 ≥2 才有意义
+    const spreadLabel = (weightCount >= 2 && sys.spreadMode)
+      ? `${sys.spreadMode === "spray" ? "广域乱射" : "链式扩散"} ${sys.spreadRange ?? 1} 格` : "";
+
+    // 标记（布尔）：只列为真的
+    const flags = [];
+    if (sys.noEquip)        flags.push(`<span class="tcs-flag f-noequip">无法装备</span>`);
+    if (sys.noClash)        flags.push(`<span class="tcs-flag f-noclash">无法拼点</span>`);
+    if (sys.coverDefense)   flags.push(`<span class="tcs-flag f-cover">援护防御</span>`);
+    if (sys.indiscriminate) flags.push(`<span class="tcs-flag f-indis">无差别攻击</span>`);
+
+    // 消耗：理智 + 罪孽资源
+    const costs = [];
+    if (sys.sanityCost) {
+      costs.push(`<span class="tcs-cost-item"><span class="tcs-cost-label">理智</span>${sys.sanityCost}</span>`);
+    }
+    for (const c of (sys.sinCost ?? [])) {
+      if (!c?.amount) continue;
+      const ic = cfg.SIN_ICON_PATHS?.[c.sinType] ?? "";
+      costs.push(`<span class="tcs-cost-item">${ic ? `<img src="${ic}" alt="">` : ""}`
+        + `${cfg.SIN_LABELS_ZH?.[c.sinType] ?? ""} ${c.amount}</span>`);
+    }
+
+    // 罪孽抗性修改：只列改过的（x1.0 视为没改）
+    const resists = (sys.egoResistanceAdj ?? [])
+      .filter(r => r?.multiplier && r.multiplier !== "x1.0")
+      .map(r => {
+        const ic  = cfg.SIN_ICON_PATHS?.[r.sinType] ?? "";
+        const col = cfg.SIN_COLORS?.[r.sinType] ?? "#E8CAA1";
+        return `<span class="tcs-res-item" style="color:${col}">`
+          + `${ic ? `<img src="${ic}" alt="">` : ""}${r.multiplier}</span>`;
+      });
+
+    // 排版：名称+等级+罪孽图标 → 分类·骰式·骰型（类型图标靠右）→ 攻击容量 →
+    //       标记 → 消耗 → 抗性 → 武器限制 → 标签 → 金线 → 描述 → 金线 → 页脚
+    // 没填的字段整块不渲染，空技能卡不会留下一堆空行
     return _wireCardInteractivity($(`<div class="limbus-title-card limbus-title-card-skill">
-      <div class="tc-header" style="background:${sinColor}">${item.name}</div>
-      <div class="tc-row2">
-        <img src="${_getCategoryIcon(sys.category)}" class="tc-cat-icon" alt="">
-        <span class="tc-formula">${(sys.diceFormula ?? "").toUpperCase()}</span>
-        <span class="tc-tags">${tags.map(t => `<span class="tc-skill-tag">${t}</span>`).join("")}</span>
+      <div class="tc-header" style="background:${sinColor}">
+        <span class="tc-name">${item.name}</span>
+        ${lvText ? `<span class="tc-lv">${lvText}</span>` : ""}
+        ${sinIcon ? `<img src="${sinIcon}" class="tc-sin-ic" alt="${sinLabel}" title="${sinLabel}">` : ""}
       </div>
-      ${weightCount > 0 ? `<div class="tc-weight"><span class="tc-weight-label">攻击容量</span>${Array.from({length: weightCount}, () => '<span class="tc-weight-sq"></span>').join("")}</div>` : ""}
+      <div class="tcs-row">
+        ${catLabel ? `<span class="tcs-cat"><img src="${_getCategoryIcon(sys.category)}" class="tc-cat-icon" alt="">${catLabel}</span>` : ""}
+        ${sys.diceFormula ? `<span class="tcs-formula">${String(sys.diceFormula).toUpperCase()}</span>` : ""}
+        ${diceLabel ? `<span class="tcs-dice">${diceLabel}</span>` : ""}
+        <img src="${kindIcon}" class="tcs-kind-ic" alt="${kindLabel}" title="${kindLabel}">
+      </div>
+      ${weightCount > 0 ? `<div class="tc-weight">
+        <span class="tc-weight-label">攻击容量</span>
+        ${Array.from({ length: weightCount }, () => '<span class="tc-weight-sq"></span>').join("")}
+        ${spreadLabel ? `<span class="tcs-spread">${spreadLabel}</span>` : ""}
+      </div>` : ""}
+      ${flags.length   ? `<div class="tcs-flags">${flags.join("")}</div>` : ""}
+      ${costs.length   ? `<div class="tcs-costs">${costs.join("")}</div>` : ""}
+      ${resists.length ? `<div class="tcs-res">${resists.join("")}</div>` : ""}
+      ${sys.weaponRestriction ? `<div class="tcs-row"><span class="tcs-cat">武器限制：${sys.weaponRestriction}</span></div>` : ""}
+      ${tags.length ? `<div class="tc-tags">${tags.map(t => `<span class="tc-skill-tag">${t}</span>`).join("")}</div>` : ""}
       <div class="tc-gold-divider-skill"></div>
       <div class="tc-desc">${descText}</div>
       <div class="tc-gold-divider-skill"></div>
       <div class="tc-footer">
-        <img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/Starlight.webp" class="tc-starlight-icon" alt="星芒">
+        <img src="${ICON}Starlight.webp" class="tc-starlight-icon" alt="星芒">
         <span class="tc-stellar-cost">${stellarCost}</span>
       </div>
     </div>`));

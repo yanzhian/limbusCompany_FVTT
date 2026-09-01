@@ -9893,3 +9893,91 @@ input.item-piles-quantity {
 .limbus-title-card-equip .tce-footer .tce-foot-sep { width: 15px; flex: 0 0 15px; }
 .limbus-title-card-equip .tc-eye-icon { width: 18px; height: 18px; object-fit: contain; }
 .limbus-title-card-equip .tc-eye-cost { color: var(--gold-active); font-variant-numeric: tabular-nums; }
+
+/* ══ 技能 Title 卡·排版（调参台导出） ══ */
+.limbus-title-card-skill { width: 280px; height: 500px; max-height: 500px; }
+
+.limbus-title-card-skill .tc-header {
+  font-size: 18px; line-height: 1.15; font-weight: bold;
+  padding: 18px 12px;
+  display: flex; align-items: baseline; gap: 8px;
+}
+.limbus-title-card-skill .tc-header .tc-name { flex: 1; min-width: 0; }
+.limbus-title-card-skill .tc-header .tc-lv {
+  font-size: 12px; flex-shrink: 0; opacity: .92; letter-spacing: .06em;
+}
+/* 罪孽：标题条里 Lv 右边，只放图标 */
+.limbus-title-card-skill .tc-header .tc-sin-ic {
+  width: 24px; height: 24px; flex-shrink: 0;
+  object-fit: contain; align-self: center;
+  filter: drop-shadow(0 0 3px rgba(0,0,0,.6));
+}
+
+.limbus-title-card-skill .tcs-row {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  padding: 1px 12px;
+}
+/* 类型：基础/E.G.O = Offense_Level.webp，守备 = block.webp；单独靠右 */
+.limbus-title-card-skill .tcs-kind-ic {
+  width: 22px; height: 22px; object-fit: contain; flex-shrink: 0;
+  margin-left: auto;
+}
+.limbus-title-card-skill .tcs-cat  { font-size: 11px; color: #9B6839;
+  display: inline-flex; align-items: center; gap: 4px; }
+.limbus-title-card-skill .tcs-cat .tc-cat-icon { width: 16px; height: 16px; object-fit: contain; }
+.limbus-title-card-skill .tcs-formula { font-size: 18px; color: #E8CAA1; font-weight: bold;
+  font-variant-numeric: tabular-nums; }
+.limbus-title-card-skill .tcs-dice { font-size: 11px; color: #C9A84C; }
+
+.limbus-title-card-skill .tc-weight {
+  display: flex; align-items: center; gap: 4px;
+  padding: 1px 12px;
+}
+.limbus-title-card-skill .tc-weight-label { font-size: 13px; color: #9B6839; margin-right: 2px; }
+.limbus-title-card-skill .tc-weight-sq {
+  width: 12px; height: 12px; background: #C9A84C; border-radius: 2px;
+}
+.limbus-title-card-skill .tcs-spread { font-size: 11px; color: #B08A5E; margin-left: 6px; }
+
+.limbus-title-card-skill .tcs-flags {
+  display: flex; flex-wrap: wrap; gap: 4px;
+  padding: 1px 12px;
+}
+.limbus-title-card-skill .tcs-flag {
+  font-size: 11px; padding: 1px 6px;
+  border-radius: 2px; border: 1px solid currentColor;
+}
+.limbus-title-card-skill .f-noequip { color: #C88A6A; }
+.limbus-title-card-skill .f-noclash { color: #C4553D; }
+.limbus-title-card-skill .f-cover   { color: #5DADE2; }
+.limbus-title-card-skill .f-indis   { color: #B07FD6; }
+
+.limbus-title-card-skill .tcs-costs,
+.limbus-title-card-skill .tcs-res {
+  display: flex; flex-wrap: wrap; gap: 8px;
+  padding: 1px 12px;
+  font-size: 12px;
+}
+.limbus-title-card-skill .tcs-cost-item,
+.limbus-title-card-skill .tcs-res-item { display: inline-flex; align-items: center; gap: 3px; }
+.limbus-title-card-skill .tcs-cost-item img,
+.limbus-title-card-skill .tcs-res-item img { width: 14px; height: 14px; object-fit: contain; }
+.limbus-title-card-skill .tcs-cost-label { color: #9B6839; }
+
+.limbus-title-card-skill .tc-tags {
+  display: flex; flex-wrap: wrap; gap: 6px;
+  padding: 1px 12px;
+}
+.limbus-title-card-skill .tc-tags .tc-skill-tag {
+  font-size: 12px; padding: 0px 4px;
+}
+
+.limbus-title-card-skill .tc-desc {
+  font-size: 12px; line-height: 1.5;
+  padding: 8px 14px;
+}
+.limbus-title-card-skill .tc-footer {
+  display: flex; align-items: center; justify-content: flex-end; gap: 4px;
+  padding: 6px 14px;
+  font-size: 14px;
+}

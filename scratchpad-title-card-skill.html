@@ -42,7 +42,7 @@ p.sub{margin:0 0 10px;font-size:12px;color:var(--text-dim);max-width:520px;line-
 .tcs-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;
   padding:calc(var(--info-pad-y)*1px) calc(var(--info-pad-x)*1px);}
 .tcs-kind-ic{width:calc(var(--kind-ic)*1px);height:calc(var(--kind-ic)*1px);
-  border-radius:3px;display:inline-block;flex-shrink:0;}
+  border-radius:3px;display:inline-block;flex-shrink:0;margin-left:auto;}
 .tcs-ic-offense{background:#C4553D;}   /* 预览占位＝Offense_Level.webp */
 .tcs-ic-block{background:#5DADE2;}     /* 预览占位＝block.webp */
 .tcs-cat{font-size:calc(var(--cat-size)*1px);color:#9B6839;display:inline-flex;align-items:center;gap:4px;}
@@ -212,7 +212,7 @@ $("ctrls").innerHTML = P.map(([id,,t,def,zh]) => {
 /* ── 区块 ── */
 const BLOCKS = {
   header:  "名称 + 等级",
-  typerow: "类型图标 · 分类 · 骰式 · 骰子类型",
+  typerow: "分类 · 骰式 · 骰子类型 · 类型图标(靠右)",
   weight:  "攻击容量 + 容量扩散",
   flags:   "标记（无法装备/无法拼点/援护防御/无差别）",
   costs:   "消耗（理智 / 罪孽资源）",
@@ -277,10 +277,10 @@ function blockHtml(b, d){
       // 类型改成图标：基础/E.G.O = Offense_Level，守备 = block
       const kindIc = d.kind === "守备技能" ? "block" : "offense";
       return `<div class="tcs-row">
-        ${d.kind ? `<span class="tcs-kind-ic tcs-ic-${kindIc}" title="${d.kind}"></span>` : ""}
         ${d.cat ? `<span class="tcs-cat"><span class="ic"></span>${d.cat}</span>` : ""}
         ${d.formula ? `<span class="tcs-formula">${d.formula}</span>` : ""}
         ${d.dice ? `<span class="tcs-dice">${d.dice}</span>` : ""}
+        ${d.kind ? `<span class="tcs-kind-ic tcs-ic-${kindIc}" title="${d.kind}"></span>` : ""}
       </div>`;
     }
     case "formula": return "";   // 已并入「类型 · 分类 · 骰式」那一排
@@ -389,6 +389,7 @@ function dump(){
 /* 类型：基础/E.G.O = Offense_Level.webp，守备 = block.webp */
 .limbus-title-card-skill .tcs-kind-ic {
   width: ${N("kind-ic")}px; height: ${N("kind-ic")}px; object-fit: contain; flex-shrink: 0;
+  margin-left: auto;
 }
 .limbus-title-card-skill .tcs-cat  { font-size: ${N("cat-size")}px; color: #9B6839;
   display: inline-flex; align-items: center; gap: 4px; }
