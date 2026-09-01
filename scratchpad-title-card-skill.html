@@ -10,7 +10,7 @@
   --card-w:280; --card-h:500;
   --hd-size:20; --hd-pad-x:12; --hd-pad-y:15; --lv-size:14;
   --info-pad-x:12; --info-pad-y:4; --info-gap:5;
-  --sub-size:14; --cat-size:12; --sin-size:13;
+  --sub-size:14; --cat-size:12; --sin-size:13; --sin-ic:18; --kind-ic:18;
   --fx-size:18;                 /* 骰式字号 */
   --wt-size:12; --wt-sq:12;     /* 攻击容量 标签字号 / 方块边长 */
   --flag-size:11; --flag-gap:4; --flag-pad-x:6; --flag-pad-y:1;
@@ -35,11 +35,16 @@ p.sub{margin:0 0 10px;font-size:12px;color:var(--text-dim);max-width:520px;line-
   display:flex;align-items:baseline;gap:8px;}
 .tc-header .tc-name{flex:1;min-width:0;}
 .tc-header .tc-lv{font-size:calc(var(--lv-size)*1px);flex-shrink:0;opacity:.92;letter-spacing:.06em;}
+.tc-header .tc-sin-ic{width:calc(var(--sin-ic)*1px);height:calc(var(--sin-ic)*1px);
+  border-radius:50%;flex-shrink:0;display:inline-block;
+  box-shadow:0 0 0 1px rgba(0,0,0,.45), 0 0 6px rgba(0,0,0,.5);align-self:center;}
 
 .tcs-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;
   padding:calc(var(--info-pad-y)*1px) calc(var(--info-pad-x)*1px);}
-.tcs-type{font-size:calc(var(--sub-size)*1px);color:#E8CAA1;font-weight:bold;
-  border-bottom:1px solid rgba(201,168,76,.4);}
+.tcs-kind-ic{width:calc(var(--kind-ic)*1px);height:calc(var(--kind-ic)*1px);
+  border-radius:3px;display:inline-block;flex-shrink:0;}
+.tcs-ic-offense{background:#C4553D;}   /* 预览占位＝Offense_Level.webp */
+.tcs-ic-block{background:#5DADE2;}     /* 预览占位＝block.webp */
 .tcs-cat{font-size:calc(var(--cat-size)*1px);color:#9B6839;display:inline-flex;align-items:center;gap:4px;}
 .tcs-cat .ic{width:16px;height:16px;border-radius:3px;background:#2A1D12;display:inline-block;}
 .tcs-sin{font-size:calc(var(--sin-size)*1px);font-weight:bold;margin-left:auto;
@@ -159,7 +164,8 @@ const P = [
   ["info-pad-y","--info-pad-y","n",4,"上下内距"],
   ["sub-size","--sub-size","n",14,"类型字号"],
   ["cat-size","--cat-size","n",12,"分类字号"],
-  ["sin-size","--sin-size","n",13,"罪孽字号"],
+  ["sin-ic","--sin-ic","n",18,"标题罪孽图标"],
+  ["kind-ic","--kind-ic","n",18,"类型图标边长"],
   ["fx-size","--fx-size","n",18,"骰式字号"],
   ["H3","","h",0,"攻击容量"],
   ["wt-size","--wt-size","n",12,"标签字号"],
@@ -190,7 +196,7 @@ const P = [
 const RANGE = {
   "card-w":[200,420],"card-h":[280,720],"hd-size":[12,36],"hd-pad-x":[4,24],"hd-pad-y":[2,26],
   "lv-size":[8,24],"info-pad-x":[4,24],"info-pad-y":[0,16],"sub-size":[10,22],"cat-size":[8,20],
-  "sin-size":[8,22],"fx-size":[10,28],"wt-size":[8,18],"wt-sq":[6,22],"flag-size":[8,18],
+  "sin-ic":[10,30],"kind-ic":[10,30],"fx-size":[10,28],"wt-size":[8,18],"wt-sq":[6,22],"flag-size":[8,18],
   "flag-gap":[0,12],"flag-pad-x":[0,14],"flag-pad-y":[0,8],"cost-size":[8,20],"cost-gap":[0,20],
   "tag-size":[8,18],"tag-gap":[0,12],"tag-pad-x":[0,12],"tag-pad-y":[0,8],
   "desc-size":[9,20],"desc-lh":[10,26],"desc-pad-x":[4,24],"desc-pad-y":[0,20],
@@ -206,8 +212,7 @@ $("ctrls").innerHTML = P.map(([id,,t,def,zh]) => {
 /* ── 区块 ── */
 const BLOCKS = {
   header:  "名称 + 等级",
-  typerow: "类型 · 分类 · 罪孽",
-  formula: "骰式 + 骰子类型",
+  typerow: "类型图标 · 分类 · 骰式 · 骰子类型",
   weight:  "攻击容量 + 容量扩散",
   flags:   "标记（无法装备/无法拼点/援护防御/无差别）",
   costs:   "消耗（理智 / 罪孽资源）",
@@ -219,7 +224,7 @@ const BLOCKS = {
   divider2:"金线②",
   footer:  "页脚（星芒）",
 };
-const BASE_ORDER = ["header","typerow","formula","weight","flags","costs","resist","weapon",
+const BASE_ORDER = ["header","typerow","weight","flags","costs","resist","weapon",
                     "tags","divider1","desc","divider2","footer"];
 const state = {};
 for (const k of ["basic","defense","ego"]) {
@@ -264,19 +269,21 @@ function blockHtml(b, d){
     case "header":
       return `<div class="tc-header" style="background:${SIN[d.sin] ?? "#5F3E21"}">
         <span class="tc-name">${d.name}</span>
-        ${d.lv ? `<span class="tc-lv">${d.lv}</span>` : ""}</div>`;
+        ${d.lv ? `<span class="tc-lv">${d.lv}</span>` : ""}
+        ${d.sin ? `<span class="tc-sin-ic" title="${d.sin}"
+          style="background:${SIN[d.sin]}"></span>` : ""}</div>`;
     case "typerow": {
-      if (!d.kind && !d.cat && !d.sin) return "";
+      if (!d.kind && !d.cat && !d.formula) return "";
+      // 类型改成图标：基础/E.G.O = Offense_Level，守备 = block
+      const kindIc = d.kind === "守备技能" ? "block" : "offense";
       return `<div class="tcs-row">
-        ${d.kind ? `<span class="tcs-type">${d.kind}</span>` : ""}
+        ${d.kind ? `<span class="tcs-kind-ic tcs-ic-${kindIc}" title="${d.kind}"></span>` : ""}
         ${d.cat ? `<span class="tcs-cat"><span class="ic"></span>${d.cat}</span>` : ""}
-        ${d.sin ? `<span class="tcs-sin" style="color:${SIN[d.sin]}">${dot(SIN[d.sin])}${d.sin}</span>` : ""}
+        ${d.formula ? `<span class="tcs-formula">${d.formula}</span>` : ""}
+        ${d.dice ? `<span class="tcs-dice">${d.dice}</span>` : ""}
       </div>`;
     }
-    case "formula":
-      if (!d.formula) return "";
-      return `<div class="tcs-row"><span class="tcs-formula">${d.formula}</span>
-        ${d.dice ? `<span class="tcs-dice">${d.dice}</span>` : ""}</div>`;
+    case "formula": return "";   // 已并入「类型 · 分类 · 骰式」那一排
     case "weight":
       if (!d.weight) return "";
       return `<div class="tc-weight"><span class="tc-weight-label">攻击容量</span>
@@ -368,19 +375,24 @@ function dump(){
 .limbus-title-card-skill .tc-header .tc-lv {
   font-size: ${N("lv-size")}px; flex-shrink: 0; opacity: .92; letter-spacing: .06em;
 }
+/* 罪孽：标题条里 Lv 右边，只放图标 */
+.limbus-title-card-skill .tc-header .tc-sin-ic {
+  width: ${N("sin-ic")}px; height: ${N("sin-ic")}px; flex-shrink: 0;
+  object-fit: contain; align-self: center;
+  filter: drop-shadow(0 0 3px rgba(0,0,0,.6));
+}
 
 .limbus-title-card-skill .tcs-row {
   display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
   padding: ${N("info-pad-y")}px ${N("info-pad-x")}px;
 }
-.limbus-title-card-skill .tcs-type { font-size: ${N("sub-size")}px; color: #E8CAA1; font-weight: bold;
-  border-bottom: 1px solid rgba(201,168,76,.4); }
+/* 类型：基础/E.G.O = Offense_Level.webp，守备 = block.webp */
+.limbus-title-card-skill .tcs-kind-ic {
+  width: ${N("kind-ic")}px; height: ${N("kind-ic")}px; object-fit: contain; flex-shrink: 0;
+}
 .limbus-title-card-skill .tcs-cat  { font-size: ${N("cat-size")}px; color: #9B6839;
   display: inline-flex; align-items: center; gap: 4px; }
 .limbus-title-card-skill .tcs-cat .tc-cat-icon { width: 16px; height: 16px; object-fit: contain; }
-.limbus-title-card-skill .tcs-sin  { font-size: ${N("sin-size")}px; font-weight: bold; margin-left: auto;
-  display: inline-flex; align-items: center; gap: 4px; }
-.limbus-title-card-skill .tcs-sin img { width: 16px; height: 16px; object-fit: contain; }
 .limbus-title-card-skill .tcs-formula { font-size: ${N("fx-size")}px; color: #E8CAA1; font-weight: bold;
   font-variant-numeric: tabular-nums; }
 .limbus-title-card-skill .tcs-dice { font-size: ${N("cat-size")}px; color: #C9A84C; }
