@@ -276,8 +276,11 @@ function assetPath(id){
 function times(){
   const band=N("t-band"), clock=N("t-clock"), swing=N("t-swing"),
         text=N("t-text"), hold=N("t-hold"), out=N("t-out");
-  const dClock = band, dSwing = dClock + clock,
-        dText  = dSwing + swing * 0.55, dOut = dText + text + hold;
+  // 顺序：黑条 → 钟淡入并由大缩到正常 → 红线与 TURN 出现 → 钟再摆一下 → 淡出
+  const dClock = band;
+  const dText  = dClock + clock;
+  const dSwing = dText + text;
+  const dOut   = dSwing + swing + hold;
   return { band, clock, swing, text, hold, out, dClock, dSwing,
            dText: Math.round(dText), dOut: Math.round(dOut),
            total: Math.round(dOut + out) };
@@ -295,7 +298,7 @@ function apply(){
   rs.setProperty("--d-text",  `${T.dText}ms`);
   rs.setProperty("--d-out",   `${T.dOut}ms`);
   $("timeline").innerHTML =
-    `0ms 黑条 → ${T.dClock}ms 钟缩入 → ${T.dSwing}ms 摆动 → ${T.dText}ms 线+TURN → ${T.dOut}ms 淡出` +
+    `0ms 黑条 → ${T.dClock}ms 钟淡入缩小 → ${T.dText}ms 红线+TURN → ${T.dSwing}ms 钟摆动 → ${T.dOut}ms 淡出` +
     `<br><span style="color:${T.total > 900 ? "#E2705C" : "#7FB57F"}">总时长 ${T.total}ms</span>`;
   dump();
 }
@@ -330,7 +333,8 @@ $("rnd").addEventListener("click", () => { round++; $("num").textContent = round
 function dump(){
   const T = times();
   $("out").value =
-`/* ══ 回合开始横幅（素材版：钟 / 红线×2 / TURN + 回合数）══ */
+`/* ══ 回合开始横幅（素材版）══
+   顺序：黑条 → 钟淡入并由大缩到正常 → 红线与 TURN+回合数出现 → 钟逆时针摆一下 → 淡出 */
 .lc-turn-banner {
   position: fixed; left: 0; right: 0; top: ${N("band-y")}%;
   height: ${N("band-h")}px; transform: translateY(-50%);
