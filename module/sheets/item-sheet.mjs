@@ -2366,7 +2366,8 @@ function _buildItemTitleCard(item) {
   }
 
   // 装备 / 消耗品 / 材料 / 容器
-  const typeLabels   = { equipment:"装备", consumable:"消耗品", material:"材料", container:"容器" };
+  const typeLabels   = { equipment:"装备", consumable:"消耗品", material:"材料", container:"容器",
+                         skillbook:"技能书", recipebook:"配方表", panic:"恐慌卡", background:"背景" };
   const stellarCost  = sys.stellarCost ?? 0;
   const tags = (Array.isArray(sys.tags) ? sys.tags : String(sys.tags ?? "").split("/"))
     .map(t => String(t).trim()).filter(Boolean);
