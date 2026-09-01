@@ -1322,11 +1322,26 @@ export class LimbusCampSheet extends ActorSheet {
 
     if (place) {
       newContents.push({ uuid: outItem.uuid, ...place });
-    } else {
-      ui.notifications.warn(`[营地] 产出 ${recipe.outputName} 无法放入仓库（空间不足），已创建为悬空物品。`);
+      await campActor.update({ "system.warehouseContents": newContents });
+      await LimbusCampSheet._sendCraftCard(campActor, recipe, userId, "营地仓库");
+      return;
     }
-    await campActor.update({ "system.warehouseContents": newContents });
 
+    // 仓库摆不下：改放制作者的背包（找不到人才退回悬空物品）
+    const fallbackChar = game.actors.get(charId) ?? game.users.get(userId)?.character ?? null;
+    await campActor.update({ "system.warehouseContents": newContents });
+    if (fallbackChar) {
+      const moved = outItem.toObject();
+      delete moved._id;
+      await campActor.deleteEmbeddedDocuments("Item", [outItem.id]);
+      await LimbusCampSheet._placeCraftOutput(fallbackChar, moved, recipe.outputQuantity);
+      ui.notifications.info(
+        `[营地] 仓库放不下 ${recipe.outputName}，已改放进【${fallbackChar.name}】的背包。`);
+      await LimbusCampSheet._sendCraftCard(campActor, recipe, userId, `${fallbackChar.name} 的背包`);
+      return;
+    }
+
+    ui.notifications.warn(`[营地] 产出 ${recipe.outputName} 无法放入仓库（空间不足），已创建为悬空物品。`);
     await LimbusCampSheet._sendCraftCard(campActor, recipe, userId, "营地仓库");
     } finally {
       // 闸门再多留一会儿：制作触发的那几次重渲染的孤儿清理都排在后面
