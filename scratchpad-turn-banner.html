@@ -12,11 +12,10 @@
   --clock-w:150; --clock-x:0; --clock-y:0; --clock-from:340; --clock-a:100;
 
   /* ── 红线素材（上下各一条） ── */
-  --line-w:70;      /* 宽度：占屏宽 % */
-  --line-gap:37;    /* 与中线的上下距离 px */
+  --line-w:70;      /* 宽度：占屏宽 %（上下两条在同一张图里） */
   --line-x:0;       /* 水平微调 px */
+  --line-y:0;       /* 垂直微调 px */
   --line-a:100;     /* 不透明度 % */
-  --line-flip:1;    /* 下面那条是否上下翻转：1=翻转 0=不翻 */
 
   /* ── TURN 素材 ── */
   --word-w:180; --word-x:0; --word-y:0; --word-a:100;
@@ -62,13 +61,10 @@ h2{font-size:11.5px;color:#E7B956;margin:9px 0 1px;letter-spacing:.1em;font-weig
 .lc-tb-clock img{width:100%;height:auto;display:block;opacity:calc(var(--clock-a)/100);
   filter:drop-shadow(0 0 8px rgba(0,0,0,.8));}
 
-.lc-tb-line{position:absolute;left:50%;width:calc(var(--line-w)*1%);z-index:1;
-  transform:translateX(-50%) translateX(calc(var(--line-x)*1px)) scaleX(0);
+.lc-tb-line{position:absolute;left:50%;top:50%;width:calc(var(--line-w)*1%);z-index:1;
+  transform:translate(-50%,-50%) translate(calc(var(--line-x)*1px),calc(var(--line-y)*1px)) scaleX(0);
   transform-origin:center;}
 .lc-tb-line img{width:100%;height:auto;display:block;opacity:calc(var(--line-a)/100);}
-.lc-tb-line.top   {top:calc(50% - var(--line-gap)*1px);}
-.lc-tb-line.bottom{top:calc(50% + var(--line-gap)*1px);}
-.lc-tb-line.bottom img{transform:scaleY(calc(1 - 2*var(--line-flip)));}
 
 .lc-tb-text{position:absolute;left:0;right:0;top:50%;z-index:3;opacity:0;
   transform:translateY(-50%);
@@ -87,7 +83,7 @@ h2{font-size:11.5px;color:#E7B956;margin:9px 0 1px;letter-spacing:.1em;font-weig
 .ph{display:flex;align-items:center;justify-content:center;
   border:1px dashed #5F3E22;color:#6E5540;font-size:12px;background:rgba(0,0,0,.35);}
 .lc-tb-clock .ph{aspect-ratio:1/1;border-radius:50%;}
-.lc-tb-line  .ph{height:6px;background:#DC4110;border:none;}
+.lc-tb-line  .ph{height:74px;}
 .lc-tb-word  .ph{height:52px;}
 
 /* ── 播放 ── */
@@ -112,8 +108,8 @@ h2{font-size:11.5px;color:#E7B956;margin:9px 0 1px;letter-spacing:.1em;font-weig
   70% {transform:translate(-50%,-50%) translate(calc(var(--clock-x)*1px),calc(var(--clock-y)*1px)) rotate(calc(var(--swing-deg)*0.35deg));}
   100%{transform:translate(-50%,-50%) translate(calc(var(--clock-x)*1px),calc(var(--clock-y)*1px)) rotate(0deg);}}
 @keyframes tb-line{
-  from{transform:translateX(-50%) translateX(calc(var(--line-x)*1px)) scaleX(0);}
-  to  {transform:translateX(-50%) translateX(calc(var(--line-x)*1px)) scaleX(1);}}
+  from{transform:translate(-50%,-50%) translate(calc(var(--line-x)*1px),calc(var(--line-y)*1px)) scaleX(0);}
+  to  {transform:translate(-50%,-50%) translate(calc(var(--line-x)*1px),calc(var(--line-y)*1px)) scaleX(1);}}
 @keyframes tb-text{
   from{opacity:0;transform:translateY(-50%) scale(.86);}
   to  {opacity:1;transform:translateY(-50%) scale(1);}}
@@ -146,7 +142,7 @@ textarea{width:100%;height:200px;background:#15110E;border:1px solid #3A2A1C;bor
 
 <div>
   <h1>回合开始横幅·素材版调参</h1>
-  <p class="sub">三个素材：<b>钟</b>、<b>红线</b>（上下各用一次）、<b>TURN</b>。
+  <p class="sub">三个素材：<b>钟</b>、<b>红线</b>（上下两条在同一张图里）、<b>TURN</b>。
     在右边选本地文件即可**立刻预览**（只在本页临时用，不上传）；
     旁边的路径框写的是**实装时的真实路径**，会写进导出的 CSS。回合数仍是文字（好换数字）。</p>
   <div class="stage" id="stage">
@@ -155,8 +151,7 @@ textarea{width:100%;height:200px;background:#15110E;border:1px solid #3A2A1C;bor
 
     <div class="lc-turn-banner" id="banner">
       <div class="lc-tb-band"></div>
-      <div class="lc-tb-line top"    id="lineTop"><div class="ph">红线素材</div></div>
-      <div class="lc-tb-line bottom" id="lineBot"><div class="ph">红线素材</div></div>
+      <div class="lc-tb-line" id="lineBox"><div class="ph">红线素材（上下两条在同一张图里）</div></div>
       <div class="lc-tb-clock" id="clockBox"><div class="ph">钟表素材</div></div>
       <div class="lc-tb-text">
         <div class="lc-tb-word" id="wordBox"><div class="ph">TURN 素材</div></div>
@@ -208,10 +203,9 @@ const P = [
   ["swing-deg","--swing-deg","n",15,"逆时针角度"],
   ["H2","","h",0,"红线素材"],
   ["line-w","--line-w","n",70,"宽度%"],
-  ["line-gap","--line-gap","n",37,"与中线距离"],
   ["line-x","--line-x","n",0,"水平微调"],
+  ["line-y","--line-y","n",0,"垂直微调"],
   ["line-a","--line-a","n",100,"不透明度%"],
-  ["line-flip","--line-flip","n",1,"下条翻转(0/1)"],
   ["H3","","h",0,"TURN 素材"],
   ["word-w","--word-w","n",180,"宽度"],
   ["word-x","--word-x","n",0,"水平微调"],
@@ -236,7 +230,7 @@ const RANGE = {
   "band-h":[60,300],"band-y":[10,90],"band-a":[0,100],
   "clock-w":[40,400],"clock-x":[-300,300],"clock-y":[-150,150],"clock-a":[0,100],
   "clock-from":[100,800],"swing-deg":[0,45],
-  "line-w":[20,100],"line-gap":[0,160],"line-x":[-200,200],"line-a":[0,100],"line-flip":[0,1],
+  "line-w":[20,140],"line-x":[-200,200],"line-y":[-150,150],"line-a":[0,100],
   "word-w":[40,500],"word-x":[-300,300],"word-y":[-150,150],"word-a":[0,100],
   "num-size":[16,140],"num-gap":[0,120],"num-dx":[-200,200],"num-dy":[-100,100],"num-glow":[0,100],
   "t-band":[20,400],"t-clock":[40,600],"t-swing":[20,400],"t-text":[40,600],
@@ -255,7 +249,7 @@ $("ctrls").innerHTML = P.map(([id,,t,def,zh]) => {
 /* ── 素材上传：本地预览 ── */
 const SLOTS = {
   clock: { file: "f-clock", path: "p-clock", boxes: ["clockBox"] },
-  line:  { file: "f-line",  path: "p-line",  boxes: ["lineTop", "lineBot"] },
+  line:  { file: "f-line",  path: "p-line",  boxes: ["lineBox"] },
   word:  { file: "f-word",  path: "p-word",  boxes: ["wordBox"] },
 };
 for (const [key, s] of Object.entries(SLOTS)) {
@@ -323,7 +317,7 @@ $("hold").addEventListener("click", () => {
     el.style.opacity = holding ? "1" : "";
     if (!holding) { el.style.transform = ""; return; }
     if (el.classList.contains("lc-tb-line"))
-      el.style.transform = "translateX(-50%) translateX(calc(var(--line-x)*1px)) scaleX(1)";
+      el.style.transform = "translate(-50%,-50%) translate(calc(var(--line-x)*1px),calc(var(--line-y)*1px)) scaleX(1)";
     else if (el.classList.contains("lc-tb-clock"))
       el.style.transform = "translate(-50%,-50%) translate(calc(var(--clock-x)*1px),calc(var(--clock-y)*1px)) scale(1)";
     else if (el.classList.contains("lc-tb-text"))
@@ -364,16 +358,14 @@ function dump(){
   filter: drop-shadow(0 0 8px rgba(0,0,0,.8));
   opacity: 0;
 }
-/* ④ 红线（上下各一条，下面那条${N("line-flip") ? "上下翻转" : "不翻转"}） */
+/* ④ 红线（上下两条在同一张图里，整张缩放定位） */
 .lc-turn-banner .lc-tb-line {
-  position: absolute; left: 50%; width: ${N("line-w")}%; z-index: 1;
-  transform: translateX(-50%) translateX(${N("line-x")}px) scaleX(0);
+  position: absolute; left: 50%; top: 50%; width: ${N("line-w")}%; z-index: 1;
+  transform: translate(-50%, -50%) translate(${N("line-x")}px, ${N("line-y")}px) scaleX(0);
   transform-origin: center;
-  background: url("${assetPath("p-line")}") center/100% 100% no-repeat;
   opacity: ${(N("line-a")/100).toFixed(2)};
 }
-.lc-turn-banner .lc-tb-line.top    { top: calc(50% - ${N("line-gap")}px); }
-.lc-turn-banner .lc-tb-line.bottom { top: calc(50% + ${N("line-gap")}px);${N("line-flip") ? " transform: translateX(-50%) translateX(" + N("line-x") + "px) scaleX(0) scaleY(-1);" : ""} }
+.lc-turn-banner .lc-tb-line img { width: 100%; height: auto; display: block; }
 /* ④ TURN + 回合数 */
 .lc-turn-banner .lc-tb-text {
   position: absolute; left: 0; right: 0; top: 50%; z-index: 3; opacity: 0;
@@ -430,8 +422,8 @@ function dump(){
   100% { transform: translate(-50%,-50%) translate(${N("clock-x")}px, ${N("clock-y")}px) rotate(0deg); }
 }
 @keyframes lc-tb-line {
-  from { transform: translateX(-50%) translateX(${N("line-x")}px) scaleX(0)${N("line-flip") ? "" : ""}; }
-  to   { transform: translateX(-50%) translateX(${N("line-x")}px) scaleX(1); }
+  from { transform: translate(-50%,-50%) translate(${N("line-x")}px, ${N("line-y")}px) scaleX(0); }
+  to   { transform: translate(-50%,-50%) translate(${N("line-x")}px, ${N("line-y")}px) scaleX(1); }
 }
 @keyframes lc-tb-text {
   from { opacity: 0; transform: translateY(-50%) scale(.86); }
