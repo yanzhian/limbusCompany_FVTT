@@ -17,7 +17,18 @@ const WORD_IMG  = "systems/limbusCompany_FVTT/assets/icons/GUI/turn_word.webp";
 /** 与 CSS 里最后那条注释保持一致：整段动画跑完需要多久（ms） */
 const TOTAL_MS = 1280;
 
+/** 回合开始音效：和横幅同时起，本地播放（各端自己触发，不广播） */
+const TURN_SFX = "systems/limbusCompany_FVTT/assets/audio/turn.wav";
+
 let _timer = null;
+
+/** 播一次回合音效；音频未就绪或被浏览器拦截时静默失败 */
+function _playTurnSfx() {
+  try {
+    const helper = foundry?.audio?.AudioHelper ?? globalThis.AudioHelper;
+    helper?.play?.({ src: TURN_SFX, volume: 0.7, autoplay: true, loop: false }, false);
+  } catch (err) { /* 忽略：音效不该影响演出 */ }
+}
 
 /**
  * 播一次回合横幅。
@@ -52,6 +63,7 @@ export function playTurnBanner(round) {
 
   // 先入 DOM 再加 play：否则动画的第一帧可能被跳过
   requestAnimationFrame(() => el.classList.add("play", "show"));
+  _playTurnSfx();
   _timer = setTimeout(() => el.remove(), TOTAL_MS + 80);
 }
 
