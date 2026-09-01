@@ -1,142 +1,143 @@
 <!doctype html>
 <meta charset="utf-8">
-<title>回合开始横幅·调参</title>
+<title>回合开始横幅·素材版调参</title>
 <style>
 :root{
   --font-main:"Noto Sans SC","Microsoft YaHei",sans-serif;
 
   /* ── 黑条 ── */
-  --band-h:150;        /* 黑条高度 px */
-  --band-y:45;         /* 纵向位置：距顶部 % */
-  --band-col:#070605;  /* 黑条颜色 */
-  --band-a:88;         /* 黑条不透明度 % */
-  --band-ms:90;       /* ① 黑条展开时长 ms */
+  --band-h:121; --band-y:40; --band-col:#070605; --band-a:83;
 
-  /* ── 钟表 ── */
-  --clock-size:86;     /* 钟表最终边长 px */
-  --clock-from:340;    /* 入场时的放大倍率 %（从多大缩到正常） */
-  --clock-col:#E8CAA1; /* 钟表主色 */
-  --clock-ms:150;      /* ② 缩放入场时长 ms */
-  --swing-deg:15;      /* ③ 逆时针摆动角度 deg */
-  --swing-ms:140;      /* ③ 摆动时长 ms */
+  /* ── 钟表素材 ── */
+  --clock-w:150; --clock-x:0; --clock-y:0; --clock-from:340; --clock-a:100;
 
-  /* ── 橙红双线 + 文字 ── */
-  --line-col:#DC4110;  /* 线与数字的颜色 */
-  --line-w:3;          /* 线粗 px */
-  --line-len:70;       /* 线长度 %（相对屏宽） */
-  --line-gap:54;       /* 两条线的上下间距 px */
-  --line-glow:60;      /* 线的光晕强度 % */
-  --text-ms:110;       /* ④ 文字与线出现时长 ms */
+  /* ── 红线素材（上下各一条） ── */
+  --line-w:70;      /* 宽度：占屏宽 % */
+  --line-gap:37;    /* 与中线的上下距离 px */
+  --line-x:0;       /* 水平微调 px */
+  --line-a:100;     /* 不透明度 % */
+  --line-flip:1;    /* 下面那条是否上下翻转：1=翻转 0=不翻 */
 
-  --word-size:52;      /* TURN 字号 */
-  --word-track:24;     /* TURN 字距 ÷100 em */
-  --word-col:#E8CAA1;
-  --num-size:52;       /* 回合数字号 */
-  --num-gap:20;        /* TURN 与数字间距 */
-  --num-glow:55;       /* 数字光晕 % */
+  /* ── TURN 素材 ── */
+  --word-w:180; --word-x:0; --word-y:0; --word-a:100;
 
-  --hold-ms:0;       /* 停留 ms */
-  --out-ms:70;        /* 退出 ms */
+  /* ── 回合数（文字） ── */
+  --num-size:52; --num-col:#DC4110; --num-gap:20; --num-dx:0; --num-dy:0; --num-glow:55;
+
+  /* ── 时间轴 ── */
+  --t-band:60; --t-clock:160; --t-swing:60; --t-text:260;
+  --swing-deg:15; --hold:0; --t-out:260;
 }
 body{margin:0;background:#141110;color:#E8CAA2;font-family:var(--font-main);
   display:flex;gap:18px;align-items:flex-start;padding:16px;flex-wrap:wrap;}
 h1{font-size:16px;margin:0 0 3px;letter-spacing:.06em;}
-p.sub{margin:0 0 10px;font-size:12px;color:#6E5540;max-width:560px;line-height:1.7;}
-h2{font-size:11.5px;color:#E7B956;margin:8px 0 1px;letter-spacing:.1em;font-weight:normal;}
+p.sub{margin:0 0 10px;font-size:12px;color:#6E5540;max-width:600px;line-height:1.7;}
+h2{font-size:11.5px;color:#E7B956;margin:9px 0 1px;letter-spacing:.1em;font-weight:normal;}
 
 /* ══ 舞台 ══ */
-.stage{position:relative;width:660px;height:420px;overflow:hidden;border-radius:5px;
+.stage{position:relative;width:680px;height:430px;overflow:hidden;border-radius:5px;
   border:1px solid #2b2119;
   background:repeating-linear-gradient(0deg,#1b1714 0 39px,#221c18 39px 40px),
              repeating-linear-gradient(90deg,#1b1714 0 39px,#221c18 39px 40px);}
 .stage .fake-token{position:absolute;width:44px;height:44px;border-radius:50%;
   background:#3B2412;border:2px solid #5F3E22;}
 
-/* ══ 横幅 ══════════════════════════════════════════════ */
+/* ══ 横幅 ══ */
 .lc-turn-banner{position:absolute;left:0;right:0;top:calc(var(--band-y)*1%);
   height:calc(var(--band-h)*1px);transform:translateY(-50%);
   display:flex;align-items:center;justify-content:center;
   pointer-events:none;overflow:visible;opacity:0;}
 .lc-turn-banner.show{opacity:1;}
 
-/* ① 黑条 */
 .lc-tb-band{position:absolute;inset:0;
   background:linear-gradient(90deg,transparent,
     color-mix(in srgb,var(--band-col) calc(var(--band-a)*1%),transparent) 8%,
     color-mix(in srgb,var(--band-col) calc(var(--band-a)*1%),transparent) 92%,transparent);
   transform:scaleY(0);transform-origin:center;}
-.play .lc-tb-band{animation:tb-band var(--t-band) cubic-bezier(.2,.9,.3,1) forwards;}
 
-/* ② 钟表 */
-.lc-tb-clock{position:relative;width:calc(var(--clock-size)*1px);height:calc(var(--clock-size)*1px);
-  opacity:0;transform-origin:center;z-index:2;}
-.lc-tb-clock svg{width:100%;height:100%;display:block;
+.lc-tb-clock{position:absolute;left:50%;top:50%;z-index:2;opacity:0;
+  width:calc(var(--clock-w)*1px);
+  transform:translate(-50%,-50%) translate(calc(var(--clock-x)*1px),calc(var(--clock-y)*1px));
+  transform-origin:center;}
+.lc-tb-clock img{width:100%;height:auto;display:block;opacity:calc(var(--clock-a)/100);
   filter:drop-shadow(0 0 8px rgba(0,0,0,.8));}
-.play .lc-tb-clock{animation:
-  tb-clock-in var(--t-clock) cubic-bezier(.14,.8,.28,1) var(--d-clock) both,
-  tb-clock-swing var(--t-swing) cubic-bezier(.36,.07,.19,.97) var(--d-swing) both,
-  tb-fade-out var(--t-out) ease-in var(--d-out) forwards;}
 
-/* ④ 橙红双线 */
-.lc-tb-line{position:absolute;left:50%;width:calc(var(--line-len)*1%);
-  height:calc(var(--line-w)*1px);background:var(--line-col);
-  box-shadow:0 0 calc(var(--line-glow)/5*1px) color-mix(in srgb,var(--line-col) calc(var(--line-glow)*1%),transparent),
-             0 0 calc(var(--line-glow)/2*1px) color-mix(in srgb,var(--line-col) calc(var(--line-glow)*0.6%),transparent);
-  transform:translateX(-50%) scaleX(0);transform-origin:center;}
+.lc-tb-line{position:absolute;left:50%;width:calc(var(--line-w)*1%);z-index:1;
+  transform:translateX(-50%) translateX(calc(var(--line-x)*1px)) scaleX(0);
+  transform-origin:center;}
+.lc-tb-line img{width:100%;height:auto;display:block;opacity:calc(var(--line-a)/100);}
 .lc-tb-line.top   {top:calc(50% - var(--line-gap)*1px);}
 .lc-tb-line.bottom{top:calc(50% + var(--line-gap)*1px);}
-.play .lc-tb-line{animation:
-  tb-line var(--t-text) cubic-bezier(.16,.84,.3,1) var(--d-text) both,
-  tb-fade-out var(--t-out) ease-in var(--d-out) forwards;}
+.lc-tb-line.bottom img{transform:scaleY(calc(1 - 2*var(--line-flip)));}
 
-/* ④ 文字 */
-.lc-tb-text{position:absolute;left:0;right:0;top:50%;transform:translateY(-50%);
-  display:flex;align-items:baseline;justify-content:center;gap:calc(var(--num-gap)*1px);
-  opacity:0;z-index:3;}
-.play .lc-tb-text{animation:
-  tb-text var(--t-text) cubic-bezier(.16,.84,.3,1) var(--d-text) both,
-  tb-fade-out var(--t-out) ease-in var(--d-out) forwards;}
-.lc-tb-word{font-size:calc(var(--word-size)*1px);font-weight:bold;color:var(--word-col);
-  letter-spacing:calc(var(--word-track)/100*1em);text-indent:calc(var(--word-track)/100*1em);
-  line-height:1;text-shadow:0 2px 10px rgba(0,0,0,.9);}
-.lc-tb-num{font-size:calc(var(--num-size)*1px);font-weight:bold;color:var(--line-col);
+.lc-tb-text{position:absolute;left:0;right:0;top:50%;z-index:3;opacity:0;
+  transform:translateY(-50%);
+  display:flex;align-items:center;justify-content:center;gap:calc(var(--num-gap)*1px);}
+.lc-tb-word{width:calc(var(--word-w)*1px);flex-shrink:0;
+  transform:translate(calc(var(--word-x)*1px),calc(var(--word-y)*1px));}
+.lc-tb-word img{width:100%;height:auto;display:block;opacity:calc(var(--word-a)/100);
+  filter:drop-shadow(0 2px 10px rgba(0,0,0,.9));}
+.lc-tb-num{font-size:calc(var(--num-size)*1px);font-weight:bold;color:var(--num-col);
   line-height:1;font-variant-numeric:tabular-nums;
-  text-shadow:0 0 calc(var(--num-glow)/4*1px) color-mix(in srgb,var(--line-col) calc(var(--num-glow)*1%),transparent),
+  transform:translate(calc(var(--num-dx)*1px),calc(var(--num-dy)*1px));
+  text-shadow:0 0 calc(var(--num-glow)/4*1px) color-mix(in srgb,var(--num-col) calc(var(--num-glow)*1%),transparent),
               0 2px 10px rgba(0,0,0,.9);}
 
-@keyframes tb-band{
-  from{transform:scaleY(0);} to{transform:scaleY(1);}
-}
+/* 素材没上传时的占位 */
+.ph{display:flex;align-items:center;justify-content:center;
+  border:1px dashed #5F3E22;color:#6E5540;font-size:12px;background:rgba(0,0,0,.35);}
+.lc-tb-clock .ph{aspect-ratio:1/1;border-radius:50%;}
+.lc-tb-line  .ph{height:6px;background:#DC4110;border:none;}
+.lc-tb-word  .ph{height:52px;}
+
+/* ── 播放 ── */
+.play .lc-tb-band {animation:tb-band calc(var(--t-band)*1ms) cubic-bezier(.2,.9,.3,1) forwards,
+  tb-out calc(var(--t-out)*1ms) ease-in var(--d-out) forwards;}
+.play .lc-tb-clock{animation:
+  tb-clock-in calc(var(--t-clock)*1ms) cubic-bezier(.14,.8,.28,1) var(--d-clock) both,
+  tb-swing    calc(var(--t-swing)*1ms) cubic-bezier(.36,.07,.19,.97) var(--d-swing) both,
+  tb-out      calc(var(--t-out)*1ms) ease-in var(--d-out) forwards;}
+.play .lc-tb-line {animation:tb-line calc(var(--t-text)*1ms) cubic-bezier(.16,.84,.3,1) var(--d-text) both,
+  tb-out calc(var(--t-out)*1ms) ease-in var(--d-out) forwards;}
+.play .lc-tb-text {animation:tb-text calc(var(--t-text)*1ms) cubic-bezier(.16,.84,.3,1) var(--d-text) both,
+  tb-out calc(var(--t-out)*1ms) ease-in var(--d-out) forwards;}
+
+@keyframes tb-band{from{transform:scaleY(0);}to{transform:scaleY(1);}}
 @keyframes tb-clock-in{
-  from{opacity:0;transform:scale(calc(var(--clock-from)/100));}
-  to  {opacity:1;transform:scale(1);}
-}
-@keyframes tb-clock-swing{
-  0%  {transform:rotate(0deg);}
-  35% {transform:rotate(calc(var(--swing-deg)*-1deg));}
-  70% {transform:rotate(calc(var(--swing-deg)*0.35deg));}
-  100%{transform:rotate(0deg);}
-}
-@keyframes tb-line{ from{transform:translateX(-50%) scaleX(0);} to{transform:translateX(-50%) scaleX(1);} }
-@keyframes tb-text{ from{opacity:0;transform:translateY(-50%) scale(.86);} to{opacity:1;transform:translateY(-50%) scale(1);} }
-@keyframes tb-fade-out{ from{opacity:1;} to{opacity:0;} }
-.play .lc-tb-band{animation:tb-band var(--t-band) cubic-bezier(.2,.9,.3,1) forwards,
-  tb-fade-out var(--t-out) ease-in var(--d-out) forwards;}
+  from{opacity:0;transform:translate(-50%,-50%) translate(calc(var(--clock-x)*1px),calc(var(--clock-y)*1px)) scale(calc(var(--clock-from)/100));}
+  to  {opacity:1;transform:translate(-50%,-50%) translate(calc(var(--clock-x)*1px),calc(var(--clock-y)*1px)) scale(1);}}
+@keyframes tb-swing{
+  0%  {transform:translate(-50%,-50%) translate(calc(var(--clock-x)*1px),calc(var(--clock-y)*1px)) rotate(0deg);}
+  35% {transform:translate(-50%,-50%) translate(calc(var(--clock-x)*1px),calc(var(--clock-y)*1px)) rotate(calc(var(--swing-deg)*-1deg));}
+  70% {transform:translate(-50%,-50%) translate(calc(var(--clock-x)*1px),calc(var(--clock-y)*1px)) rotate(calc(var(--swing-deg)*0.35deg));}
+  100%{transform:translate(-50%,-50%) translate(calc(var(--clock-x)*1px),calc(var(--clock-y)*1px)) rotate(0deg);}}
+@keyframes tb-line{
+  from{transform:translateX(-50%) translateX(calc(var(--line-x)*1px)) scaleX(0);}
+  to  {transform:translateX(-50%) translateX(calc(var(--line-x)*1px)) scaleX(1);}}
+@keyframes tb-text{
+  from{opacity:0;transform:translateY(-50%) scale(.86);}
+  to  {opacity:1;transform:translateY(-50%) scale(1);}}
+@keyframes tb-out{from{opacity:1;}to{opacity:0;}}
 
 /* ══ 面板 ══ */
-.panel{border:1px solid #2b2119;border-radius:4px;padding:12px 14px;width:400px;
+.panel{border:1px solid #2b2119;border-radius:4px;padding:12px 14px;width:420px;
   display:flex;flex-direction:column;gap:5px;max-height:94vh;overflow:auto;}
-.btnrow{display:flex;gap:6px;margin-bottom:4px;flex-wrap:wrap;}
+.btnrow{display:flex;gap:6px;margin-bottom:2px;flex-wrap:wrap;}
 .btn{font-size:12px;padding:4px 12px;border-radius:3px;cursor:pointer;
   border:1px solid #3A2A1C;background:#15110E;color:#9B6839;}
 .btn:hover{color:#E7B956;border-color:#E7B956;}
 .btn.primary{background:#E7B956;border-color:#E7B956;color:#15110E;font-weight:bold;}
+.up{display:flex;align-items:center;gap:6px;font-size:12px;padding:4px 0;}
+.up label{width:62px;color:#9B6839;}
+.up input[type=text]{flex:1;min-width:0;background:#15110E;border:1px solid #3A2A1C;
+  border-radius:2px;color:#E8CAA2;font:11px monospace;padding:3px 5px;}
+.up input[type=file]{width:96px;font-size:10px;color:#6E5540;}
 .row{display:flex;align-items:center;gap:8px;font-size:12px;}
-.row label{width:112px;color:#9B6839;}
-.row input[type=range]{flex:1;min-width:78px;}
+.row label{width:110px;color:#9B6839;}
+.row input[type=range]{flex:1;min-width:70px;}
 .row input[type=color]{width:38px;height:22px;padding:0;border:1px solid #3A2A1C;background:none;}
 .row b{width:46px;text-align:right;color:#E7B956;font:11.5px monospace;}
-textarea{width:100%;height:210px;background:#15110E;border:1px solid #3A2A1C;border-radius:3px;
+textarea{width:100%;height:200px;background:#15110E;border:1px solid #3A2A1C;border-radius:3px;
   color:#E8CAA2;font:11px/1.5 monospace;padding:7px;resize:vertical;margin-top:6px;}
 .note{font-size:11.5px;color:#6E5540;line-height:1.7;}
 .tl{font:11px/1.6 monospace;color:#8A6E52;background:#15110E;border:1px solid #3A2A1C;
@@ -144,32 +145,21 @@ textarea{width:100%;height:210px;background:#15110E;border:1px solid #3A2A1C;bor
 </style>
 
 <div>
-  <h1>回合开始横幅·调参</h1>
-  <p class="sub">顺序：<b>① 黑条展开 → ② 钟表由大缩到正常 → ③ 逆时针摆一下 → ④ 橙红双线拉开 + TURN 与回合数浮现</b>
-    → 淡出。<b>整体时长不超过 500ms</b>（时间轴会实时校验）。调好把导出的 CSS 贴到 <code>styles/limbusCompany_FVTT.css</code> 末尾，我再写触发逻辑。</p>
+  <h1>回合开始横幅·素材版调参</h1>
+  <p class="sub">三个素材：<b>钟</b>、<b>红线</b>（上下各用一次）、<b>TURN</b>。
+    在右边选本地文件即可**立刻预览**（只在本页临时用，不上传）；
+    旁边的路径框写的是**实装时的真实路径**，会写进导出的 CSS。回合数仍是文字（好换数字）。</p>
   <div class="stage" id="stage">
-    <div class="fake-token" style="left:120px;top:300px"></div>
-    <div class="fake-token" style="left:470px;top:120px"></div>
+    <div class="fake-token" style="left:120px;top:310px"></div>
+    <div class="fake-token" style="left:480px;top:120px"></div>
 
     <div class="lc-turn-banner" id="banner">
       <div class="lc-tb-band"></div>
-      <div class="lc-tb-line top"></div>
-      <div class="lc-tb-line bottom"></div>
-      <div class="lc-tb-clock">
-        <svg viewBox="0 0 100 100">
-          <circle cx="50" cy="50" r="42" fill="none" stroke="var(--clock-col)" stroke-width="5"/>
-          <circle cx="50" cy="50" r="34" fill="none" stroke="var(--clock-col)" stroke-width="1.5" opacity=".45"/>
-          <g stroke="var(--clock-col)" stroke-width="3" stroke-linecap="round">
-            <line x1="50" y1="12" x2="50" y2="20"/><line x1="88" y1="50" x2="80" y2="50"/>
-            <line x1="50" y1="88" x2="50" y2="80"/><line x1="12" y1="50" x2="20" y2="50"/>
-          </g>
-          <line x1="50" y1="50" x2="50" y2="26" stroke="var(--clock-col)" stroke-width="5" stroke-linecap="round"/>
-          <line x1="50" y1="50" x2="70" y2="58" stroke="var(--line-col)" stroke-width="4" stroke-linecap="round"/>
-          <circle cx="50" cy="50" r="4" fill="var(--line-col)"/>
-        </svg>
-      </div>
+      <div class="lc-tb-line top"    id="lineTop"><div class="ph">红线素材</div></div>
+      <div class="lc-tb-line bottom" id="lineBot"><div class="ph">红线素材</div></div>
+      <div class="lc-tb-clock" id="clockBox"><div class="ph">钟表素材</div></div>
       <div class="lc-tb-text">
-        <span class="lc-tb-word">TURN</span>
+        <div class="lc-tb-word" id="wordBox"><div class="ph">TURN 素材</div></div>
         <span class="lc-tb-num" id="num">3</span>
       </div>
     </div>
@@ -182,81 +172,121 @@ textarea{width:100%;height:210px;background:#15110E;border:1px solid #3A2A1C;bor
     <span class="btn" id="hold">常显（调版面）</span>
     <span class="btn" id="rnd">回合数 +1</span>
   </div>
+
+  <h2>素材</h2>
+  <div class="up"><label>钟</label>
+    <input type="file" accept="image/*" id="f-clock">
+    <input type="text" id="p-clock" value="assets/icons/GUI/turn_clock.webp"></div>
+  <div class="up"><label>红线</label>
+    <input type="file" accept="image/*" id="f-line">
+    <input type="text" id="p-line" value="assets/icons/GUI/turn_line.webp"></div>
+  <div class="up"><label>TURN</label>
+    <input type="file" accept="image/*" id="f-word">
+    <input type="text" id="p-word" value="assets/icons/GUI/turn_word.webp"></div>
+
   <div class="tl" id="timeline"></div>
   <div id="ctrls"></div>
   <textarea id="out" readonly></textarea>
-  <div class="note">钟表是内联 SVG（没有素材依赖）；指针颜色跟着橙红色走。
-    想换成图片素材的话告诉我路径，我把 SVG 换成 &lt;img&gt;。</div>
+  <div class="note">导出的 CSS 里图片路径会自动补上 <code>systems/limbusCompany_FVTT/</code> 前缀。</div>
 </div>
 
 <script>
 const $ = id => document.getElementById(id);
 
 const P = [
-  ["H0","","h",0,"① 黑条"],
-  ["band-h","--band-h","n",150,"高度"],
-  ["band-y","--band-y","n",45,"纵向位置%"],
+  ["H0","","h",0,"黑条"],
+  ["band-h","--band-h","n",121,"高度"],
+  ["band-y","--band-y","n",40,"纵向位置%"],
   ["band-col","--band-col","c","#070605","颜色"],
-  ["band-a","--band-a","n",88,"不透明度%"],
-  ["band-ms","--band-ms","n",90,"展开时长ms"],
-  ["H1","","h",0,"② 钟表"],
-  ["clock-size","--clock-size","n",86,"最终边长"],
+  ["band-a","--band-a","n",83,"不透明度%"],
+  ["H1","","h",0,"钟表素材"],
+  ["clock-w","--clock-w","n",150,"宽度"],
+  ["clock-x","--clock-x","n",0,"水平微调"],
+  ["clock-y","--clock-y","n",0,"垂直微调"],
+  ["clock-a","--clock-a","n",100,"不透明度%"],
   ["clock-from","--clock-from","n",340,"入场放大%"],
-  ["clock-col","--clock-col","c","#E8CAA1","主色"],
-  ["clock-ms","--clock-ms","n",150,"缩放时长ms"],
-  ["H2","","h",0,"③ 摆动"],
   ["swing-deg","--swing-deg","n",15,"逆时针角度"],
-  ["swing-ms","--swing-ms","n",140,"摆动时长ms"],
-  ["H3","","h",0,"④ 双线与文字"],
-  ["line-col","--line-col","c","#DC4110","橙红色"],
-  ["line-w","--line-w","n",3,"线粗"],
-  ["line-len","--line-len","n",70,"线长度%"],
-  ["line-gap","--line-gap","n",54,"两线间距"],
-  ["line-glow","--line-glow","n",60,"线光晕%"],
-  ["text-ms","--text-ms","n",110,"出现时长ms"],
-  ["word-size","--word-size","n",52,"TURN 字号"],
-  ["word-track","--word-track","n",24,"TURN 字距"],
-  ["word-col","--word-col","c","#E8CAA1","TURN 颜色"],
-  ["num-size","--num-size","n",52,"回合数字号"],
-  ["num-gap","--num-gap","n",20,"两者间距"],
-  ["num-glow","--num-glow","n",55,"数字光晕%"],
-  ["H4","","h",0,"收尾"],
-  ["hold-ms","--hold-ms","n",0,"停留ms"],
-  ["out-ms","--out-ms","n",70,"退出ms"],
+  ["H2","","h",0,"红线素材"],
+  ["line-w","--line-w","n",70,"宽度%"],
+  ["line-gap","--line-gap","n",37,"与中线距离"],
+  ["line-x","--line-x","n",0,"水平微调"],
+  ["line-a","--line-a","n",100,"不透明度%"],
+  ["line-flip","--line-flip","n",1,"下条翻转(0/1)"],
+  ["H3","","h",0,"TURN 素材"],
+  ["word-w","--word-w","n",180,"宽度"],
+  ["word-x","--word-x","n",0,"水平微调"],
+  ["word-y","--word-y","n",0,"垂直微调"],
+  ["word-a","--word-a","n",100,"不透明度%"],
+  ["H4","","h",0,"回合数（文字）"],
+  ["num-size","--num-size","n",52,"字号"],
+  ["num-col","--num-col","c","#DC4110","颜色"],
+  ["num-gap","--num-gap","n",20,"与 TURN 间距"],
+  ["num-dx","--num-dx","n",0,"水平微调"],
+  ["num-dy","--num-dy","n",0,"垂直微调"],
+  ["num-glow","--num-glow","n",55,"光晕%"],
+  ["H5","","h",0,"时间轴"],
+  ["t-band","--t-band","n",60,"黑条 ms"],
+  ["t-clock","--t-clock","n",160,"钟缩入 ms"],
+  ["t-swing","--t-swing","n",60,"摆动 ms"],
+  ["t-text","--t-text","n",260,"线+字 ms"],
+  ["hold","--hold","n",0,"停留 ms"],
+  ["t-out","--t-out","n",260,"退出 ms"],
 ];
 const RANGE = {
-  "band-h":[60,300],"band-y":[10,90],"band-a":[0,100],"band-ms":[40,300],
-  "clock-size":[30,200],"clock-from":[100,800],"clock-ms":[60,400],
-  "swing-deg":[0,45],"swing-ms":[60,400],
-  "line-w":[1,10],"line-len":[20,100],"line-gap":[10,140],"line-glow":[0,100],
-  "text-ms":[40,300],"word-size":[16,100],"word-track":[0,60],
-  "num-size":[16,120],"num-gap":[0,60],"num-glow":[0,100],
-  "hold-ms":[0,600],"out-ms":[40,300],
+  "band-h":[60,300],"band-y":[10,90],"band-a":[0,100],
+  "clock-w":[40,400],"clock-x":[-300,300],"clock-y":[-150,150],"clock-a":[0,100],
+  "clock-from":[100,800],"swing-deg":[0,45],
+  "line-w":[20,100],"line-gap":[0,160],"line-x":[-200,200],"line-a":[0,100],"line-flip":[0,1],
+  "word-w":[40,500],"word-x":[-300,300],"word-y":[-150,150],"word-a":[0,100],
+  "num-size":[16,140],"num-gap":[0,120],"num-dx":[-200,200],"num-dy":[-100,100],"num-glow":[0,100],
+  "t-band":[20,400],"t-clock":[40,600],"t-swing":[20,400],"t-text":[40,600],
+  "hold":[0,1500],"t-out":[40,600],
 };
 $("ctrls").innerHTML = P.map(([id,,t,def,zh]) => {
   if (t === "h") return `<h2>${zh}</h2>`;
   if (t === "c") return `<div class="row"><label>${zh}</label>
     <input type="color" id="${id}" value="${def}"><b id="${id}-n"></b></div>`;
   const [mn,mx] = RANGE[id] || [0,100];
-  const step = id.endsWith("-ms") ? 20 : 1;
+  const step = id.startsWith("t-") || id === "hold" ? 10 : 1;
   return `<div class="row"><label>${zh}</label>
     <input type="range" id="${id}" min="${mn}" max="${mx}" step="${step}" value="${def}"><b id="${id}-n"></b></div>`;
 }).join("");
 
+/* ── 素材上传：本地预览 ── */
+const SLOTS = {
+  clock: { file: "f-clock", path: "p-clock", boxes: ["clockBox"] },
+  line:  { file: "f-line",  path: "p-line",  boxes: ["lineTop", "lineBot"] },
+  word:  { file: "f-word",  path: "p-word",  boxes: ["wordBox"] },
+};
+for (const [key, s] of Object.entries(SLOTS)) {
+  $(s.file).addEventListener("change", (ev) => {
+    const f = ev.target.files?.[0];
+    if (!f) return;
+    const url = URL.createObjectURL(f);
+    for (const b of s.boxes) {
+      $(b).innerHTML = `<img src="${url}" alt="">`;
+    }
+    apply();
+  });
+  $(s.path).addEventListener("input", dump);
+}
+
 const V = id => $(id).value, N = id => Number($(id).value);
 function rgba(hex,a){const n=parseInt(hex.replace("#",""),16);
   return `rgba(${(n>>16)&255},${(n>>8)&255},${n&255},${(+a).toFixed(2)})`;}
-
-/* 时间轴：各段的开始时刻 */
+function assetPath(id){
+  let p = V(id).trim().replace(/^\/+/, "");
+  if (!p.startsWith("systems/")) p = `systems/limbusCompany_FVTT/${p}`;
+  return p;
+}
 function times(){
-  const band = N("band-ms"), clock = N("clock-ms"), swing = N("swing-ms"),
-        text = N("text-ms"), hold = N("hold-ms"), out = N("out-ms");
-  const dClock = band;                 // 黑条铺开后钟表才进
-  const dSwing = dClock + clock;       // 缩放到位后摆动
-  const dText  = dSwing + swing * 0.55; // 摆到最远处时线与字开始出现
-  const dOut   = dText + text + hold;
-  return { band, clock, swing, text, hold, out, dClock, dSwing, dText, dOut,
-           total: dOut + out };
+  const band=N("t-band"), clock=N("t-clock"), swing=N("t-swing"),
+        text=N("t-text"), hold=N("hold"), out=N("t-out");
+  const dClock = band, dSwing = dClock + clock,
+        dText  = dSwing + swing * 0.55, dOut = dText + text + hold;
+  return { band, clock, swing, text, hold, out, dClock, dSwing,
+           dText: Math.round(dText), dOut: Math.round(dOut),
+           total: Math.round(dOut + out) };
 }
 function apply(){
   const rs = document.documentElement.style;
@@ -266,21 +296,13 @@ function apply(){
     else { rs.setProperty(v, N(id)); $(id+"-n").textContent = N(id); }
   }
   const T = times();
-  rs.setProperty("--t-band",  `${T.band}ms`);
-  rs.setProperty("--t-clock", `${T.clock}ms`);
-  rs.setProperty("--t-swing", `${T.swing}ms`);
-  rs.setProperty("--t-text",  `${T.text}ms`);
-  rs.setProperty("--t-out",   `${T.out}ms`);
   rs.setProperty("--d-clock", `${T.dClock}ms`);
   rs.setProperty("--d-swing", `${T.dSwing}ms`);
   rs.setProperty("--d-text",  `${T.dText}ms`);
   rs.setProperty("--d-out",   `${T.dOut}ms`);
-  const over = T.total > 500;
   $("timeline").innerHTML =
-    `0ms 黑条 → ${T.dClock}ms 钟表缩入 → ${T.dSwing}ms 摆动 → ` +
-    `${Math.round(T.dText)}ms 线+文字 → ${Math.round(T.dOut)}ms 淡出<br>` +
-    `<span style="color:${over ? "#E2705C" : "#7FB57F"}">总时长 ${Math.round(T.total)}ms` +
-    `${over ? "　⚠ 超过 500ms 预算" : "　✓ 在 500ms 以内"}</span>`;
+    `0ms 黑条 → ${T.dClock}ms 钟缩入 → ${T.dSwing}ms 摆动 → ${T.dText}ms 线+TURN → ${T.dOut}ms 淡出` +
+    `<br><span style="color:${T.total > 900 ? "#E2705C" : "#7FB57F"}">总时长 ${T.total}ms</span>`;
   dump();
 }
 let round = 3, holding = false;
@@ -289,7 +311,7 @@ function play(){
   b.classList.remove("play","show"); void b.offsetWidth;
   b.classList.add("play","show");
   clearTimeout(play._t);
-  play._t = setTimeout(() => b.classList.remove("play","show"), times().total + 60);
+  play._t = setTimeout(() => b.classList.remove("play","show"), times().total + 80);
 }
 $("play").addEventListener("click", () => { holding = false; play(); });
 $("hold").addEventListener("click", () => {
@@ -299,10 +321,14 @@ $("hold").addEventListener("click", () => {
   b.classList.toggle("show", holding);
   b.querySelectorAll(".lc-tb-band,.lc-tb-line,.lc-tb-clock,.lc-tb-text").forEach(el => {
     el.style.opacity = holding ? "1" : "";
-    el.style.transform = holding
-      ? (el.classList.contains("lc-tb-line") ? "translateX(-50%) scaleX(1)"
-        : el.classList.contains("lc-tb-text") ? "translateY(-50%)" : "")
-      : "";
+    if (!holding) { el.style.transform = ""; return; }
+    if (el.classList.contains("lc-tb-line"))
+      el.style.transform = "translateX(-50%) translateX(calc(var(--line-x)*1px)) scaleX(1)";
+    else if (el.classList.contains("lc-tb-clock"))
+      el.style.transform = "translate(-50%,-50%) translate(calc(var(--clock-x)*1px),calc(var(--clock-y)*1px)) scale(1)";
+    else if (el.classList.contains("lc-tb-text"))
+      el.style.transform = "translateY(-50%)";
+    else el.style.transform = "scaleY(1)";
   });
 });
 $("rnd").addEventListener("click", () => { round++; $("num").textContent = round; play(); });
@@ -310,7 +336,7 @@ $("rnd").addEventListener("click", () => { round++; $("num").textContent = round
 function dump(){
   const T = times();
   $("out").value =
-`/* ══ 回合开始横幅（① 黑条 → ② 钟表缩入 → ③ 逆时针摆动 → ④ 双线+TURN+回合数）══ */
+`/* ══ 回合开始横幅（素材版：钟 / 红线×2 / TURN + 回合数）══ */
 .lc-turn-banner {
   position: fixed; left: 0; right: 0; top: ${N("band-y")}%;
   height: ${N("band-h")}px; transform: translateY(-50%);
@@ -327,77 +353,97 @@ function dump(){
     ${rgba(V("band-col"), N("band-a")/100)} 92%, transparent);
   transform: scaleY(0); transform-origin: center;
 }
-/* ② 钟表 */
+/* ② 钟 */
 .lc-turn-banner .lc-tb-clock {
-  position: relative; width: ${N("clock-size")}px; height: ${N("clock-size")}px;
-  opacity: 0; transform-origin: center; z-index: 2;
+  position: absolute; left: 50%; top: 50%; z-index: 2; opacity: 0;
+  width: ${N("clock-w")}px;
+  transform: translate(-50%, -50%) translate(${N("clock-x")}px, ${N("clock-y")}px);
+  transform-origin: center;
+  background: url("${assetPath("p-clock")}") center/contain no-repeat;
+  aspect-ratio: 1 / 1;
+  filter: drop-shadow(0 0 8px rgba(0,0,0,.8));
+  opacity: 0;
 }
-.lc-turn-banner .lc-tb-clock svg { width: 100%; height: 100%; display: block;
-  filter: drop-shadow(0 0 8px rgba(0,0,0,.8)); }
-/* ④ 橙红双线 */
+/* ④ 红线（上下各一条，下面那条${N("line-flip") ? "上下翻转" : "不翻转"}） */
 .lc-turn-banner .lc-tb-line {
-  position: absolute; left: 50%; width: ${N("line-len")}%;
-  height: ${N("line-w")}px; background: ${V("line-col")};
-  box-shadow: 0 0 ${(N("line-glow")/5).toFixed(1)}px ${rgba(V("line-col"), N("line-glow")/100)},
-              0 0 ${(N("line-glow")/2).toFixed(1)}px ${rgba(V("line-col"), N("line-glow")*0.6/100)};
-  transform: translateX(-50%) scaleX(0); transform-origin: center;
+  position: absolute; left: 50%; width: ${N("line-w")}%; z-index: 1;
+  transform: translateX(-50%) translateX(${N("line-x")}px) scaleX(0);
+  transform-origin: center;
+  background: url("${assetPath("p-line")}") center/100% 100% no-repeat;
+  opacity: ${(N("line-a")/100).toFixed(2)};
 }
 .lc-turn-banner .lc-tb-line.top    { top: calc(50% - ${N("line-gap")}px); }
-.lc-turn-banner .lc-tb-line.bottom { top: calc(50% + ${N("line-gap")}px); }
-/* ④ 文字 */
+.lc-turn-banner .lc-tb-line.bottom { top: calc(50% + ${N("line-gap")}px);${N("line-flip") ? " transform: translateX(-50%) translateX(" + N("line-x") + "px) scaleX(0) scaleY(-1);" : ""} }
+/* ④ TURN + 回合数 */
 .lc-turn-banner .lc-tb-text {
-  position: absolute; left: 0; right: 0; top: 50%; transform: translateY(-50%);
-  display: flex; align-items: baseline; justify-content: center; gap: ${N("num-gap")}px;
-  opacity: 0; z-index: 3;
+  position: absolute; left: 0; right: 0; top: 50%; z-index: 3; opacity: 0;
+  transform: translateY(-50%);
+  display: flex; align-items: center; justify-content: center; gap: ${N("num-gap")}px;
 }
 .lc-turn-banner .lc-tb-word {
-  font-size: ${N("word-size")}px; font-weight: bold; color: ${V("word-col")};
-  letter-spacing: ${(N("word-track")/100).toFixed(2)}em;
-  text-indent: ${(N("word-track")/100).toFixed(2)}em;
-  line-height: 1; text-shadow: 0 2px 10px rgba(0,0,0,.9);
+  width: ${N("word-w")}px; flex-shrink: 0;
+  transform: translate(${N("word-x")}px, ${N("word-y")}px);
+}
+.lc-turn-banner .lc-tb-word img {
+  width: 100%; height: auto; display: block;
+  opacity: ${(N("word-a")/100).toFixed(2)};
+  filter: drop-shadow(0 2px 10px rgba(0,0,0,.9));
 }
 .lc-turn-banner .lc-tb-num {
-  font-size: ${N("num-size")}px; font-weight: bold; color: ${V("line-col")};
+  font-size: ${N("num-size")}px; font-weight: bold; color: ${V("num-col")};
   line-height: 1; font-variant-numeric: tabular-nums;
-  text-shadow: 0 0 ${(N("num-glow")/4).toFixed(1)}px ${rgba(V("line-col"), N("num-glow")/100)},
+  transform: translate(${N("num-dx")}px, ${N("num-dy")}px);
+  text-shadow: 0 0 ${(N("num-glow")/4).toFixed(1)}px ${rgba(V("num-col"), N("num-glow")/100)},
                0 2px 10px rgba(0,0,0,.9);
 }
 
 /* ── 播放 ── */
 .lc-turn-banner.play .lc-tb-band {
   animation: lc-tb-band ${T.band}ms cubic-bezier(.2,.9,.3,1) forwards,
-             lc-tb-out ${T.out}ms ease-in ${Math.round(T.dOut)}ms forwards;
+             lc-tb-out ${T.out}ms ease-in ${T.dOut}ms forwards;
 }
 .lc-turn-banner.play .lc-tb-clock {
   animation: lc-tb-clock-in ${T.clock}ms cubic-bezier(.14,.8,.28,1) ${T.dClock}ms both,
              lc-tb-swing ${T.swing}ms cubic-bezier(.36,.07,.19,.97) ${T.dSwing}ms both,
-             lc-tb-out ${T.out}ms ease-in ${Math.round(T.dOut)}ms forwards;
+             lc-tb-out ${T.out}ms ease-in ${T.dOut}ms forwards;
 }
 .lc-turn-banner.play .lc-tb-line {
-  animation: lc-tb-line ${T.text}ms cubic-bezier(.16,.84,.3,1) ${Math.round(T.dText)}ms both,
-             lc-tb-out ${T.out}ms ease-in ${Math.round(T.dOut)}ms forwards;
+  animation: lc-tb-line ${T.text}ms cubic-bezier(.16,.84,.3,1) ${T.dText}ms both,
+             lc-tb-out ${T.out}ms ease-in ${T.dOut}ms forwards;
 }
 .lc-turn-banner.play .lc-tb-text {
-  animation: lc-tb-text ${T.text}ms cubic-bezier(.16,.84,.3,1) ${Math.round(T.dText)}ms both,
-             lc-tb-out ${T.out}ms ease-in ${Math.round(T.dOut)}ms forwards;
+  animation: lc-tb-text ${T.text}ms cubic-bezier(.16,.84,.3,1) ${T.dText}ms both,
+             lc-tb-out ${T.out}ms ease-in ${T.dOut}ms forwards;
 }
 
-@keyframes lc-tb-band     { from { transform: scaleY(0); } to { transform: scaleY(1); } }
-@keyframes lc-tb-clock-in { from { opacity: 0; transform: scale(${(N("clock-from")/100).toFixed(2)}); }
-                            to   { opacity: 1; transform: scale(1); } }
+@keyframes lc-tb-band { from { transform: scaleY(0); } to { transform: scaleY(1); } }
+@keyframes lc-tb-clock-in {
+  from { opacity: 0;
+         transform: translate(-50%,-50%) translate(${N("clock-x")}px, ${N("clock-y")}px) scale(${(N("clock-from")/100).toFixed(2)}); }
+  to   { opacity: ${(N("clock-a")/100).toFixed(2)};
+         transform: translate(-50%,-50%) translate(${N("clock-x")}px, ${N("clock-y")}px) scale(1); }
+}
 @keyframes lc-tb-swing {
-  0%   { transform: rotate(0deg); }
-  35%  { transform: rotate(-${N("swing-deg")}deg); }
-  70%  { transform: rotate(${(N("swing-deg")*0.35).toFixed(1)}deg); }
-  100% { transform: rotate(0deg); }
+  0%   { transform: translate(-50%,-50%) translate(${N("clock-x")}px, ${N("clock-y")}px) rotate(0deg); }
+  35%  { transform: translate(-50%,-50%) translate(${N("clock-x")}px, ${N("clock-y")}px) rotate(-${N("swing-deg")}deg); }
+  70%  { transform: translate(-50%,-50%) translate(${N("clock-x")}px, ${N("clock-y")}px) rotate(${(N("swing-deg")*0.35).toFixed(1)}deg); }
+  100% { transform: translate(-50%,-50%) translate(${N("clock-x")}px, ${N("clock-y")}px) rotate(0deg); }
 }
-@keyframes lc-tb-line { from { transform: translateX(-50%) scaleX(0); }
-                        to   { transform: translateX(-50%) scaleX(1); } }
-@keyframes lc-tb-text { from { opacity: 0; transform: translateY(-50%) scale(.86); }
-                        to   { opacity: 1; transform: translateY(-50%) scale(1); } }
-@keyframes lc-tb-out  { from { opacity: 1; } to { opacity: 0; } }
+@keyframes lc-tb-line {
+  from { transform: translateX(-50%) translateX(${N("line-x")}px) scaleX(0)${N("line-flip") ? "" : ""}; }
+  to   { transform: translateX(-50%) translateX(${N("line-x")}px) scaleX(1); }
+}
+@keyframes lc-tb-text {
+  from { opacity: 0; transform: translateY(-50%) scale(.86); }
+  to   { opacity: 1; transform: translateY(-50%) scale(1); }
+}
+@keyframes lc-tb-out { from { opacity: 1; } to { opacity: 0; } }
 
-/* 总时长（JS 里移除元素用）：${Math.round(T.total)} ms */`;
+/* 素材路径：
+   钟   ${assetPath("p-clock")}
+   红线 ${assetPath("p-line")}
+   TURN ${assetPath("p-word")}
+   总时长（JS 里移除元素用）：${T.total} ms */`;
 }
 
 for (const [id,,t] of P){ if (t !== "h") $(id).addEventListener("input", apply); }
