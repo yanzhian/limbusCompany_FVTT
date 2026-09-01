@@ -46,6 +46,15 @@
         <div class="qa-panel-divider"></div>
       </div>
 
+      {{!-- 下个回合：放在【消耗品】上面，玩家点它结束自己的回合。
+            遭遇战进行中且轮到本角色时可点；GM 全程可点 --}}
+      {{#if showNextTurn}}
+        <button class="qa-next-turn-btn qa-btn {{#unless isMyTurn}}qa-next-turn-btn--gm{{/unless}}"
+                title="{{#if isMyTurn}}结束本回合，轮到下一位{{else}}（GM）推进到下一回合{{/if}}">
+          下个回合
+        </button>
+      {{/if}}
+
       {{!-- 左侧按钮 --}}
       <button class="qa-btn" data-panel="consumable">消耗品</button>
       <button class="qa-btn" data-panel="equipment">装备</button>
@@ -154,14 +163,6 @@
                    width="28" height="28" alt="AP" draggable="false">
             </div>
           {{/each}}
-
-          {{!-- 下一回合：遭遇战进行中且轮到本角色时显示；GM 全程可见 --}}
-          {{#if showNextTurn}}
-            <button class="qa-next-turn-btn {{#unless isMyTurn}}qa-next-turn-btn--gm{{/unless}}"
-                    title="{{#if isMyTurn}}结束本回合，轮到下一位{{else}}（GM）推进到下一回合{{/if}}">
-              下个回合
-            </button>
-          {{/if}}
         </div>
 
       </div>

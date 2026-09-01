@@ -9797,3 +9797,13 @@ input.item-piles-quantity {
   display: flex; flex-wrap: wrap; gap: 6px; padding: 6px 2px 2px;
 }
 .limbuscompany .gmc-folder-collapsed .gmc-folder-body { display: none; }
+
+/* 【下个回合】移到左侧按钮组（消耗品上方）：按 .qa-btn 的规格排版，
+   但保留原来的金底高亮，让它在一列按钮里依然是最显眼的那个 */
+.qa-btn-group--left .qa-next-turn-btn {
+  margin-left: 0;
+  width: 100%;
+  padding: 6px 12px;
+  font-size: 14px;
+  border-radius: 4px;
+}
