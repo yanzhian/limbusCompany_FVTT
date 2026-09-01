@@ -9845,8 +9845,8 @@ input.item-piles-quantity {
 .limbus-title-card { width: 280px; height: 500px; max-height: 500px; }
 
 .limbus-title-card-equip .tce-header {
-  font-size: 32px;
-  padding: 10px 12px 8px;
+  font-size: 20px;
+  padding: 15px 12px;
   display: flex; align-items: baseline; gap: 8px;
 }
 /* 可堆叠物品：数量 ×N 挂在标题条右端 */
@@ -9888,7 +9888,8 @@ input.item-piles-quantity {
   font-size: 14px;
   padding: 6px 14px 8px;
 }
-/* 页脚：装备＝星芒 + 眼；其余只有眼。中间的弹性空位把眼推到最右 */
-.limbus-title-card-equip .tce-footer .tce-foot-sep { flex: 1; }
+/* 页脚：装备＝星芒 + 眼，两者一起靠右、间隔 15px；其余只有眼 */
+.limbus-title-card-equip .tce-footer { justify-content: flex-end; gap: 4px; }
+.limbus-title-card-equip .tce-footer .tce-foot-sep { width: 15px; flex: 0 0 15px; }
 .limbus-title-card-equip .tc-eye-icon { width: 18px; height: 18px; object-fit: contain; }
 .limbus-title-card-equip .tc-eye-cost { color: var(--gold-active); font-variant-numeric: tabular-nums; }
