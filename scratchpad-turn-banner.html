@@ -1,0 +1,290 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>回合开始横幅·调参</title>
+<style>
+:root{
+  --font-main:"Noto Sans SC","Microsoft YaHei",sans-serif;
+
+  /* ── 版面 ── */
+  --band-h:120;        /* 横幅带高度 px */
+  --band-y:42;         /* 纵向位置：距屏幕顶部的百分比 */
+  --band-skew:0;       /* 整条斜切角度 deg */
+  --band-a:78;         /* 底带不透明度 % */
+  --band-col:#0B0908;  /* 底带颜色 */
+  --line-col:#DC4110;  /* 上下描边颜色 */
+  --line-w:2;          /* 上下描边粗细 px */
+
+  /* ── 文字 ── */
+  --word-size:64;      /* TURN 字号 px */
+  --word-track:22;     /* TURN 字距 ÷100 em */
+  --word-col:#E8CAA1;  /* TURN 颜色 */
+  --num-size:88;       /* 回合数字号 px */
+  --num-col:#DC4110;   /* 回合数颜色 */
+  --num-gap:18;        /* TURN 与数字的间距 px */
+  --num-dy:0;          /* 数字垂直微调 px */
+  --glow:40;           /* 数字外发光强度 % */
+
+  /* ── 动画 ── */
+  --in-ms:420;         /* 进入时长 ms */
+  --hold-ms:900;       /* 停留时长 ms */
+  --out-ms:380;        /* 退出时长 ms */
+  --slide:220;         /* 横向滑动距离 px */
+  --sweep-a:22;        /* 扫光强度 % */
+}
+body{margin:0;background:#141110;color:#E8CAA2;font-family:var(--font-main);
+  display:flex;gap:18px;align-items:flex-start;padding:16px;flex-wrap:wrap;}
+h1{font-size:16px;margin:0 0 3px;letter-spacing:.06em;}
+p.sub{margin:0 0 10px;font-size:12px;color:#6E5540;max-width:560px;line-height:1.7;}
+h2{font-size:11.5px;color:#E7B956;margin:8px 0 1px;letter-spacing:.1em;font-weight:normal;}
+
+/* ══ 舞台：模拟 Foundry 画布 ══ */
+.stage{position:relative;width:640px;height:400px;overflow:hidden;border-radius:5px;
+  border:1px solid #2b2119;
+  background:
+    repeating-linear-gradient(0deg,#1b1714 0 39px,#221c18 39px 40px),
+    repeating-linear-gradient(90deg,#1b1714 0 39px,#221c18 39px 40px);}
+.stage .fake-token{position:absolute;width:44px;height:44px;border-radius:50%;
+  background:#3B2412;border:2px solid #5F3E22;}
+
+/* ══ 横幅 ══ */
+.lc-turn-banner{
+  position:absolute;left:0;right:0;top:calc(var(--band-y)*1%);
+  height:calc(var(--band-h)*1px);transform:translateY(-50%) skewY(calc(var(--band-skew)*1deg));
+  display:flex;align-items:center;justify-content:center;gap:calc(var(--num-gap)*1px);
+  background:linear-gradient(90deg,transparent,
+    color-mix(in srgb,var(--band-col) calc(var(--band-a)*1%),transparent) 12%,
+    color-mix(in srgb,var(--band-col) calc(var(--band-a)*1%),transparent) 88%,transparent);
+  border-top:calc(var(--line-w)*1px) solid var(--line-col);
+  border-bottom:calc(var(--line-w)*1px) solid var(--line-col);
+  pointer-events:none;overflow:hidden;
+}
+.lc-turn-banner .lc-tb-inner{display:flex;align-items:baseline;
+  gap:calc(var(--num-gap)*1px);transform:skewY(calc(var(--band-skew)*-1deg));}
+.lc-tb-word{font-size:calc(var(--word-size)*1px);font-weight:bold;color:var(--word-col);
+  letter-spacing:calc(var(--word-track)/100*1em);text-indent:calc(var(--word-track)/100*1em);
+  line-height:1;}
+.lc-tb-num{font-size:calc(var(--num-size)*1px);font-weight:bold;color:var(--num-col);
+  line-height:1;font-variant-numeric:tabular-nums;
+  transform:translateY(calc(var(--num-dy)*1px));
+  text-shadow:0 0 calc(var(--glow)/4*1px) color-mix(in srgb,var(--num-col) calc(var(--glow)*1%),transparent);}
+/* 扫光 */
+.lc-turn-banner::after{content:"";position:absolute;inset:0;pointer-events:none;
+  background:linear-gradient(105deg,transparent 35%,
+    rgba(255,255,255,calc(var(--sweep-a)/100)) 50%,transparent 65%);
+  transform:translateX(-120%);}
+
+/* 动画：整条淡入 + 文字反向对冲滑入 → 停留 → 淡出 */
+.lc-turn-banner.play{animation:tb-band calc((var(--in-ms) + var(--hold-ms) + var(--out-ms))*1ms) linear forwards;}
+.lc-turn-banner.play .lc-tb-word{animation:tb-word calc(var(--in-ms)*1ms) cubic-bezier(.16,.84,.3,1) both;}
+.lc-turn-banner.play .lc-tb-num {animation:tb-num  calc(var(--in-ms)*1ms) cubic-bezier(.16,.84,.3,1) both;}
+.lc-turn-banner.play::after{
+  animation:tb-sweep calc((var(--in-ms) + var(--hold-ms))*1ms) ease-out both;}
+
+@keyframes tb-band{
+  0%{opacity:0;transform:translateY(-50%) skewY(calc(var(--band-skew)*1deg)) scaleY(.2);}
+  12%{opacity:1;transform:translateY(-50%) skewY(calc(var(--band-skew)*1deg)) scaleY(1);}
+  82%{opacity:1;transform:translateY(-50%) skewY(calc(var(--band-skew)*1deg)) scaleY(1);}
+  100%{opacity:0;transform:translateY(-50%) skewY(calc(var(--band-skew)*1deg)) scaleY(.86);}
+}
+@keyframes tb-word{
+  from{opacity:0;transform:translateX(calc(var(--slide)*-1px));}
+  to  {opacity:1;transform:translateX(0);}
+}
+@keyframes tb-num{
+  from{opacity:0;transform:translateX(calc(var(--slide)*1px)) translateY(calc(var(--num-dy)*1px));}
+  to  {opacity:1;transform:translateX(0) translateY(calc(var(--num-dy)*1px));}
+}
+@keyframes tb-sweep{
+  0%{transform:translateX(-120%);} 55%{transform:translateX(120%);} 100%{transform:translateX(120%);}
+}
+
+/* ══ 面板 ══ */
+.panel{border:1px solid #2b2119;border-radius:4px;padding:12px 14px;width:400px;
+  display:flex;flex-direction:column;gap:5px;max-height:94vh;overflow:auto;}
+.btnrow{display:flex;gap:6px;margin-bottom:4px;flex-wrap:wrap;}
+.btn{font-size:12px;padding:4px 12px;border-radius:3px;cursor:pointer;
+  border:1px solid #3A2A1C;background:#15110E;color:#9B6839;}
+.btn:hover{color:#E7B956;border-color:#E7B956;}
+.btn.primary{background:#E7B956;border-color:#E7B956;color:#15110E;font-weight:bold;}
+.row{display:flex;align-items:center;gap:8px;font-size:12px;}
+.row label{width:108px;color:#9B6839;}
+.row input[type=range]{flex:1;min-width:80px;}
+.row input[type=color]{width:38px;height:22px;padding:0;border:1px solid #3A2A1C;background:none;}
+.row b{width:46px;text-align:right;color:#E7B956;font:11.5px monospace;}
+textarea{width:100%;height:210px;background:#15110E;border:1px solid #3A2A1C;border-radius:3px;
+  color:#E8CAA2;font:11px/1.5 monospace;padding:7px;resize:vertical;margin-top:6px;}
+.note{font-size:11.5px;color:#6E5540;line-height:1.7;}
+</style>
+
+<div>
+  <h1>回合开始横幅·调参</h1>
+  <p class="sub">点【播放】看一次完整动画。回合数默认取 <code>game.combat.round</code>，
+    颜色 <code>#DC4110</code>。调好把导出的 CSS 贴到
+    <code>styles/limbusCompany_FVTT.css</code> 末尾，我再写触发逻辑。</p>
+  <div class="stage" id="stage">
+    <div class="fake-token" style="left:120px;top:250px"></div>
+    <div class="fake-token" style="left:420px;top:120px"></div>
+    <div class="lc-turn-banner" id="banner">
+      <div class="lc-tb-inner">
+        <span class="lc-tb-word">TURN</span>
+        <span class="lc-tb-num" id="num">3</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="panel">
+  <div class="btnrow">
+    <span class="btn primary" id="play">▶ 播放</span>
+    <span class="btn" id="hold">常显（方便调版面）</span>
+    <span class="btn" id="rnd">回合数 +1</span>
+  </div>
+  <div id="ctrls"></div>
+  <textarea id="out" readonly></textarea>
+  <div class="note">「常显」下动画停在最终状态，方便调位置和字号；调完记得再播一次看节奏。</div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+
+const P = [
+  ["H0","","h",0,"版面"],
+  ["band-h","--band-h","n",120,"横幅高度"],
+  ["band-y","--band-y","n",42,"纵向位置%"],
+  ["band-skew","--band-skew","n",0,"斜切角度"],
+  ["band-a","--band-a","n",78,"底带浓度%"],
+  ["band-col","--band-col","c","#0B0908","底带颜色"],
+  ["line-col","--line-col","c","#DC4110","上下描边色"],
+  ["line-w","--line-w","n",2,"描边粗细"],
+  ["H1","","h",0,"文字"],
+  ["word-size","--word-size","n",64,"TURN 字号"],
+  ["word-track","--word-track","n",22,"TURN 字距"],
+  ["word-col","--word-col","c","#E8CAA1","TURN 颜色"],
+  ["num-size","--num-size","n",88,"回合数字号"],
+  ["num-col","--num-col","c","#DC4110","回合数颜色"],
+  ["num-gap","--num-gap","n",18,"两者间距"],
+  ["num-dy","--num-dy","n",0,"数字垂直微调"],
+  ["glow","--glow","n",40,"数字发光%"],
+  ["H2","","h",0,"动画"],
+  ["in-ms","--in-ms","n",420,"进入 ms"],
+  ["hold-ms","--hold-ms","n",900,"停留 ms"],
+  ["out-ms","--out-ms","n",380,"退出 ms"],
+  ["slide","--slide","n",220,"滑入距离"],
+  ["sweep-a","--sweep-a","n",22,"扫光强度%"],
+];
+const RANGE = {
+  "band-h":[40,240],"band-y":[10,90],"band-skew":[-12,12],"band-a":[0,100],"line-w":[0,8],
+  "word-size":[20,120],"word-track":[0,60],"num-size":[20,160],"num-gap":[0,60],
+  "num-dy":[-40,40],"glow":[0,100],
+  "in-ms":[100,1200],"hold-ms":[0,3000],"out-ms":[100,1200],"slide":[0,600],"sweep-a":[0,60],
+};
+$("ctrls").innerHTML = P.map(([id,,t,def,zh]) => {
+  if (t === "h") return `<h2>${zh}</h2>`;
+  if (t === "c") return `<div class="row"><label>${zh}</label>
+    <input type="color" id="${id}" value="${def}"><b id="${id}-n"></b></div>`;
+  const [mn,mx] = RANGE[id] || [0,100];
+  const step = id.endsWith("-ms") ? 20 : 1;
+  return `<div class="row"><label>${zh}</label>
+    <input type="range" id="${id}" min="${mn}" max="${mx}" step="${step}" value="${def}"><b id="${id}-n"></b></div>`;
+}).join("");
+
+const V = id => $(id).value, N = id => Number($(id).value);
+function rgba(hex, a){ const n = parseInt(hex.replace("#",""),16);
+  return `rgba(${(n>>16)&255},${(n>>8)&255},${n&255},${(+a).toFixed(2)})`; }
+
+let round = 3, holding = false;
+function apply(){
+  const rs = document.documentElement.style;
+  for (const [id,v,t] of P){
+    if (t === "h") continue;
+    if (t === "c"){ rs.setProperty(v, V(id)); $(id+"-n").textContent = V(id); }
+    else { rs.setProperty(v, N(id)); $(id+"-n").textContent = N(id); }
+  }
+  dump();
+}
+function play(){
+  const b = $("banner");
+  b.classList.remove("play");
+  void b.offsetWidth;                 // 强制重排，重启动画
+  b.style.opacity = "";
+  b.classList.add("play");
+}
+$("play").addEventListener("click", () => { holding = false; $("banner").style.animationPlayState=""; play(); });
+$("hold").addEventListener("click", () => {
+  holding = !holding;
+  const b = $("banner");
+  b.classList.remove("play");
+  b.style.opacity = holding ? "1" : "0";
+  b.querySelectorAll(".lc-tb-word,.lc-tb-num").forEach(el => el.style.opacity = holding ? "1" : "");
+});
+$("rnd").addEventListener("click", () => { round++; $("num").textContent = round; play(); });
+$("banner").style.opacity = "0";
+
+function dump(){
+  $("out").value =
+`/* ══ 回合开始横幅 ══ */
+.lc-turn-banner {
+  position: fixed; left: 0; right: 0; top: ${N("band-y")}%;
+  height: ${N("band-h")}px;
+  transform: translateY(-50%) skewY(${N("band-skew")}deg);
+  display: flex; align-items: center; justify-content: center;
+  background: linear-gradient(90deg, transparent,
+    ${rgba(V("band-col"), N("band-a")/100)} 12%,
+    ${rgba(V("band-col"), N("band-a")/100)} 88%, transparent);
+  border-top: ${N("line-w")}px solid ${V("line-col")};
+  border-bottom: ${N("line-w")}px solid ${V("line-col")};
+  pointer-events: none; overflow: hidden; z-index: 100;
+  opacity: 0;
+}
+.lc-turn-banner .lc-tb-inner {
+  display: flex; align-items: baseline; gap: ${N("num-gap")}px;
+  transform: skewY(${-N("band-skew")}deg);
+}
+.lc-turn-banner .lc-tb-word {
+  font-size: ${N("word-size")}px; font-weight: bold; color: ${V("word-col")};
+  letter-spacing: ${(N("word-track")/100).toFixed(2)}em;
+  text-indent: ${(N("word-track")/100).toFixed(2)}em; line-height: 1;
+}
+.lc-turn-banner .lc-tb-num {
+  font-size: ${N("num-size")}px; font-weight: bold; color: ${V("num-col")};
+  line-height: 1; font-variant-numeric: tabular-nums;
+  transform: translateY(${N("num-dy")}px);
+  text-shadow: 0 0 ${(N("glow")/4).toFixed(1)}px ${rgba(V("num-col"), N("glow")/100)};
+}
+.lc-turn-banner::after {
+  content: ""; position: absolute; inset: 0; pointer-events: none;
+  background: linear-gradient(105deg, transparent 35%,
+    rgba(255,255,255,${(N("sweep-a")/100).toFixed(2)}) 50%, transparent 65%);
+  transform: translateX(-120%);
+}
+
+/* 播放：整条展开 → 文字左右对冲滑入 → 停留 → 收起 */
+.lc-turn-banner.play      { animation: lc-tb-band ${N("in-ms")+N("hold-ms")+N("out-ms")}ms linear forwards; }
+.lc-turn-banner.play .lc-tb-word { animation: lc-tb-word ${N("in-ms")}ms cubic-bezier(.16,.84,.3,1) both; }
+.lc-turn-banner.play .lc-tb-num  { animation: lc-tb-num  ${N("in-ms")}ms cubic-bezier(.16,.84,.3,1) both; }
+.lc-turn-banner.play::after      { animation: lc-tb-sweep ${N("in-ms")+N("hold-ms")}ms ease-out both; }
+
+@keyframes lc-tb-band {
+  0%   { opacity: 0; transform: translateY(-50%) skewY(${N("band-skew")}deg) scaleY(.2); }
+  12%  { opacity: 1; transform: translateY(-50%) skewY(${N("band-skew")}deg) scaleY(1); }
+  82%  { opacity: 1; transform: translateY(-50%) skewY(${N("band-skew")}deg) scaleY(1); }
+  100% { opacity: 0; transform: translateY(-50%) skewY(${N("band-skew")}deg) scaleY(.86); }
+}
+@keyframes lc-tb-word {
+  from { opacity: 0; transform: translateX(-${N("slide")}px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+@keyframes lc-tb-num {
+  from { opacity: 0; transform: translateX(${N("slide")}px) translateY(${N("num-dy")}px); }
+  to   { opacity: 1; transform: translateX(0) translateY(${N("num-dy")}px); }
+}
+@keyframes lc-tb-sweep {
+  0% { transform: translateX(-120%); } 55%, 100% { transform: translateX(120%); }
+}
+
+/* 总时长（JS 里移除元素用）：${N("in-ms")+N("hold-ms")+N("out-ms")} ms */`;
+}
+
+for (const [id,,t] of P){ if (t !== "h") $(id).addEventListener("input", apply); }
+apply();
+</script>
