@@ -68,10 +68,12 @@ export class CharacterData extends foundry.abstract.TypeDataModel {
         max: new fields.NumberField({ required: true, integer: true, min: 0, initial: 7 }),
       }),
 
-      // ── 行动点（上限固定 3） ───────────────────────────────────────────
+      // ── 行动币（AP，无上限）─────────────────────────────────────────────
+      // value 无上限：技能 / 装备 / 消耗品都能把它顶到 3 以上。
+      // max 只是「回合开始补到几枚」的默认值，不是硬上限。
       ap: new fields.SchemaField({
-        value: new fields.NumberField({ required: true, integer: true, min: 0, max: 3, initial: 3 }),
-        max:   new fields.NumberField({ required: true, integer: true, min: 1, max: 3, initial: 3 }),
+        value: new fields.NumberField({ required: true, integer: true, min: 0, initial: 3 }),
+        max:   new fields.NumberField({ required: true, integer: true, min: 1, initial: 3 }),
       }),
 
       // ── 等级 & 经验 ───────────────────────────────────────────────────
@@ -269,7 +271,7 @@ export class CharacterData extends foundry.abstract.TypeDataModel {
     const xpTable = CONFIG.LIMBUSCOMPANY?.LEVEL_XP ?? [];
     this.xp.next = xpTable[level] ?? (xpTable[xpTable.length - 1] ?? 0);
 
-    // 行动值不再有上限：ap.max 只作为"回合开始时恢复到的默认值"
+    // 行动币无上限；ap.max 只是"回合开始时补到几枚"的默认值，不是硬上限
     this.ap.max = 3;
   }
 

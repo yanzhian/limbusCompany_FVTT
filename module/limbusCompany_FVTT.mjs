@@ -843,6 +843,7 @@ Hooks.on("updateCombat", async (combat, changed) => {
     // 一轮结束进入下一轮：行动值恢复到默认值（已高于默认值的不动，也不封顶）
     // （第 0→1 轮由 combatStart 钩子已处理，跳过）
     else if ((changed.round ?? 0) > 1) {
+      // 补满：不足 3 枚的补到 3；已经 3 枚以上的不动，也不封顶
       const apDefault = actor.system.ap?.max ?? 3;
       if ((actor.system.ap?.value ?? 0) < apDefault) {
         await actor.update({ "system.ap.value": apDefault });
