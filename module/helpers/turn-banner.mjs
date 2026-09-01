@@ -2,8 +2,8 @@
  * turn-banner.mjs —— 回合开始横幅
  *
  * 演出顺序（总时长见 CSS 末尾注释）：
- *   ① 黑条纵向展开 → ② 钟表从大缩到正常、定在中心 → ③ 逆时针摆一下回正
- *   → ④ 橙红双线向两侧拉开，TURN 与回合数浮现 → 整体淡出
+ *   ① 黑条纵向展开 → ② 钟淡入、由大缩到正常并定住 → ③ 红线与 TURN、回合数出现
+ *   → ④ 钟逆时针摆一下回正 → 整体淡出
  *
  * 纯 DOM + CSS 动画，挂在 body 上；播完自动移除。每个客户端各自播放
  * （由 updateCombat 钩子在各端触发），不走 socket。
@@ -15,7 +15,7 @@ const LINE_IMG = "systems/limbusCompany_FVTT/assets/icons/GUI/turn_line.webp";
 const WORD_IMG = "systems/limbusCompany_FVTT/assets/icons/GUI/turn_word.webp";
 
 /** 与 CSS 里最后那条注释保持一致：整段动画跑完需要多久（ms） */
-const TOTAL_MS = 800;
+const TOTAL_MS = 1280;
 
 let _timer = null;
 

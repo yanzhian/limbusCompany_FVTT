@@ -9996,8 +9996,8 @@ input.item-piles-quantity {
    顺序：黑条 → 钟淡入并由大缩到正常 → 红线与 TURN+回合数出现 → 钟逆时针摆一下 → 淡出
    素材：assets/icons/GUI/turn_clock.webp / turn_line.webp / turn_word.webp */
 .lc-turn-banner {
-  position: fixed; left: 0; right: 0; top: 42%;
-  height: 99px; transform: translateY(-50%);
+  position: fixed; left: 0; right: 0; top: 46%;
+  height: 121px; transform: translateY(-50%);
   display: flex; align-items: center; justify-content: center;
   pointer-events: none; z-index: 100; opacity: 0;
 }
@@ -10011,10 +10011,10 @@ input.item-piles-quantity {
     rgba(7,6,5,0.83) 92%, transparent);
   transform: scaleY(0); transform-origin: center;
 }
-/* ② 钟（背景图，层级只压在黑条上面） */
+/* ② 钟（背景图；层级只压在黑条上面） */
 .lc-turn-banner .lc-tb-clock {
   position: absolute; left: 50%; top: 50%; z-index: 1; opacity: 0;
-  width: 233px;
+  width: 280px;
   transform: translate(-50%, -50%) translate(0px, 0px);
   transform-origin: center;
   background: url("systems/limbusCompany_FVTT/assets/icons/GUI/turn_clock.webp") center/contain no-repeat;
@@ -10023,8 +10023,8 @@ input.item-piles-quantity {
 }
 /* ③ 红线（上下两条在同一张图里，整张缩放定位） */
 .lc-turn-banner .lc-tb-line {
-  position: absolute; left: 50%; top: 50%; width: 49%; z-index: 2;
-  transform: translate(-50%, -50%) translate(1px, 5px) scaleX(0);
+  position: absolute; left: 50%; top: 50%; width: 58%; z-index: 2;
+  transform: translate(-50%, -50%) translate(0px, 4px) scaleX(0);
   transform-origin: center;
   opacity: 1.00;
 }
@@ -10033,11 +10033,11 @@ input.item-piles-quantity {
 .lc-turn-banner .lc-tb-text {
   position: absolute; left: 0; right: 0; top: 50%; z-index: 3; opacity: 0;
   transform: translateY(-50%);
-  display: flex; align-items: center; justify-content: center; gap: 20px;
+  display: flex; align-items: center; justify-content: center; gap: 25px;
 }
 .lc-turn-banner .lc-tb-word {
-  width: 180px; flex-shrink: 0;
-  transform: translate(10px, 0px);
+  width: 215px; flex-shrink: 0;
+  transform: translate(21px, -4px);
 }
 .lc-turn-banner .lc-tb-word img {
   width: 100%; height: auto; display: block;
@@ -10045,39 +10045,39 @@ input.item-piles-quantity {
   filter: drop-shadow(0 2px 10px rgba(0,0,0,.9));
 }
 .lc-turn-banner .lc-tb-num {
-  font-size: 52px; font-weight: bold; color: #dc4110;
+  font-size: 69px; font-weight: bold; color: #dc4110;
   line-height: 1; font-variant-numeric: tabular-nums;
-  transform: translate(-8px, -3px);
+  transform: translate(-12px, -5px);
   text-shadow: 0 0 13.8px rgba(220,65,16,0.55),
                0 2px 10px rgba(0,0,0,.9);
 }
 
-/* ── 播放：黑条 0ms → 钟淡入 60ms → 红线与文字 220ms → 钟摆动 480ms → 淡出 540ms ──
-   摆动那条必须是 forwards 不能是 both：both 会在延迟期间就把 0% 关键帧
-   （只有 rotate、没有 scale）填上，而它排在后面会盖掉钟的缩放入场，
+/* ── 播放：黑条 0ms → 钟淡入 60ms → 红线与文字 220ms → 钟摆动 480ms → 淡出 780ms ──
+   摆动那条必须是 forwards 不能是 both：both 会在它的延迟期间就把 0% 关键帧
+   （只有 rotate、没有 scale）填上去，而它排在后面，会盖掉钟的缩放入场，
    表现就是"钟直接以正常大小出现，看不到由大变小" */
 .lc-turn-banner.play .lc-tb-band {
   animation: lc-tb-band 60ms cubic-bezier(.2,.9,.3,1) forwards,
-             lc-tb-out 260ms ease-in 540ms forwards;
+             lc-tb-out 500ms ease-in 780ms forwards;
 }
 .lc-turn-banner.play .lc-tb-clock {
   animation: lc-tb-clock-in 160ms cubic-bezier(.14,.8,.28,1) 60ms both,
-             lc-tb-swing 60ms cubic-bezier(.36,.07,.19,.97) 480ms forwards,
-             lc-tb-out 260ms ease-in 540ms forwards;
+             lc-tb-swing 100ms cubic-bezier(.36,.07,.19,.97) 480ms forwards,
+             lc-tb-out 500ms ease-in 780ms forwards;
 }
 .lc-turn-banner.play .lc-tb-line {
   animation: lc-tb-line 260ms cubic-bezier(.16,.84,.3,1) 220ms both,
-             lc-tb-out 260ms ease-in 540ms forwards;
+             lc-tb-out 500ms ease-in 780ms forwards;
 }
 .lc-turn-banner.play .lc-tb-text {
   animation: lc-tb-text 260ms cubic-bezier(.16,.84,.3,1) 220ms both,
-             lc-tb-out 260ms ease-in 540ms forwards;
+             lc-tb-out 500ms ease-in 780ms forwards;
 }
 
 @keyframes lc-tb-band { from { transform: scaleY(0); } to { transform: scaleY(1); } }
 @keyframes lc-tb-clock-in {
   from { opacity: 0;
-         transform: translate(-50%,-50%) translate(0px, 0px) scale(4.29); }
+         transform: translate(-50%,-50%) translate(0px, 0px) scale(3.40); }
   to   { opacity: 1.00;
          transform: translate(-50%,-50%) translate(0px, 0px) scale(1); }
 }
@@ -10088,8 +10088,8 @@ input.item-piles-quantity {
   100% { transform: translate(-50%,-50%) translate(0px, 0px) rotate(0deg); }
 }
 @keyframes lc-tb-line {
-  from { transform: translate(-50%,-50%) translate(1px, 5px) scaleX(0); }
-  to   { transform: translate(-50%,-50%) translate(1px, 5px) scaleX(1); }
+  from { transform: translate(-50%,-50%) translate(0px, 4px) scaleX(0); }
+  to   { transform: translate(-50%,-50%) translate(0px, 4px) scaleX(1); }
 }
 @keyframes lc-tb-text {
   from { opacity: 0; transform: translateY(-50%) scale(.86); }
@@ -10097,4 +10097,4 @@ input.item-piles-quantity {
 }
 @keyframes lc-tb-out { from { opacity: 1; } to { opacity: 0; } }
 
-/* 总时长（turn-banner.mjs 的 TOTAL_MS 要跟它一致）：800 ms */
+/* 总时长（turn-banner.mjs 的 TOTAL_MS 要跟它一致）：1280 ms */
