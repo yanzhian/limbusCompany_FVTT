@@ -25,7 +25,7 @@
 
   /* ── 时间轴 ── */
   --t-band:60; --t-clock:160; --t-swing:60; --t-text:260;
-  --swing-deg:15; --hold:0; --t-out:260;
+  --swing-deg:15; --t-hold:0; --t-out:260;
 }
 body{margin:0;background:#141110;color:#E8CAA2;font-family:var(--font-main);
   display:flex;gap:18px;align-items:flex-start;padding:16px;flex-wrap:wrap;}
@@ -54,14 +54,14 @@ h2{font-size:11.5px;color:#E7B956;margin:9px 0 1px;letter-spacing:.1em;font-weig
     color-mix(in srgb,var(--band-col) calc(var(--band-a)*1%),transparent) 92%,transparent);
   transform:scaleY(0);transform-origin:center;}
 
-.lc-tb-clock{position:absolute;left:50%;top:50%;z-index:2;opacity:0;
+.lc-tb-clock{position:absolute;left:50%;top:50%;z-index:1;opacity:0;
   width:calc(var(--clock-w)*1px);
   transform:translate(-50%,-50%) translate(calc(var(--clock-x)*1px),calc(var(--clock-y)*1px));
   transform-origin:center;}
 .lc-tb-clock img{width:100%;height:auto;display:block;opacity:calc(var(--clock-a)/100);
   filter:drop-shadow(0 0 8px rgba(0,0,0,.8));}
 
-.lc-tb-line{position:absolute;left:50%;top:50%;width:calc(var(--line-w)*1%);z-index:1;
+.lc-tb-line{position:absolute;left:50%;top:50%;width:calc(var(--line-w)*1%);z-index:2;
   transform:translate(-50%,-50%) translate(calc(var(--line-x)*1px),calc(var(--line-y)*1px)) scaleX(0);
   transform-origin:center;}
 .lc-tb-line img{width:100%;height:auto;display:block;opacity:calc(var(--line-a)/100);}
@@ -223,7 +223,7 @@ const P = [
   ["t-clock","--t-clock","n",160,"钟缩入 ms"],
   ["t-swing","--t-swing","n",60,"摆动 ms"],
   ["t-text","--t-text","n",260,"线+字 ms"],
-  ["hold","--hold","n",0,"停留 ms"],
+  ["t-hold","--t-hold","n",0,"停留 ms"],
   ["t-out","--t-out","n",260,"退出 ms"],
 ];
 const RANGE = {
@@ -234,14 +234,14 @@ const RANGE = {
   "word-w":[40,500],"word-x":[-300,300],"word-y":[-150,150],"word-a":[0,100],
   "num-size":[16,140],"num-gap":[0,120],"num-dx":[-200,200],"num-dy":[-100,100],"num-glow":[0,100],
   "t-band":[20,400],"t-clock":[40,600],"t-swing":[20,400],"t-text":[40,600],
-  "hold":[0,1500],"t-out":[40,600],
+  "t-hold":[0,1500],"t-out":[40,600],
 };
 $("ctrls").innerHTML = P.map(([id,,t,def,zh]) => {
   if (t === "h") return `<h2>${zh}</h2>`;
   if (t === "c") return `<div class="row"><label>${zh}</label>
     <input type="color" id="${id}" value="${def}"><b id="${id}-n"></b></div>`;
   const [mn,mx] = RANGE[id] || [0,100];
-  const step = id.startsWith("t-") || id === "hold" ? 10 : 1;
+  const step = id.startsWith("t-") ? 10 : 1;
   return `<div class="row"><label>${zh}</label>
     <input type="range" id="${id}" min="${mn}" max="${mx}" step="${step}" value="${def}"><b id="${id}-n"></b></div>`;
 }).join("");
@@ -275,7 +275,7 @@ function assetPath(id){
 }
 function times(){
   const band=N("t-band"), clock=N("t-clock"), swing=N("t-swing"),
-        text=N("t-text"), hold=N("hold"), out=N("t-out");
+        text=N("t-text"), hold=N("t-hold"), out=N("t-out");
   const dClock = band, dSwing = dClock + clock,
         dText  = dSwing + swing * 0.55, dOut = dText + text + hold;
   return { band, clock, swing, text, hold, out, dClock, dSwing,
@@ -349,7 +349,7 @@ function dump(){
 }
 /* ② 钟 */
 .lc-turn-banner .lc-tb-clock {
-  position: absolute; left: 50%; top: 50%; z-index: 2; opacity: 0;
+  position: absolute; left: 50%; top: 50%; z-index: 1; opacity: 0;
   width: ${N("clock-w")}px;
   transform: translate(-50%, -50%) translate(${N("clock-x")}px, ${N("clock-y")}px);
   transform-origin: center;
@@ -360,7 +360,7 @@ function dump(){
 }
 /* ④ 红线（上下两条在同一张图里，整张缩放定位） */
 .lc-turn-banner .lc-tb-line {
-  position: absolute; left: 50%; top: 50%; width: ${N("line-w")}%; z-index: 1;
+  position: absolute; left: 50%; top: 50%; width: ${N("line-w")}%; z-index: 2;
   transform: translate(-50%, -50%) translate(${N("line-x")}px, ${N("line-y")}px) scaleX(0);
   transform-origin: center;
   opacity: ${(N("line-a")/100).toFixed(2)};
