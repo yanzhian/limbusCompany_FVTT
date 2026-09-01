@@ -9807,3 +9807,36 @@ input.item-piles-quantity {
   font-size: 14px;
   border-radius: 4px;
 }
+
+/* ══ 快捷 HUD·恐惧鉴定（布局 C：数字压在图标右下角） ══════════════════
+   纯计数显示：无边框、无底色、无 hover 反馈 */
+.qa-panic-check {
+  display: flex; align-items: center;
+  gap: 13px;
+  margin-top: 2px;
+  padding: 4px 11px;
+  background: none;
+  border: none;
+  border-radius: 0;
+  cursor: default;
+  transition: none;
+}
+.qa-panic-check:hover { border-color: transparent; }
+
+.qa-panic-item { display: flex; align-items: center; position: relative; gap: 0; }
+.qa-panic-item img { width: 34px; height: 34px; display: block; }
+.qa-panic-num { position: absolute; right: -2px; bottom: -2px; }
+
+.qa-panic-num {
+  font-size: 22px; font-weight: 500; line-height: 1;
+  -webkit-text-stroke: 3px #0b0908;
+  paint-order: stroke fill;
+}
+.qa-panic-resolve .qa-panic-num {
+  color: #ffffff;
+  text-shadow: 0 0 5.0px rgba(93,173,226,0.40);
+}
+.qa-panic-fear .qa-panic-num {
+  color: #ffffff;
+  text-shadow: 0 0 5.0px rgba(231,76,60,0.40);
+}

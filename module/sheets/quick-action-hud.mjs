@@ -551,7 +551,6 @@ export class QuickActionHUD extends Application {
     html.find(".qa-hex-hp, .qa-hex-san").on("click", () => this._actor?.sheet?.render(true));
 
     // ── 恐惧鉴定：点击打开角色卡战斗页（恐慌计数在那里可手动调整） ───────
-    html.find(".qa-panic-check").on("click", () => this._openCombatTab());
 
     // ── 装备激活 ──────────────────────────────────────────────────────────
     html.find(".qa-equip-activate").on("click", async (e) => {
