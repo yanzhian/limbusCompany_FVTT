@@ -12,7 +12,7 @@
   --clock-w:150; --clock-x:0; --clock-y:0; --clock-from:340; --clock-a:100;
 
   /* ── 红线素材（上下各一条） ── */
-  --line-w:70;      /* 宽度：占屏宽 %（上下两条在同一张图里） */
+  --line-w:394;     /* 宽度 px（上下两条在同一张图里；用 px 才和实装一致） */
   --line-x:0;       /* 水平微调 px */
   --line-y:0;       /* 垂直微调 px */
   --line-a:100;     /* 不透明度 % */
@@ -61,7 +61,7 @@ h2{font-size:11.5px;color:#E7B956;margin:9px 0 1px;letter-spacing:.1em;font-weig
 .lc-tb-clock img{width:100%;height:auto;display:block;opacity:calc(var(--clock-a)/100);
   filter:drop-shadow(0 0 8px rgba(0,0,0,.8));}
 
-.lc-tb-line{position:absolute;left:50%;top:50%;width:calc(var(--line-w)*1%);z-index:2;
+.lc-tb-line{position:absolute;left:50%;top:50%;width:calc(var(--line-w)*1px);z-index:2;
   transform:translate(-50%,-50%) translate(calc(var(--line-x)*1px),calc(var(--line-y)*1px)) scaleX(0);
   transform-origin:center;}
 .lc-tb-line img{width:100%;height:auto;display:block;opacity:calc(var(--line-a)/100);}
@@ -202,7 +202,7 @@ const P = [
   ["clock-from","--clock-from","n",340,"入场放大%"],
   ["swing-deg","--swing-deg","n",15,"逆时针角度"],
   ["H2","","h",0,"红线素材"],
-  ["line-w","--line-w","n",70,"宽度%"],
+  ["line-w","--line-w","n",394,"宽度px"],
   ["line-x","--line-x","n",0,"水平微调"],
   ["line-y","--line-y","n",0,"垂直微调"],
   ["line-a","--line-a","n",100,"不透明度%"],
@@ -230,7 +230,7 @@ const RANGE = {
   "band-h":[60,300],"band-y":[10,90],"band-a":[0,100],
   "clock-w":[40,400],"clock-x":[-300,300],"clock-y":[-150,150],"clock-a":[0,100],
   "clock-from":[100,800],"swing-deg":[0,45],
-  "line-w":[20,140],"line-x":[-200,200],"line-y":[-150,150],"line-a":[0,100],
+  "line-w":[100,1200],"line-x":[-200,200],"line-y":[-150,150],"line-a":[0,100],
   "word-w":[40,500],"word-x":[-300,300],"word-y":[-150,150],"word-a":[0,100],
   "num-size":[16,140],"num-gap":[0,120],"num-dx":[-200,200],"num-dy":[-100,100],"num-glow":[0,100],
   "t-band":[20,400],"t-clock":[40,600],"t-swing":[20,400],"t-text":[40,600],
@@ -364,7 +364,7 @@ function dump(){
 }
 /* ④ 红线（上下两条在同一张图里，整张缩放定位） */
 .lc-turn-banner .lc-tb-line {
-  position: absolute; left: 50%; top: 50%; width: ${N("line-w")}%; z-index: 2;
+  position: absolute; left: 50%; top: 50%; width: ${N("line-w")}px; z-index: 2;
   transform: translate(-50%, -50%) translate(${N("line-x")}px, ${N("line-y")}px) scaleX(0);
   transform-origin: center;
   opacity: ${(N("line-a")/100).toFixed(2)};

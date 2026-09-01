@@ -10011,19 +10011,20 @@ input.item-piles-quantity {
     rgba(7,6,5,0.83) 92%, transparent);
   transform: scaleY(0); transform-origin: center;
 }
-/* ② 钟（背景图；层级只压在黑条上面） */
+/* ② 钟（层级只压在黑条上面） */
 .lc-turn-banner .lc-tb-clock {
   position: absolute; left: 50%; top: 50%; z-index: 1; opacity: 0;
   width: 280px;
   transform: translate(-50%, -50%) translate(0px, 0px);
   transform-origin: center;
-  background: url("systems/limbusCompany_FVTT/assets/icons/GUI/turn_clock.webp") center/contain no-repeat;
-  aspect-ratio: 1 / 1;
   filter: drop-shadow(0 0 8px rgba(0,0,0,.8));
 }
+.lc-turn-banner .lc-tb-clock img { width: 100%; height: auto; display: block; }
 /* ③ 红线（上下两条在同一张图里，整张缩放定位） */
 .lc-turn-banner .lc-tb-line {
-  position: absolute; left: 50%; top: 50%; width: 58%; z-index: 2;
+  /* 用 px 不用 %：% 是相对屏幕宽度的，调参台舞台只有 680px 宽，
+     到了全屏（1900px+）红线会被放大近三倍，两条线之间也被撑得很开 */
+  position: absolute; left: 50%; top: 50%; width: 394px; z-index: 2;
   transform: translate(-50%, -50%) translate(0px, 4px) scaleX(0);
   transform-origin: center;
   opacity: 1.00;

@@ -9,10 +9,10 @@
  * （由 updateCombat 钩子在各端触发），不走 socket。
  */
 
-// 素材路径。钟走 CSS 背景图（见 styles 里的 .lc-tb-clock），
-// 红线与 TURN 是 <img>，路径写在这里；缺图时该元素自动隐藏，其余照常播。
-const LINE_IMG = "systems/limbusCompany_FVTT/assets/icons/GUI/turn_line.webp";
-const WORD_IMG = "systems/limbusCompany_FVTT/assets/icons/GUI/turn_word.webp";
+// 三张素材都走 <img>：加载失败时能在控制台报出来，不会像 CSS 背景图那样静默消失
+const CLOCK_IMG = "systems/limbusCompany_FVTT/assets/icons/GUI/turn_clock.webp";
+const LINE_IMG  = "systems/limbusCompany_FVTT/assets/icons/GUI/turn_line.webp";
+const WORD_IMG  = "systems/limbusCompany_FVTT/assets/icons/GUI/turn_word.webp";
 
 /** 与 CSS 里最后那条注释保持一致：整段动画跑完需要多久（ms） */
 const TOTAL_MS = 1280;
@@ -32,7 +32,11 @@ export function playTurnBanner(round) {
   el.className = "lc-turn-banner";
   el.innerHTML = `
     <div class="lc-tb-band"></div>
-    <div class="lc-tb-clock"></div>
+    <div class="lc-tb-clock">
+      <img src="${CLOCK_IMG}" alt="" draggable="false"
+           onerror="console.warn('[limbus] 回合横幅：钟表素材加载失败', this.src);
+                    this.closest('.lc-tb-clock').style.visibility='hidden'">
+    </div>
     <div class="lc-tb-line">
       <img src="${LINE_IMG}" alt="" draggable="false"
            onerror="this.closest('.lc-tb-line').style.visibility='hidden'">
