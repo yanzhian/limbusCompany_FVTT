@@ -14,7 +14,7 @@
   --hd-bg:#5F3E21; --hd-col:#E8CAA1;
   /* ── 信息行 ── */
   --info-pad-x:12; --info-pad-t:6; --info-gap:5;
-  --sub-size:14;  --cat-size:12;
+  --sub-size:14;  --cat-size:12; --rar-size:13;
   /* ── 修正值行 ── */
   --mod-gap:10; --mod-ic:18; --mod-size:14;
   /* ── 标签 ── */
@@ -50,7 +50,8 @@ p.sub{margin:0 0 10px;font-size:12px;color:var(--text-dim);max-width:520px;line-
 .tce-subtype{font-size:calc(var(--sub-size)*1px);color:#E8CAA1;font-weight:bold;
   border-bottom:1px solid rgba(201,168,76,.4);}
 .tce-category{font-size:calc(var(--cat-size)*1px);color:#9B6839;}
-.tce-rarity{font-size:calc(var(--cat-size)*1px);font-weight:bold;margin-left:auto;}
+.tce-rarity{font-size:calc(var(--rar-size)*1px);font-weight:bold;margin-left:auto;
+  letter-spacing:.06em;}
 .tce-modifiers{display:flex;flex-wrap:wrap;gap:calc(var(--mod-gap)*1px);}
 .modifier-row{display:flex;align-items:center;gap:3px;}
 .modifier-row .mod-icon{width:calc(var(--mod-ic)*1px);height:calc(var(--mod-ic)*1px);
@@ -140,6 +141,7 @@ const P = [
   ["info-gap","--info-gap","n",5,"行间距"],
   ["sub-size","--sub-size","n",14,"子类型字号"],
   ["cat-size","--cat-size","n",12,"分类字号"],
+  ["rar-size","--rar-size","n",13,"稀有度字号"],
   ["H3","","h",0,"修正值"],
   ["mod-gap","--mod-gap","n",10,"项间距"],
   ["mod-ic","--mod-ic","n",18,"图标边长"],
@@ -162,7 +164,7 @@ const P = [
 const RANGE = {
   "card-w":[200,420],"card-h":[280,720],"hd-size":[16,44],"hd-pad-x":[4,24],
   "hd-pad-t":[2,20],"hd-pad-b":[2,20],"info-pad-x":[4,24],"info-pad-t":[0,20],
-  "info-gap":[0,16],"sub-size":[10,22],"cat-size":[8,20],"mod-gap":[2,24],
+  "info-gap":[0,16],"sub-size":[10,22],"cat-size":[8,20],"rar-size":[8,22],"mod-gap":[2,24],
   "mod-ic":[10,28],"mod-size":[8,22],"tag-size":[8,18],"tag-gap":[0,10],
   "tag-pad-x":[0,14],"tag-pad-y":[0,10],"desc-size":[9,20],"desc-lh":[10,26],
   "desc-pad-x":[4,24],"desc-pad-y":[0,18],"foot-pad-x":[4,24],"foot-pad-y":[0,18],
@@ -180,8 +182,7 @@ $("ctrls").innerHTML = P.map(([id,,t,def,zh]) => {
 /* ── 区块定义 ── */
 const BLOCKS = {
   header:  "名称（标题条）",
-  subrow:  "类型 · 分类",
-  rarity:  "稀有度",
+  subrow:  "类型 · 分类 · 稀有度",
   mods:    "修正值（攻/防/速/抗性）",
   tags:    "标签",
   qty:     "数量 / 内部网格",
@@ -192,13 +193,13 @@ const BLOCKS = {
 };
 /* 每种类型的默认顺序与显隐 */
 const DEFAULT_ORDER = {
-  upper:      ["header","subrow","rarity","mods","tags","divider1","desc","divider2","footer"],
-  lower:      ["header","subrow","rarity","mods","tags","divider1","desc","divider2","footer"],
-  weapon:     ["header","subrow","rarity","mods","tags","divider1","desc","divider2","footer"],
-  accessory:  ["header","subrow","rarity","mods","tags","divider1","desc","divider2","footer"],
-  material:   ["header","subrow","rarity","qty","tags","divider1","desc","divider2","footer"],
-  consumable: ["header","subrow","rarity","qty","tags","divider1","desc","divider2","footer"],
-  container:  ["header","subrow","rarity","qty","tags","divider1","desc","divider2","footer"],
+  upper:      ["header","subrow","mods","tags","divider1","desc","divider2","footer"],
+  lower:      ["header","subrow","mods","tags","divider1","desc","divider2","footer"],
+  weapon:     ["header","subrow","mods","tags","divider1","desc","divider2","footer"],
+  accessory:  ["header","subrow","mods","tags","divider1","desc","divider2","footer"],
+  material:   ["header","subrow","qty","tags","divider1","desc","divider2","footer"],
+  consumable: ["header","subrow","qty","tags","divider1","desc","divider2","footer"],
+  container:  ["header","subrow","qty","tags","divider1","desc","divider2","footer"],
 };
 const state = {};
 for (const [k, list] of Object.entries(DEFAULT_ORDER)) {
@@ -237,9 +238,7 @@ function blockHtml(b, d){
     case "header":  return `<div class="tce-header">${d.name}</div>`;
     case "subrow":  return `<div class="tce-info-row"><div class="tce-info-left">
       <div class="tce-subrow"><span class="tce-subtype">${d.sub}</span>
-      ${d.cat ? `<span class="tce-category">${d.cat}</span>` : ""}</div></div></div>`;
-    case "rarity":  return `<div class="tce-info-row"><div class="tce-info-left"><div class="tce-subrow">
-      <span class="tce-category">稀有度</span>
+      ${d.cat ? `<span class="tce-category">${d.cat}</span>` : ""}
       <span class="tce-rarity" style="color:${d.rarity[1]}">${d.rarity[0]}</span></div></div></div>`;
     case "mods":    return d.mods.length ? `<div class="tce-info-row"><div class="tce-info-left">
       <div class="tce-modifiers">${d.mods.map(([k,v]) =>
@@ -325,6 +324,11 @@ function dump(){
 .limbus-title-card-equip .tce-info-left { gap: ${N("info-gap")}px; }
 .limbus-title-card-equip .tce-subtype   { font-size: ${N("sub-size")}px; }
 .limbus-title-card-equip .tce-category  { font-size: ${N("cat-size")}px; }
+/* 稀有度：并在「类型·分类」同一排，靠右 */
+.limbus-title-card-equip .tce-rarity {
+  font-size: ${N("rar-size")}px; font-weight: bold;
+  margin-left: auto; letter-spacing: .06em;
+}
 
 .limbus-title-card-equip .tce-modifiers { gap: ${N("mod-gap")}px; }
 .limbus-title-card-equip .modifier-row .mod-icon {
