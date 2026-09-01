@@ -2432,7 +2432,7 @@ const sinColor    = cfg.SIN_COLORS?.[sys.sinType] ?? "#5F3E21";
       ${sinIcon ? `<img src="${sinIcon}" class="tc-sin-ic" alt="${sinLabel}" title="${sinLabel}">` : ""}
     </div>
     <div class="tcs-row">
-      ${catLabel ? `<span class="tcs-cat"><img src="${_getCategoryIcon(sys.category)}" class="tc-cat-icon" alt="">${catLabel}</span>` : ""}
+      ${sys.category ? `<span class="tcs-cat"><img src="${_getCategoryIcon(sys.category)}" class="tc-cat-icon" alt="${catLabel}" title="${catLabel}"></span>` : ""}
       ${sys.diceFormula ? `<span class="tcs-formula">${String(sys.diceFormula).toUpperCase()}</span>` : ""}
       ${diceLabel ? `<span class="tcs-dice">${diceLabel}</span>` : ""}
       <img src="${kindIcon}" class="tcs-kind-ic" alt="${kindLabel}" title="${kindLabel}">

@@ -9924,7 +9924,7 @@ input.item-piles-quantity {
 }
 .limbus-title-card-skill .tcs-cat  { font-size: 11px; color: #9B6839;
   display: inline-flex; align-items: center; gap: 4px; }
-.limbus-title-card-skill .tcs-cat .tc-cat-icon { width: 16px; height: 16px; object-fit: contain; }
+.limbus-title-card-skill .tcs-cat .tc-cat-icon { width: 14px; height: 14px; object-fit: contain; }
 .limbus-title-card-skill .tcs-formula { font-size: 18px; color: #E8CAA1; font-weight: bold;
   font-variant-numeric: tabular-nums; }
 .limbus-title-card-skill .tcs-dice { font-size: 11px; color: #C9A84C; }
