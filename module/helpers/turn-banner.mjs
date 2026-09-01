@@ -9,11 +9,13 @@
  * （由 updateCombat 钩子在各端触发），不走 socket。
  */
 
-/** 钟表素材。还没上传时会自动隐藏，动画其余部分照常播 */
-const CLOCK_IMG = "systems/limbusCompany_FVTT/assets/icons/GUI/turn_clock.webp";
+// 素材路径。钟走 CSS 背景图（见 styles 里的 .lc-tb-clock），
+// 红线与 TURN 是 <img>，路径写在这里；缺图时该元素自动隐藏，其余照常播。
+const LINE_IMG = "systems/limbusCompany_FVTT/assets/icons/GUI/turn_line.webp";
+const WORD_IMG = "systems/limbusCompany_FVTT/assets/icons/GUI/turn_word.webp";
 
 /** 与 CSS 里最后那条注释保持一致：整段动画跑完需要多久（ms） */
-const TOTAL_MS = 873;
+const TOTAL_MS = 800;
 
 let _timer = null;
 
@@ -30,14 +32,16 @@ export function playTurnBanner(round) {
   el.className = "lc-turn-banner";
   el.innerHTML = `
     <div class="lc-tb-band"></div>
-    <div class="lc-tb-line top"></div>
-    <div class="lc-tb-line bottom"></div>
-    <div class="lc-tb-clock">
-      <img src="${CLOCK_IMG}" alt="" draggable="false"
-           onerror="this.closest('.lc-tb-clock').style.visibility='hidden'">
+    <div class="lc-tb-clock"></div>
+    <div class="lc-tb-line">
+      <img src="${LINE_IMG}" alt="" draggable="false"
+           onerror="this.closest('.lc-tb-line').style.visibility='hidden'">
     </div>
     <div class="lc-tb-text">
-      <span class="lc-tb-word">TURN</span>
+      <span class="lc-tb-word">
+        <img src="${WORD_IMG}" alt="TURN" draggable="false"
+             onerror="this.closest('.lc-tb-word').style.visibility='hidden'">
+      </span>
       <span class="lc-tb-num">${Number(round) || 1}</span>
     </div>`;
   document.body.appendChild(el);
