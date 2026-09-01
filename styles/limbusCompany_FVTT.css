@@ -9981,3 +9981,9 @@ input.item-piles-quantity {
   padding: 6px 14px;
   font-size: 14px;
 }
+
+/* E.G.O 两形态：卡片底部提示当前形态与切换键 */
+.limbus-title-card-skill .tcs-form-hint {
+  padding: 0 14px 6px;
+  font-size: 11px; color: #8A6E52; text-align: right; flex-shrink: 0;
+}

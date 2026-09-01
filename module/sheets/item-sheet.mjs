@@ -11,7 +11,7 @@
  */
 
 import { ClashManager } from "../helpers/clash.mjs";
-import { SKILLBOOK_MAX_SLOTS } from "../documents/item.mjs";
+import { SKILLBOOK_MAX_SLOTS, buildDiceFormula } from "../documents/item.mjs";
 import { CustomBuffRegistry, normalizeBuffType } from "../helpers/custom-buffs.mjs";
 import { linkifyHtml } from "../helpers/linkify.mjs";
 import { GridDnD } from "../helpers/grid-dnd.mjs";
@@ -2335,99 +2335,134 @@ async function _findItemByName(name) {
   return fallback;
 }
 
+/**
+ * 技能 Title 卡。E.G.O 有【觉醒】/【侵蚀】两套数据，卡片按 `system.egoForm`
+ * 显示当前那一套；悬停时按 **R** 可以在两套之间来回看（只改显示，不写文档）。
+ *
+ * @param {Item}        item
+ * @param {string|null} formOverride 强制显示的形态（"awaken" / "corrode"），null = 跟随物品
+ */
+function _buildSkillTitleCard(item, formOverride = null) {
+  const sysRaw = item.system;
+  const cfg    = CONFIG.LIMBUSCOMPANY ?? {};
+  // 侵蚀形态：没写过（initialized=false）就一律沿用觉醒那一套；写过的字段才覆盖
+  const form   = formOverride ?? (sysRaw.egoForm ?? "awaken");
+  const useCor = sysRaw.type === "ego" && form === "corrode" && !!sysRaw.corrode?.initialized;
+  const canToggle = sysRaw.type === "ego" && !!sysRaw.corrode?.initialized;
+
+  // 侵蚀里为 null / "" 的字段视为"没单独写"，继续沿用觉醒那一套
+  const cor  = sysRaw.corrode ?? {};
+  const pick = (k) => (cor[k] !== null && cor[k] !== undefined && cor[k] !== "") ? cor[k] : sysRaw[k];
+  const OVERRIDE = new Set(["category", "baseValue", "diceCount", "diceFaces", "negativeDice",
+                            "indiscriminate", "spreadMode", "spreadRange", "weight",
+                            "sanityCost", "effectDesc"]);
+  const sys = !useCor ? sysRaw : new Proxy(sysRaw, {
+    get(t, k) {
+      if (OVERRIDE.has(k)) return pick(k);
+      // 骰式跟着覆盖后的三个数字重算
+      if (k === "diceFormula") return buildDiceFormula({
+        diceCount: pick("diceCount"), diceFaces: pick("diceFaces"),
+        baseValue: pick("baseValue"), negativeDice: pick("negativeDice"),
+      });
+      return t[k];
+    },
+  });
+
+  const ICON = "systems/limbusCompany_FVTT/assets/icons/Base_icon/";
+const sinColor    = cfg.SIN_COLORS?.[sys.sinType] ?? "#5F3E21";
+  const sinIcon     = cfg.SIN_ICON_PATHS?.[sys.sinType] ?? "";
+  const sinLabel    = cfg.SIN_LABELS_ZH?.[sys.sinType] ?? "";
+  const stellarCost = item.getStellarCost?.() ?? sys.stellarCost ?? 0;
+  const tags = (Array.isArray(sys.tags) ? sys.tags : String(sys.tags ?? "").split("/"))
+    .map(t => String(t).trim()).filter(Boolean);
+  const weightCount = Number(sys.weight ?? 0);
+  const descText    = linkifyHtml(sys.effectDesc ?? sys.description ?? "");
+
+  // 等级：基础/守备写 Lv.N，EGO 写评级（ZAYIN…）
+  const lvText = sys.type === "ego" ? (sys.egoDiceRating ?? "") : `Lv.${sys.level ?? 1}`;
+
+  // 类型图标：基础 / E.G.O = 攻击等级图；守备 = 格挡图（靠右）
+  const kindIcon  = sys.type === "defense" ? `${ICON}block.webp` : `${ICON}Offense_Level.webp`;
+  const kindLabel = { basic: "基础技能", defense: "守备技能", ego: "E.G.O" }[sys.type] ?? "";
+
+  const catLabel  = cfg.CATEGORY_LABELS_ZH?.[sys.category] ?? sys.category ?? "";
+  const diceLabel = { unbreakable: "不可摧毁", severing: "斩断" }[sys.diceType] ?? "";
+
+  // 容量扩散：攻击容量 ≥2 才有意义
+  const spreadLabel = (weightCount >= 2 && sys.spreadMode)
+    ? `${sys.spreadMode === "spray" ? "广域乱射" : "链式扩散"} ${sys.spreadRange ?? 1} 格` : "";
+
+  // 标记（布尔）：只列为真的
+  const flags = [];
+  if (sys.noEquip)        flags.push(`<span class="tcs-flag f-noequip">无法装备</span>`);
+  if (sys.noClash)        flags.push(`<span class="tcs-flag f-noclash">无法拼点</span>`);
+  if (sys.coverDefense)   flags.push(`<span class="tcs-flag f-cover">援护防御</span>`);
+  if (sys.indiscriminate) flags.push(`<span class="tcs-flag f-indis">无差别攻击</span>`);
+
+  // 消耗：理智 + 罪孽资源
+  const costs = [];
+  if (sys.sanityCost) {
+    costs.push(`<span class="tcs-cost-item"><span class="tcs-cost-label">理智</span>${sys.sanityCost}</span>`);
+  }
+  for (const c of (sys.sinCost ?? [])) {
+    if (!c?.amount) continue;
+    const ic = cfg.SIN_ICON_PATHS?.[c.sinType] ?? "";
+    costs.push(`<span class="tcs-cost-item">${ic ? `<img src="${ic}" alt="">` : ""}`
+      + `${cfg.SIN_LABELS_ZH?.[c.sinType] ?? ""} ${c.amount}</span>`);
+  }
+
+  // 罪孽抗性修改：只列改过的（x1.0 视为没改）
+  const resists = (sys.egoResistanceAdj ?? [])
+    .filter(r => r?.multiplier && r.multiplier !== "x1.0")
+    .map(r => {
+      const ic  = cfg.SIN_ICON_PATHS?.[r.sinType] ?? "";
+      const col = cfg.SIN_COLORS?.[r.sinType] ?? "#E8CAA1";
+      return `<span class="tcs-res-item" style="color:${col}">`
+        + `${ic ? `<img src="${ic}" alt="">` : ""}${r.multiplier}</span>`;
+    });
+
+  // 排版：名称+等级+罪孽图标 → 分类·骰式·骰型（类型图标靠右）→ 攻击容量 →
+  //       标记 → 消耗 → 抗性 → 武器限制 → 标签 → 金线 → 描述 → 金线 → 页脚
+  // 没填的字段整块不渲染，空技能卡不会留下一堆空行
+  const card = _wireCardInteractivity($(`<div class="limbus-title-card limbus-title-card-skill"
+       data-ego-form="${useCor ? "corrode" : "awaken"}">
+    <div class="tc-header" style="background:${sinColor}">
+      <span class="tc-name">${item.name}</span>
+      ${lvText ? `<span class="tc-lv">${lvText}</span>` : ""}
+      ${sinIcon ? `<img src="${sinIcon}" class="tc-sin-ic" alt="${sinLabel}" title="${sinLabel}">` : ""}
+    </div>
+    <div class="tcs-row">
+      ${catLabel ? `<span class="tcs-cat"><img src="${_getCategoryIcon(sys.category)}" class="tc-cat-icon" alt="">${catLabel}</span>` : ""}
+      ${sys.diceFormula ? `<span class="tcs-formula">${String(sys.diceFormula).toUpperCase()}</span>` : ""}
+      ${diceLabel ? `<span class="tcs-dice">${diceLabel}</span>` : ""}
+      <img src="${kindIcon}" class="tcs-kind-ic" alt="${kindLabel}" title="${kindLabel}">
+    </div>
+    ${weightCount > 0 ? `<div class="tc-weight">
+      <span class="tc-weight-label">攻击容量</span>
+      ${Array.from({ length: weightCount }, () => '<span class="tc-weight-sq"></span>').join("")}
+      ${spreadLabel ? `<span class="tcs-spread">${spreadLabel}</span>` : ""}
+    </div>` : ""}
+    ${flags.length   ? `<div class="tcs-flags">${flags.join("")}</div>` : ""}
+    ${costs.length   ? `<div class="tcs-costs">${costs.join("")}</div>` : ""}
+    ${resists.length ? `<div class="tcs-res">${resists.join("")}</div>` : ""}
+    ${sys.weaponRestriction ? `<div class="tcs-row"><span class="tcs-cat">武器限制：${sys.weaponRestriction}</span></div>` : ""}
+    ${tags.length ? `<div class="tc-tags">${tags.map(t => `<span class="tc-skill-tag">${t}</span>`).join("")}</div>` : ""}
+    <div class="tc-gold-divider-skill"></div>
+    <div class="tc-desc">${descText}</div>
+    <div class="tc-gold-divider-skill"></div>
+    <div class="tc-footer">
+      <img src="${ICON}Starlight.webp" class="tc-starlight-icon" alt="星芒">
+      <span class="tc-stellar-cost">${stellarCost}</span>
+    </div>
+  </div>`));
+}
+
 function _buildItemTitleCard(item) {
   if (!item) return null;
   const sys = item.system;
   const cfg = CONFIG.LIMBUSCOMPANY ?? {};
 
-  if (item.type === "skill") {
-    const ICON = "systems/limbusCompany_FVTT/assets/icons/Base_icon/";
-    const sinColor    = cfg.SIN_COLORS?.[sys.sinType] ?? "#5F3E21";
-    const sinIcon     = cfg.SIN_ICON_PATHS?.[sys.sinType] ?? "";
-    const sinLabel    = cfg.SIN_LABELS_ZH?.[sys.sinType] ?? "";
-    const stellarCost = item.getStellarCost?.() ?? sys.stellarCost ?? 0;
-    const tags = (Array.isArray(sys.tags) ? sys.tags : String(sys.tags ?? "").split("/"))
-      .map(t => String(t).trim()).filter(Boolean);
-    const weightCount = Number(sys.weight ?? 0);
-    const descText    = linkifyHtml(sys.effectDesc ?? sys.description ?? "");
-
-    // 等级：基础/守备写 Lv.N，EGO 写评级（ZAYIN…）
-    const lvText = sys.type === "ego" ? (sys.egoDiceRating ?? "") : `Lv.${sys.level ?? 1}`;
-
-    // 类型图标：基础 / E.G.O = 攻击等级图；守备 = 格挡图（靠右）
-    const kindIcon  = sys.type === "defense" ? `${ICON}block.webp` : `${ICON}Offense_Level.webp`;
-    const kindLabel = { basic: "基础技能", defense: "守备技能", ego: "E.G.O" }[sys.type] ?? "";
-
-    const catLabel  = cfg.CATEGORY_LABELS_ZH?.[sys.category] ?? sys.category ?? "";
-    const diceLabel = { unbreakable: "不可摧毁", severing: "斩断" }[sys.diceType] ?? "";
-
-    // 容量扩散：攻击容量 ≥2 才有意义
-    const spreadLabel = (weightCount >= 2 && sys.spreadMode)
-      ? `${sys.spreadMode === "spray" ? "广域乱射" : "链式扩散"} ${sys.spreadRange ?? 1} 格` : "";
-
-    // 标记（布尔）：只列为真的
-    const flags = [];
-    if (sys.noEquip)        flags.push(`<span class="tcs-flag f-noequip">无法装备</span>`);
-    if (sys.noClash)        flags.push(`<span class="tcs-flag f-noclash">无法拼点</span>`);
-    if (sys.coverDefense)   flags.push(`<span class="tcs-flag f-cover">援护防御</span>`);
-    if (sys.indiscriminate) flags.push(`<span class="tcs-flag f-indis">无差别攻击</span>`);
-
-    // 消耗：理智 + 罪孽资源
-    const costs = [];
-    if (sys.sanityCost) {
-      costs.push(`<span class="tcs-cost-item"><span class="tcs-cost-label">理智</span>${sys.sanityCost}</span>`);
-    }
-    for (const c of (sys.sinCost ?? [])) {
-      if (!c?.amount) continue;
-      const ic = cfg.SIN_ICON_PATHS?.[c.sinType] ?? "";
-      costs.push(`<span class="tcs-cost-item">${ic ? `<img src="${ic}" alt="">` : ""}`
-        + `${cfg.SIN_LABELS_ZH?.[c.sinType] ?? ""} ${c.amount}</span>`);
-    }
-
-    // 罪孽抗性修改：只列改过的（x1.0 视为没改）
-    const resists = (sys.egoResistanceAdj ?? [])
-      .filter(r => r?.multiplier && r.multiplier !== "x1.0")
-      .map(r => {
-        const ic  = cfg.SIN_ICON_PATHS?.[r.sinType] ?? "";
-        const col = cfg.SIN_COLORS?.[r.sinType] ?? "#E8CAA1";
-        return `<span class="tcs-res-item" style="color:${col}">`
-          + `${ic ? `<img src="${ic}" alt="">` : ""}${r.multiplier}</span>`;
-      });
-
-    // 排版：名称+等级+罪孽图标 → 分类·骰式·骰型（类型图标靠右）→ 攻击容量 →
-    //       标记 → 消耗 → 抗性 → 武器限制 → 标签 → 金线 → 描述 → 金线 → 页脚
-    // 没填的字段整块不渲染，空技能卡不会留下一堆空行
-    return _wireCardInteractivity($(`<div class="limbus-title-card limbus-title-card-skill">
-      <div class="tc-header" style="background:${sinColor}">
-        <span class="tc-name">${item.name}</span>
-        ${lvText ? `<span class="tc-lv">${lvText}</span>` : ""}
-        ${sinIcon ? `<img src="${sinIcon}" class="tc-sin-ic" alt="${sinLabel}" title="${sinLabel}">` : ""}
-      </div>
-      <div class="tcs-row">
-        ${catLabel ? `<span class="tcs-cat"><img src="${_getCategoryIcon(sys.category)}" class="tc-cat-icon" alt="">${catLabel}</span>` : ""}
-        ${sys.diceFormula ? `<span class="tcs-formula">${String(sys.diceFormula).toUpperCase()}</span>` : ""}
-        ${diceLabel ? `<span class="tcs-dice">${diceLabel}</span>` : ""}
-        <img src="${kindIcon}" class="tcs-kind-ic" alt="${kindLabel}" title="${kindLabel}">
-      </div>
-      ${weightCount > 0 ? `<div class="tc-weight">
-        <span class="tc-weight-label">攻击容量</span>
-        ${Array.from({ length: weightCount }, () => '<span class="tc-weight-sq"></span>').join("")}
-        ${spreadLabel ? `<span class="tcs-spread">${spreadLabel}</span>` : ""}
-      </div>` : ""}
-      ${flags.length   ? `<div class="tcs-flags">${flags.join("")}</div>` : ""}
-      ${costs.length   ? `<div class="tcs-costs">${costs.join("")}</div>` : ""}
-      ${resists.length ? `<div class="tcs-res">${resists.join("")}</div>` : ""}
-      ${sys.weaponRestriction ? `<div class="tcs-row"><span class="tcs-cat">武器限制：${sys.weaponRestriction}</span></div>` : ""}
-      ${tags.length ? `<div class="tc-tags">${tags.map(t => `<span class="tc-skill-tag">${t}</span>`).join("")}</div>` : ""}
-      <div class="tc-gold-divider-skill"></div>
-      <div class="tc-desc">${descText}</div>
-      <div class="tc-gold-divider-skill"></div>
-      <div class="tc-footer">
-        <img src="${ICON}Starlight.webp" class="tc-starlight-icon" alt="星芒">
-        <span class="tc-stellar-cost">${stellarCost}</span>
-      </div>
-    </div>`));
-  }
+  if (item.type === "skill") return _buildSkillTitleCard(item);
 
   // 装备 / 消耗品 / 材料 / 容器
   const typeLabels   = { equipment:"装备", consumable:"消耗品", material:"材料", container:"容器",
