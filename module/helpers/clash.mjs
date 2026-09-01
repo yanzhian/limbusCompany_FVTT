@@ -3940,12 +3940,14 @@ export class ClashManager {
    *
    * 规则（见 策划文件/大纲.txt → 对战 → 拼点）：
    *   · 第一次投掷免费，双方各投一次；
-   *   · **只有失败方**可以花 1 枚行动币重投，胜方的数值锁定不变；
+   *   · 输的一方花 1 枚行动币续拼，**双方重掷**（要的就是能翻盘的连续碰撞）；
+   *   · 平局同样**双方重掷**，不消耗行动币、不加惩罚；
    *   · 一般骰每重投一次，自己的拼点威力**累计 -1**；【不可摧毁】骰免这个惩罚；
    *     威力增减只影响拼点胜负，不影响伤害，且只在本次对抗内有效；
    *   · 重投后打平＝翻盘失败（本系统没有平局）；首投打平由攻方承担举证责任；
    *   · 0 币的防守方不能重投，且拼点威力额外 -3；
-   *   · 一方不再重投（无币）时定胜负，胜方再摧毁败方 1 枚币
+   *   · 输的一方已经没币时，还有**一次免费的最后机会**（仍是双方重掷）；
+   *     这一次再输就是彻底失败，胜方再摧毁败方 1 枚币
    *     （【不可摧毁】骰不被摧毁，对方已 0 币则无事发生）；
    *   · 连击奖励：本次对抗内每拼点 3 次（含首投、不论胜负）最终威力 +1，不封顶，
    *     结束时一次性结算给胜方。
@@ -3987,8 +3989,8 @@ export class ClashManager {
     let atkRollCur = atkRoll0;
     let defRollCur = defRoll0;
     const pen = { atk: 0, def: 0 };  // 重投累计的拼点威力惩罚（仅本次对抗）
-    let lastRerollSide = "";         // 最近一次重投的是谁——平局时判它翻盘失败
-    let rerollSide = "";             // 下一轮要重投的一方（只有它重掷）
+    let lastRerollSide = "";         // 最近一次是谁在续拼（仅用于日志）
+    const lastChance = { atk: false, def: false };  // 0 币后的免费最后机会用掉没
     let winSide = "";                // 决出胜负的一方
     let winRoll = null;              // 决胜那一掷（【伤害计算】沿用它，不重掷）
     let winParts = null;
@@ -4012,18 +4014,15 @@ export class ClashManager {
         atkCtx._comboRound = 1;
         defCtx._comboRound = 1;
 
-        // **只有重投方重掷**，另一方的数值锁定
-        if (rerollSide === "atk") {
-          atkRollCur = new Roll(atkFormula + bonusStr(atkBonus));
-          await atkRollCur.evaluate();
-          ClashManager.applyDiceRollMods(atkActor, atkRollCur, { item: atkItem, isDefense: false });
-          atkCur = atkRollCur.total ?? 0;
-        } else {
-          defRollCur = new Roll(defFormula + bonusStr(defBonus));
-          await defRollCur.evaluate();
-          ClashManager.applyDiceRollMods(defActor, defRollCur, { item: defItem, isDefense: true });
-          defCur = defRollCur.total ?? 0;
-        }
+        // 双方重掷：连续碰撞才有翻盘的快感，锁死一边就没戏了
+        atkRollCur = new Roll(atkFormula + bonusStr(atkBonus));
+        defRollCur = new Roll(defFormula + bonusStr(defBonus));
+        await atkRollCur.evaluate();
+        await defRollCur.evaluate();
+        ClashManager.applyDiceRollMods(atkActor, atkRollCur, { item: atkItem, isDefense: false });
+        ClashManager.applyDiceRollMods(defActor, defRollCur, { item: defItem, isDefense: true });
+        atkCur = atkRollCur.total ?? 0;
+        defCur = defRollCur.total ?? 0;
       }
 
       const aParts = partsOf("atk", atkCur);
@@ -4054,8 +4053,12 @@ export class ClashManager {
           : null,
       });
 
-      // 平局＝重投方翻盘失败；首投打平则由攻方承担举证责任（他得再投一次）
-      const atkWon = (aEff !== dEff) ? (aEff > dEff) : (lastRerollSide === "def");
+      // 平局：不分胜负、不扣币、不加惩罚，直接双方重掷再拼一次（激烈的碰撞）
+      if (aEff === dEff) {
+        ClashTotalFX._log("平局：双方重掷，再拼一次");
+        continue;
+      }
+      const atkWon = aEff > dEff;
 
       // 斥力：分出胜负后双方一起被震开，胜方随即瞬移追回贴身；撞墙触发【震颤引爆】
       await ClashKnockback.repel({
@@ -4071,14 +4074,15 @@ export class ClashManager {
       const loserActor  = atkWon ? defActor : atkActor;
       const loserItem   = atkWon ? defItem  : atkItem;
       const loserUnbreak = loserItem?.system?.diceType === "unbreakable";
-      // 0 币的防守方不能重投；攻方同样要有币才能翻盘
-      const canReroll = apOf(loserActor) > 0;
+      // 有币就花币续拼；没币了还有一次免费的最后机会，那一次再输就是彻底失败
+      const hasCoin   = apOf(loserActor) > 0;
+      const canReroll = hasCoin || !lastChance[loserSide];
 
       if (!canReroll) {
         winSide  = atkWon ? "atk" : "def";
         winRoll  = atkWon ? atkRollCur : defRollCur;
         winParts = atkWon ? aParts : dParts;
-        ClashTotalFX._log(`${loserActor?.name ?? "败方"} 已无行动币可重投，对抗结束`);
+        ClashTotalFX._log(`${loserActor?.name ?? "败方"} 的最后机会也失败了，对抗结束`);
         // 对抗结束：胜方摧毁败方 1 枚币（【不可摧毁】骰不被摧毁；对方 0 币则无事发生）
         if (!loserUnbreak && apOf(loserActor) > 0) {
           await ClashManager._safeDocUpdate(loserActor,
@@ -4088,14 +4092,18 @@ export class ClashManager {
         break;
       }
 
-      // 花 1 枚币重投——刀剑相击处炸一朵
+      // 续拼——刀剑相击处炸一朵
       ClashVFX.broadcastBurst(ClashVFX.midPoint(atkActor, defActor));
-      await ClashManager._safeDocUpdate(loserActor,
-        { "system.ap.value": apOf(loserActor) - 1 });
-      // 一般骰重投累计 -1；【不可摧毁】免惩罚
+      if (hasCoin) {
+        await ClashManager._safeDocUpdate(loserActor,
+          { "system.ap.value": apOf(loserActor) - 1 });
+      } else {
+        lastChance[loserSide] = true;      // 免费的最后机会，用掉就没了
+        ClashTotalFX._log(`${loserActor?.name ?? "败方"} 已无行动币，这是最后一次机会`);
+      }
+      // 一般骰每续拼一次累计 -1 拼点威力；【不可摧毁】免惩罚
       if (!loserUnbreak) pen[loserSide] += 1;
       lastRerollSide = loserSide;
-      rerollSide     = loserSide;
     }
 
     // 连击奖励：每拼点 3 次（含首投、不论胜负）最终威力 +1，不封顶
