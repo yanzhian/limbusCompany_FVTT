@@ -2368,6 +2368,40 @@ function _buildItemTitleCard(item) {
   // 装备 / 消耗品 / 材料 / 容器
   const typeLabels   = { equipment:"装备", consumable:"消耗品", material:"材料", container:"容器",
                          skillbook:"技能书", recipebook:"配方表", panic:"恐慌卡", background:"背景" };
+  const ICON_BASE    = "systems/limbusCompany_FVTT/assets/icons/Base_icon/";
+
+  /** 标题条：名称 + （可堆叠时）右端 ×N */
+  const headerHtml = () => {
+    const qty = sys.quantity ?? 1;
+    const showQty = (sys.stackable ?? false) && qty >= 1;
+    return `<div class="tc-header tce-header">
+      <span class="tce-name">${item.name}</span>
+      ${showQty ? `<span class="tce-qty">×${qty}</span>` : ""}
+    </div>`;
+  };
+
+  /** 稀有度：挂在「类型 · 分类」同一排最右（设置里关掉就不显示） */
+  const rarityHtml = () => {
+    let show = true;
+    try { show = game.settings.get("limbusCompany_FVTT", "showRarity"); } catch { /* 设置未注册 */ }
+    const key = sys.rarity;
+    if (!show || !key) return "";
+    const cfg   = CONFIG.LIMBUSCOMPANY ?? {};
+    const label = cfg.RARITY_LABELS?.[key];
+    if (!label) return "";
+    const color = cfg.RARITY_COLORS?.[key] ?? "#E8CAA1";
+    return `<span class="tce-rarity" style="color:${color}">${label}</span>`;
+  };
+
+  /** 页脚：装备＝星芒 + 眼；其余只有眼 */
+  const footerHtml = (isEquip) => `
+    <div class="tc-footer tce-footer">
+      ${isEquip ? `<img src="${ICON_BASE}Starlight.webp" class="tc-starlight-icon" alt="星芒">
+        <span class="tc-stellar-cost">${sys.stellarCost ?? 0}</span>` : ""}
+      <span class="tce-foot-sep"></span>
+      <img src="${ICON_BASE}眼.webp" class="tc-eye-icon" alt="眼">
+      <span class="tc-eye-cost">${sys.cost ?? 0}</span>
+    </div>`;
   const stellarCost  = sys.stellarCost ?? 0;
   const tags = (Array.isArray(sys.tags) ? sys.tags : String(sys.tags ?? "").split("/"))
     .map(t => String(t).trim()).filter(Boolean);
@@ -2389,13 +2423,15 @@ function _buildItemTitleCard(item) {
       if (sys.subtype !== "upper") modRows.push(`<div class="modifier-row"><img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/Speed.webp" class="mod-icon" alt="SPD"><span class="mod-val">${fmt(sys.speedAdj)}</span></div>`);
     }
     const tagsHtml = tags.map(t => `<span class="tc-skill-tag">${t}</span>`).join("");
+    // 排版顺序：名称 → 类型·分类·稀有度 → 修正值 → 标签 → 金线 → 描述 → 金线 → 页脚
     return _wireCardInteractivity($(`<div class="limbus-title-card limbus-title-card-equip">
-      <div class="tc-header tce-header">${item.name}</div>
+      ${headerHtml()}
       <div class="tce-info-row">
         <div class="tce-info-left">
           <div class="tce-subrow">
             <span class="tce-subtype">${_subtypeLabel(sys.subtype ?? item.type)}</span>
             ${sys.category ? `<span class="tce-category">${sys.category}</span>` : ""}
+            ${rarityHtml()}
           </div>
           ${modRows.length ? `<div class="tce-modifiers">${modRows.join("")}</div>` : ""}
           ${tagsHtml ? `<div class="tce-tags">${tagsHtml}</div>` : ""}
@@ -2404,32 +2440,36 @@ function _buildItemTitleCard(item) {
       <div class="tc-gold-divider-skill"></div>
       <div class="tc-desc tce-desc">${descText}</div>
       <div class="tc-gold-divider-skill"></div>
-      <div class="tc-footer tce-footer">
-        <img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/Starlight.webp" class="tc-starlight-icon" alt="星芒">
-        <span class="tc-stellar-cost">${stellarCost}</span>
-      </div>
+      ${footerHtml(true)}
     </div>`));
   }
 
-  // 消耗品 / 材料 / 容器 — 简单卡片
+  // 消耗品 / 材料 / 容器 / 技能书 / 配方表 — 简单卡片
+  // 排版顺序：名称(×N) → 类型·分类·稀有度 → 容量/内部网格 → 标签 → 金线 → 描述 → 金线 → 页脚(眼)
   const typeLabel = typeLabels[item.type] ?? item.type;
-  const catLabel  = sys.category ? ` · ${sys.category}` : "";
   const tagsHtml  = tags.map(t => `<span class="tc-skill-tag">${t}</span>`).join("");
+  const capW = sys.capacity?.w ?? 1, capH = sys.capacity?.h ?? 1;
+  const gridStr = (item.type === "container" && sys.gridSize)
+    ? `　内部 ${sys.gridSize.width ?? 0}×${sys.gridSize.height ?? 0}` : "";
   return _wireCardInteractivity($(`<div class="limbus-title-card limbus-title-card-equip">
-    <div class="tc-header tce-header">${item.name}</div>
+    ${headerHtml()}
     <div class="tce-info-row">
       <div class="tce-info-left">
-        <div class="tce-subrow"><span class="tce-subtype">${typeLabel}${catLabel}</span></div>
+        <div class="tce-subrow">
+          <span class="tce-subtype">${typeLabel}</span>
+          ${sys.category ? `<span class="tce-category">${sys.category}</span>` : ""}
+          ${rarityHtml()}
+        </div>
+        <div class="tce-subrow">
+          <span class="tce-category">容量 ${capW}×${capH}${gridStr}</span>
+        </div>
         ${tagsHtml ? `<div class="tce-tags">${tagsHtml}</div>` : ""}
       </div>
     </div>
     <div class="tc-gold-divider-skill"></div>
     <div class="tc-desc tce-desc">${descText}</div>
     <div class="tc-gold-divider-skill"></div>
-    <div class="tc-footer tce-footer">
-      <img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/Starlight.webp" class="tc-starlight-icon" alt="星芒">
-      <span class="tc-stellar-cost">${stellarCost}</span>
-    </div>
+    ${footerHtml(false)}
   </div>`));
 }
 

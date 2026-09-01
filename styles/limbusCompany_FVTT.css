@@ -9840,3 +9840,55 @@ input.item-piles-quantity {
   color: #ffffff;
   text-shadow: 0 0 5.0px rgba(231,76,60,0.40);
 }
+
+/* ══ 物品 Title 卡·排版（调参台导出） ══ */
+.limbus-title-card { width: 280px; height: 500px; max-height: 500px; }
+
+.limbus-title-card-equip .tce-header {
+  font-size: 32px;
+  padding: 10px 12px 8px;
+  display: flex; align-items: baseline; gap: 8px;
+}
+/* 可堆叠物品：数量 ×N 挂在标题条右端 */
+.limbus-title-card-equip .tce-header .tce-name { flex: 1; min-width: 0; }
+.limbus-title-card-equip .tce-header .tce-qty {
+  font-size: 20px; font-weight: bold; flex-shrink: 0;
+  opacity: .9; font-variant-numeric: tabular-nums;
+}
+
+.limbus-title-card-equip .tce-info-row {
+  padding: 2px 12px 4px;
+}
+.limbus-title-card-equip .tce-info-left { gap: 5px; }
+.limbus-title-card-equip .tce-subtype   { font-size: 14px; }
+.limbus-title-card-equip .tce-category  { font-size: 12px; }
+/* 稀有度：并在「类型·分类」同一排，靠右 */
+.limbus-title-card-equip .tce-rarity {
+  font-size: 13px; font-weight: bold;
+  margin-left: auto; letter-spacing: .06em;
+}
+
+.limbus-title-card-equip .tce-modifiers { gap: 10px; }
+.limbus-title-card-equip .modifier-row .mod-icon {
+  width: 17px; height: 17px;
+}
+.limbus-title-card-equip .modifier-row .mod-val,
+.limbus-title-card-equip .modifier-row .resist-display { font-size: 12px; }
+
+.limbus-title-card-equip .tce-tags { gap: 6px; }
+.limbus-title-card-equip .tce-tags .tc-skill-tag {
+  font-size: 12px; padding: 0px 4px;
+}
+
+.limbus-title-card-equip .tce-desc {
+  font-size: 12px; line-height: 1.5;
+  padding: 9px 14px;
+}
+.limbus-title-card-equip .tce-footer {
+  font-size: 14px;
+  padding: 6px 14px 8px;
+}
+/* 页脚：装备＝星芒 + 眼；其余只有眼。中间的弹性空位把眼推到最右 */
+.limbus-title-card-equip .tce-footer .tce-foot-sep { flex: 1; }
+.limbus-title-card-equip .tc-eye-icon { width: 18px; height: 18px; object-fit: contain; }
+.limbus-title-card-equip .tc-eye-cost { color: var(--gold-active); font-variant-numeric: tabular-nums; }
