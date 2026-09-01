@@ -271,8 +271,11 @@ export class CharacterData extends foundry.abstract.TypeDataModel {
     const xpTable = CONFIG.LIMBUSCOMPANY?.LEVEL_XP ?? [];
     this.xp.next = xpTable[level] ?? (xpTable[xpTable.length - 1] ?? 0);
 
-    // 行动币没有上限；ap.max 只是"回合开始补满到几枚"的默认值
-    this.ap.max = 3;
+    // 行动币：value 无上限（效果可以顶到 3 枚以上）；
+    // ap.max 是「本回合的最大次数」＝ 基础 3 −「本回合被胜方摧毁的枚数」。
+    // 被摧毁数记在 flag 上，回合开始时清零 —— 摧毁只压制本回合，不跨回合累积。
+    const apBroken = this.parent?.getFlag?.("limbusCompany_FVTT", "apMaxBroken") ?? 0;
+    this.ap.max = Math.max(0, 3 - apBroken);
   }
 
   // ─── 混乱阈值辅助方法 ─────────────────────────────────────────────────────
@@ -930,6 +933,7 @@ export class LimbusActor extends Actor {
       "system.hp.value":            sys.hp.max,
       "system.sanity.value":        50,
       "system.ap.value":            3,
+      "flags.limbusCompany_FVTT.apMaxBroken": 0,
       "system.chaosThresholds":     defaultThresholds,
     });
   }

@@ -4083,11 +4083,15 @@ export class ClashManager {
         winRoll  = atkWon ? atkRollCur : defRollCur;
         winParts = atkWon ? aParts : dParts;
         ClashTotalFX._log(`${loserActor?.name ?? "败方"} 的最后机会也失败了，对抗结束`);
-        // 对抗结束：胜方摧毁败方 1 枚币（【不可摧毁】骰不被摧毁；对方 0 币则无事发生）
-        if (!loserUnbreak && apOf(loserActor) > 0) {
+        // 对抗结束：胜方摧毁败方**本回合的最大次数** 1 枚（不是当前次数——那个在
+        // 续拼时已经一枚枚花光了）。被摧毁数记在 flag 上，回合开始清零，
+        // 所以它压制的是"这一回合还能回多少币"，不跨回合累积。
+        if (!loserUnbreak) {
+          const broken = (loserActor?.getFlag?.("limbusCompany_FVTT", "apMaxBroken") ?? 0) + 1;
           await ClashManager._safeDocUpdate(loserActor,
-            { "system.ap.value": apOf(loserActor) - 1 });
-          ClashTotalFX._log(`胜方摧毁 ${loserActor?.name ?? "败方"} 1 枚行动币`);
+            { "flags.limbusCompany_FVTT.apMaxBroken": broken });
+          ClashTotalFX._log(
+            `胜方摧毁 ${loserActor?.name ?? "败方"} 本回合最大次数 1 枚（累计 ${broken} 枚）`);
         }
         break;
       }
