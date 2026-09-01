@@ -9842,7 +9842,11 @@ input.item-piles-quantity {
 }
 
 /* ══ 物品 Title 卡·排版（调参台导出） ══ */
-.limbus-title-card { width: 280px; height: 500px; max-height: 500px; }
+/* 不能裸写 .limbus-title-card：BUFF 卡是自适应高度的，写在前面会被这条后来居上地
+   压成固定 500px（症状：BUFF 卡凭空变高一大截），所以显式排除它 */
+.limbus-title-card:not(.limbus-buff-title-card) {
+  width: 280px; height: 500px; max-height: 500px;
+}
 
 .limbus-title-card-equip .tce-header {
   font-size: 20px;
