@@ -2443,18 +2443,35 @@ const sinColor    = cfg.SIN_COLORS?.[sys.sinType] ?? "#5F3E21";
       ${spreadLabel ? `<span class="tcs-spread">${spreadLabel}</span>` : ""}
     </div>` : ""}
     ${flags.length   ? `<div class="tcs-flags">${flags.join("")}</div>` : ""}
-    ${costs.length   ? `<div class="tcs-costs">${costs.join("")}</div>` : ""}
-    ${resists.length ? `<div class="tcs-res">${resists.join("")}</div>` : ""}
     ${sys.weaponRestriction ? `<div class="tcs-row"><span class="tcs-cat">武器限制：${sys.weaponRestriction}</span></div>` : ""}
     ${tags.length ? `<div class="tc-tags">${tags.map(t => `<span class="tc-skill-tag">${t}</span>`).join("")}</div>` : ""}
     <div class="tc-gold-divider-skill"></div>
     <div class="tc-desc">${descText}</div>
+    ${costs.length   ? `<div class="tcs-costs">${costs.join("")}</div>` : ""}
+    ${resists.length ? `<div class="tcs-res">${resists.join("")}</div>` : ""}
     <div class="tc-gold-divider-skill"></div>
     <div class="tc-footer">
       <img src="${ICON}Starlight.webp" class="tc-starlight-icon" alt="星芒">
       <span class="tc-stellar-cost">${stellarCost}</span>
     </div>
+    ${canToggle ? `<div class="tcs-form-hint">${useCor ? "【侵蚀】" : "【觉醒】"}　按 R 切换</div>` : ""}
   </div>`));
+
+  // R 键在【觉醒】/【侵蚀】之间切换（只换显示内容，不写文档）
+  if (canToggle) {
+    const el = card[0];
+    const onKey = (ev) => {
+      if (!document.body.contains(el)) { document.removeEventListener("keydown", onKey); return; }
+      if (ev.key !== "r" && ev.key !== "R") return;
+      ev.preventDefault();
+      const next  = el.dataset.egoForm === "corrode" ? "awaken" : "corrode";
+      const fresh = _buildSkillTitleCard(item, next)[0];
+      el.dataset.egoForm = next;
+      el.innerHTML = fresh.innerHTML;
+    };
+    document.addEventListener("keydown", onKey);
+  }
+  return card;
 }
 
 function _buildItemTitleCard(item) {
