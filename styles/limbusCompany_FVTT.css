@@ -9991,3 +9991,94 @@ input.item-piles-quantity {
   padding: 0 14px 6px;
   font-size: 11px; color: #8A6E52; text-align: right; flex-shrink: 0;
 }
+
+/* ══ 回合开始横幅（① 黑条 → ② 钟表缩入 → ③ 逆时针摆动 → ④ 双线+TURN+回合数）══ */
+.lc-turn-banner {
+  position: fixed; left: 0; right: 0; top: 40%;
+  height: 121px; transform: translateY(-50%);
+  display: flex; align-items: center; justify-content: center;
+  pointer-events: none; z-index: 100; opacity: 0;
+}
+.lc-turn-banner.show { opacity: 1; }
+
+/* ① 黑条 */
+.lc-turn-banner .lc-tb-band {
+  position: absolute; inset: 0;
+  background: linear-gradient(90deg, transparent,
+    rgba(7,6,5,0.83) 8%,
+    rgba(7,6,5,0.83) 92%, transparent);
+  transform: scaleY(0); transform-origin: center;
+}
+/* ② 钟表（素材：assets/icons/GUI/turn_clock.webp） */
+.lc-turn-banner .lc-tb-clock {
+  position: relative; width: 150px; height: 150px;
+  opacity: 0; transform-origin: center; z-index: 2;
+}
+.lc-turn-banner .lc-tb-clock img {
+  width: 100%; height: 100%; display: block; object-fit: contain;
+  filter: drop-shadow(0 0 8px rgba(0,0,0,.8));
+}
+/* ④ 橙红双线 */
+.lc-turn-banner .lc-tb-line {
+  position: absolute; left: 50%; width: 70%;
+  height: 3px; background: #dc4110;
+  box-shadow: 0 0 12.0px rgba(220,65,16,0.60),
+              0 0 30.0px rgba(220,65,16,0.36);
+  transform: translateX(-50%) scaleX(0); transform-origin: center;
+}
+.lc-turn-banner .lc-tb-line.top    { top: calc(50% - 37px); }
+.lc-turn-banner .lc-tb-line.bottom { top: calc(50% + 37px); }
+/* ④ 文字 */
+.lc-turn-banner .lc-tb-text {
+  position: absolute; left: 0; right: 0; top: 50%; transform: translateY(-50%);
+  display: flex; align-items: baseline; justify-content: center; gap: 20px;
+  opacity: 0; z-index: 3;
+}
+.lc-turn-banner .lc-tb-word {
+  font-size: 52px; font-weight: bold; color: #e8caa1;
+  letter-spacing: 0.03em;
+  text-indent: 0.03em;
+  line-height: 1; text-shadow: 0 2px 10px rgba(0,0,0,.9);
+}
+.lc-turn-banner .lc-tb-num {
+  font-size: 52px; font-weight: bold; color: #dc4110;
+  line-height: 1; font-variant-numeric: tabular-nums;
+  text-shadow: 0 0 13.8px rgba(220,65,16,0.55),
+               0 2px 10px rgba(0,0,0,.9);
+}
+
+/* ── 播放 ── */
+.lc-turn-banner.play .lc-tb-band {
+  animation: lc-tb-band 60ms cubic-bezier(.2,.9,.3,1) forwards,
+             lc-tb-out 260ms ease-in 613ms forwards;
+}
+.lc-turn-banner.play .lc-tb-clock {
+  animation: lc-tb-clock-in 160ms cubic-bezier(.14,.8,.28,1) 60ms both,
+             lc-tb-swing 60ms cubic-bezier(.36,.07,.19,.97) 220ms both,
+             lc-tb-out 260ms ease-in 613ms forwards;
+}
+.lc-turn-banner.play .lc-tb-line {
+  animation: lc-tb-line 260ms cubic-bezier(.16,.84,.3,1) 253ms both,
+             lc-tb-out 260ms ease-in 613ms forwards;
+}
+.lc-turn-banner.play .lc-tb-text {
+  animation: lc-tb-text 260ms cubic-bezier(.16,.84,.3,1) 253ms both,
+             lc-tb-out 260ms ease-in 613ms forwards;
+}
+
+@keyframes lc-tb-band     { from { transform: scaleY(0); } to { transform: scaleY(1); } }
+@keyframes lc-tb-clock-in { from { opacity: 0; transform: scale(3.40); }
+                            to   { opacity: 1; transform: scale(1); } }
+@keyframes lc-tb-swing {
+  0%   { transform: rotate(0deg); }
+  35%  { transform: rotate(-15deg); }
+  70%  { transform: rotate(5.3deg); }
+  100% { transform: rotate(0deg); }
+}
+@keyframes lc-tb-line { from { transform: translateX(-50%) scaleX(0); }
+                        to   { transform: translateX(-50%) scaleX(1); } }
+@keyframes lc-tb-text { from { opacity: 0; transform: translateY(-50%) scale(.86); }
+                        to   { opacity: 1; transform: translateY(-50%) scale(1); } }
+@keyframes lc-tb-out  { from { opacity: 1; } to { opacity: 0; } }
+
+/* 总时长（JS 里移除元素用）：873 ms */

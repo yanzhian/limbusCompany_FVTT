@@ -10,6 +10,7 @@
 
 import { LIMBUSCOMPANY }   from "./config.mjs";
 import { registerHeaderCollapse } from "./helpers/window-header.mjs";
+import { registerTurnBanner } from "./helpers/turn-banner.mjs";
 import { LimbusActor, CharacterData, MerchantData, CampData, LootData }  from "./documents/actor.mjs";
 import {
   LimbusItem,
@@ -222,6 +223,9 @@ Hooks.once("setup", () => {
 /* ─── Hooks.once("ready") ────────────────────────────────────────────────── */
 
 Hooks.once("ready", () => {
+  // 回合开始横幅（黑条 → 钟表 → TURN + 回合数）
+  registerTurnBanner();
+
   // 窗口标题栏整合：隐藏标题，除关闭外的按钮收进右上角 ⋮
   registerHeaderCollapse([
     "LimbusActorSheet", "LimbusItemSheet", "LimbusMerchantSheet",
