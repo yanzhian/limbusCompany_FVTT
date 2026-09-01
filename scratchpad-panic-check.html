@@ -1,0 +1,230 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>恐惧鉴定（坚定/恐慌）·调参</title>
+<style>
+:root{
+  --font-main:"Noto Sans SC","Microsoft YaHei",sans-serif;
+
+  /* ── 可调参数 ── */
+  --box-pad-x:8;     /* 外框左右内边距 px */
+  --box-pad-y:5;     /* 外框上下内边距 px */
+  --box-gap:10;      /* 两个鉴定项之间的间距 px */
+  --box-bg:#141210;  /* 外框底色 */
+  --box-bd:#4A4038;  /* 外框描边 */
+  --box-r:6;         /* 外框圆角 px */
+
+  --ic:34;           /* 图标边长 px */
+  --ic-gap:4;        /* 图标与数字的间距 px */
+  --num:20;          /* 数字字号 px */
+  --num-weight:700;  /* 数字字重 */
+  --num-dx:0;        /* 数字水平微调 px */
+  --num-dy:0;        /* 数字垂直微调 px */
+
+  --c-resolve:#5DADE2;  /* 坚定色 */
+  --c-fear:#E74C3C;     /* 恐慌色 */
+  --glow:35;            /* 数字外发光强度 % */
+  --stroke:2;           /* 数字描边粗细 px（0 = 无） */
+  --stroke-col:#0B0908; /* 描边颜色 */
+}
+body{margin:0;padding:18px;background:#141110;color:#E8CAA2;font-family:var(--font-main);
+  display:flex;gap:18px;align-items:flex-start;flex-wrap:wrap;}
+h1{font-size:16px;margin:0 0 3px;letter-spacing:.06em;}
+p.sub{margin:0 0 12px;font-size:12px;color:#6E5540;max-width:520px;line-height:1.7;}
+h3{font-size:12px;color:#E7B956;margin:14px 0 6px;font-weight:normal;letter-spacing:.08em;}
+
+/* ══ 预览：三种排布 ══════════════════════════════════════ */
+.stage{background:#0B0908;border:1px solid #2b2119;border-radius:5px;
+  padding:14px;display:inline-flex;gap:20px;align-items:center;}
+.stage.on-hud{background:linear-gradient(180deg,#171310,#0d0b09);}
+
+.qa-panic-check{
+  display:flex;align-items:center;
+  gap:calc(var(--box-gap)*1px);
+  padding:calc(var(--box-pad-y)*1px) calc(var(--box-pad-x)*1px);
+  background:var(--box-bg);border:1px solid var(--box-bd);
+  border-radius:calc(var(--box-r)*1px);cursor:pointer;transition:border-color .15s;
+}
+.qa-panic-check:hover{border-color:#C9A84C;}
+
+/* 布局 A：图标 + 右侧数字（横排） */
+.qa-panic-item{display:flex;align-items:center;gap:calc(var(--ic-gap)*1px);}
+/* 布局 B：图标上、数字下 */
+.lay-b .qa-panic-item{flex-direction:column;gap:calc(var(--ic-gap)*1px);}
+/* 布局 C：数字压在图标右下角 */
+.lay-c .qa-panic-item{position:relative;gap:0;}
+.lay-c .qa-panic-num{position:absolute;right:calc(var(--num-dx)*1px - 2px);
+  bottom:calc(var(--num-dy)*1px - 2px);}
+
+.qa-panic-item img{width:calc(var(--ic)*1px);height:calc(var(--ic)*1px);display:block;}
+.qa-panic-num{
+  font-size:calc(var(--num)*1px);font-weight:var(--num-weight);line-height:1;
+  transform:translate(calc(var(--num-dx)*1px),calc(var(--num-dy)*1px));
+  -webkit-text-stroke:calc(var(--stroke)*1px) var(--stroke-col);
+  paint-order:stroke fill;
+}
+.qa-panic-resolve .qa-panic-num{color:var(--c-resolve);
+  text-shadow:0 0 calc(var(--glow)/8*1px) rgba(93,173,226,calc(var(--glow)/100));}
+.qa-panic-fear .qa-panic-num{color:var(--c-fear);
+  text-shadow:0 0 calc(var(--glow)/8*1px) rgba(231,76,60,calc(var(--glow)/100));}
+
+/* ══ 面板 ══════════════════════════════════════════════ */
+.panel{border:1px solid #2b2119;border-radius:4px;padding:12px 14px;width:400px;
+  display:flex;flex-direction:column;gap:6px;max-height:92vh;overflow:auto;}
+.seg{display:flex;gap:5px;flex-wrap:wrap;margin-bottom:4px;}
+.seg span{font-size:11.5px;padding:3px 10px;border-radius:999px;cursor:pointer;
+  border:1px solid #3A2A1C;background:#15110E;color:#9B6839;}
+.seg span.on{background:#E7B956;border-color:#E7B956;color:#15110E;font-weight:bold;}
+.row{display:flex;align-items:center;gap:8px;font-size:12px;}
+.row label{width:104px;color:#9B6839;}
+.row input[type=range]{flex:1;min-width:80px;}
+.row input[type=color]{width:38px;height:22px;padding:0;border:1px solid #3A2A1C;background:none;}
+.row b{width:46px;text-align:right;color:#E7B956;font:11.5px monospace;}
+textarea{width:100%;height:200px;background:#15110E;border:1px solid #3A2A1C;border-radius:3px;
+  color:#E8CAA2;font:11px/1.5 monospace;padding:7px;resize:vertical;margin-top:8px;}
+.note{font-size:11.5px;color:#6E5540;line-height:1.7;}
+</style>
+
+<div>
+  <h1>恐惧鉴定（坚定 / 恐慌）·调参</h1>
+  <p class="sub">快捷 HUD 左栏那两个小图标。图标用的是
+    <code>坚定次数.webp</code> / <code>恐慌次数.webp</code>，这里用同色块占位（实际会更清楚）。
+    调好把导出的 CSS 贴到 <code>styles/limbusCompany_FVTT.css</code> <b>末尾</b>。</p>
+
+  <h3>预览（深底 = HUD 上的实际观感）</h3>
+  <div class="stage on-hud">
+    <div class="qa-panic-check" id="prev">
+      <div class="qa-panic-item qa-panic-resolve">
+        <img id="ic1" alt="坚定"><span class="qa-panic-num">2</span>
+      </div>
+      <div class="qa-panic-item qa-panic-fear">
+        <img id="ic2" alt="恐慌"><span class="qa-panic-num">0</span>
+      </div>
+    </div>
+    <div style="font-size:12px;color:#6E5540;">← 鼠标移上去看 hover</div>
+  </div>
+</div>
+
+<div class="panel">
+  <div class="seg" id="seg">
+    <span class="on" data-v="a">A 图标+右侧数字</span>
+    <span data-v="b">B 图标上·数字下</span>
+    <span data-v="c">C 数字压角标</span>
+  </div>
+  <div id="ctrls"></div>
+  <textarea id="out" readonly></textarea>
+  <div class="note">数字用 <code>-webkit-text-stroke</code> 描边，压在图标上也读得清；
+    描边设 0 就是纯色字。</div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+
+const P = [
+  ["box-pad-x","--box-pad-x","n",8,"外框左右内距"],
+  ["box-pad-y","--box-pad-y","n",5,"外框上下内距"],
+  ["box-gap","--box-gap","n",10,"两项间距"],
+  ["box-r","--box-r","n",6,"外框圆角"],
+  ["box-bg","--box-bg","c","#141210","外框底色"],
+  ["box-bd","--box-bd","c","#4A4038","外框描边"],
+  ["ic","--ic","n",34,"图标边长"],
+  ["ic-gap","--ic-gap","n",4,"图标↔数字"],
+  ["num","--num","n",20,"数字字号"],
+  ["num-weight","--num-weight","n",700,"数字字重"],
+  ["num-dx","--num-dx","n",0,"数字水平微调"],
+  ["num-dy","--num-dy","n",0,"数字垂直微调"],
+  ["c-resolve","--c-resolve","c","#5DADE2","坚定色"],
+  ["c-fear","--c-fear","c","#E74C3C","恐慌色"],
+  ["glow","--glow","n",35,"数字发光%"],
+  ["stroke","--stroke","n",2,"数字描边"],
+  ["stroke-col","--stroke-col","c","#0B0908","描边颜色"],
+];
+const RANGE = {
+  "box-pad-x":[0,20],"box-pad-y":[0,20],"box-gap":[0,30],"box-r":[0,16],
+  "ic":[16,56],"ic-gap":[0,14],"num":[10,34],"num-weight":[300,900],
+  "num-dx":[-16,16],"num-dy":[-16,16],"glow":[0,100],"stroke":[0,5],
+};
+
+$("ctrls").innerHTML = P.map(([id,,t,def,zh]) => {
+  if (t === "c") return `<div class="row"><label>${zh}</label>
+    <input type="color" id="${id}" value="${def}"><b id="${id}-n"></b></div>`;
+  const [mn,mx] = RANGE[id] || [0,100];
+  const step = id === "num-weight" ? 100 : 1;
+  return `<div class="row"><label>${zh}</label>
+    <input type="range" id="${id}" min="${mn}" max="${mx}" step="${step}" value="${def}"><b id="${id}-n"></b></div>`;
+}).join("");
+
+// 占位图标（实际用 assets/icons/Base_icon/坚定次数.webp / 恐慌次数.webp）
+const icon = (col, ch) => `data:image/svg+xml;utf8,${encodeURIComponent(
+  `<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64">
+     <circle cx="32" cy="32" r="28" fill="${col}" opacity=".22" stroke="${col}" stroke-width="3"/>
+     <text x="32" y="42" font-size="30" fill="${col}" text-anchor="middle" font-family="sans-serif">${ch}</text>
+   </svg>`)}`;
+
+let mode = "a";
+const V = id => $(id).value, N = id => Number($(id).value);
+
+function apply(){
+  const rs = document.documentElement.style;
+  for (const [id, v, t] of P){
+    if (t === "c"){ rs.setProperty(v, V(id)); $(id+"-n").textContent = V(id); }
+    else { rs.setProperty(v, N(id)); $(id+"-n").textContent = N(id); }
+  }
+  $("ic1").src = icon(V("c-resolve"), "坚");
+  $("ic2").src = icon(V("c-fear"), "慌");
+  dump();
+}
+
+function dump(){
+  const layout =
+    mode === "b" ? `.qa-panic-item { flex-direction: column; gap: ${N("ic-gap")}px; }`
+  : mode === "c" ? `.qa-panic-item { position: relative; gap: 0; }
+.qa-panic-num { position: absolute; right: ${N("num-dx") - 2}px; bottom: ${N("num-dy") - 2}px; }`
+  :                `.qa-panic-item { flex-direction: row; gap: ${N("ic-gap")}px; }`;
+
+  const shift = mode === "c" ? "" :
+    `\n  transform: translate(${N("num-dx")}px, ${N("num-dy")}px);`;
+
+  $("out").value =
+`/* ══ 快捷 HUD·恐惧鉴定（布局 ${mode.toUpperCase()}） ══ */
+.qa-panic-check {
+  display: flex; align-items: center;
+  gap: ${N("box-gap")}px;
+  margin-top: 2px;
+  padding: ${N("box-pad-y")}px ${N("box-pad-x")}px;
+  background: ${V("box-bg")};
+  border: 1px solid ${V("box-bd")};
+  border-radius: ${N("box-r")}px;
+  cursor: pointer; transition: border-color .15s;
+}
+.qa-panic-check:hover { border-color: #C9A84C; }
+
+.qa-panic-item { display: flex; align-items: center; }
+${layout}
+.qa-panic-item img { width: ${N("ic")}px; height: ${N("ic")}px; display: block; }
+
+.qa-panic-num {
+  font-size: ${N("num")}px; font-weight: ${N("num-weight")}; line-height: 1;${shift}
+  -webkit-text-stroke: ${N("stroke")}px ${V("stroke-col")};
+  paint-order: stroke fill;
+}
+.qa-panic-resolve .qa-panic-num {
+  color: ${V("c-resolve")};
+  text-shadow: 0 0 ${(N("glow")/8).toFixed(1)}px rgba(93,173,226,${(N("glow")/100).toFixed(2)});
+}
+.qa-panic-fear .qa-panic-num {
+  color: ${V("c-fear")};
+  text-shadow: 0 0 ${(N("glow")/8).toFixed(1)}px rgba(231,76,60,${(N("glow")/100).toFixed(2)});
+}`;
+}
+
+for (const [id] of P) $(id).addEventListener("input", apply);
+$("seg").addEventListener("click", ev => {
+  const v = ev.target?.dataset?.v; if (!v) return;
+  [...$("seg").children].forEach(c => c.classList.toggle("on", c.dataset.v === v));
+  mode = v;
+  $("prev").className = "qa-panic-check" + (v === "a" ? "" : ` lay-${v}`);
+  dump();
+});
+
+apply();
+</script>
