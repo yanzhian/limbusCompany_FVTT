@@ -5,31 +5,38 @@
 :root{
   --font-main:"Noto Sans SC","Microsoft YaHei",sans-serif;
 
-  /* ── 版面 ── */
-  --band-h:120;        /* 横幅带高度 px */
-  --band-y:42;         /* 纵向位置：距屏幕顶部的百分比 */
-  --band-skew:0;       /* 整条斜切角度 deg */
-  --band-a:78;         /* 底带不透明度 % */
-  --band-col:#0B0908;  /* 底带颜色 */
-  --line-col:#DC4110;  /* 上下描边颜色 */
-  --line-w:2;          /* 上下描边粗细 px */
+  /* ── 黑条 ── */
+  --band-h:150;        /* 黑条高度 px */
+  --band-y:45;         /* 纵向位置：距顶部 % */
+  --band-col:#070605;  /* 黑条颜色 */
+  --band-a:88;         /* 黑条不透明度 % */
+  --band-ms:90;       /* ① 黑条展开时长 ms */
 
-  /* ── 文字 ── */
-  --word-size:64;      /* TURN 字号 px */
-  --word-track:22;     /* TURN 字距 ÷100 em */
-  --word-col:#E8CAA1;  /* TURN 颜色 */
-  --num-size:88;       /* 回合数字号 px */
-  --num-col:#DC4110;   /* 回合数颜色 */
-  --num-gap:18;        /* TURN 与数字的间距 px */
-  --num-dy:0;          /* 数字垂直微调 px */
-  --glow:40;           /* 数字外发光强度 % */
+  /* ── 钟表 ── */
+  --clock-size:86;     /* 钟表最终边长 px */
+  --clock-from:340;    /* 入场时的放大倍率 %（从多大缩到正常） */
+  --clock-col:#E8CAA1; /* 钟表主色 */
+  --clock-ms:150;      /* ② 缩放入场时长 ms */
+  --swing-deg:15;      /* ③ 逆时针摆动角度 deg */
+  --swing-ms:140;      /* ③ 摆动时长 ms */
 
-  /* ── 动画 ── */
-  --in-ms:420;         /* 进入时长 ms */
-  --hold-ms:900;       /* 停留时长 ms */
-  --out-ms:380;        /* 退出时长 ms */
-  --slide:220;         /* 横向滑动距离 px */
-  --sweep-a:22;        /* 扫光强度 % */
+  /* ── 橙红双线 + 文字 ── */
+  --line-col:#DC4110;  /* 线与数字的颜色 */
+  --line-w:3;          /* 线粗 px */
+  --line-len:70;       /* 线长度 %（相对屏宽） */
+  --line-gap:54;       /* 两条线的上下间距 px */
+  --line-glow:60;      /* 线的光晕强度 % */
+  --text-ms:110;       /* ④ 文字与线出现时长 ms */
+
+  --word-size:52;      /* TURN 字号 */
+  --word-track:24;     /* TURN 字距 ÷100 em */
+  --word-col:#E8CAA1;
+  --num-size:52;       /* 回合数字号 */
+  --num-gap:20;        /* TURN 与数字间距 */
+  --num-glow:55;       /* 数字光晕 % */
+
+  --hold-ms:0;       /* 停留 ms */
+  --out-ms:70;        /* 退出 ms */
 }
 body{margin:0;background:#141110;color:#E8CAA2;font-family:var(--font-main);
   display:flex;gap:18px;align-items:flex-start;padding:16px;flex-wrap:wrap;}
@@ -37,66 +44,84 @@ h1{font-size:16px;margin:0 0 3px;letter-spacing:.06em;}
 p.sub{margin:0 0 10px;font-size:12px;color:#6E5540;max-width:560px;line-height:1.7;}
 h2{font-size:11.5px;color:#E7B956;margin:8px 0 1px;letter-spacing:.1em;font-weight:normal;}
 
-/* ══ 舞台：模拟 Foundry 画布 ══ */
-.stage{position:relative;width:640px;height:400px;overflow:hidden;border-radius:5px;
+/* ══ 舞台 ══ */
+.stage{position:relative;width:660px;height:420px;overflow:hidden;border-radius:5px;
   border:1px solid #2b2119;
-  background:
-    repeating-linear-gradient(0deg,#1b1714 0 39px,#221c18 39px 40px),
-    repeating-linear-gradient(90deg,#1b1714 0 39px,#221c18 39px 40px);}
+  background:repeating-linear-gradient(0deg,#1b1714 0 39px,#221c18 39px 40px),
+             repeating-linear-gradient(90deg,#1b1714 0 39px,#221c18 39px 40px);}
 .stage .fake-token{position:absolute;width:44px;height:44px;border-radius:50%;
   background:#3B2412;border:2px solid #5F3E22;}
 
-/* ══ 横幅 ══ */
-.lc-turn-banner{
-  position:absolute;left:0;right:0;top:calc(var(--band-y)*1%);
-  height:calc(var(--band-h)*1px);transform:translateY(-50%) skewY(calc(var(--band-skew)*1deg));
-  display:flex;align-items:center;justify-content:center;gap:calc(var(--num-gap)*1px);
+/* ══ 横幅 ══════════════════════════════════════════════ */
+.lc-turn-banner{position:absolute;left:0;right:0;top:calc(var(--band-y)*1%);
+  height:calc(var(--band-h)*1px);transform:translateY(-50%);
+  display:flex;align-items:center;justify-content:center;
+  pointer-events:none;overflow:visible;opacity:0;}
+.lc-turn-banner.show{opacity:1;}
+
+/* ① 黑条 */
+.lc-tb-band{position:absolute;inset:0;
   background:linear-gradient(90deg,transparent,
-    color-mix(in srgb,var(--band-col) calc(var(--band-a)*1%),transparent) 12%,
-    color-mix(in srgb,var(--band-col) calc(var(--band-a)*1%),transparent) 88%,transparent);
-  border-top:calc(var(--line-w)*1px) solid var(--line-col);
-  border-bottom:calc(var(--line-w)*1px) solid var(--line-col);
-  pointer-events:none;overflow:hidden;
-}
-.lc-turn-banner .lc-tb-inner{display:flex;align-items:baseline;
-  gap:calc(var(--num-gap)*1px);transform:skewY(calc(var(--band-skew)*-1deg));}
+    color-mix(in srgb,var(--band-col) calc(var(--band-a)*1%),transparent) 8%,
+    color-mix(in srgb,var(--band-col) calc(var(--band-a)*1%),transparent) 92%,transparent);
+  transform:scaleY(0);transform-origin:center;}
+.play .lc-tb-band{animation:tb-band var(--t-band) cubic-bezier(.2,.9,.3,1) forwards;}
+
+/* ② 钟表 */
+.lc-tb-clock{position:relative;width:calc(var(--clock-size)*1px);height:calc(var(--clock-size)*1px);
+  opacity:0;transform-origin:center;z-index:2;}
+.lc-tb-clock svg{width:100%;height:100%;display:block;
+  filter:drop-shadow(0 0 8px rgba(0,0,0,.8));}
+.play .lc-tb-clock{animation:
+  tb-clock-in var(--t-clock) cubic-bezier(.14,.8,.28,1) var(--d-clock) both,
+  tb-clock-swing var(--t-swing) cubic-bezier(.36,.07,.19,.97) var(--d-swing) both,
+  tb-fade-out var(--t-out) ease-in var(--d-out) forwards;}
+
+/* ④ 橙红双线 */
+.lc-tb-line{position:absolute;left:50%;width:calc(var(--line-len)*1%);
+  height:calc(var(--line-w)*1px);background:var(--line-col);
+  box-shadow:0 0 calc(var(--line-glow)/5*1px) color-mix(in srgb,var(--line-col) calc(var(--line-glow)*1%),transparent),
+             0 0 calc(var(--line-glow)/2*1px) color-mix(in srgb,var(--line-col) calc(var(--line-glow)*0.6%),transparent);
+  transform:translateX(-50%) scaleX(0);transform-origin:center;}
+.lc-tb-line.top   {top:calc(50% - var(--line-gap)*1px);}
+.lc-tb-line.bottom{top:calc(50% + var(--line-gap)*1px);}
+.play .lc-tb-line{animation:
+  tb-line var(--t-text) cubic-bezier(.16,.84,.3,1) var(--d-text) both,
+  tb-fade-out var(--t-out) ease-in var(--d-out) forwards;}
+
+/* ④ 文字 */
+.lc-tb-text{position:absolute;left:0;right:0;top:50%;transform:translateY(-50%);
+  display:flex;align-items:baseline;justify-content:center;gap:calc(var(--num-gap)*1px);
+  opacity:0;z-index:3;}
+.play .lc-tb-text{animation:
+  tb-text var(--t-text) cubic-bezier(.16,.84,.3,1) var(--d-text) both,
+  tb-fade-out var(--t-out) ease-in var(--d-out) forwards;}
 .lc-tb-word{font-size:calc(var(--word-size)*1px);font-weight:bold;color:var(--word-col);
   letter-spacing:calc(var(--word-track)/100*1em);text-indent:calc(var(--word-track)/100*1em);
-  line-height:1;}
-.lc-tb-num{font-size:calc(var(--num-size)*1px);font-weight:bold;color:var(--num-col);
+  line-height:1;text-shadow:0 2px 10px rgba(0,0,0,.9);}
+.lc-tb-num{font-size:calc(var(--num-size)*1px);font-weight:bold;color:var(--line-col);
   line-height:1;font-variant-numeric:tabular-nums;
-  transform:translateY(calc(var(--num-dy)*1px));
-  text-shadow:0 0 calc(var(--glow)/4*1px) color-mix(in srgb,var(--num-col) calc(var(--glow)*1%),transparent);}
-/* 扫光 */
-.lc-turn-banner::after{content:"";position:absolute;inset:0;pointer-events:none;
-  background:linear-gradient(105deg,transparent 35%,
-    rgba(255,255,255,calc(var(--sweep-a)/100)) 50%,transparent 65%);
-  transform:translateX(-120%);}
-
-/* 动画：整条淡入 + 文字反向对冲滑入 → 停留 → 淡出 */
-.lc-turn-banner.play{animation:tb-band calc((var(--in-ms) + var(--hold-ms) + var(--out-ms))*1ms) linear forwards;}
-.lc-turn-banner.play .lc-tb-word{animation:tb-word calc(var(--in-ms)*1ms) cubic-bezier(.16,.84,.3,1) both;}
-.lc-turn-banner.play .lc-tb-num {animation:tb-num  calc(var(--in-ms)*1ms) cubic-bezier(.16,.84,.3,1) both;}
-.lc-turn-banner.play::after{
-  animation:tb-sweep calc((var(--in-ms) + var(--hold-ms))*1ms) ease-out both;}
+  text-shadow:0 0 calc(var(--num-glow)/4*1px) color-mix(in srgb,var(--line-col) calc(var(--num-glow)*1%),transparent),
+              0 2px 10px rgba(0,0,0,.9);}
 
 @keyframes tb-band{
-  0%{opacity:0;transform:translateY(-50%) skewY(calc(var(--band-skew)*1deg)) scaleY(.2);}
-  12%{opacity:1;transform:translateY(-50%) skewY(calc(var(--band-skew)*1deg)) scaleY(1);}
-  82%{opacity:1;transform:translateY(-50%) skewY(calc(var(--band-skew)*1deg)) scaleY(1);}
-  100%{opacity:0;transform:translateY(-50%) skewY(calc(var(--band-skew)*1deg)) scaleY(.86);}
+  from{transform:scaleY(0);} to{transform:scaleY(1);}
 }
-@keyframes tb-word{
-  from{opacity:0;transform:translateX(calc(var(--slide)*-1px));}
-  to  {opacity:1;transform:translateX(0);}
+@keyframes tb-clock-in{
+  from{opacity:0;transform:scale(calc(var(--clock-from)/100));}
+  to  {opacity:1;transform:scale(1);}
 }
-@keyframes tb-num{
-  from{opacity:0;transform:translateX(calc(var(--slide)*1px)) translateY(calc(var(--num-dy)*1px));}
-  to  {opacity:1;transform:translateX(0) translateY(calc(var(--num-dy)*1px));}
+@keyframes tb-clock-swing{
+  0%  {transform:rotate(0deg);}
+  35% {transform:rotate(calc(var(--swing-deg)*-1deg));}
+  70% {transform:rotate(calc(var(--swing-deg)*0.35deg));}
+  100%{transform:rotate(0deg);}
 }
-@keyframes tb-sweep{
-  0%{transform:translateX(-120%);} 55%{transform:translateX(120%);} 100%{transform:translateX(120%);}
-}
+@keyframes tb-line{ from{transform:translateX(-50%) scaleX(0);} to{transform:translateX(-50%) scaleX(1);} }
+@keyframes tb-text{ from{opacity:0;transform:translateY(-50%) scale(.86);} to{opacity:1;transform:translateY(-50%) scale(1);} }
+@keyframes tb-fade-out{ from{opacity:1;} to{opacity:0;} }
+.play .lc-tb-band{animation:tb-band var(--t-band) cubic-bezier(.2,.9,.3,1) forwards,
+  tb-fade-out var(--t-out) ease-in var(--d-out) forwards;}
 
 /* ══ 面板 ══ */
 .panel{border:1px solid #2b2119;border-radius:4px;padding:12px 14px;width:400px;
@@ -107,25 +132,43 @@ h2{font-size:11.5px;color:#E7B956;margin:8px 0 1px;letter-spacing:.1em;font-weig
 .btn:hover{color:#E7B956;border-color:#E7B956;}
 .btn.primary{background:#E7B956;border-color:#E7B956;color:#15110E;font-weight:bold;}
 .row{display:flex;align-items:center;gap:8px;font-size:12px;}
-.row label{width:108px;color:#9B6839;}
-.row input[type=range]{flex:1;min-width:80px;}
+.row label{width:112px;color:#9B6839;}
+.row input[type=range]{flex:1;min-width:78px;}
 .row input[type=color]{width:38px;height:22px;padding:0;border:1px solid #3A2A1C;background:none;}
 .row b{width:46px;text-align:right;color:#E7B956;font:11.5px monospace;}
 textarea{width:100%;height:210px;background:#15110E;border:1px solid #3A2A1C;border-radius:3px;
   color:#E8CAA2;font:11px/1.5 monospace;padding:7px;resize:vertical;margin-top:6px;}
 .note{font-size:11.5px;color:#6E5540;line-height:1.7;}
+.tl{font:11px/1.6 monospace;color:#8A6E52;background:#15110E;border:1px solid #3A2A1C;
+  border-radius:3px;padding:6px 8px;}
 </style>
 
 <div>
   <h1>回合开始横幅·调参</h1>
-  <p class="sub">点【播放】看一次完整动画。回合数默认取 <code>game.combat.round</code>，
-    颜色 <code>#DC4110</code>。调好把导出的 CSS 贴到
-    <code>styles/limbusCompany_FVTT.css</code> 末尾，我再写触发逻辑。</p>
+  <p class="sub">顺序：<b>① 黑条展开 → ② 钟表由大缩到正常 → ③ 逆时针摆一下 → ④ 橙红双线拉开 + TURN 与回合数浮现</b>
+    → 淡出。<b>整体时长不超过 500ms</b>（时间轴会实时校验）。调好把导出的 CSS 贴到 <code>styles/limbusCompany_FVTT.css</code> 末尾，我再写触发逻辑。</p>
   <div class="stage" id="stage">
-    <div class="fake-token" style="left:120px;top:250px"></div>
-    <div class="fake-token" style="left:420px;top:120px"></div>
+    <div class="fake-token" style="left:120px;top:300px"></div>
+    <div class="fake-token" style="left:470px;top:120px"></div>
+
     <div class="lc-turn-banner" id="banner">
-      <div class="lc-tb-inner">
+      <div class="lc-tb-band"></div>
+      <div class="lc-tb-line top"></div>
+      <div class="lc-tb-line bottom"></div>
+      <div class="lc-tb-clock">
+        <svg viewBox="0 0 100 100">
+          <circle cx="50" cy="50" r="42" fill="none" stroke="var(--clock-col)" stroke-width="5"/>
+          <circle cx="50" cy="50" r="34" fill="none" stroke="var(--clock-col)" stroke-width="1.5" opacity=".45"/>
+          <g stroke="var(--clock-col)" stroke-width="3" stroke-linecap="round">
+            <line x1="50" y1="12" x2="50" y2="20"/><line x1="88" y1="50" x2="80" y2="50"/>
+            <line x1="50" y1="88" x2="50" y2="80"/><line x1="12" y1="50" x2="20" y2="50"/>
+          </g>
+          <line x1="50" y1="50" x2="50" y2="26" stroke="var(--clock-col)" stroke-width="5" stroke-linecap="round"/>
+          <line x1="50" y1="50" x2="70" y2="58" stroke="var(--line-col)" stroke-width="4" stroke-linecap="round"/>
+          <circle cx="50" cy="50" r="4" fill="var(--line-col)"/>
+        </svg>
+      </div>
+      <div class="lc-tb-text">
         <span class="lc-tb-word">TURN</span>
         <span class="lc-tb-num" id="num">3</span>
       </div>
@@ -136,47 +179,59 @@ textarea{width:100%;height:210px;background:#15110E;border:1px solid #3A2A1C;bor
 <div class="panel">
   <div class="btnrow">
     <span class="btn primary" id="play">▶ 播放</span>
-    <span class="btn" id="hold">常显（方便调版面）</span>
+    <span class="btn" id="hold">常显（调版面）</span>
     <span class="btn" id="rnd">回合数 +1</span>
   </div>
+  <div class="tl" id="timeline"></div>
   <div id="ctrls"></div>
   <textarea id="out" readonly></textarea>
-  <div class="note">「常显」下动画停在最终状态，方便调位置和字号；调完记得再播一次看节奏。</div>
+  <div class="note">钟表是内联 SVG（没有素材依赖）；指针颜色跟着橙红色走。
+    想换成图片素材的话告诉我路径，我把 SVG 换成 &lt;img&gt;。</div>
 </div>
 
 <script>
 const $ = id => document.getElementById(id);
 
 const P = [
-  ["H0","","h",0,"版面"],
-  ["band-h","--band-h","n",120,"横幅高度"],
-  ["band-y","--band-y","n",42,"纵向位置%"],
-  ["band-skew","--band-skew","n",0,"斜切角度"],
-  ["band-a","--band-a","n",78,"底带浓度%"],
-  ["band-col","--band-col","c","#0B0908","底带颜色"],
-  ["line-col","--line-col","c","#DC4110","上下描边色"],
-  ["line-w","--line-w","n",2,"描边粗细"],
-  ["H1","","h",0,"文字"],
-  ["word-size","--word-size","n",64,"TURN 字号"],
-  ["word-track","--word-track","n",22,"TURN 字距"],
+  ["H0","","h",0,"① 黑条"],
+  ["band-h","--band-h","n",150,"高度"],
+  ["band-y","--band-y","n",45,"纵向位置%"],
+  ["band-col","--band-col","c","#070605","颜色"],
+  ["band-a","--band-a","n",88,"不透明度%"],
+  ["band-ms","--band-ms","n",90,"展开时长ms"],
+  ["H1","","h",0,"② 钟表"],
+  ["clock-size","--clock-size","n",86,"最终边长"],
+  ["clock-from","--clock-from","n",340,"入场放大%"],
+  ["clock-col","--clock-col","c","#E8CAA1","主色"],
+  ["clock-ms","--clock-ms","n",150,"缩放时长ms"],
+  ["H2","","h",0,"③ 摆动"],
+  ["swing-deg","--swing-deg","n",15,"逆时针角度"],
+  ["swing-ms","--swing-ms","n",140,"摆动时长ms"],
+  ["H3","","h",0,"④ 双线与文字"],
+  ["line-col","--line-col","c","#DC4110","橙红色"],
+  ["line-w","--line-w","n",3,"线粗"],
+  ["line-len","--line-len","n",70,"线长度%"],
+  ["line-gap","--line-gap","n",54,"两线间距"],
+  ["line-glow","--line-glow","n",60,"线光晕%"],
+  ["text-ms","--text-ms","n",110,"出现时长ms"],
+  ["word-size","--word-size","n",52,"TURN 字号"],
+  ["word-track","--word-track","n",24,"TURN 字距"],
   ["word-col","--word-col","c","#E8CAA1","TURN 颜色"],
-  ["num-size","--num-size","n",88,"回合数字号"],
-  ["num-col","--num-col","c","#DC4110","回合数颜色"],
-  ["num-gap","--num-gap","n",18,"两者间距"],
-  ["num-dy","--num-dy","n",0,"数字垂直微调"],
-  ["glow","--glow","n",40,"数字发光%"],
-  ["H2","","h",0,"动画"],
-  ["in-ms","--in-ms","n",420,"进入 ms"],
-  ["hold-ms","--hold-ms","n",900,"停留 ms"],
-  ["out-ms","--out-ms","n",380,"退出 ms"],
-  ["slide","--slide","n",220,"滑入距离"],
-  ["sweep-a","--sweep-a","n",22,"扫光强度%"],
+  ["num-size","--num-size","n",52,"回合数字号"],
+  ["num-gap","--num-gap","n",20,"两者间距"],
+  ["num-glow","--num-glow","n",55,"数字光晕%"],
+  ["H4","","h",0,"收尾"],
+  ["hold-ms","--hold-ms","n",0,"停留ms"],
+  ["out-ms","--out-ms","n",70,"退出ms"],
 ];
 const RANGE = {
-  "band-h":[40,240],"band-y":[10,90],"band-skew":[-12,12],"band-a":[0,100],"line-w":[0,8],
-  "word-size":[20,120],"word-track":[0,60],"num-size":[20,160],"num-gap":[0,60],
-  "num-dy":[-40,40],"glow":[0,100],
-  "in-ms":[100,1200],"hold-ms":[0,3000],"out-ms":[100,1200],"slide":[0,600],"sweep-a":[0,60],
+  "band-h":[60,300],"band-y":[10,90],"band-a":[0,100],"band-ms":[40,300],
+  "clock-size":[30,200],"clock-from":[100,800],"clock-ms":[60,400],
+  "swing-deg":[0,45],"swing-ms":[60,400],
+  "line-w":[1,10],"line-len":[20,100],"line-gap":[10,140],"line-glow":[0,100],
+  "text-ms":[40,300],"word-size":[16,100],"word-track":[0,60],
+  "num-size":[16,120],"num-gap":[0,60],"num-glow":[0,100],
+  "hold-ms":[0,600],"out-ms":[40,300],
 };
 $("ctrls").innerHTML = P.map(([id,,t,def,zh]) => {
   if (t === "h") return `<h2>${zh}</h2>`;
@@ -189,10 +244,20 @@ $("ctrls").innerHTML = P.map(([id,,t,def,zh]) => {
 }).join("");
 
 const V = id => $(id).value, N = id => Number($(id).value);
-function rgba(hex, a){ const n = parseInt(hex.replace("#",""),16);
-  return `rgba(${(n>>16)&255},${(n>>8)&255},${n&255},${(+a).toFixed(2)})`; }
+function rgba(hex,a){const n=parseInt(hex.replace("#",""),16);
+  return `rgba(${(n>>16)&255},${(n>>8)&255},${n&255},${(+a).toFixed(2)})`;}
 
-let round = 3, holding = false;
+/* 时间轴：各段的开始时刻 */
+function times(){
+  const band = N("band-ms"), clock = N("clock-ms"), swing = N("swing-ms"),
+        text = N("text-ms"), hold = N("hold-ms"), out = N("out-ms");
+  const dClock = band;                 // 黑条铺开后钟表才进
+  const dSwing = dClock + clock;       // 缩放到位后摆动
+  const dText  = dSwing + swing * 0.55; // 摆到最远处时线与字开始出现
+  const dOut   = dText + text + hold;
+  return { band, clock, swing, text, hold, out, dClock, dSwing, dText, dOut,
+           total: dOut + out };
+}
 function apply(){
   const rs = document.documentElement.style;
   for (const [id,v,t] of P){
@@ -200,89 +265,139 @@ function apply(){
     if (t === "c"){ rs.setProperty(v, V(id)); $(id+"-n").textContent = V(id); }
     else { rs.setProperty(v, N(id)); $(id+"-n").textContent = N(id); }
   }
+  const T = times();
+  rs.setProperty("--t-band",  `${T.band}ms`);
+  rs.setProperty("--t-clock", `${T.clock}ms`);
+  rs.setProperty("--t-swing", `${T.swing}ms`);
+  rs.setProperty("--t-text",  `${T.text}ms`);
+  rs.setProperty("--t-out",   `${T.out}ms`);
+  rs.setProperty("--d-clock", `${T.dClock}ms`);
+  rs.setProperty("--d-swing", `${T.dSwing}ms`);
+  rs.setProperty("--d-text",  `${T.dText}ms`);
+  rs.setProperty("--d-out",   `${T.dOut}ms`);
+  const over = T.total > 500;
+  $("timeline").innerHTML =
+    `0ms 黑条 → ${T.dClock}ms 钟表缩入 → ${T.dSwing}ms 摆动 → ` +
+    `${Math.round(T.dText)}ms 线+文字 → ${Math.round(T.dOut)}ms 淡出<br>` +
+    `<span style="color:${over ? "#E2705C" : "#7FB57F"}">总时长 ${Math.round(T.total)}ms` +
+    `${over ? "　⚠ 超过 500ms 预算" : "　✓ 在 500ms 以内"}</span>`;
   dump();
 }
+let round = 3, holding = false;
 function play(){
   const b = $("banner");
-  b.classList.remove("play");
-  void b.offsetWidth;                 // 强制重排，重启动画
-  b.style.opacity = "";
-  b.classList.add("play");
+  b.classList.remove("play","show"); void b.offsetWidth;
+  b.classList.add("play","show");
+  clearTimeout(play._t);
+  play._t = setTimeout(() => b.classList.remove("play","show"), times().total + 60);
 }
-$("play").addEventListener("click", () => { holding = false; $("banner").style.animationPlayState=""; play(); });
+$("play").addEventListener("click", () => { holding = false; play(); });
 $("hold").addEventListener("click", () => {
   holding = !holding;
   const b = $("banner");
   b.classList.remove("play");
-  b.style.opacity = holding ? "1" : "0";
-  b.querySelectorAll(".lc-tb-word,.lc-tb-num").forEach(el => el.style.opacity = holding ? "1" : "");
+  b.classList.toggle("show", holding);
+  b.querySelectorAll(".lc-tb-band,.lc-tb-line,.lc-tb-clock,.lc-tb-text").forEach(el => {
+    el.style.opacity = holding ? "1" : "";
+    el.style.transform = holding
+      ? (el.classList.contains("lc-tb-line") ? "translateX(-50%) scaleX(1)"
+        : el.classList.contains("lc-tb-text") ? "translateY(-50%)" : "")
+      : "";
+  });
 });
 $("rnd").addEventListener("click", () => { round++; $("num").textContent = round; play(); });
-$("banner").style.opacity = "0";
 
 function dump(){
+  const T = times();
   $("out").value =
-`/* ══ 回合开始横幅 ══ */
+`/* ══ 回合开始横幅（① 黑条 → ② 钟表缩入 → ③ 逆时针摆动 → ④ 双线+TURN+回合数）══ */
 .lc-turn-banner {
   position: fixed; left: 0; right: 0; top: ${N("band-y")}%;
-  height: ${N("band-h")}px;
-  transform: translateY(-50%) skewY(${N("band-skew")}deg);
+  height: ${N("band-h")}px; transform: translateY(-50%);
   display: flex; align-items: center; justify-content: center;
-  background: linear-gradient(90deg, transparent,
-    ${rgba(V("band-col"), N("band-a")/100)} 12%,
-    ${rgba(V("band-col"), N("band-a")/100)} 88%, transparent);
-  border-top: ${N("line-w")}px solid ${V("line-col")};
-  border-bottom: ${N("line-w")}px solid ${V("line-col")};
-  pointer-events: none; overflow: hidden; z-index: 100;
-  opacity: 0;
+  pointer-events: none; z-index: 100; opacity: 0;
 }
-.lc-turn-banner .lc-tb-inner {
-  display: flex; align-items: baseline; gap: ${N("num-gap")}px;
-  transform: skewY(${-N("band-skew")}deg);
+.lc-turn-banner.show { opacity: 1; }
+
+/* ① 黑条 */
+.lc-turn-banner .lc-tb-band {
+  position: absolute; inset: 0;
+  background: linear-gradient(90deg, transparent,
+    ${rgba(V("band-col"), N("band-a")/100)} 8%,
+    ${rgba(V("band-col"), N("band-a")/100)} 92%, transparent);
+  transform: scaleY(0); transform-origin: center;
+}
+/* ② 钟表 */
+.lc-turn-banner .lc-tb-clock {
+  position: relative; width: ${N("clock-size")}px; height: ${N("clock-size")}px;
+  opacity: 0; transform-origin: center; z-index: 2;
+}
+.lc-turn-banner .lc-tb-clock svg { width: 100%; height: 100%; display: block;
+  filter: drop-shadow(0 0 8px rgba(0,0,0,.8)); }
+/* ④ 橙红双线 */
+.lc-turn-banner .lc-tb-line {
+  position: absolute; left: 50%; width: ${N("line-len")}%;
+  height: ${N("line-w")}px; background: ${V("line-col")};
+  box-shadow: 0 0 ${(N("line-glow")/5).toFixed(1)}px ${rgba(V("line-col"), N("line-glow")/100)},
+              0 0 ${(N("line-glow")/2).toFixed(1)}px ${rgba(V("line-col"), N("line-glow")*0.6/100)};
+  transform: translateX(-50%) scaleX(0); transform-origin: center;
+}
+.lc-turn-banner .lc-tb-line.top    { top: calc(50% - ${N("line-gap")}px); }
+.lc-turn-banner .lc-tb-line.bottom { top: calc(50% + ${N("line-gap")}px); }
+/* ④ 文字 */
+.lc-turn-banner .lc-tb-text {
+  position: absolute; left: 0; right: 0; top: 50%; transform: translateY(-50%);
+  display: flex; align-items: baseline; justify-content: center; gap: ${N("num-gap")}px;
+  opacity: 0; z-index: 3;
 }
 .lc-turn-banner .lc-tb-word {
   font-size: ${N("word-size")}px; font-weight: bold; color: ${V("word-col")};
   letter-spacing: ${(N("word-track")/100).toFixed(2)}em;
-  text-indent: ${(N("word-track")/100).toFixed(2)}em; line-height: 1;
+  text-indent: ${(N("word-track")/100).toFixed(2)}em;
+  line-height: 1; text-shadow: 0 2px 10px rgba(0,0,0,.9);
 }
 .lc-turn-banner .lc-tb-num {
-  font-size: ${N("num-size")}px; font-weight: bold; color: ${V("num-col")};
+  font-size: ${N("num-size")}px; font-weight: bold; color: ${V("line-col")};
   line-height: 1; font-variant-numeric: tabular-nums;
-  transform: translateY(${N("num-dy")}px);
-  text-shadow: 0 0 ${(N("glow")/4).toFixed(1)}px ${rgba(V("num-col"), N("glow")/100)};
-}
-.lc-turn-banner::after {
-  content: ""; position: absolute; inset: 0; pointer-events: none;
-  background: linear-gradient(105deg, transparent 35%,
-    rgba(255,255,255,${(N("sweep-a")/100).toFixed(2)}) 50%, transparent 65%);
-  transform: translateX(-120%);
+  text-shadow: 0 0 ${(N("num-glow")/4).toFixed(1)}px ${rgba(V("line-col"), N("num-glow")/100)},
+               0 2px 10px rgba(0,0,0,.9);
 }
 
-/* 播放：整条展开 → 文字左右对冲滑入 → 停留 → 收起 */
-.lc-turn-banner.play      { animation: lc-tb-band ${N("in-ms")+N("hold-ms")+N("out-ms")}ms linear forwards; }
-.lc-turn-banner.play .lc-tb-word { animation: lc-tb-word ${N("in-ms")}ms cubic-bezier(.16,.84,.3,1) both; }
-.lc-turn-banner.play .lc-tb-num  { animation: lc-tb-num  ${N("in-ms")}ms cubic-bezier(.16,.84,.3,1) both; }
-.lc-turn-banner.play::after      { animation: lc-tb-sweep ${N("in-ms")+N("hold-ms")}ms ease-out both; }
-
-@keyframes lc-tb-band {
-  0%   { opacity: 0; transform: translateY(-50%) skewY(${N("band-skew")}deg) scaleY(.2); }
-  12%  { opacity: 1; transform: translateY(-50%) skewY(${N("band-skew")}deg) scaleY(1); }
-  82%  { opacity: 1; transform: translateY(-50%) skewY(${N("band-skew")}deg) scaleY(1); }
-  100% { opacity: 0; transform: translateY(-50%) skewY(${N("band-skew")}deg) scaleY(.86); }
+/* ── 播放 ── */
+.lc-turn-banner.play .lc-tb-band {
+  animation: lc-tb-band ${T.band}ms cubic-bezier(.2,.9,.3,1) forwards,
+             lc-tb-out ${T.out}ms ease-in ${Math.round(T.dOut)}ms forwards;
 }
-@keyframes lc-tb-word {
-  from { opacity: 0; transform: translateX(-${N("slide")}px); }
-  to   { opacity: 1; transform: translateX(0); }
+.lc-turn-banner.play .lc-tb-clock {
+  animation: lc-tb-clock-in ${T.clock}ms cubic-bezier(.14,.8,.28,1) ${T.dClock}ms both,
+             lc-tb-swing ${T.swing}ms cubic-bezier(.36,.07,.19,.97) ${T.dSwing}ms both,
+             lc-tb-out ${T.out}ms ease-in ${Math.round(T.dOut)}ms forwards;
 }
-@keyframes lc-tb-num {
-  from { opacity: 0; transform: translateX(${N("slide")}px) translateY(${N("num-dy")}px); }
-  to   { opacity: 1; transform: translateX(0) translateY(${N("num-dy")}px); }
+.lc-turn-banner.play .lc-tb-line {
+  animation: lc-tb-line ${T.text}ms cubic-bezier(.16,.84,.3,1) ${Math.round(T.dText)}ms both,
+             lc-tb-out ${T.out}ms ease-in ${Math.round(T.dOut)}ms forwards;
 }
-@keyframes lc-tb-sweep {
-  0% { transform: translateX(-120%); } 55%, 100% { transform: translateX(120%); }
+.lc-turn-banner.play .lc-tb-text {
+  animation: lc-tb-text ${T.text}ms cubic-bezier(.16,.84,.3,1) ${Math.round(T.dText)}ms both,
+             lc-tb-out ${T.out}ms ease-in ${Math.round(T.dOut)}ms forwards;
 }
 
-/* 总时长（JS 里移除元素用）：${N("in-ms")+N("hold-ms")+N("out-ms")} ms */`;
+@keyframes lc-tb-band     { from { transform: scaleY(0); } to { transform: scaleY(1); } }
+@keyframes lc-tb-clock-in { from { opacity: 0; transform: scale(${(N("clock-from")/100).toFixed(2)}); }
+                            to   { opacity: 1; transform: scale(1); } }
+@keyframes lc-tb-swing {
+  0%   { transform: rotate(0deg); }
+  35%  { transform: rotate(-${N("swing-deg")}deg); }
+  70%  { transform: rotate(${(N("swing-deg")*0.35).toFixed(1)}deg); }
+  100% { transform: rotate(0deg); }
+}
+@keyframes lc-tb-line { from { transform: translateX(-50%) scaleX(0); }
+                        to   { transform: translateX(-50%) scaleX(1); } }
+@keyframes lc-tb-text { from { opacity: 0; transform: translateY(-50%) scale(.86); }
+                        to   { opacity: 1; transform: translateY(-50%) scale(1); } }
+@keyframes lc-tb-out  { from { opacity: 1; } to { opacity: 0; } }
+
+/* 总时长（JS 里移除元素用）：${Math.round(T.total)} ms */`;
 }
 
 for (const [id,,t] of P){ if (t !== "h") $(id).addEventListener("input", apply); }
