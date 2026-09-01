@@ -3948,7 +3948,7 @@ export class ClashManager {
    *     威力增减只影响拼点胜负，不影响伤害，且只在本次对抗内有效；
    *   · 重投后打平＝翻盘失败（本系统没有平局）；首投打平由攻方承担举证责任；
    *   · 0 币的防守方不能重投，且拼点威力额外 -3；
-   *   · 失败次数用满时，还有**一次最后机会**（仍是双方重掷）；这一次再输就是彻底失败；
+   *   · 失败次数用满（＝失败次数超过币数）即彻底失败；
    *   · 对抗结束时胜方摧毁败方 1 枚币（当前币数 -1，持续到回合开始补满）
    *     （【不可摧毁】骰不被摧毁，对方已 0 币则无事发生）；
    *   · 连击奖励：本次对抗内每拼点 3 次（含首投、不论胜负）最终威力 +1，不封顶，
@@ -3992,8 +3992,7 @@ export class ClashManager {
     let defRollCur = defRoll0;
     const pen = { atk: 0, def: 0 };  // 重投累计的拼点威力惩罚（仅本次对抗）
     let lastRerollSide = "";         // 最近一次是谁在续拼（仅用于日志）
-    const fails = { atk: 0, def: 0 };               // 本次对抗内各自失败了几次
-    const lastChance = { atk: false, def: false };  // 失败次数用满后的最后机会用掉没
+    const fails = { atk: 0, def: 0 };  // 本次对抗内各自失败了几次（≤ 币数）
     let winSide = "";                // 决出胜负的一方
     let winRoll = null;              // 决胜那一掷（【伤害计算】沿用它，不重掷）
     let winParts = null;
@@ -4078,16 +4077,16 @@ export class ClashManager {
       const loserActor  = atkWon ? defActor : atkActor;
       const loserItem   = atkWon ? defItem  : atkItem;
       const loserUnbreak = loserItem?.system?.diceType === "unbreakable";
-      // 币是容量：允许失败 apOf(败方) 次；用满后还有一次最后机会
+      // 币是容量：允许失败 apOf(败方) 次；用满即彻底失败
       fails[loserSide] += 1;
-      const within    = fails[loserSide] <= apOf(loserActor);
-      const canReroll = within || !lastChance[loserSide];
+      const canReroll = fails[loserSide] <= apOf(loserActor);
 
       if (!canReroll) {
         winSide  = atkWon ? "atk" : "def";
         winRoll  = atkWon ? atkRollCur : defRollCur;
         winParts = atkWon ? aParts : dParts;
-        ClashTotalFX._log(`${loserActor?.name ?? "败方"} 的最后机会也失败了，对抗结束`);
+        ClashTotalFX._log(
+          `${loserActor?.name ?? "败方"} 的失败次数已用满（${apOf(loserActor)} 次），对抗结束`);
         // 对抗结束：胜方摧毁败方 1 枚币（币数 -1，一直持续到回合开始补满；
         // 【不可摧毁】骰不被摧毁，已经 0 枚则无事发生）
         if (!loserUnbreak && apOf(loserActor) > 0) {
@@ -4100,10 +4099,6 @@ export class ClashManager {
 
       // 续拼——刀剑相击处炸一朵（币不扣，只是把失败次数用掉一次）
       ClashVFX.broadcastBurst(ClashVFX.midPoint(atkActor, defActor));
-      if (!within) {
-        lastChance[loserSide] = true;      // 失败次数用满后的最后机会，用掉就没了
-        ClashTotalFX._log(`${loserActor?.name ?? "败方"} 的失败次数已用满，这是最后一次机会`);
-      }
       // 一般骰每失败一次累计 -1 拼点威力；【不可摧毁】免惩罚
       if (!loserUnbreak) pen[loserSide] += 1;
       lastRerollSide = loserSide;
