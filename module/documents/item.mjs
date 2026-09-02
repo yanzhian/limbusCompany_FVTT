@@ -46,6 +46,28 @@ export function buildDiceFormula({ diceCount = 1, diceFaces = 4, baseValue = 0, 
   return `${diceCount}d${diceFaces}` + (baseValue > 0 ? `+${baseValue}` : "");
 }
 
+/**
+ * 当前**生效**的那一套数值在 system 下的路径前缀。
+ *
+ * 技能可以在同一件物品上挂多套数值（E.G.O 的觉醒/侵蚀、基础/守备的训练等级），
+ * prepareDerivedData 会把生效的那一套投影到顶层字段上。于是所有"读派生值、
+ * 改完再写回去"的临时改动（clash.mjs 的 tempMods / itemSnaps）必须写到这个
+ * 前缀底下——否则写回的是投影结果，会把底层那一套（觉醒 / Ⅲ阶）覆盖掉。
+ *
+ * @param {Item} item
+ * @returns {string} "" | "corrode." | "trainForms.lvN."
+ */
+export function activeVariantPrefix(item) {
+  if (item?.type !== "skill") return "";
+  const sys = item.system;
+  if (!sys) return "";
+  if (sys.type === "ego") {
+    return (sys.corrode?.initialized && sys._ownerInPanic) ? "corrode." : "";
+  }
+  const key = `lv${sys.trainLevel ?? 3}`;
+  return sys.trainForms?.[key]?.initialized ? `trainForms.${key}.` : "";
+}
+
 export class EquipmentData extends foundry.abstract.TypeDataModel {
   static defineSchema() {
     const fields = foundry.data.fields;
@@ -164,6 +186,25 @@ export class SkillData extends foundry.abstract.TypeDataModel {
       multiplier: new fields.StringField({ required: true, initial: "x1.0" }),
     });
 
+    // 【训练等级】某一阶的覆盖数据。null = 沿用顶层（基础那一套）的值。
+    // 与 corrode 同构：同一件物品身上挂多套数值，切换的是"展示/生效哪一套"，
+    // 而不是复制出多张同名卡。
+    const trainFormSchema = () => new fields.SchemaField({
+      // 是否已经写过这一阶的数据；false 时该阶完全沿用顶层
+      initialized:  new fields.BooleanField({ required: false, initial: false }),
+      category:     new fields.StringField({ required: false, nullable: true, initial: null }),
+      baseValue:    new fields.NumberField({ required: false, nullable: true, integer: true, min: 0, initial: null }),
+      diceCount:    new fields.NumberField({ required: false, nullable: true, integer: true, min: 0, initial: null }),
+      diceFaces:    new fields.NumberField({ required: false, nullable: true, integer: true, min: 1, initial: null }),
+      negativeDice: new fields.BooleanField({ required: false, nullable: true, initial: null }),
+      // 不给 choices：合法值含 null，混进 choices 数组会让校验把 null 判成非法，
+      // 整条更新被静默丢掉（与 corrode.spreadMode 踩过的是同一个坑）
+      diceType:     new fields.StringField({ required: false, nullable: true, initial: null }),
+      weight:       new fields.NumberField({ required: false, nullable: true, integer: true, min: 0, initial: null }),
+      effectDesc:   new fields.HTMLField({ required: false, initial: "" }),
+      activities:   new fields.ArrayField(makeActivitySchema(), { required: true, initial: [] }),
+    });
+
     return {
       // 技能类型：basic / defense / ego
       type: new fields.StringField({ required: true, initial: "basic",
@@ -224,6 +265,23 @@ export class SkillData extends foundry.abstract.TypeDataModel {
         sanityCost:  new fields.NumberField({ required: false, nullable: true, integer: true, min: 0, initial: null }),
         effectDesc:  new fields.HTMLField({ required: false, initial: "" }),
         activities:  new fields.ArrayField(makeActivitySchema(), { required: true, initial: [] }),
+      }),
+
+      // ── 训练等级（基础 / 守备技能）────────────────────────────────────
+      // 规则里的「默认Ⅲ级、精通Ⅳ级、强化Ⅴ级」。同一张卡随角色练上去会换一套
+      // 数值，因此走和【觉醒/侵蚀】一样的思路：一件物品挂多套数据，而不是做成
+      // 多张同名卡。trainLevel 即当前生效的那一阶。
+      // E.G.O 不用这套（它用 egoForm 的觉醒/侵蚀），避免 2×5 的组合爆炸。
+      trainLevel: new fields.NumberField({ required: false, integer: true, min: 1, max: 5, initial: 3 }),
+
+      // 顶层那一套数值属于哪一阶（导入时由最低的一行决定；手改卡时就是默认的 Ⅲ）
+      trainBaseLevel: new fields.NumberField({ required: false, integer: true, min: 1, max: 5, initial: 3 }),
+
+      // 各阶的覆盖数值；未 initialized 的阶完全沿用顶层字段。
+      // 顶层字段 = 这张卡的"底子"，通常就是 Ⅲ 阶。
+      trainForms: new fields.SchemaField({
+        lv1: trainFormSchema(), lv2: trainFormSchema(), lv3: trainFormSchema(),
+        lv4: trainFormSchema(), lv5: trainFormSchema(),
       }),
 
       // 攻击容量：命中后还能往外扩散几个目标（守备技能同样可用）
@@ -321,6 +379,20 @@ export class SkillData extends foundry.abstract.TypeDataModel {
       }
       if (c.effectDesc) this.effectDesc = c.effectDesc;
       if (c.activities?.length) this.activities = c.activities;
+    }
+
+    // 训练等级：把当前阶的覆盖值盖到顶层（没填的字段沿用顶层）。
+    // E.G.O 走 egoForm，不参与这套。
+    if (this.type !== "ego") {
+      const tf = this.trainForms?.[`lv${this.trainLevel ?? 3}`];
+      if (tf?.initialized) {
+        for (const key of ["category", "baseValue", "diceCount", "diceFaces",
+                           "negativeDice", "diceType", "weight"]) {
+          if (tf[key] !== null && tf[key] !== undefined) this[key] = tf[key];
+        }
+        if (tf.effectDesc) this.effectDesc = tf.effectDesc;
+        if (tf.activities?.length) this.activities = tf.activities;
+      }
     }
 
     this.diceFormula = buildDiceFormula(this);

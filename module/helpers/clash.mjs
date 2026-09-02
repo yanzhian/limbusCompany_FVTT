@@ -7,6 +7,7 @@ import { SinResourceHUD } from "./sin-resource-hud.mjs";
 import { ClashTotalFX }   from "./clash-total-fx.mjs";
 import { ClashKnockback } from "./knockback.mjs";
 import { ClashVFX }       from "./clash-vfx.mjs";
+import { activeVariantPrefix } from "../documents/item.mjs";
 import {
   CustomBuffRegistry, resolveBuffHandler, FieldResourceRegistry,
   isTremorFamilyType, TREMOR_BASE_TYPE, TREMOR_DEPENDENT_TYPES,
@@ -1998,8 +1999,11 @@ export class ClashManager {
             const val = _scaleVal(rawVal, mode);
             const cur = item.system?.weight ?? 0;
             const nv  = mode === "absolute" ? Math.max(0, val) : Math.max(0, cur + val);
-            await ClashManager._stashItemMod(item, "system.weight");
-            await ClashManager._safeDocUpdate(item, { "system.weight": nv });
+            {
+              const _p = ClashManager._modPath(item, "system.weight");
+              await ClashManager._stashItemMod(item, _p);
+              await ClashManager._safeDocUpdate(item, { [_p]: nv });
+            }
             descStr = mode === "absolute"
               ? `【${item.name}】攻击容量 调整为 ${nv}`
               : `【${item.name}】攻击容量 ${val >= 0 ? "+" : ""}${val}（${cur} → ${nv}）`;
@@ -2011,8 +2015,11 @@ export class ClashManager {
             const val = _scaleVal(rawVal, mode);
             const cur = item.system?.diceCount ?? 1;
             const nv  = mode === "absolute" ? Math.max(1, val) : Math.max(1, cur + val);
-            await ClashManager._stashItemMod(item, "system.diceCount");
-            await ClashManager._safeDocUpdate(item, { "system.diceCount": nv });
+            {
+              const _p = ClashManager._modPath(item, "system.diceCount");
+              await ClashManager._stashItemMod(item, _p);
+              await ClashManager._safeDocUpdate(item, { [_p]: nv });
+            }
             descStr = mode === "absolute"
               ? `【${item.name}】骰数 调整为 ${nv}d`
               : `【${item.name}】骰数 ${val >= 0 ? "+" : ""}${val}（${cur}d → ${nv}d）`;
@@ -2024,8 +2031,11 @@ export class ClashManager {
             const val = _scaleVal(rawVal, mode);
             const cur = item.system?.diceFaces ?? 4;
             const nv  = mode === "absolute" ? Math.max(2, val) : Math.max(2, cur + val);
-            await ClashManager._stashItemMod(item, "system.diceFaces");
-            await ClashManager._safeDocUpdate(item, { "system.diceFaces": nv });
+            {
+              const _p = ClashManager._modPath(item, "system.diceFaces");
+              await ClashManager._stashItemMod(item, _p);
+              await ClashManager._safeDocUpdate(item, { [_p]: nv });
+            }
             descStr = mode === "absolute"
               ? `【${item.name}】面数 d${cur} → d${nv}`
               : `【${item.name}】面数 ${val >= 0 ? "+" : ""}${val}（d${cur} → d${nv}）`;
@@ -2037,8 +2047,11 @@ export class ClashManager {
             const val = _scaleVal(rawVal, mode);
             const cur = item.system?.baseValue ?? 0;
             const nv  = mode === "absolute" ? val : cur + val;
-            await ClashManager._stashItemMod(item, "system.baseValue");
-            await ClashManager._safeDocUpdate(item, { "system.baseValue": nv });
+            {
+              const _p = ClashManager._modPath(item, "system.baseValue");
+              await ClashManager._stashItemMod(item, _p);
+              await ClashManager._safeDocUpdate(item, { [_p]: nv });
+            }
             descStr = mode === "absolute"
               ? `【${item.name}】基础值 调整为 ${nv}`
               : `【${item.name}】基础值 ${val >= 0 ? "+" : ""}${val}（${cur} → ${nv}）`;
@@ -2228,8 +2241,9 @@ export class ClashManager {
           case "diceTypeChg": {
             const newDiceType = eff.diceTypeVal ?? "normal";
             if (item) {
-              await ClashManager._stashItemMod(item, "system.diceType");
-              await ClashManager._safeDocUpdate(item, { "system.diceType": newDiceType });
+              const _p = ClashManager._modPath(item, "system.diceType");
+              await ClashManager._stashItemMod(item, _p);
+              await ClashManager._safeDocUpdate(item, { [_p]: newDiceType });
               const label = newDiceType === "unbreakable" ? "不可摧毁" : "一般骰子";
               descStr = `【${item.name}】骰子类型变更为【${label}】`;
             }
@@ -4672,6 +4686,21 @@ export class ClashManager {
 
   /* ─── 本次攻击内的临时骰面改动 ─────────────────────────────────────── */
 
+  /**
+   * 把 "system.diceCount" 这类字段名换算成**当前生效那一套**的真实路径。
+   * 技能可能停在 E.G.O 侵蚀形态或训练等级 Ⅳ/Ⅴ 上，这时顶层字段是投影结果，
+   * 直接写顶层等于拿高阶数值覆盖掉底层那一套（症状：打一场架，Ⅲ阶变成了Ⅳ阶）。
+   */
+  static _modPath(item, path) {
+    const bare = String(path).startsWith("system.") ? String(path).slice(7) : String(path);
+    return `system.${activeVariantPrefix(item)}${bare}`;
+  }
+
+  /** 把变体路径还原成通用字段名，用于和 TEMP_MOD_PATHS 比对 */
+  static _bareModPath(path) {
+    return String(path).replace(/^system\.(?:corrode\.|trainForms\.lv\d\.)/, "system.");
+  }
+
   /** 会写回物品、因而需要打完还原的字段 */
   static TEMP_MOD_PATHS = [
     "system.diceCount", "system.diceFaces", "system.baseValue",
@@ -4699,7 +4728,7 @@ export class ClashManager {
     if (!mods || !Object.keys(mods).length) return;
     const update = { "flags.limbusCompany_FVTT.-=tempMods": null };
     for (const [path, orig] of Object.entries(mods)) {
-      if (ClashManager.TEMP_MOD_PATHS.includes(path)) update[path] = orig;
+      if (ClashManager.TEMP_MOD_PATHS.includes(ClashManager._bareModPath(path))) update[path] = orig;
     }
     await ClashManager._safeDocUpdate(item, update);
   }
@@ -4734,7 +4763,8 @@ export class ClashManager {
       if (!it || seen.has(it.id)) return;
       const vals = {};
       for (const path of ClashManager.TEMP_MOD_PATHS) {
-        vals[path] = foundry.utils.getProperty(it, path);
+        const real = ClashManager._modPath(it, path);
+        vals[real] = foundry.utils.getProperty(it, real);
       }
       seen.set(it.id, { item: it, vals });
     };

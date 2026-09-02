@@ -10099,3 +10099,77 @@ input.item-piles-quantity {
 @keyframes lc-tb-out { from { opacity: 1; } to { opacity: 0; } }
 
 /* 总时长（turn-banner.mjs 的 TOTAL_MS 要跟它一致）：1280 ms */
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   训练等级徽章（技能卡右上角）
+   规则书里的「默认Ⅲ级 / 精通Ⅳ级 / 强化Ⅴ级」。同一张卡挂多阶数值，
+   点击在本卡已有的几阶之间轮转，右键删掉当前阶。
+   素材：assets/icons/Base_icon/阶段等级N.webp —— 缺图时 onerror 会给徽章加
+   .no-art，退回纯文字罗马数字，不至于开天窗。
+   ═════════════════════════════════════════════════════════════════════════ */
+
+.skill-sheet .equip-header { position: relative; }
+
+.skill-sheet .skill-train-badge {
+  position: absolute;
+  top: 2px;
+  right: 4px;
+  width: 54px;
+  height: 54px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  user-select: none;
+  transition: transform 0.12s ease, filter 0.12s ease;
+}
+.skill-sheet .skill-train-badge:hover {
+  transform: scale(1.08);
+  filter: drop-shadow(0 0 4px rgba(201, 168, 76, 0.75));
+}
+
+.skill-sheet .skill-train-badge img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  pointer-events: none;
+}
+
+/* 有素材时不显示文字；缺图（.no-art）才退回罗马数字 */
+.skill-sheet .skill-train-badge .train-numeral { display: none; }
+.skill-sheet .skill-train-badge.no-art .train-numeral {
+  display: block;
+  font-size: 26px;
+  font-weight: 700;
+  line-height: 1;
+  color: #c9a84c;
+  text-shadow: 0 0 6px rgba(0, 0, 0, 0.8);
+}
+
+/* 当前显示的不是顶层那一套（即精通/强化出来的阶）时给个淡金底衬 */
+.skill-sheet .skill-train-badge.derived::after {
+  content: "";
+  position: absolute;
+  inset: -2px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(201, 168, 76, 0.22) 0%, transparent 70%);
+  pointer-events: none;
+  z-index: -1;
+}
+
+/* Title 卡标题条里的训练等级（罪孽图标右侧） */
+.limbus-title-card-skill .tc-header .tc-train-ic {
+  width: 24px;
+  height: 24px;
+  object-fit: contain;
+  flex: 0 0 auto;
+  margin-left: 4px;
+}
+.limbus-title-card-skill .tc-header .tc-train-num {
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1;
+  margin-left: 4px;
+  flex: 0 0 auto;
+  color: #f3e3b5;
+}

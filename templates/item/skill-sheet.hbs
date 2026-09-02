@@ -25,6 +25,19 @@
       {{!-- 顶部：图标（100×100 八角形）+ 右侧信息列 --}}
       <div class="equip-header">
 
+        {{!-- 右上角：训练等级（默认Ⅲ / 精通Ⅳ / 强化Ⅴ）。
+              同一张卡挂多阶数值，点击在本卡已有的几阶之间轮转；
+              解锁状态下点最后一阶会以当前数值打底新开一阶，右键删除当前阶。 --}}
+        {{#if showTrainLevel}}
+          <div class="skill-train-badge{{#if trainMulti}} multi{{/if}}{{#unless trainIsBase}} derived{{/unless}}"
+               data-level="{{trainLevel}}"
+               title="训练等级 {{trainNumeral}}{{#if trainMulti}}（本卡有 {{trainLevels.length}} 阶，左键切换）{{/if}}&#10;Shift+左键：新开一阶　右键：删除当前阶">
+            <img src="{{trainIcon}}" alt="{{trainNumeral}}" draggable="false"
+                 onerror="this.closest('.skill-train-badge').classList.add('no-art'); this.remove();">
+            <span class="train-numeral">{{trainNumeral}}</span>
+          </div>
+        {{/if}}
+
         {{!-- 图标 --}}
         <div class="equip-icon-col">
           <div class="skill-slot-octa skill-icon-big {{#if isEgo}}skill-icon-big--ego{{/if}}" style="border-color:{{sinColor}}">
@@ -97,7 +110,7 @@
           {{#if (and isEditable (not isLocked))}}
             <div class="skill-flag-row">
               {{#unless isDefense}}
-                <select name="system.diceType" class="equip-subtype-sel dice-type-sel" title="骰子类型">
+                <select name="{{fpDice}}diceType" class="equip-subtype-sel dice-type-sel" title="骰子类型">
                   <option value="normal"      {{#eq system.diceType "normal"}}selected{{/eq}}>一般骰子</option>
                   <option value="unbreakable" {{#eq system.diceType "unbreakable"}}selected{{/eq}}>不可摧毁</option>
                 </select>

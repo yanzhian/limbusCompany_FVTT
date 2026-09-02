@@ -22,6 +22,13 @@ import { buildPlacementGrid, canPlace, autoPlace, makeLockedSet } from "../helpe
 /** 背景的等级物品不收这三类（背景由向导指定、恐慌卡走 panicSlots、技能走技能书） */
 const BG_ITEM_BLOCKED_TYPES = ["background", "panic", "skill"];
 
+/** 训练等级的罗马数字写法（规则书里 默认Ⅲ级 / 精通Ⅳ级 / 强化Ⅴ级） */
+export const TRAIN_NUMERALS = { 1: "Ⅰ", 2: "Ⅱ", 3: "Ⅲ", 4: "Ⅳ", 5: "Ⅴ" };
+
+/** 训练等级徽章素材；素材缺失时模板会退回纯文字罗马数字 */
+export const trainLevelIcon = (lv) =>
+  `systems/limbusCompany_FVTT/assets/icons/Base_icon/阶段等级${Number(lv) || 3}.webp`;
+
 /**
  * 拖动 payload 里随身携带的物品"身份卡"：容器限制判定只看类型/分类/子类型，
  * 悬停预览必须同步出结果（来不及 await fromUuid），所以起拖时就带上。
@@ -97,14 +104,32 @@ export class LimbusItemSheet extends ItemSheet {
       && this.item.system?.type === "ego"
       && this.item.system?.egoForm === "corrode";
   }
-  /** 激活效果所在的字段名（侵蚀形态另存一套） */
-  get _actField() { return this._editCorrode ? "corrode.activities" : "activities"; }
+
+  /**
+   * 当前正在编辑的"变体"在 system 下的路径前缀（空串 = 顶层那一套）。
+   *
+   * 技能有两套互斥的多形态机制，都是「同一件物品挂多套数值」：
+   *   · E.G.O    → 觉醒 / 侵蚀，前缀 "corrode."
+   *   · 基础/守备 → 训练等级 Ⅰ-Ⅴ，前缀 "trainForms.lvN."
+   * 未 initialized 的那一阶没有自己的数据，直接编辑顶层，因此前缀为空。
+   */
+  get _variantPrefix() {
+    const it = this.item;
+    if (it.type !== "skill") return "";
+    const src = it.toObject().system ?? {};
+    if (src.type === "ego") return src.egoForm === "corrode" ? "corrode." : "";
+    const key = `lv${src.trainLevel ?? 3}`;
+    return src.trainForms?.[key]?.initialized ? `trainForms.${key}.` : "";
+  }
+
+  /** 激活效果所在的字段名（每个形态各存一套） */
+  get _actField() { return `${this._variantPrefix}activities`; }
   get _actPath()  { return `system.${this._actField}`; }
   /** 当前形态的激活效果列表（原始存档值） */
   get _actList() {
     const src = this.item.toObject().system ?? {};
     return foundry.utils.deepClone(
-      (this._editCorrode ? src.corrode?.activities : src.activities) ?? []
+      foundry.utils.getProperty(src, this._actField) ?? []
     );
   }
 
@@ -140,6 +165,87 @@ export class LimbusItemSheet extends ItemSheet {
       }
     }
     await this.item.update(update);
+  }
+
+  /* ─── 训练等级（基础 / 守备技能）─────────────────────────────────────────── */
+
+  /** 顶层数据代表的那一阶 */
+  get _trainBaseLevel() {
+    return this.item.toObject().system?.trainBaseLevel ?? 3;
+  }
+
+  /** 这张卡上已经写过数据的训练等级，从小到大；顶层那一套算作 baseLevel 一档 */
+  get _trainLevels() {
+    const src = this.item.toObject().system ?? {};
+    const set = new Set([this._trainBaseLevel, src.trainLevel ?? 3]);
+    for (let i = 1; i <= 5; i++) {
+      if (src.trainForms?.[`lv${i}`]?.initialized) set.add(i);
+    }
+    return [...set].sort((a, b) => a - b);
+  }
+
+  /**
+   * 训练等级徽章：
+   *   · 左键       —— 在这张卡已有的几阶之间轮转（锁定状态下也能看）
+   *   · Shift+左键 —— 解锁时新开一阶（Ⅲ→Ⅳ→Ⅴ），用当前那一套数值打底
+   *   · 右键       —— 删掉当前这一阶（见 _onTrainLevelDelete）
+   * 新建单独放在 Shift 上：轮转是高频操作，不该顺手就多出一阶数据。
+   */
+  async _onTrainLevelToggle(event) {
+    event.preventDefault();
+    const src     = this.item.toObject().system ?? {};
+    const levels  = this._trainLevels;
+    const cur     = src.trainLevel ?? 3;
+    const idx     = levels.indexOf(cur);
+    const canEdit = this.isEditable && !this.isLocked;
+
+    if (!(event.shiftKey && canEdit && cur < 5)) {
+      const next = levels[(idx + 1) % levels.length] ?? cur;
+      if (next === cur) return;
+      return this.item.update({ "system.trainLevel": next });
+    }
+
+    // 新开一阶：拿"当前生效的那一套"打底，这样 Ⅳ 是在 Ⅲ 的基础上改
+    const next = cur + 1;
+    if (levels.includes(next)) return this.item.update({ "system.trainLevel": next });
+    const key  = `lv${next}`;
+    const from = src.trainForms?.[`lv${cur}`]?.initialized
+      ? src.trainForms[`lv${cur}`] : src;
+    const val = (k, dflt) => (from[k] !== null && from[k] !== undefined) ? from[k] : (src[k] ?? dflt);
+    await this.item.update({
+      "system.trainLevel": next,
+      [`system.trainForms.${key}.initialized`]:  true,
+      [`system.trainForms.${key}.category`]:     val("category", "slash"),
+      [`system.trainForms.${key}.baseValue`]:    val("baseValue", 0),
+      [`system.trainForms.${key}.diceCount`]:    val("diceCount", 1),
+      [`system.trainForms.${key}.diceFaces`]:    val("diceFaces", 4),
+      [`system.trainForms.${key}.negativeDice`]: !!val("negativeDice", false),
+      [`system.trainForms.${key}.diceType`]:     val("diceType", "normal"),
+      [`system.trainForms.${key}.weight`]:       val("weight", 1),
+      [`system.trainForms.${key}.effectDesc`]:   val("effectDesc", "") || "",
+      [`system.trainForms.${key}.activities`]:
+        foundry.utils.deepClone(val("activities", []) ?? []),
+    });
+  }
+
+  /** 右键徽章：删掉当前这一阶（顶层那一套删不掉） */
+  async _onTrainLevelDelete(event) {
+    event.preventDefault();
+    if (!this.isEditable || this.isLocked) return;
+    const src = this.item.toObject().system ?? {};
+    const cur = src.trainLevel ?? 3;
+    if (!src.trainForms?.[`lv${cur}`]?.initialized) return;   // 顶层那一套
+    const ok = await Dialog.confirm({
+      title: "删除训练等级",
+      content: `<p>删除本卡的 <b>${TRAIN_NUMERALS[cur] ?? cur}</b> 阶数值？顶层（基础）那一套不受影响。</p>`,
+    });
+    if (!ok) return;
+    await this.item.update({
+      "system.trainLevel": this._trainBaseLevel,
+      [`system.trainForms.lv${cur}.initialized`]: false,
+      [`system.trainForms.lv${cur}.activities`]:  [],
+      [`system.trainForms.lv${cur}.effectDesc`]:  "",
+    });
   }
 
   /* ─── 数据准备 ──────────────────────────────────────────────────────────── */
@@ -203,16 +309,38 @@ export class LimbusItemSheet extends ItemSheet {
       const corrode = context.isEgo && sys.egoForm === "corrode";
       context.isCorrode    = corrode;
       context.egoFormLabel = corrode ? "侵蚀" : "觉醒";
-      // 表单字段前缀：侵蚀形态下这些字段写进 system.corrode.*
-      context.fp = corrode ? "system.corrode." : "system.";
-      const cSrc = src.corrode ?? {};
-      const pick = (k) => (corrode && cSrc[k] !== null && cSrc[k] !== undefined) ? cSrc[k] : src[k];
+
+      // ── 训练等级（基础 / 守备技能；E.G.O 用觉醒/侵蚀，两者不叠加）──────
+      const tLv   = src.trainLevel ?? 3;
+      const tBase = src.trainBaseLevel ?? 3;
+      const tKey  = `lv${tLv}`;
+      const tSrc  = (!context.isEgo && src.trainForms?.[tKey]?.initialized)
+        ? src.trainForms[tKey] : null;
+      context.showTrainLevel = !context.isEgo;
+      context.trainLevel     = tLv;
+      context.trainNumeral   = TRAIN_NUMERALS[tLv] ?? tLv;
+      context.trainIcon      = trainLevelIcon(tLv);
+      context.trainLevels    = this._trainLevels;
+      context.trainIsBase    = tLv === tBase;
+      // 这张卡到底有没有"同名卡"（多阶数值），有才值得显示成可点的轮转徽章
+      context.trainMulti     = this._trainLevels.length > 1;
+
+      // 表单字段前缀：写进当前形态自己那一套
+      //   侵蚀 → system.corrode.*；非基础阶的训练等级 → system.trainForms.lvN.*
+      context.fp = corrode ? "system.corrode."
+                 : tSrc   ? `system.trainForms.${tKey}.`
+                          : "system.";
+      // 骰子类型：侵蚀形态没有自己的 diceType（两形态共用），训练等级则每阶各存一份
+      context.fpDice = corrode ? "system." : context.fp;
+      const cSrc = corrode ? (src.corrode ?? {}) : (tSrc ?? {});
+      const inVariant = corrode || !!tSrc;
+      const pick = (k) => (inVariant && cSrc[k] !== null && cSrc[k] !== undefined) ? cSrc[k] : src[k];
       // 当前形态下展示的那一套数值
       context.form = {
         category:   pick("category"),
         weight:     pick("weight"),
         sanityCost: pick("sanityCost"),
-        effectDesc: corrode ? (cSrc.effectDesc ?? "") : (src.effectDesc ?? ""),
+        effectDesc: inVariant ? (cSrc.effectDesc ?? "") : (src.effectDesc ?? ""),
         // 【无差别攻击】：侵蚀形态可以单独开（null = 沿用觉醒）
         indiscriminate: !!(pick("indiscriminate") ?? false),
       };
@@ -543,6 +671,8 @@ export class LimbusItemSheet extends ItemSheet {
 
     html.find(".sheet-lock-icon").on("click", this._onToggleLock.bind(this));
     html.find(".ego-form-toggle").on("click", this._onEgoFormToggle.bind(this));
+    html.find(".skill-train-badge").on("click", this._onTrainLevelToggle.bind(this));
+    html.find(".skill-train-badge").on("contextmenu", this._onTrainLevelDelete.bind(this));
 
     // 攻击容量输入时即时切换扩散设置的显隐（不等重渲染）
     // 扩散设置写哪一套：EGO 在侵蚀形态下写 system.corrode.*，其余写 system.*
@@ -797,11 +927,15 @@ export class LimbusItemSheet extends ItemSheet {
 
     // ── skill：将用户输入的 diceFormula 文本解析为真正的 schema 字段
     if (this.item.type === "skill") {
-      // 侵蚀形态编辑时，骰数写进 system.corrode.*
-      const corrode  = this._editCorrode;
-      const pre      = corrode ? "system.corrode." : "system.";
+      // 非顶层形态（侵蚀 / 非基础阶的训练等级）编辑时，骰数写进那一套自己的字段
+      const vp       = this._variantPrefix;          // "" | "corrode." | "trainForms.lvN."
+      const pre      = `system.${vp}`;
       const _isFlat  = !formData.system;
-      const nested   = () => (corrode ? formData.system?.corrode : formData.system) ?? {};
+      const nested   = () => {
+        let o = formData.system;
+        for (const seg of vp.split(".").filter(Boolean)) o = o?.[seg];
+        return o ?? {};
+      };
       const rawFml   = _isFlat ? formData[`${pre}diceFormula`] : nested().diceFormula;
       if (rawFml !== undefined) {
         const parsed = _parseDiceFormula(String(rawFml));
@@ -2381,6 +2515,12 @@ const sinColor    = cfg.SIN_COLORS?.[sys.sinType] ?? "#5F3E21";
   // 等级：基础/守备写 Lv.N，EGO 写评级（ZAYIN…）
   const lvText = sys.type === "ego" ? (sys.egoDiceRating ?? "") : `Lv.${sys.level ?? 1}`;
 
+  // 训练等级徽章：基础/守备技能才有（E.G.O 走觉醒/侵蚀）。素材缺失时退回罗马数字。
+  const trainLv = sys.type === "ego" ? 0 : (sys.trainLevel ?? 3);
+  const trainIcoHtml = trainLv ? `<img src="${trainLevelIcon(trainLv)}" class="tc-train-ic"
+       alt="${TRAIN_NUMERALS[trainLv] ?? trainLv}" title="训练等级 ${TRAIN_NUMERALS[trainLv] ?? trainLv}"
+       onerror="this.outerHTML='<span class=&quot;tc-train-num&quot;>${TRAIN_NUMERALS[trainLv] ?? trainLv}</span>'">` : "";
+
   // 类型图标：基础 / E.G.O = 攻击等级图；守备 = 格挡图（靠右）
   const kindIcon  = sys.type === "defense" ? `${ICON}block.webp` : `${ICON}Offense_Level.webp`;
   const kindLabel = { basic: "基础技能", defense: "守备技能", ego: "E.G.O" }[sys.type] ?? "";
@@ -2430,6 +2570,7 @@ const sinColor    = cfg.SIN_COLORS?.[sys.sinType] ?? "#5F3E21";
       <span class="tc-name">${item.name}</span>
       ${lvText ? `<span class="tc-lv">${lvText}</span>` : ""}
       ${sinIcon ? `<img src="${sinIcon}" class="tc-sin-ic" alt="${sinLabel}" title="${sinLabel}">` : ""}
+      ${trainIcoHtml}
     </div>
     <div class="tcs-row">
       ${sys.category ? `<span class="tcs-cat"><img src="${_getCategoryIcon(sys.category)}" class="tc-cat-icon" alt="${catLabel}" title="${catLabel}"></span>` : ""}
