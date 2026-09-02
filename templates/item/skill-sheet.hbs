@@ -69,13 +69,13 @@
           <div class="skill-cat-dice-row">
             {{#if (and isEditable (not isLocked))}}
               {{#if isDefense}}
-                <select name="{{fp}}category" class="equip-subtype-sel">
+                <select name="{{fpCat}}category" class="equip-subtype-sel">
                   {{#each defenseCategories}}
                     <option value="{{@key}}" {{#eq @key ../form.category}}selected{{/eq}}>{{this}}</option>
                   {{/each}}
                 </select>
               {{else}}
-                <select name="{{fp}}category" class="equip-subtype-sel">
+                <select name="{{fpCat}}category" class="equip-subtype-sel">
                   {{#each attackCategories}}
                     <option value="{{@key}}" {{#eq @key ../form.category}}selected{{/eq}}>{{this}}</option>
                   {{/each}}
@@ -117,17 +117,17 @@
               {{/unless}}
               {{!-- 无法装备：衍生技能专用，只能由【相关技能转换】换上场 --}}
               <label class="no-equip-toggle" title="衍生技能：无法直接装备，只能通过【相关技能转换】替换上场">
-                <input type="checkbox" name="system.noEquip" {{#if system.noEquip}}checked{{/if}}>
+                <input type="checkbox" name="{{fpDice}}noEquip" {{#if system.noEquip}}checked{{/if}}>
                 无法装备
               </label>
               {{!-- 援护防御：队友被锁定且行动值为 0 时，可用本技能顶上去接下对抗 --}}
               <label class="no-equip-toggle" title="【援护防御】专属技能：队友被锁定为目标且行动值为 0 时，可用它替队友接下这次对抗">
-                <input type="checkbox" name="system.coverDefense" {{#if system.coverDefense}}checked{{/if}}>
+                <input type="checkbox" name="{{fpDice}}coverDefense" {{#if system.coverDefense}}checked{{/if}}>
                 援护防御
               </label>
               {{!-- 无法拼点：被锁定的目标只能【承受】，连守备技能都不能对抗 --}}
               <label class="no-equip-toggle" title="被这张技能锁定的目标只能【承受】：不能对抗，也不会询问【援护防御】">
-                <input type="checkbox" name="system.noClash" {{#if system.noClash}}checked{{/if}}>
+                <input type="checkbox" name="{{fpDice}}noClash" {{#if system.noClash}}checked{{/if}}>
                 无法拼点
               </label>
               {{!-- 无差别攻击：容量扩散敌我不分，友方同样会被打到（常见于 EGO 侵蚀形态） --}}
@@ -143,7 +143,7 @@
             <div class="counter-type-row">
               {{#if (and isEditable (not isLocked))}}
                 <label class="counter-type-label">反击分类</label>
-                <select name="system.counterType" class="equip-subtype-sel">
+                <select name="{{fpDice}}counterType" class="equip-subtype-sel">
                   <option value="slash"  {{#if (eq system.counterType "slash")}}selected{{/if}}>斩击</option>
                   <option value="blunt"  {{#if (eq system.counterType "blunt")}}selected{{/if}}>打击</option>
                   <option value="pierce" {{#if (eq system.counterType "pierce")}}selected{{/if}}>突刺</option>

@@ -773,9 +773,16 @@ export function buildItemData(rows, defaultType) {
  * @returns {object[]} 合并后的物品数据
  */
 export function mergeTrainLevels(items, warnings = []) {
-  // 只有明确填了训练等级的技能行才参与合并；没填的保持原样各是各的卡
-  const OVERRIDABLE = ["category", "baseValue", "diceCount", "diceFaces",
-                       "negativeDice", "diceType", "weight", "effectDesc", "activities"];
+  // 只有明确填了训练等级的技能行才参与合并；没填的保持原样各是各的卡。
+  // 名称 / 类型 / 分类 / 罪孽 / 等级 / 标签 跨阶共用，一律取最低那一阶的，
+  // 高阶行里就算填了也不会生效（在这里被丢掉）。
+  const OVERRIDABLE = ["baseValue", "diceCount", "diceFaces", "negativeDice",
+                       "diceType", "counterType", "weight", "spreadMode", "spreadRange",
+                       "indiscriminate", "noEquip", "coverDefense", "noClash",
+                       "sanityCost", "stellarCost", "weaponRestriction",
+                       "effectDesc", "activities"];
+  const SHARED_LABELS = { name: "名称", type: "类型", category: "分类",
+                          sinType: "罪孽", level: "等级", tags: "标签" };
 
   const groups = new Map();                       // 名称 → 行下标数组
   items.forEach((it, i) => {
@@ -822,6 +829,22 @@ export function mergeTrainLevels(items, warnings = []) {
         continue;
       }
       seen.add(lv);
+
+      // 高阶行里填了跨阶共用的列 → 提醒一声它不会生效，免得表填了半天没反应
+      const ignored = [];
+      for (const [k, label] of Object.entries(SHARED_LABELS)) {
+        if (k === "name") continue;                       // 同名才会走到这里
+        const rv = row.system[k];
+        if (rv === undefined) continue;
+        const bv = base.system[k];
+        const same = Array.isArray(rv) && Array.isArray(bv)
+          ? rv.join("/") === bv.join("/") : rv === bv;
+        if (!same) ignored.push(label);
+      }
+      if (ignored.length) {
+        warnings.push(`「${name}」训练等级 ${lv} 那一行填的「${ignored.join("、")}」不会生效`
+          + `——这几项跨阶共用，一律取最低阶那一行的值。`);
+      }
 
       // 只搬这一行真的填了的字段；没填的留 null = 沿用低阶
       const form = { initialized: true };
@@ -924,7 +947,7 @@ const COLUMN_NOTES = {
   "容量扩散": "攻击容量≥2 时生效，形如 [链式扩散3] / 广域乱射2，数字为范围格数（留空=链式1格）",
   "无法装备": "填 是/否、TRUE/FALSE",
   "援护防御": "填 是/否、TRUE/FALSE；标记为【援护防御】专属技能",
-  "训练等级": "填 Ⅲ/Ⅳ/Ⅴ（或 3/4/5、默认/精通/强化）。同名的几行会合并成同一张卡的多阶数值，留空的格子沿用低一阶；E.G.O 不适用",
+  "训练等级": "填 Ⅲ/Ⅳ/Ⅴ（或 3/4/5、默认/精通/强化）。同名的几行会合并成同一张卡的多阶，留空的格子沿用低一阶。名称/类型/分类/罪孽/等级/标签跨阶共用（取最低阶那行），其余逐阶各一套；E.G.O 不适用",
   "无法拼点": "填 是/否、TRUE/FALSE；被锁定的目标只能【承受】，不能对抗",
   "攻击范围": "仅武器：留空=近战1格；填数字=近战N格（长矛/锁链）；填「远程6」=远程6格",
   "允许类型": "容器存放限制·类型，多个用 / 分隔（消耗品/材料），留空=不限制",

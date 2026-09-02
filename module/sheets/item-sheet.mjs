@@ -212,16 +212,26 @@ export class LimbusItemSheet extends ItemSheet {
     const from = src.trainForms?.[`lv${cur}`]?.initialized
       ? src.trainForms[`lv${cur}`] : src;
     const val = (k, dflt) => (from[k] !== null && from[k] !== undefined) ? from[k] : (src[k] ?? dflt);
+    // 名称/类型/分类/罪孽/等级/标签跨阶共用，不进这一套
     await this.item.update({
       "system.trainLevel": next,
       [`system.trainForms.${key}.initialized`]:  true,
-      [`system.trainForms.${key}.category`]:     val("category", "slash"),
       [`system.trainForms.${key}.baseValue`]:    val("baseValue", 0),
       [`system.trainForms.${key}.diceCount`]:    val("diceCount", 1),
       [`system.trainForms.${key}.diceFaces`]:    val("diceFaces", 4),
       [`system.trainForms.${key}.negativeDice`]: !!val("negativeDice", false),
       [`system.trainForms.${key}.diceType`]:     val("diceType", "normal"),
+      [`system.trainForms.${key}.counterType`]:  val("counterType", "slash"),
       [`system.trainForms.${key}.weight`]:       val("weight", 1),
+      [`system.trainForms.${key}.spreadMode`]:   val("spreadMode", "chain"),
+      [`system.trainForms.${key}.spreadRange`]:  val("spreadRange", 1),
+      [`system.trainForms.${key}.indiscriminate`]: !!val("indiscriminate", false),
+      [`system.trainForms.${key}.noEquip`]:      !!val("noEquip", false),
+      [`system.trainForms.${key}.coverDefense`]: !!val("coverDefense", false),
+      [`system.trainForms.${key}.noClash`]:      !!val("noClash", false),
+      [`system.trainForms.${key}.sanityCost`]:   val("sanityCost", 0),
+      [`system.trainForms.${key}.stellarCost`]:  val("stellarCost", 1),
+      [`system.trainForms.${key}.weaponRestriction`]: val("weaponRestriction", "") || "",
       [`system.trainForms.${key}.effectDesc`]:   val("effectDesc", "") || "",
       [`system.trainForms.${key}.activities`]:
         foundry.utils.deepClone(val("activities", []) ?? []),
@@ -330,14 +340,18 @@ export class LimbusItemSheet extends ItemSheet {
       context.fp = corrode ? "system.corrode."
                  : tSrc   ? `system.trainForms.${tKey}.`
                           : "system.";
-      // 骰子类型：侵蚀形态没有自己的 diceType（两形态共用），训练等级则每阶各存一份
-      context.fpDice = corrode ? "system." : context.fp;
+      // 侵蚀形态没有自己的 diceType / 三个布尔 / 反击类型（E.G.O 两形态共用这些），
+      // 训练等级则每阶各存一份 —— 这两处前缀因此要分开算
+      context.fpDice   = corrode ? "system." : context.fp;
+      // 分类：训练等级共用顶层，侵蚀形态可以单独改
+      context.fpCat    = corrode ? "system.corrode." : "system.";
       const cSrc = corrode ? (src.corrode ?? {}) : (tSrc ?? {});
       const inVariant = corrode || !!tSrc;
       const pick = (k) => (inVariant && cSrc[k] !== null && cSrc[k] !== undefined) ? cSrc[k] : src[k];
       // 当前形态下展示的那一套数值
       context.form = {
-        category:   pick("category"),
+        // 分类跨训练等级共用（只有 E.G.O 的侵蚀形态能单独改），因此不走训练等级那一套
+        category:   corrode ? pick("category") : src.category,
         weight:     pick("weight"),
         sanityCost: pick("sanityCost"),
         effectDesc: inVariant ? (cSrc.effectDesc ?? "") : (src.effectDesc ?? ""),
@@ -677,15 +691,12 @@ export class LimbusItemSheet extends ItemSheet {
     // 攻击容量输入时即时切换扩散设置的显隐（不等重渲染）
     // 扩散设置写哪一套：EGO 在侵蚀形态下写 system.corrode.*，其余写 system.*
     // （不加这一层的话，改侵蚀的扩散方式会把觉醒的也一起改掉）
-    const _spreadPath = (key) => {
-      const corrode = this.item.type === "ego" && this.item.system?.egoForm === "corrode";
-      return corrode ? `system.corrode.${key}` : `system.${key}`;
-    };
+    const _spreadPath = (key) => `system.${this._variantPrefix}${key}`;
     const _curSpread = (key, dflt) => {
-      const sys = this.item.system ?? {};
-      const corrode = this.item.type === "ego" && sys.egoForm === "corrode";
-      const cv = corrode ? sys.corrode?.[key] : null;
-      return (cv !== null && cv !== undefined) ? cv : (sys[key] ?? dflt);
+      const src = this.item.toObject().system ?? {};
+      const vp  = this._variantPrefix;
+      const cv  = vp ? foundry.utils.getProperty(src, `${vp}${key}`) : null;
+      return (cv !== null && cv !== undefined) ? cv : (src[key] ?? dflt);
     };
 
     html.find(".weight-input[name$='weight']").on("input", (ev) => {

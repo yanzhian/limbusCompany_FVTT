@@ -189,10 +189,11 @@ export class SkillData extends foundry.abstract.TypeDataModel {
     // 【训练等级】某一阶的覆盖数据。null = 沿用顶层（基础那一套）的值。
     // 与 corrode 同构：同一件物品身上挂多套数值，切换的是"展示/生效哪一套"，
     // 而不是复制出多张同名卡。
+    // 跨阶共用、切换训练等级**不会**变的：名称 / 类型 / 分类 / 罪孽 / 等级 / 标签。
+    // 其余的都可以逐阶各写一套（下面这些字段），null = 沿用低一阶。
     const trainFormSchema = () => new fields.SchemaField({
       // 是否已经写过这一阶的数据；false 时该阶完全沿用顶层
       initialized:  new fields.BooleanField({ required: false, initial: false }),
-      category:     new fields.StringField({ required: false, nullable: true, initial: null }),
       baseValue:    new fields.NumberField({ required: false, nullable: true, integer: true, min: 0, initial: null }),
       diceCount:    new fields.NumberField({ required: false, nullable: true, integer: true, min: 0, initial: null }),
       diceFaces:    new fields.NumberField({ required: false, nullable: true, integer: true, min: 1, initial: null }),
@@ -200,7 +201,17 @@ export class SkillData extends foundry.abstract.TypeDataModel {
       // 不给 choices：合法值含 null，混进 choices 数组会让校验把 null 判成非法，
       // 整条更新被静默丢掉（与 corrode.spreadMode 踩过的是同一个坑）
       diceType:     new fields.StringField({ required: false, nullable: true, initial: null }),
+      counterType:  new fields.StringField({ required: false, nullable: true, initial: null }),
       weight:       new fields.NumberField({ required: false, nullable: true, integer: true, min: 0, initial: null }),
+      spreadMode:   new fields.StringField({ required: false, nullable: true, initial: null }),
+      spreadRange:  new fields.NumberField({ required: false, nullable: true, integer: true, min: 1, max: 6, initial: null }),
+      indiscriminate: new fields.BooleanField({ required: false, nullable: true, initial: null }),
+      noEquip:      new fields.BooleanField({ required: false, nullable: true, initial: null }),
+      coverDefense: new fields.BooleanField({ required: false, nullable: true, initial: null }),
+      noClash:      new fields.BooleanField({ required: false, nullable: true, initial: null }),
+      sanityCost:   new fields.NumberField({ required: false, nullable: true, integer: true, min: 0, initial: null }),
+      stellarCost:  new fields.NumberField({ required: false, nullable: true, integer: true, min: 0, initial: null }),
+      weaponRestriction: new fields.StringField({ required: false, nullable: true, initial: null }),
       effectDesc:   new fields.HTMLField({ required: false, initial: "" }),
       activities:   new fields.ArrayField(makeActivitySchema(), { required: true, initial: [] }),
     });
@@ -386,8 +397,11 @@ export class SkillData extends foundry.abstract.TypeDataModel {
     if (this.type !== "ego") {
       const tf = this.trainForms?.[`lv${this.trainLevel ?? 3}`];
       if (tf?.initialized) {
-        for (const key of ["category", "baseValue", "diceCount", "diceFaces",
-                           "negativeDice", "diceType", "weight"]) {
+        // 名称 / 类型 / 分类 / 罪孽 / 等级 / 标签 不在这里 —— 那六项跨阶共用
+        for (const key of ["baseValue", "diceCount", "diceFaces", "negativeDice",
+                           "diceType", "counterType", "weight", "spreadMode", "spreadRange",
+                           "indiscriminate", "noEquip", "coverDefense", "noClash",
+                           "sanityCost", "stellarCost", "weaponRestriction"]) {
           if (tf[key] !== null && tf[key] !== undefined) this[key] = tf[key];
         }
         if (tf.effectDesc) this.effectDesc = tf.effectDesc;
