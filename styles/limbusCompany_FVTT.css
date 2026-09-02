@@ -10173,3 +10173,22 @@ input.item-piles-quantity {
   flex: 0 0 auto;
   color: #f3e3b5;
 }
+
+/* 升级对话框：连升多级标记 + 奖励物品的来源等级 */
+.lud-multi {
+  margin-left: 8px;
+  padding: 1px 7px;
+  border-radius: 9px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #2a1c0a;
+  background: #c9a84c;
+  white-space: nowrap;
+}
+.lud-item-lv {
+  margin-left: auto;
+  padding-left: 8px;
+  font-size: 11px;
+  color: #c9a84c;
+  white-space: nowrap;
+}

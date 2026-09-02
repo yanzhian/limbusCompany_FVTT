@@ -13,6 +13,15 @@
           <span class="lud-value">{{preview.currentLevel}}</span>
           <span class="lud-arrow">→</span>
           <span class="lud-value lud-value-new">{{preview.nextLevel}}</span>
+          {{#if (gt preview.levelsGained 1)}}
+            <span class="lud-multi">连升 {{preview.levelsGained}} 级</span>
+          {{/if}}
+        </div>
+        <div class="lud-row">
+          <span class="lud-label">您的经验</span>
+          <span class="lud-value">{{preview.xpFrom}}</span>
+          <span class="lud-arrow">→</span>
+          <span class="lud-value lud-value-new">{{preview.xpTo}}</span>
         </div>
         <div class="lud-row">
           <span class="lud-label">您的生命值</span>
@@ -39,9 +48,10 @@
           <div class="lud-item-row" data-item-uuid="{{uuid}}" title="{{name}}">
             <img src="{{img}}" class="lud-item-icon" alt="{{name}}">
             <span class="lud-item-name">{{name}}</span>
+            {{#if level}}<span class="lud-item-lv">Lv.{{level}}</span>{{/if}}
           </div>
         {{else}}
-          <div class="lud-empty">本级无升级奖励</div>
+          <div class="lud-empty">本次升级无奖励物品</div>
         {{/each}}
       </div>
       <div class="lud-footer">

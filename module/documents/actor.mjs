@@ -267,9 +267,11 @@ export class CharacterData extends foundry.abstract.TypeDataModel {
     // 星芒上限：30 + 等级
     this.stellarMotes.max = 30 + level;
 
-    // 下一级经验需求
-    const xpTable = CONFIG.LIMBUSCOMPANY?.LEVEL_XP ?? [];
-    this.xp.next = xpTable[level] ?? (xpTable[xpTable.length - 1] ?? 0);
+    // 下一级经验需求（满级后为 0 = 不再需要）
+    const maxLevel = CONFIG.LIMBUSCOMPANY?.MAX_LEVEL ?? Infinity;
+    this.xp.next = level >= maxLevel
+      ? 0
+      : (CONFIG.LIMBUSCOMPANY?.getXpForLevel?.(level) ?? 0);
 
     // 行动币无上限；ap.max 只是"回合开始时补到几枚"的默认值，不是硬上限
     this.ap.max = 3;
@@ -829,14 +831,25 @@ export class LimbusActor extends Actor {
    * @returns {Promise<object|null>} 无法升级时返回 null
    */
   async getLevelUpPreview() {
-    const xpTable = CONFIG.LIMBUSCOMPANY?.LEVEL_XP ?? [];
+    const cfg = CONFIG.LIMBUSCOMPANY ?? {};
+    const maxLevel = cfg.MAX_LEVEL ?? Infinity;
     const sys = this.system;
     const currentLevel = sys.level;
-    const needed = xpTable[currentLevel] ?? null;
-    const currentXp = sys.xp.value ?? 0;
-    if (needed === null || currentXp <= needed) return null;
 
-    const nextLevel = currentLevel + 1;
+    // 经验达到阈值即可升级（>=，不是 >）；够几级就升几级，每升一级扣掉该级的阈值，
+    // 余数留着继续攒——早先是"只升 1 级 + 经验清零"，一次交大笔经验会白白蒸发。
+    let nextLevel = currentLevel;
+    let xpLeft    = sys.xp.value ?? 0;
+    const consumed = [];                       // 每一级各扣了多少，供聊天卡展示
+    while (nextLevel < maxLevel) {
+      const need = cfg.getXpForLevel?.(nextLevel) ?? 0;
+      if (need <= 0 || xpLeft < need) break;
+      xpLeft -= need;
+      nextLevel += 1;
+      consumed.push({ level: nextLevel, cost: need });
+    }
+    if (nextLevel === currentLevel) return null;
+
     const con = sys.attributes?.con ?? 1;
     const conClamped = Math.max(1, Math.min(8, con));
     const t = (conClamped - 1) / 7;
@@ -845,26 +858,35 @@ export class LimbusActor extends Actor {
     const nextHPMax   = Math.round(hpBase + (nextLevel - 1) * hpGrowth);
     const nextHPValue = Math.min(Math.max(sys.hp.value ?? 0, 0), nextHPMax);
     const nextStellarMax = 30 + nextLevel;
-    const nextAttrPoints = (nextLevel % 10 === 0) ? ((sys.attrPoints ?? 0) + 1) : (sys.attrPoints ?? 0);
 
-    // 背景升级奖励：匹配 nextLevel 的物品条目
+    // 属性点：每 10 级 1 点。一次跨多级时要把中间跨过的每一个整十级都算上
+    // （Lv9 一口气升到 Lv21 应该拿 2 点，不是只看落点是不是整十）
+    const gainedAttr = Math.floor(nextLevel / 10) - Math.floor(currentLevel / 10);
+    const nextAttrPoints = (sys.attrPoints ?? 0) + gainedAttr;
+
+    // 背景升级奖励：本次跨过的**每一级**都要发，不能只发落点那一级
     const rewards = [];
     const bgUuid = sys.background?.uuid ?? "";
     if (bgUuid) {
       const bg = await fromUuid(bgUuid).catch(() => null);
-      const entry = bg?.system?.levelRewards?.find(r => Number(r.level) === nextLevel);
-      for (const ref of entry?.items ?? []) {
-        const it = ref.uuid ? await fromUuid(ref.uuid).catch(() => null) : null;
-        rewards.push({
-          uuid: ref.uuid,
-          name: it?.name ?? ref.itemData?.name ?? "（未知物品）",
-          img:  it?.img  ?? ref.itemData?.img  ?? "icons/svg/item-bag.svg",
-        });
+      for (let lv = currentLevel + 1; lv <= nextLevel; lv++) {
+        const entry = bg?.system?.levelRewards?.find(r => Number(r.level) === lv);
+        for (const ref of entry?.items ?? []) {
+          const it = ref.uuid ? await fromUuid(ref.uuid).catch(() => null) : null;
+          rewards.push({
+            level: lv,
+            uuid: ref.uuid,
+            name: it?.name ?? ref.itemData?.name ?? "（未知物品）",
+            img:  it?.img  ?? ref.itemData?.img  ?? "icons/svg/item-bag.svg",
+          });
+        }
       }
     }
 
     return {
       currentLevel, nextLevel,
+      levelsGained: nextLevel - currentLevel,
+      xpFrom: sys.xp.value ?? 0, xpTo: xpLeft, xpConsumed: consumed,
       hpFrom: sys.hp.max, hpTo: nextHPMax, hpValueTo: nextHPValue,
       stellarFrom: sys.stellarMotes.max, stellarTo: nextStellarMax,
       attrPointsFrom: sys.attrPoints ?? 0, attrPointsTo: nextAttrPoints,
@@ -873,19 +895,23 @@ export class LimbusActor extends Actor {
   }
 
   /**
-   * 应用升级：等级+1，经验清零，生命/星芒上限更新，按背景等级奖励发放物品。
+   * 应用升级：经验够几级就升几级（每级扣掉该级阈值、余数保留），
+   * 生命/星芒上限更新，按背景等级奖励发放这几级的全部物品。
    * @returns {Promise<object|null>} 升级预览数据（用于聊天记录展示），无法升级时返回 null
    */
   async levelUpByXp() {
     const preview = await this.getLevelUpPreview();
     if (!preview) {
-      ui.notifications?.warn?.("经验值未超过升级阈值，无法升级。");
+      const maxLevel = CONFIG.LIMBUSCOMPANY?.MAX_LEVEL ?? Infinity;
+      ui.notifications?.warn?.(this.system.level >= maxLevel
+        ? "已经满级，无法继续升级。"
+        : "经验值未达到升级阈值，无法升级。");
       return null;
     }
 
     await this.update({
       "system.level":             preview.nextLevel,
-      "system.xp.value":          0,
+      "system.xp.value":          preview.xpTo,
       "system.attrPoints":        preview.attrPointsTo,
       "system.stellarMotes.max":  preview.stellarTo,
       "system.hp.max":            preview.hpTo,
