@@ -10192,3 +10192,88 @@ input.item-piles-quantity {
   color: #c9a84c;
   white-space: nowrap;
 }
+
+/* ── 升级对话框 · 第 2 步：训练等级强化 ────────────────────────────────── */
+.lud-train-hint {
+  margin: 2px 0 8px;
+  font-size: 12px;
+  color: #cfc0a0;
+}
+.lud-train-hint b { color: #c9a84c; font-size: 14px; }
+
+.lud-train-done {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+.lud-train-done span {
+  padding: 1px 7px;
+  border-radius: 9px;
+  font-size: 11px;
+  color: #2a1c0a;
+  background: #c9a84c;
+}
+
+.lud-train-list {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.lud-train-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 4px 7px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 0.12s ease, border-color 0.12s ease;
+}
+.lud-train-row:hover {
+  background: rgba(201, 168, 76, 0.14);
+  border-color: rgba(201, 168, 76, 0.55);
+}
+/* 已装备的那 7 个：左侧金条标出来，和列表里没装的区分开 */
+.lud-train-row.equipped { border-left: 3px solid #c9a84c; }
+.lud-train-row.disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.lud-train-icon {
+  width: 26px;
+  height: 26px;
+  object-fit: cover;
+  border-radius: 3px;
+  flex: 0 0 auto;
+}
+.lud-train-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.lud-train-slot {
+  padding: 0 6px;
+  border-radius: 8px;
+  font-size: 10px;
+  color: #2a1c0a;
+  background: #c9a84c;
+  white-space: nowrap;
+}
+.lud-train-lv {
+  font-size: 13px;
+  color: #c9a84c;
+  white-space: nowrap;
+}
+.lud-train-warn {
+  font-size: 10px;
+  color: #b06a4a;
+  white-space: nowrap;
+}

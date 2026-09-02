@@ -165,6 +165,13 @@ LIMBUSCOMPANY.LEVEL_XP = [
 LIMBUSCOMPANY.MAX_LEVEL = 50;
 
 /**
+ * 每升这么多级，可以把一个技能的【训练等级】强化一阶（Ⅲ→Ⅳ→Ⅴ）。
+ * 满级 50 ÷ 3 = 16 次。可选的技能不限于已装备的 7 个——
+ * 技能列表里没装上去的（含要「强化 Lv.3 技能」的那些）同样能挑。
+ */
+LIMBUSCOMPANY.TRAIN_UPGRADE_EVERY = 3;
+
+/**
  * 从 Lv `level` 升到 Lv `level+1` 所需的经验值。
  * 表尾（Lv50）之后按每 5 级 ×1.5 递推——正常打不到，只是别让曲线断掉。
  * @param {number} level 当前等级

@@ -41,7 +41,42 @@
       </div>
     {{/if}}
 
+    {{!-- 第 2 步：训练等级强化。已装备的排在前面，但技能列表里没装的同样能挑 --}}
     {{#if (eq step 2)}}
+      <div class="lud-section-title">强化训练等级</div>
+      <div class="lud-train-hint">
+        还可强化 <b>{{trainLeft}}</b> 次 —— 点一个技能把它的训练等级提升一阶
+      </div>
+      {{#if trainDone.length}}
+        <div class="lud-train-done">
+          {{#each trainDone}}<span>{{name}} {{from}}→{{to}}</span>{{/each}}
+        </div>
+      {{/if}}
+      <div class="lud-train-list">
+        {{#each candidates}}
+          <div class="lud-train-row{{#unless canUpgrade}} disabled{{/unless}}{{#if equipped}} equipped{{/if}}"
+               data-item-id="{{id}}"
+               title="{{#if maxed}}已经是 Ⅴ 阶，无法再强化{{else if hasNextData}}强化到 {{nextNumeral}} 阶{{else}}这张卡还没写 {{nextNumeral}} 阶的数值，强化了也不会有变化{{/if}}">
+            <img src="{{img}}" class="lud-train-icon" alt="{{name}}">
+            <span class="lud-train-name">{{name}}</span>
+            {{#if equipped}}<span class="lud-train-slot">{{slotLabel}}</span>{{/if}}
+            <span class="lud-train-lv">
+              {{numeral}}{{#if canUpgrade}} <span class="lud-arrow">→</span> <b>{{nextNumeral}}</b>{{/if}}
+            </span>
+            {{#unless canUpgrade}}
+              <span class="lud-train-warn">{{#if maxed}}已满阶{{else}}无 {{nextNumeral}} 阶数据{{/if}}</span>
+            {{/unless}}
+          </div>
+        {{else}}
+          <div class="lud-empty">没有可强化的技能</div>
+        {{/each}}
+      </div>
+      <div class="lud-footer">
+        <button type="button" class="lud-skip sheet-btn">稍后再说</button>
+      </div>
+    {{/if}}
+
+    {{#if (eq step 3)}}
       <div class="lud-section-title">等级奖励物品</div>
       <div class="lud-item-list">
         {{#each preview.rewards}}

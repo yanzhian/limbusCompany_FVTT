@@ -883,9 +883,16 @@ export class LimbusActor extends Actor {
       }
     }
 
+    // 训练等级强化名额：每 TRAIN_UPGRADE_EVERY 级 1 次，连升时跨过几个就给几次
+    const every = cfg.TRAIN_UPGRADE_EVERY ?? 0;
+    const trainUpgrades = every > 0
+      ? Math.floor(nextLevel / every) - Math.floor(currentLevel / every)
+      : 0;
+
     return {
       currentLevel, nextLevel,
       levelsGained: nextLevel - currentLevel,
+      trainUpgrades,
       xpFrom: sys.xp.value ?? 0, xpTo: xpLeft, xpConsumed: consumed,
       hpFrom: sys.hp.max, hpTo: nextHPMax, hpValueTo: nextHPValue,
       stellarFrom: sys.stellarMotes.max, stellarTo: nextStellarMax,
@@ -933,6 +940,71 @@ export class LimbusActor extends Actor {
     return preview;
   }
 
+
+  /**
+   * 可用于【训练等级强化】的技能清单。
+   *
+   * 已装备的 6 基础 + 1 守备排在前面（equipped=true），其余持有的技能跟在后面
+   * ——「强化 Lv.3 技能」这类奖励针对的常常是还没装上去的那张卡，只列已装备的会漏。
+   * E.G.O 不参与训练等级（它用觉醒/侵蚀），一律排除。
+   *
+   * @returns {object[]} 每项 { id, name, img, level, numeral, nextNumeral,
+   *                            equipped, slotLabel, hasNextData, canUpgrade }
+   */
+  getTrainUpgradeCandidates() {
+    const NUM = { 1: "Ⅰ", 2: "Ⅱ", 3: "Ⅲ", 4: "Ⅳ", 5: "Ⅴ" };
+    const sys = this.system;
+    const basic = sys.skills?.basic ?? [];
+    const defId = sys.skills?.defense ?? null;
+
+    // 槽位标签：装备中的排前面，并标出它占的是哪个槽
+    const slotOf = new Map();
+    basic.forEach((id, i) => { if (id) slotOf.set(id, `基础 ${i + 1}`); });
+    if (defId) slotOf.set(defId, "守备");
+
+    const rows = [];
+    for (const item of this.items) {
+      if (item.type !== "skill") continue;
+      if (item.system?.type === "ego") continue;          // E.G.O 走觉醒/侵蚀
+      const lv   = item.system?.trainLevel ?? 3;
+      const next = lv + 1;
+      // 下一阶有没有真的写过数值——没写的话这次强化等于白花
+      const hasNextData = !!item.system?.trainForms?.[`lv${next}`]?.initialized;
+      rows.push({
+        id: item.id, uuid: item.uuid, name: item.name, img: item.img,
+        level: lv, numeral: NUM[lv] ?? lv, nextNumeral: NUM[next] ?? next,
+        equipped:  slotOf.has(item.id),
+        slotLabel: slotOf.get(item.id) ?? "",
+        hasNextData,
+        canUpgrade: next <= 5 && hasNextData,
+        maxed: next > 5,
+      });
+    }
+
+    // 已装备的在前（按槽位顺序），其余按名称
+    const order = [...basic.filter(Boolean), ...(defId ? [defId] : [])];
+    rows.sort((a, b) => {
+      if (a.equipped !== b.equipped) return a.equipped ? -1 : 1;
+      if (a.equipped) return order.indexOf(a.id) - order.indexOf(b.id);
+      return a.name.localeCompare(b.name, "zh");
+    });
+    return rows;
+  }
+
+  /**
+   * 把一个技能的训练等级强化一阶（Ⅲ→Ⅳ→Ⅴ）。
+   * @param {string} itemId
+   * @returns {Promise<boolean>} 是否真的升了
+   */
+  async applyTrainUpgrade(itemId) {
+    const item = this.items.get(itemId);
+    if (!item || item.type !== "skill") return false;
+    if (item.system?.type === "ego") return false;
+    const next = (item.system?.trainLevel ?? 3) + 1;
+    if (next > 5) return false;
+    await item.update({ "system.trainLevel": next });
+    return true;
+  }
 
   // ─── 长休 ──────────────────────────────────────────────────────────────
 
