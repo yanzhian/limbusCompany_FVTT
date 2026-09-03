@@ -9751,3 +9751,545 @@ input.item-piles-quantity {
   background: linear-gradient(90deg, #E7B956 var(--craft-p, 0%), transparent 0);
 }
 .camp-craft-btn > * { position: relative; z-index: 1; }
+
+/* ══ GM 控制台：角色按文件夹分组 ══════════════════════════════════ */
+.limbuscompany .gmc-section-header .gmc-search {
+  flex: 1; min-width: 80px; margin: 0 4px;
+  background: var(--bg-panel); border: 1px solid var(--border-gold);
+  color: var(--text-main); font-family: var(--font-main); font-size: .72rem;
+  border-radius: 2px; padding: 2px 6px;
+}
+/* 【全选】【清空】改成方形图标按钮 */
+.limbuscompany .gmc-icon-btn {
+  width: 24px; height: 22px; flex: 0 0 24px; padding: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: var(--bg-panel); border: 1px solid var(--border-gold);
+  color: var(--text-sub); border-radius: 2px; cursor: pointer;
+  font-size: .72rem; transition: color .12s, border-color .12s, background .12s;
+}
+.limbuscompany .gmc-icon-btn:hover {
+  color: var(--gold-active); border-color: var(--gold-active);
+  background: rgba(95,62,33,.3);
+}
+
+/* 分组：拖放区改成竖向堆叠的一组组 */
+.limbuscompany .gmc-drop-zone { display: block; }
+.limbuscompany .gmc-folder { margin-bottom: 4px; }
+.limbuscompany .gmc-folder-head {
+  display: flex; align-items: center; gap: 5px; cursor: pointer; user-select: none;
+  padding: 2px 6px 2px 4px; border-radius: 2px;
+  background: linear-gradient(90deg, rgba(95,62,33,.34), rgba(95,62,33,.06) 60%, transparent);
+  border-bottom: 1px solid rgba(95,62,33,.35);
+  font-size: .72rem; letter-spacing: .06em; color: #B08A5E;
+}
+.limbuscompany .gmc-folder-head:hover { color: var(--text-main); }
+.limbuscompany .gmc-folder-caret { font-size: .6rem; width: 10px; }
+.limbuscompany .gmc-folder-ic    { color: #8A6E52; font-size: .7rem; }
+.limbuscompany .gmc-folder-name  { flex: 1; }
+.limbuscompany .gmc-folder-count { color: var(--gold-active); font-size: .66rem; }
+.limbuscompany .gmc-folder-btn {
+  width: 20px; height: 18px; display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 2px; color: #7A6249; font-size: .68rem; cursor: pointer;
+  transition: color .12s, background .12s;
+}
+.limbuscompany .gmc-folder-btn:hover { color: var(--gold-active); background: rgba(231,185,86,.16); }
+.limbuscompany .gmc-folder-body {
+  display: flex; flex-wrap: wrap; gap: 6px; padding: 6px 2px 2px;
+}
+.limbuscompany .gmc-folder-collapsed .gmc-folder-body { display: none; }
+
+/* 【下个回合】移到左侧按钮组（消耗品上方）：按 .qa-btn 的规格排版，
+   但保留原来的金底高亮，让它在一列按钮里依然是最显眼的那个 */
+.qa-btn-group--left .qa-next-turn-btn {
+  margin-left: 0;
+  width: 100%;
+  padding: 6px 12px;
+  font-size: 14px;
+  border-radius: 4px;
+}
+
+/* ══ 快捷 HUD·恐惧鉴定（布局 C：数字压在图标右下角） ══════════════════
+   纯计数显示：无边框、无底色、无 hover 反馈 */
+.qa-panic-check {
+  display: flex; align-items: center;
+  gap: 13px;
+  margin-top: 2px;
+  padding: 4px 11px;
+  background: none;
+  border: none;
+  border-radius: 0;
+  cursor: default;
+  transition: none;
+}
+.qa-panic-check:hover { border-color: transparent; }
+
+.qa-panic-item { display: flex; align-items: center; position: relative; gap: 0; }
+.qa-panic-item img { width: 34px; height: 34px; display: block; }
+.qa-panic-num { position: absolute; right: -2px; bottom: -2px; }
+
+.qa-panic-num {
+  font-size: 22px; font-weight: 500; line-height: 1;
+  -webkit-text-stroke: 3px #0b0908;
+  paint-order: stroke fill;
+}
+.qa-panic-resolve .qa-panic-num {
+  color: #ffffff;
+  text-shadow: 0 0 5.0px rgba(93,173,226,0.40);
+}
+.qa-panic-fear .qa-panic-num {
+  color: #ffffff;
+  text-shadow: 0 0 5.0px rgba(231,76,60,0.40);
+}
+
+/* ══ 物品 Title 卡·排版（调参台导出） ══ */
+/* 不能裸写 .limbus-title-card：BUFF 卡是自适应高度的，写在前面会被这条后来居上地
+   压成固定 500px（症状：BUFF 卡凭空变高一大截），所以显式排除它 */
+.limbus-title-card:not(.limbus-buff-title-card) {
+  width: 280px; height: 500px; max-height: 500px;
+}
+
+.limbus-title-card-equip .tce-header {
+  font-size: 20px;
+  padding: 15px 12px;
+  display: flex; align-items: baseline; gap: 8px;
+}
+/* 可堆叠物品：数量 ×N 挂在标题条右端 */
+.limbus-title-card-equip .tce-header .tce-name { flex: 1; min-width: 0; }
+.limbus-title-card-equip .tce-header .tce-qty {
+  font-size: 20px; font-weight: bold; flex-shrink: 0;
+  opacity: .9; font-variant-numeric: tabular-nums;
+}
+
+.limbus-title-card-equip .tce-info-row {
+  padding: 2px 12px 4px;
+}
+.limbus-title-card-equip .tce-info-left { gap: 5px; }
+.limbus-title-card-equip .tce-subtype   { font-size: 14px; }
+.limbus-title-card-equip .tce-category  { font-size: 12px; }
+/* 稀有度：并在「类型·分类」同一排，靠右 */
+.limbus-title-card-equip .tce-rarity {
+  font-size: 13px; font-weight: bold;
+  margin-left: auto; letter-spacing: .06em;
+}
+
+.limbus-title-card-equip .tce-modifiers { gap: 10px; }
+.limbus-title-card-equip .modifier-row .mod-icon {
+  width: 17px; height: 17px;
+}
+.limbus-title-card-equip .modifier-row .mod-val,
+.limbus-title-card-equip .modifier-row .resist-display { font-size: 12px; }
+
+.limbus-title-card-equip .tce-tags { gap: 6px; }
+.limbus-title-card-equip .tce-tags .tc-skill-tag {
+  font-size: 12px; padding: 0px 4px;
+}
+
+.limbus-title-card-equip .tce-desc {
+  font-size: 12px; line-height: 1.5;
+  padding: 9px 14px;
+}
+.limbus-title-card-equip .tce-footer {
+  font-size: 14px;
+  padding: 6px 14px 8px;
+}
+/* 页脚：装备＝星芒 + 眼，两者一起靠右、间隔 15px；其余只有眼 */
+.limbus-title-card-equip .tce-footer { justify-content: flex-end; gap: 4px; }
+.limbus-title-card-equip .tce-footer .tce-foot-sep { width: 15px; flex: 0 0 15px; }
+.limbus-title-card-equip .tc-eye-icon { width: 18px; height: 18px; object-fit: contain; }
+.limbus-title-card-equip .tc-eye-cost { color: var(--gold-active); font-variant-numeric: tabular-nums; }
+
+/* ══ 技能 Title 卡·排版（调参台导出） ══ */
+.limbus-title-card-skill { width: 280px; height: 500px; max-height: 500px; }
+
+.limbus-title-card-skill .tc-header {
+  font-size: 18px; line-height: 1.15; font-weight: bold;
+  padding: 18px 12px;
+  display: flex; align-items: baseline; gap: 8px;
+}
+.limbus-title-card-skill .tc-header .tc-name { flex: 1; min-width: 0; }
+.limbus-title-card-skill .tc-header .tc-lv {
+  font-size: 12px; flex-shrink: 0; opacity: .92; letter-spacing: .06em;
+}
+/* 罪孽：标题条里 Lv 右边，只放图标 */
+.limbus-title-card-skill .tc-header .tc-sin-ic {
+  width: 24px; height: 24px; flex-shrink: 0;
+  object-fit: contain; align-self: center;
+  filter: drop-shadow(0 0 3px rgba(0,0,0,.6));
+}
+
+.limbus-title-card-skill .tcs-row {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  padding: 1px 12px;
+}
+/* 类型：基础/E.G.O = Offense_Level.webp，守备 = block.webp；单独靠右 */
+.limbus-title-card-skill .tcs-kind-ic {
+  width: 22px; height: 22px; object-fit: contain; flex-shrink: 0;
+  margin-left: auto;
+}
+.limbus-title-card-skill .tcs-cat  { font-size: 11px; color: #9B6839;
+  display: inline-flex; align-items: center; gap: 4px; }
+.limbus-title-card-skill .tcs-cat .tc-cat-icon { width: 14px; height: 14px; object-fit: contain; }
+.limbus-title-card-skill .tcs-formula { font-size: 18px; color: #E8CAA1; font-weight: bold;
+  font-variant-numeric: tabular-nums; }
+.limbus-title-card-skill .tcs-dice { font-size: 11px; color: #C9A84C; }
+
+.limbus-title-card-skill .tc-weight {
+  display: flex; align-items: center; gap: 4px;
+  padding: 1px 12px;
+}
+.limbus-title-card-skill .tc-weight-label { font-size: 13px; color: #9B6839; margin-right: 2px; }
+.limbus-title-card-skill .tc-weight-sq {
+  width: 12px; height: 12px; background: #C9A84C; border-radius: 2px;
+}
+.limbus-title-card-skill .tcs-spread { font-size: 11px; color: #B08A5E; margin-left: 6px; }
+
+.limbus-title-card-skill .tcs-flags {
+  display: flex; flex-wrap: wrap; gap: 4px;
+  padding: 1px 12px;
+}
+.limbus-title-card-skill .tcs-flag {
+  font-size: 11px; padding: 1px 6px;
+  border-radius: 2px; border: 1px solid currentColor;
+}
+.limbus-title-card-skill .f-noequip { color: #C88A6A; }
+.limbus-title-card-skill .f-noclash { color: #C4553D; }
+.limbus-title-card-skill .f-cover   { color: #5DADE2; }
+.limbus-title-card-skill .f-indis   { color: #B07FD6; }
+
+.limbus-title-card-skill .tcs-costs,
+.limbus-title-card-skill .tcs-res {
+  display: flex; flex-wrap: wrap; gap: 8px;
+  padding: 1px 12px;
+  font-size: 12px;
+}
+.limbus-title-card-skill .tcs-cost-item,
+.limbus-title-card-skill .tcs-res-item { display: inline-flex; align-items: center; gap: 3px; }
+.limbus-title-card-skill .tcs-cost-item img,
+.limbus-title-card-skill .tcs-res-item img { width: 14px; height: 14px; object-fit: contain; }
+.limbus-title-card-skill .tcs-cost-label { color: #9B6839; }
+
+.limbus-title-card-skill .tc-tags {
+  display: flex; flex-wrap: wrap; gap: 6px;
+  padding: 1px 12px;
+}
+.limbus-title-card-skill .tc-tags .tc-skill-tag {
+  font-size: 12px; padding: 0px 4px;
+}
+
+.limbus-title-card-skill .tc-desc {
+  font-size: 12px; line-height: 1.5;
+  padding: 8px 14px;
+}
+.limbus-title-card-skill .tc-footer {
+  display: flex; align-items: center; justify-content: flex-end; gap: 4px;
+  padding: 6px 14px;
+  font-size: 14px;
+}
+
+/* E.G.O 两形态：卡片底部提示当前形态与切换键 */
+.limbus-title-card-skill .tcs-form-hint {
+  padding: 0 14px 6px;
+  font-size: 11px; color: #8A6E52; text-align: right; flex-shrink: 0;
+}
+
+/* ══ 回合开始横幅（素材版）══
+   顺序：黑条 → 钟淡入并由大缩到正常 → 红线与 TURN+回合数出现 → 钟逆时针摆一下 → 淡出
+   素材：assets/icons/GUI/turn_clock.webp / turn_line.webp / turn_word.webp */
+.lc-turn-banner {
+  position: fixed; left: 0; right: 0; top: 46%;
+  height: 121px; transform: translateY(-50%);
+  display: flex; align-items: center; justify-content: center;
+  pointer-events: none; z-index: 100; opacity: 0;
+}
+.lc-turn-banner.show { opacity: 1; }
+
+/* ① 黑条 */
+.lc-turn-banner .lc-tb-band {
+  position: absolute; inset: 0;
+  background: linear-gradient(90deg, transparent,
+    rgba(7,6,5,0.83) 8%,
+    rgba(7,6,5,0.83) 92%, transparent);
+  transform: scaleY(0); transform-origin: center;
+}
+/* ② 钟（层级只压在黑条上面） */
+.lc-turn-banner .lc-tb-clock {
+  position: absolute; left: 50%; top: 50%; z-index: 1; opacity: 0;
+  width: 280px;
+  transform: translate(-50%, -50%) translate(0px, 0px);
+  transform-origin: center;
+  filter: drop-shadow(0 0 8px rgba(0,0,0,.8));
+}
+.lc-turn-banner .lc-tb-clock img { width: 100%; height: auto; display: block; }
+/* ③ 红线（上下两条在同一张图里，整张缩放定位） */
+.lc-turn-banner .lc-tb-line {
+  /* 用 px 不用 %：% 是相对屏幕宽度的，调参台舞台只有 680px 宽，
+     到了全屏（1900px+）红线会被放大近三倍，两条线之间也被撑得很开 */
+  position: absolute; left: 50%; top: 50%; width: 394px; z-index: 2;
+  transform: translate(-50%, -50%) translate(0px, 4px) scaleX(0);
+  transform-origin: center;
+  opacity: 1.00;
+}
+.lc-turn-banner .lc-tb-line img { width: 100%; height: auto; display: block; }
+/* ③ TURN + 回合数 */
+.lc-turn-banner .lc-tb-text {
+  position: absolute; left: 0; right: 0; top: 50%; z-index: 3; opacity: 0;
+  transform: translateY(-50%);
+  display: flex; align-items: center; justify-content: center; gap: 25px;
+}
+.lc-turn-banner .lc-tb-word {
+  width: 215px; flex-shrink: 0;
+  transform: translate(21px, -4px);
+}
+.lc-turn-banner .lc-tb-word img {
+  width: 100%; height: auto; display: block;
+  opacity: 1.00;
+  filter: drop-shadow(0 2px 10px rgba(0,0,0,.9));
+}
+.lc-turn-banner .lc-tb-num {
+  font-size: 69px; font-weight: bold; color: #dc4110;
+  line-height: 1; font-variant-numeric: tabular-nums;
+  transform: translate(-12px, -5px);
+  text-shadow: 0 0 13.8px rgba(220,65,16,0.55),
+               0 2px 10px rgba(0,0,0,.9);
+}
+
+/* ── 播放：黑条 0ms → 钟淡入 60ms → 红线与文字 220ms → 钟摆动 480ms → 淡出 780ms ──
+   摆动那条必须是 forwards 不能是 both：both 会在它的延迟期间就把 0% 关键帧
+   （只有 rotate、没有 scale）填上去，而它排在后面，会盖掉钟的缩放入场，
+   表现就是"钟直接以正常大小出现，看不到由大变小" */
+.lc-turn-banner.play .lc-tb-band {
+  animation: lc-tb-band 60ms cubic-bezier(.2,.9,.3,1) forwards,
+             lc-tb-out 500ms ease-in 780ms forwards;
+}
+.lc-turn-banner.play .lc-tb-clock {
+  animation: lc-tb-clock-in 160ms cubic-bezier(.14,.8,.28,1) 60ms both,
+             lc-tb-swing 100ms cubic-bezier(.36,.07,.19,.97) 480ms forwards,
+             lc-tb-out 500ms ease-in 780ms forwards;
+}
+.lc-turn-banner.play .lc-tb-line {
+  animation: lc-tb-line 260ms cubic-bezier(.16,.84,.3,1) 220ms both,
+             lc-tb-out 500ms ease-in 780ms forwards;
+}
+.lc-turn-banner.play .lc-tb-text {
+  animation: lc-tb-text 260ms cubic-bezier(.16,.84,.3,1) 220ms both,
+             lc-tb-out 500ms ease-in 780ms forwards;
+}
+
+@keyframes lc-tb-band { from { transform: scaleY(0); } to { transform: scaleY(1); } }
+@keyframes lc-tb-clock-in {
+  from { opacity: 0;
+         transform: translate(-50%,-50%) translate(0px, 0px) scale(3.40); }
+  to   { opacity: 1.00;
+         transform: translate(-50%,-50%) translate(0px, 0px) scale(1); }
+}
+@keyframes lc-tb-swing {
+  0%   { transform: translate(-50%,-50%) translate(0px, 0px) rotate(0deg); }
+  35%  { transform: translate(-50%,-50%) translate(0px, 0px) rotate(-15deg); }
+  70%  { transform: translate(-50%,-50%) translate(0px, 0px) rotate(5.3deg); }
+  100% { transform: translate(-50%,-50%) translate(0px, 0px) rotate(0deg); }
+}
+@keyframes lc-tb-line {
+  from { transform: translate(-50%,-50%) translate(0px, 4px) scaleX(0); }
+  to   { transform: translate(-50%,-50%) translate(0px, 4px) scaleX(1); }
+}
+@keyframes lc-tb-text {
+  from { opacity: 0; transform: translateY(-50%) scale(.86); }
+  to   { opacity: 1; transform: translateY(-50%) scale(1); }
+}
+@keyframes lc-tb-out { from { opacity: 1; } to { opacity: 0; } }
+
+/* 总时长（turn-banner.mjs 的 TOTAL_MS 要跟它一致）：1280 ms */
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   训练等级徽章（技能卡右上角）
+   规则书里的「默认Ⅲ级 / 精通Ⅳ级 / 强化Ⅴ级」。同一张卡挂多阶数值，
+   点击在本卡已有的几阶之间轮转，右键删掉当前阶。
+   素材：assets/icons/Base_icon/阶段等级N.webp —— 缺图时 onerror 会给徽章加
+   .no-art，退回纯文字罗马数字，不至于开天窗。
+   ═════════════════════════════════════════════════════════════════════════ */
+
+.skill-sheet .equip-header { position: relative; }
+
+.skill-sheet .skill-train-badge {
+  position: absolute;
+  top: 2px;
+  right: 4px;
+  width: 54px;
+  height: 54px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  user-select: none;
+  transition: transform 0.12s ease, filter 0.12s ease;
+}
+.skill-sheet .skill-train-badge:hover {
+  transform: scale(1.08);
+  filter: drop-shadow(0 0 4px rgba(201, 168, 76, 0.75));
+}
+
+.skill-sheet .skill-train-badge img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  pointer-events: none;
+}
+
+/* 有素材时不显示文字；缺图（.no-art）才退回罗马数字 */
+.skill-sheet .skill-train-badge .train-numeral { display: none; }
+.skill-sheet .skill-train-badge.no-art .train-numeral {
+  display: block;
+  font-size: 26px;
+  font-weight: 700;
+  line-height: 1;
+  color: #c9a84c;
+  text-shadow: 0 0 6px rgba(0, 0, 0, 0.8);
+}
+
+/* 当前显示的不是顶层那一套（即精通/强化出来的阶）时给个淡金底衬 */
+.skill-sheet .skill-train-badge.derived::after {
+  content: "";
+  position: absolute;
+  inset: -2px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(201, 168, 76, 0.22) 0%, transparent 70%);
+  pointer-events: none;
+  z-index: -1;
+}
+
+/* Title 卡标题条里的训练等级（罪孽图标右侧） */
+.limbus-title-card-skill .tc-header .tc-train-ic {
+  width: 24px;
+  height: 24px;
+  object-fit: contain;
+  flex: 0 0 auto;
+  margin-left: 4px;
+}
+.limbus-title-card-skill .tc-header .tc-train-num {
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1;
+  margin-left: 4px;
+  flex: 0 0 auto;
+  color: #f3e3b5;
+}
+
+/* 升级对话框：连升多级标记 + 奖励物品的来源等级 */
+.lud-multi {
+  margin-left: 8px;
+  padding: 1px 7px;
+  border-radius: 9px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #2a1c0a;
+  background: #c9a84c;
+  white-space: nowrap;
+}
+.lud-item-lv {
+  margin-left: auto;
+  padding-left: 8px;
+  font-size: 11px;
+  color: #c9a84c;
+  white-space: nowrap;
+}
+
+/* ── 升级对话框 · 第 2 步：训练等级强化 ────────────────────────────────── */
+.lud-train-hint {
+  margin: 2px 0 8px;
+  font-size: 12px;
+  color: #cfc0a0;
+}
+.lud-train-hint b { color: #c9a84c; font-size: 14px; }
+
+.lud-train-done {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+.lud-train-done span {
+  padding: 1px 7px;
+  border-radius: 9px;
+  font-size: 11px;
+  color: #2a1c0a;
+  background: #c9a84c;
+}
+
+.lud-train-list {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.lud-train-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 4px 7px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 0.12s ease, border-color 0.12s ease;
+}
+.lud-train-row:hover {
+  background: rgba(201, 168, 76, 0.14);
+  border-color: rgba(201, 168, 76, 0.55);
+}
+/* 已装备的那 7 个：左侧金条标出来，和列表里没装的区分开 */
+.lud-train-row.equipped { border-left: 3px solid #c9a84c; }
+.lud-train-row.disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.lud-train-icon {
+  width: 26px;
+  height: 26px;
+  object-fit: cover;
+  border-radius: 3px;
+  flex: 0 0 auto;
+}
+.lud-train-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.lud-train-slot {
+  padding: 0 6px;
+  border-radius: 8px;
+  font-size: 10px;
+  color: #2a1c0a;
+  background: #c9a84c;
+  white-space: nowrap;
+}
+.lud-train-lv {
+  font-size: 13px;
+  color: #c9a84c;
+  white-space: nowrap;
+}
+.lud-train-warn {
+  font-size: 10px;
+  color: #b06a4a;
+  white-space: nowrap;
+}
+
+/* 设置侧边栏里的规则书入口 */
+.limbus-rulebook-block {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+.limbus-rulebook-block h4.divider {
+  color: #c9a84c;
+  letter-spacing: .08em;
+}
+.limbus-rulebook-block button i {
+  margin-right: 6px;
+  color: #c9a84c;
+}

@@ -104,6 +104,8 @@ const V_EGO_RES   = "__egoRes";
 const V_RANGE     = "__range";
 /** 「完成」列：值为真时整行跳过（已经导入过的条目不再重复导入） */
 const V_DONE      = "__done";
+/** 「训练等级」列：基础/守备填 Ⅲ/Ⅳ/Ⅴ，E.G.O 填 觉醒/侵蚀 —— 同一列两种含义 */
+const V_TRAIN     = "__train";
 
 /** 抗性 / 弱性列的倍率写法 */
 const RESIST_MULT = "x0.5";
@@ -141,6 +143,8 @@ export const COLUMN_ALIASES = {
   "库存": "system.stock",
   "隐藏": "system.hidden",
   "收藏": "system.favorited",
+  "稀有度": "system.rarity",        // 平装 / 精良 / 史诗 / 艺术 / 神话
+  "可堆叠": "system.stackable",
 
   // ── 装备 ──────────────────────────────────────────────────────────────
   "攻击等级": "system.atkAdj", "攻击修正": "system.atkAdj",
@@ -175,6 +179,10 @@ export const COLUMN_ALIASES = {
   "EGO等级": "system.egoDiceRating", "ego等级": "system.egoDiceRating",
   "武器限制": "system.weaponRestriction",
   "技能描述": "system.effectDesc",
+  // 训练等级：同名的几行会合并成同一张卡的多套数值，见 mergeSkillVariants
+  //   基础/守备 → Ⅲ/Ⅳ/Ⅴ（训练等级）
+  //   E.G.O     → 觉醒/侵蚀（形态）
+  "训练等级": V_TRAIN, "阶段等级": V_TRAIN, "形态": V_TRAIN,
 
   // ── 消耗品 / 材料 / 容器 ──────────────────────────────────────────────
   "可复用": "system.reusable", "可重复使用": "system.reusable",
@@ -184,8 +192,32 @@ export const COLUMN_ALIASES = {
   "网格高": "system.gridSize.height",
 };
 
+/** 训练等级：罗马数字 / 阿拉伯数字 / 规则书里的叫法都收 */
+const TRAIN_LEVEL_ALIASES = {
+  "Ⅰ": 1, "I": 1, "1": 1,
+  "Ⅱ": 2, "II": 2, "2": 2,
+  "Ⅲ": 3, "III": 3, "3": 3, "默认": 3, "基础": 3,
+  "Ⅳ": 4, "IV": 4, "4": 4, "精通": 4,
+  "Ⅴ": 5, "V": 5, "5": 5, "强化": 5,
+};
+
+/** E.G.O 形态（与训练等级共用「训练等级」那一列） */
+const EGO_FORM_ALIASES = {
+  "觉醒": "awaken",  "AWAKEN":  "awaken",
+  "侵蚀": "corrode", "CORRODE": "corrode",
+};
+
 /** 子类型/枚举值的中文 → 内部值映射（大小写不敏感，按列路径区分） */
 const VALUE_ALIASES = {
+  "system.rarity": {
+    "平装": "common", "普通": "common", "白": "common",
+    "精良": "fine",   "优良": "fine",   "蓝": "fine",
+    "史诗": "epic",   "紫": "epic",
+    "艺术": "artistic", "金": "artistic",
+    "神话": "mythic", "红": "mythic",
+  },
+  "system.trainLevel": TRAIN_LEVEL_ALIASES,
+  "system.egoForm":    EGO_FORM_ALIASES,
   "system.sinType": {
     "暴怒": "wrath", "愤怒": "wrath", "色欲": "lust", "怠惰": "sloth",
     "暴食": "gluttony", "忧郁": "gloom", "傲慢": "pride", "嫉妒": "envy",
@@ -578,6 +610,22 @@ function parseEgoRes(text) {
 /**
  * 解析一个虚拟列，返回 { 路径: 值 } 映射或 { __error }。
  */
+/**
+ * 「训练等级」列：一列两用，按填的内容自己判断是哪一种。
+ *   觉醒 / 侵蚀 → E.G.O 形态（system.egoForm）
+ *   Ⅲ/Ⅳ/Ⅴ…    → 训练等级（system.trainLevel）
+ * 两者都是"同一张卡的另一套数值"，合并逻辑也共用一套（见 mergeSkillVariants）。
+ */
+function parseTrainCell(text) {
+  const t = String(text ?? "").trim();
+  if (!t || t === "-") return {};
+  const ego = EGO_FORM_ALIASES[t] ?? EGO_FORM_ALIASES[t.toUpperCase()];
+  if (ego) return { "system.egoForm": ego };
+  const lv = TRAIN_LEVEL_ALIASES[t] ?? TRAIN_LEVEL_ALIASES[t.toUpperCase()];
+  if (lv) return { "system.trainLevel": lv };
+  return { __error: `「${t}」既不是训练等级（Ⅲ/Ⅳ/Ⅴ）也不是 E.G.O 形态（觉醒/侵蚀）` };
+}
+
 function parseVirtualColumn(marker, text, itemType) {
   switch (marker) {
     case V_CATEGORY: return parseCategory(text, itemType);
@@ -589,6 +637,7 @@ function parseVirtualColumn(marker, text, itemType) {
     case V_SPREAD:   return parseSpread(text);
     case V_RANGE:    return parseRange(text);
     case V_EGO_RES:  return parseEgoRes(text);
+    case V_TRAIN:    return parseTrainCell(text);
     case V_CAPACITY: {
       const r = parseWxH(text);
       if (!r) return {};
@@ -736,7 +785,172 @@ export function buildItemData(rows, defaultType) {
     warnings.push(`「完成」列已标记的 ${skipped} 行已跳过，未导入。`);
   }
 
-  return { items, errors, warnings };
+  return { items: mergeSkillVariants(items, warnings), errors, warnings };
+}
+
+/**
+ * 把「同名 + 填了训练等级列」的几行技能合并成**同一张卡**的多套数值。
+ *
+ * 「训练等级」这一列一列两用：
+ *   基础 / 守备 → Ⅲ / Ⅳ / Ⅴ，合并成 system.trainForms.lvN
+ *   E.G.O       → 觉醒 / 侵蚀，合并成 system.corrode
+ *
+ * 规则书里 Ⅲ→Ⅳ→Ⅴ 是同一个技能被练上去，不是三张不同的卡；因此走和
+ * E.G.O【觉醒/侵蚀】一样的做法：最低的一阶留在顶层字段（trainBaseLevel），
+ * 更高的几阶写进 system.trainForms.lvN。
+ *
+ * 留空的单元格不会写进 form —— 于是"没填的字段自动沿用低阶"这件事天然成立，
+ * 表里只需要填 Ⅳ 阶真正变了的那几列。
+ *
+ * @param {object[]} items    解析出来的物品数据
+ * @param {string[]} warnings 合并情况写回这里给导入面板显示
+ * @returns {object[]} 合并后的物品数据
+ */
+export function mergeSkillVariants(items, warnings = []) {
+  // ── 基础/守备：训练等级 Ⅲ→Ⅳ→Ⅴ ──────────────────────────────────────
+  // 名称 / 类型 / 分类 / 罪孽 / 等级 / 标签 跨阶共用，一律取最低那一阶的
+  const TRAIN_OVERRIDABLE = ["baseValue", "diceCount", "diceFaces", "negativeDice",
+                       "diceType", "counterType", "weight", "spreadMode", "spreadRange",
+                       "indiscriminate", "noEquip", "coverDefense", "noClash",
+                       "sanityCost", "stellarCost", "weaponRestriction",
+                       "effectDesc", "activities"];
+  const TRAIN_SHARED = { name: "名称", type: "类型", category: "分类",
+                         sinType: "罪孽", level: "等级", tags: "标签" };
+
+  // ── E.G.O：觉醒（顶层）/ 侵蚀（system.corrode）────────────────────────
+  // 共用：名称 / 罪孽 / EGO等级 / 罪孽资源消耗 / 抗性修改 / 标签 / 骰子类型
+  const EGO_OVERRIDABLE = ["category", "baseValue", "diceCount", "diceFaces", "negativeDice",
+                           "indiscriminate", "spreadMode", "spreadRange", "weight",
+                           "sanityCost", "effectDesc", "activities"];
+  const EGO_SHARED = { name: "名称", sinType: "罪孽", egoDiceRating: "EGO等级",
+                       sinCost: "罪孽资源消耗", egoResistanceAdj: "抗性修改",
+                       tags: "标签", diceType: "骰子类型" };
+
+  /** 高阶/另一形态那行填了共用列 → 提醒一声，免得表填了半天没反应 */
+  const reportShared = (row, base, labels, what) => {
+    const ignored = [];
+    for (const [k, label] of Object.entries(labels)) {
+      if (k === "name") continue;                       // 同名才会走到这里
+      const rv = row.system[k];
+      if (rv === undefined) continue;
+      const bv = base.system[k];
+      const same = JSON.stringify(rv) === JSON.stringify(bv);
+      if (!same) ignored.push(label);
+    }
+    if (ignored.length) {
+      warnings.push(`「${base.name}」${what} 那一行填的「${ignored.join("、")}」不会生效`
+        + `——这几项两套数值共用，一律取打底那一行的值。`);
+    }
+  };
+
+  /** 把一行里真的填了的可覆盖字段抄成一套覆盖数值；没填的不写 = 沿用打底那套 */
+  const buildForm = (row, keys) => {
+    const form = { initialized: true };
+    for (const k of keys) {
+      if (row.system[k] !== undefined) form[k] = row.system[k];
+    }
+    return form;
+  };
+
+  // 只有明确填了「训练等级」列的技能行才参与合并；没填的保持原样各是各的卡
+  const groups = new Map();                       // 名称 → 行下标数组
+  items.forEach((it, i) => {
+    if (it?.type !== "skill") return;
+    const sys = it.system ?? {};
+    if (sys.trainLevel === undefined && sys.egoForm === undefined) return;
+    const key = String(it.name ?? "").trim();
+    if (!key) return;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(i);
+  });
+
+  const dropped = new Set();
+  for (const [name, idxs] of groups) {
+    const isEgo = items[idxs[0]].system?.type === "ego";
+
+    // 同名的几行必须是同一种技能，否则不合并
+    const kinds = new Set(idxs.map(i => items[i].system?.type ?? "basic"));
+    if (kinds.size > 1) {
+      warnings.push(`「${name}」同名但技能类型不一致（${[...kinds].join(" / ")}），未合并。`);
+      continue;
+    }
+
+    // ── E.G.O：觉醒打底，侵蚀写进 system.corrode ───────────────────────
+    if (isEgo) {
+      const awake   = idxs.filter(i => items[i].system.egoForm !== "corrode");
+      const corrode = idxs.filter(i => items[i].system.egoForm === "corrode");
+
+      if (!awake.length) {
+        warnings.push(`「${name}」只有【侵蚀】没有【觉醒】，无法合并——`
+          + `侵蚀是覆盖在觉醒之上的一套数值，请补一行觉醒。`);
+        // 别让卡开在一个没有数据的形态上
+        for (const i of idxs) items[i].system.egoForm = "awaken";
+        continue;
+      }
+      const base = items[awake[0]];
+      base.system.egoForm = "awaken";
+      for (const i of awake.slice(1)) {
+        warnings.push(`「${name}」有两行都填了【觉醒】，后一行已忽略。`);
+        dropped.add(i);
+      }
+      if (!corrode.length) continue;               // 只有觉醒 = 普通一张卡
+
+      const row = items[corrode[0]];
+      for (const i of corrode.slice(1)) {
+        warnings.push(`「${name}」有两行都填了【侵蚀】，后一行已忽略。`);
+        dropped.add(i);
+      }
+      reportShared(row, base, EGO_SHARED, "【侵蚀】");
+      foundry.utils.setProperty(base, "system.corrode", buildForm(row, EGO_OVERRIDABLE));
+      dropped.add(corrode[0]);
+      warnings.push(`「${name}」的【觉醒】/【侵蚀】已合并为同一张卡。`);
+      continue;
+    }
+
+    // ── 基础 / 守备：训练等级 ──────────────────────────────────────────
+    // 填的是觉醒/侵蚀却不是 E.G.O：这一列对它没意义
+    const strayForm = idxs.filter(i => items[i].system.egoForm !== undefined);
+    if (strayForm.length) {
+      warnings.push(`「${name}」不是 E.G.O，「训练等级」列里的觉醒/侵蚀已忽略——`
+        + `这一列对基础/守备技能应填 Ⅲ/Ⅳ/Ⅴ。`);
+      for (const i of strayForm) delete items[i].system.egoForm;
+    }
+    const lvIdxs = idxs.filter(i => items[i].system.trainLevel !== undefined);
+    if (!lvIdxs.length) continue;
+
+    // 单独一行也要把 trainBaseLevel 对齐，否则徽章会以为它是 Ⅲ 阶
+    if (lvIdxs.length === 1) {
+      const only = items[lvIdxs[0]];
+      only.system.trainBaseLevel = only.system.trainLevel;
+      continue;
+    }
+
+    const sorted = [...lvIdxs].sort((a, b) => items[a].system.trainLevel - items[b].system.trainLevel);
+    const base   = items[sorted[0]];
+    base.system.trainBaseLevel = base.system.trainLevel;
+
+    const seen = new Set([base.system.trainLevel]);
+    for (const i of sorted.slice(1)) {
+      const row = items[i];
+      const lv  = row.system.trainLevel;
+      if (seen.has(lv)) {
+        warnings.push(`「${name}」有两行都填了训练等级 ${lv}，后一行已忽略。`);
+        dropped.add(i);
+        continue;
+      }
+      seen.add(lv);
+      reportShared(row, base, TRAIN_SHARED, `训练等级 ${lv}`);
+      foundry.utils.setProperty(base, `system.trainForms.lv${lv}`,
+                                buildForm(row, TRAIN_OVERRIDABLE));
+      dropped.add(i);
+    }
+
+    // 导入后默认停在最低那一阶，跟角色实际练度对齐由玩家自己点徽章切
+    base.system.trainLevel = base.system.trainBaseLevel;
+    warnings.push(`「${name}」的 ${seen.size} 个训练等级（${[...seen].sort().join(" / ")}）已合并为同一张卡。`);
+  }
+
+  return items.filter((_, i) => !dropped.has(i));
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -746,17 +960,21 @@ export function buildItemData(rows, defaultType) {
 /** 各类型的模板列（与实际编辑用的表格布局一致；「图标/区域N」为表格自用，导入时忽略；
     「完成」列填真值时整行跳过，见 isDoneMark） */
 const TEMPLATE_COLUMNS = {
-  equipment:  ["图标", "完成", "名称", "类型", "攻击等级", "防御等级", "速度", "攻击范围",
-               "抗性", "弱性", "分类", "星芒", "容量", "标签", "效果", "价格"],
-  skill:      ["图标", "完成", "名称", "类型", "分类", "罪孽", "等级", "骰数",
-               "攻击容量", "容量扩散", "骰类型", "无法装备", "援护防御", "无法拼点", "无差别攻击", "标签", "效果",
-               "理智消耗", "罪孽资源消耗", "抗性修改"],
-  consumable: ["图标", "完成", "名称", "类型", "分类", "可复用", "无限耐久", "星芒",
-               "容量", "标签", "效果", "价格", "内部数量"],
-  container:  ["图标", "完成", "名称", "类型", "分类", "可复用", "无限耐久", "星芒",
-               "容量", "标签", "效果", "价格", "内部数量"],
-  material:   ["图标", "完成", "名称", "类型", "分类", "可复用", "无限耐久", "星芒",
-               "容量", "标签", "效果", "价格", "内部数量"],
+  equipment:  ["完成", "名称", "类型", "攻击等级", "防御等级", "速度",
+               "抗性", "弱性", "分类", "稀有度", "星芒", "容量", "标签", "效果",
+               "价格", "攻击范围"],
+  skill:      ["名称", "类型", "分类", "罪孽", "等级", "训练等级", "骰数",
+               "攻击容量", "容量扩散", "骰子类型", "无法装备", "无法拼点", "援护防御",
+               "无差别攻击", "标签", "效果", "理智消耗", "罪孽资源消耗", "抗性修改"],
+  consumable: ["图标", "完成", "名称", "类型", "分类", "稀有度", "可复用", "无限耐久",
+               "可堆叠", "数量", "容量", "标签", "效果", "价格",
+               "内部数量", "允许类型", "允许分类"],
+  container:  ["图标", "完成", "名称", "类型", "分类", "稀有度", "可复用", "无限耐久",
+               "可堆叠", "数量", "容量", "标签", "效果", "价格",
+               "内部数量", "允许类型", "允许分类"],
+  material:   ["图标", "完成", "名称", "类型", "分类", "稀有度", "可复用", "无限耐久",
+               "可堆叠", "数量", "容量", "标签", "效果", "价格",
+               "内部数量", "允许类型", "允许分类"],
   skillbook:  ["图标", "完成", "名称", "类型", "分类", "标签", "效果", "价格", "容量"],
   recipebook: ["图标", "完成", "名称", "类型", "分类", "标签", "效果", "价格", "容量"],
   panic:      ["图标", "完成", "名称", "类型", "标签", "效果"],
@@ -766,19 +984,21 @@ const TEMPLATE_COLUMNS = {
 /** 模板示例行：给出各类型最典型的一条，照着改即可 */
 const TEMPLATE_EXAMPLE = {
   equipment:  { "名称": "中指-怨恨纹身", "类型": "上装", "防御等级": "4", "抗性": "打",
-                "弱性": "突", "分类": "西服-纹身", "星芒": "1", "容量": "2x3",
+                "弱性": "突", "分类": "西服-纹身", "稀有度": "平装", "星芒": "1", "容量": "2x3",
                 "标签": "手指/中指", "价格": "240" },
   skill:      { "名称": "七发魔弹", "类型": "E.G.O", "分类": "突刺", "罪孽": "傲慢",
-                "等级": "HE", "骰数": "1D2", "攻击容量": "1", "容量扩散": "", "骰类型": "不可摧毁",
+                "等级": "HE", "训练等级": "觉醒", "骰数": "1D2", "攻击容量": "1", "容量扩散": "", "骰子类型": "不可摧毁",
                 "标签": "E.G.O装备/脑叶公司", "理智消耗": "10",
                 "罪孽资源消耗": "暴怒2，怠惰2，傲慢4",
                 "抗性修改": "暴怒x0.5傲慢x0.5怠惰x2.0嫉妒x2.0" },
-  consumable: { "名称": "紧急恢复针剂", "类型": "消耗品", "分类": "医疗",
-                "可复用": "FALSE", "无限耐久": "FALSE", "星芒": "0",
+  consumable: { "名称": "紧急恢复针剂", "类型": "消耗品", "分类": "医疗", "稀有度": "平装",
+                "可复用": "FALSE", "无限耐久": "FALSE", "可堆叠": "TRUE", "数量": "1",
                 "容量": "1x1", "价格": "30" },
-  container:  { "名称": "小型木箱", "类型": "容器", "分类": "建筑",
-                "容量": "3x2", "内部数量": "4x8" },
-  material:   { "名称": "绳索", "类型": "材料", "分类": "建材", "容量": "1x1" },
+  container:  { "名称": "小型木箱", "类型": "容器", "分类": "建筑", "稀有度": "平装",
+                "可堆叠": "FALSE", "数量": "1", "容量": "3x2", "内部数量": "4x8",
+                "允许类型": "", "允许分类": "" },
+  material:   { "名称": "绳索", "类型": "材料", "分类": "建材", "稀有度": "平装",
+                "可堆叠": "TRUE", "数量": "1", "容量": "1x1" },
   background: { "名称": "中指", "类型": "背景", "副标题": "中指-长兄", "分类": "帮派",
                 "标签": "中指/手指", "简介": "永不遗忘。中指的核心理念就是记仇。" },
 };
@@ -806,6 +1026,7 @@ const COLUMN_NOTES = {
   "等级":     "基础/守备填数字；E.G.O 填 ZAYIN/TET/HE/WAW/ALEPH",
   "骰数":     "形如 1D4、1D4+2；负面骰写成 20-1D8（基础值在前）；留空或 - 表示无",
   "骰类型":   "留空=一般骰子；可填 不可摧毁 / 斩断",
+  "骰子类型": "留空=一般骰子；可填 不可摧毁 / 斩断",
   "抗性":     "斩/打/突，记 x0.5，可多写",
   "弱性":     "斩/打/突，记 x2.0，可多写",
   "容量":     "形如 2x3（背包占格）",
@@ -816,11 +1037,15 @@ const COLUMN_NOTES = {
   "容量扩散": "攻击容量≥2 时生效，形如 [链式扩散3] / 广域乱射2，数字为范围格数（留空=链式1格）",
   "无法装备": "填 是/否、TRUE/FALSE",
   "援护防御": "填 是/否、TRUE/FALSE；标记为【援护防御】专属技能",
+  "训练等级": "一列两用：基础/守备填 Ⅲ/Ⅳ/Ⅴ（或 3/4/5、默认/精通/强化），E.G.O 填 觉醒/侵蚀。同名的几行会合并成同一张卡的多套数值，留空的格子沿用打底那一行——基础/守备沿用低一阶，侵蚀沿用觉醒。共用列（基础/守备：名称·类型·分类·罪孽·等级·标签；E.G.O：名称·罪孽·EGO等级·罪孽资源消耗·抗性修改·标签·骰子类型）一律取打底那一行的值",
   "无法拼点": "填 是/否、TRUE/FALSE；被锁定的目标只能【承受】，不能对抗",
   "攻击范围": "仅武器：留空=近战1格；填数字=近战N格（长矛/锁链）；填「远程6」=远程6格",
   "允许类型": "容器存放限制·类型，多个用 / 分隔（消耗品/材料），留空=不限制",
   "允许分类": "容器存放限制·分类，多个用 / 分隔（医疗/食材），与类型同时满足才收",
   "无差别攻击": "填 是/否、TRUE/FALSE；容量扩散时敌我不分，范围内的友方也会被打到（自己除外）",
+  "稀有度":   "平装 / 精良 / 史诗 / 艺术 / 神话（也认 白蓝紫金红）；留空=平装",
+  "可堆叠":   "填 是/否、TRUE/FALSE；同名物品能否叠成一格",
+  "数量":     "整数，留空=1",
   "可复用":   "填 是/否、TRUE/FALSE",
   "无限耐久": "填 是/否、TRUE/FALSE",
   "图标":     "表格自用，导入时忽略",

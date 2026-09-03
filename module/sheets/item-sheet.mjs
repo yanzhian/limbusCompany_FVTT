@@ -11,7 +11,7 @@
  */
 
 import { ClashManager } from "../helpers/clash.mjs";
-import { SKILLBOOK_MAX_SLOTS } from "../documents/item.mjs";
+import { SKILLBOOK_MAX_SLOTS, buildDiceFormula } from "../documents/item.mjs";
 import { CustomBuffRegistry, normalizeBuffType } from "../helpers/custom-buffs.mjs";
 import { linkifyHtml } from "../helpers/linkify.mjs";
 import { GridDnD } from "../helpers/grid-dnd.mjs";
@@ -21,6 +21,13 @@ import { buildPlacementGrid, canPlace, autoPlace, makeLockedSet } from "../helpe
 
 /** 背景的等级物品不收这三类（背景由向导指定、恐慌卡走 panicSlots、技能走技能书） */
 const BG_ITEM_BLOCKED_TYPES = ["background", "panic", "skill"];
+
+/** 训练等级的罗马数字写法（规则书里 默认Ⅲ级 / 精通Ⅳ级 / 强化Ⅴ级） */
+export const TRAIN_NUMERALS = { 1: "Ⅰ", 2: "Ⅱ", 3: "Ⅲ", 4: "Ⅳ", 5: "Ⅴ" };
+
+/** 训练等级徽章素材；素材缺失时模板会退回纯文字罗马数字 */
+export const trainLevelIcon = (lv) =>
+  `systems/limbusCompany_FVTT/assets/icons/Base_icon/阶段等级${Number(lv) || 3}.webp`;
 
 /**
  * 拖动 payload 里随身携带的物品"身份卡"：容器限制判定只看类型/分类/子类型，
@@ -97,14 +104,32 @@ export class LimbusItemSheet extends ItemSheet {
       && this.item.system?.type === "ego"
       && this.item.system?.egoForm === "corrode";
   }
-  /** 激活效果所在的字段名（侵蚀形态另存一套） */
-  get _actField() { return this._editCorrode ? "corrode.activities" : "activities"; }
+
+  /**
+   * 当前正在编辑的"变体"在 system 下的路径前缀（空串 = 顶层那一套）。
+   *
+   * 技能有两套互斥的多形态机制，都是「同一件物品挂多套数值」：
+   *   · E.G.O    → 觉醒 / 侵蚀，前缀 "corrode."
+   *   · 基础/守备 → 训练等级 Ⅰ-Ⅴ，前缀 "trainForms.lvN."
+   * 未 initialized 的那一阶没有自己的数据，直接编辑顶层，因此前缀为空。
+   */
+  get _variantPrefix() {
+    const it = this.item;
+    if (it.type !== "skill") return "";
+    const src = it.toObject().system ?? {};
+    if (src.type === "ego") return src.egoForm === "corrode" ? "corrode." : "";
+    const key = `lv${src.trainLevel ?? 3}`;
+    return src.trainForms?.[key]?.initialized ? `trainForms.${key}.` : "";
+  }
+
+  /** 激活效果所在的字段名（每个形态各存一套） */
+  get _actField() { return `${this._variantPrefix}activities`; }
   get _actPath()  { return `system.${this._actField}`; }
   /** 当前形态的激活效果列表（原始存档值） */
   get _actList() {
     const src = this.item.toObject().system ?? {};
     return foundry.utils.deepClone(
-      (this._editCorrode ? src.corrode?.activities : src.activities) ?? []
+      foundry.utils.getProperty(src, this._actField) ?? []
     );
   }
 
@@ -140,6 +165,97 @@ export class LimbusItemSheet extends ItemSheet {
       }
     }
     await this.item.update(update);
+  }
+
+  /* ─── 训练等级（基础 / 守备技能）─────────────────────────────────────────── */
+
+  /** 顶层数据代表的那一阶 */
+  get _trainBaseLevel() {
+    return this.item.toObject().system?.trainBaseLevel ?? 3;
+  }
+
+  /** 这张卡上已经写过数据的训练等级，从小到大；顶层那一套算作 baseLevel 一档 */
+  get _trainLevels() {
+    const src = this.item.toObject().system ?? {};
+    const set = new Set([this._trainBaseLevel, src.trainLevel ?? 3]);
+    for (let i = 1; i <= 5; i++) {
+      if (src.trainForms?.[`lv${i}`]?.initialized) set.add(i);
+    }
+    return [...set].sort((a, b) => a - b);
+  }
+
+  /**
+   * 训练等级徽章：
+   *   · 左键       —— 在这张卡已有的几阶之间轮转（锁定状态下也能看）
+   *   · Shift+左键 —— 解锁时新开一阶（Ⅲ→Ⅳ→Ⅴ），用当前那一套数值打底
+   *   · 右键       —— 删掉当前这一阶（见 _onTrainLevelDelete）
+   * 新建单独放在 Shift 上：轮转是高频操作，不该顺手就多出一阶数据。
+   */
+  async _onTrainLevelToggle(event) {
+    event.preventDefault();
+    const src     = this.item.toObject().system ?? {};
+    const levels  = this._trainLevels;
+    const cur     = src.trainLevel ?? 3;
+    const idx     = levels.indexOf(cur);
+    const canEdit = this.isEditable && !this.isLocked;
+
+    if (!(event.shiftKey && canEdit && cur < 5)) {
+      const next = levels[(idx + 1) % levels.length] ?? cur;
+      if (next === cur) return;
+      return this.item.update({ "system.trainLevel": next });
+    }
+
+    // 新开一阶：拿"当前生效的那一套"打底，这样 Ⅳ 是在 Ⅲ 的基础上改
+    const next = cur + 1;
+    if (levels.includes(next)) return this.item.update({ "system.trainLevel": next });
+    const key  = `lv${next}`;
+    const from = src.trainForms?.[`lv${cur}`]?.initialized
+      ? src.trainForms[`lv${cur}`] : src;
+    const val = (k, dflt) => (from[k] !== null && from[k] !== undefined) ? from[k] : (src[k] ?? dflt);
+    // 名称/类型/分类/罪孽/等级/标签跨阶共用，不进这一套
+    await this.item.update({
+      "system.trainLevel": next,
+      [`system.trainForms.${key}.initialized`]:  true,
+      [`system.trainForms.${key}.baseValue`]:    val("baseValue", 0),
+      [`system.trainForms.${key}.diceCount`]:    val("diceCount", 1),
+      [`system.trainForms.${key}.diceFaces`]:    val("diceFaces", 4),
+      [`system.trainForms.${key}.negativeDice`]: !!val("negativeDice", false),
+      [`system.trainForms.${key}.diceType`]:     val("diceType", "normal"),
+      [`system.trainForms.${key}.counterType`]:  val("counterType", "slash"),
+      [`system.trainForms.${key}.weight`]:       val("weight", 1),
+      [`system.trainForms.${key}.spreadMode`]:   val("spreadMode", "chain"),
+      [`system.trainForms.${key}.spreadRange`]:  val("spreadRange", 1),
+      [`system.trainForms.${key}.indiscriminate`]: !!val("indiscriminate", false),
+      [`system.trainForms.${key}.noEquip`]:      !!val("noEquip", false),
+      [`system.trainForms.${key}.coverDefense`]: !!val("coverDefense", false),
+      [`system.trainForms.${key}.noClash`]:      !!val("noClash", false),
+      [`system.trainForms.${key}.sanityCost`]:   val("sanityCost", 0),
+      [`system.trainForms.${key}.stellarCost`]:  val("stellarCost", 1),
+      [`system.trainForms.${key}.weaponRestriction`]: val("weaponRestriction", "") || "",
+      [`system.trainForms.${key}.effectDesc`]:   val("effectDesc", "") || "",
+      [`system.trainForms.${key}.activities`]:
+        foundry.utils.deepClone(val("activities", []) ?? []),
+    });
+  }
+
+  /** 右键徽章：删掉当前这一阶（顶层那一套删不掉） */
+  async _onTrainLevelDelete(event) {
+    event.preventDefault();
+    if (!this.isEditable || this.isLocked) return;
+    const src = this.item.toObject().system ?? {};
+    const cur = src.trainLevel ?? 3;
+    if (!src.trainForms?.[`lv${cur}`]?.initialized) return;   // 顶层那一套
+    const ok = await Dialog.confirm({
+      title: "删除训练等级",
+      content: `<p>删除本卡的 <b>${TRAIN_NUMERALS[cur] ?? cur}</b> 阶数值？顶层（基础）那一套不受影响。</p>`,
+    });
+    if (!ok) return;
+    await this.item.update({
+      "system.trainLevel": this._trainBaseLevel,
+      [`system.trainForms.lv${cur}.initialized`]: false,
+      [`system.trainForms.lv${cur}.activities`]:  [],
+      [`system.trainForms.lv${cur}.effectDesc`]:  "",
+    });
   }
 
   /* ─── 数据准备 ──────────────────────────────────────────────────────────── */
@@ -203,16 +319,42 @@ export class LimbusItemSheet extends ItemSheet {
       const corrode = context.isEgo && sys.egoForm === "corrode";
       context.isCorrode    = corrode;
       context.egoFormLabel = corrode ? "侵蚀" : "觉醒";
-      // 表单字段前缀：侵蚀形态下这些字段写进 system.corrode.*
-      context.fp = corrode ? "system.corrode." : "system.";
-      const cSrc = src.corrode ?? {};
-      const pick = (k) => (corrode && cSrc[k] !== null && cSrc[k] !== undefined) ? cSrc[k] : src[k];
+
+      // ── 训练等级（基础 / 守备技能；E.G.O 用觉醒/侵蚀，两者不叠加）──────
+      const tLv   = src.trainLevel ?? 3;
+      const tBase = src.trainBaseLevel ?? 3;
+      const tKey  = `lv${tLv}`;
+      const tSrc  = (!context.isEgo && src.trainForms?.[tKey]?.initialized)
+        ? src.trainForms[tKey] : null;
+      context.showTrainLevel = !context.isEgo;
+      context.trainLevel     = tLv;
+      context.trainNumeral   = TRAIN_NUMERALS[tLv] ?? tLv;
+      context.trainIcon      = trainLevelIcon(tLv);
+      context.trainLevels    = this._trainLevels;
+      context.trainIsBase    = tLv === tBase;
+      // 这张卡到底有没有"同名卡"（多阶数值），有才值得显示成可点的轮转徽章
+      context.trainMulti     = this._trainLevels.length > 1;
+
+      // 表单字段前缀：写进当前形态自己那一套
+      //   侵蚀 → system.corrode.*；非基础阶的训练等级 → system.trainForms.lvN.*
+      context.fp = corrode ? "system.corrode."
+                 : tSrc   ? `system.trainForms.${tKey}.`
+                          : "system.";
+      // 侵蚀形态没有自己的 diceType / 三个布尔 / 反击类型（E.G.O 两形态共用这些），
+      // 训练等级则每阶各存一份 —— 这两处前缀因此要分开算
+      context.fpDice   = corrode ? "system." : context.fp;
+      // 分类：训练等级共用顶层，侵蚀形态可以单独改
+      context.fpCat    = corrode ? "system.corrode." : "system.";
+      const cSrc = corrode ? (src.corrode ?? {}) : (tSrc ?? {});
+      const inVariant = corrode || !!tSrc;
+      const pick = (k) => (inVariant && cSrc[k] !== null && cSrc[k] !== undefined) ? cSrc[k] : src[k];
       // 当前形态下展示的那一套数值
       context.form = {
-        category:   pick("category"),
+        // 分类跨训练等级共用（只有 E.G.O 的侵蚀形态能单独改），因此不走训练等级那一套
+        category:   corrode ? pick("category") : src.category,
         weight:     pick("weight"),
         sanityCost: pick("sanityCost"),
-        effectDesc: corrode ? (cSrc.effectDesc ?? "") : (src.effectDesc ?? ""),
+        effectDesc: inVariant ? (cSrc.effectDesc ?? "") : (src.effectDesc ?? ""),
         // 【无差别攻击】：侵蚀形态可以单独开（null = 沿用觉醒）
         indiscriminate: !!(pick("indiscriminate") ?? false),
       };
@@ -543,19 +685,18 @@ export class LimbusItemSheet extends ItemSheet {
 
     html.find(".sheet-lock-icon").on("click", this._onToggleLock.bind(this));
     html.find(".ego-form-toggle").on("click", this._onEgoFormToggle.bind(this));
+    html.find(".skill-train-badge").on("click", this._onTrainLevelToggle.bind(this));
+    html.find(".skill-train-badge").on("contextmenu", this._onTrainLevelDelete.bind(this));
 
     // 攻击容量输入时即时切换扩散设置的显隐（不等重渲染）
     // 扩散设置写哪一套：EGO 在侵蚀形态下写 system.corrode.*，其余写 system.*
     // （不加这一层的话，改侵蚀的扩散方式会把觉醒的也一起改掉）
-    const _spreadPath = (key) => {
-      const corrode = this.item.type === "ego" && this.item.system?.egoForm === "corrode";
-      return corrode ? `system.corrode.${key}` : `system.${key}`;
-    };
+    const _spreadPath = (key) => `system.${this._variantPrefix}${key}`;
     const _curSpread = (key, dflt) => {
-      const sys = this.item.system ?? {};
-      const corrode = this.item.type === "ego" && sys.egoForm === "corrode";
-      const cv = corrode ? sys.corrode?.[key] : null;
-      return (cv !== null && cv !== undefined) ? cv : (sys[key] ?? dflt);
+      const src = this.item.toObject().system ?? {};
+      const vp  = this._variantPrefix;
+      const cv  = vp ? foundry.utils.getProperty(src, `${vp}${key}`) : null;
+      return (cv !== null && cv !== undefined) ? cv : (src[key] ?? dflt);
     };
 
     html.find(".weight-input[name$='weight']").on("input", (ev) => {
@@ -797,11 +938,15 @@ export class LimbusItemSheet extends ItemSheet {
 
     // ── skill：将用户输入的 diceFormula 文本解析为真正的 schema 字段
     if (this.item.type === "skill") {
-      // 侵蚀形态编辑时，骰数写进 system.corrode.*
-      const corrode  = this._editCorrode;
-      const pre      = corrode ? "system.corrode." : "system.";
+      // 非顶层形态（侵蚀 / 非基础阶的训练等级）编辑时，骰数写进那一套自己的字段
+      const vp       = this._variantPrefix;          // "" | "corrode." | "trainForms.lvN."
+      const pre      = `system.${vp}`;
       const _isFlat  = !formData.system;
-      const nested   = () => (corrode ? formData.system?.corrode : formData.system) ?? {};
+      const nested   = () => {
+        let o = formData.system;
+        for (const seg of vp.split(".").filter(Boolean)) o = o?.[seg];
+        return o ?? {};
+      };
       const rawFml   = _isFlat ? formData[`${pre}diceFormula`] : nested().diceFormula;
       if (rawFml !== undefined) {
         const parsed = _parseDiceFormula(String(rawFml));
@@ -2335,38 +2480,196 @@ async function _findItemByName(name) {
   return fallback;
 }
 
+/**
+ * 技能 Title 卡。E.G.O 有【觉醒】/【侵蚀】两套数据，卡片按 `system.egoForm`
+ * 显示当前那一套；悬停时按 **R** 可以在两套之间来回看（只改显示，不写文档）。
+ *
+ * @param {Item}        item
+ * @param {string|null} formOverride 强制显示的形态（"awaken" / "corrode"），null = 跟随物品
+ */
+function _buildSkillTitleCard(item, formOverride = null) {
+  const sysRaw = item.system;
+  const cfg    = CONFIG.LIMBUSCOMPANY ?? {};
+  // 侵蚀形态：没写过（initialized=false）就一律沿用觉醒那一套；写过的字段才覆盖
+  const form   = formOverride ?? (sysRaw.egoForm ?? "awaken");
+  const useCor = sysRaw.type === "ego" && form === "corrode" && !!sysRaw.corrode?.initialized;
+  const canToggle = sysRaw.type === "ego" && !!sysRaw.corrode?.initialized;
+
+  // 侵蚀里为 null / "" 的字段视为"没单独写"，继续沿用觉醒那一套
+  const cor  = sysRaw.corrode ?? {};
+  const pick = (k) => (cor[k] !== null && cor[k] !== undefined && cor[k] !== "") ? cor[k] : sysRaw[k];
+  const OVERRIDE = new Set(["category", "baseValue", "diceCount", "diceFaces", "negativeDice",
+                            "indiscriminate", "spreadMode", "spreadRange", "weight",
+                            "sanityCost", "effectDesc"]);
+  const sys = !useCor ? sysRaw : new Proxy(sysRaw, {
+    get(t, k) {
+      if (OVERRIDE.has(k)) return pick(k);
+      // 骰式跟着覆盖后的三个数字重算
+      if (k === "diceFormula") return buildDiceFormula({
+        diceCount: pick("diceCount"), diceFaces: pick("diceFaces"),
+        baseValue: pick("baseValue"), negativeDice: pick("negativeDice"),
+      });
+      return t[k];
+    },
+  });
+
+  const ICON = "systems/limbusCompany_FVTT/assets/icons/Base_icon/";
+const sinColor    = cfg.SIN_COLORS?.[sys.sinType] ?? "#5F3E21";
+  const sinIcon     = cfg.SIN_ICON_PATHS?.[sys.sinType] ?? "";
+  const sinLabel    = cfg.SIN_LABELS_ZH?.[sys.sinType] ?? "";
+  const stellarCost = item.getStellarCost?.() ?? sys.stellarCost ?? 0;
+  const tags = (Array.isArray(sys.tags) ? sys.tags : String(sys.tags ?? "").split("/"))
+    .map(t => String(t).trim()).filter(Boolean);
+  const weightCount = Number(sys.weight ?? 0);
+  const descText    = linkifyHtml(sys.effectDesc ?? sys.description ?? "");
+
+  // 等级：基础/守备写 Lv.N，EGO 写评级（ZAYIN…）
+  const lvText = sys.type === "ego" ? (sys.egoDiceRating ?? "") : `Lv.${sys.level ?? 1}`;
+
+  // 训练等级徽章：基础/守备技能才有（E.G.O 走觉醒/侵蚀）。素材缺失时退回罗马数字。
+  const trainLv = sys.type === "ego" ? 0 : (sys.trainLevel ?? 3);
+  const trainIcoHtml = trainLv ? `<img src="${trainLevelIcon(trainLv)}" class="tc-train-ic"
+       alt="${TRAIN_NUMERALS[trainLv] ?? trainLv}" title="训练等级 ${TRAIN_NUMERALS[trainLv] ?? trainLv}"
+       onerror="this.outerHTML='<span class=&quot;tc-train-num&quot;>${TRAIN_NUMERALS[trainLv] ?? trainLv}</span>'">` : "";
+
+  // 类型图标：基础 / E.G.O = 攻击等级图；守备 = 格挡图（靠右）
+  const kindIcon  = sys.type === "defense" ? `${ICON}block.webp` : `${ICON}Offense_Level.webp`;
+  const kindLabel = { basic: "基础技能", defense: "守备技能", ego: "E.G.O" }[sys.type] ?? "";
+
+  const catLabel  = cfg.CATEGORY_LABELS_ZH?.[sys.category] ?? sys.category ?? "";
+  const diceLabel = { unbreakable: "不可摧毁", severing: "斩断" }[sys.diceType] ?? "";
+
+  // 容量扩散：攻击容量 ≥2 才有意义
+  const spreadLabel = (weightCount >= 2 && sys.spreadMode)
+    ? `${sys.spreadMode === "spray" ? "广域乱射" : "链式扩散"} ${sys.spreadRange ?? 1} 格` : "";
+
+  // 标记（布尔）：只列为真的
+  const flags = [];
+  if (sys.noEquip)        flags.push(`<span class="tcs-flag f-noequip">无法装备</span>`);
+  if (sys.noClash)        flags.push(`<span class="tcs-flag f-noclash">无法拼点</span>`);
+  if (sys.coverDefense)   flags.push(`<span class="tcs-flag f-cover">援护防御</span>`);
+  if (sys.indiscriminate) flags.push(`<span class="tcs-flag f-indis">无差别攻击</span>`);
+
+  // 消耗：理智 + 罪孽资源
+  const costs = [];
+  if (sys.sanityCost) {
+    costs.push(`<span class="tcs-cost-item"><span class="tcs-cost-label">理智</span>${sys.sanityCost}</span>`);
+  }
+  for (const c of (sys.sinCost ?? [])) {
+    if (!c?.amount) continue;
+    const ic = cfg.SIN_ICON_PATHS?.[c.sinType] ?? "";
+    costs.push(`<span class="tcs-cost-item">${ic ? `<img src="${ic}" alt="">` : ""}`
+      + `${cfg.SIN_LABELS_ZH?.[c.sinType] ?? ""} ${c.amount}</span>`);
+  }
+
+  // 罪孽抗性修改：只列改过的（x1.0 视为没改）
+  const resists = (sys.egoResistanceAdj ?? [])
+    .filter(r => r?.multiplier && r.multiplier !== "x1.0")
+    .map(r => {
+      const ic  = cfg.SIN_ICON_PATHS?.[r.sinType] ?? "";
+      const col = cfg.SIN_COLORS?.[r.sinType] ?? "#E8CAA1";
+      return `<span class="tcs-res-item" style="color:${col}">`
+        + `${ic ? `<img src="${ic}" alt="">` : ""}${r.multiplier}</span>`;
+    });
+
+  // 排版：名称+等级+罪孽图标 → 分类·骰式·骰型（类型图标靠右）→ 攻击容量 →
+  //       标记 → 消耗 → 抗性 → 武器限制 → 标签 → 金线 → 描述 → 金线 → 页脚
+  // 没填的字段整块不渲染，空技能卡不会留下一堆空行
+  const card = _wireCardInteractivity($(`<div class="limbus-title-card limbus-title-card-skill"
+       data-ego-form="${useCor ? "corrode" : "awaken"}">
+    <div class="tc-header" style="background:${sinColor}">
+      <span class="tc-name">${item.name}</span>
+      ${lvText ? `<span class="tc-lv">${lvText}</span>` : ""}
+      ${sinIcon ? `<img src="${sinIcon}" class="tc-sin-ic" alt="${sinLabel}" title="${sinLabel}">` : ""}
+      ${trainIcoHtml}
+    </div>
+    <div class="tcs-row">
+      ${sys.category ? `<span class="tcs-cat"><img src="${_getCategoryIcon(sys.category)}" class="tc-cat-icon" alt="${catLabel}" title="${catLabel}"></span>` : ""}
+      ${sys.diceFormula ? `<span class="tcs-formula">${String(sys.diceFormula).toUpperCase()}</span>` : ""}
+      ${diceLabel ? `<span class="tcs-dice">${diceLabel}</span>` : ""}
+      <img src="${kindIcon}" class="tcs-kind-ic" alt="${kindLabel}" title="${kindLabel}">
+    </div>
+    ${weightCount > 0 ? `<div class="tc-weight">
+      <span class="tc-weight-label">攻击容量</span>
+      ${Array.from({ length: weightCount }, () => '<span class="tc-weight-sq"></span>').join("")}
+      ${spreadLabel ? `<span class="tcs-spread">${spreadLabel}</span>` : ""}
+    </div>` : ""}
+    ${flags.length   ? `<div class="tcs-flags">${flags.join("")}</div>` : ""}
+    ${sys.weaponRestriction ? `<div class="tcs-row"><span class="tcs-cat">武器限制：${sys.weaponRestriction}</span></div>` : ""}
+    ${tags.length ? `<div class="tc-tags">${tags.map(t => `<span class="tc-skill-tag">${t}</span>`).join("")}</div>` : ""}
+    <div class="tc-gold-divider-skill"></div>
+    <div class="tc-desc">${descText}</div>
+    ${costs.length   ? `<div class="tcs-costs">${costs.join("")}</div>` : ""}
+    ${resists.length ? `<div class="tcs-res">${resists.join("")}</div>` : ""}
+    <div class="tc-gold-divider-skill"></div>
+    <div class="tc-footer">
+      <img src="${ICON}Starlight.webp" class="tc-starlight-icon" alt="星芒">
+      <span class="tc-stellar-cost">${stellarCost}</span>
+    </div>
+    ${canToggle ? `<div class="tcs-form-hint">${useCor ? "【侵蚀】" : "【觉醒】"}　按 R 切换</div>` : ""}
+  </div>`));
+
+  // R 键在【觉醒】/【侵蚀】之间切换（只换显示内容，不写文档）
+  if (canToggle) {
+    const el = card[0];
+    const onKey = (ev) => {
+      if (!document.body.contains(el)) { document.removeEventListener("keydown", onKey); return; }
+      if (ev.key !== "r" && ev.key !== "R") return;
+      ev.preventDefault();
+      const next  = el.dataset.egoForm === "corrode" ? "awaken" : "corrode";
+      const fresh = _buildSkillTitleCard(item, next)[0];
+      el.dataset.egoForm = next;
+      el.innerHTML = fresh.innerHTML;
+    };
+    document.addEventListener("keydown", onKey);
+  }
+  return card;
+}
+
 function _buildItemTitleCard(item) {
   if (!item) return null;
   const sys = item.system;
   const cfg = CONFIG.LIMBUSCOMPANY ?? {};
 
-  if (item.type === "skill") {
-    const sinColor    = cfg.SIN_COLORS?.[sys.sinType] ?? "#5F3E21";
-    const stellarCost = item.getStellarCost?.() ?? sys.stellarCost ?? 0;
-    const tags = (Array.isArray(sys.tags) ? sys.tags : String(sys.tags ?? "").split("/"))
-      .map(t => String(t).trim()).filter(Boolean);
-    const weightCount = Number(sys.weight ?? 0);
-    const descText    = linkifyHtml(sys.effectDesc ?? sys.description ?? "");
-    return _wireCardInteractivity($(`<div class="limbus-title-card limbus-title-card-skill">
-      <div class="tc-header" style="background:${sinColor}">${item.name}</div>
-      <div class="tc-row2">
-        <img src="${_getCategoryIcon(sys.category)}" class="tc-cat-icon" alt="">
-        <span class="tc-formula">${(sys.diceFormula ?? "").toUpperCase()}</span>
-        <span class="tc-tags">${tags.map(t => `<span class="tc-skill-tag">${t}</span>`).join("")}</span>
-      </div>
-      ${weightCount > 0 ? `<div class="tc-weight"><span class="tc-weight-label">攻击容量</span>${Array.from({length: weightCount}, () => '<span class="tc-weight-sq"></span>').join("")}</div>` : ""}
-      <div class="tc-gold-divider-skill"></div>
-      <div class="tc-desc">${descText}</div>
-      <div class="tc-gold-divider-skill"></div>
-      <div class="tc-footer">
-        <img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/Starlight.webp" class="tc-starlight-icon" alt="星芒">
-        <span class="tc-stellar-cost">${stellarCost}</span>
-      </div>
-    </div>`));
-  }
+  if (item.type === "skill") return _buildSkillTitleCard(item);
 
   // 装备 / 消耗品 / 材料 / 容器
-  const typeLabels   = { equipment:"装备", consumable:"消耗品", material:"材料", container:"容器" };
+  const typeLabels   = { equipment:"装备", consumable:"消耗品", material:"材料", container:"容器",
+                         skillbook:"技能书", recipebook:"配方表", panic:"恐慌卡", background:"背景" };
+  const ICON_BASE    = "systems/limbusCompany_FVTT/assets/icons/Base_icon/";
+
+  /** 标题条：名称 + （可堆叠时）右端 ×N */
+  const headerHtml = () => {
+    const qty = sys.quantity ?? 1;
+    const showQty = (sys.stackable ?? false) && qty >= 1;
+    return `<div class="tc-header tce-header">
+      <span class="tce-name">${item.name}</span>
+      ${showQty ? `<span class="tce-qty">×${qty}</span>` : ""}
+    </div>`;
+  };
+
+  /** 稀有度：挂在「类型 · 分类」同一排最右（设置里关掉就不显示） */
+  const rarityHtml = () => {
+    let show = true;
+    try { show = game.settings.get("limbusCompany_FVTT", "showRarity"); } catch { /* 设置未注册 */ }
+    const key = sys.rarity;
+    if (!show || !key) return "";
+    const cfg   = CONFIG.LIMBUSCOMPANY ?? {};
+    const label = cfg.RARITY_LABELS?.[key];
+    if (!label) return "";
+    const color = cfg.RARITY_COLORS?.[key] ?? "#E8CAA1";
+    return `<span class="tce-rarity" style="color:${color}">${label}</span>`;
+  };
+
+  /** 页脚：装备＝星芒 + 眼；其余只有眼 */
+  const footerHtml = (isEquip) => `
+    <div class="tc-footer tce-footer">
+      ${isEquip ? `<img src="${ICON_BASE}Starlight.webp" class="tc-starlight-icon" alt="星芒">
+        <span class="tc-stellar-cost">${sys.stellarCost ?? 0}</span>` : ""}
+      <span class="tce-foot-sep"></span>
+      <img src="${ICON_BASE}眼.webp" class="tc-eye-icon" alt="眼">
+      <span class="tc-eye-cost">${sys.cost ?? 0}</span>
+    </div>`;
   const stellarCost  = sys.stellarCost ?? 0;
   const tags = (Array.isArray(sys.tags) ? sys.tags : String(sys.tags ?? "").split("/"))
     .map(t => String(t).trim()).filter(Boolean);
@@ -2388,13 +2691,15 @@ function _buildItemTitleCard(item) {
       if (sys.subtype !== "upper") modRows.push(`<div class="modifier-row"><img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/Speed.webp" class="mod-icon" alt="SPD"><span class="mod-val">${fmt(sys.speedAdj)}</span></div>`);
     }
     const tagsHtml = tags.map(t => `<span class="tc-skill-tag">${t}</span>`).join("");
+    // 排版顺序：名称 → 类型·分类·稀有度 → 修正值 → 标签 → 金线 → 描述 → 金线 → 页脚
     return _wireCardInteractivity($(`<div class="limbus-title-card limbus-title-card-equip">
-      <div class="tc-header tce-header">${item.name}</div>
+      ${headerHtml()}
       <div class="tce-info-row">
         <div class="tce-info-left">
           <div class="tce-subrow">
             <span class="tce-subtype">${_subtypeLabel(sys.subtype ?? item.type)}</span>
             ${sys.category ? `<span class="tce-category">${sys.category}</span>` : ""}
+            ${rarityHtml()}
           </div>
           ${modRows.length ? `<div class="tce-modifiers">${modRows.join("")}</div>` : ""}
           ${tagsHtml ? `<div class="tce-tags">${tagsHtml}</div>` : ""}
@@ -2403,32 +2708,36 @@ function _buildItemTitleCard(item) {
       <div class="tc-gold-divider-skill"></div>
       <div class="tc-desc tce-desc">${descText}</div>
       <div class="tc-gold-divider-skill"></div>
-      <div class="tc-footer tce-footer">
-        <img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/Starlight.webp" class="tc-starlight-icon" alt="星芒">
-        <span class="tc-stellar-cost">${stellarCost}</span>
-      </div>
+      ${footerHtml(true)}
     </div>`));
   }
 
-  // 消耗品 / 材料 / 容器 — 简单卡片
+  // 消耗品 / 材料 / 容器 / 技能书 / 配方表 — 简单卡片
+  // 排版顺序：名称(×N) → 类型·分类·稀有度 → 容量/内部网格 → 标签 → 金线 → 描述 → 金线 → 页脚(眼)
   const typeLabel = typeLabels[item.type] ?? item.type;
-  const catLabel  = sys.category ? ` · ${sys.category}` : "";
   const tagsHtml  = tags.map(t => `<span class="tc-skill-tag">${t}</span>`).join("");
+  const capW = sys.capacity?.w ?? 1, capH = sys.capacity?.h ?? 1;
+  const gridStr = (item.type === "container" && sys.gridSize)
+    ? `　内部 ${sys.gridSize.width ?? 0}×${sys.gridSize.height ?? 0}` : "";
   return _wireCardInteractivity($(`<div class="limbus-title-card limbus-title-card-equip">
-    <div class="tc-header tce-header">${item.name}</div>
+    ${headerHtml()}
     <div class="tce-info-row">
       <div class="tce-info-left">
-        <div class="tce-subrow"><span class="tce-subtype">${typeLabel}${catLabel}</span></div>
+        <div class="tce-subrow">
+          <span class="tce-subtype">${typeLabel}</span>
+          ${sys.category ? `<span class="tce-category">${sys.category}</span>` : ""}
+          ${rarityHtml()}
+        </div>
+        <div class="tce-subrow">
+          <span class="tce-category">容量 ${capW}×${capH}${gridStr}</span>
+        </div>
         ${tagsHtml ? `<div class="tce-tags">${tagsHtml}</div>` : ""}
       </div>
     </div>
     <div class="tc-gold-divider-skill"></div>
     <div class="tc-desc tce-desc">${descText}</div>
     <div class="tc-gold-divider-skill"></div>
-    <div class="tc-footer tce-footer">
-      <img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/Starlight.webp" class="tc-starlight-icon" alt="星芒">
-      <span class="tc-stellar-cost">${stellarCost}</span>
-    </div>
+    ${footerHtml(false)}
   </div>`));
 }
 

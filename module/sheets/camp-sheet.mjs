@@ -1261,7 +1261,7 @@ export class LimbusCampSheet extends ActorSheet {
       ui.notifications.warn("[营地] 找不到目标角色，产出改存营地仓库。");
     }
     if (toBagActor) {
-      await toBagActor.createEmbeddedDocuments("Item", [outData]);
+      await LimbusCampSheet._placeCraftOutput(toBagActor, outData, recipe.outputQuantity);
       // 原料记录仍要从仓库摘掉
       const deadIds = new Set(idsToDelete);
       await campActor.update({
@@ -1272,7 +1272,12 @@ export class LimbusCampSheet extends ActorSheet {
       return;
     }
 
-    const [outItem] = await campActor.createEmbeddedDocuments("Item", [outData]);
+    // 仓库里已经摆着的同名可堆叠物品直接加数量，不再多占一格
+    const placedIdsNow = new Set(
+      (campActor.system.warehouseContents ?? []).map(p => p.uuid.split(".").pop()));
+    const { item: outItem, merged: outMerged } =
+      await LimbusCampSheet._placeCraftOutput(campActor, outData, recipe.outputQuantity,
+        { onlyIds: placedIdsNow });
 
     // ── 5. 用预先计算的 idsToDelete 集合过滤 warehouseContents ──────
     // 不依赖 campActor.items.contents 的即时刷新状态（EmbeddedCollection
@@ -1302,6 +1307,12 @@ export class LimbusCampSheet extends ActorSheet {
     };
 
     let place = null;
+    if (outMerged) {
+      // 并进了已有堆叠：只需把消耗掉的原料记录写回去
+      await campActor.update({ "system.warehouseContents": newContents });
+      await LimbusCampSheet._sendCraftCard(campActor, recipe, userId, "营地仓库");
+      return;
+    }
     outer: for (let y = 0; y < rows; y++) {
       for (let x = 0; x < cols; x++) {
         if (canPlaceStatic(x, y, ow, oh, newContents)) { place = { x, y, w: ow, h: oh, rotated: false }; break outer; }
@@ -1311,11 +1322,26 @@ export class LimbusCampSheet extends ActorSheet {
 
     if (place) {
       newContents.push({ uuid: outItem.uuid, ...place });
-    } else {
-      ui.notifications.warn(`[营地] 产出 ${recipe.outputName} 无法放入仓库（空间不足），已创建为悬空物品。`);
+      await campActor.update({ "system.warehouseContents": newContents });
+      await LimbusCampSheet._sendCraftCard(campActor, recipe, userId, "营地仓库");
+      return;
     }
-    await campActor.update({ "system.warehouseContents": newContents });
 
+    // 仓库摆不下：改放制作者的背包（找不到人才退回悬空物品）
+    const fallbackChar = game.actors.get(charId) ?? game.users.get(userId)?.character ?? null;
+    await campActor.update({ "system.warehouseContents": newContents });
+    if (fallbackChar) {
+      const moved = outItem.toObject();
+      delete moved._id;
+      await campActor.deleteEmbeddedDocuments("Item", [outItem.id]);
+      await LimbusCampSheet._placeCraftOutput(fallbackChar, moved, recipe.outputQuantity);
+      ui.notifications.info(
+        `[营地] 仓库放不下 ${recipe.outputName}，已改放进【${fallbackChar.name}】的背包。`);
+      await LimbusCampSheet._sendCraftCard(campActor, recipe, userId, `${fallbackChar.name} 的背包`);
+      return;
+    }
+
+    ui.notifications.warn(`[营地] 产出 ${recipe.outputName} 无法放入仓库（空间不足），已创建为悬空物品。`);
     await LimbusCampSheet._sendCraftCard(campActor, recipe, userId, "营地仓库");
     } finally {
       // 闸门再多留一会儿：制作触发的那几次重渲染的孤儿清理都排在后面
@@ -1346,6 +1372,30 @@ export class LimbusCampSheet extends ActorSheet {
         </div>`,
       speaker: triggerChar ? ChatMessage.getSpeaker({ actor: triggerChar }) : undefined,
     });
+  }
+
+  /**
+   * 产出落地：可堆叠的物品并进已有的同名同类物品（数量相加），
+   * 不可堆叠的才新建一份。
+   * @returns {Promise<{item: Item|null, merged: boolean}>}
+   *          merged=true 表示并进了已有物品，调用方不需要再安排摆放位置
+   */
+  static async _placeCraftOutput(target, outData, qty, { onlyIds = null } = {}) {
+    const stackable = outData.system?.stackable ?? true;
+    if (stackable) {
+      const same = target.items.find(i =>
+        i.name === outData.name &&
+        i.type === outData.type &&
+        (i.system?.stackable ?? true) &&
+        (!onlyIds || onlyIds.has(i.id)));
+      if (same) {
+        const cur = same.system?.quantity ?? 1;
+        await same.update({ "system.quantity": cur + qty });
+        return { item: same, merged: true };
+      }
+    }
+    const [created] = await target.createEmbeddedDocuments("Item", [outData]);
+    return { item: created, merged: false };
   }
 
   /* ─── 静态：GM 端执行取出物品 ──────────────────────────────────────── */

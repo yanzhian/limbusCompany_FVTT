@@ -6,19 +6,34 @@
     <div class="gmc-section-header">
       <span class="gmc-section-title">角色选择</span>
       <span class="gmc-selected-count">已选 {{selectedCount}} 名</span>
-      <button type="button" class="gmc-select-all  gmc-text-btn">全选</button>
-      <button type="button" class="gmc-deselect-all gmc-text-btn">清空</button>
+      <input type="text" class="gmc-search" placeholder="搜索角色…" value="{{search}}">
+      <button type="button" class="gmc-select-all  gmc-icon-btn" title="全选"><i class="fas fa-check-double"></i></button>
+      <button type="button" class="gmc-deselect-all gmc-icon-btn" title="清空"><i class="fas fa-eraser"></i></button>
     </div>
 
-    {{!-- 拖放区域：从侧边栏拖入角色 --}}
+    {{!-- 拖放区域：从侧边栏拖入角色，按文件夹分组 --}}
     <div class="gmc-drop-zone" title="可从侧边栏角色列表拖入角色">
-      {{#each actors}}
-        <div class="gmc-actor-tile {{#if selected}}gmc-actor-selected{{/if}}"
-             data-actor-id="{{id}}"
-             title="{{name}}（点击切换选中）">
-          <img src="{{img}}" alt="{{name}}" class="gmc-actor-img">
-          {{#if selected}}<div class="gmc-actor-check">✓</div>{{/if}}
-          <span class="gmc-actor-name">{{name}}</span>
+      {{#each folders}}
+        <div class="gmc-folder {{#if collapsed}}gmc-folder-collapsed{{/if}}" data-folder="{{key}}">
+          <div class="gmc-folder-head" data-folder="{{key}}">
+            <span class="gmc-folder-caret">{{#if collapsed}}▶{{else}}▼{{/if}}</span>
+            <i class="fas fa-folder gmc-folder-ic"></i>
+            <span class="gmc-folder-name">{{name}}</span>
+            <span class="gmc-folder-count">{{chosen}} / {{total}}</span>
+            <span class="gmc-folder-btn" data-act="all"  title="本组全选"><i class="fas fa-check-double"></i></span>
+            <span class="gmc-folder-btn" data-act="none" title="本组清空"><i class="fas fa-eraser"></i></span>
+          </div>
+          <div class="gmc-folder-body">
+            {{#each actors}}
+              <div class="gmc-actor-tile {{#if selected}}gmc-actor-selected{{/if}}"
+                   data-actor-id="{{id}}" data-name="{{name}}"
+                   title="{{name}}（点击切换选中）">
+                <img src="{{img}}" alt="{{name}}" class="gmc-actor-img">
+                {{#if selected}}<div class="gmc-actor-check">✓</div>{{/if}}
+                <span class="gmc-actor-name">{{name}}</span>
+              </div>
+            {{/each}}
+          </div>
         </div>
       {{/each}}
       {{#unless actors.length}}

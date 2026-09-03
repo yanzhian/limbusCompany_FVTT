@@ -68,10 +68,12 @@ export class CharacterData extends foundry.abstract.TypeDataModel {
         max: new fields.NumberField({ required: true, integer: true, min: 0, initial: 7 }),
       }),
 
-      // ── 行动点（上限固定 3） ───────────────────────────────────────────
+      // ── 行动币（AP，无上限）─────────────────────────────────────────────
+      // value 无上限：技能 / 装备 / 消耗品都能把它顶到 3 以上。
+      // max 只是「回合开始补到几枚」的默认值，不是硬上限。
       ap: new fields.SchemaField({
-        value: new fields.NumberField({ required: true, integer: true, min: 0, max: 3, initial: 3 }),
-        max:   new fields.NumberField({ required: true, integer: true, min: 1, max: 3, initial: 3 }),
+        value: new fields.NumberField({ required: true, integer: true, min: 0, initial: 3 }),
+        max:   new fields.NumberField({ required: true, integer: true, min: 1, initial: 3 }),
       }),
 
       // ── 等级 & 经验 ───────────────────────────────────────────────────
@@ -265,11 +267,13 @@ export class CharacterData extends foundry.abstract.TypeDataModel {
     // 星芒上限：30 + 等级
     this.stellarMotes.max = 30 + level;
 
-    // 下一级经验需求
-    const xpTable = CONFIG.LIMBUSCOMPANY?.LEVEL_XP ?? [];
-    this.xp.next = xpTable[level] ?? (xpTable[xpTable.length - 1] ?? 0);
+    // 下一级经验需求（满级后为 0 = 不再需要）
+    const maxLevel = CONFIG.LIMBUSCOMPANY?.MAX_LEVEL ?? Infinity;
+    this.xp.next = level >= maxLevel
+      ? 0
+      : (CONFIG.LIMBUSCOMPANY?.getXpForLevel?.(level) ?? 0);
 
-    // 行动值不再有上限：ap.max 只作为"回合开始时恢复到的默认值"
+    // 行动币无上限；ap.max 只是"回合开始时补到几枚"的默认值，不是硬上限
     this.ap.max = 3;
   }
 
@@ -827,14 +831,25 @@ export class LimbusActor extends Actor {
    * @returns {Promise<object|null>} 无法升级时返回 null
    */
   async getLevelUpPreview() {
-    const xpTable = CONFIG.LIMBUSCOMPANY?.LEVEL_XP ?? [];
+    const cfg = CONFIG.LIMBUSCOMPANY ?? {};
+    const maxLevel = cfg.MAX_LEVEL ?? Infinity;
     const sys = this.system;
     const currentLevel = sys.level;
-    const needed = xpTable[currentLevel] ?? null;
-    const currentXp = sys.xp.value ?? 0;
-    if (needed === null || currentXp <= needed) return null;
 
-    const nextLevel = currentLevel + 1;
+    // 经验达到阈值即可升级（>=，不是 >）；够几级就升几级，每升一级扣掉该级的阈值，
+    // 余数留着继续攒——早先是"只升 1 级 + 经验清零"，一次交大笔经验会白白蒸发。
+    let nextLevel = currentLevel;
+    let xpLeft    = sys.xp.value ?? 0;
+    const consumed = [];                       // 每一级各扣了多少，供聊天卡展示
+    while (nextLevel < maxLevel) {
+      const need = cfg.getXpForLevel?.(nextLevel) ?? 0;
+      if (need <= 0 || xpLeft < need) break;
+      xpLeft -= need;
+      nextLevel += 1;
+      consumed.push({ level: nextLevel, cost: need });
+    }
+    if (nextLevel === currentLevel) return null;
+
     const con = sys.attributes?.con ?? 1;
     const conClamped = Math.max(1, Math.min(8, con));
     const t = (conClamped - 1) / 7;
@@ -843,26 +858,42 @@ export class LimbusActor extends Actor {
     const nextHPMax   = Math.round(hpBase + (nextLevel - 1) * hpGrowth);
     const nextHPValue = Math.min(Math.max(sys.hp.value ?? 0, 0), nextHPMax);
     const nextStellarMax = 30 + nextLevel;
-    const nextAttrPoints = (nextLevel % 10 === 0) ? ((sys.attrPoints ?? 0) + 1) : (sys.attrPoints ?? 0);
 
-    // 背景升级奖励：匹配 nextLevel 的物品条目
+    // 属性点：每 10 级 1 点。一次跨多级时要把中间跨过的每一个整十级都算上
+    // （Lv9 一口气升到 Lv21 应该拿 2 点，不是只看落点是不是整十）
+    const gainedAttr = Math.floor(nextLevel / 10) - Math.floor(currentLevel / 10);
+    const nextAttrPoints = (sys.attrPoints ?? 0) + gainedAttr;
+
+    // 背景升级奖励：本次跨过的**每一级**都要发，不能只发落点那一级
     const rewards = [];
     const bgUuid = sys.background?.uuid ?? "";
     if (bgUuid) {
       const bg = await fromUuid(bgUuid).catch(() => null);
-      const entry = bg?.system?.levelRewards?.find(r => Number(r.level) === nextLevel);
-      for (const ref of entry?.items ?? []) {
-        const it = ref.uuid ? await fromUuid(ref.uuid).catch(() => null) : null;
-        rewards.push({
-          uuid: ref.uuid,
-          name: it?.name ?? ref.itemData?.name ?? "（未知物品）",
-          img:  it?.img  ?? ref.itemData?.img  ?? "icons/svg/item-bag.svg",
-        });
+      for (let lv = currentLevel + 1; lv <= nextLevel; lv++) {
+        const entry = bg?.system?.levelRewards?.find(r => Number(r.level) === lv);
+        for (const ref of entry?.items ?? []) {
+          const it = ref.uuid ? await fromUuid(ref.uuid).catch(() => null) : null;
+          rewards.push({
+            level: lv,
+            uuid: ref.uuid,
+            name: it?.name ?? ref.itemData?.name ?? "（未知物品）",
+            img:  it?.img  ?? ref.itemData?.img  ?? "icons/svg/item-bag.svg",
+          });
+        }
       }
     }
 
+    // 训练等级强化名额：每 TRAIN_UPGRADE_EVERY 级 1 次，连升时跨过几个就给几次
+    const every = cfg.TRAIN_UPGRADE_EVERY ?? 0;
+    const trainUpgrades = every > 0
+      ? Math.floor(nextLevel / every) - Math.floor(currentLevel / every)
+      : 0;
+
     return {
       currentLevel, nextLevel,
+      levelsGained: nextLevel - currentLevel,
+      trainUpgrades,
+      xpFrom: sys.xp.value ?? 0, xpTo: xpLeft, xpConsumed: consumed,
       hpFrom: sys.hp.max, hpTo: nextHPMax, hpValueTo: nextHPValue,
       stellarFrom: sys.stellarMotes.max, stellarTo: nextStellarMax,
       attrPointsFrom: sys.attrPoints ?? 0, attrPointsTo: nextAttrPoints,
@@ -871,19 +902,23 @@ export class LimbusActor extends Actor {
   }
 
   /**
-   * 应用升级：等级+1，经验清零，生命/星芒上限更新，按背景等级奖励发放物品。
+   * 应用升级：经验够几级就升几级（每级扣掉该级阈值、余数保留），
+   * 生命/星芒上限更新，按背景等级奖励发放这几级的全部物品。
    * @returns {Promise<object|null>} 升级预览数据（用于聊天记录展示），无法升级时返回 null
    */
   async levelUpByXp() {
     const preview = await this.getLevelUpPreview();
     if (!preview) {
-      ui.notifications?.warn?.("经验值未超过升级阈值，无法升级。");
+      const maxLevel = CONFIG.LIMBUSCOMPANY?.MAX_LEVEL ?? Infinity;
+      ui.notifications?.warn?.(this.system.level >= maxLevel
+        ? "已经满级，无法继续升级。"
+        : "经验值未达到升级阈值，无法升级。");
       return null;
     }
 
     await this.update({
       "system.level":             preview.nextLevel,
-      "system.xp.value":          0,
+      "system.xp.value":          preview.xpTo,
       "system.attrPoints":        preview.attrPointsTo,
       "system.stellarMotes.max":  preview.stellarTo,
       "system.hp.max":            preview.hpTo,
@@ -905,6 +940,71 @@ export class LimbusActor extends Actor {
     return preview;
   }
 
+
+  /**
+   * 可用于【训练等级强化】的技能清单。
+   *
+   * 已装备的 6 基础 + 1 守备排在前面（equipped=true），其余持有的技能跟在后面
+   * ——「强化 Lv.3 技能」这类奖励针对的常常是还没装上去的那张卡，只列已装备的会漏。
+   * E.G.O 不参与训练等级（它用觉醒/侵蚀），一律排除。
+   *
+   * @returns {object[]} 每项 { id, name, img, level, numeral, nextNumeral,
+   *                            equipped, slotLabel, hasNextData, canUpgrade }
+   */
+  getTrainUpgradeCandidates() {
+    const NUM = { 1: "Ⅰ", 2: "Ⅱ", 3: "Ⅲ", 4: "Ⅳ", 5: "Ⅴ" };
+    const sys = this.system;
+    const basic = sys.skills?.basic ?? [];
+    const defId = sys.skills?.defense ?? null;
+
+    // 槽位标签：装备中的排前面，并标出它占的是哪个槽
+    const slotOf = new Map();
+    basic.forEach((id, i) => { if (id) slotOf.set(id, `基础 ${i + 1}`); });
+    if (defId) slotOf.set(defId, "守备");
+
+    const rows = [];
+    for (const item of this.items) {
+      if (item.type !== "skill") continue;
+      if (item.system?.type === "ego") continue;          // E.G.O 走觉醒/侵蚀
+      const lv   = item.system?.trainLevel ?? 3;
+      const next = lv + 1;
+      // 下一阶有没有真的写过数值——没写的话这次强化等于白花
+      const hasNextData = !!item.system?.trainForms?.[`lv${next}`]?.initialized;
+      rows.push({
+        id: item.id, uuid: item.uuid, name: item.name, img: item.img,
+        level: lv, numeral: NUM[lv] ?? lv, nextNumeral: NUM[next] ?? next,
+        equipped:  slotOf.has(item.id),
+        slotLabel: slotOf.get(item.id) ?? "",
+        hasNextData,
+        canUpgrade: next <= 5 && hasNextData,
+        maxed: next > 5,
+      });
+    }
+
+    // 已装备的在前（按槽位顺序），其余按名称
+    const order = [...basic.filter(Boolean), ...(defId ? [defId] : [])];
+    rows.sort((a, b) => {
+      if (a.equipped !== b.equipped) return a.equipped ? -1 : 1;
+      if (a.equipped) return order.indexOf(a.id) - order.indexOf(b.id);
+      return a.name.localeCompare(b.name, "zh");
+    });
+    return rows;
+  }
+
+  /**
+   * 把一个技能的训练等级强化一阶（Ⅲ→Ⅳ→Ⅴ）。
+   * @param {string} itemId
+   * @returns {Promise<boolean>} 是否真的升了
+   */
+  async applyTrainUpgrade(itemId) {
+    const item = this.items.get(itemId);
+    if (!item || item.type !== "skill") return false;
+    if (item.system?.type === "ego") return false;
+    const next = (item.system?.trainLevel ?? 3) + 1;
+    if (next > 5) return false;
+    await item.update({ "system.trainLevel": next });
+    return true;
+  }
 
   // ─── 长休 ──────────────────────────────────────────────────────────────
 
