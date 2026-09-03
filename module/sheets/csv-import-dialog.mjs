@@ -12,9 +12,39 @@ import {
   buildItemData,
   buildTemplateCSV,
   listAvailableColumns,
+  UPDATE_FLAG,
 } from "../helpers/csv-import.mjs";
 
 const PREVIEW_ROWS = 8;
+
+/**
+ * 覆盖导入时**不**碰的字段。
+ *
+ * 激活效果（Activity）是在 Foundry 的效果触发编辑器里一条条编出来的，
+ * 表格里根本表达不了；覆盖时要是把它一起写掉，等于每次改个价格就把效果清空。
+ * 三处都要挡：顶层、E.G.O 侵蚀形态、训练等级各阶。
+ */
+function stripActivities(data) {
+  const sys = data?.system;
+  if (!sys) return data;
+  delete sys.activities;
+  if (sys.corrode) delete sys.corrode.activities;
+  if (sys.trainForms) {
+    for (const k of Object.keys(sys.trainForms)) {
+      if (sys.trainForms[k] && typeof sys.trainForms[k] === "object") {
+        delete sys.trainForms[k].activities;
+      }
+    }
+  }
+  return data;
+}
+
+/** 找出目标里同名同类型的已有物品；返回 null 表示没有 */
+function findExisting(collection, data) {
+  const name = String(data.name ?? "").trim();
+  const hits = collection.filter(i => i.name === name && i.type === data.type);
+  return hits.length ? hits : null;
+}
 
 export class CSVImportDialog extends Application {
 
@@ -202,30 +232,63 @@ export class CSVImportDialog extends Application {
 
   async _onImport() {
     this._parse();
-    const items = this._parsed?.items ?? [];
-    if (!items.length) { ui.notifications.warn("没有可导入的数据。"); return; }
+    const all = this._parsed?.items ?? [];
+    if (!all.length) { ui.notifications.warn("没有可导入的数据。"); return; }
 
-    const targetLabel = this.target === "world"
-      ? "世界物品列表"
-      : (game.packs.get(this.target)?.metadata.label ?? this.target);
+    const isPack = this.target !== "world";
+    const pack   = isPack ? game.packs.get(this.target) : null;
+    if (isPack && !pack) { ui.notifications.error("目标合集包不存在。"); return; }
+    const targetLabel = isPack ? pack.metadata.label : "世界物品列表";
 
+    // 覆盖需要先知道目标里有什么。合集包的索引不含 type，得把文档载出来。
+    const existing = isPack ? await pack.getDocuments() : Array.from(game.items);
+
+    // ── 分流：标了「完成」的去覆盖，其余新建；覆盖但找不到的退回新建 ──
+    const toCreate = [];
+    const updates  = [];          // { doc, data }
+    const dupes    = [];
+    for (const raw of all) {
+      const data = foundry.utils.deepClone(raw);
+      const wantUpdate = !!data[UPDATE_FLAG];
+      delete data[UPDATE_FLAG];                     // 不能写进文档
+
+      if (!wantUpdate) { toCreate.push(data); continue; }
+
+      const hits = findExisting(existing, data);
+      if (!hits) { toCreate.push(data); continue; } // 标了完成但世界里还没有 → 新建
+      if (hits.length > 1) dupes.push(`${data.name}（${hits.length} 个）`);
+      stripActivities(data);
+      delete data.type;                             // 类型不可改，避免误伤
+      updates.push({ doc: hits[0], data });
+    }
+
+    const lines = [];
+    if (toCreate.length) lines.push(`新建 <b>${toCreate.length}</b> 个`);
+    if (updates.length)  lines.push(`覆盖 <b>${updates.length}</b> 个已有物品`);
     const ok = await Dialog.confirm({
       title:   "确认批量导入",
-      content: `<p>将创建 <b>${items.length}</b> 个物品到 <b>${targetLabel}</b>。</p>
-                <p>此操作不会覆盖已有同名物品，而是新建。确定继续？</p>`,
+      content: `<p>目标：<b>${targetLabel}</b></p><p>${lines.join("，")}。</p>`
+             + (updates.length
+                 ? `<p style="color:#b06a4a">覆盖会按表格重写这些物品的字段，`
+                   + `但<b>不会</b>动它们的激活效果。</p>` : "")
+             + (dupes.length
+                 ? `<p style="color:#b06a4a">同名多份，只覆盖第一个：`
+                   + `${dupes.join("、")}</p>` : ""),
       defaultYes: false,
     });
     if (!ok) return;
 
     try {
-      if (this.target === "world") {
-        await Item.createDocuments(items);
-      } else {
-        const pack = game.packs.get(this.target);
-        if (!pack) { ui.notifications.error("目标合集包不存在。"); return; }
-        await Item.createDocuments(items, { pack: this.target });
+      if (toCreate.length) {
+        await Item.createDocuments(toCreate, isPack ? { pack: this.target } : {});
       }
-      ui.notifications.info(`已导入 ${items.length} 个物品到「${targetLabel}」。`);
+      // 逐个更新：合集包文档不能用 Item.updateDocuments 批量按 id 走世界集合
+      for (const { doc, data } of updates) await doc.update(data);
+
+      const done = [];
+      if (toCreate.length) done.push(`新建 ${toCreate.length}`);
+      if (updates.length)  done.push(`覆盖 ${updates.length}`);
+      ui.notifications.info(`已导入到「${targetLabel}」：${done.join("，")}。`);
       this.rawText  = "";
       this.fileName = "";
       this._parsed  = null;
@@ -235,4 +298,5 @@ export class CSVImportDialog extends Application {
       ui.notifications.error(`导入失败：${err.message}`);
     }
   }
+
 }
