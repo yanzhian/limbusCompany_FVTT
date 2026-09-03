@@ -1,0 +1,1271 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="郊区幸存者 · 084 同人规则书 —— Foundry VTT 系统 limbusCompany_FVTT 配套规则">
+<!-- 本文件由 策划文件/规则书.md 排版而来，与在线版同源。
+     字体走 Google Fonts，取不到时回退到系统字体栈，离线可读。 -->
+<title>郊区幸存者</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Noto+Sans+SC:wght@300;400;500&family=Noto+Serif+SC:wght@600;900&display=swap">
+
+<style>
+/* ─────────────────────────────────────────────────────────────
+   郊区幸存者 · 规则书
+   配色取自系统自身：金 #C9A84C（卡面分割线/徽章）、
+   余烬红 #DC4110（回合横幅的回合数）、七宗罪取 config.mjs 原值。
+   ───────────────────────────────────────────────────────────── */
+
+:root {
+  /* 浅色 = 印刷手册；深色（下方）才是本作的本色 */
+  --ground:    #F2EDE1;
+  --ground-2:  #E9E2D2;
+  --ground-3:  #DFD6C2;
+  --ink:       #201B12;
+  --ink-dim:   #6B6152;
+  --ink-faint: #9C9282;
+  --gold:      #8A6E1E;
+  --gold-soft: #B79A45;
+  --ember:     #B5330C;
+  --rule:      rgba(138,110,30,.30);
+  --rule-soft: rgba(32,27,18,.13);
+  --shade:     rgba(32,27,18,.045);
+
+  --wrath:#C40100; --lust:#C25405; --sloth:#9A7C0C;
+  --gluttony:#548206; --gloom:#07708A; --pride:#0B3BA6; --envy:#7202A6;
+
+  --f-display: "Noto Serif SC", "Songti SC", "SimSun", Georgia, serif;
+  --f-body:    "Noto Sans SC", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  --f-mono:    "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+
+  --col: 68ch;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --ground:    #0E0C0A;
+    --ground-2:  #16130F;
+    --ground-3:  #1E1A14;
+    --ink:       #E6DCC8;
+    --ink-dim:   #9A907C;
+    --ink-faint: #6A6254;
+    --gold:      #C9A84C;
+    --gold-soft: #8A7534;
+    --ember:     #DC4110;
+    --rule:      rgba(201,168,76,.26);
+    --rule-soft: rgba(230,220,200,.11);
+    --shade:     rgba(201,168,76,.045);
+
+    --wrath:#FD0001; --lust:#FA6D07; --sloth:#C9A110;
+    --gluttony:#77B808; --gloom:#0A94B3; --pride:#2F63E8; --envy:#9503DA;
+  }
+}
+
+:root[data-theme="dark"] {
+  --ground:    #0E0C0A;
+  --ground-2:  #16130F;
+  --ground-3:  #1E1A14;
+  --ink:       #E6DCC8;
+  --ink-dim:   #9A907C;
+  --ink-faint: #6A6254;
+  --gold:      #C9A84C;
+  --gold-soft: #8A7534;
+  --ember:     #DC4110;
+  --rule:      rgba(201,168,76,.26);
+  --rule-soft: rgba(230,220,200,.11);
+  --shade:     rgba(201,168,76,.045);
+
+  --wrath:#FD0001; --lust:#FA6D07; --sloth:#C9A110;
+  --gluttony:#77B808; --gloom:#0A94B3; --pride:#2F63E8; --envy:#9503DA;
+}
+
+/* ── 基础 ────────────────────────────────────────────────── */
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--ground);
+  color: var(--ink);
+  font-family: var(--f-body);
+  font-weight: 300;
+  font-size: 15.5px;
+  line-height: 1.85;
+  -webkit-font-smoothing: antialiased;
+}
+
+::selection { background: var(--gold); color: var(--ground); }
+
+a { color: var(--gold); text-decoration-thickness: 1px; text-underline-offset: 3px; }
+a:focus-visible, button:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 3px;
+}
+
+/* ── 版面骨架：左侧书脊 + 正文单栏 ───────────────────────── */
+
+.wrap {
+  display: grid;
+  grid-template-columns: 210px minmax(0, 1fr);
+  gap: 0 56px;
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 0 32px 140px;
+}
+
+.spine {
+  position: sticky;
+  top: 0;
+  align-self: start;
+  height: 100vh;
+  padding: 40px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  border-right: 1px solid var(--rule);
+  margin-right: -1px;
+}
+
+.spine-mark {
+  font-family: var(--f-mono);
+  font-size: 10px;
+  letter-spacing: .22em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.toc { display: flex; flex-direction: column; gap: 1px; }
+
+.toc a {
+  display: grid;
+  grid-template-columns: 26px 1fr;
+  gap: 8px;
+  align-items: baseline;
+  padding: 5px 10px 5px 0;
+  font-size: 13px;
+  color: var(--ink-dim);
+  text-decoration: none;
+  border-left: 2px solid transparent;
+  padding-left: 10px;
+  transition: color .15s, border-color .15s;
+}
+.toc a:hover { color: var(--ink); border-left-color: var(--gold); }
+.toc a .n {
+  font-family: var(--f-mono);
+  font-size: 10px;
+  color: var(--ink-faint);
+  letter-spacing: .06em;
+}
+
+.col { max-width: var(--col); padding-top: 40px; }
+
+/* ── 报头 ────────────────────────────────────────────────── */
+
+.masthead { padding: 44px 0 4px; }
+
+.eyebrow {
+  font-family: var(--f-mono);
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: .3em;
+  text-transform: uppercase;
+  color: var(--gold);
+}
+
+.masthead h1 {
+  font-family: var(--f-display);
+  font-weight: 900;
+  font-size: clamp(46px, 9vw, 82px);
+  line-height: .98;
+  letter-spacing: .04em;
+  margin: 18px 0 0;
+  text-wrap: balance;
+}
+
+.masthead .lede {
+  margin: 22px 0 0;
+  font-size: 17px;
+  line-height: 1.8;
+  color: var(--ink-dim);
+  max-width: 46ch;
+}
+
+/* 文档识别块：真·系统字段，不是装饰 */
+.docid {
+  margin-top: 34px;
+  border-top: 1px solid var(--gold);
+  border-bottom: 1px solid var(--rule);
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(112px, 1fr));
+}
+.docid div {
+  padding: 12px 14px 13px 0;
+  border-right: 1px solid var(--rule-soft);
+}
+.docid div:last-child { border-right: 0; }
+.docid dt {
+  font-family: var(--f-mono);
+  font-size: 9.5px;
+  letter-spacing: .18em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  margin: 0 0 4px;
+}
+.docid dd {
+  margin: 0;
+  font-family: var(--f-mono);
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── 章节 ────────────────────────────────────────────────── */
+
+section { scroll-margin-top: 24px; }
+
+.chapter {
+  margin-top: 96px;
+  padding-top: 20px;
+  border-top: 2px solid var(--gold);
+}
+/* 报头之后的第一章：报头自带下边框，不必再空出一整章的距离 */
+#prologue .chapter { margin-top: 52px; }
+.chapter .kicker {
+  font-family: var(--f-mono);
+  font-size: 10.5px;
+  letter-spacing: .26em;
+  text-transform: uppercase;
+  color: var(--gold);
+  display: block;
+  margin-bottom: 12px;
+}
+.chapter h2 {
+  font-family: var(--f-display);
+  font-weight: 900;
+  font-size: clamp(28px, 4.4vw, 40px);
+  line-height: 1.14;
+  letter-spacing: .03em;
+  margin: 0;
+  text-wrap: balance;
+}
+.chapter p.intro {
+  margin: 16px 0 0;
+  color: var(--ink-dim);
+  font-size: 16px;
+}
+
+h3 {
+  font-family: var(--f-display);
+  font-weight: 600;
+  font-size: 21px;
+  letter-spacing: .03em;
+  line-height: 1.4;
+  margin: 54px 0 4px;
+  padding-bottom: 9px;
+  border-bottom: 1px solid var(--rule);
+  text-wrap: balance;
+}
+h3 .h3n {
+  font-family: var(--f-mono);
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--gold);
+  letter-spacing: .1em;
+  margin-right: 12px;
+  vertical-align: 2px;
+}
+
+h4 {
+  font-family: var(--f-body);
+  font-weight: 500;
+  font-size: 15px;
+  letter-spacing: .06em;
+  color: var(--gold);
+  margin: 34px 0 -6px;
+}
+
+p { margin: 18px 0; }
+strong { font-weight: 500; color: var(--ink); }
+em { font-style: normal; color: var(--gold); }
+
+ul, ol { margin: 18px 0; padding-left: 1.15em; }
+li { margin: 9px 0; padding-left: .25em; }
+li::marker { color: var(--gold-soft); }
+
+code {
+  font-family: var(--f-mono);
+  font-size: .88em;
+  background: var(--shade);
+  border: 1px solid var(--rule-soft);
+  padding: 1px 5px;
+  border-radius: 2px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── 表格：账簿，不是卡片 ────────────────────────────────── */
+
+.ledger { overflow-x: auto; margin: 24px 0; }
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+  line-height: 1.65;
+}
+caption {
+  text-align: left;
+  font-family: var(--f-mono);
+  font-size: 10px;
+  letter-spacing: .2em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  padding-bottom: 9px;
+}
+th {
+  text-align: left;
+  font-family: var(--f-mono);
+  font-weight: 500;
+  font-size: 10.5px;
+  letter-spacing: .16em;
+  text-transform: uppercase;
+  color: var(--gold);
+  padding: 0 16px 8px 0;
+  border-bottom: 1px solid var(--gold);
+  white-space: nowrap;
+}
+td {
+  padding: 11px 16px 11px 0;
+  border-bottom: 1px solid var(--rule-soft);
+  vertical-align: top;
+}
+tbody tr:last-child td { border-bottom: 0; }
+th:last-child, td:last-child { padding-right: 0; }
+td.num, th.num { font-family: var(--f-mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
+td.key { color: var(--ink); font-weight: 400; white-space: nowrap; }
+
+/* ── 罪孽色带：全篇唯一一处用满七色 ──────────────────────── */
+
+.sins {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 3px;
+  margin: 26px 0;
+}
+.sin { text-align: center; }
+.sin i {
+  display: block;
+  height: 5px;
+  background: var(--c);
+  margin-bottom: 9px;
+}
+.sin b {
+  display: block;
+  font-family: var(--f-display);
+  font-weight: 600;
+  font-size: 14px;
+  letter-spacing: .05em;
+}
+.sin span {
+  display: block;
+  font-family: var(--f-mono);
+  font-size: 9px;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  margin-top: 2px;
+}
+
+/* ── 行动币图解 ──────────────────────────────────────────── */
+
+figure.coins {
+  margin: 30px 0;
+  padding: 24px 0 20px;
+  border-top: 1px solid var(--gold);
+  border-bottom: 1px solid var(--rule);
+}
+figure.coins figcaption {
+  font-family: var(--f-mono);
+  font-size: 10px;
+  letter-spacing: .2em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  margin-bottom: 20px;
+}
+.track { display: flex; flex-direction: column; gap: 0; }
+.exch {
+  display: grid;
+  grid-template-columns: 74px 1fr 96px;
+  gap: 14px;
+  align-items: center;
+  padding: 10px 0;
+  border-bottom: 1px dashed var(--rule-soft);
+}
+.exch:last-child { border-bottom: 0; }
+.exch .lbl {
+  font-family: var(--f-mono);
+  font-size: 11px;
+  color: var(--ink-dim);
+  letter-spacing: .08em;
+}
+.pips { display: flex; gap: 7px; align-items: center; }
+.pip {
+  width: 15px; height: 15px;
+  border-radius: 50%;
+  border: 1.5px solid var(--gold);
+  background: var(--gold);
+  flex: 0 0 auto;
+}
+.pip.spent { background: transparent; border-color: var(--ink-faint); }
+.pip.gone  { background: transparent; border-color: var(--ember); border-style: dashed; }
+.exch .pen {
+  font-family: var(--f-mono);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  color: var(--ember);
+}
+.exch .pen.zero { color: var(--ink-faint); }
+
+/* ── 强调块 ──────────────────────────────────────────────── */
+
+.note {
+  margin: 26px 0;
+  padding: 2px 0 2px 20px;
+  border-left: 2px solid var(--gold);
+  color: var(--ink-dim);
+  font-size: 14.5px;
+}
+.note p { margin: 10px 0; }
+.note .tag {
+  display: block;
+  font-family: var(--f-mono);
+  font-size: 9.5px;
+  letter-spacing: .2em;
+  text-transform: uppercase;
+  color: var(--gold);
+  margin-bottom: 2px;
+}
+
+.danger { border-left-color: var(--ember); }
+.danger .tag { color: var(--ember); }
+
+blockquote {
+  margin: 30px 0;
+  padding: 0;
+  font-family: var(--f-display);
+  font-weight: 600;
+  font-size: 19px;
+  line-height: 1.65;
+  letter-spacing: .02em;
+  color: var(--ink);
+  text-wrap: balance;
+}
+blockquote::before {
+  content: "";
+  display: block;
+  width: 46px;
+  height: 2px;
+  background: var(--gold);
+  margin-bottom: 18px;
+}
+
+/* ── 经验表：五栏账页 ────────────────────────────────────── */
+
+.xp {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 0 22px;
+  margin: 24px 0;
+  font-family: var(--f-mono);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.xp div {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--rule-soft);
+  color: var(--ink-dim);
+}
+.xp div b { color: var(--ink); font-weight: 500; }
+.xp div.mile { color: var(--gold); }
+.xp div.mile b { color: var(--gold); }
+
+/* ── 速查网格 ────────────────────────────────────────────── */
+
+.stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 0;
+  margin: 26px 0;
+  border-top: 1px solid var(--gold);
+}
+.stats div {
+  padding: 15px 18px 16px 0;
+  border-bottom: 1px solid var(--rule-soft);
+  border-right: 1px solid var(--rule-soft);
+}
+.stats dt {
+  font-family: var(--f-mono);
+  font-size: 9.5px;
+  letter-spacing: .18em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  margin-bottom: 5px;
+}
+.stats dd {
+  margin: 0;
+  font-size: 15px;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+.stats dd .u { color: var(--ink-dim); font-size: 13px; }
+
+/* ── 页脚 ────────────────────────────────────────────────── */
+
+footer {
+  margin-top: 90px;
+  padding-top: 22px;
+  border-top: 2px solid var(--gold);
+  font-family: var(--f-mono);
+  font-size: 11px;
+  line-height: 1.9;
+  letter-spacing: .06em;
+  color: var(--ink-faint);
+}
+
+/* ── 窄屏 ────────────────────────────────────────────────── */
+
+@media (max-width: 900px) {
+  .wrap { grid-template-columns: 1fr; gap: 0; padding: 0 22px 100px; }
+  .spine {
+    position: static; height: auto; border-right: 0;
+    border-bottom: 1px solid var(--rule);
+    padding: 26px 0 18px; margin-right: 0;
+  }
+  .toc { flex-flow: row wrap; gap: 2px 6px; }
+  .toc a { border-left: 0; padding: 3px 0; grid-template-columns: auto auto; }
+  .toc a:hover { border-left: 0; }
+  .col { padding-top: 8px; }
+  .xp { grid-template-columns: repeat(2, 1fr); }
+  .sins { grid-template-columns: repeat(4, 1fr); gap: 10px 6px; }
+  .exch { grid-template-columns: 60px 1fr; }
+  .exch .pen { grid-column: 2; text-align: left; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; animation: none !important; }
+  html { scroll-behavior: auto; }
+}
+
+html { scroll-behavior: smooth; }
+</style>
+</head>
+<body>
+
+
+<div class="wrap">
+
+  <nav class="spine" aria-label="目录">
+    <div class="spine-mark">Outskirts&nbsp;/&nbsp;084</div>
+    <div class="toc">
+      <a href="#prologue"><span class="n">00</span><span>序章</span></a>
+      <a href="#create"><span class="n">01</span><span>角色创建</span></a>
+      <a href="#survive"><span class="n">02</span><span>鉴定与生存</span></a>
+      <a href="#combat"><span class="n">03</span><span>战斗</span></a>
+      <a href="#status"><span class="n">04</span><span>状态一览</span></a>
+      <a href="#appendix"><span class="n">05</span><span>数值速查</span></a>
+    </div>
+    <div class="spine-mark" style="margin-top:auto">限 幸存者 阅</div>
+  </nav>
+
+  <main class="col">
+
+    <!-- ══ 报头 ══════════════════════════════════════════ -->
+    <header class="masthead">
+      <div class="eyebrow">郊区生存手册 · 084 同人规则</div>
+      <h1>郊区幸存者</h1>
+      <p class="lede">
+        都市之星图书馆事件之后，本该沉睡的你们在郊区醒来。这里没有首脑，没有秩序，
+        只有一件事要做：直面自身的罪孽，活下去。
+      </p>
+      <dl class="docid">
+        <div><dt>System</dt><dd>limbusCompany</dd></div>
+        <div><dt>版本</dt><dd>1.0.0</dd></div>
+        <div><dt>满级</dt><dd>50</dd></div>
+        <div><dt>基础技能</dt><dd>6 + 1</dd></div>
+        <div><dt>回合行动币</dt><dd>3</dd></div>
+      </dl>
+    </header>
+
+    <!-- ══ 序章 ══════════════════════════════════════════ -->
+    <section id="prologue">
+      <div class="chapter">
+        <span class="kicker">00 — Prologue</span>
+        <h2>序章</h2>
+        <p class="intro">若你玩过月亮计划旗下的作品，会更快进入状况；没玩过也不影响。</p>
+      </div>
+
+      <h3><span class="h3n">00.1</span>世界观</h3>
+      <p>本次剧本发生在<strong>都市的郊区</strong>。首脑的手伸不到这里，秩序也一样。</p>
+      <p>
+        为了生存，你们搜集物资、搭建营地；为了了解郊区的现状，你们结识当地的
+        NPC。最终目标只有一个——逃离郊区，返回都市。
+      </p>
+
+      <h3><span class="h3n">00.2</span>星引者（GM）</h3>
+      <p>在郊区迷路的时候，不妨看看星空，它们会把你引入命运的河流。</p>
+      <p>
+        作为 GM，你需要相对熟悉月计世界观，才能在这片贫瘠的土地上引导幸存者。
+        你的职责是：设定鉴定难度、扮演 NPC、裁定规则边界，以及决定这群人什么时候该倒霉。
+      </p>
+
+      <h3><span class="h3n">00.3</span>幸存者（PL）</h3>
+      <p>
+        经过一番打探与方向确认，你们得知自己身处都市外围的郊区——此处无首脑干预，
+        危机四伏。想要重返都市的你们，尽管背景各异，却志同道合，
+        遂决定在郊区寻觅一处临时藏身之所。
+      </p>
+      <blockquote>
+        人类的赞歌是勇气的赞歌。<br>
+        不要对未知感到恐惧——在没有制度的郊区活下去，才是唯一的目标。
+      </blockquote>
+    </section>
+
+    <!-- ══ 一、角色创建 ══════════════════════════════════ -->
+    <section id="create">
+      <div class="chapter">
+        <span class="kicker">01 — Character</span>
+        <h2>角色创建</h2>
+        <p class="intro">
+          六步：选背景 → 分配属性 → 选恐慌卡 → 确认其他属性 → 学习技能 → 最后检查。
+          系统里由「创建向导」带着走。
+        </p>
+      </div>
+
+      <h3><span class="h3n">01.1</span>选择背景</h3>
+      <p>背景决定你<strong>是谁</strong>，也决定你开局拿到什么装备和技能书。</p>
+      <div class="ledger">
+        <table>
+          <caption>背景大类 · 排名不分先后</caption>
+          <thead><tr><th style="width:8.5em">大类</th><th>构成</th></tr></thead>
+          <tbody>
+            <tr><td class="key">幸存者</td><td>适合新手：忘记了身世，在废土上寻找自我。熟悉规则后可换成剧本里遇见过的背景</td></tr>
+            <tr><td class="key">世界之翼 / 巢</td><td>H / K / L / N / P / R / T / W 公司，以及旧 L（脑叶公司分部）、旧 W（WARP 列车）</td></tr>
+            <tr><td class="key">帮派 / 五指</td><td>后巷的五大手指（拇指·食指·中指·环指·小指），以及黑云会、剑契组、布莱梅乐团、丧家犬</td></tr>
+            <tr><td class="key">收尾人</td><td>十二协会 / 事务所 / 工坊</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <ul>
+        <li><strong>事务所</strong>擅长团队协同，人多时能发挥出事务所特有的战斗风格。</li>
+        <li><strong>工坊</strong>拥有自己的制作表，能给自己和队友打造本工坊的武器装备，并且<em>能多带传说装备</em>——一般角色只能装 1 件，工坊出身可以 3 件。</li>
+        <li><strong>协会</strong>各有专精（暗杀、防御、决斗、情报……），会影响你被委托什么活。</li>
+      </ul>
+
+      <h3><span class="h3n">01.2</span>分配属性</h3>
+      <p>总共 <strong>30 点</strong>，每项 <strong>2–8</strong>。每 10 级获得 1 点属性点。</p>
+      <div class="ledger">
+        <table>
+          <thead><tr><th style="width:7.5em">属性</th><th>影响</th></tr></thead>
+          <tbody>
+            <tr><td class="key">力量 Str</td><td>攻击等级（力量÷3 向下取整）、采集建材的收获量</td></tr>
+            <tr><td class="key">敏捷 Agi</td><td>速度（1D6+敏捷）、移动步数、混乱阈值条数（&gt;7 多一条）</td></tr>
+            <tr><td class="key">体质 Con</td><td>防御等级（体质÷3 向下取整）、最大生命值、混乱阈值条数（&gt;7 少一条）</td></tr>
+            <tr><td class="key">智力 Int</td><td>恐慌鉴定的成功率、E.G.O 使用条件</td></tr>
+            <tr><td class="key">感知 Per</td><td>观察等级（侦察）、搜索战利品与物资箱的收获量</td></tr>
+            <tr><td class="key">魅力 Cha</td><td>交涉、NPC 谈判价格优惠</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3><span class="h3n">01.3</span>恐慌类型</h3>
+      <p>
+        对战中难免遇到不可名状之物：有些让人发疯，有些让人一蹶不振。
+        建卡时要选<strong>两张恐慌卡</strong>——一张【士气低落】，一张【陷入恐慌】。
+      </p>
+      <h4>基础恐惧（示例）</h4>
+      <div class="ledger">
+        <table>
+          <thead><tr><th style="width:6em">恐惧</th><th>陷入时</th><th>坚定时</th></tr></thead>
+          <tbody>
+            <tr><td class="key">愤怒</td><td>为自己添加 2 层【攻击等级提升】和 10 层【易损】</td><td>本回合与下回合添加 2 层【强壮】</td></tr>
+            <tr><td class="key">自残</td><td>扣除自身 1D10 生命值，添加 1 层 5 级【流血】</td><td>添加 10 层【护盾】和 2 层【忍耐】</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>
+        其余九种（无措 / 畏缩 / 怨恨 / 不洁 / 抑郁 / 徘徊 / 疯狂 / 迁怒 / 强迫）待补。
+        <strong>特殊恐惧</strong>在遭遇郊区怪物或经历心理创伤后留下，若得不到治愈或长休会长期存在。
+      </p>
+
+      <h3><span class="h3n">01.4</span>其他属性</h3>
+      <ul>
+        <li><strong>容量</strong>：初始 6×6，可以通过背包类「容器」扩充。</li>
+        <li><strong>装备栏</strong>：9 格。上装最多 1 件；下装 / 武器 / 饰品不限件数。</li>
+        <li><strong>星芒</strong>：上限 <code>30 + 等级</code>（1 级为 31），每升 1 级 +1。装备技能和物品都要向星星许愿——星芒不足就装不上，这是对"全身稀有装备"的限制。</li>
+        <li><strong>眼</strong>：货币单位。都市的钱，郊区照用。</li>
+      </ul>
+      <div class="ledger">
+        <table>
+          <caption>星芒消耗</caption>
+          <thead><tr><th>项目</th><th class="num">消耗</th></tr></thead>
+          <tbody>
+            <tr><td>技能 Lv.1 / Lv.2 / Lv.3</td><td class="num">1 / 5 / 10</td></tr>
+            <tr><td>E.G.O ZAYIN / TET / HE / WAW / ALEPH</td><td class="num">1 / 3 / 5 / 10 / 15</td></tr>
+            <tr><td>装备</td><td class="num">默认 1</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>由【相关技能转换】产生的衍生技能不额外消耗星芒。</p>
+
+      <h3><span class="h3n">01.5</span>学习技能</h3>
+      <ul>
+        <li><strong>背景技能</strong>：选定背景会自动获得相关「技能书」。</li>
+        <li><strong>技能书</strong>：从战利品、NPC 授予或购买获得。技能书学来的技能<em>无法精通</em>。</li>
+        <li><strong>复制核心</strong>：郊区最稀有的存在。持有它就能去「复制核心工作台」复制已战胜过的目标，学会它的一个技能或获得它的一件物品。BOSS 与郊区怪物的技能基本只能走这条路。</li>
+        <li><strong>E.G.O 装备</strong>：前 L 公司的奇点技术，心灵的具象化。装备后自动学会对应的 E.G.O 技能。</li>
+      </ul>
+
+      <h3><span class="h3n">01.6</span>完成建卡</h3>
+      <p>填完之后你应该有：一个背景与所属势力、分配好的六项属性、两张恐慌卡、势力给的装备与技能书，以及用技能书学到的 <strong>6 个基础技能 + 1 个守备技能</strong>。</p>
+    </section>
+
+    <!-- ══ 二、鉴定与生存 ════════════════════════════════ -->
+    <section id="survive">
+      <div class="chapter">
+        <span class="kicker">02 — Survival</span>
+        <h2>鉴定与生存</h2>
+        <p class="intro">郊区的大部分时间不在战斗里，而在搜刮、制作和不要发疯上。</p>
+      </div>
+
+      <h3><span class="h3n">02.1</span>属性鉴定</h3>
+      <ol>
+        <li>GM 指定一项属性和一个<strong>难度等级</strong>。</li>
+        <li>投掷<strong>等同于你该属性数值</strong>枚的十面骰（最少 2 枚；装备与扮演可以增减枚数）。</li>
+        <li>每有一枚骰子结果<strong>小于</strong>你的属性值，算 1 次成功。</li>
+        <li>成功次数 <strong>≥</strong> 难度等级即为成功。</li>
+      </ol>
+      <div class="note">
+        <span class="tag">参考难度</span>
+        <p><code>1</code> 简单　<code>2–3</code> 中等　<code>4–5</code> 困难　<code>6+</code> 极难</p>
+      </div>
+
+      <h3><span class="h3n">02.2</span>恐慌鉴定</h3>
+      <p>
+        理智值 <strong>≤10</strong> 时，每个回合结束会自动进行一次「智力」鉴定：投 1d10，
+        结果 <strong>≤ 智力</strong> 记【坚定 +1】，否则记【恐惧 +1】。
+      </p>
+      <div class="ledger">
+        <table>
+          <thead><tr><th style="width:9em">累计</th><th>结果</th><th class="num">理智</th></tr></thead>
+          <tbody>
+            <tr><td class="key">坚定 ×3</td><td>坚定心智，本次不会陷入恐慌</td><td class="num">→ 70</td></tr>
+            <tr><td class="key">恐惧 ×3</td><td>陷入恐慌，触发恐慌卡效果</td><td class="num">→ 30</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>
+        任一侧计满 3 点后，两侧计数在下一个回合开始时清空。
+        另外，理智值<strong>首次</strong>跌到 30 或以下时会触发【士气低落】，无需鉴定，
+        一场遭遇战只触发一次。
+      </p>
+
+      <h3><span class="h3n">02.3</span>威力鉴定</h3>
+      <p>
+        面对可破坏的物体（门窗、巨石等），可以在破坏前用「技能」进行鉴定。
+        中途可以无限尝试，直到物体被破坏或触发其他事件。
+      </p>
+
+      <h3><span class="h3n">02.4</span>营地与制作台</h3>
+      <p>营地是你们的家。建筑不止一个，各有各的容量和配方。</p>
+      <div class="ledger">
+        <table>
+          <thead><tr><th style="width:11em">建筑</th><th class="num" style="width:5em">容量</th><th>用途</th></tr></thead>
+          <tbody>
+            <tr><td class="key">制作台</td><td class="num">8×8</td><td>最基础的工作台，随等级解锁更多配方与建筑</td></tr>
+            <tr><td class="key">熔炉</td><td class="num">6×6</td><td>对于原矿来讲，最好的归属就是熔炉</td></tr>
+            <tr><td class="key">武器 / 弹药制作台</td><td class="num">6×6</td><td>首脑管不到郊区，弹药成了廉价的硬通货</td></tr>
+            <tr><td class="key">灶台</td><td class="num">6×6</td><td>出发前的热饭与长途口粮</td></tr>
+            <tr><td class="key">医疗制作台</td><td class="num">6×6</td><td>一根针、一瓶安瓿、一口丸，都可能逆转战局</td></tr>
+            <tr><td class="key">情报信息台</td><td class="num">6×6</td><td>想离开郊区，情报比勇气和运气更重要</td></tr>
+            <tr><td class="key">复制核心复刻机</td><td class="num">6×8</td><td>郊区的失落奇迹</td></tr>
+            <tr><td class="key">拟态物健身房</td><td class="num">—</td><td>休息时别让身体生疏（会骨折的那种）</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="note">
+        <span class="tag">配方表</span>
+        <p>
+          可以拾取和交易的物品。把它放进营地建筑里<strong>双击或右键</strong>即可使用，
+          其中的配方会被永久追加到该建筑，配方表本体随之消耗。
+          如果里面的配方该建筑已经全部拥有，则<strong>不会</strong>消耗——留着当纪念。
+        </p>
+        <p>
+          点击【制作】时可以选择产物去向：营地仓库或制作者的背包。
+          仓库放不下时自动改放进制作者背包；可堆叠的产物会与已有的同名物品合并。
+        </p>
+      </div>
+      <div class="ledger">
+        <table>
+          <caption>容器</caption>
+          <thead><tr><th style="width:9em">容器</th><th class="num">自身</th><th class="num">内部</th><th>限制</th></tr></thead>
+          <tbody>
+            <tr><td class="key">木箱</td><td class="num">3×4</td><td class="num">8×8</td><td>可升级：Lv.2 8×10 / Lv.3 10×12</td></tr>
+            <tr><td class="key">冷冻箱</td><td class="num">2×2</td><td class="num">6×6</td><td>只放食材，不可升级</td></tr>
+            <tr><td class="key">建材箱</td><td class="num">3×2</td><td class="num">8×10</td><td>只放建材，不可升级</td></tr>
+            <tr><td class="key">医疗箱</td><td class="num">2×2</td><td class="num">6×6</td><td>只放消耗品 / 医疗，不可升级</td></tr>
+            <tr><td class="key">档案箱</td><td class="num">2×2</td><td class="num">6×8</td><td>只放档案，不可升级</td></tr>
+            <tr><td class="key">装备收藏展示箱</td><td class="num">2×3</td><td class="num">8×10</td><td>只放装备 / 武器，不可升级</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3><span class="h3n">02.5</span>郊区的中立交易生物</h3>
+      <p>有些郊区生物愿意和人类做交易。下次见到它们，也许能帮上忙。</p>
+      <ul>
+        <li><strong>圣诞精灵</strong>（12 区）：对人类极具敌意，但有那么几个例外。掉落的装备、或者太大带不走的东西，贴上礼物标记，它们会做成礼物送到你的营地——收费是人类尸块。</li>
+        <li><strong>旅行沙虫</strong>：实在撤不下来时的最下策，用人类尸体交易，让它把你平安送回营地。它似乎不喜欢鲜活的人类，反而偏好腐烂发臭的——下次搜刮时看到尸体，不妨顺手带上。</li>
+        <li><strong>拟态物</strong>：只会拙劣模仿人类和怪物的动作，攻击性强但伤害不高，适合练手。</li>
+      </ul>
+
+      <h3><span class="h3n">02.6</span>搜刮与采集</h3>
+      <div class="ledger">
+        <table>
+          <thead><tr><th style="width:9em">行为</th><th style="width:11em">鉴定</th><th>收获</th></tr></thead>
+          <tbody>
+            <tr><td class="key">搜索物资箱</td><td>感知</td><td>每成功 1 次，从物资表随机抽取一个物品</td></tr>
+            <tr><td class="key">采集资源</td><td>力量（需对应工具：砍树用斧、挖矿用镐）</td><td>获得等同于成功次数的数量</td></tr>
+            <tr><td class="key">搜刮尸体</td><td>敏捷 或 感知</td><td>按战利品表</td></tr>
+            <tr><td class="key">截肢 / 取部位</td><td>力量（需要工具）</td><td>按战利品表</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ══ 三、战斗 ══════════════════════════════════════ -->
+    <section id="combat">
+      <div class="chapter">
+        <span class="kicker">03 — Combat</span>
+        <h2>战斗</h2>
+        <p class="intro">
+          整体框架接近边狱巴士，但改了两处：<strong>技能槽换成了行动币</strong>，
+          <strong>硬币换成了随机性更大的骰子</strong>。
+        </p>
+      </div>
+
+      <h3><span class="h3n">03.1</span>基础属性</h3>
+      <div class="ledger">
+        <table>
+          <thead><tr><th style="width:7em">属性</th><th>公式与说明</th></tr></thead>
+          <tbody>
+            <tr><td class="key">攻击等级</td><td><code>力量 ÷ 3 ↓ + 等级</code>，再由装备修正</td></tr>
+            <tr><td class="key">防御等级</td><td><code>体质 ÷ 3 ↓ + 等级</code>，只在伤害结算或使用守备技能时生效</td></tr>
+            <tr><td class="key">速度</td><td><code>1D6 + 敏捷</code>，决定先攻顺序，同时决定可移动格数（速度 ÷ 5）</td></tr>
+            <tr><td class="key">生命值</td><td><code>基础 + (等级−1) × 成长</code>，两者按体质插值：体质 1 → 基础 60 / 每级 +2.0；体质 8 → 基础 80 / 每级 +3.0</td></tr>
+            <tr><td class="key">理智值</td><td>初始 50，范围 5–95。E.G.O 与拼点失败会降低；拼点胜利、长休 / 短休（固定回到 50）可恢复</td></tr>
+            <tr><td class="key">物理抗性</td><td>【斩击】【打击】【突刺】，默认 ×1.0，由【上装】修改</td></tr>
+            <tr><td class="key">罪孽抗性</td><td>七种，默认 ×1.0，由使用的 E.G.O 技能修改</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>攻防等级<strong>每相差 3 级，最终骰数 +1</strong>。双方都是攻击时比攻击等级；一方攻击一方守备时比攻击等级与防御等级。不存在双方都是守备的情况。</p>
+
+      <h4>七宗罪</h4>
+      <p>罪孽资源是<strong>公共资源</strong>——使用技能后会为对应罪孽增加 1 点，全队共享。</p>
+      <div class="sins">
+        <div class="sin" style="--c:var(--wrath)"><i></i><b>暴怒</b><span>Wrath</span></div>
+        <div class="sin" style="--c:var(--lust)"><i></i><b>色欲</b><span>Lust</span></div>
+        <div class="sin" style="--c:var(--sloth)"><i></i><b>怠惰</b><span>Sloth</span></div>
+        <div class="sin" style="--c:var(--gluttony)"><i></i><b>暴食</b><span>Gluttony</span></div>
+        <div class="sin" style="--c:var(--gloom)"><i></i><b>忧郁</b><span>Gloom</span></div>
+        <div class="sin" style="--c:var(--pride)"><i></i><b>傲慢</b><span>Pride</span></div>
+        <div class="sin" style="--c:var(--envy)"><i></i><b>嫉妒</b><span>Envy</span></div>
+      </div>
+
+      <h4>混乱阈值</h4>
+      <p>
+        默认 2 条，位于最大生命值的 <strong>60% / 30%</strong>；
+        体质 &gt; 7 减为 1 条（50%），敏捷 &gt; 7 增为 3 条（80% / 50% / 20%）。
+        生命值掉过某一条就会【陷入混乱】，该条随即熄灭直到长休；
+        一次掉血事件最多触发一条（由高到低检查）。
+        【震颤引爆】会把所有阈值百分比<strong>永久前移</strong>，可叠加，同样在长休时重置。
+      </p>
+
+      <h3><span class="h3n">03.2</span>行动币</h3>
+      <p class="intro" style="color:var(--ink);font-size:16px">这是本作和原作差别最大的地方。</p>
+      <p>
+        <strong>行动币没有上限</strong>，可以由技能 / 装备 / 消耗品提升。
+        回合开始时不足 3 枚的补满至 3 枚，已经超过 3 枚的<strong>保留</strong>，不削减也不负债。
+      </p>
+      <p>
+        <strong>使用技能不消耗行动币</strong>，发起对抗也不消耗——这是一场有胜算才出手的游戏。
+        行动币是<em>容量，不是消耗品</em>：你的币数 = 本次对抗里<strong>允许失败几次</strong>，
+        拼点过程中一枚都不会扣。
+      </p>
+
+      <figure class="coins">
+        <figcaption>一次对抗 · 3 币方视角</figcaption>
+        <div class="track">
+          <div class="exch">
+            <span class="lbl">首投</span>
+            <span class="pips"><span class="pip"></span><span class="pip"></span><span class="pip"></span></span>
+            <span class="pen zero">免费</span>
+          </div>
+          <div class="exch">
+            <span class="lbl">败 1 次</span>
+            <span class="pips"><span class="pip spent"></span><span class="pip"></span><span class="pip"></span></span>
+            <span class="pen">威力 −1</span>
+          </div>
+          <div class="exch">
+            <span class="lbl">败 2 次</span>
+            <span class="pips"><span class="pip spent"></span><span class="pip spent"></span><span class="pip"></span></span>
+            <span class="pen">威力 −2</span>
+          </div>
+          <div class="exch">
+            <span class="lbl">败 3 次</span>
+            <span class="pips"><span class="pip spent"></span><span class="pip spent"></span><span class="pip spent"></span></span>
+            <span class="pen">威力 −3</span>
+          </div>
+          <div class="exch">
+            <span class="lbl">败 4 次</span>
+            <span class="pips"><span class="pip gone"></span><span class="pip gone"></span><span class="pip gone"></span></span>
+            <span class="pen">彻底失败</span>
+          </div>
+        </div>
+      </figure>
+      <p style="margin-top:-8px;color:var(--ink-dim);font-size:14px">
+        惩罚只影响拼点胜负，<strong>不影响最终伤害</strong>，对抗一结束即清空。
+        【不可摧毁】骰同样占用失败次数，但<em>不吃惩罚</em>，也不会在对抗结束时被摧毁。
+      </p>
+      <p>
+        对抗结束时，胜方摧毁败方 <strong>1 枚</strong>行动币——每次对抗至多 1 枚，已经 0 枚则无事发生。
+      </p>
+      <div class="note danger">
+        <span class="tag">0 币不等于不能防守</span>
+        <p>仍然可以应战，只是拼点威力额外 <strong>−3</strong>，且输一次就直接定胜负。</p>
+      </div>
+      <div class="note">
+        <span class="tag">例</span>
+        <p>
+          A 有 5 币 → 对抗失败被摧毁 1 → 4 币 → 队友技能回 2 → 6 币
+          → 下次对抗从"允许失败 6 次"开始 → 又失败被摧毁 1 → 5 币
+          → 下个回合因为已经 ≥3 币，<strong>不再补满</strong>。
+        </p>
+      </div>
+
+      <h3><span class="h3n">03.3</span>技能</h3>
+      <p>
+        <strong>基础技能</strong>最多装备 6 个。物理类型：斩击 / 打击 / 突刺；技能等级 Lv.1–3。
+        战斗中按 <em>6-bag</em> 抽取：从 6 个技能中抽 2 个作为【激活】、1 个作为【预备】；
+        用掉一个后由预备补位，再从本轮尚未抽到的技能里补一个新的预备，6 个抽完重新洗牌。
+      </p>
+      <p><strong>守备技能</strong>装备 1 个，无法主动发起对抗，只能在被【发起对抗】时选用。</p>
+      <div class="ledger">
+        <table>
+          <thead><tr><th style="width:8em">守备类型</th><th>效果</th></tr></thead>
+          <tbody>
+            <tr><td class="key">闪避</td><td>双方同时出手，只拼一次；不消耗行动点也不碎币。<strong>平局算闪避成功</strong></td></tr>
+            <tr><td class="key">格挡</td><td>直接受到伤害，减少等同于自己格挡骰数的伤害</td></tr>
+            <tr><td class="key">反击</td><td>直接受到伤害，同时对目标造成自己骰数的伤害</td></tr>
+            <tr><td class="key">可拼点格挡</td><td>拼点成功 → 无视本次伤害；失败 → 受伤并减免自己格挡骰数</td></tr>
+            <tr><td class="key">可拼点反击</td><td>拼点成功 → 对目标造成自己骰数的伤害；失败 → 受伤并仍然反击</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>
+        <strong>E.G.O 技能</strong>需要消耗罪孽资源与理智值，每个 E.G.O 等级只能装备 1 个，
+        使用后会修改自己的罪孽抗性。角色【陷入恐慌】时，所有 E.G.O 强制切换为<em>侵蚀形态</em>。
+      </p>
+
+      <h3><span class="h3n">03.4</span>一张卡的多套数值</h3>
+      <p>同一张技能卡可以挂多套数值，切换的是"当前用哪一套"，而不是换一张卡。两套机制互斥：</p>
+      <div class="ledger">
+        <table>
+          <thead><tr><th style="width:10em">机制</th><th style="width:7em">适用</th><th>切换方式</th></tr></thead>
+          <tbody>
+            <tr><td class="key">觉醒 / 侵蚀</td><td>仅 E.G.O</td><td>【陷入恐慌】时强制切到侵蚀</td></tr>
+            <tr><td class="key">训练等级 Ⅲ→Ⅳ→Ⅴ</td><td>仅基础 / 守备</td><td>每 3 级获得一次强化名额，升级时自选</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>
+        <strong>训练等级</strong>：默认 Ⅲ 级，精通 Ⅳ 级，强化 Ⅴ 级。
+        切换训练等级<em>不会改变</em>名称 / 类型 / 分类 / 罪孽 / 等级 / 标签；
+        其余（骰式、骰子类型、反击分类、攻击容量与扩散、各种标记、理智消耗、星芒、
+        武器限制、描述、激活效果）每一阶各有一套。
+      </p>
+      <p>
+        强化名额落在 Lv3 / 6 / 9 / … / 48，满级 50 共 <strong>16 次</strong>。
+        可选的不限于已装备的 7 个技能——技能列表里没装上去的同样能挑。
+      </p>
+
+      <h3><span class="h3n">03.5</span>装备与消耗品</h3>
+      <div class="ledger">
+        <table>
+          <thead><tr><th style="width:5em">部位</th><th>修改</th><th class="num">限制</th></tr></thead>
+          <tbody>
+            <tr><td class="key">上装</td><td>防御等级、物理抗性</td><td class="num">1 件</td></tr>
+            <tr><td class="key">下装</td><td>防御等级、速度</td><td class="num">不限</td></tr>
+            <tr><td class="key">武器</td><td>攻击等级、防御等级、速度</td><td class="num">不限</td></tr>
+            <tr><td class="key">饰品</td><td>攻击等级、防御等级、速度</td><td class="num">不限</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <ul>
+        <li>带效果的装备可以【激活】触发，<strong>消耗 1 行动币</strong>。</li>
+        <li><strong>消耗品</strong>：战斗中每回合只能使用 1 次，<em>不消耗行动币</em>。</li>
+        <li><strong>背包</strong>：背包里的物品在战斗中既不能激活也不能使用，只能战前准备时与身上的替换。</li>
+        <li><strong>传说装备</strong>：占用大量星芒并配套专属技能，只能装备 1 件——工坊背景可以装 3 件。</li>
+      </ul>
+
+      <h3><span class="h3n">03.6</span>行动时点</h3>
+      <h4>回合开始时</h4>
+      <ol>
+        <li>所有角色重投「速度」决定先后顺序。</li>
+        <li>行动币不足 3 枚的补满至 3 枚（超过的保留）；恐慌 / 坚定计数若已计满 3 点则清空。</li>
+        <li>触发所有【回合开始时】的技能与装备效果。</li>
+        <li>从本轮第一位开始行动。</li>
+      </ol>
+      <h4>角色行动</h4>
+      <ul>
+        <li>可以移动「速度 ÷ 5」格。</li>
+        <li>可以【激活】装备 / 消耗品 / 守备技能，每次消耗 1 行动币（消耗品不消耗）。</li>
+        <li>对范围内的 1 个目标使用【基础技能】或【E.G.O 技能】——这视为<strong>发起对抗</strong>。</li>
+      </ul>
+      <h4>对抗（拼点）</h4>
+      <ol>
+        <li><strong>第一次投掷免费</strong>：攻守双方各投一次。</li>
+        <li><strong>输一次</strong> → 双方重掷再拼一次，并占用输方 1 次失败次数（上限 = 输方的行动币数）。</li>
+        <li><strong>平局</strong> → 不分胜负、不占用失败次数、不加惩罚，双方重掷再拼。</li>
+        <li><strong>失败次数用满</strong> → 彻底失败（3 币 = 允许失败 3 次，第 4 次失败即定胜负）。</li>
+        <li><strong>连击奖励</strong>：按本次对抗内的<em>拼点次数</em>计算（含首投，与胜负平局无关），每 3 次令最终威力 <strong>+1</strong>，不封顶，对抗结束时一次性加到胜方身上。</li>
+        <li><strong>对抗结束</strong>：胜方摧毁败方 1 枚行动币。</li>
+      </ol>
+      <p>对抗胜利可以恢复理智值，连续胜利恢复更多；失败除了受伤还会降低理智。</p>
+      <div class="note danger">
+        <span class="tag">单方面攻击 · 不进入拼点</span>
+        <p>
+          满足任一即可：防守方 0 币且没有可用的【不可摧毁】守备手段；
+          防守方没有可用的守备技能；防守方处于【陷入混乱】【陷入恐慌】等无法应战的状态；
+          攻击方技能带【无法防御】。
+        </p>
+      </div>
+      <h4>反应（追击）</h4>
+      <p>
+        满足条件即可触发，<strong>不限于自己的回合</strong>。任何角色「攻击后」，
+        带【反应】词条的技能 / 装备若满足条件就能触发。反应相当于附赠动作。
+      </p>
+      <h4>回合结束时</h4>
+      <p>所有目标行动完毕即视为回合结束：触发所有【回合结束时】效果，结算 BUFF，重投速度并重新排序。</p>
+      <div class="note">
+        <span class="tag">可选规则 · 击退</span>
+        <p>
+          拼点的激烈碰撞可以把目标击退：自己点数 10 / 20 / 30 分别击退 1 / 2 / 3 格，胜方可追击。
+          过程中若有目标撞上墙体，触发一次【震颤引爆】。
+        </p>
+      </div>
+
+      <h3><span class="h3n">03.7</span>陷入混乱 / 陷入恐慌</h3>
+      <div class="ledger">
+        <table>
+          <thead><tr><th style="width:7em">状态</th><th>效果</th></tr></thead>
+          <tbody>
+            <tr>
+              <td class="key">陷入混乱</td>
+              <td>本回合无法行动也无法应战（被攻击时按单方面攻击结算），所有物理抗性强制调整为 <strong>×2.0</strong>，行动币清零，回合结束时解除。跨过的那条阈值线会一直熄灭到长休</td>
+            </tr>
+            <tr>
+              <td class="key">陷入恐慌</td>
+              <td>行动币清零，本回合<strong>仍可使用 E.G.O 技能发起对抗</strong>，回合结束时解除</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3><span class="h3n">03.8</span>观察等级</h3>
+      <p>
+        面对未知威胁时，你看不到目标的具体数值和能力。通过「感知」侦测可以提升观察等级：
+        等级越高，越能看到目标的基础技能与弱点机制。观察等级足够高时可以解锁目标的<strong>机制</strong>，
+        用机制达成【强制混乱】。
+      </p>
+    </section>
+
+    <!-- ══ 四、状态一览 ══════════════════════════════════ -->
+    <section id="status">
+      <div class="chapter">
+        <span class="kicker">04 — Status</span>
+        <h2>状态一览</h2>
+        <p class="intro">
+          每个状态附加时默认有 1 层。<strong>强度</strong>只有特殊状态才有
+          （例如"12 强度 2 层的烧伤"，左强度右层数）。层数与强度都可叠加；层数归 0 即清除。
+        </p>
+      </div>
+
+      <h3><span class="h3n">04.1</span>增益</h3>
+      <div class="ledger">
+        <table>
+          <thead><tr><th style="width:10em">状态</th><th>效果</th></tr></thead>
+          <tbody>
+            <tr><td class="key">强壮</td><td>本回合内「攻击类」技能的最终威力 <strong>+</strong> 层数</td></tr>
+            <tr><td class="key">忍耐</td><td>本回合内「守备」技能的最终威力 <strong>+</strong> 层数</td></tr>
+            <tr><td class="key">迅捷</td><td>本回合内速度的最大 / 最小值 <strong>+</strong> 层数</td></tr>
+            <tr><td class="key">守护</td><td>本回合内受到的伤害 <strong>−</strong> 层数</td></tr>
+            <tr><td class="key">拼点威力提升</td><td>本回合内进行拼点时，拼点威力 <strong>+</strong> 层数</td></tr>
+            <tr><td class="key">攻击 / 防御等级提升</td><td>本回合内攻击 / 防御等级 <strong>+</strong> 层数</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3><span class="h3n">04.2</span>减益</h3>
+      <div class="ledger">
+        <table>
+          <thead><tr><th style="width:10em">状态</th><th>效果</th></tr></thead>
+          <tbody>
+            <tr><td class="key">虚弱</td><td>本回合内「攻击类」技能的最终威力 <strong>−</strong> 层数</td></tr>
+            <tr><td class="key">破绽</td><td>本回合内「守备」技能的最终威力 <strong>−</strong> 层数</td></tr>
+            <tr><td class="key">束缚</td><td>本回合内速度的最大 / 最小值 <strong>−</strong> 层数</td></tr>
+            <tr><td class="key">易损</td><td>本回合内受到的伤害 <strong>+</strong> 层数</td></tr>
+            <tr><td class="key">拼点威力降低</td><td>本回合内进行拼点时，拼点威力 <strong>−</strong> 层数</td></tr>
+            <tr><td class="key">攻击 / 防御等级降低</td><td>本回合内攻击 / 防御等级 <strong>−</strong> 层数</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3><span class="h3n">04.3</span>特殊</h3>
+      <div class="ledger">
+        <table>
+          <thead><tr><th style="width:10em">状态</th><th style="width:8.5em">触发</th><th>效果</th></tr></thead>
+          <tbody>
+            <tr><td class="key">烧伤</td><td>回合结束时</td><td>减少 1 层，受到等同强度的固定伤害</td></tr>
+            <tr><td class="key">流血</td><td>攻击时</td><td>减少 1 层，受到等同强度的固定伤害</td></tr>
+            <tr><td class="key">破裂</td><td>受到伤害时</td><td>减少 1 层，额外受到等同强度的固定伤害</td></tr>
+            <tr><td class="key">沉沦</td><td>受到伤害时</td><td>减少 1 层，额外受到等同强度的理智伤害（侵蚀度）；若理智因此跌到下限 5，再额外受到同等强度的【忧郁】伤害</td></tr>
+            <tr><td class="key">震颤</td><td>震颤引爆时</td><td>混乱阈值前移等同强度的数值；层数归 0 即消失</td></tr>
+            <tr><td class="key">呼吸法</td><td>造成伤害时</td><td>下次有「强度 × 5%」的概率产生暴击</td></tr>
+            <tr><td class="key">充能</td><td>回合结束时</td><td>特定技能所需的资源，最大 20 层，每回合结束减少 1 层</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ══ 附录 ══════════════════════════════════════════ -->
+    <section id="appendix">
+      <div class="chapter">
+        <span class="kicker">05 — Appendix</span>
+        <h2>数值速查</h2>
+      </div>
+
+      <dl class="stats">
+        <div><dt>属性</dt><dd>30 点分配 · 每项 2–8 <span class="u">（上限 10）</span></dd></div>
+        <div><dt>生命值</dt><dd>60–80 <span class="u">+ 每级 2.0–3.0</span></dd></div>
+        <div><dt>理智值</dt><dd>5–95 <span class="u">· 默认 50</span></dd></div>
+        <div><dt>行动币</dt><dd>无上限 <span class="u">· 补至 3</span></dd></div>
+        <div><dt>速度</dt><dd>1D6 + 敏捷</dd></div>
+        <div><dt>星芒上限</dt><dd>30 + 等级</dd></div>
+        <div><dt>混乱阈值</dt><dd>60% / 30% <span class="u">默认 2 条</span></dd></div>
+        <div><dt>满级</dt><dd>50</dd></div>
+        <div><dt>训练等级强化</dt><dd>每 3 级 <span class="u">· 共 16 次</span></dd></div>
+        <div><dt>初始容量</dt><dd>6 × 6</dd></div>
+        <div><dt>装备栏</dt><dd>9 格</dd></div>
+        <div><dt>6-bag</dt><dd>2 激活 + 1 预备</dd></div>
+      </dl>
+
+      <h3><span class="h3n">05.1</span>升级规则</h3>
+      <p>
+        经验 <strong>≥</strong> 阈值即可升级。升一级<strong>扣掉该级阈值</strong>，
+        余数保留继续攒，够几级就连升几级。
+        每 10 级获得 1 点属性点，每级 +1 星芒上限，每 3 级获得一次训练等级强化名额。
+      </p>
+
+      <h3><span class="h3n">05.2</span>升级经验表</h3>
+      <p style="color:var(--ink-dim);font-size:14px;margin-bottom:6px">
+        从 Lv N 升到 Lv N+1 所需经验。升满累计约 <strong>312,560</strong> 点。
+      </p>
+      <div class="xp">
+        <div><span>01→02</span><b>10</b></div>
+        <div><span>11→12</span><b>227</b></div>
+        <div><span>21→22</span><b>1 739</b></div>
+        <div><span>31→32</span><b>6 075</b></div>
+        <div><span>41→42</span><b>14 600</b></div>
+
+        <div><span>02→03</span><b>12</b></div>
+        <div><span>12→13</span><b>298</b></div>
+        <div><span>22→23</span><b>2 014</b></div>
+        <div><span>32→33</span><b>6 722</b></div>
+        <div><span>42→43</span><b>15 700</b></div>
+
+        <div><span>03→04</span><b>15</b></div>
+        <div><span>13→14</span><b>381</b></div>
+        <div><span>23→24</span><b>2 327</b></div>
+        <div><span>33→34</span><b>7 413</b></div>
+        <div><span>43→44</span><b>16 900</b></div>
+
+        <div><span>04→05</span><b>20</b></div>
+        <div><span>14→15</span><b>482</b></div>
+        <div><span>24→25</span><b>2 674</b></div>
+        <div><span>34→35</span><b>8 140</b></div>
+        <div><span>44→45</span><b>18 100</b></div>
+
+        <div><span>05→06</span><b>27</b></div>
+        <div><span>15→16</span><b>591</b></div>
+        <div><span>25→26</span><b>3 047</b></div>
+        <div><span>35→36</span><b>8 910</b></div>
+        <div><span>45→46</span><b>19 400</b></div>
+
+        <div><span>06→07</span><b>40</b></div>
+        <div><span>16→17</span><b>728</b></div>
+        <div><span>26→27</span><b>3 456</b></div>
+        <div><span>36→37</span><b>9 730</b></div>
+        <div><span>46→47</span><b>20 700</b></div>
+
+        <div><span>07→08</span><b>59</b></div>
+        <div><span>17→18</span><b>885</b></div>
+        <div><span>27→28</span><b>3 899</b></div>
+        <div><span>37→38</span><b>10 600</b></div>
+        <div><span>47→48</span><b>22 000</b></div>
+
+        <div><span>08→09</span><b>88</b></div>
+        <div><span>18→19</span><b>1 064</b></div>
+        <div><span>28→29</span><b>4 378</b></div>
+        <div><span>38→39</span><b>11 500</b></div>
+        <div><span>48→49</span><b>23 400</b></div>
+
+        <div><span>09→10</span><b>125</b></div>
+        <div><span>19→20</span><b>1 261</b></div>
+        <div><span>29→30</span><b>4 899</b></div>
+        <div><span>39→40</span><b>12 500</b></div>
+        <div class="mile"><span>49→50</span><b>24 800</b></div>
+
+        <div class="mile"><span>10→11</span><b>168</b></div>
+        <div><span>20→21</span><b>1 488</b></div>
+        <div><span>30→31</span><b>5 468</b></div>
+        <div><span>40→41</span><b>13 500</b></div>
+        <div style="border-bottom:0"></div>
+      </div>
+
+      <h3><span class="h3n">05.3</span>待补</h3>
+      <p>以下内容规则未定或尚未实现，GM 自行裁定：</p>
+      <ul>
+        <li><strong>基础恐惧</strong>：无措 / 畏缩 / 怨恨 / 不洁 / 抑郁 / 徘徊 / 疯狂 / 迁怒 / 强迫 的具体效果</li>
+        <li><strong>心 / 望</strong>：角色陷入绝对危机并克服绝望后获得「心」；向星星许愿获得「望」。两者会同时提升攻击等级与防御等级并赋予强大力量</li>
+        <li><strong>截断骰</strong>：常量与图标已备，规则与结算尚未落地</li>
+        <li><strong>主线任务与分支任务</strong>：结构待定</li>
+      </ul>
+    </section>
+
+    <footer>
+      郊区幸存者 · 084 同人规则书<br>
+      配套 Foundry VTT 系统 limbusCompany_FVTT v1.0.0<br>
+      数值口径以 config.mjs / actor.mjs 为准
+    </footer>
+
+  </main>
+</div>
+
+</body>
+</html>

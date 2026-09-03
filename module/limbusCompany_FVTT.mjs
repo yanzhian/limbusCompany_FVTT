@@ -11,6 +11,7 @@
 import { LIMBUSCOMPANY }   from "./config.mjs";
 import { registerHeaderCollapse } from "./helpers/window-header.mjs";
 import { registerTurnBanner } from "./helpers/turn-banner.mjs";
+import { registerRulebook } from "./helpers/rulebook.mjs";
 import { LimbusActor, CharacterData, MerchantData, CampData, LootData }  from "./documents/actor.mjs";
 import {
   LimbusItem,
@@ -200,6 +201,9 @@ Hooks.once("init", () => {
     onDown: () => { SquadHUD.toggle(2); return true; },
     restricted: true,
   });
+
+  // 规则书入口：设置侧边栏按钮 + F1（keybindings 只能在 init 期注册）
+  registerRulebook();
 
   // 注册小队 HUD 世界设置
   SquadHUD.init();

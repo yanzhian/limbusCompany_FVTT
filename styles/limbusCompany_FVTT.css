@@ -10277,3 +10277,19 @@ input.item-piles-quantity {
   color: #b06a4a;
   white-space: nowrap;
 }
+
+/* 设置侧边栏里的规则书入口 */
+.limbus-rulebook-block {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+.limbus-rulebook-block h4.divider {
+  color: #c9a84c;
+  letter-spacing: .08em;
+}
+.limbus-rulebook-block button i {
+  margin-right: 6px;
+  color: #c9a84c;
+}
