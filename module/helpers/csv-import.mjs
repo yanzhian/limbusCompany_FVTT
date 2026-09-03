@@ -140,7 +140,10 @@ export const COLUMN_ALIASES = {
   "简介": "system.description", "背景描述": "system.description",
   "星芒": "system.stellarCost", "星芒费用": "system.stellarCost",
   "容量": V_CAPACITY,               // "2x3" → capacity.w / capacity.h
-  "价格": "system.price", "售价": "system.price",
+  // 价格 = 物品的「眼」价：卡面显示、商人报价（merchant-sheet 取 item.system.cost）
+  // 读的都是 system.cost。system.price 是商人货架的遗留字段，全仓无人读取，
+  // 早先映射到它 = 价格写进了黑洞。技能没有 cost 字段，由 SYNONYMS 兜到 price。
+  "价格": "system.cost", "售价": "system.cost", "眼": "system.cost",
   "数量": "system.quantity",
   "库存": "system.stock",
   "隐藏": "system.hidden",
@@ -309,6 +312,7 @@ export function adjustPathForType(path, itemType) {
   const SYNONYMS = [
     ["effect", "effectDesc", "description"],
     ["category", "typeName"],
+    ["cost", "price"],
   ];
   const group = SYNONYMS.find(g => g.includes(key));
   if (!group) return path;
@@ -1046,6 +1050,7 @@ const COLUMN_NOTES = {
   "容量扩散": "攻击容量≥2 时生效，形如 [链式扩散3] / 广域乱射2，数字为范围格数（留空=链式1格）",
   "无法装备": "填 是/否、TRUE/FALSE",
   "援护防御": "填 是/否、TRUE/FALSE；标记为【援护防御】专属技能",
+  "价格":     "物品的「眼」价——卡面上显示、商人也按它报价（写入 system.cost；技能没有该字段时回落到 system.price）",
   "训练等级": "一列两用：基础/守备填 Ⅲ/Ⅳ/Ⅴ（或 3/4/5、默认/精通/强化），E.G.O 填 觉醒/侵蚀。同名的几行会合并成同一张卡的多套数值，留空的格子沿用打底那一行——基础/守备沿用低一阶，侵蚀沿用觉醒。共用列（基础/守备：名称·类型·分类·罪孽·等级·标签；E.G.O：名称·罪孽·EGO等级·罪孽资源消耗·抗性修改·标签·骰子类型）一律取打底那一行的值",
   "无法拼点": "填 是/否、TRUE/FALSE；被锁定的目标只能【承受】，不能对抗",
   "攻击范围": "仅武器：留空=近战1格；填数字=近战N格（长矛/锁链）；填「远程6」=远程6格",
