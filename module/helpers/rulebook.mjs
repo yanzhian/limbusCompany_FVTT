@@ -2,22 +2,22 @@
  * rulebook.mjs —— 规则书入口
  *
  * 在 Foundry 的【设置】侧边栏加一块「郊区幸存者」区，放两个按钮：
- *   · 规则书 —— 打开随系统分发的 docs/rulebook.html（新标签页）
- *   · 在线版 —— 打开托管在外部的同一份规则书
+ *   · 规则书 —— 打开随系统分发的 docs/index.html（新标签页）
+ *   · 在线版 —— 打开 GitHub Pages 上的同一份规则书（公开，不需要账号）
  *
  * 为什么本地那份是主入口：随系统走、跟着版本一起更新、不需要账号也不怕断网，
  * 玩家点一下就能看。在线版只是备用（换设备、手机上翻）。
  */
 
 /** 随系统分发的规则书；相对路径由 Foundry 的静态文件服务直接提供 */
-const LOCAL_PATH = "systems/limbusCompany_FVTT/docs/rulebook.html";
+const LOCAL_PATH = "systems/limbusCompany_FVTT/docs/index.html";
 
 /**
- * 在线版地址。留空则不显示【在线版】按钮。
- * 注意：这个链接是否对玩家可见，取决于它在托管方那边的分享设置——
- * 没有公开分享的话，玩家点开会是"无权访问"。
+ * 在线版地址（GitHub Pages，公开可访问，不需要账号）。
+ * 由 docs/ 目录发布，内容与上面的本地文件是同一份。
+ * 留空则不显示【在线版】按钮。
  */
-const ONLINE_URL = "https://claude.ai/code/artifact/610b6ce0-7722-48ac-b648-8692a436cd49";
+const ONLINE_URL = "https://yanzhian.github.io/limbusCompany_FVTT/";
 
 /** 打开随系统分发的规则书 */
 export function openRulebook() {
