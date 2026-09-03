@@ -25,12 +25,17 @@ There is no npm/build/lint/test tooling in this repo. Workflow instead is:
 **先出模板，不要直接实装。** 任何改观感的东西（间距、字号、配色、布局、动效），先做一个
 `scratchpad-*.html` 调参台交给用户，等他确认后再落进 `styles/` 或模板。已有的几个可以直接照抄结构：
 
-- `scratchpad-sheet.html` —— 现版角色卡（保持简约棕金），47 项滑块 + 三个可选改良开关
-- `scratchpad-sheet-redesign.html` —— 改良版角色卡（试验外观，默认关闭的那套）
-- `scratchpad-equip-panel.html` —— 物品页左栏（九宫格 / 形象两种视图）
-- `scratchpad-doll.html` —— 形象默认摆放（DOLL_DEFAULTS）
-- `scratchpad-rarity.html` —— 稀有度网格光晕
-- `scratchpad-hp-ring.html` —— Token 生命环
+仓库里当前还留着的（调完就删是常态，`git log -- 'scratchpad-*.html'` 能翻到已删掉的那些当范本）：
+
+- `scratchpad-window-header.html` —— 窗口标题栏收纳（⋮ 菜单）
+- `scratchpad-panic-check.html` —— 恐惧鉴定计数
+- `scratchpad-title-card-item.html` / `scratchpad-title-card-skill.html` —— 物品 / 技能 Title 卡
+- `scratchpad-turn-banner.html` —— 回合开始横幅（对应 `module/helpers/turn-banner.mjs`）
+
+两个反复踩到的坑：滑块 id 不能和页面里某个元素的 `id` 撞（撞了会取到 DOM 节点而不是数值，
+导出里出现 `undefined` 或 `NaN`）；素材一律走 `<img>` 并挂 `onerror`，用 CSS 背景图的话
+路径错了是**静默**不显示，在 Foundry 里排查不出来。CSS 动画多条并列时注意 `both` 的
+backwards fill 会用后一条的 0% 关键帧盖掉前一条已经跑完的变换——需要保留就用 `forwards`。
 
 调参台的固定套路：**左边等比预览 + 右边分组滑块 + 底部实时导出可直接粘贴的 CSS/JSON**，
 所有可调项走 CSS 变量；导出的内容必须能整段贴到目标文件**末尾**生效（同名规则后写的赢），
@@ -41,8 +46,29 @@ There is no npm/build/lint/test tooling in this repo. Workflow instead is:
 ### Document/data layer (`module/documents/`)
 
 - `actor.mjs` — `LimbusActor extends Actor` (game logic: combat resolution helpers, level-up, long rest, chaos threshold triggers, buff application) plus `TypeDataModel` subclasses per Actor type: `CharacterData` (PCs — the core one, most fields), `MerchantData`, `CampData`, `LootData`.
-- `item.mjs` — `LimbusItem extends Item` (mostly `sendToChat()` / title-card rendering) plus `TypeDataModel` subclasses per Item type: `EquipmentData`, `SkillData`, `ConsumableData`, `MaterialData`, `ContainerData`, `SkillBookData`, `PanicData`, `BackgroundData`.
+- `item.mjs` — `LimbusItem extends Item` (mostly `sendToChat()` / title-card rendering) plus `TypeDataModel` subclasses per Item type: `EquipmentData`, `SkillData`, `ConsumableData`, `MaterialData`, `ContainerData`, `SkillBookData`, `RecipeBookData` (配方表), `PanicData`, `BackgroundData`.
 - Every field lives under `system.*` via the `TypeDataModel` schema (`defineSchema()` using `foundry.data.fields.*`) — there is no legacy `template.json`-driven data, `template.json` is vestigial.
+
+#### One item, several sets of values (E.G.O forms & 训练等级)
+
+A skill card can carry more than one set of numbers on the **same item** rather than being duplicated into near-identical cards. Two instances of the same pattern, deliberately mutually exclusive:
+
+| | Applies to | Selector | Alternate data lives in |
+|---|---|---|---|
+| 觉醒 / 侵蚀 | E.G.O only | `system.egoForm`, auto-forced to 侵蚀 while the owner is 【陷入恐慌】 | `system.corrode.*` |
+| 训练等级 Ⅲ→Ⅳ→Ⅴ | 基础 / 守备 only | `system.trainLevel` (+ `trainBaseLevel` = which stage the top-level fields are) | `system.trainForms.lv1…lv5` |
+
+In both, the **top-level fields are the base set**, the alternate holds only the fields that differ (`null` = inherit), and `prepareDerivedData()` projects the active one onto the top-level fields. Never combine the two on one item — that would be a 2×5 matrix of overrides.
+
+Which fields may differ is a rules decision, not a free-for-all:
+- 训练等级 shares 名称 / 类型 / 分类 / 罪孽 / 等级 / 标签 across all stages; everything else is per-stage.
+- 觉醒/侵蚀 shares 名称 / 罪孽 / EGO等级 / 罪孽消耗 / 抗性修改 / 标签 / 骰子类型; **分类 differs** (unlike 训练等级).
+
+Three consequences worth knowing before touching this:
+
+- **`activeVariantPrefix(item)` (exported from `item.mjs`) is the authority on which set is live** — it returns `""` / `"corrode."` / `"trainForms.lvN."`. Any code that reads a *derived* value, modifies it, and writes it back **must write through that prefix**. Writing to the top level instead silently overwrites the base set with the projected high-stage values — `clash.mjs`'s `tempMods` (`_stashItemMod`/`_restoreItemMods`) and `snapItemStats`/`restoreItemSnaps` both did exactly that and corrupted Ⅲ into Ⅳ after one clash; they now go through `ClashManager._modPath(item, path)`.
+- The **sheet** has its own parallel getter `LimbusItemSheet._variantPrefix` (reads `_source`, not derived data — the editor must never write the projection back). It drives `context.fp` (field-name prefix in the template) and `_actField`/`_actPath`/`_actList` (activities). Fields that are *shared* in one mechanism but *per-variant* in the other get their own prefix var: `fpCat` (分类) and `fpDice` (骰子类型 / 三个布尔 / 反击分类).
+- **CSV import merges same-name rows into one card** — `mergeSkillVariants()` in `csv-import.mjs`. The 「训练等级」 column is one column with two meanings: `Ⅲ/Ⅳ/Ⅴ` for 基础/守备, `觉醒/侵蚀` for E.G.O; the lowest stage / the 觉醒 row becomes the base regardless of row order, and blank cells simply aren't written (so "inherit" falls out for free).
 
 ### Sheets (`module/sheets/`)
 
@@ -55,7 +81,8 @@ Recurring conventions across sheets — follow these when adding new ones:
 - **Item-reference schema shape**: `{ id, uuid, itemData }` (see `makeItemRefSchema()` in `item.mjs`) is the standard way a document schema references *another* item without embedding it — `uuid` for live resolution via `fromUuid()`, `itemData` as a `toObject()` snapshot fallback if the source item is later deleted/unavailable. Used by `BackgroundData.startingItems`/`levelRewards[].items`. Contrast with actually **embedding** a copy into `actor.items` (used for panic cards in `system.panicSlots`, because panic cards have `activities` that must execute via `_applyActivities` — a plain UUID reference can't run those).
 - **Right-click context menus**: use the shared `_renderContextMenu(event, menuItems)` helper on `LimbusActorSheet` (`{ name, icon, callback }[]`) rather than building ad-hoc menus — see `_onEquipSlotContextMenu`, `_onSkillSlotContextMenu`, `_onBackgroundContextMenu` for the pattern, including confirm-before-destructive-action via `Dialog.confirm(...)`.
 - **Search-input re-render pitfall**: any `Application`/`ItemSheet` that filters a list via a live search `<input>` and calls `this.render()` on every keystroke will destroy/recreate that `<input>` DOM node mid-keystroke, breaking IME composition (Chinese input) and occasionally duplicating characters. See `BackgroundWizard._bindSearchInput()` for the fix: skip re-render during `compositionstart`~`compositionend`, debounce re-render (~120ms) otherwise, and restore focus/caret position after render via saved `{ target, start, end }` state.
-- **Multi-step wizard state**: `BackgroundWizard` and `LevelUpDialog` hold a `this.step` counter and branch the whole template on it (`{{#if (eq step N)}}`) rather than being separate Application instances per step — state (selections, search terms) persists on `this` across steps within one instance.
+- **Multi-step wizard state**: `BackgroundWizard` and `LevelUpDialog` hold a `this.step` counter and branch the whole template on it (`{{#if (eq step N)}}`) rather than being separate Application instances per step — state (selections, search terms) persists on `this` across steps within one instance. A step that isn't always relevant is skipped by jumping the counter (`LevelUpDialog` goes 1 → 3 when the level-up granted no 训练等级 quota), not by renumbering.
+- **Collapsed window headers** (`module/helpers/window-header.mjs`): `collapseWindowHeader(app)` hides the title and folds every module-added header button into a right-aligned `⋮` menu. It **moves the real DOM nodes** (so their listeners survive) and re-runs at 0 ms and 200 ms because some modules inject buttons late. Two traps: v1 `Application` render hooks fire only for the *exact* class name, so `registerHeaderCollapse([...names])` must list every sheet class by name; and the `⋮` toggle must **not** carry the `header-button` class — Foundry delegates clicks on `.window-header .header-button` and its handler throws on a button with no backing definition.
 
 ### Combat/game-logic engine (`module/helpers/clash.mjs`)
 
@@ -108,7 +135,7 @@ Special tremors (`specialTremor: true`) follow 【震颤】's rules wholesale: 0
 - **Which PIXI group.** Token artwork lives in `canvas.primary`; `Token` placeables (borders, bars) live in the interface group, which always paints **above every token's art**. An overlay added as a child of the token therefore covers neighbouring tokens no matter what `zIndex` says. `TokenRingHUD` adds its container to `canvas.primary` with `elevation`/`sort`/`sortLayer` instead, so it can be occluded by the token below it, and raises `sort` to `1e6` only while controlled/hovered. Coordinates are then **world** coordinates (`token.center`), and the container must be removed from `primary` by hand on destroy.
 - **Sizes are authored at a 100px grid** and multiplied by `canvas.grid.size / 100` at draw time, so nothing needs re-tuning when the scene grid changes.
 
-Visual parameters are tuned in a standalone HTML lab (`scratchpad-hp-ring.html`) whose panel exports JSON matching `TokenRingHUD.CFG` field-for-field — tune there, paste into `CFG`. The lab renders **top-down with no CSS 3D**, exactly like the Foundry canvas; the ring's "lying on the ground" look comes from a real perspective projection (regular polygon in a ground plane → `rotateX(tilt)` → divide by `persp`), and the band is a **filled polygon, not a stroke**, because a stroke's width is screen-space and would lose the near-thick/far-thin half of the perspective.
+Visual parameters are tuned in a standalone HTML lab whose panel exports JSON matching `TokenRingHUD.CFG` field-for-field — tune there, paste into `CFG`. (That lab, `scratchpad-hp-ring.html`, has since been deleted; recover it from git history if the ring needs re-tuning.) The lab renders **top-down with no CSS 3D**, exactly like the Foundry canvas; the ring's "lying on the ground" look comes from a real perspective projection (regular polygon in a ground plane → `rotateX(tilt)` → divide by `persp`), and the band is a **filled polygon, not a stroke**, because a stroke's width is screen-space and would lose the near-thick/far-thin half of the perspective.
 
 ### Config constants (`module/config.mjs`)
 
@@ -122,11 +149,13 @@ All cross-cutting constants (sin types/labels/icon paths, damage types, EGO grad
 
 Full formulas and constants: `module/config.mjs` (`LIMBUSCOMPANY.*`) and `CharacterData.defineSchema()` in `module/documents/actor.mjs` are the source of truth; below are the load-bearing ones worth knowing without opening those files.
 
-- **HP**: `等级d10 + 体质×5`. **Sanity**: 5–95, default 50, ≤5 triggers 陷入恐慌 (panic). **AP**: fixed max 3, resets each turn end. **Speed**: `1D6 + 敏捷` (displayed as a range). **Stellar Motes**: cap 30 + 1 per level.
+- **HP**: `round(base + (等级-1) × growth)`, both interpolated from 体质 (clamped 1–8): base 60→80, growth 2.0→3.0. (The design docs' older `等级d10 + 体质×5` is *not* what the code does.) **Sanity**: 5–95, default 50, ≤5 is the floor / 陷入恐慌; ≤30 fires 士气低落 once per encounter, ≤10 runs a 恐慌鉴定 each round end. **Speed**: `1D6 + 敏捷` (displayed as a range). **Stellar Motes**: cap 30 + 1 per level.
+- **AP (行动币)**: **uncapped**. `ap.max` is only "how many to refill to at round start" (3), *not* a ceiling — at round start anything below 3 is topped up to 3, anything above 3 is kept. Using a skill / initiating a clash costs **nothing**; AP's only job is the clash: your coin count = how many times you may lose within one contest. Losing costs a cumulative −1 拼点威力 (不可摧毁 dice are exempt), a 0-coin defender takes an extra −3, and the winner destroys **one** of the loser's coins when the contest ends. 连击奖励: +1 to the winner's final power per 3 exchanges in the contest, uncapped, applied once at the end.
 - **Attributes** (`str/agi/con/int/per/cha`): schema range 2–10 (character creation wizard currently constrains allocation to 2–8 — see `ATTR_MIN`/`ATTR_MAX` in `background-wizard.mjs`, a wizard-only clamp, not a schema change).
 - **Chaos thresholds** (`system.chaosThresholds`, `[{ percent, triggered }]`): default 2 tiers (60%/30%); con>7 → 1 tier (50%); agi>7 → 3 tiers (20/50/80%). Each tier fires once (`triggered` latches permanently until long rest resets it), checked high-to-low, one tier per HP-drop event. 震颤引爆 (seismic burst) shifts all tier percentages forward permanently (stacking) until long rest.
 - **Skill draw ("6-bag")**: combat UI concept only, not persisted to the actor — 2 active + 1 prepared drawn without replacement from the 6 equipped basic skills; reshuffle when exhausted.
 - **Background system** (`BackgroundData` item type + `system.background.uuid` on `CharacterData`): a Background item is a *template*, referenced by plain UUID (not embedded) since it has no `activities` to run. `BackgroundWizard` (`module/sheets/background-wizard.mjs`) drives character creation: pick background (compendium/world browser, folder-name-based category filter) → allocate attribute points → pick panic cards (which *are* embedded into `system.panicSlots`, unlike the background reference itself, because panic cards need `activities` execution) → review/grant starting items.
 - **Panic cards** (`PanicData`): `panicType` splits them into 士气低落 (`lowMorale`) and 陷入恐慌 (`panic`), one per slot in `system.panicSlots`; `""` means unset (legacy data) and is accepted by both slots. 士气低落 fires once per encounter when sanity first drops ≤30 (latched by the `lowMoraleFiredEncounter` flag, cleared on `combatStart`/`deleteCombat`); 陷入恐慌 runs the 1d10 vs 智力 坚定/恐慌 rolls at round end once sanity ≤10. The ④ effect `panicCardSwap` swaps a card in by name (searched across world items **and every compendium**, since panic cards aren't carried by the actor).
 - **No 平局**: a dodge that ties counts as a successful dodge. There is no tie-break path — don't reintroduce one.
-- **Level-up** (`LimbusActor.getLevelUpPreview()` / `.levelUpByXp()`, dialog in `module/sheets/level-up-dialog.mjs`): preview is a pure read (no mutation) so the dialog can show before/after values before the player confirms; `levelUpByXp()` applies the level, and grants any `BackgroundData.levelRewards` entries matching the new level.
+- **Level-up** (`LimbusActor.getLevelUpPreview()` / `.levelUpByXp()`, dialog in `module/sheets/level-up-dialog.mjs`): preview is a pure read (no mutation) so the dialog can show before/after values before the player confirms. `LEVEL_XP[N]` = XP to go from Lv N to N+1 (`MAX_LEVEL` 50; read it via `getXpForLevel()`, which also handles past-table-end). XP **≥** the threshold levels up; each level **deducts** its own threshold and the remainder carries over, so one big XP grant can chain several levels at once — which is why attribute points count every multiple of 10 *crossed* and `levelRewards` are collected for **every** level crossed, not just the final one. The dialog is 3 steps: values → 训练等级 强化 (only when this level-up granted any) → reward items.
+- **训练等级 强化 quota**: one per `LIMBUSCOMPANY.TRAIN_UPGRADE_EVERY` (3) levels, computed as `floor(next/N) - floor(cur/N)` so multi-level jumps grant several. Nothing is banked on the actor — the player spends it inside the level-up dialog or forfeits it. Candidates come from `getTrainUpgradeCandidates()`: **all** non-E.G.O skills the actor owns, with the 6 basic + 1 defense equipped ones sorted first and slot-labelled (a skill only in the list can be upgraded too). A stage with no authored `trainForms.lvN` data is shown disabled, since spending the quota there would change nothing.
