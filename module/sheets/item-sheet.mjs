@@ -2963,7 +2963,10 @@ function _buildCondRow(cond, idx, cfg) {
   const perNDimOpts = [
     ["stacks","层数"],["intensity","强度"],
   ].map(([v,l]) => `<option value="${v}" ${perNDim === v ? "selected":""}>${l}</option>`).join("");
-  const buffLabel  = _keyToLabel(cond?.buff ?? "", cond?.buffCustom ?? "");
+  // 【比较值】可以填多条 BUFF（求和），存的是 buffs 数组，回填时用 / 拼回去
+  const buffLabel  = (Array.isArray(cond?.buffs) && cond.buffs.length > 1)
+    ? cond.buffs.map(k => _keyToLabel(k, cond?.buffCustom ?? "")).join(" / ")
+    : _keyToLabel(cond?.buff ?? "", cond?.buffCustom ?? "");
 
   const attrTypeOpts = [
     ["hp","生命值"],["sanity","理智值"],["ap","行动值"],
@@ -3010,7 +3013,9 @@ function _buildCondRow(cond, idx, cfg) {
         <span class="ae-cond-buff-sec" ${isBuffSec ? "" : 'style="display:none"'}>
           <label>BUFF</label>
           <input class="ae-input cond-buff" type="text" list="ae-buff-dl"
-                 placeholder="输入或选择BUFF…" autocomplete="off" style="width:100px;"
+                 placeholder="${isCompare ? "多条用 / 分隔＝求和" : "输入或选择BUFF…"}"
+                 title="${isCompare ? "【比较值】填多条时比较的是它们的和，如「烧伤 / 流血」" : ""}"
+                 autocomplete="off" style="width:${isCompare ? 160 : 100}px;"
                  value="${_esc(buffLabel)}">
           <span class="ae-cond-intensity-sec" ${(isCompare || isPerN) ? 'style="display:none"' : ""}>
             <label>强度≥</label>
@@ -3771,6 +3776,11 @@ function _bindCondType(html) {
     row.find(".ae-cond-intensity-sec").toggle(!isCompare && !isPerN);
     row.find(".cond-stacks-label").toggle(!isCompare);
     row.find(".ae-cond-cmp-sec").toggle(isCompare);
+    // 【比较值】才能填多条求和，切过去时把输入框的提示与宽度一起换掉
+    row.find(".cond-buff")
+      .attr("placeholder", isCompare ? "多条用 / 分隔＝求和" : "输入或选择BUFF…")
+      .attr("title", isCompare ? "【比较值】填多条时比较的是它们的和，如「烧伤 / 流血」" : "")
+      .css("width", isCompare ? "160px" : "100px");
   });
   html.find(".cond-equip-pereach").off("change").on("change", function () {
     $(this).closest(".ae-cond-row").find(".ae-cond-equip-max").toggle(this.checked);
@@ -3991,10 +4001,15 @@ function _readActivityForm(html, original) {
         value:      parseInt($r.find(".cond-sin-value").val()) || 0,
       });
     } else if (condType === "buffCompare") {
+      // BUFF 栏用 / 分隔可填多条，比较的是它们的和（「烧伤与流血强度之和 ≥ 6」）。
+      // buff 仍写第一条：老代码路径和 _preStr 的兜底都还读它。
+      const cmpKeys = String($r.find(".cond-buff").val() ?? "")
+        .split("/").map(x => resolveKey(x)).filter(Boolean);
       preconditions.push({
         type:       "buffCompare",
         target:     $r.find(".cond-target").val() || "self",
-        buff:       resolveKey($r.find(".cond-buff").val()),
+        buff:       cmpKeys[0] ?? "",
+        buffs:      cmpKeys,
         buffCustom: "",
         compareDim: $r.find(".cond-cmp-dim").val() || "stacks",
         comparison: $r.find(".cond-stacks-cmp").val() || "eq",
