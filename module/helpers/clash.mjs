@@ -1571,10 +1571,15 @@ export class ClashManager {
           // 如"目标每有 8 级【烧伤】"实际指的是强度而非层数，需按强度计算倍数。
           // 维度≥ N（N = pre.stacks）才满足，倍数 = floor(当前值 / N)，可选上限 maxTimes。
           // 注：不再额外检查"强度≥"门槛——"每"只关心倍数怎么算，不需要"拥有"式的额外强度阈值。
+          // 【多条 BUFF 求和】与【比较值】同一套写法：BUFF 栏用 / 分隔可填多条，
+          // 倍数按它们的和算（「每拥有【流血】与【烧伤】强度之和 4 级」）。
+          // 一条都没挂时不成立；挂了其中一条时缺的那条按 0 计入和。
           const dim  = pre.perNDim === "intensity" ? "intensity" : "stacks";
           const n    = Math.max(1, pre.stacks ?? 1);
-          if (!buff) { precondFail = true; break; }
-          const haveVal = dim === "intensity" ? (buff.intensity ?? 0) : (buff.stacks ?? 0);
+          const perBuffs = ClashManager._preBuffKeys(pre)
+            .map(k => (precTgt ? ClashManager._getBuff(precTgt, k) : null));
+          if (!perBuffs.some(Boolean)) { precondFail = true; break; }
+          const haveVal = perBuffs.reduce((s, b) => s + (b?.[dim] ?? 0), 0);
           if (haveVal < n) { precondFail = true; break; }
           let times = Math.floor(haveVal / n);
           if ((pre.maxTimes ?? 0) > 0) times = Math.min(times, pre.maxTimes);
@@ -6683,7 +6688,13 @@ export class ClashManager {
       return `${who}拥有${q.length ? ` ${q.join("／")}` : ""}【${bn}】`;
     }
     if (t === "noBuff")      return `${who}未拥有【${bn}】`;
-    if (t === "perN")        return `${who}每 ${pre.stacks ?? 1} ${pre.perNDim === "intensity" ? "级" : "层"}【${bn}】`;
+    if (t === "perN") {
+      const ns  = ClashManager._preBuffKeys(pre).map(k => ClashManager._buffLabel(k));
+      const lbl = ns.length > 1 ? `${ns.map(n => `【${n}】`).join("与")}之和`
+                                : `【${ns[0] ?? bn}】`;
+      const cap = (pre.maxTimes ?? 0) > 0 ? `（最多 ${pre.maxTimes} 次）` : "";
+      return `${who}每 ${pre.stacks ?? 1} ${pre.perNDim === "intensity" ? "级" : "层"}${lbl}${cap}`;
+    }
     if (t === "buffCompare") {
       const names = ClashManager._preBuffKeys(pre).map(k => ClashManager._buffLabel(k));
       const label = names.length > 1 ? `${names.map(n => `【${n}】`).join("与")}之和`
