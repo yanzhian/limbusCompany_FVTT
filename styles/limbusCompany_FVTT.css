@@ -10309,8 +10309,10 @@ input.item-piles-quantity {
 
 /* ══ 网格图块：名称与数量都浮在图上 ══ */
 /* 图铺满格子，名称左上、数量右下，两个都是 absolute，不参与 flex 布局，
-   所以加不加它们都不会把图挤小。×1 没有信息量，只有「可堆叠且 >1」才画。 */
-.limbuscompany .cg-tile-name {
+   所以加不加它们都不会把图挤小。×1 没有信息量，只有「可堆叠且 >1」才画。
+   两条都必须带 .cg-item-tile：上面那条 `.cg-item-tile > * { position: relative }`
+   权重是 (0,2,0)，选择器写短了会被它按回文档流，数量就掉到图片下面去。 */
+.limbuscompany .cg-item-tile .cg-tile-name {
   display: block;
   position: absolute;
   left: 2px; top: 1px; right: 2px;
@@ -10326,7 +10328,8 @@ input.item-piles-quantity {
   z-index: 2;
 }
 
-.cg-tile-qty {
+.limbuscompany .cg-item-tile .cg-tile-qty {
+  position: absolute;
   bottom: 1px; right: 2px;
   font-size: 0.72rem;
   font-weight: bold;
@@ -10337,4 +10340,4 @@ input.item-piles-quantity {
 
 /* 商人图块底部有价格条，图标得给它让位 */
 .limbuscompany .mc-tile .cg-tile-icon { width: 84%; height: 84%; margin-bottom: 10px; }
-.limbuscompany .mc-tile .cg-tile-name { top: 12px; }   /* 顶上是数量角标 mc-qty */
+.limbuscompany .cg-item-tile.mc-tile .cg-tile-name { top: 12px; }   /* 顶上是数量角标 mc-qty */
