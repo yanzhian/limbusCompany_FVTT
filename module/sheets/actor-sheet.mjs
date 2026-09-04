@@ -129,8 +129,11 @@ export class LimbusActorSheet extends ActorSheet {
       .filter(b => b.type === type)
       .reduce((s, b) => s + (b.stacks ?? 0), 0);
 
-    const buffAtkMod   = bStacks("atkLevelUp") - bStacks("atkLevelDown");
-    const buffDefMod   = bStacks("defLevelUp")  - bStacks("defLevelDown");
+    // 自定义 BUFF（如【复仇账簿】）对攻防等级的修正
+    const customLv = ClashManager._customLevelMod(actor);
+
+    const buffAtkMod   = bStacks("atkLevelUp") - bStacks("atkLevelDown") + customLv.atk;
+    const buffDefMod   = bStacks("defLevelUp")  - bStacks("defLevelDown") + customLv.def;
     const buffSpeedMod = bStacks("swift")        - bStacks("bind");
 
     context.atkTotal = (system.atk.base ?? 0) + (system.atk.extra ?? 0) + equipAdj.atk + buffAtkMod;

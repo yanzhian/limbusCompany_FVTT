@@ -368,6 +368,24 @@ export class ClashManager {
     return { intensity: b?.intensity ?? 0, stacks: b?.stacks ?? 0 };
   }
 
+  /**
+   * 自定义 BUFF 对攻击/防御等级的修正合计。
+   * 钩子签名：modifyLevels(actor, buff) → { atk, def }（两者均可省略）
+   */
+  static _customLevelMod(actor) {
+    const out = { atk: 0, def: 0 };
+    // 只统计"本回合"生效的 BUFF，与 _getBuff 的口径一致
+    const buffs = (actor?.system?.buffs ?? []).filter(b => b.whenAdded !== "下回合");
+    for (const buff of buffs) {
+      const handler = resolveBuffHandler(buff);
+      if (typeof handler?.modifyLevels !== "function") continue;
+      const r = handler.modifyLevels(actor, buff) ?? {};
+      out.atk += Number(r.atk ?? 0);
+      out.def += Number(r.def ?? 0);
+    }
+    return out;
+  }
+
   /** 有效攻击等级（含装备 atkAdj + atk.extra + BUFF 层数） */
   static _effAtkLv(actor) {
     if (!actor) return 0;
@@ -378,7 +396,8 @@ export class ClashManager {
       .reduce((s, eq) => s + Number(eq.system?.atkAdj ?? 0), 0);
     const gs = (t) => ClashManager._getBuffVal(actor, t).stacks;
     return (sys.atk?.base ?? 0) + (sys.atk?.extra ?? 0) + equipAdj
-         + gs("atkLevelUp") - gs("atkLevelDown");
+         + gs("atkLevelUp") - gs("atkLevelDown")
+         + ClashManager._customLevelMod(actor).atk;
   }
 
   /** 有效防御等级（含装备 defAdj + def.extra + BUFF 层数） */
@@ -391,7 +410,8 @@ export class ClashManager {
       .reduce((s, eq) => s + Number(eq.system?.defAdj ?? 0), 0);
     const gs = (t) => ClashManager._getBuffVal(actor, t).stacks;
     return (sys.def?.base ?? 0) + (sys.def?.extra ?? 0) + equipAdj
-         + gs("defLevelUp") - gs("defLevelDown");
+         + gs("defLevelUp") - gs("defLevelDown")
+         + ClashManager._customLevelMod(actor).def;
   }
 
   /**
