@@ -355,8 +355,9 @@ export class MerchantData extends foundry.abstract.TypeDataModel {
         height: new fields.NumberField({ required: true, integer: true, min: 1, max: 20, initial: 8 }),
       }),
       // 货架摆放记录，格式与营地仓库 warehouseContents 一致（buildPlacementGrid 直接吃）
-      // 多一个 price：**这一件商品的原价**，与物品自身的 system.price 解耦——
+      // 多一个 price：**这一件商品的原价**，与物品自身的 system.cost 解耦——
       // 同一件物品在不同商人那里可以卖不同价，玩家卖过来的东西也不该改写原物品。
+      // 上架时由 baseCostOf(item) 取 system.cost 作为初值，之后各商人各改各的。
       shelfContents: new fields.ArrayField(
         new fields.SchemaField({
           uuid:    new fields.StringField({ required: true, initial: "" }),
