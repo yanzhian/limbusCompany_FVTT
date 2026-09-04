@@ -14,6 +14,11 @@ import {
   listAvailableColumns,
   UPDATE_FLAG,
 } from "../helpers/csv-import.mjs";
+import {
+  clearAssetIndex,
+  fillMissingImages,
+  fillMissingImagesForUpdates,
+} from "../helpers/asset-lookup.mjs";
 
 const PREVIEW_ROWS = 8;
 
@@ -262,12 +267,20 @@ export class CSVImportDialog extends Application {
       updates.push({ doc: hits[0], data });
     }
 
+    // ── 没填「图片」列的，按物品名去 assets/ 里捞一张同名图 ──
+    // 覆盖的那批只在原物品还是默认图标时才补，玩家自己换过的图不动。
+    clearAssetIndex();
+    const imgFilled = (await fillMissingImages(toCreate))
+                    + (await fillMissingImagesForUpdates(updates));
+
     const lines = [];
     if (toCreate.length) lines.push(`新建 <b>${toCreate.length}</b> 个`);
     if (updates.length)  lines.push(`覆盖 <b>${updates.length}</b> 个已有物品`);
     const ok = await Dialog.confirm({
       title:   "确认批量导入",
       content: `<p>目标：<b>${targetLabel}</b></p><p>${lines.join("，")}。</p>`
+             + (imgFilled
+                 ? `<p style="color:#8a9a5b">已按物品名自动匹配到 <b>${imgFilled}</b> 张图片。</p>` : "")
              + (updates.length
                  ? `<p style="color:#b06a4a">覆盖会按表格重写这些物品的字段，`
                    + `但<b>不会</b>动它们的激活效果。</p>` : "")
