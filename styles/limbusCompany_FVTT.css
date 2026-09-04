@@ -10307,18 +10307,34 @@ input.item-piles-quantity {
 }
 
 
-/* ══ 网格图块：只留图 + 右下角数量 ══ */
-/* 名称由 Title 卡承担，格子里不再重复；×1 也没有信息量，只有「可堆叠且 >1」才画角标 */
-.limbuscompany .cg-tile-name { display: none; }
-
-.cg-tile-qty {
-  font-size: 0.72rem;
-  font-weight: bold;
-  padding: 0 3px;
-  border-radius: 2px;
-  background: rgba(0, 0, 0, .62);
-  text-shadow: 0 1px 2px rgba(0, 0, 0, .8);
+/* ══ 网格图块：名称与数量都浮在图上 ══ */
+/* 图铺满格子，名称左上、数量右下，两个都是 absolute，不参与 flex 布局，
+   所以加不加它们都不会把图挤小。×1 没有信息量，只有「可堆叠且 >1」才画。 */
+.limbuscompany .cg-tile-name {
+  display: block;
+  position: absolute;
+  left: 2px; top: 1px; right: 2px;
+  font-size: 0.62rem;
+  line-height: 1.15;
+  text-align: left;
+  color: #E8CAA1;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, .9), 0 0 3px rgba(0, 0, 0, .8);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 2;
 }
 
-/* 商人图块底部有价格条、顶部有数量角标，图标得给它们让位 */
-.limbuscompany .mc-tile .cg-tile-icon { width: 78%; height: 78%; margin-bottom: 10px; }
+.cg-tile-qty {
+  bottom: 1px; right: 2px;
+  font-size: 0.72rem;
+  font-weight: bold;
+  color: #E8CAA1;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, .9), 0 0 3px rgba(0, 0, 0, .8);
+  z-index: 2;
+}
+
+/* 商人图块底部有价格条，图标得给它让位 */
+.limbuscompany .mc-tile .cg-tile-icon { width: 84%; height: 84%; margin-bottom: 10px; }
+.limbuscompany .mc-tile .cg-tile-name { top: 12px; }   /* 顶上是数量角标 mc-qty */

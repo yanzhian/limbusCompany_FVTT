@@ -72,6 +72,7 @@
                  draggable="true"
                  title="{{#if masked}}？？？（双击揭晓）{{else}}{{item.name}}（双击拾取，右键菜单）{{/if}}">
               <img src="{{item.img}}" class="cg-tile-icon" alt="{{item.name}}">
+              <span class="cg-tile-name">{{item.name}}</span>
               {{#if showQty}}<span class="cg-tile-qty">×{{item.quantity}}</span>{{/if}}
               {{#if (and ../isGM ../editUnlocked)}}
               {{/if}}
