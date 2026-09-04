@@ -10293,3 +10293,14 @@ input.item-piles-quantity {
   margin-right: 6px;
   color: #c9a84c;
 }
+
+/* ══ 技能 Title 卡·标题条：只留 名称 + 训练等级 ══ */
+/* 罪孽底色深浅不一，白字经常糊掉，给名称描一圈黑边。
+   --tc-name-stroke 就是那个旋钮，想粗想细改这一处即可。 */
+.limbus-title-card-skill .tc-header { --tc-name-stroke: 1px; }
+.limbus-title-card-skill .tc-header .tc-name {
+  color: #fff;
+  -webkit-text-stroke: var(--tc-name-stroke) #000;
+  paint-order: stroke fill;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, .55);
+}

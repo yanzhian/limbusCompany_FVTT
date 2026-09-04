@@ -2515,16 +2515,11 @@ function _buildSkillTitleCard(item, formOverride = null) {
 
   const ICON = "systems/limbusCompany_FVTT/assets/icons/Base_icon/";
 const sinColor    = cfg.SIN_COLORS?.[sys.sinType] ?? "#5F3E21";
-  const sinIcon     = cfg.SIN_ICON_PATHS?.[sys.sinType] ?? "";
-  const sinLabel    = cfg.SIN_LABELS_ZH?.[sys.sinType] ?? "";
   const stellarCost = item.getStellarCost?.() ?? sys.stellarCost ?? 0;
   const tags = (Array.isArray(sys.tags) ? sys.tags : String(sys.tags ?? "").split("/"))
     .map(t => String(t).trim()).filter(Boolean);
   const weightCount = Number(sys.weight ?? 0);
   const descText    = linkifyHtml(sys.effectDesc ?? sys.description ?? "");
-
-  // 等级：基础/守备写 Lv.N，EGO 写评级（ZAYIN…）
-  const lvText = sys.type === "ego" ? (sys.egoDiceRating ?? "") : `Lv.${sys.level ?? 1}`;
 
   // 训练等级徽章：基础/守备技能才有（E.G.O 走觉醒/侵蚀）。素材缺失时退回罗马数字。
   const trainLv = sys.type === "ego" ? 0 : (sys.trainLevel ?? 3);
@@ -2572,15 +2567,13 @@ const sinColor    = cfg.SIN_COLORS?.[sys.sinType] ?? "#5F3E21";
         + `${ic ? `<img src="${ic}" alt="">` : ""}${r.multiplier}</span>`;
     });
 
-  // 排版：名称+等级+罪孽图标 → 分类·骰式·骰型（类型图标靠右）→ 攻击容量 →
+  // 排版：名称+训练等级（等级/罪孽在别处能看到，标题条不再重复）→ 分类·骰式·骰型（类型图标靠右）→ 攻击容量 →
   //       标记 → 消耗 → 抗性 → 武器限制 → 标签 → 金线 → 描述 → 金线 → 页脚
   // 没填的字段整块不渲染，空技能卡不会留下一堆空行
   const card = _wireCardInteractivity($(`<div class="limbus-title-card limbus-title-card-skill"
        data-ego-form="${useCor ? "corrode" : "awaken"}">
     <div class="tc-header" style="background:${sinColor}">
       <span class="tc-name">${item.name}</span>
-      ${lvText ? `<span class="tc-lv">${lvText}</span>` : ""}
-      ${sinIcon ? `<img src="${sinIcon}" class="tc-sin-ic" alt="${sinLabel}" title="${sinLabel}">` : ""}
       ${trainIcoHtml}
     </div>
     <div class="tcs-row">
