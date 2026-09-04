@@ -40,8 +40,7 @@
                    draggable="true"
                    title="{{name}}（拖入仓库存放，双击查看）">
                 <img src="{{img}}" class="cg-tile-icon" alt="{{name}}">
-                <span class="cg-tile-name">{{name}}</span>
-                {{#if quantity}}<span class="cg-tile-qty">×{{quantity}}</span>{{/if}}
+                {{#if showQty}}<span class="cg-tile-qty">×{{quantity}}</span>{{/if}}
               </div>
             {{/each}}
           </div>
@@ -99,8 +98,7 @@
                  draggable="true"
                  title="{{item.name}}（右键取出）">
               <img src="{{item.img}}" class="cg-tile-icon" alt="{{item.name}}">
-              <span class="cg-tile-name">{{item.name}}</span>
-              {{#if item.quantity}}<span class="cg-tile-qty">×{{item.quantity}}</span>{{/if}}
+              {{#if showQty}}<span class="cg-tile-qty">×{{item.quantity}}</span>{{/if}}
             </div>
           {{/each}}
 

@@ -4222,7 +4222,8 @@ body.cg-dragging-active .limbuscompany .cg-item-tile:hover {
 
 /* 图标：填满格子 70% */
 .limbuscompany .cg-tile-icon {
-  width: 70%; height: 70%;
+  /* 名称标签去掉之后，图标可以铺满整格（留一点内缩免得贴到稀有度描边上） */
+  width: 92%; height: 92%;
   object-fit: contain;
   pointer-events: none;
   flex-shrink: 0;
@@ -10304,3 +10305,20 @@ input.item-piles-quantity {
   paint-order: stroke fill;
   text-shadow: 0 1px 2px rgba(0, 0, 0, .55);
 }
+
+
+/* ══ 网格图块：只留图 + 右下角数量 ══ */
+/* 名称由 Title 卡承担，格子里不再重复；×1 也没有信息量，只有「可堆叠且 >1」才画角标 */
+.limbuscompany .cg-tile-name { display: none; }
+
+.cg-tile-qty {
+  font-size: 0.72rem;
+  font-weight: bold;
+  padding: 0 3px;
+  border-radius: 2px;
+  background: rgba(0, 0, 0, .62);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, .8);
+}
+
+/* 商人图块底部有价格条、顶部有数量角标，图标得给它们让位 */
+.limbuscompany .mc-tile .cg-tile-icon { width: 78%; height: 78%; margin-bottom: 10px; }
