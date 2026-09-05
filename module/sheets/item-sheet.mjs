@@ -1711,8 +1711,9 @@ export class LimbusItemSheet extends ItemSheet {
     const sourceActor = dropped?.parent ?? null;
 
     // 同一角色背包内的技能：仅存引用，不复制不删除
+    // 允许同一张技能重复收录——一本书可以放 3 份【鹤斩】（份数即重复条目，
+    // 槽位按下标渲染，各占一格）。CSV 的「技能」列同样按份数写入，两边口径一致。
     if (dropped && bookActor && sourceActor && sourceActor.id === bookActor.id) {
-      if (skills.some(s => s.uuid === dropped.uuid)) return void ui.notifications.warn("该技能已在技能书中。");
       skills.push({ uuid: dropped.uuid, itemData: null });
       return void await this.item.update({ "system.skills": skills });
     }
