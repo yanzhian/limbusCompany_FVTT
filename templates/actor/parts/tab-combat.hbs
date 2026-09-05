@@ -17,10 +17,12 @@
       <ul class="buff-list">
         {{#each buffs}}
           <li class="buff-row {{#if (eq whenAdded '下回合')}}buff-row--next-turn{{/if}}"
-              data-buff-id="{{id}}">
+              data-buff-id="{{id}}"
+              title="{{name}}{{#if description}}&#13;&#13;{{description}}{{/if}}">
             <span class="buff-col-icon">
               {{#if icon}}
-                <img src="{{icon}}" width="16" height="16" alt="{{name}}">
+                <img src="{{icon}}" width="16" height="16" alt="{{name}}"
+                     title="{{name}}{{#if description}}&#13;&#13;{{description}}{{/if}}">
               {{else}}
                 <span class="buff-icon-placeholder"></span>
               {{/if}}
@@ -78,8 +80,6 @@
             <div class="combat-slot-name"></div>
             {{!-- 激活/预备状态指示点 --}}
             <div class="slot-state-dot"></div>
-            {{!-- 相关技能切换按钮（有绑定相关技能时才显示） --}}
-            <button class="combat-skill-related-toggle" style="display:none" title="切换相关技能">↺</button>
           </div>
         {{/each}}
       </div>
@@ -105,7 +105,6 @@
                  title="{{#if item}}{{item.name}}{{else}}{{grade}}{{/if}}">
               <img src="{{skillImg}}" class="combat-skill-img" alt="{{grade}}">
             </div>
-            <button class="combat-skill-related-toggle{{#unless hasRelated}} hidden{{/unless}}" title="切换相关技能">↺</button>
           </div>
         {{/each}}
 
@@ -119,7 +118,6 @@
                title="{{#if defenseSkill.item}}{{defenseSkill.item.name}}{{else}}守备技能{{/if}}">
             <img src="{{defenseSkill.skillImg}}" class="combat-skill-img" alt="守备">
           </div>
-          <button class="combat-skill-related-toggle" style="display:none" title="切换相关技能">↺</button>
         </div>
 
       </div>{{!-- /combat-skill-slots-row --}}
@@ -130,8 +128,8 @@
     <div class="combat-section ap-initiative-section">
       <div class="combat-section-header">
         <span class="combat-section-title">行动值 / 先攻</span>
-        <button class="ap-reset-btn" title="恢复行动点至上限">重置</button>
-        <button class="ap-clear-btn" title="清零所有行动点">清除</button>
+        <button class="ap-reset-btn" title="恢复行动值至默认值（3）">重置</button>
+        <button class="ap-clear-btn" title="清零行动值">清除</button>
         <button class="roll-initiative-btn" title="骰掷先攻：1D6 + 敏捷">骰掷先攻</button>
       </div>
       <div class="ap-initiative-row">
@@ -140,7 +138,7 @@
           {{#each apCoins}}
             <div class="ap-coin {{#if active}}ap-coin-active{{else}}ap-coin-inactive{{/if}}"
                  data-index="{{index}}"
-                 title="行动点 {{index}}">
+                 title="行动值 {{index}}（拼点失败时消耗，为 0 时再失败即受到伤害）">
               <img src="{{#if active}}systems/limbusCompany_FVTT/assets/icons/Base_icon/硬币_正面.webp{{else}}systems/limbusCompany_FVTT/assets/icons/Base_icon/硬币_反面.webp{{/if}}"
                    width="36" height="36" alt="AP">
             </div>
@@ -177,6 +175,48 @@
         {{/each}}
       </div>
     </div>{{!-- /sin-resist-section --}}
+
+    {{!-- 恐慌类型区 --}}
+    <div class="combat-section panic-type-section">
+      <div class="combat-section-header">
+        <span class="combat-section-title">恐慌类型</span>
+      </div>
+      <div class="panic-slot-row">
+        {{#each panicSlots}}
+          <div class="panic-slot-group">
+            <span class="panic-slot-label">{{label}}</span>
+            <div class="panic-slot {{#if item}}panic-slot-filled{{/if}}"
+                 data-slot="{{key}}"
+                 title="{{#if item}}{{item.name}}（双击查看，右键移除）{{else}}拖入恐慌卡{{/if}}">
+              {{#if item}}
+                <img src="{{item.img}}" alt="{{item.name}}">
+              {{/if}}
+            </div>
+          </div>
+        {{/each}}
+
+        <span class="panic-counter-sep">｜</span>
+
+        {{!-- 恐慌计数：左 3-2-1 红（恐慌），右 1-2-3 蓝（坚定） --}}
+        <div class="panic-counter-row" title="回合结束理智≤10自动鉴定；点击圆点可手动调整（点亮3立即触发）">
+          <span class="panic-counter-label">恐慌</span>
+          <span class="panic-counter-dot panic-counter-fear {{#if (lte 3 panicCounters.fear)}}lit{{/if}} {{#unless canEditPanicCounters}}readonly{{/unless}}"
+                data-side="fear" data-index="3"></span>
+          <span class="panic-counter-dot panic-counter-fear {{#if (lte 2 panicCounters.fear)}}lit{{/if}} {{#unless canEditPanicCounters}}readonly{{/unless}}"
+                data-side="fear" data-index="2"></span>
+          <span class="panic-counter-dot panic-counter-fear {{#if (lte 1 panicCounters.fear)}}lit{{/if}} {{#unless canEditPanicCounters}}readonly{{/unless}}"
+                data-side="fear" data-index="1"></span>
+          <span class="panic-counter-mid"></span>
+          <span class="panic-counter-dot panic-counter-resolve {{#if (lte 1 panicCounters.resolve)}}lit{{/if}} {{#unless canEditPanicCounters}}readonly{{/unless}}"
+                data-side="resolve" data-index="1"></span>
+          <span class="panic-counter-dot panic-counter-resolve {{#if (lte 2 panicCounters.resolve)}}lit{{/if}} {{#unless canEditPanicCounters}}readonly{{/unless}}"
+                data-side="resolve" data-index="2"></span>
+          <span class="panic-counter-dot panic-counter-resolve {{#if (lte 3 panicCounters.resolve)}}lit{{/if}} {{#unless canEditPanicCounters}}readonly{{/unless}}"
+                data-side="resolve" data-index="3"></span>
+          <span class="panic-counter-label">坚定</span>
+        </div>
+      </div>
+    </div>{{!-- /panic-type-section --}}
 
   </div>{{!-- /combat-skills-panel --}}
 

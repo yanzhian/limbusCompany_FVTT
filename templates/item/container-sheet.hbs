@@ -36,6 +36,17 @@
           {{/if}}
         </div>
 
+        {{!-- 类型 + 分类 --}}
+        <div class="equip-type-row">
+          <span class="equip-subtype-label">容器</span>
+          {{#if (and isEditable (not isLocked))}}
+            <input type="text" name="system.category" value="{{system.category}}" class="equip-category-input" placeholder="分类"/>
+          {{else}}
+            <span class="equip-sep">　</span>
+            <span class="equip-category">{{system.category}}</span>
+          {{/if}}
+        </div>
+
         {{!-- 内部容量（网格尺寸） --}}
         <div class="container-size-row">
           <span class="container-size-label">内部容量</span>
@@ -57,6 +68,25 @@
           <span class="container-avail-unit">格可用</span>
         </div>
 
+        {{!-- 存放限制：类型 AND 分类，留空 = 不限制（多个用 / 分隔）
+              锁定态下两条都为空时整行隐藏，不占版面 --}}
+        {{#if (or (and isEditable (not isLocked)) system.allowTypes system.allowCategories)}}
+        <div class="container-limit-row">
+          <span class="container-limit-label">存放限制</span>
+          {{#if (and isEditable (not isLocked))}}
+            <input type="text" name="system.allowTypes" value="{{system.allowTypes}}"
+                   class="container-limit-input" placeholder="类型"
+                   title="存放限制·类型：留空=不限制，多个用 / 分隔（消耗品/材料）"/>
+            <input type="text" name="system.allowCategories" value="{{system.allowCategories}}"
+                   class="container-limit-input" placeholder="分类"
+                   title="存放限制·分类：留空=不限制，多个用 / 分隔（医疗/食材）"/>
+          {{else}}
+            {{#if system.allowTypes}}<span class="container-limit-badge">{{system.allowTypes}}</span>{{/if}}
+            {{#if system.allowCategories}}<span class="container-limit-badge">{{system.allowCategories}}</span>{{/if}}
+          {{/if}}
+        </div>
+        {{/if}}
+
       </div>
     </div>
 
@@ -64,7 +94,7 @@
     <div class="item-tags-row">
       <div class="tags-area">
         {{#if (and isEditable (not isLocked))}}
-          <input type="text" name="system.tags" value="{{system.tags}}" class="tags-input" placeholder="标签1/标签2"/>
+          <input type="text" name="system.tags" value="{{join system.tags '/'}}" class="tags-input" placeholder="标签1/标签2"/>
         {{else}}
           {{#each (split system.tags '/')}}
             <span class="tag">{{trim this}}</span>
@@ -87,6 +117,24 @@
           <input type="number" name="system.cost" value="{{system.cost}}" class="cost-input" min="0"/>
         {{else}}
           <span class="cost-display">{{system.cost}}</span>
+        {{/if}}
+      </div>
+      {{!-- 稀有度：只管战利品随机池权重与网格光晕，不参与定价 --}}
+      <div class="item-rarity-group rarity-{{system.rarity}}">
+        <span class="rarity-dot"></span>
+        {{#if (and isEditable (not isLocked))}}
+          <select name="system.rarity" class="rarity-select">
+            {{!-- v13 移除了内置的 select 块助手：助手不存在时整块被当成假值跳过，
+                  下拉里一个 option 都不会渲染（表现就是"选不了也存不上"）。
+                  改用本系统自己注册的 eq 助手逐个标 selected。 --}}
+            <option value="common"   {{#eq system.rarity "common"}}selected{{/eq}}>平装</option>
+            <option value="fine"     {{#eq system.rarity "fine"}}selected{{/eq}}>精良</option>
+            <option value="epic"     {{#eq system.rarity "epic"}}selected{{/eq}}>史诗</option>
+            <option value="artistic" {{#eq system.rarity "artistic"}}selected{{/eq}}>艺术</option>
+            <option value="mythic"   {{#eq system.rarity "mythic"}}selected{{/eq}}>神话</option>
+          </select>
+        {{else}}
+          <span class="rarity-display">{{rarityLabel}}</span>
         {{/if}}
       </div>
     </div>
@@ -112,7 +160,7 @@
 
       {{!-- 物品图块（按 w×h 跨格）--}}
       {{#each placedItems}}
-        <div class="cg-item-tile {{#unless show}}cg-hidden{{/unless}}"
+        <div class="cg-item-tile rarity-{{rarity}} {{#unless show}}cg-hidden{{/unless}}"
              style="grid-column:{{col}} / span {{w}}; grid-row:{{row}} / span {{h}}"
              data-placement-idx="{{idx}}"
              data-item-uuid="{{uuid}}"
@@ -121,7 +169,7 @@
              title="{{item.name}}">
           <img src="{{item.img}}" class="cg-tile-icon" alt="{{item.name}}">
           <span class="cg-tile-name">{{item.name}}</span>
-          <button type="button" class="cg-rotate-btn" data-placement-idx="{{idx}}" title="旋转">↻</button>
+          {{#if showQty}}<span class="cg-tile-qty">×{{item.quantity}}</span>{{/if}}
         </div>
       {{/each}}
 

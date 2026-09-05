@@ -8,6 +8,8 @@
  * 快捷键：Z = 切换队伍1，X = 切换队伍2（在 limbusCompany_FVTT.mjs 注册）
  */
 
+import { attachReadySparkle, clearReadySparkles, readySkillIds } from "../helpers/ready-sparkle.mjs";
+
 const BUFF_ICON_BASE = "systems/limbusCompany_FVTT/assets/icons/Buff_icon/";
 const BUFF_ICON_MAP  = {
   strong:        "强壮.webp",        weak:          "虚弱.webp",
@@ -134,9 +136,8 @@ export class SquadHUD extends Application {
       // 理智颜色阶段
       const sanClass = sanVal <= 5 ? "san-panic" : sanVal <= 20 ? "san-low" : "san-normal";
 
-      // AP 硬币（最多3个）
-      const apMax   = sys.ap?.max ?? 3;
-      const apCoins = Array.from({ length: apMax }, (_, i) => ({ active: i < apVal }));
+      // AP 硬币（行动值无上限，至少画 3 个）
+      const apCoins = Array.from({ length: Math.max(3, apVal) }, (_, i) => ({ active: i < apVal }));
 
       // BUFF（只显示本回合有效的）
       const buffs = (sys.buffs ?? [])
@@ -205,6 +206,14 @@ export class SquadHUD extends Application {
 
   activateListeners(html) {
     super.activateListeners(html);
+
+    // ── 【大招就绪】星芒：谁的强化形态已经换上槽位，就在谁的头像上闪 ───────
+    clearReadySparkles(html);
+    html.find(".squad-avatar").each((_, img) => {
+      const id    = img.closest(".squad-member")?.dataset?.actorId;
+      const actor = id ? game.actors?.get(id) : null;
+      if (actor && readySkillIds(actor).size) attachReadySparkle(img);
+    });
 
     // 标题栏拖动
     html.find(".squad-header").on("mousedown", (e) => {

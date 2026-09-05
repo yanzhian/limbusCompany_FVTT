@@ -49,9 +49,22 @@ export class GMConsole extends Application {
     );
     // 长休勾选项
     this._lrOpts = { hp: true, sanity: true, ap: true, chaos: true, buffs: true };
+    // 展开着的文件夹名（默认全部折叠）/ 搜索词
+    this._expanded = new Set();
+    this._search    = "";
   }
 
   /* ─── 数据准备 ───────────────────────────────────────────────────── */
+
+  /** 角色所在文件夹的完整路径名（"外勤组 / 第二小队"），无文件夹则 null */
+  static _folderPath(actor) {
+    let f = actor.folder;
+    if (!f) return null;
+    const parts = [];
+    let guard = 0;
+    while (f && guard++ < 20) { parts.unshift(f.name); f = f.folder; }
+    return parts.join(" / ");
+  }
 
   getData() {
     // 列表：仓库中所有 character 角色 + 手动拖入但不在全局列表里的角色
@@ -65,15 +78,35 @@ export class GMConsole extends Application {
       .map(id => game.actors.get(id))
       .filter(Boolean);
 
-    const actors = [...allChars, ...extra].map(a => ({
-      id:       a.id,
-      name:     a.name,
-      img:      a.img,
-      selected: this._selectedIds.has(a.id),
-    }));
+    const actors = [...allChars, ...extra]
+      .map(a => ({
+        id:       a.id,
+        name:     a.name,
+        img:      a.img,
+        selected: this._selectedIds.has(a.id),
+        folder:   GMConsole._folderPath(a) ?? "未分类",
+      }));
+
+    // 按文件夹分组（未分类永远排最后）
+    const byFolder = new Map();
+    for (const a of actors) {
+      if (!byFolder.has(a.folder)) byFolder.set(a.folder, []);
+      byFolder.get(a.folder).push(a);
+    }
+    const folders = [...byFolder.entries()]
+      .sort((x, y) => x[0] === "未分类" ? 1 : y[0] === "未分类" ? -1 : x[0].localeCompare(y[0], "zh"))
+      .map(([name, list]) => ({
+        name,
+        key:       name,
+        actors:    list,
+        total:     list.length,
+        chosen:    list.filter(a => a.selected).length,
+        collapsed: !this._expanded.has(name),
+      }));
 
     return {
-      actors,
+      actors, folders,
+      search: this._search ?? "",
       selectedCount: [...this._selectedIds].filter(
         id => game.actors.get(id)?.type === "character"
       ).length,
@@ -105,6 +138,48 @@ export class GMConsole extends Application {
       this.render(false);
     });
 
+    // ── 文件夹折叠 ────────────────────────────────────────────────
+    html.find(".gmc-folder-head").on("click", e => {
+      if ($(e.target).closest(".gmc-folder-btn").length) return;   // 组内按钮不触发折叠
+      const key = e.currentTarget.dataset.folder;
+      if (this._expanded.has(key)) this._expanded.delete(key);
+      else                         this._expanded.add(key);
+      this.render(false);
+    });
+
+    // ── 按文件夹全选 / 清空 ───────────────────────────────────────
+    html.find(".gmc-folder-btn").on("click", e => {
+      e.stopPropagation();
+      const key  = e.currentTarget.closest("[data-folder]")?.dataset.folder;
+      const on   = e.currentTarget.dataset.act === "all";
+      const list = game.actors.filter(a =>
+        a.type === "character" && (GMConsole._folderPath(a) ?? "未分类") === key);
+      for (const a of list) {
+        if (on) this._selectedIds.add(a.id);
+        else    this._selectedIds.delete(a.id);
+      }
+      this.render(false);
+    });
+
+    // ── 搜索角色 ──────────────────────────────────────────────────
+    // 纯 DOM 过滤，不重渲染：重渲染会销毁输入框，中文输入法打一半就断了
+    html.find(".gmc-search").on("input", e => {
+      const q = (e.target.value ?? "").toLowerCase().trim();
+      this._search = e.target.value;
+      html.find(".gmc-folder").each((_, grp) => {
+        let visible = 0;
+        $(grp).find(".gmc-actor-tile").each((_i, tile) => {
+          const hit = !q || (tile.dataset.name ?? "").toLowerCase().includes(q);
+          tile.style.display = hit ? "" : "none";
+          if (hit) visible++;
+        });
+        grp.style.display = visible ? "" : "none";
+        // 搜索时临时展开命中的组（清空搜索词后恢复各自的折叠状态）
+        if (q) grp.classList.remove("gmc-folder-collapsed");
+        else   grp.classList.toggle("gmc-folder-collapsed", !this._expanded.has(grp.dataset.folder));
+      });
+    });
+
     // ── 长休勾选项 ────────────────────────────────────────────────
     html.find(".gmc-lr-cb").on("change", e => {
       const key = e.currentTarget.dataset.key;
@@ -116,6 +191,12 @@ export class GMConsole extends Application {
 
     // ── 分配经验 ──────────────────────────────────────────────────
     html.find(".gmc-btn-xp").on("click", this._onAddXP.bind(this));
+
+    // ── 批量导入物品（CSV / 表格）─────────────────────────────────
+    html.find(".gmc-btn-csv-import").on("click", async () => {
+      const { CSVImportDialog } = await import("./csv-import-dialog.mjs");
+      CSVImportDialog.open();
+    });
 
     // ── 拖放区域：接收侧边栏角色 ──────────────────────────────────
     const drop = html.find(".gmc-drop-zone")[0];

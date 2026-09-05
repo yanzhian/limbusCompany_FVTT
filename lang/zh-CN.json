@@ -12,7 +12,8 @@
       "skill":     "技能",
       "consumable":"消耗品",
       "material":  "材料",
-      "container": "容器"
+      "container": "容器",
+      "skillbook": "技能书"
     },
 
     "Sin": {
@@ -134,7 +135,7 @@
       },
       "Skill": {
         "RelatedSkill":   "相关技能",
-        "Weight":         "加重值",
+        "Weight":         "攻击容量",
         "DiceFormula":    "骰子公式",
         "SinCost":        "罪孽消耗",
         "SanityCost":     "理智消耗",
@@ -155,11 +156,9 @@
       "Equipment": {
         "Subtype":      "子类型",
         "Category":     "分类",
-        "Links":        "链接方向",
         "StellarCost":  "星芒费用",
         "Tags":         "标签",
         "Effect":       "效果描述",
-        "RequiresLink": "需要相互链接",
         "AtkAdj":       "攻击等级修正",
         "DefAdj":       "防御等级修正",
         "SpeedAdj":     "速度修正",
@@ -192,7 +191,6 @@
       "Clear6Bag":        "清除",
       "ResetAP":          "重置",
       "ClearAP":          "清零",
-      "SwitchRelated":    "切换相关技能",
       "InChaos":          "陷入混乱",
       "InPanic":          "陷入恐慌",
       "ChaosThreshold":   "混乱阈值触发",
@@ -247,7 +245,9 @@
       "skill":     { "label": "技能",  "plural": "技能" },
       "consumable":{ "label": "消耗品","plural": "消耗品" },
       "material":  { "label": "材料",  "plural": "材料" },
-      "container": { "label": "容器",  "plural": "容器" }
+      "container": { "label": "容器",  "plural": "容器" },
+      "skillbook": { "label": "技能书","plural": "技能书" },
+      "background": { "label": "背景", "plural": "背景" }
     }
   }
 }

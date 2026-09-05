@@ -56,6 +56,12 @@
       <div class="resource-bar-wrap">
         <div class="resource-bar hp-bar">
           <div class="resource-bar-fill hp-fill" style="width:{{clamp hpPercent 0 100}}%"></div>
+          {{!-- 护盾条：叠加在 HP 末端，青色 --}}
+          {{#if shieldStacks}}
+            <div class="resource-bar-fill shield-fill"
+                 style="width:{{clamp shieldWidth 0 100}}%;left:{{clamp shieldOffset 0 100}}%;">
+            </div>
+          {{/if}}
           {{!-- 混乱阈值刻度线（白色细竖线叠加在血条上） --}}
           {{#each chaosThresholds}}
             <div class="chaos-mark {{#if triggered}}chaos-mark-burned{{/if}}"
@@ -77,6 +83,9 @@
                    class="hp-max editable-field" min="1" disabled/>
           {{else}}
             <span class="hp-max">{{system.hp.max}}</span>
+          {{/if}}
+          {{#if shieldStacks}}
+            <span class="shield-display" title="护盾">🛡{{shieldStacks}}</span>
           {{/if}}
         </div>
       </div>
@@ -153,11 +162,12 @@
     {{!-- D：背景标签（200×25px）+ 玩家名字（200×50px）+ 长休按钮 --}}
     <div class="name-block">
       <div class="name-row-top">
-        {{#if isEditable}}
-          <input type="text" name="system.backgroundTag" value="{{system.backgroundTag}}"
-                 class="bg-tag-input editable-field" placeholder="背景标签" disabled/>
+        {{#if backgroundName}}
+          <span class="bg-tag bg-tag-set" data-action="open-background-item" title="点击查看背景物品">{{backgroundName}}</span>
         {{else}}
-          <span class="bg-tag">{{system.backgroundTag}}</span>
+          <button type="button" class="bg-add-btn" data-action="open-background-wizard" title="选择背景">
+            <i class="fas fa-plus"></i> 添加背景
+          </button>
         {{/if}}
         {{!-- <button class="long-rest-btn" title="长休：重置HP/理智/AP/混乱阈值">长休</button> --}}
       </div>

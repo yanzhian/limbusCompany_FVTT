@@ -7,9 +7,13 @@
       <i class="fas fa-{{#if isLocked}}lock{{else}}lock-open{{/if}}"></i>
     </span>
     <span class="sheet-type-label">技能</span>
-    <button type="button" class="related-skill-toggle" title="展开/折叠相关技能">
-      {{#if relatedExpanded}}▲ 相关{{else}}＋ 相关{{/if}}
-    </button>
+    {{#if isEgo}}
+      {{!-- 右上角 60×25：【觉醒】/【侵蚀】两套数据切换 --}}
+      <span class="ego-form-toggle {{#if isCorrode}}corrode{{else}}awaken{{/if}}"
+            title="切换 EGO 形态（觉醒 / 侵蚀）——两种形态的罪孽消耗与罪孽抗性各自独立">
+        {{egoFormLabel}}
+      </span>
+    {{/if}}
   </div>
 
   {{!-- ── 可滚动主体 ──────────────────────────────────────────────── --}}
@@ -21,13 +25,30 @@
       {{!-- 顶部：图标（100×100 八角形）+ 右侧信息列 --}}
       <div class="equip-header">
 
+        {{!-- 右上角：训练等级（默认Ⅲ / 精通Ⅳ / 强化Ⅴ）。
+              同一张卡挂多阶数值，点击在本卡已有的几阶之间轮转；
+              解锁状态下点最后一阶会以当前数值打底新开一阶，右键删除当前阶。 --}}
+        {{#if showTrainLevel}}
+          <div class="skill-train-badge{{#if trainMulti}} multi{{/if}}{{#unless trainIsBase}} derived{{/unless}}"
+               data-level="{{trainLevel}}"
+               title="训练等级 {{trainNumeral}}{{#if trainMulti}}（本卡有 {{trainLevels.length}} 阶，左键切换）{{/if}}&#10;Shift+左键：新开一阶　右键：删除当前阶">
+            <img src="{{trainIcon}}" alt="{{trainNumeral}}" draggable="false"
+                 onerror="this.closest('.skill-train-badge').classList.add('no-art'); this.remove();">
+            <span class="train-numeral">{{trainNumeral}}</span>
+          </div>
+        {{/if}}
+
         {{!-- 图标 --}}
         <div class="equip-icon-col">
-          <div class="skill-slot-octa skill-icon-big" style="border-color:{{sinColor}}">
+          <div class="skill-slot-octa skill-icon-big {{#if isEgo}}skill-icon-big--ego{{/if}}" style="border-color:{{sinColor}}">
             {{#if isEditable}}
               <img src="{{item.img}}" class="skill-slot-img" data-edit="img" title="更换图标" alt="icon">
             {{else}}
               <img src="{{item.img}}" class="skill-slot-img" alt="icon">
+            {{/if}}
+            {{!-- 罪孽 + 等级边框（EGO 为圆环），叠在图标之上 --}}
+            {{#if skillFrame}}
+              <img src="{{skillFrame}}" class="skill-icon-frame" alt="" draggable="false">
             {{/if}}
           </div>
         </div>
@@ -48,33 +69,81 @@
           <div class="skill-cat-dice-row">
             {{#if (and isEditable (not isLocked))}}
               {{#if isDefense}}
-                <select name="system.category" class="equip-subtype-sel">
+                <select name="{{fpCat}}category" class="equip-subtype-sel">
                   {{#each defenseCategories}}
-                    <option value="{{@key}}" {{#eq @key ../system.category}}selected{{/eq}}>{{this}}</option>
+                    <option value="{{@key}}" {{#eq @key ../form.category}}selected{{/eq}}>{{this}}</option>
                   {{/each}}
                 </select>
               {{else}}
-                <select name="system.category" class="equip-subtype-sel">
+                <select name="{{fpCat}}category" class="equip-subtype-sel">
                   {{#each attackCategories}}
-                    <option value="{{@key}}" {{#eq @key ../system.category}}selected{{/eq}}>{{this}}</option>
+                    <option value="{{@key}}" {{#eq @key ../form.category}}selected{{/eq}}>{{this}}</option>
                   {{/each}}
                 </select>
               {{/if}}
-              <input type="text" name="system.diceFormula" value="{{diceFormulaDisplay}}" class="dice-formula-input" placeholder="1D4+2"/>
+              <input type="text" name="{{fp}}diceFormula" value="{{diceFormulaDisplay}}" class="dice-formula-input" placeholder="1D4+2 或 20-1D8"/>
             {{else}}
-              {{#if system.category}}
-                <img src="{{lookup @root.config.CATEGORY_ICON_PATHS system.category}}" class="category-icon" width="22" height="22" alt="{{system.category}}">
+              {{#if form.category}}
+                <img src="{{lookup @root.config.CATEGORY_ICON_PATHS form.category}}" class="category-icon" width="22" height="22" alt="{{form.category}}">
               {{/if}}
               <span class="dice-formula-display">{{diceFormulaDisplay}}</span>
+              {{#if (eq system.diceType "unbreakable")}}
+                <span class="dice-type-badge unbreakable-badge">不可摧毁</span>
+              {{/if}}
+              {{#if system.noEquip}}
+                <span class="dice-type-badge no-equip-badge">无法装备</span>
+              {{/if}}
+              {{#if system.coverDefense}}
+                <span class="dice-type-badge cover-defense-badge">援护防御</span>
+              {{/if}}
+              {{#if system.noClash}}
+                <span class="dice-type-badge no-clash-badge">无法拼点</span>
+              {{/if}}
+              {{#if form.indiscriminate}}
+                <span class="dice-type-badge indiscriminate-badge">无差别攻击</span>
+              {{/if}}
             {{/if}}
           </div>
+
+          {{!-- 解锁时：骰子类型与各种标记单独占一行，免得把骰子公式挤没了；
+                锁上后它们会以徽章形式回到上面那一行 --}}
+          {{#if (and isEditable (not isLocked))}}
+            <div class="skill-flag-row">
+              {{#unless isDefense}}
+                <select name="{{fpDice}}diceType" class="equip-subtype-sel dice-type-sel" title="骰子类型">
+                  <option value="normal"      {{#eq system.diceType "normal"}}selected{{/eq}}>一般骰子</option>
+                  <option value="unbreakable" {{#eq system.diceType "unbreakable"}}selected{{/eq}}>不可摧毁</option>
+                </select>
+              {{/unless}}
+              {{!-- 无法装备：衍生技能专用，只能由【相关技能转换】换上场 --}}
+              <label class="no-equip-toggle" title="衍生技能：无法直接装备，只能通过【相关技能转换】替换上场">
+                <input type="checkbox" name="{{fpDice}}noEquip" {{#if system.noEquip}}checked{{/if}}>
+                无法装备
+              </label>
+              {{!-- 援护防御：队友被锁定且行动值为 0 时，可用本技能顶上去接下对抗 --}}
+              <label class="no-equip-toggle" title="【援护防御】专属技能：队友被锁定为目标且行动值为 0 时，可用它替队友接下这次对抗">
+                <input type="checkbox" name="{{fpDice}}coverDefense" {{#if system.coverDefense}}checked{{/if}}>
+                援护防御
+              </label>
+              {{!-- 无法拼点：被锁定的目标只能【承受】，连守备技能都不能对抗 --}}
+              <label class="no-equip-toggle" title="被这张技能锁定的目标只能【承受】：不能对抗，也不会询问【援护防御】">
+                <input type="checkbox" name="{{fpDice}}noClash" {{#if system.noClash}}checked{{/if}}>
+                无法拼点
+              </label>
+              {{!-- 无差别攻击：容量扩散敌我不分，友方同样会被打到（常见于 EGO 侵蚀形态） --}}
+              <label class="no-equip-toggle" title="【无差别攻击】：容量扩散时敌我不分，范围内的友方也会被打到（自己除外）">
+                <input type="checkbox" name="{{fp}}indiscriminate" {{#if form.indiscriminate}}checked{{/if}}>
+                无差别攻击
+              </label>
+            </div>
+          {{/if}}
 
           {{!-- 反击伤害类型（守备且为反击/可拼点反击） --}}
           {{#if isCounterType}}
             <div class="counter-type-row">
               {{#if (and isEditable (not isLocked))}}
                 <label class="counter-type-label">反击分类</label>
-                <select name="system.counterType" class="equip-subtype-sel">
+                <select name="{{fpDice}}counterType" class="equip-subtype-sel">
                   <option value="slash"  {{#if (eq system.counterType "slash")}}selected{{/if}}>斩击</option>
                   <option value="blunt"  {{#if (eq system.counterType "blunt")}}selected{{/if}}>打击</option>
                   <option value="pierce" {{#if (eq system.counterType "pierce")}}selected{{/if}}>突刺</option>
@@ -103,14 +172,15 @@
                   <option value="{{@key}}" {{#if (eq @key ../system.sinType)}}selected{{/if}}>{{this}}</option>
                 {{/each}}
               </select>
-              {{#if isBasic}}
+              {{!-- 基础与守备技能都有 Lv.1~3；E.G.O 用评级 --}}
+              {{#unless isEgo}}
                 <label>等级</label>
                 <select name="system.level" class="equip-subtype-sel">
                   <option value="1" {{#if (eq system.level 1)}}selected{{/if}}>1</option>
                   <option value="2" {{#if (eq system.level 2)}}selected{{/if}}>2</option>
                   <option value="3" {{#if (eq system.level 3)}}selected{{/if}}>3</option>
                 </select>
-              {{/if}}
+              {{/unless}}
               {{#if isEgo}}
                 <label>等级</label>
                 <select name="system.egoDiceRating" class="equip-subtype-sel">
@@ -128,28 +198,42 @@
               {{#if system.sinType}}
                 <img src="{{lookup @root.config.SIN_ICON_PATHS system.sinType}}" width="14" height="14" alt="{{system.sinType}}" class="sin-type-icon">
               {{/if}}
-              {{#if isBasic}}
+              {{#unless isEgo}}
                 <span class="skill-level-badge">Lv{{system.level}}</span>
-              {{/if}}
+              {{/unless}}
               {{#if isEgo}}
                 <span class="skill-level-badge">{{system.egoDiceRating}}</span>
               {{/if}}
             </div>
           {{/if}}
 
-          {{!-- 加重值（非守备技能） --}}
-          {{#unless isDefense}}
-            <div class="weight-row">
-              {{#if (and isEditable (not isLocked))}}
-                <label class="skill-field-label">加重值</label>
-                <input type="number" name="system.weight" value="{{system.weight}}" class="weight-input" min="0" max="8" style="width:45px"/>
-              {{else}}
-                {{#each weightSquares}}
-                  <span class="weight-sq" title="加重值"></span>
-                {{/each}}
+        {{!-- 攻击容量（守备技能也有：可拼点反击等能打出多次伤害） --}}
+          <div class="weight-row">
+            {{#if (and isEditable (not isLocked))}}
+              <label class="skill-field-label">攻击容量</label>
+              <input type="number" name="{{fp}}weight" value="{{form.weight}}" class="weight-input" min="0" max="8" style="width:45px"/>
+              {{!-- 攻击容量 ≥ 2 才出现：扩散方式 + 范围（以格为半径） --}}
+              <span class="spread-box{{#if showSpread}} on{{/if}}">
+                {{!-- 这两个控件不参与表单提交（不写 name），改由 JS 直接 update，
+                      免得和骰数公式那套重写逻辑抢同一次提交 --}}
+                <select class="equip-subtype-sel spread-mode-sel">
+                  <option value="chain" {{#eq formSpreadMode "chain"}}selected{{/eq}}>链式扩散</option>
+                  <option value="spray" {{#eq formSpreadMode "spray"}}selected{{/eq}}>广域乱射</option>
+                </select>
+                <input type="number" value="{{formSpreadRange}}"
+                       class="weight-input spread-range-input" min="1" max="6" style="width:38px"
+                       title="扩散范围（格）"/>
+                <span class="spread-ft">{{spreadFt}}</span>
+              </span>
+            {{else}}
+              {{#each weightSquares}}
+                <span class="weight-sq" title="攻击容量"></span>
+              {{/each}}
+              {{#if showSpread}}
+                <span class="spread-badge">{{spreadModeLabel}} · {{spreadFt}}</span>
               {{/if}}
-            </div>
-          {{/unless}}
+            {{/if}}
+          </div>
 
         </div>{{!-- /equip-info-col --}}
       </div>{{!-- /equip-header --}}
@@ -163,7 +247,7 @@
           <div class="ego-cost-block">
             {{#each sinCosts}}
               <div class="ego-cost-item">
-                {{#if ../isEditable}}
+                {{#if (and ../isEditable (not ../isLocked))}}
                   <select name="system.sinCost.{{@index}}.sinType" class="sin-cost-sel">
                     {{#each @root.config.SINS}}
                       <option value="{{this}}" {{#if (eq this ../sinType)}}selected{{/if}}>{{lookup @root.config.SIN_LABELS_ZH this}}</option>
@@ -185,11 +269,11 @@
 
         {{!-- 理智消耗 --}}
         <div class="ego-row-wrap">
-          <span class="ego-row-label">理智消耗</span>
+          <span class="ego-row-label">理智消耗<span class="ego-form-tag">[{{egoFormLabel}}]</span></span>
           {{#if (and isEditable (not isLocked))}}
-            <input type="number" name="system.sanityCost" value="{{system.sanityCost}}" class="weight-input" min="0" style="width:50px"/>
+            <input type="number" name="{{fp}}sanityCost" value="{{form.sanityCost}}" class="weight-input" min="0" style="width:50px"/>
           {{else}}
-            <span class="ego-sanity-val">{{#if system.sanityCost}}-{{system.sanityCost}}{{else}}—{{/if}}</span>
+            <span class="ego-sanity-val">{{#if form.sanityCost}}-{{form.sanityCost}}{{else}}—{{/if}}</span>
           {{/if}}
         </div>
 
@@ -199,7 +283,7 @@
           <div class="ego-resist-block">
             {{#each egoResChanges}}
               <div class="ego-resist-item">
-                {{#if ../isEditable}}
+                {{#if (and ../isEditable (not ../isLocked))}}
                   <select name="system.egoResistanceAdj.{{@index}}.sinType" class="sin-cost-sel">
                     {{#each @root.config.SINS}}
                       <option value="{{this}}" {{#if (eq this ../sinType)}}selected{{/if}}>{{lookup @root.config.SIN_LABELS_ZH this}}</option>
@@ -212,7 +296,8 @@
                   </select>
                   <button type="button" class="res-change-remove-btn" data-idx="{{@index}}">×</button>
                 {{else}}
-                  <span>{{sinType}}×{{multiplier}}</span>
+                  <img src="{{lookup @root.config.SIN_ICON_PATHS sinType}}" width="16" height="16" alt="{{sinType}}">
+                  <span>{{multiplier}}</span>
                 {{/if}}
               </div>
             {{/each}}
@@ -227,7 +312,7 @@
       {{!-- ── 标签行 ──────────────────────────────────────────────── --}}
       <div class="skill-tags-row">
         {{#if (and isEditable (not isLocked))}}
-          <input type="text" name="system.tags" value="{{system.tags}}" class="tags-input" placeholder="标签1/标签2"/>
+          <input type="text" name="system.tags" value="{{join system.tags '/'}}" class="tags-input" placeholder="标签1/标签2"/>
         {{else}}
           <div class="skill-tags">
             {{#each (split system.tags '/')}}
@@ -243,9 +328,13 @@
       {{!-- ── 描述区 ──────────────────────────────────────────────── --}}
       <div class="item-desc-block">
         {{#if (and isEditable (not isLocked))}}
-          {{editor system.effectDesc target="system.effectDesc" button=false editable=true engine="prosemirror"}}
+          {{#if isCorrode}}
+            {{editor form.effectDesc target="system.corrode.effectDesc" button=false editable=true engine="prosemirror"}}
+          {{else}}
+            {{editor form.effectDesc target="system.effectDesc" button=false editable=true engine="prosemirror"}}
+          {{/if}}
         {{else}}
-          <div class="item-desc-display">{{{system.effectDesc}}}</div>
+          <div class="item-desc-display">{{{linkify form.effectDesc}}}</div>
         {{/if}}
       </div>
 
@@ -259,77 +348,17 @@
 
     </div>{{!-- /skill-card-main --}}
 
-    {{!-- ══ 相关技能卡片（展开） ══════════════════════════════════════ --}}
-    {{#if relatedExpanded}}
-      <div class="related-skill-divider"><span>相关技能</span></div>
-
-      {{#if relatedSkillItem}}
-        <div class="skill-card-related" style="border-color:#2A7A2A">
-          <div class="equip-header" style="padding:6px">
-            <div class="equip-icon-col">
-              <div class="skill-slot-octa skill-icon-big" style="border-color:#2A7A2A">
-                <img src="{{relatedSkillItem.img}}" class="skill-slot-img" alt="{{relatedSkillItem.name}}">
-              </div>
-            </div>
-            <div class="equip-info-col">
-              <div class="item-name-display" style="color:#4CAF50">{{relatedSkillItem.name}}</div>
-              <div class="skill-cat-dice-row">
-                {{#if relatedSkillItem.system.category}}
-                  <img src="{{lookup @root.config.CATEGORY_ICON_PATHS relatedSkillItem.system.category}}" class="category-icon" width="22" height="22" alt="{{relatedSkillItem.system.category}}">
-                {{/if}}
-                <span class="dice-formula-display">{{fmtDice relatedSkillItem.system.diceFormula}}</span>
-              </div>
-              {{#if (and isEditable (not isLocked))}}
-                <div class="skill-sin-row">
-                  <label>触发条件</label>
-                  <select name="system.relatedSkill.trigger" class="equip-subtype-sel">
-                    {{#each relatedTriggers}}
-                      <option value="{{this}}" {{#eq this ../../system.relatedSkill.trigger}}selected{{/eq}}>{{this}}</option>
-                    {{/each}}
-                  </select>
-                </div>
-                <div class="skill-sin-row">
-                  <label>技能UUID</label>
-                  <input type="text" name="system.relatedSkill.itemUuid" value="{{system.relatedSkill.itemUuid}}" placeholder="拖拽技能到此绑定" class="uuid-input"/>
-                </div>
-              {{else}}
-                <div class="skill-type-label">触发条件：{{system.relatedSkill.trigger}}</div>
-                <div class="item-desc-display">{{{relatedSkillItem.system.effectDesc}}}</div>
-              {{/if}}
-            </div>
-          </div>
-        </div>
-      {{else}}
-        {{#if (and isEditable (not isLocked))}}
-          <div class="skill-card-related related-empty" style="padding:8px">
-            <div class="skill-sin-row">
-              <label>绑定相关技能（UUID）</label>
-              <input type="text" name="system.relatedSkill.itemUuid" value="{{system.relatedSkill.itemUuid}}" placeholder="拖拽技能到此处或输入UUID" class="uuid-input"/>
-            </div>
-            <div class="skill-sin-row">
-              <label>触发条件</label>
-              <select name="system.relatedSkill.trigger" class="equip-subtype-sel">
-                {{#each relatedTriggers}}
-                  <option value="{{this}}">{{this}}</option>
-                {{/each}}
-              </select>
-            </div>
-          </div>
-        {{else}}
-          <div class="related-empty-tip">暂无相关技能，解锁编辑模式后可绑定</div>
-        {{/if}}
-      {{/if}}
-    {{/if}}{{!-- /relatedExpanded --}}
-
   </div>{{!-- /equip-body --}}
 
   {{!-- ── 固定底部按钮栏 ─────────────────────────────────────────── --}}
   <div class="item-sheet-footer">
     <div class="footer-actions">
       <button class="item-send-chat sheet-btn">发送聊天框</button>
-      {{#unless isDefense}}
+      {{#if isDefense}}
+        <button class="item-activate sheet-btn">激活</button>
+      {{else}}
         <button class="item-start-clash sheet-btn">发起对抗</button>
-      {{/unless}}
+      {{/if}}
       <button class="activity-edit-toggle sheet-btn">编辑激活效果 {{#if activitiesExpanded}}▼{{else}}▲{{/if}}</button>
     </div>
   </div>

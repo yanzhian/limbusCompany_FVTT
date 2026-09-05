@@ -330,6 +330,108 @@
   background: #A83232;
 }
 
+/* 护盾条：叠加在血条末端，position:absolute 允许超出血量上限显示 */
+.limbuscompany .resource-bar-fill.shield-fill {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  background: #1FADCF;
+  opacity: 0.85;
+  border-radius: 0 2px 2px 0;
+  transition: width 0.3s, left 0.3s;
+}
+
+.limbuscompany .shield-display {
+  font-size: 0.7rem;
+  color: #1FADCF;
+  margin-left: 4px;
+  white-space: nowrap;
+}
+
+.limbuscompany .dice-type-badge {
+  display: inline-block;
+  font-size: 0.65rem;
+  padding: 1px 5px;
+  border-radius: 3px;
+  margin-left: 4px;
+  white-space: nowrap;
+  font-weight: bold;
+}
+.limbuscompany .unbreakable-badge {
+  background: #5A1010;
+  color: #FF9090;
+  /* border: 1px solid #A03030; */
+}
+.limbuscompany .dice-type-sel {
+  font-size: 0.72rem;
+  max-width: 90px;
+}
+
+/* 无法装备：衍生技能标记（只能由【相关技能转换】换上场） */
+.limbuscompany .no-equip-badge {
+  background: #B43822;
+  color: #FFE2DA;
+}
+.limbuscompany .no-equip-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 0.72rem;
+  color: var(--text-main);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.limbuscompany .no-equip-toggle input { margin: 0; }
+
+/* 援护防御：【援护防御】专属技能标记（队友被锁定且行动值为 0 时可顶上去） */
+.limbuscompany .cover-defense-badge {
+  background: #2A5F7A;
+  color: #D8EEFA;
+}
+
+/* 无法拼点：被这张技能锁定的目标只能【承受】 */
+.limbuscompany .no-clash-badge {
+  background: #7A2A2A;
+  color: #FAD8D8;
+}
+
+/* 无差别攻击：容量扩散敌我不分，友方也会被打到 */
+.limbuscompany .indiscriminate-badge {
+  background: #6E3A7A;
+  color: #F2DAFA;
+}
+
+/* 技能卡大图标：图片保持原始尺寸（60px 就显示 60px，不放大以免发糊），
+   外面叠一层罪孽/等级边框。--skill-frame-scale 控制边框相对槽位的大小，
+   调整外框松紧改这一个值即可。 */
+.limbuscompany .skill-slot-octa.skill-icon-big {
+  --skill-frame-scale: 150%;
+}
+.limbuscompany .skill-slot-octa.skill-icon-big .skill-slot-img {
+  width: auto;
+  height: auto;
+  max-width: 100%;
+  max-height: 100%;
+}
+/* 基础/守备技能：图源尺寸不一（有 60px 也有 400px），统一压到 --skill-art-max，
+   小图保持原样、大图缩到同一档，避免边框里图标大小参差。
+   EGO 用的是圆环边框、图本身就该铺满，因此不参与这条限制。 */
+.limbuscompany .skill-slot-octa.skill-icon-big:not(.skill-icon-big--ego) .skill-slot-img {
+  --skill-art-max: 60px;
+  max-width: var(--skill-art-max);
+  max-height: var(--skill-art-max);
+}
+.limbuscompany .skill-icon-frame {
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  width: var(--skill-frame-scale);
+  height: var(--skill-frame-scale);
+  object-fit: contain;
+  pointer-events: none;
+  z-index: 2;
+}
+
 .limbuscompany .resource-bar-fill.sanity-fill {
   background: linear-gradient(
     to left,
@@ -472,24 +574,6 @@
   object-fit: contain;
 }
 
-/* 链接箭头（装备格链接方向指示） */
-.limbuscompany .link-arrow {
-  position: absolute;
-  font-size: 0.6rem;
-  color: var(--text-sub);
-  opacity: 0.5;
-}
-
-.limbuscompany .link-arrow.active {
-  color: var(--gold-active);
-  opacity: 1;
-}
-
-.limbuscompany .link-arrow.up    { top:    -4px; left: 50%; transform: translateX(-50%); }
-.limbuscompany .link-arrow.down  { bottom: -4px; left: 50%; transform: translateX(-50%); }
-.limbuscompany .link-arrow.left  { left:   -4px; top:  50%; transform: translateY(-50%); }
-.limbuscompany .link-arrow.right { right:  -4px; top:  50%; transform: translateY(-50%); }
-
 /* ─── 列表通用行样式 ───────────────────────────────────────── */
 .limbuscompany .item-list {
   list-style: none;
@@ -617,31 +701,6 @@
   background: var(--border-gold);
   color: var(--text-main);
   border-color: var(--gold-active);
-}
-
-/* 链接方向十字 */
-.limbuscompany .filter-panel .link-filter {
-  display: grid;
-  grid-template-areas: ". up ." "left . right" ". down .";
-  grid-template-columns: repeat(3, 24px);
-  gap: 2px;
-  justify-content: center;
-  margin-bottom: 6px;
-}
-
-.limbuscompany .filter-panel .link-filter button {
-  background: var(--bg-darkest);
-  border: 1px solid var(--border-gold);
-  color: var(--text-sub);
-  cursor: pointer;
-  font-size: 0.8rem;
-  padding: 2px;
-  transition: all 0.15s;
-}
-
-.limbuscompany .filter-panel .link-filter button.selected {
-  background: var(--border-gold);
-  color: var(--text-main);
 }
 
 /* ─── BUFF 状态列表 ────────────────────────────────────────── */
@@ -1500,6 +1559,48 @@ select#chat-whisper-to {
 /* 判定成功/失败着色 */
 .dice-total.success { color: var(--gold-active); }
 .dice-total.failure { color: var(--red-danger); }
+
+/* ── v13 默认骰子卡可读性增强（公式条/骰面明细/总计框） ────────── */
+
+/* 公式条（顶部 "1d4"、"1d6 + 5"） */
+.chat-message .dice-roll .dice-formula {
+  background:    var(--bg-panel);
+  border:        1px solid var(--border-gold);
+  border-radius: 3px;
+  color:         var(--text-main);
+  text-shadow:   none;
+}
+
+/* 骰面明细：部件公式（左上角 "1d4"）与部件小计 */
+.chat-message .dice-roll .dice-tooltip .part-formula {
+  color:       var(--text-sub);
+  background:  transparent;
+  text-shadow: none;
+}
+.chat-message .dice-roll .dice-tooltip .part-total {
+  color:       var(--gold-active);
+  background:  var(--bg-panel);
+  border:      1px solid var(--border-gold);
+  text-shadow: none;
+}
+
+/* 单个骰子图标与点数：黑色骰面在暗底上不可见 → 提亮为金铜色 */
+.chat-message .dice-roll .dice-tooltip .dice-rolls .roll {
+  color:       var(--text-main);
+  text-shadow: 0 0 2px rgba(0, 0, 0, .8);
+  filter:      invert(0.82) sepia(0.35) saturate(2.2) hue-rotate(-18deg) brightness(1.05);
+}
+.chat-message .dice-roll .dice-tooltip .dice-rolls .roll.max { filter: invert(0.82) sepia(0.6) saturate(3) hue-rotate(-25deg) brightness(1.25); }
+.chat-message .dice-roll .dice-tooltip .dice-rolls .roll.min { filter: invert(0.5) sepia(0.8) saturate(4) hue-rotate(-50deg) brightness(0.9); }
+
+/* 总计框（底部大数字）：核心样式黑底黑字 → 面板底 + 金字 */
+.chat-message .dice-roll .dice-total {
+  background:    var(--bg-panel);
+  border:        1px solid var(--border-gold);
+  border-radius: 3px;
+  color:         var(--gold-active);
+  text-shadow:   none;
+}
 
 /* ─── §2-F  对话框（.dialog） ──────────────────────────────── */
 
@@ -2472,12 +2573,12 @@ body.game .limbuscompany.app img {
 
 /* 中列：220px 固定 */
 .limbuscompany .header-mid {
-  width: 220px; flex-shrink: 0; padding: 0 4px;
+  width: 240px; flex-shrink: 0; padding: 0 4px;
 }
 
 /* 右列：剩余空间，最小 370px */
 .limbuscompany .header-right {
-  flex: 1; min-width: 370px;
+  flex: 1; min-width: 320px;
 }
 
 /* ── 头像区块（260×100px）：头像100×100 + XP区域150×60 ─────────────── */
@@ -2716,6 +2817,15 @@ body.game .limbuscompany.app img {
   border-radius: 2px; font-family: var(--font-main); flex-shrink: 0;
 }
 .limbuscompany .bg-tag-input:disabled { border: none; cursor: default; }
+.limbuscompany .bg-tag-set { cursor: pointer; }
+.limbuscompany .bg-tag-set:hover { background: #4a2f18; color: #C58C4E; }
+.limbuscompany .bg-add-btn {
+  width: 200px; height: 25px; line-height: 23px;
+  background: #3B2412; color: #9A6839; border: 1px solid var(--gold-active);
+  font-size: 14px; text-align: center; border-radius: 2px; flex-shrink: 0;
+  font-family: var(--font-main); cursor: pointer;
+}
+.limbuscompany .bg-add-btn:hover { background: #4a2f18; color: #C58C4E; }
 
 /* 长休按钮 */
 .limbuscompany .long-rest-btn {
@@ -2814,9 +2924,12 @@ body.game .limbuscompany.app img {
 
 /* ─── §3-C  Tab 导航（固定高24px） ──────────────────────────────── */
 
+/* Tab 导航：沿用改良版那套做法——等宽三格、加宽字距、选中时一条会「张开」
+   的金色指示条 + 极淡的金色底。配色仍是本体的棕金，不引入新色系。 */
 .limbuscompany .sheet-tabs {
-  display: flex; border-bottom: none !important;
-  background: var(--bg-darkest); flex-shrink: 0; height: 24px;
+  display: grid; grid-template-columns: repeat(3, 1fr);
+  border-bottom: 1px solid #5C4128 !important;
+  background: #0B0908; flex-shrink: 0; height: 38px;
 }
 
 /* 覆盖 Foundry tabs 默认浅色分隔线（--color-border-light-primary） */
@@ -2827,14 +2940,32 @@ body.game .limbuscompany.app img {
   --color-border-light-primary: transparent;
 }
 .limbuscompany .sheet-tabs .item {
-  flex: 1; text-align: center; padding: 0; line-height: 32px; font-size: .8rem;
-  color: var(--text-sub); cursor: pointer; 
-  /* border-bottom: 2px solid transparent; */
-  transition: all .15s; background: none; border-left: none; border-right: none; border-top: none;
-  height: 36px; display: flex; align-items: center; justify-content: center;
+  position: relative;
+  text-align: center; padding: 0; font-size: 13px; letter-spacing: .16em;
+  color: #876E53; cursor: pointer; transition: color .15s, background .15s;
+  background: none; border: 0;
+  height: 38px; display: flex; align-items: center; justify-content: center; gap: 7px;
 }
-.limbuscompany .sheet-tabs .item:hover { color: var(--text-main); }
-.limbuscompany .sheet-tabs .item.active { color: var(--gold-active); border-bottom-color: var(--gold-active); }
+
+/* 指示条：默认透明且两端内缩，选中时张开并发光——比单纯变色好认得多 */
+.limbuscompany .sheet-tabs .item::after {
+  content: ""; position: absolute; left: 24%; right: 24%; bottom: 0;
+  height: 2px; background: transparent;
+  transition: left .16s, right .16s, background .16s, box-shadow .16s;
+}
+.limbuscompany .sheet-tabs .item:hover {
+  color: var(--text-main); text-shadow: 0 0 10px rgba(232, 202, 162, .22);
+}
+.limbuscompany .sheet-tabs .item:hover::after { background: rgba(229, 186, 37, .3); }
+.limbuscompany .sheet-tabs .item.active {
+  color: #F0C96E;
+  background: linear-gradient(180deg, rgba(201, 155, 82, .03), rgba(201, 155, 82, .10));
+}
+.limbuscompany .sheet-tabs .item.active::after {
+  left: 8%; right: 8%;
+  background: linear-gradient(90deg, transparent, #E7B956, transparent);
+  box-shadow: 0 0 8px rgba(231, 185, 86, .34);
+}
 
 /* ─── §3-D  Tab 内容区 ───────────────────────────────────────────── */
 
@@ -2894,42 +3025,11 @@ body.game .limbuscompany.app img {
   width: 40%; height: 40%; border: 1px dashed rgba(95,62,33,.35); border-radius: 2px;
 }
 
-/* 链接箭头 */
-.limbuscompany .link-arrow {
-  position: absolute; width: 0; height: 0;
-  border: 5px solid transparent; pointer-events: none;
-}
-.limbuscompany .link-arrow.up    { top: -10px; left: 50%; transform: translateX(-50%); border-bottom-color: var(--gold-active); }
-.limbuscompany .link-arrow.down  { bottom: -10px; left: 50%; transform: translateX(-50%); border-top-color: var(--gold-active); }
-.limbuscompany .link-arrow.left  { left: -10px; top: 50%; transform: translateY(-50%); border-right-color: var(--gold-active); }
-.limbuscompany .link-arrow.right { right: -10px; top: 50%; transform: translateY(-50%); border-left-color: var(--gold-active); }
-
 /* ─── §3-F  列表面板（物品/技能右侧，行高25px）─────────────────── */
 
 .limbuscompany .list-panel {
   flex: 1; display: flex; flex-direction: column; overflow: hidden;
   padding: 0px 6px 6px 8px;
-}
-
-/* 物品列表滚动条 */
-.limbuscompany .item-list-panel {
-  overflow-y: auto;
-  overflow-x: hidden;
-  padding-right: 4px;
-}
-
-/* 物品列表滚动条 */
-.limbuscompany .item-list-panel {
-  overflow-y: auto;
-  overflow-x: hidden;
-  padding-right: 4px;
-}
-
-/* 物品列表滚动条 */
-.limbuscompany .item-list-panel {
-  overflow-y: auto;
-  overflow-x: hidden;
-  padding-right: 4px;
 }
 
 /* 物品列表滚动条 */
@@ -2997,15 +3097,8 @@ body.game .limbuscompany.app img {
   color: var(--text-sub); font-size: .7rem; padding: 0 2px; text-align: center;
   cursor: pointer; border-radius: 2px; transition: all .15s;
 }
-.limbuscompany .filter-link-btn {
-  background: var(--bg-darkest); border: 1px solid var(--border-gold);
-  color: var(--text-sub); font-size: .8rem; padding: 2px 6px;
-  cursor: pointer; border-radius: 2px; transition: all .15s;
-}
-.limbuscompany .filter-category-btn:hover,
-.limbuscompany .filter-link-btn:hover { color: var(--text-main); }
-.limbuscompany .filter-category-btn.active,
-.limbuscompany .filter-link-btn.active {
+.limbuscompany .filter-category-btn:hover { color: var(--text-main); }
+.limbuscompany .filter-category-btn.active {
   background: rgba(95,62,33,.5); border-color: var(--gold-active); color: var(--gold-active);
 }
 .limbuscompany .filter-apply-btn {
@@ -3014,9 +3107,6 @@ body.game .limbuscompany.app img {
   padding: 4px 12px; cursor: pointer; border-radius: 2px;
   width: calc(100% - 16px); margin: 4px 8px 0;
 }
-.limbuscompany .filter-link-cross { display: flex; flex-direction: column; align-items: center; gap: 3px; }
-.limbuscompany .filter-link-row   { display: flex; gap: 8px; align-items: center; }
-.limbuscompany .filter-link-center { width: 20px; height: 20px; }
 
 /* 列表表头 */
 .limbuscompany .list-header {
@@ -3024,12 +3114,12 @@ body.game .limbuscompany.app img {
   padding: 0 4px 2px; border-bottom: 1px solid rgba(95,62,33,.4);
   flex-shrink: 0; text-transform: uppercase; letter-spacing: .04em;
 }
-/* 图标32px / 名称自适应 / 分类80px / 链接60px / 数量50px / 容量45px / 星芒50px / 操作80px */
+/* 图标32px / 名称自适应 / 分类130px / 数量50px / 容量40px / 星芒45px / 操作70px */
 .limbuscompany {
-  --item-list-columns: 32px 1fr 130px 50px 40px 45px 70px 80px;
+  --item-list-columns: 32px 1fr 130px 40px 45px 70px 100px;
 }
 .limbuscompany .item-list-header  { grid-template-columns: var(--item-list-columns); gap: 4px; }
-.limbuscompany .skill-list-header { grid-template-columns: 32px 1fr 80px 60px 50px 50px 80px; gap: 4px; }
+.limbuscompany .skill-list-header { grid-template-columns: 32px 1fr 80px 60px 50px 50px 100px; gap: 4px; }
 
 /* 分组 */
 .limbuscompany .item-group { flex-shrink: 0; }
@@ -3071,7 +3161,6 @@ body.game .limbuscompany.app img {
 .limbuscompany .item-name { cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .limbuscompany .item-name:hover { color: var(--gold-active); }
 .limbuscompany .item-cat,
-.limbuscompany .item-links,
 .limbuscompany .item-qty,
 .limbuscompany .item-stellar { color: var(--text-sub); font-size: .72rem; }
 
@@ -3088,13 +3177,11 @@ body.game .limbuscompany.app img {
 .limbuscompany .item-row .col-name { justify-self: start; text-align: left; }
 
 .limbuscompany .item-list-header .col-cat,
-.limbuscompany .item-list-header .col-link,
 .limbuscompany .item-list-header .col-qty,
 .limbuscompany .item-list-header .col-cap,
 .limbuscompany .item-list-header .col-stellar,
 .limbuscompany .item-list-header .col-actions,
 .limbuscompany .item-row .col-cat,
-.limbuscompany .item-row .col-link,
 .limbuscompany .item-row .col-qty,
 .limbuscompany .item-row .col-cap,
 .limbuscompany .item-row .col-stellar,
@@ -3103,19 +3190,25 @@ body.game .limbuscompany.app img {
   text-align: center;
 }
 
-.limbuscompany .item-row .col-actions {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
+/* 操作列：三个按钮横排居中，按钮做成正方形以便点中
+   （原先是 padding:0 2px 的裸文字按钮，可点区域只有字符本身那么宽） */
+.limbuscompany .item-row .col-actions,
+.limbuscompany .skill-row .col-actions,
+.limbuscompany .col-actions {
+  display: flex; align-items: center; justify-content: center; gap: 2px;
 }
-
 .limbuscompany .action-btn {
   background: none; border: none; cursor: pointer;
-  color: var(--text-sub); font-size: .75rem; padding: 0 2px;
-  transition: color .1s;
+  color: var(--text-sub); font-size: .8rem; padding: 0;
+  width: 28px; height: 28px; flex: 0 0 28px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 3px;
+  transition: color .1s, background .1s;
 }
-.limbuscompany .action-btn:hover { color: var(--gold-active); }
+.limbuscompany .action-btn:hover {
+  color: var(--gold-active);
+  background: rgba(95, 62, 33, .45);
+}
 .limbuscompany .fav-active { color: var(--gold-active) !important; }
 
 .limbuscompany .list-empty { font-size: .75rem; color: var(--text-dim); padding: 8px 6px; font-style: italic; }
@@ -3209,7 +3302,7 @@ body.game .limbuscompany.app img {
 
 /* EGO技能 图标尺寸（可独立调整） */
 .limbuscompany .ego-skill-grid .ego-skill-slot-wrap .skill-slot-img {
-  width: 70%; height: 70%;
+  width: 100%; height: 100%;
 }
 
 /* 方形槽图标：七边形蒙版（尖朝下） */
@@ -3553,21 +3646,6 @@ body.game .limbuscompany.app img {
 /* 通用隐藏辅助类 */
 .hidden { display: none !important; }
 
-/* 相关技能切换按钮 */
-.limbuscompany .combat-skill-related-toggle {
-  background: none; border: 1px solid var(--border-gold);
-  color: var(--text-sub); font-size: .65rem; cursor: pointer;
-  border-radius: 50%; width: 16px; height: 16px;
-  display: flex; align-items: center; justify-content: center;
-  padding: 0; transition: all .15s;
-}
-.limbuscompany .combat-skill-related-toggle:hover { color: var(--gold-active); border-color: var(--gold-active); }
-/* 已切换为相关技能时：绿色高亮 */
-.limbuscompany .combat-skill-related-toggle.related-active {
-  color: #6EE06E; border-color: #6EE06E;
-  box-shadow: 0 0 4px 1px rgba(110,224,110,.5);
-}
-
 /* AP不足时激活槽：保留金框但降低不透明度 */
 .limbuscompany .combat-skill-slot.slot-active.slot-no-ap {
   opacity: .5;
@@ -3669,6 +3747,19 @@ body.game .limbuscompany.app img {
 .limbuscompany .sheet-lock-icon.unlocked { color: var(--gold-active); }
 .limbuscompany .sheet-lock-icon:hover { color: var(--gold-active); }
 .limbuscompany .sheet-type-label { flex: 1; color: var(--text-sub); font-size: .75rem; }
+/* EGO 形态切换：标题栏右上角 60×25 */
+.limbuscompany .ego-form-toggle {
+  flex: 0 0 auto; width: 60px; height: 25px; margin-left: auto;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: .72rem; font-weight: 700; letter-spacing: 1px;
+  border: 1px solid var(--border-gold); border-radius: 2px;
+  cursor: pointer; user-select: none; transition: all .15s;
+}
+.limbuscompany .ego-form-toggle.awaken  { background: #1E3A4C; color: #9FD8F5; border-color: #4E8FB4; }
+.limbuscompany .ego-form-toggle.corrode { background: #3A1520; color: #F0A0B4; border-color: #A34E6B; }
+.limbuscompany .ego-form-toggle:hover   { filter: brightness(1.35); }
+.limbuscompany .ego-form-tag { margin-left: 3px; font-size: .62rem; color: var(--text-sub); opacity: .8; }
+
 .limbuscompany .related-skill-toggle {
   background: var(--bg-panel); border: 1px solid var(--border-gold);
   color: var(--text-sub); font-size: .65rem; padding: 1px 6px;
@@ -3701,6 +3792,20 @@ body.game .limbuscompany.app img {
 /* 类型 + 分类行 */
 .limbuscompany .equip-type-row {
   display: flex; align-items: center; gap: 6px; font-size: .8rem;
+  flex-wrap: nowrap; min-width: 0;
+}
+/* 解锁态：下拉框被挤窄后选项文字换行/截断，给它一个不被压缩的下限，
+   分类输入框吃掉剩下的宽度 */
+.limbuscompany .equip-type-row .equip-subtype-sel {
+  flex: 0 0 auto; min-width: 96px;
+}
+.limbuscompany .equip-type-row .equip-category-input {
+  flex: 1 1 auto; min-width: 0; width: auto;
+}
+/* 锁定态：标签不折行，分类过长时用省略号而不是撑开 */
+.limbuscompany .equip-subtype-label { white-space: nowrap; }
+.limbuscompany .equip-category {
+  min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 /* 数值 + 链接行 */
 .limbuscompany .equip-stats-links-row {
@@ -3761,34 +3866,6 @@ body.game .limbuscompany.app img {
   color: var(--text-main); font-family: var(--font-main); font-size: .75rem;
   padding: 1px 4px; border-radius: 2px;
 }
-
-/* 链接方向按钮 */
-.limbuscompany .link-dir-group {
-  display: grid; grid-template-areas: ". up ." "left . right" ". down .";
-  grid-template-columns: 18px 18px 18px; grid-template-rows: 18px 18px 18px;
-  gap: 2px; margin-left: auto;
-}
-.limbuscompany .link-dir-up    { grid-area: up; }
-.limbuscompany .link-dir-down  { grid-area: down; }
-.limbuscompany .link-dir-left  { grid-area: left; }
-.limbuscompany .link-dir-right { grid-area: right; }
-.limbuscompany .link-dir-btn {
-  background: #5f3e22; border: 1px solid var(--border-gold);
-  cursor: pointer; border-radius: 2px; transition: all .15s;
-  display: flex; align-items: center; justify-content: center;
-}
-.limbuscompany .link-dir-icon {
-  width: 12px; height: 12px; object-fit: contain;
-  filter: grayscale(1) brightness(0.75);
-  transition: filter .15s;
-}
-.limbuscompany .link-dir-up .link-dir-icon { transform: rotate(180deg); }
-.limbuscompany .link-dir-left .link-dir-icon { transform: rotate(90deg); }
-.limbuscompany .link-dir-right .link-dir-icon { transform: rotate(-90deg); }
-.limbuscompany .link-dir-btn.link-active { background: var(--gold-mid); border-color: var(--gold-active); }
-.limbuscompany .link-dir-btn.link-active .link-dir-icon,
-.limbuscompany .link-dir-btn:hover .link-dir-icon { filter: none; }
-.limbuscompany .link-dir-btn:disabled { opacity: .4; cursor: default; }
 
 /* 修正块 */
 .limbuscompany .modifier-block { padding: 4px 10px; }
@@ -3938,6 +4015,32 @@ body.game .limbuscompany.app img {
 .limbuscompany .container-avail-max { color: var(--text-main); }
 .limbuscompany .container-avail-sep { color: var(--text-dim); }
 
+/* 存放限制行：紧跟在剩余容量行下面，字号与之一致；
+   「存放限制」四个字沿用该行的副文本色，类型/分类的值用深色 #0F0B0A */
+.limbuscompany .container-limit-row {
+  display: flex; align-items: center; gap: 4px; flex-wrap: wrap;
+  font-size: .72rem; color: var(--text-sub);
+}
+.limbuscompany .container-limit-label { color: inherit; white-space: nowrap; }
+.limbuscompany .container-limit-input {
+  width: 82px;
+  background: #C9A84C;
+  border: 1px solid var(--border-gold);
+  border-radius: 2px;
+  padding: 0 4px;
+  font-size: inherit;
+  color: #0F0B0A;
+}
+.limbuscompany .container-limit-input::placeholder { color: rgba(15,11,10,.55); }
+.limbuscompany .container-limit-badge {
+  background: #C9A84C;
+  border-radius: 2px;
+  padding: 0 5px;
+  color: #0F0B0A;
+}
+.limbuscompany .container-limit-none { color: var(--text-dim); font-style: italic; }
+
+
 /* ═══ 容器网格（Diablo 风格二层布局）═══════════════════════════════ */
 .limbuscompany .cg-wrap {
   --cg-cell: 44px;
@@ -4002,15 +4105,125 @@ body.game .limbuscompany.app img {
   transition: border-color .1s, box-shadow .1s;
   user-select: none;
 }
+/* ── 物品卡上的稀有度选择器（装备/消耗品/材料/容器）────────────────── */
+.limbuscompany .item-rarity-group {
+  display: flex; align-items: center; gap: 5px; margin-left: 10px;
+}
+.limbuscompany .item-rarity-group.rarity-common   { --rc: #4E9A5B; }
+.limbuscompany .item-rarity-group.rarity-fine     { --rc: #3D7BC4; }
+.limbuscompany .item-rarity-group.rarity-epic     { --rc: #9A5CC7; }
+.limbuscompany .item-rarity-group.rarity-artistic { --rc: #E5BA25; }
+.limbuscompany .item-rarity-group.rarity-mythic   { --rc: #E94745; }
+.limbuscompany .item-rarity-group .rarity-dot {
+  width: 9px; height: 9px; border-radius: 50%;
+  background: var(--rc, #4E9A5B); box-shadow: 0 0 6px -1px var(--rc, #4E9A5B);
+}
+.limbuscompany .item-rarity-group .rarity-display {
+  font-size: 13px; font-weight: bold; color: var(--rc, var(--text-main));
+}
+.limbuscompany .item-rarity-group .rarity-select {
+  background: #15110E; border: 1px solid #3A2A1C; border-radius: 3px;
+  color: var(--rc, var(--text-main)); font: bold 12px var(--font-main); padding: 1px 4px;
+}
+
+/* ── 稀有度光晕 ────────────────────────────────────────────────────
+   网格图块正中间往外的圆形渐变（里亮 → 外透明）。边框一律不跟稀有度走。
+   浓度按稀有度逐级提亮（--g1 中心 / --g2 中段，每级 +8 / +5），
+   所以平装几乎只是一层底色，神话才真的会"发光"。
+   颜色单一来源：CONFIG.LIMBUSCOMPANY.RARITY_COLORS（module/config.mjs），两边改动要同步。
+   技能等没有 rarity 字段的类型渲染成 .rarity-（空），有兜底规则不画。 */
+.limbuscompany .cg-item-tile.rarity-common   { --rc: #4E9A5B; --g1: 34%; --g2: 19%; }
+.limbuscompany .cg-item-tile.rarity-fine     { --rc: #3D7BC4; --g1: 42%; --g2: 24%; }
+.limbuscompany .cg-item-tile.rarity-epic     { --rc: #9A5CC7; --g1: 50%; --g2: 29%; }
+.limbuscompany .cg-item-tile.rarity-artistic { --rc: #E5BA25; --g1: 58%; --g2: 34%; }
+.limbuscompany .cg-item-tile.rarity-mythic   { --rc: #E94745; --g1: 66%; --g2: 39%; }
+
+.limbuscompany .cg-item-tile[class*="rarity-"]::before {
+  content: "";
+  position: absolute; inset: 0; z-index: 0; pointer-events: none;
+  background: radial-gradient(circle at 50% 50%,
+    color-mix(in srgb, var(--rc) var(--g1), transparent) 0%,
+    color-mix(in srgb, var(--rc) var(--g2), transparent) 28%,
+    transparent 74%);
+}
+/* --rc 没定义时（rarity 为空）整条渐变会失效，但保险起见直接不画 */
+.limbuscompany .cg-item-tile.rarity-::before { display: none; }
+/* 设置里关掉【展示稀有度】：body 挂 .limbus-no-rarity，一条规则全场熄灯 */
+body.limbus-no-rarity .limbuscompany .cg-item-tile::before { display: none; }
+/* 图标/名字/角标都得压在光晕之上 */
+.limbuscompany .cg-item-tile > * { position: relative; z-index: 1; }
+
 .limbuscompany .cg-item-tile:hover {
   border-color: var(--gold-active);
   box-shadow: inset 0 0 0 1px var(--gold-active), 0 0 6px rgba(229,186,37,.3);
 }
 .limbuscompany .cg-item-tile.cg-hidden { display: none; }
 
+/* ══ pointer 自绘拖放（grid-dnd.mjs）══════════════════════════════════════
+   拖动中原图块整个隐藏（格子看着就是空的），跟随光标的是下面这份不透明幽灵。 */
+.limbuscompany .cg-item-tile.cg-dragging { visibility: hidden; }
+
+/* 拖动全程禁掉文字选中与图块 hover 效果，免得拖着拖着选中一片文本 */
+body.cg-dragging-active { user-select: none; cursor: grabbing; }
+body.cg-dragging-active .limbuscompany .cg-item-tile:hover {
+  border-color: var(--border-gold);
+  box-shadow: inset 0 0 0 1px rgba(95,62,33,.4);
+}
+
+/* 幽灵块：跟着光标走，不吃鼠标事件（否则 elementFromPoint 全命中它自己） */
+.cg-drag-ghost {
+  position: fixed;
+  left: -9999px;
+  top:  -9999px;
+  pointer-events: none;
+  opacity: 1;
+  background: #180F08;
+  border: 1px solid #E5BA25;
+  border-radius: 3px;
+  box-shadow: 0 0 10px rgba(229,186,37,.5);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  box-sizing: border-box;
+  z-index: 100000;
+}
+.cg-drag-ghost .cg-rotate-btn { display: none; }
+/* 幽灵带 .limbuscompany 类（好让子元素样式生效），但它不是窗口，
+   得把窗口级的排版属性显式盖回来 */
+.limbuscompany.cg-drag-ghost {
+  padding: 0;
+  margin:  0;
+  font-family: inherit;
+}
+
+/* 落点预览：绿=可放，红=放不下（越界 / 重叠 / 锁定格） */
+.limbuscompany .cg-drop-preview {
+  pointer-events: none;
+  border-radius: 2px;
+  z-index: 20;
+  box-sizing: border-box;
+}
+.limbuscompany .cg-drop-preview.cg-ok {
+  background: rgba(106,168,79,.28);
+  border: 1px solid rgba(140,200,110,.9);
+}
+/* 罩在容器图块上：表示"存进这个容器"（落点由接收端自动寻位） */
+.limbuscompany .cg-drop-preview.cg-into {
+  background: rgba(229,186,37,.22);
+  border: 1px solid var(--gold-active, #E5BA25);
+  box-shadow: inset 0 0 8px rgba(229,186,37,.35);
+}
+.limbuscompany .cg-drop-preview.cg-bad {
+  background: rgba(184,68,68,.26);
+  border: 1px solid rgba(224,96,96,.9);
+}
+
 /* 图标：填满格子 70% */
 .limbuscompany .cg-tile-icon {
-  width: 70%; height: 70%;
+  /* 名称标签去掉之后，图标可以铺满整格（留一点内缩免得贴到稀有度描边上） */
+  width: 92%; height: 92%;
   object-fit: contain;
   pointer-events: none;
   flex-shrink: 0;
@@ -4146,6 +4359,13 @@ body.game .limbuscompany.app img {
   display: flex; align-items: center; gap: 6px; font-size: .8rem;
 }
 .limbuscompany .category-icon { object-fit: contain; flex-shrink: 0; }
+/* 解锁态的第二行：骰子类型 + 无法装备 / 援护防御 等开关
+   （锁上后它们变回徽章，回到 skill-cat-dice-row 里） */
+.limbuscompany .skill-flag-row {
+  display: flex; align-items: center; flex-wrap: wrap;
+  gap: 6px; margin-top: 3px; font-size: .8rem;
+}
+.limbuscompany .skill-flag-row .dice-type-sel { max-width: 96px; }
 .limbuscompany .dice-formula-display {
   font-size: .9rem; font-weight: bold; color: var(--text-main);
 }
@@ -4179,7 +4399,7 @@ body.game .limbuscompany.app img {
 }
 .limbuscompany .counter-type-label { color: var(--text-sub); font-size: .75rem; }
 
-/* 加重值行 */
+/* 攻击容量行 */
 .limbuscompany .weight-row {
   display: flex; align-items: center; gap: 3px; min-height: 20px;
 }
@@ -4238,6 +4458,34 @@ body.game .limbuscompany.app img {
 .limbuscompany .related-trigger-label { font-size: .72rem; color: var(--text-sub); padding: 2px 10px; }
 .limbuscompany .related-empty { background: rgba(42,122,42,.08); }
 .limbuscompany .related-empty-tip { font-size: .72rem; color: var(--text-dim); padding: 6px 10px; font-style: italic; }
+
+/* 相关技能池（v2） */
+.limbuscompany .related-pool-list { padding: 0 10px; display: flex; flex-direction: column; gap: 4px; }
+.limbuscompany .related-pool-row {
+  display: flex; align-items: center; gap: 6px;
+  padding: 3px 6px; border-radius: 3px;
+  background: rgba(42,122,42,.08); border: 1px solid rgba(42,122,42,.3);
+}
+.limbuscompany .related-pool-row.related-pool-broken { border-color: var(--red-danger); background: rgba(220,60,60,.08); }
+.limbuscompany .related-pool-no {
+  width: 18px; height: 18px; border-radius: 50%; flex-shrink: 0;
+  background: #2A7A2A; color: #fff; font-size: .68rem; font-weight: bold;
+  display: flex; align-items: center; justify-content: center;
+}
+.limbuscompany .related-pool-icon { width: 24px; height: 24px; object-fit: cover; border-radius: 3px; flex-shrink: 0; }
+.limbuscompany .related-pool-name { flex: 1; font-size: .78rem; color: var(--text-main); }
+.limbuscompany .related-pool-remove {
+  background: none; border: none; color: var(--text-dim); cursor: pointer; font-size: .85rem; line-height: 1;max-width: 60px;
+}
+.limbuscompany .related-pool-remove:hover { color: var(--red-danger); }
+.limbuscompany .related-pool-dropzone {
+  display: flex; align-items: center; justify-content: center; gap: 6px;
+  min-height: 40px; margin: 6px 10px; padding: 8px;
+  background: #5F3E22; border: 1px dashed rgba(95,62,33,.6); border-radius: 4px;
+  font-size: .72rem; color: var(--text-dim);
+}
+.limbuscompany .related-pool-dropzone.cg-drag-over { background: rgba(229,186,37,.18); border-color: var(--gold-active); }
+.limbuscompany .related-pool-hint { font-size: .68rem; color: var(--text-dim); padding: 0 10px 6px; font-style: italic; }
 .limbuscompany .uuid-input {
   flex: 1; background: var(--bg-panel); border: 1px solid var(--border-gold);
   color: var(--text-main); font-size: .68rem; padding: 1px 5px; border-radius: 2px;
@@ -4331,10 +4579,39 @@ body.game .limbuscompany.app img {
   transition: all .15s;
 }
 .limbuscompany .activity-add-btn:hover { border-color: var(--gold-active); color: var(--gold-active); }
+.limbuscompany .activity-copy-btn,
+.limbuscompany .activity-dupe-btn {
+  background: var(--bg-panel);
+   /* border: 1px solid var(--border-gold); */
+  color: var(--text-sub); font-size: .65rem; padding: 1px 5px;
+  cursor: pointer; border-radius: 2px; transition: all .15s; min-width: 32px;
+}
+.limbuscompany .activity-copy-btn:hover,
+.limbuscompany .activity-dupe-btn:hover { color: var(--gold-active); border-color: var(--gold-active); }
+.limbuscompany .activity-add-row { display: flex; gap: 4px; }
+.limbuscompany .activity-paste-json-btn {
+  background: var(--bg-panel); border: 1px dashed var(--border-gold);
+  color: var(--text-sub); font-family: var(--font-main); font-size: .65rem;
+  padding: 3px 6px; cursor: pointer; border-radius: 2px;
+  /* 只占自己那点宽度，别把「添加效果」挤没了 */
+  flex: 0 0 auto; width: 62px; white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis; transition: all .15s;
+}
+.limbuscompany .activity-paste-json-btn:hover { border-color: var(--gold-active); color: var(--gold-active); }
+.limbuscompany .activity-paste-btn {
+  background: var(--bg-panel); border: 1px dashed var(--border-gold);
+  color: var(--text-sub); font-family: var(--font-main); font-size: .7rem;
+  padding: 3px 10px; cursor: pointer; border-radius: 2px;
+  flex: 0 1 auto; max-width: 40%;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  transition: all .15s;
+}
+.limbuscompany .activity-paste-btn:hover { border-color: var(--gold-active); color: var(--gold-active); }
 
 /* ─── §3-O  Title 卡片（悬停弹出） ─────────────────────────────── */
 
 .limbus-title-card {
+  position: relative;
   width: 280px; height: 500px; max-height: 500px;
   background: linear-gradient(180deg, var(--bg-darkest) 0%, var(--bg-mid) 50%, var(--bg-darkest) 100%);
   border: 1px solid var(--border-gold); border-radius: 4px;
@@ -4342,6 +4619,18 @@ body.game .limbuscompany.app img {
   font-family: var(--font-main); pointer-events: none;
   display: flex;
   flex-direction: column;
+}
+/* 鼠标中键点击锁定：高亮描边提示"已锁定"（唯一的关闭方式是再点一次中键） */
+.limbus-title-card.tc-locked {
+  border-color: var(--gold-active, #C58C4E);
+  box-shadow: 0 0 0 1px var(--gold-active, #C58C4E), 0 8px 32px rgba(0,0,0,.85);
+}
+/* 左下角常驻提示：唯一的锁定/关闭方式是鼠标中键（BUFF Title 卡不支持锁定，不显示） */
+.limbus-title-card:not(.limbus-buff-title-card)::after {
+  content: "鼠标中间锁定/关闭";
+  position: absolute; left: 8px; bottom: 6px;
+  font-size: 12px; color: #9b6839;
+  pointer-events: none;
 }
 .tc-header {
   padding: 6px 10px; font-size: .9rem; font-weight: bold; color: #fff;
@@ -4357,8 +4646,6 @@ body.game .limbuscompany.app img {
 .tc-formula { font-weight: bold; color: var(--text-main); }
 .tc-tags    { display: flex; gap: 3px; flex-wrap: wrap; margin-left: auto; }
 .tc-weight  { display: flex; gap: 2px; padding: 3px 10px; }
-.tc-links   { display: flex; gap: 2px; font-size: .8rem; color: var(--text-sub); }
-.tc-link-arrow { font-size: .8rem; color: var(--gold-active); }
 .tc-desc {
   padding: 6px 10px; font-size: .75rem; color: var(--text-sub);
   line-height: 1.5; flex: 1; overflow: hidden;
@@ -4383,7 +4670,7 @@ body.game .limbuscompany.app img {
   font-weight: bold;
 }
 
-/* Info row: left (subtype/category/modifiers/tags) + right (link grid) */
+/* Info row: subtype/category/modifiers/tags */
 .limbus-title-card-equip .tce-info-row {
   display: flex;
   justify-content: space-between;
@@ -4458,36 +4745,6 @@ body.game .limbuscompany.app img {
   font-size: 11px;
   padding: 1px 5px;
   border-radius: 2px;
-}
-
-/* Link direction grid */
-.limbus-title-card-equip .tc-link-dir-group {
-  flex-shrink: 0;
-  display: grid;
-  grid-template-areas: ". up ." "left . right" ". down .";
-  grid-template-columns: 16px 16px 16px;
-  grid-template-rows: 16px 16px 16px;
-  gap: 2px;
-  margin-top: 2px;
-}
-
-.limbus-title-card-equip .tc-link-dir-group .link-dir-up    { grid-area: up; }
-.limbus-title-card-equip .tc-link-dir-group .link-dir-down  { grid-area: down; }
-.limbus-title-card-equip .tc-link-dir-group .link-dir-left  { grid-area: left; }
-.limbus-title-card-equip .tc-link-dir-group .link-dir-right { grid-area: right; }
-
-.limbus-title-card-equip .tc-link-dir-group .link-dir-btn {
-  display: flex; align-items: center; justify-content: center;
-  border: 1px solid var(--border-gold); border-radius: 2px;
-  background: rgba(95,62,33,.45);
-}
-
-.limbus-title-card-equip .tc-link-dir-group .tc-link-arrow-text {
-  color: #EBBD68; font-size: 12px; line-height: 1;
-}
-
-.limbus-title-card-equip .tc-link-dir-group .link-dir-btn.link-active {
-  background: var(--gold-mid);
 }
 
 /* Description (same as skill card) */
@@ -4646,7 +4903,7 @@ body.game .limbuscompany.app img {
 
 .ae-v2 .ae-body {
   padding: 8px 14px 10px; display: flex; flex-direction: column; gap: 6px;
-  max-height: 70vh; overflow-y: auto;
+  /* 不再自带滚动条：由对话框窗口统一滚动，避免出现内外两条 */
 }
 
 /* 名称行 */
@@ -4657,7 +4914,7 @@ body.game .limbuscompany.app img {
   color: var(--text-main); border-radius: 2px; padding: 3px 6px; font-size: .8rem;
 }
 .ae-v2 .ae-input-sm {
-  width: 52px; background: var(--bg-panel); border: 1px solid #5A4A30;
+  width: 120px; background: var(--bg-panel); border: 1px solid #5A4A30;
   color: var(--text-main); border-radius: 2px; padding: 2px 4px;
   font-size: .75rem; text-align: center;
 }
@@ -4689,6 +4946,7 @@ body.game .limbuscompany.app img {
 .ae-v2 .ae-add-btn {
   background: #3A2E1A; color: var(--text-gold); border: 1px solid #5A4A30;
   border-radius: 2px; padding: 1px 8px; font-size: .8rem; cursor: pointer;
+  max-width: 400px;
 }
 .ae-v2 .ae-add-btn:hover { background: #5A3E18; }
 
@@ -4704,13 +4962,27 @@ body.game .limbuscompany.app img {
 .ae-v2 .ae-del-btn {
   background: #5A1A1A; color: #FF9A9A; border: none;
   border-radius: 2px; padding: 0 6px; font-size: .8rem; cursor: pointer; line-height: 1.4;
+  max-width: 60px;
 }
 .ae-v2 .ae-del-btn:hover { background: #8B2222; }
 
 .ae-v2 .ae-row-fields {
-  display: flex; flex-wrap: wrap; align-items: center; gap: 4px;
+  display: flex; flex-direction: column; align-items: stretch; gap: 3px;
   font-size: .72rem;
 }
+
+/* 行内一条：类型 / 目标+标签+在场+至多 / 其余字段，各占一行，能横着排就横着排 */
+.ae-v2 .ae-line {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 4px;
+  min-width: 0;
+}
+/* 该行没有任何可见内容时（如目标区被隐藏）不占高度 */
+.ae-v2 .ae-line:empty { display: none; }
+/* 分区壳子保持默认显示（jQuery 的显隐切换依赖它），
+   壳子内部的字段用小间距横排 */
+.ae-v2 .ae-line > span > * { margin-right: 3px; }
+/* 文本框不再抢占整行宽度 */
+.ae-v2 .ae-line .ae-input { flex: 0 1 auto; }
 .ae-v2 .ae-row-fields label {
   color: var(--text-sub); font-size: .68rem; white-space: nowrap;
 }
@@ -4734,7 +5006,7 @@ body.game .limbuscompany.app img {
 }
 .limbuscompany .inline-row { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
 .limbuscompany .inline-row label { display: inline; }
-.limbuscompany .inline-row input { width: 60px !important; }
+.limbuscompany .inline-row input { width: 120px !important; }
 .limbuscompany .form-group-inline { display: flex; align-items: center; gap: 6px; font-size: .75rem; }
 
 /* ─── §3-Q  对话框通用（鉴定弹窗 / 添加BUFF / 发起对抗） ─────────── */
@@ -5053,40 +5325,101 @@ body.game .limbuscompany.app img {
   border-color: #8B1A1A;
 }
 
-/* ── 技能选择器弹窗内容区 ── */
+/* ══════════════════════════════════════════════════════════════
+   「拼点对抗」技能选择器弹窗
+   结构：金色分割线 → 两个已激活技能 + 守备技能 → 金色分割线
+         → 展开按钮（白色）→ 展开区（6-bag 剩余技能 + EGO，固定 3 列）
+   ══════════════════════════════════════════════════════════════ */
 .limbuscompany .clash-pick-dialog {
+  --pick-slot: 74px;
   font-family: var(--font-main);
-  color: var(--text-main);
-  padding: 4px 2px;
+  color:       var(--text-main);
+  padding:     4px 2px;
+  min-width:   260px;
 }
 
-/* 技能格默认边框 */
+/* 顶部一行：两个已激活技能 + 守备技能 */
+.clash-pick-row {
+  display:         flex;
+  gap:             16px;
+  justify-content: center;
+  padding:         12px 0;
+}
+
+/* 展开区：固定 3 列，基础技能与 EGO 统一排布 */
+.clash-pick-grid {
+  display:               grid;
+  grid-template-columns: repeat(3, var(--pick-slot, 74px));
+  gap:                   14px 18px;
+  justify-content:       center;
+  justify-items:         center;
+  padding:               12px 0 8px;
+}
+
+/* 技能格：方形图 + 罪孽色描边 */
 .clash-pick-slot {
+  position:      relative;
+  width:         var(--pick-slot, 74px);
+  height:        var(--pick-slot, 74px);
+  flex-shrink:   0;
   border-radius: 2px;
-  transition: filter .15s, box-shadow .15s;
+  cursor:        pointer;
+  transition:    filter .15s, box-shadow .15s;
+}
+.clash-pick-slot img {
+  width:      100%;
+  height:     100%;
+  object-fit: cover;
+  display:    block;
+  box-sizing: border-box;
+  border:     2px solid var(--border-gold, #C9A84C);   /* 实际颜色由内联的罪孽色覆盖 */
 }
 
-.clash-pick-slot:not(.clash-pick-empty):hover {
-  filter: brightness(1.3);
+.clash-pick-slot:not(.clash-pick-empty):not(.clash-pick-disabled):hover {
+  filter:     brightness(1.3);
   box-shadow: 0 0 6px 2px rgba(201,168,76,.6);
+  border-radius: 4px;
+}
+
+/* 恐慌中不可用的技能格 */
+.clash-pick-disabled {
+  cursor:  not-allowed;
+  opacity: .35;
+  filter:  grayscale(1);
 }
 
 /* 空格 */
 .clash-pick-empty {
   background: rgba(255,255,255,.04);
-  border: 2px dashed rgba(201,168,76,.3);
-  /* clip-path: polygon(25% 0%,75% 0%,100% 25%,100% 75%,75% 100%,25% 100%,0% 75%,0% 25%); */
-  cursor: default !important;
+  border:     2px dashed rgba(201,168,76,.3);
+  cursor:     default !important;
 }
 
-/* 相关技能切换按钮（选择器内） */
-.clash-pick-rel {
-  transition: color .15s, border-color .15s;
+/* EGO 圆形槽 + 等级名（空等级不渲染，与快捷 HUD 一致） */
+.clash-pick-ego {
+  display:        flex;
+  flex-direction: column;
+  align-items:    center;
+  gap:            3px;
 }
-.clash-pick-rel.rel-active {
-  color: #6EE06E !important;
-  border-color: #6EE06E !important;
+.clash-pick-ego-grade {
+  font-size: 9px;
+  color:     #9A8462;
 }
+
+/* 展开按钮：白色 */
+.clash-pick-expand-wrap { text-align: center; margin: 2px 0 4px; }
+.clash-pick-expand-btn {
+  background:  none;
+  border:      none;
+  color:       #FFFFFF;
+  font-size:   1.3rem;
+  line-height: 1;
+  cursor:      pointer;
+  padding:     2px 10px;
+  transition:  color .15s, transform .15s;
+}
+.clash-pick-expand-btn:hover { color: #C9A84C; transform: translateY(1px); }
 
 /* ── Dialog 按钮尺寸（override foundry default） ── */
 .dialog .dialog-button.clash,
@@ -5365,6 +5698,126 @@ body.game .limbuscompany.app img {
   line-height: 1;
 }
 
+/* ============================================================
+   §3-V  恐慌鉴定聊天卡片 — limbus-panic-card
+   蓝色系（沿用旧版 limbus-panic-check-card 的配色）：
+   每人一行 40px 头像 + 名称 + 结果，下一行 OOO OOO 计数点。
+   ============================================================ */
+
+.chat-message .message-content:has(.limbus-panic-card) {
+  padding: 0;
+}
+
+.limbus-panic-card {
+  background: linear-gradient(180deg, #121A24 0%, #090C11 100%);
+  border: 1px solid #1E4A6E;
+  border-radius: 6px;
+  overflow: hidden;
+  font-family: var(--font-main);
+  color: var(--text-main);
+  padding: 10px 12px 8px;
+}
+
+.limbus-panic-card .pc-title {
+  font-size: 20px;
+  font-weight: bold;
+  color: #A2C9E8;
+  line-height: 1.2;
+  margin-bottom: 10px;
+}
+
+.limbus-panic-card .pc-divider {
+  height: 1px;
+  background: linear-gradient(
+    to right,
+    transparent 0%,
+    #20507A 25%,
+    #5DADE2 50%,
+    #20507A 75%,
+    transparent 100%
+  );
+  margin: 8px 0;
+}
+
+/* ── 一行结果 ── */
+.limbus-panic-card .pc-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.limbus-panic-card .pc-row + .pc-dots { margin-top: 4px; }
+.limbus-panic-card .pc-gap { height: 10px; }
+
+.limbus-panic-card .pc-avatar {
+  width: 40px;
+  height: 40px;
+  object-fit: cover;
+  border-radius: 4px;
+  border: 1px solid #1E4A6E;
+  flex-shrink: 0;
+}
+
+/* 中列：名字在上、骰掷说明在下（头像纵跨两行，结果纵向居中） */
+.limbus-panic-card .pc-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.limbus-panic-card .pc-name {
+  font-size: 14px;
+  color: #A1CAE8;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.limbus-panic-card .pc-note {
+  font-size: 13px;
+  color: #9AB4C6;
+  white-space: nowrap;
+}
+
+.limbus-panic-card .pc-label {
+  font-size: 16px;
+  font-weight: bold;
+  line-height: 1;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.limbus-panic-card .pc-label.is-resolve { color: #5DADE2; }
+.limbus-panic-card .pc-label.is-fear    { color: #E74C3C; }
+
+/* ── OOO OOO 计数点：左组坚定（蓝）/ 右组恐慌（红） ── */
+.limbus-panic-card .pc-dots {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-left: 48px;
+  line-height: 1;
+}
+
+.limbus-panic-card .pc-dot-grp {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.limbus-panic-card .pc-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  border: 1px solid currentColor;
+}
+
+.limbus-panic-card .pc-dot.on { background: currentColor; }
+.limbus-panic-card .pc-dot-grp.is-resolve { color: #5DADE2; }
+.limbus-panic-card .pc-dot-grp.is-fear    { color: #E74C3C; }
+
 /* ══════════════════════════════════════════════════════════════════════════
    全局罪孽资源 HUD
    位置：left:710px / top:135px（设计图坐标）
@@ -5417,14 +5870,13 @@ body.game .limbuscompany.app img {
   border-radius:   6px;
   /* 静止时：半透明背景，保留图标+数值可见 */
   background:      rgba(10, 7, 3, 0.45);
-  border:          1px solid rgba(90, 58, 26, 0.3);
-  transition:      background 0.35s ease, border-color 0.35s ease;
+  border:          none;
+  transition:      background 0.35s ease;
 }
 
 #limbus-sin-resource-hud.sin-hud-hover .sin-hud-bar,
 #limbus-sin-resource-hud.sin-hud-dragging .sin-hud-bar {
   background:   rgba(10, 7, 3, 0.88);
-  border-color: rgba(90, 58, 26, 0.7);
 }
 
 /* ── 每个罪孽条目 ── */
@@ -5440,7 +5892,7 @@ body.game .limbuscompany.app img {
   width:         32px;
   height:        32px;
   border-radius: 50%;
-  border:        2px solid currentColor;
+  border:        none;
   object-fit:    cover;
   flex-shrink:   0;
 }
@@ -5463,7 +5915,6 @@ body.game .limbuscompany.app img {
   color:        #E5B681;
   background:   transparent;
   border:       none;
-  border-bottom: 1px solid rgba(200, 158, 112, 0.3);
   outline:      none;
   text-align:   center;
   padding:      0;
@@ -5475,7 +5926,7 @@ body.game .limbuscompany.app img {
   margin: 0;
 }
 .limbus-sin-hud .sin-hud-value-input:focus {
-  border-bottom-color: #C89E70;
+  outline: none;
 }
 
 /* ── 重置按钮 ── */
@@ -5496,6 +5947,35 @@ body.game .limbuscompany.app img {
   transform: rotate(180deg);
 }
 
+/* ── 场地资源（并入七宗罪池同一条 bar，仅显示已激活的条目） ── */
+.limbus-sin-hud .field-hud-divider {
+  width: 1px; align-self: stretch; margin: 4px 6px;
+  background: rgba(200, 158, 112, 0.3); flex-shrink: 0;
+}
+.limbus-sin-hud .field-hud-entry {
+  display: flex; align-items: center; gap: 4px; flex-shrink: 0;
+}
+.limbus-sin-hud .field-hud-icon {
+  width: 32px; height: 32px; object-fit: cover; border-radius: 50%;
+  border: none; flex-shrink: 0;
+}
+.limbus-sin-hud .field-hud-value {
+  font-size: 20px; font-weight: bold; min-width: 20px; text-align: center; color: #E5B681;
+}
+.limbus-sin-hud .field-hud-value-input {
+  font-size: 20px; font-weight: bold; width: 40px; color: #E5B681;
+  background: transparent; border: none;
+  outline: none; text-align: center; padding: 0; -moz-appearance: textfield;
+}
+.limbus-sin-hud .field-hud-value-input::-webkit-outer-spin-button,
+.limbus-sin-hud .field-hud-value-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.limbus-sin-hud .field-hud-value-input:focus { outline: none; }
+.limbus-sin-hud .field-hud-remove {
+  background: transparent; border: none; color: #8a7a6a; cursor: pointer;
+  font-size: 14px; line-height: 1; padding: 0 2px;
+}
+.limbus-sin-hud .field-hud-remove:hover { color: #E84444; }
+
 /* ============================================================
    快捷操作 HUD — Quick Action HUD
    ============================================================ */
@@ -5506,17 +5986,257 @@ body.game .limbuscompany.app img {
   z-index:         100;
   display:         flex;
   flex-direction:  column;
-  align-items:     center;
+  /* 左对齐：底部 BUFF 栏与上方内容左边缘对齐（原为 center，BUFF 栏会居中偏移） */
+  align-items:     flex-start;
   gap:             4px;
   user-select:     none;
   pointer-events:  auto;
 }
 
-/* ── AP 硬币行 ────────────────────────────────────────────── */
+/* ══════════════════════════════════════════════════════════════
+   右侧块：上=基础技能，下=行动值，右=刷新
+   ══════════════════════════════════════════════════════════════ */
+.qa-right-block {
+  display:     flex;
+  align-items: center;
+  gap:         8px;
+  align-self:  flex-end;
+}
+.qa-right-col {
+  display:        flex;
+  flex-direction: column;
+  gap:            6px;
+}
+
+/* ── 基础技能三格 ─────────────────────────────────────────── */
+.qa-skill-row {
+  /* 整格大小 / 边框中空区内缩比例（技能图多大）/ 相邻格重叠量 */
+  --skill-size:    100px;
+  --art-inset:     24%;
+  --skill-overlap: 22px;
+
+  display:     flex;
+  align-items: center;
+}
+
+/* 七边形边框左右两侧本身是透明的，格子并排会留出大片空白、整行显得过宽。
+   让相邻格互相重叠（负 margin），既压缩整行宽度，也更接近原作技能牌叠放的观感。
+   左侧格叠在右侧格之上，"准备"格自然被压在最后面。 */
+.qa-skill-slot + .qa-skill-slot {
+  margin-left: calc(var(--skill-overlap) * -1);
+}
+.qa-skill-row .qa-skill-slot:nth-child(1) { z-index: 3; }
+.qa-skill-row .qa-skill-slot:nth-child(2) { z-index: 2; }
+.qa-skill-row .qa-skill-slot:nth-child(3) { z-index: 1; }
+
+/* 单个技能格：技能图垫底 + 罪孽/等级空心边框盖在上面
+   （{罪孽}_lv{N}.webp 是中空的七边形边框，不是技能图本身） */
+.qa-skill-slot {
+  position:    relative;
+  width:       var(--skill-size);
+  height:      var(--skill-size);
+  flex-shrink: 0;
+  cursor:      pointer;
+  transition:  transform .12s;
+}
+
+/* 底层：技能自身的图，裁成尖朝下七边形，塞进边框中空区域。
+   必须显式给出宽高：绝对定位的 <img> 在 width/height 为 auto 时会按图片
+   自身的原始像素尺寸渲染（inset 的右/下约束被忽略），导致 40px 的小图正常、
+   400px 的大图直接撑爆格子。用 calc 算出宽高后，渲染尺寸与原图分辨率无关。 */
+.qa-skill-art {
+  position:   absolute;
+  inset:      var(--art-inset);
+  width:      calc(100% - var(--art-inset) * 2);
+  height:     calc(100% - var(--art-inset) * 2);
+  object-fit: cover;
+  display:    block;
+  pointer-events: none;
+  clip-path: polygon(
+    71.7% 5.0%, 98.7% 38.9%, 89.1% 81.2%, 50% 100%,
+    10.9% 81.2%, 1.3% 38.9%, 28.3% 5.0%
+  );
+}
+
+/* 顶层：罪孽 + 等级边框 */
+.qa-skill-frame {
+  position:   absolute;
+  inset:      0;
+  width:      100%;
+  height:     100%;
+  object-fit: contain;
+  display:    block;
+  pointer-events: none;
+}
+
+/* 悬停时抬起并提到最上层，避免被右侧格子压住一角 */
+.qa-skill-row .qa-skill-slot--ready:hover { transform: translateY(-3px); z-index: 9; }
+
+/* 准备格（半透明，不可直接使用）/ 空格 */
+.qa-skill-slot--pending { opacity: .42; cursor: default; }
+.qa-skill-slot--empty   { cursor: default; }
+
+/* 打出：向上飞走并淡出 */
+@keyframes qa-skill-cast {
+  0%   { transform: translateY(0)     scale(1);    opacity: 1; }
+  35%  { transform: translateY(-10px) scale(1.12); opacity: 1; }
+  100% { transform: translateY(-56px) scale(.75);  opacity: 0; }
+}
+.qa-skill-slot--casting {
+  animation: qa-skill-cast .42s cubic-bezier(.32,.72,.4,1) forwards;
+  pointer-events: none;
+}
+
+/* 补位：右侧新技能滑入 / 被打出格右侧的技能左移
+   （被打出格左侧的技能不加这些类，保持原地不动） */
+@keyframes qa-skill-slide-in {
+  0%   { transform: translateX(24px); opacity: 0; }
+  100% { transform: translateX(0);    opacity: 1; }
+}
+.qa-skill-slot--entering { animation: qa-skill-slide-in .3s ease-out backwards; }
+
+@keyframes qa-skill-shift {
+  0%   { transform: translateX(24px); }
+  100% { transform: translateX(0); }
+}
+.qa-skill-slot--shifting { animation: qa-skill-shift .3s ease-out backwards; }
+
+/* ══════════════════════════════════════════════════════════════
+   E.G.O 模式：单击头像切换。左右两块隐藏，5 个 EGO 等级环绕七边形
+   （底部两条边已被生命值/理智值占用，剩余 5 条正好对应 5 个等级）。
+   槽位坐标由 JS 按边中点方向角算出（见 QA_EGO_ANGLES / QA_EGO_RADIUS），
+   以百分比写入 inline style，故此处只管样式不管定位。
+   ══════════════════════════════════════════════════════════════ */
+/* EGO 模式：左右两块只隐藏、不移除（visibility 保留占位），
+   这样切换模式时中央七边形与底部 BUFF 栏的位置完全不变。
+   EGO 槽是绝对定位、不参与布局，正好铺在左右两块空出来的视觉区域上。
+   两套元素都常驻 DOM，切换时只改 opacity/visibility，因此有淡入淡出过渡。
+   visibility 用 0.22s 的 transition 而非直接切换，是为了让它在淡出结束后
+   才真正生效——否则元素会立刻不可点、看不到渐隐过程。 */
+.qa-btn-group--left,
+.qa-right-block {
+  transition: opacity .22s ease, visibility .22s;
+}
+
+/* 基础面板：EGO 模式下淡出 */
+.qa-hud--ego .qa-btn-group--left,
+.qa-hud--ego .qa-right-block {
+  opacity:    0;
+  visibility: hidden;
+}
+
+/* EGO 槽：默认隐藏，进入 EGO 模式才淡入
+   （transition 里必须一并声明 opacity/visibility，否则会覆盖掉淡入淡出） */
+.qa-ego-slot {
+  --ego-size: 62px;
+  position:   absolute;
+  width:      var(--ego-size);
+  height:     var(--ego-size);
+  transform:  translate(-50%, -50%);   /* inline 的 left/top 是槽位中心 */
+  cursor:     pointer;
+  z-index:    6;
+  opacity:    0;
+  visibility: hidden;
+  transition: transform .12s, filter .12s, opacity .22s ease, visibility .22s;
+}
+.qa-hud--ego .qa-ego-slot {
+  opacity:    1;
+  visibility: visible;
+}
+.qa-ego-slot:hover {
+  transform: translate(-50%, -50%) scale(1.08);
+  filter:    brightness(1.15);
+  z-index:   10;
+}
+/* 内部图层复用基础技能格的两层结构（技能图 + 边框）。
+   但 EGO 边框 E.G.O.webp 是圆环、不是七边形，内图需改为圆形裁切，
+   否则会沿用 .qa-skill-art 默认的七边形 clip-path 而与圆环对不上。 */
+.qa-ego-slot .qa-skill-art {
+  --art-inset:   15%;
+  clip-path:     none;
+  border-radius: 50%;
+}
+
+/* 等级名（ZAYIN / TET / HE / WAW / ALEPH）
+   压在槽位底部内侧而非外侧：下方两个槽（ZAYIN/ALEPH）的标签若放在槽外，
+   会越过七边形底边压到 BUFF 栏上。 */
+.qa-ego-grade {
+  position:    absolute;
+  left:        50%;
+  bottom:      -2px;
+  transform:   translateX(-50%);
+  font-size:   11px;
+  font-weight: bold;
+  color:       #E8C9A2;
+  white-space: nowrap;
+  pointer-events: none;
+  text-shadow: 1px 1px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000;
+}
+
+/* 瞄准中的源技能格：上浮并压暗，把视线让给箭头 */
+.qa-skill-row .qa-skill-slot--aiming {
+  transform: translateY(-10px);
+  opacity:   .55;
+  z-index:   9;
+}
+
+/* 拖拽瞄准箭头的全屏 SVG 覆盖层：不拦截鼠标，避免挡住画布交互 */
+.qa-aim-overlay {
+  position:       fixed;
+  left:           0;
+  top:            0;
+  width:          100vw;
+  height:         100vh;
+  pointer-events: none;
+  z-index:        9998;
+}
+
+/* ── 刷新按钮（行动值左侧，浅色底 + 白色描边）───────────────── */
+.qa-refresh-btn {
+  width:           30px;
+  height:          30px;
+  margin-right:    6px;
+  flex-shrink:     0;
+  background:      #E8C9A2;
+  border:          1px solid #FFFFFF;
+  border-radius:   4px;
+  cursor:          pointer;
+  display:         flex;
+  align-items:     center;
+  justify-content: center;
+  padding:         0;
+  transition:      border-color .15s, filter .15s, transform .32s;
+}
+.qa-refresh-btn:hover   { border-color: #C9A84C; filter: brightness(1.2); }
+.qa-refresh-btn.qa-spin { transform: rotate(360deg); }
+
+/* ── "下个回合"按钮（行动值右侧）───────────────────────────── */
+.qa-next-turn-btn {
+  margin-left:   8px;
+  flex-shrink:   0;
+  padding:       5px 12px;
+  background:    #E8C9A2;
+  border:        1px solid #FFFFFF;
+  border-radius: 4px;
+  color:         #2A1B0C;
+  font-size:     13px;
+  font-weight:   bold;
+  white-space:   nowrap;
+  cursor:        pointer;
+  transition:    filter .15s, border-color .15s;
+}
+.qa-next-turn-btn:hover { filter: brightness(1.1); border-color: #C9A84C; }
+
+/* GM 在非本角色回合时也可见：降低存在感，与"轮到自己"时区分 */
+.qa-next-turn-btn--gm { opacity: .72; }
+.qa-next-turn-btn--gm:hover { opacity: 1; }
+
+/* ── AP 硬币行（含刷新按钮，整行左对齐）─────────────────────── */
 .qa-ap-row {
   display:         flex;
+  align-items:     center;
   gap:             4px;
-  justify-content: center;
+  justify-content: flex-start;
 }
 
 .qa-ap-coin {
@@ -5562,6 +6282,11 @@ body.game .limbuscompany.app img {
   overflow-y:       auto;
 }
 /* 左侧按钮组：面板左对齐 */
+/* 左组改为纵向堆叠：消耗品 / 装备 / 恐惧鉴定 */
+.qa-btn-group--left {
+  flex-direction: column;
+  align-items:    stretch;
+}
 .qa-btn-group--left  .qa-panel { left:  0; }
 /* 右侧按钮组：面板右对齐 */
 .qa-btn-group--right .qa-panel { right: 0; }
@@ -5657,7 +6382,6 @@ body.game .limbuscompany.app img {
   padding:   4px 0;
 }
 
-.qa-basic-skill-slot,
 .qa-ego-skill-slot {
   width:           52px;
   height:          52px;
@@ -5673,10 +6397,8 @@ body.game .limbuscompany.app img {
   flex-shrink:     0;
   transition:      filter 0.15s;
 }
-.qa-basic-skill-slot:hover,
 .qa-ego-skill-slot:hover     { filter: brightness(1.2); }
 
-.qa-basic-skill-slot img,
 .qa-ego-skill-slot img {
   width:      100%;
   height:     100%;
@@ -5703,20 +6425,10 @@ body.game .limbuscompany.app img {
   line-height:      1.2;
 }
 
-/* EGO 槽包装容器（用于放置相关技能切换按钮） */
+/* EGO 槽包装容器 */
 .qa-ego-skill-wrap {
   position: relative;
   display:  inline-flex;
-}
-/* 快捷 HUD 上的 EGO 相关技能切换按钮（右上角） */
-.qa-ego-related-toggle {
-  position:  absolute;
-  top:       -5px;
-  right:     -5px;
-  z-index:   10;
-  width:     14px;
-  height:    14px;
-  font-size: .55rem;
 }
 
 /* ── 功能按钮 ─────────────────────────────────────────────── */
@@ -5734,22 +6446,159 @@ body.game .limbuscompany.app img {
 .qa-btn:hover      { background: #2A2520; border-color: #C9A84C; }
 .qa-btn--active    { background: #3A2510; border-color: #E5BA25; color: #E5BA25; }
 
-/* ── 头像包装 ─────────────────────────────────────────────── */
-.qa-avatar-wrap { position: relative; }
+/* ══════════════════════════════════════════════════════════════
+   中央：角色状态七边形（生命值血环 / 头像 / 理智值 / 混乱阈值）
+   血环几何：起点 180°（底部尖角），顺时针铺 310°，右下留 50° 缺口
+   （缺口由理智球盖住）。扣血时红色从右下终点逆时针缩回底部尖角。
+   角度常量与 quick-action-hud.mjs 的 QA_ARC_FROM / QA_ARC_LEN 一致，
+   两边改动需同步。
+   ══════════════════════════════════════════════════════════════ */
+.qa-hex-block {
+  --hp:       1;          /* 0~1，由模板 inline style 写入 */
+  --arc-from: 180deg;
+  --arc-len:  310deg;
+  --hp-red:   #B43822;
 
-.qa-avatar {
-  width:         90px;
-  height:        90px;
-  border-radius: 50%;
-  object-fit:    cover;
-  border:        2px solid #C9A84C;
-  display:       block;
-  cursor:        pointer;
-  transition:    border-color 0.15s;
+  /* 整块尺寸：内部所有数值均按此等比换算，改这一个数即可整体缩放 */
+  --hex-size: 125px;
+
+  position:    relative;
+  width:       var(--hex-size);
+  height:      var(--hex-size);
+  flex-shrink: 0;
 }
-.qa-avatar:hover { border-color: #E5BA25; }
 
-/* ── 底部行 ───────────────────────────────────────────────── */
+/* 尖朝下七边形（外层，半径 100） */
+.qa-hex-shape {
+  position:  absolute;
+  inset:     0;
+  clip-path: polygon(
+    71.7% 5.0%, 98.7% 38.9%, 89.1% 81.2%, 50% 100%,
+    10.9% 81.2%, 1.3% 38.9%, 28.3% 5.0%
+  );
+  pointer-events: none;
+}
+
+/* 底层：黑色（血扣掉后露出的底色） */
+.qa-hex-black { background: #000; }
+
+/* 中层：红色血环，conic 遮罩控制露出多少 */
+.qa-hex-red {
+  background: var(--hp-red);
+  -webkit-mask-image: conic-gradient(from var(--arc-from),
+      #000 0deg,
+      #000 calc(var(--arc-len) * var(--hp)),
+      transparent calc(var(--arc-len) * var(--hp)),
+      transparent 360deg);
+  mask-image: conic-gradient(from var(--arc-from),
+      #000 0deg,
+      #000 calc(var(--arc-len) * var(--hp)),
+      transparent calc(var(--arc-len) * var(--hp)),
+      transparent 360deg);
+}
+
+/* 混乱阈值刻度线：中心 → 边缘的白线（超出部分被七边形裁掉） */
+.qa-chaos-line {
+  position:         absolute;
+  left:             calc(50% - 1px);
+  top:              0;
+  width:            2px;
+  height:           50%;
+  background:       #FFFFFF;
+  transform-origin: 50% 100%;   /* 旋转轴 = 七边形中心 */
+  box-shadow:       0 0 3px rgba(0,0,0,.8);
+}
+/* 已触发的阈值：变暗，与未触发区分 */
+.qa-chaos-line--fired { background: #7A7A7A; opacity: .55; }
+
+/* 顶层：内缩 14% 的七边形（半径比 100→72，对应 200px 时环宽 28px），裁切头像 */
+.qa-hex-avatar {
+  position:  absolute;
+  inset:     0;
+  clip-path: polygon(
+    65.62% 17.57%, 85.10% 41.99%, 78.15% 72.44%, 50% 86%,
+    21.85% 72.44%, 14.90% 41.99%, 34.38% 17.57%
+  );
+  overflow:   hidden;
+  background: #111;
+}
+.qa-avatar {
+  width:      100%;
+  height:     100%;
+  object-fit: cover;
+  display:    block;
+  cursor:     pointer;
+}
+
+/* 生命值数字（左下角，压在七边形边缘上）—— 比例基于 200px 原稿换算 */
+.qa-hex-hp {
+  position:    absolute;
+  left:        calc(var(--hex-size) * 0.07);
+  bottom:      calc(var(--hex-size) * -0.01);
+  font-size:   calc(var(--hex-size) * 0.25);
+  font-weight: bold;
+  color:       var(--hp-red);
+  line-height: 1;
+  cursor:      pointer;
+  z-index:     5;
+  text-shadow: 1px 1px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000;
+}
+
+/* 理智值（右下圆，正好盖住血环右下 50° 缺口） */
+.qa-hex-san {
+  position:        absolute;
+  right:           calc(var(--hex-size) * 0.15);
+  bottom:          calc(var(--hex-size) * -0.04);
+  width:           calc(var(--hex-size) * 0.26);
+  height:          calc(var(--hex-size) * 0.26);
+  border-radius:   50%;
+  /* 底色/描边由模板按理智值内联写入（见 _sanityColors），此处仅作兜底 */
+  background:      #6A6A6A;
+  border:          2px solid #414141;
+  box-sizing:      border-box;
+  display:         flex;
+  align-items:     center;
+  justify-content: center;
+  font-size:       calc(var(--hex-size) * 0.11);
+  font-weight:     bold;
+  color:           #FFFFFF;
+  text-shadow:     1px 1px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000;
+  cursor:          pointer;
+  z-index:         5;
+  transition:      filter .15s;
+}
+.qa-hex-san:hover { filter: brightness(1.12); }
+
+/* ── 恐惧鉴定（左侧：坚定次数 / 恐慌次数）───────────────────── */
+.qa-panic-check {
+  display:       flex;
+  gap:           6px;
+  margin-top:    2px;
+  padding:       4px 6px;
+  background:    #1A1714;
+  border:        1px solid #4A4038;
+  border-radius: 3px;
+  cursor:        pointer;
+  transition:    border-color .15s;
+}
+.qa-panic-check:hover { border-color: #C9A84C; }
+
+.qa-panic-item {
+  display:     flex;
+  align-items: center;
+  gap:         2px;
+}
+.qa-panic-item img { width: 20px; height: 20px; display: block; }
+
+.qa-panic-num {
+  font-size:   15px;
+  font-weight: bold;
+  line-height: 1;
+}
+.qa-panic-resolve .qa-panic-num { color: #5DADE2; }
+.qa-panic-fear    .qa-panic-num { color: #E74C3C; }
+
+/* ── 底部行（BUFF 状态栏）─────────────────────────────────── */
 .qa-bottom-row {
   display:     flex;
   align-items: center;
@@ -5757,43 +6606,21 @@ body.game .limbuscompany.app img {
   margin-top:  2px;
 }
 
-/* ── HP / 理智 球 ──────────────────────────────────────────── */
-.qa-hp-ball,
-.qa-san-ball {
-  width:           32px;
-  height:          32px;
-  border-radius:   50%;
-  background:      #201E1B;
-  display:         flex;
-  align-items:     center;
-  justify-content: center;
-  cursor:          pointer;
-  flex-shrink:     0;
-  border:          2px solid;
-  transition:      filter 0.15s;
-}
-.qa-hp-ball:hover,
-.qa-san-ball:hover { filter: brightness(1.15); }
-
-.qa-hp-ball  { border-color: #B43822; box-shadow: 0 0 5px rgba(180,56,34,.4); }
-.qa-san-ball { border-color: #4F7A9C; box-shadow: 0 0 5px rgba(79,122,156,.4); }
-
-.qa-ball-value {
-  font-size:   24px;
-  font-weight: bold;
-  color:       #ECE4D6;
-  line-height: 1;
-  /* 数字较大时自动缩放，保证不超出球体 */
-  transform-origin: center;
-}
-
 /* ── BUFF 状态栏 ───────────────────────────────────────────── */
+/* BUFF 状态栏：左对齐；默认 8 格，新增的向右扩展，
+   每行最多 16 格（由 max-width 决定换行位置），装满才向下换行。
+   每行格数需与 quick-action-hud.mjs 的 QA_BUFF_PER_ROW 保持一致。 */
 .qa-status-bar {
-  display:   flex;
-  flex-wrap: wrap;
-  gap:       2px;
-  flex:      1;
-  max-width: 300px; /* 8格 × (24+2) px */
+  --buff-slot:    34px;   /* 32px 内容 + 1px 边框 ×2 */
+  --buff-gap:     2px;
+  --buff-per-row: 16;
+
+  display:         flex;
+  flex-wrap:       wrap;
+  justify-content: flex-start;
+  align-content:   flex-start;
+  gap:             var(--buff-gap);
+  max-width: calc(var(--buff-per-row) * (var(--buff-slot) + var(--buff-gap)) - var(--buff-gap));
 }
 
 .qa-buff-slot {
@@ -5850,520 +6677,153 @@ input.item-piles-quantity {
 }
 
 /* ============================================================
-   §4  NPC 商人角色卡（.merchant-sheet）
+   §4  NPC 商人角色卡（.merchant-sheet · 网格版）
    ============================================================
-
-   布局：
-     .merchant-sheet
-       .merchant-header        — 标题栏（商人名）
-       .merchant-body          — 主体两栏
-         .merchant-left        — 左栏（Tab导航 + 立绘 + 描述）
-         .merchant-right       — 右栏（搜索 + Tab内容）
-       .merchant-footer        — 底栏（货币 / 购买角色选择）
+   左＝玩家背包网格，右＝商人货架网格，两块都复用 .cg-* 那套
+   （helpers/grid-layout + grid-dnd），这里只补商人自己的外壳与图块角标。
    ============================================================ */
 
-/* ── 窗体整体 ──────────────────────────────────────────────── */
 .app.sheet.actor.merchant {
   background: var(--bg-darkest);
-  border:     1px solid #3B2412;
-  color:      var(--text-main);
+  border: 1px solid #3B2412;
+  color: var(--text-main);
   font-family: inherit;
 }
-
-.merchant-sheet {
-  display:        flex;
-  flex-direction: column;
-  height:         100%;
-  overflow:       hidden;
-  background:     var(--bg-darkest);
-  color:          var(--text-main);
+.mc-sheet {
+  display: flex; flex-direction: column; height: 100%; overflow: hidden;
+  background: var(--bg-darkest); color: var(--text-main);
 }
 
-/* ── 标题栏 ────────────────────────────────────────────────── */
-.merchant-header {
-  background:    var(--bg-title-bar);
-  border-bottom: 1px solid #3B2412;
-  padding:       6px 12px;
-  flex-shrink:   0;
-  display:       flex;
-  align-items:   center;
-  gap:           8px;
+/* ── 顶部 ─────────────────────────────────────────────────────── */
+.mc-head {
+  display: flex; align-items: flex-start; gap: 10px;
+  padding: 8px 12px; border-bottom: 1px solid #3A2A1C; background: rgba(0,0,0,.25);
+}
+.mc-portrait {
+  width: 54px; height: 54px; object-fit: cover; flex: 0 0 54px;
+  border: 1px solid #5F3E22; border-radius: 3px;
+}
+.mc-head-info { flex: 1; min-width: 0; }
+.mc-name { font-size: 16px; font-weight: bold; letter-spacing: .04em; }
+.mc-desc { font-size: 12px; color: var(--text-sub); max-height: 42px; overflow: auto; }
+.mc-desc-input {
+  width: 100%; background: #15110E; border: 1px solid #3A2A1C; border-radius: 3px;
+  color: var(--text-main); font: 12px var(--font-main); padding: 3px 6px; resize: vertical;
+}
+/* 立绘容器：锁按钮钉在立绘右上角 */
+.mc-portrait-wrap { position: relative; flex: 0 0 54px; line-height: 0; }
+.mc-portrait-edit { cursor: pointer; }
+.mc-portrait-edit:hover { border-color: var(--gold-active); }
+.mc-lock {
+  position: absolute; top: -4px; right: -6px; z-index: 2;
+  cursor: pointer; color: var(--text-sub); font-size: 11px; line-height: 1;
+  padding: 2px 3px; border: 1px solid #3A2A1C; border-radius: 3px;
+  background: rgba(10,8,6,.85);
+}
+.mc-lock.unlocked { color: var(--gold-active); border-color: var(--gold-active); }
+.mc-name-input {
+  width: 100%; background: #15110E; border: 1px solid #3A2A1C; border-radius: 3px;
+  color: var(--text-main); font: bold 15px var(--font-main); padding: 2px 6px;
+}
+.mc-token-row { display: flex; align-items: center; gap: 6px; margin: 3px 0; }
+.mc-token-img {
+  width: 28px; height: 28px; object-fit: cover; cursor: pointer;
+  border: 1px solid #5F3E22; border-radius: 3px;
+}
+.mc-token-img:hover { border-color: var(--gold-active); }
+.mc-token-tip { font-size: 11px; color: var(--text-dim); }
+/* 「眼」图标：跟在数字后面 */
+/* 数字与图标必须并排：Foundry 核心把 img 设成 block，这里强制回内联 */
+.mc-eye-ic {
+  display: inline-block; flex: 0 0 auto;
+  width: 13px; height: 13px; min-width: 13px; object-fit: contain;
+  vertical-align: -2px; margin-left: 2px; border: none;
+}
+.mc-eye, .mc-price, .mc-purse, .mc-total, .mc-after { white-space: nowrap; }
+
+/* ── GM 工具条 ─────────────────────────────────────────────────── */
+.mc-gmbar {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 6px 12px; border-bottom: 1px solid #2b2119; background: rgba(0,0,0,.18);
+  font-size: 12px;
+}
+.mc-gmbar label { color: var(--text-sub); }
+.mc-sale-rate { flex: 0 0 160px; }
+.mc-sale-num { font-weight: bold; color: var(--gold-active); min-width: 46px; }
+.mc-gm-hint { color: var(--text-dim); font-size: 11.5px; }
+
+/* ── 主体两栏 ─────────────────────────────────────────────────── */
+.mc-body { flex: 1; display: flex; gap: 10px; padding: 8px 10px; overflow: auto; }
+.mc-col {
+  flex: 1 1 0; min-width: 0; display: flex; flex-direction: column;
+  background: linear-gradient(180deg,#1A1512,#120E0C);
+  border: 1px solid #3A2A1C; border-radius: 4px;
+}
+.mc-col-hd {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 10px; border-bottom: 1px solid #2b2119;
+}
+.mc-col--pl .mc-col-hd { border-bottom-color: #2E4A6E; }
+.mc-av { width: 28px; height: 28px; object-fit: cover; border: 1px solid #5F3E22; border-radius: 3px; }
+.mc-col--pl .mc-av { border-color: #2E4A6E; }
+.mc-col-t { flex: 1; min-width: 0; display: flex; flex-direction: column; line-height: 1.25; }
+.mc-col-t b { font-size: 13px; }
+.mc-col-t span { font-size: 11px; color: var(--text-sub); }
+.mc-purse {
+  display: flex; align-items: center; gap: 4px; white-space: nowrap; font-size: 12px;
+  background: rgba(0,0,0,.35); border: 1px solid #5F3E22; border-radius: 999px; padding: 2px 9px;
+}
+.mc-eye { color: var(--gold-active); font-weight: bold; }
+.mc-eye-input {
+  width: 68px; background: #15110E; border: 1px solid #3A2A1C; border-radius: 3px;
+  color: var(--gold-active); font: bold 12px var(--font-main); padding: 0 4px; text-align: right;
 }
 
-/* 编辑锁按钮（标题栏右侧） */
-.merchant-lock-toggle {
-  flex-shrink:   0;
-  background:    none;
-  border:        1px solid #3B2412;
-  border-radius: 3px;
-  color:         var(--text-sub);
-  padding:       3px 8px;
-  cursor:        pointer;
-  font-size:     0.82rem;
-  line-height:   1;
-  transition:    color .15s, border-color .15s;
-  margin-left:   auto; /* 推到最右侧 */
-  max-width: 20px;
+.mc-toolbar { display: flex; align-items: center; gap: 6px; padding: 6px 10px; flex-wrap: wrap; }
+.mc-chip {
+  font-size: 11.5px; color: var(--text-sub); background: #15110E;
+  border: 1px solid #3A2A1C; border-radius: 999px; padding: 2px 9px;
+  cursor: pointer; user-select: none; white-space: nowrap;
 }
-.merchant-lock-toggle:hover        { color: var(--text-main); border-color: var(--text-sub); }
-.merchant-lock-toggle.locked       { color: var(--text-dim); }
-.merchant-lock-toggle:not(.locked) { color: var(--gold-active); border-color: var(--gold-active); }
+.mc-chip:hover { color: var(--text-main); }
+.mc-chip.on { color: #15110E; background: var(--gold-active); border-color: var(--gold-active); font-weight: bold; }
+.mc-chip.on.blue { background: #5B7FBF; border-color: #5B7FBF; color: #fff; }
+.mc-tip { color: var(--text-dim); font-size: 11px; margin-left: auto; }
 
-.merchant-title {
-  margin:      0;
-  font-size:   1.1rem;
-  color:       var(--text-main);
-  font-weight: 600;
-  letter-spacing: 0.05em;
-}
+.mc-grid-box { padding: 0 10px 10px; display: grid; place-items: center; }
+/* 两块网格共用 44px 格；grid-dnd 从 --cg-cell 读格距，必须给上 */
+.mc-cg { --cg-cell: 44px; --cg-gap: 2px; }
+.mc-cg--bag .cg-cell { background: #5F3E22; border-color: rgba(95,62,34,.45); }
+.mc-cg--bag .cg-cell.cg-occupied { background: rgba(95,62,34,.25); }
 
-.merchant-name-input {
-  background:  transparent;
-  border:      none;
-  border-bottom: 1px solid var(--text-sub);
-  color:       var(--text-main);
-  font-size:   1.1rem;
-  font-weight: 600;
-  width:       100%;
-  padding:     2px 4px;
-  letter-spacing: 0.05em;
+/* ── 图块角标 ─────────────────────────────────────────────────── */
+.mc-tile .mc-price {
+  position: absolute; left: 0; right: 0; bottom: 0; line-height: 1.35;
+  font-size: 9.5px; font-weight: bold; text-align: center;
+  color: var(--gold-active); background: rgba(0,0,0,.62);
 }
-.merchant-name-input:focus { outline: none; border-color: var(--gold-active); }
+.mc-tile .mc-price s { color: #8a7a5c; font-weight: normal; }
+.mc-tile .mc-eye-ic { width: 10px; height: 10px; vertical-align: -1px; margin-left: 1px; }
+.mc-tile--bag .mc-price { color: #7AAB6A; }
+.mc-tile .mc-qty {
+  position: absolute; right: 2px; top: 1px; font-size: 9.5px; font-weight: bold;
+  color: var(--text-main); background: rgba(0,0,0,.55); border-radius: 2px; padding: 0 3px;
+}
+.mc-tile.mc-poor .mc-price { color: var(--red-danger); }
+.mc-tile.mc-dim { opacity: .22; }
+/* 多选 */
+.mc-tile .mc-tick {
+  position: absolute; left: 2px; top: 1px; font-size: 11px; font-weight: bold;
+  color: var(--gold-active); display: none;
+}
+.mc-tile.mc-sel { outline: 2px solid var(--gold-active); outline-offset: -2px; }
+.mc-tile.mc-sel .mc-tick { display: block; }
+.mc-tile--bag.mc-sel { outline-color: #5B7FBF; }
+.mc-tile--bag.mc-sel .mc-tick { color: #5B7FBF; }
+/* 货架图块玩家拖不动，光标别给 grab 的错觉 */
+.mc-tile--shop { cursor: pointer; }
 
-/* ── 主体两栏 ──────────────────────────────────────────────── */
-.merchant-body {
-  display:    flex;
-  flex:       1;
-  overflow:   hidden;
-  min-height: 0;
-}
-
-/* ── 左栏 ──────────────────────────────────────────────────── */
-.merchant-left {
-  width:          200px;
-  min-width:      180px;
-  max-width:      220px;
-  flex-shrink:    0;
-  display:        flex;
-  flex-direction: column;
-  background:     var(--bg-mid);
-  border-right:   1px solid #3B2412;
-  overflow:       hidden;
-}
-
-/* Tab 导航（左栏顶部） */
-.merchant-tabs.tabs {
-  display:     flex;
-  flex-shrink: 0;
-  border-bottom: 1px solid #3B2412;
-}
-
-.merchant-tabs .item {
-  flex:          1;
-  text-align:    center;
-  padding:       6px 4px;
-  font-size:     0.78rem;
-  color:         var(--text-sub);
-  cursor:        pointer;
-  border-bottom: 2px solid transparent;
-  transition:    color .15s, border-color .15s;
-  white-space:   nowrap;
-  overflow:      hidden;
-  text-overflow: ellipsis;
-}
-.merchant-tabs .item:hover  { color: var(--text-main); }
-.merchant-tabs .item.active {
-  color:        var(--gold-active);
-  border-color: var(--gold-active);
-}
-
-/* 立绘 */
-.merchant-portrait-wrap {
-  flex-shrink: 0;
-  padding:     8px;
-}
-
-.merchant-portrait {
-  width:         100%;
-  aspect-ratio:  3/4;
-  object-fit:    cover;
-  object-position: center top;
-  border:        1px solid #3B2412;
-  border-radius: 2px;
-  display:       block;
-  cursor:        pointer;
-}
-.merchant-portrait:hover { border-color: var(--gold-active); }
-
-/* 描述区 */
-.merchant-desc-wrap {
-  flex:       1;
-  overflow-y: auto;
-  padding:    6px 8px;
-  font-size:  0.78rem;
-  line-height: 1.5;
-  color:      var(--text-main);
-}
-
-.merchant-desc-text {
-  white-space: pre-wrap;
-}
-
-/* 富文本编辑器（ProseMirror） */
-.merchant-desc-wrap .editor {
-  height: 100%;
-}
-/* 工具栏 */
-.merchant-desc-wrap .editor-menu {
-  background: #201D1A;
-  border-bottom: 1px solid #3B2412;
-}
-.merchant-desc-wrap .editor-menu button,
-.merchant-desc-wrap .editor-menu select {
-  background:  #201D1A !important;
-  color:       #E8C9A2 !important;
-  border-color: #3B2412 !important;
-}
-/* 编辑区 */
-.merchant-desc-wrap .editor-content,
-.merchant-desc-wrap .prosemirror,
-.merchant-desc-wrap div[contenteditable] {
-  min-height: 60px;
-  font-size:  0.78rem;
-  color:      #E8C9A2 !important;
-  background: #201D1A !important;
-  caret-color: #E8C9A2;
-}
-/* ProseMirror 内段落/文字继承 */
-.merchant-desc-wrap .prosemirror p,
-.merchant-desc-wrap .prosemirror span,
-.merchant-desc-wrap div[contenteditable] p {
-  color: #E8C9A2;
-}
-
-/* ── 右栏 ──────────────────────────────────────────────────── */
-.merchant-right {
-  flex:           1;
-  display:        flex;
-  flex-direction: column;
-  overflow:       hidden;
-  min-width:      0;
-}
-
-/* 搜索栏 */
-.merchant-search-bar {
-  display:      flex;
-  align-items:  center;
-  gap:          6px;
-  padding:      6px 10px;
-  border-bottom: 1px solid #3B2412;
-  flex-shrink:  0;
-  background:   var(--bg-mid);
-}
-
-.merchant-search {
-  flex:        1;
-  background:  rgba(255,255,255,0.04);
-  border:      1px solid #3B2412;
-  border-radius: 3px;
-  color:       var(--text-main);
-  padding:     3px 8px;
-  font-size:   0.82rem;
-}
-.merchant-search::placeholder { color: var(--text-dim); }
-.merchant-search:focus        { outline: none; border-color: var(--gold-active); }
-
-.merchant-search-icon { color: var(--text-dim); font-size: 0.8rem; }
-
-/* 隐藏物品切换按钮 */
-.merchant-hidden-toggle {
-  background:  none;
-  border:      1px solid #3B2412;
-  border-radius: 3px;
-  color:       var(--text-sub);
-  padding:     3px 7px;
-  cursor:      pointer;
-  font-size:   0.78rem;
-  line-height: 1;
-  transition:  color .15s, border-color .15s;
-  max-width: 10px;
-}
-.merchant-hidden-toggle:hover  { color: var(--text-main); border-color: var(--text-sub); }
-.merchant-hidden-toggle.active { color: var(--gold-active); border-color: var(--gold-active); }
-
-/* ── Tab 内容区 ──────────────────────────────────────────────── */
-.merchant-tab-body {
-  flex:       1;
-  overflow:   hidden;
-  position:   relative;
-  min-height: 0;
-}
-
-.merchant-tab-content {
-  display:    none;
-  height:     100%;
-  overflow-y: auto;
-  padding:    0;
-}
-.merchant-tab-content.active { display: block; }
-
-/* ── 货物表格 ────────────────────────────────────────────────── */
-.merchant-table {
-  width:           100%;
-  border-collapse: collapse;
-  font-size:       0.82rem;
-}
-
-.merchant-table thead tr {
-  background:    var(--bg-mid);
-  border-bottom: 1px solid #3B2412;
-  position:      sticky;
-  top:           0;
-  z-index:       1;
-}
-
-.merchant-table th {
-  padding:    6px 8px;
-  font-weight: 600;
-  color:       var(--text-sub);
-  text-align:  left;
-  font-size:   0.75rem;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
-
-.merchant-table td {
-  padding:       5px 8px;
-  border-bottom: 1px solid rgba(59,36,18,0.4);
-  vertical-align: middle;
-}
-
-/* 列宽 */
-.merchant-table .col-icon    { width: 36px; }
-.merchant-table .col-name    { }              /* 弹性宽 */
-.merchant-table .col-stock   { width: 60px; text-align: center; }
-.merchant-table .col-price   { width: 64px; text-align: right; }
-.merchant-table .col-actions { width: 180px; text-align: right; white-space: nowrap; }
-
-/* 行悬停 */
-.merchant-item-row {
-  transition: background .1s;
-}
-.merchant-item-row:hover { background: rgba(59,36,18,0.35); }
-
-/* 隐藏物品行（GM视图半透明） */
-.merchant-item-row.is-hidden { opacity: 0.45; }
-.merchant-item-row.is-hidden:hover { opacity: 0.75; }
-
-/* 售罄行 */
-.merchant-item-row.is-soldout .col-name { color: var(--text-dim); text-decoration: line-through; }
-
-/* 空状态 */
-.merchant-empty-row td {
-  text-align:  center;
-  padding:     24px;
-  color:       var(--text-dim);
-  font-size:   0.82rem;
-  border:      none;
-}
-
-/* 物品图标 */
-.merchant-item-icon {
-  width:         28px;
-  height:        28px;
-  object-fit:    cover;
-  border:        1px solid #3B2412;
-  border-radius: 2px;
-  cursor:        pointer;
-  display:       block;
-}
-.merchant-item-icon:hover { border-color: var(--gold-active); }
-
-/* 隐藏标记图标 */
-.hidden-badge {
-  margin-left: 4px;
-  font-size:   0.72rem;
-  color:       var(--text-dim);
-  vertical-align: middle;
-}
-
-/* 库存 */
-.stock-unlimited { color: var(--gold-active); font-weight: 700; }
-.stock-soldout   { color: var(--red-danger);  font-size: 0.75rem; }
-
-/* ── 按钮 ─────────────────────────────────────────────────────── */
-.btn-sm {
-  padding:       2px 8px;
-  font-size:     0.72rem;
-  border:        1px solid #3B2412;
-  border-radius: 2px;
-  background:    rgba(59,36,18,0.5);
-  color:         var(--text-main);
-  cursor:        pointer;
-  transition:    background .15s, border-color .15s;
-  line-height:   1.5;
-  max-width:     50px;
-}
-.btn-sm:hover           { background: rgba(59,36,18,0.9); border-color: var(--text-sub); }
-.btn-sm:disabled        { color: var(--text-dim); cursor: not-allowed; opacity: 0.5; }
-.btn-sm.btn-show        { border-color: #2a4a2a; color: #6ec26e; }
-.btn-sm.btn-show:hover  { background: rgba(42,74,42,0.5); }
-
-.merchant-item-buy {
-  background: rgba(40,25,10,0.7);
-  border-color: var(--gold-mid);
-  color:        var(--gold-active);
-  font-weight:  600;
-}
-.merchant-item-buy:hover {
-  background:   rgba(60,40,10,0.9);
-  border-color: var(--gold-active);
-}
-
-/* ── 填充物品 Tab 拖拽区 ─────────────────────────────────────── */
-.merchant-dropzone {
-  min-height: 100%;
-  position:   relative;
-}
-
-.merchant-dropzone-hint {
-  display:       flex;
-  flex-direction: column;
-  align-items:   center;
-  gap:           8px;
-  padding:       20px;
-  color:         var(--text-dim);
-  font-size:     0.82rem;
-}
-.merchant-dropzone-hint i { font-size: 1.4rem; }
-
-.merchant-dropzone.dragover {
-  outline:          2px dashed var(--gold-active);
-  outline-offset:  -4px;
-  background:       rgba(229,186,37,0.04);
-}
-
-/* ── 卖出 Tab ─────────────────────────────────────────────────── */
-
-/* 卖出按钮（绿色调强调） */
-.merchant-item-sell {
-  background:   rgba(20,50,20,0.7);
-  border-color: #2a6a2a;
-  color:        #6ec26e;
-  font-weight:  600;
-}
-.merchant-item-sell:hover {
-  background:   rgba(30,70,30,0.9);
-  border-color: #4ec24e;
-}
-
-/* 类型标签 */
-.sell-type-label {
-  font-size:  0.75rem;
-  color:      var(--text-sub);
-}
-
-/* 未设定价格提示 */
-.sell-no-price {
-  color:     var(--text-dim);
-  font-size: 0.82rem;
-}
-
-/* ── （保留旧占位选择器） ──────────────────────────────────────── */
-.merchant-coming-soon {
-  display:        flex;
-  flex-direction: column;
-  align-items:    center;
-  justify-content: center;
-  height:         100%;
-  gap:            12px;
-  color:          var(--text-dim);
-  font-size:      0.9rem;
-  min-height:     120px;
-}
-.merchant-coming-soon i { font-size: 1.8rem; }
-
-/* ── 底栏 ─────────────────────────────────────────────────────── */
-.merchant-footer {
-  display:       flex;
-  align-items:   center;
-  justify-content: space-between;
-  gap:           12px;
-  padding:       6px 12px;
-  border-top:    1px solid #3B2412;
-  background:    var(--bg-bottom);
-  flex-shrink:   0;
-  min-height:    36px;
-}
-
-.btn-footer {
-  padding:       4px 12px;
-  font-size:     0.8rem;
-  border:        1px solid #3B2412;
-  border-radius: 2px;
-  background:    rgba(59,36,18,0.5);
-  color:         var(--text-main);
-  cursor:        pointer;
-  transition:    background .15s;
-  max-width: 140px;
-}
-.btn-footer:hover { background: rgba(59,36,18,0.9); }
-
-/* 货币显示区 */
-.merchant-currency-display {
-  display:     flex;
-  align-items: center;
-  gap:         5px;
-  font-size:   0.9rem;
-  font-weight: 600;
-  color:       var(--gold-active);
-}
-
-.currency-icon {
-  width:  18px;
-  height: 18px;
-  object-fit: contain;
-}
-
-.merchant-currency-value,
-.merchant-player-currency {
-  min-width: 40px;
-  text-align: right;
-}
-
-.merchant-currency-input {
-  width: 70px;
-  text-align: right;
-  background: transparent;
-  border: 1px solid var(--gold-active);
-  color: var(--gold-active);
-  font-size: 0.9rem;
-  font-weight: 600;
-  padding: 0 2px;
-}
-
-/* 玩家角色选择器 */
-.merchant-buyer-select {
-  display:     flex;
-  align-items: center;
-  gap:         6px;
-  font-size:   0.82rem;
-  color:       var(--text-sub);
-}
-
-.merchant-char-select {
-  background:    rgba(59,36,18,0.6);
-  border:        1px solid #3B2412;
-  border-radius: 2px;
-  color:         var(--text-main);
-  padding:       2px 4px;
-  font-size:     0.82rem;
-  cursor:        pointer;
-  max-width:     130px;
-}
-.merchant-char-select:focus { outline: none; border-color: var(--gold-active); }
-
-/* ── 购买聊天卡 ──────────────────────────────────────────────── */
+/* ── 购买/取出播报卡（camp-sheet 与 loot-sheet 也在用，别跟着商人一起删） ── */
 .limbus-merchant-purchase-card {
   background:    var(--bg-card);
   border:        1px solid #3B2412;
@@ -6434,33 +6894,6 @@ input.item-piles-quantity {
   font-weight: 700;
 }
 
-/* ── 商人编辑对话框 ─────────────────────────────────────────── */
-.merchant-edit-dialog .form-group {
-  display:     flex;
-  align-items: center;
-  gap:         10px;
-  margin:      8px 0;
-}
-.merchant-edit-dialog label {
-  width:       120px;
-  font-size:   0.85rem;
-  color:       var(--text-sub);
-  flex-shrink: 0;
-}
-.merchant-edit-dialog input[type="number"] {
-  flex:        1;
-  background:  rgba(255,255,255,0.05);
-  border:      1px solid #3B2412;
-  border-radius: 2px;
-  color:       var(--text-main);
-  padding:     4px 8px;
-  font-size:   0.85rem;
-}
-.merchant-edit-dialog input[type="number"]:focus {
-  outline:      none;
-  border-color: var(--gold-active);
-}
-
 /* ══════════════════════════════════════════════════════════════
    §  营地（Camp）角色卡
    ══════════════════════════════════════════════════════════════ */
@@ -6519,18 +6952,151 @@ input.item-piles-quantity {
 }
 
 /* ── 通用：面板 ───────────────────────────────────────────────── */
+.camp-char-panel,
 .camp-warehouse-panel,
 .camp-recipe-panel {
   display:        flex;
   flex-direction: column;
   overflow:       hidden;
 }
+.camp-char-panel {
+  flex:            0 0 265px;   /* 固定宽度，缩放窗口不变；容量超出向下扩展（6×N） */
+  border-right:    1px solid var(--border-gold);
+}
+.camp-char-panel.cg-drag-over {
+  outline:         2px dashed var(--gold-active);
+  outline-offset:  -4px;
+}
+.camp-char-avatar {
+  width:         22px;
+  height:        22px;
+  object-fit:    cover;
+  border-radius: 50%;
+  border:        1px solid var(--border-gold);
+}
+.camp-char-grid-wrap {
+  flex:      1;
+  overflow:  auto;
+  padding:   8px;
+}
+/* 营地左栏的角色背包：格子尺寸与右侧仓库（继承基准的 44px）保持一致——
+   两边要互相拖放，格子不一样大时物品跨过去尺寸会突变，很难对准 */
+.limbuscompany .cg-wrap.camp-char-cg {
+  --cg-cell: 44px;
+  --cg-gap:  2px;
+}
+
+/* ── 角色卡物品 Tab：网格视图 ─────────────────────────────────── */
+.bag-grid-wrap {
+  flex:      1;
+  overflow:  auto;
+  padding:   8px;
+}
+.limbuscompany .cg-wrap.bag-cg {
+  --cg-cell: 44px;
+  --cg-gap:  2px;
+}
+.item-view-toggle.active {
+  color: var(--gold-active);
+}
+
+/* 营地仓库：容器图块永远置顶，保证可作为拖放目标 */
+.camp-cg .cg-item-tile.cg-tile-container {
+  z-index: 5;
+}
+
+/* ── 角色卡战斗 Tab：恐慌类型槽位 ─────────────────────────────── */
+.panic-slot-row {
+  display:     flex;
+  align-items: center;
+  gap:         18px;
+  padding:     6px 10px;
+}
+.panic-slot-group {
+  display:     flex;
+  align-items: center;
+  gap:         8px;
+}
+.panic-slot-label {
+  font-size: 0.8rem;
+  color:     var(--text-main);
+}
+.panic-slot {
+  width:         32px;
+  height:        32px;
+  border:        1px dashed var(--border-gold);
+  border-radius: 3px;
+  background:    rgba(0, 0, 0, .25);
+  cursor:        pointer;
+  overflow:      hidden;
+  flex-shrink:   0;
+}
+.panic-slot.panic-slot-filled {
+  border-style: solid;
+}
+.panic-slot img {
+  width:      100%;
+  height:     100%;
+  object-fit: cover;
+}
+.panic-slot.cg-drag-over {
+  border-color: var(--gold-active);
+  background:   rgba(201, 168, 76, .15);
+}
+
+/* ── 恐慌/坚定计数圆点 ────────────────────────────────────────── */
+.panic-counter-sep {
+  color:      var(--text-dim);
+  margin:     0 4px;
+  font-size:  1rem;
+}
+.panic-counter-row {
+  display:     flex;
+  align-items: center;
+  gap:         4px;
+}
+.panic-counter-label {
+  font-size: 0.75rem;
+  color:     var(--text-sub);
+  margin:    0 2px;
+}
+.panic-counter-mid {
+  width: 6px;
+}
+.panic-counter-dot {
+  width:         14px;
+  height:        14px;
+  border-radius: 50%;
+  border:        1px solid var(--border-gold);
+  background:    rgba(0, 0, 0, .3);
+  cursor:        pointer;
+  transition:    background .15s, box-shadow .15s;
+  flex-shrink:   0;
+}
+.panic-counter-dot:hover:not(.readonly) {
+  box-shadow: 0 0 4px rgba(201, 168, 76, .6);
+}
+.panic-counter-dot.readonly {
+  cursor: default;
+}
+.panic-counter-fear.lit {
+  background:   #C0392B;
+  border-color: #E74C3C;
+  box-shadow:   0 0 5px rgba(231, 76, 60, .7);
+}
+.panic-counter-resolve.lit {
+  background:   #2E86C1;
+  border-color: #5DADE2;
+  box-shadow:   0 0 5px rgba(93, 173, 226, .7);
+}
 .camp-warehouse-panel {
-  flex:            0 0 52%;
+  flex:            1 1 400px;   /* 唯一随窗口缩放变化的面板；起始至少 400px */
+  min-width:       400px;
   border-right:    1px solid var(--border-gold);
 }
 .camp-recipe-panel {
-  flex:            1;
+  flex:            0 0 400px;   /* 固定宽度，缩放窗口不变 */
+  max-width:       400px;
 }
 
 .camp-panel-header {
@@ -6608,6 +7174,12 @@ input.item-piles-quantity {
 .camp-cg {
   --cell-size: 36px;
 }
+/* 仓库网格：滚动统一交给外层 grid-wrap（两个方向同一个滚动条组，
+   水平条固定显示在面板底部，不再需要拉到网格最底才能看见） */
+.limbuscompany .cg-wrap.camp-cg {
+  overflow:  visible;
+  max-width: none;
+}
 .camp-warehouse-drag-hint {
   text-align:  center;
   font-size:   0.72rem;
@@ -6679,6 +7251,42 @@ input.item-piles-quantity {
   color:        #FFD700;
   flex-shrink:  0;
 }
+/* 图标按钮（配方的隐藏/编辑/删除、面板标题栏的 +）
+   原先没有任何样式，直接吃 Foundry 的默认 button：一片黑底，还会被
+   flex 容器拉长（标题栏那个 + 尤其明显）。这里统一成小方块图标钮。 */
+.limbuscompany .icon-btn {
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  min-width: 0;
+  padding: 0;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(95,62,33,.35);
+  border: 1px solid var(--border-gold);
+  border-radius: 2px;
+  color: var(--text-main);
+  font-size: .72rem;
+  cursor: pointer;
+  transition: background .15s, color .15s, border-color .15s;
+}
+.limbuscompany .icon-btn:hover {
+  background: rgba(229,186,37,.25);
+  border-color: var(--gold-active);
+  color: var(--gold-active);
+}
+.limbuscompany .icon-btn > i { margin: 0; }
+/* 删除键单独给个警示色 */
+.limbuscompany .camp-recipe-delete:hover {
+  background: rgba(184,68,68,.3);
+  border-color: #B84444;
+  color: #E8A0A0;
+}
+/* 面板标题栏里的 + 靠右，不跟着标题一起铺满 */
+.limbuscompany .camp-panel-header .icon-btn { margin-left: auto; }
+
 .camp-recipe-btns {
   display:     flex;
   align-items: center;
@@ -7450,6 +8058,97 @@ input.item-piles-quantity {
   color:     var(--text-dim, #786455);
 }
 
+/* ── 主体：网格（左） + GM 战利品清单（右） ─────────────────────────────── */
+
+.loot-body {
+  display:  flex;
+  flex:     1;
+  overflow: hidden;
+  gap:      0;
+}
+.loot-grid-col {
+  display:        flex;
+  flex-direction: column;
+  flex:           1;
+  min-width:      0;
+  overflow:       hidden;
+}
+
+/* GM 右栏：战利品清单 */
+.loot-table-panel {
+  flex:           0 0 260px;
+  display:        flex;
+  flex-direction: column;
+  overflow:       hidden;
+  border-left:    1px solid var(--border-gold, #5F3E21);
+}
+.loot-table-panel.cg-drag-over {
+  outline:        2px dashed var(--gold-active, #C9A84C);
+  outline-offset: -4px;
+}
+.loot-table-header {
+  display:       flex;
+  align-items:   center;
+  gap:           6px;
+  padding:       6px 10px;
+  font-size:     0.8rem;
+  font-weight:   600;
+  color:         var(--text-sub, #A08A6E);
+  border-bottom: 1px solid var(--border-gold, #5F3E21);
+  flex-shrink:   0;
+}
+.loot-table-count {
+  margin-left: auto;
+  font-size:   0.72rem;
+  color:       var(--text-dim, #786455);
+}
+.loot-table-list {
+  flex:     1;
+  overflow: auto;
+  padding:  6px;
+}
+.loot-table-entry {
+  display:       flex;
+  align-items:   center;
+  gap:           6px;
+  padding:       3px 4px;
+  border-radius: 3px;
+}
+.loot-table-entry:hover { background: rgba(201, 168, 76, .08); }
+.loot-table-entry-icon {
+  width:         22px;
+  height:        22px;
+  object-fit:    cover;
+  border-radius: 3px;
+  border:        1px solid var(--border-gold, #5F3E21);
+}
+.loot-table-entry-name {
+  flex:          1;
+  font-size:     0.78rem;
+  overflow:      hidden;
+  text-overflow: ellipsis;
+  white-space:   nowrap;
+}
+.loot-table-weight { width: 44px; }
+.loot-table-del {
+  background: none;
+  border:     none;
+  color:      var(--text-dim, #786455);
+  cursor:     pointer;
+}
+.loot-table-del:hover { color: #E84444; }
+.loot-table-empty {
+  padding:    16px 8px;
+  text-align: center;
+  font-size:  0.75rem;
+  color:      var(--text-dim, #786455);
+  font-style: italic;
+}
+.loot-refill-btn {
+  margin:      6px;
+  flex-shrink: 0;
+}
+
 /* ── 网格容器 ────────────────────────────────────────────────────────────── */
 
 .loot-grid-wrap {
@@ -7492,8 +8191,7 @@ input.item-piles-quantity {
 /* ── 剪影状态 ────────────────────────────────────────────────────────────── */
 
 .loot-tile--silhouette {
-  cursor: default;
-  pointer-events: none; /* 搜索中禁止交互 */
+  cursor: pointer; /* 可双击揭晓 */
 }
 
 /* 图片变为纯黑轮廓 */
@@ -7508,19 +8206,25 @@ input.item-piles-quantity {
   opacity: 0;
 }
 
-/* ♻ 旋转搜索符号（居中悬浮在图块上） */
+/* ? 未揭晓标记（静态；揭晓动画时替换为旋转 ♻） */
 .loot-tile--silhouette::before {
-  content:         "♻";
+  content:         "?";
   position:        absolute;
   top:             50%;
   left:            50%;
   transform:       translate(-50%, -50%);
   font-size:       20px;
-  color:           rgba(200, 158, 112, 0.75);
-  animation:       loot-spin 1.1s linear infinite;
+  font-weight:     bold;
+  color:           rgba(200, 158, 112, 0.85);
   z-index:         5;
   pointer-events:  none;
   text-shadow:     0 0 8px rgba(200, 158, 112, 0.4);
+}
+
+/* 揭晓动画进行中：旋转 ♻（双击后 800ms） */
+.loot-tile--searching::before {
+  content:   "♻";
+  animation: loot-spin 1.1s linear infinite;
 }
 
 /* ── 揭示瞬间动画 ────────────────────────────────────────────────────────── */
@@ -7545,3 +8249,2095 @@ input.item-piles-quantity {
   padding-left: 8px;
   color: var(--text-dim, #b0a090);
 }
+
+/* ═══ 技能书（skillbook-sheet）═══════════════════════════════════════ */
+.limbuscompany .skillbook-toolbar {
+  display: flex; justify-content: flex-end; align-items: center;
+  padding: 2px 10px;
+}
+.limbuscompany .skillbook-count {
+  font-size: .72rem; color: var(--text-sub);
+}
+.limbuscompany .skillbook-dropzone {
+  display: flex; flex-wrap: wrap; align-content: flex-start;
+  gap: 8px;
+  min-height: 110px;
+  padding: 10px;
+  margin: 0 10px 6px;
+  background: #5F3E22;
+  border: 1px solid rgba(95,62,33,.45);
+  border-radius: 4px;
+}
+.limbuscompany .skillbook-dropzone.cg-drag-over {
+  background: rgba(229,186,37,.18);
+  border-color: var(--gold-active);
+}
+.limbuscompany .skillbook-slot {
+  cursor: pointer;
+}
+.limbuscompany .skillbook-empty-hint {
+  width: 100%;
+  display: flex; align-items: center; justify-content: center;
+  color: var(--text-dim);
+  font-size: .78rem;
+}
+
+/* ═══ 背景物品卡 ═══════════════════════════════════════════════════ */
+.limbuscompany .bg-subtitle-label { font-size: .8rem; color: var(--gold-active); }
+.limbuscompany .bg-section-title {
+  font-size: .8rem; font-weight: bold; color: var(--text-main);
+  padding: 6px 10px 2px;
+}
+.limbuscompany .bg-level-block { margin: 4px 10px 10px; }
+.limbuscompany .bg-level-hd {
+  display: flex; align-items: center; gap: 6px;
+  font-size: .78rem; color: var(--text-sub);
+  padding: 2px 0 4px;
+}
+.limbuscompany .bg-level-remove {
+  background: none; border: none; color: var(--text-dim);
+  cursor: pointer; font-size: .85rem; line-height: 1;
+}
+.limbuscompany .bg-level-remove:hover { color: var(--red-danger); }
+.limbuscompany .bg-dropzone {
+  display: flex; flex-wrap: wrap; align-content: flex-start;
+  gap: 6px;
+  min-height: 64px;
+  padding: 8px;
+  background: #5F3E22;
+  border: 1px solid rgba(95,62,33,.45);
+  border-radius: 4px;
+}
+.limbuscompany .bg-dropzone.cg-drag-over {
+  background: rgba(229,186,37,.18);
+  border-color: var(--gold-active);
+}
+.limbuscompany .bg-item-chip {
+  position: relative;
+  display: flex; align-items: center; justify-content: center;
+  padding: 0;
+  background: rgba(0,0,0,.25);
+  border: 1px solid rgba(201,168,76,.3);
+  border-radius: 3px;
+  cursor: default;
+}
+.limbuscompany .bg-item-icon { width: 50px; height: 50px; object-fit: cover; border-radius: 3px; }
+.limbuscompany .bg-item-name { display: none; }
+.limbuscompany .bg-item-remove {
+  position: absolute; top: -6px; right: -6px;
+  width: 16px; height: 16px;
+  display: flex; align-items: center; justify-content: center;
+  background: #2A1A10; border: 1px solid rgba(201,168,76,.5); border-radius: 50%;
+  color: var(--text-dim);
+  cursor: pointer; font-size: .7rem; line-height: 1;
+}
+.limbuscompany .bg-item-remove:hover { color: var(--red-danger); }
+.limbuscompany .bg-empty-hint {
+  width: 100%;
+  display: flex; align-items: center; justify-content: center;
+  color: var(--text-dim);
+  font-size: .74rem;
+}
+.limbuscompany .bg-add-level {
+  display: block;
+  margin: 4px 10px 10px;
+  width: calc(100% - 20px);
+}
+
+/* ═══ Activity 编辑器：随机BUFF池 ═══════════════════════════════════ */
+.ae-eff-random-sec {
+  display: contents;
+}
+.ae-pool-list {
+  width: 100%; display: flex; flex-direction: column; gap: 4px; margin-top: 4px;
+}
+.ae-pool-row {
+  display: flex; align-items: center; gap: 4px; flex-wrap: wrap;
+}
+.ae-pool-row .ae-sel { flex: 1; min-width: 90px; }
+.ae-pool-row label { font-size: .72rem; color: var(--text-dim, #8a7a6a); white-space: nowrap; }
+.ae-pool-row .ae-input-sm { width: 46px; }
+.ae-pool-row .ae-del-btn { flex-shrink: 0; }
+
+/* ═══ 背景创建向导（background-wizard） ═══ */
+.background-wizard .window-content { padding: 0; background: #1c140c; }
+.bgw-root { display: flex; flex-direction: column; height: 100%; padding: 10px 14px; box-sizing: border-box; color: #C9B79C; }
+.bgw-steps { display: flex; gap: 10px; margin-bottom: 10px; flex-shrink: 0; }
+.bgw-step-dot {
+  flex: 1; text-align: center; padding: 4px 0; font-size: 13px;
+  background: #2b1d10; color: #8a7a6a; border-radius: 2px; border: 1px solid #3a2a18;
+}
+.bgw-step-dot.active { color: #C58C4E; border-color: var(--gold-active, #C58C4E); background: #3B2412; }
+.bgw-panel { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; min-height: 0; }
+.bgw-search-input {
+  width: 100%; background: #2b1d10; border: 1px solid #3a2a18; color: #C9B79C;
+  padding: 5px 8px; border-radius: 2px; font-family: var(--font-main); flex-shrink: 0;
+}
+.bgw-list { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; }
+.bgw-list-item {
+  display: flex; align-items: center; gap: 8px; padding: 5px 8px;
+  background: #241808; border: 1px solid transparent; border-radius: 2px; cursor: pointer;
+}
+.bgw-list-item:hover { border-color: #5a3f22; }
+.bgw-list-item.selected { border-color: var(--gold-active, #C58C4E); background: #3B2412; }
+.bgw-list-icon { width: 32px; height: 32px; object-fit: cover; border-radius: 2px; flex-shrink: 0; cursor: pointer; }
+.bgw-list-icon:hover { outline: 1px solid var(--gold-active, #C58C4E); }
+.bgw-list-info { display: flex; flex-direction: column; overflow: hidden; }
+.bgw-list-name { font-size: 14px; color: #C9B79C; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bgw-empty { text-align: center; color: #6a5a48; padding: 20px 0; font-size: 13px; }
+
+/* ── 合集包浏览器（左：搜索+合集筛选 / 右：结果表） ── */
+.bgw-browser-panel {
+  background: linear-gradient(180deg, #241a10 0%, #150f09 100%);
+  border-radius: 4px; padding: 12px; gap: 10px;
+}
+.bgw-browser-title { text-align: center; font-size: 18px; color: #C58C4E; flex-shrink: 0; }
+.bgw-browser-body { flex: 1; display: flex; gap: 14px; min-height: 0; }
+.bgw-browser-left { width: 210px; flex-shrink: 0; display: flex; flex-direction: column; gap: 8px; }
+.bgw-search-wrap { position: relative; flex-shrink: 0; }
+.bgw-search-wrap .bgw-search-input { padding-right: 26px; }
+.bgw-search-icon { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); color: #8a7a6a; font-size: 12px; pointer-events: none; }
+.bgw-cat-list { display: flex; flex-direction: column; gap: 6px; overflow-y: auto; }
+.bgw-cat-row { display: flex; align-items: center; gap: 8px; cursor: pointer; padding: 2px 0; }
+.bgw-cat-check {
+  width: 16px; height: 16px; border: 1px solid #6a5a48; border-radius: 2px;
+  background: #150f09; flex-shrink: 0; display: inline-block;
+}
+.bgw-cat-check.checked { background: #C58C4E; border-color: #C58C4E; }
+.bgw-cat-name { font-size: 13px; color: #C9B79C; }
+.bgw-browser-right { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+.bgw-result-hd {
+  display: flex; justify-content: space-between; align-items: center;
+  background: #C9B79C; color: #241808; font-size: 12px; font-weight: bold;
+  padding: 5px 10px; border-radius: 2px 2px 0 0; flex-shrink: 0;
+}
+.bgw-browser-right .bgw-list { border: 1px solid #3a2a18; border-top: none; padding: 4px; gap: 0; }
+.bgw-browser-right .bgw-list-item {
+  border-radius: 0; border: none; border-bottom: 1px solid #2b1d10; background: transparent; padding: 6px 6px;
+}
+.bgw-browser-right .bgw-list-item:last-child { border-bottom: none; }
+.bgw-browser-right .bgw-list-item.selected { background: #3B2412; }
+.bgw-browser-right .bgw-list-item .bgw-list-info { flex: 1; }
+.bgw-result-cat { font-size: 12px; color: #8a7a6a; flex-shrink: 0; margin-right: 8px; }
+.bgw-list-check {
+  width: 16px; height: 16px; border: 1px solid #6a5a48; border-radius: 2px;
+  background: #150f09; flex-shrink: 0; display: inline-block;
+}
+.bgw-list-check.checked { background: #C58C4E; border-color: #C58C4E; }
+
+/* ── 卡片风格步骤（属性分配 / 恐慌选择，对齐截图） ── */
+.bgw-card {
+  background: linear-gradient(180deg, #241a10 0%, #150f09 100%);
+  border-radius: 4px; padding: 16px; gap: 6px;
+}
+.bgw-card-title { text-align: center; font-size: 22px; color: #E8D9C0; font-weight: bold; }
+.bgw-card-subtitle { text-align: center; font-size: 12px; color: #8a7a6a; margin-bottom: 6px; }
+.bgw-card-section-hd {
+  display: flex; justify-content: space-between; align-items: baseline;
+  font-size: 14px; color: #C9B79C; padding-bottom: 6px;
+  border-bottom: 1px solid #5a3f22; margin-bottom: 4px;
+}
+.bgw-card-hint { font-size: 11px; color: #8a7a6a; }
+.bgw-card-hint strong { color: #C58C4E; }
+.bgw-card-hint strong.zero { color: #7fae6a; }
+.bgw-attr-note { font-size: 11px; color: #6a5a48; text-align: right; margin-bottom: 4px; }
+
+.bgw-attr-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px 10px; padding: 6px 0; }
+.bgw-attr-col { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.bgw-attr-label { font-size: 32px; color: #AE9475; }
+.bgw-attr-adjust { display: flex; align-items: center; gap: 20px; }
+.bgw-attr-adjust .bgw-attr-minus, .bgw-attr-adjust .bgw-attr-plus {
+  width: 32px; height: 32px; background: #3B2412; color: #C9B79C; border: 1px solid #5a3f22;
+  border-radius: 2px; cursor: pointer; font-size: 18px; line-height: 1;
+}
+.bgw-attr-adjust .bgw-attr-minus:hover, .bgw-attr-adjust .bgw-attr-plus:hover { background: #4a2f18; color: #C58C4E; }
+.bgw-attr-adjust .bgw-attr-value { font-size: 42px; color: #C9B79C; min-width: 20px; text-align: center; }
+
+.bgw-panic-cols { display: flex; gap: 14px; padding: 6px 0; }
+.bgw-panic-col { flex: 1; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.bgw-panic-hd { font-size: 20px; color: #AE9475; text-align: center; }
+.bgw-panic-list { max-height: 260px; }
+.bgw-panic-item {
+  display: flex; align-items: center; gap: 6px; padding: 4px 6px;
+  background: #1c140c; border: 1px solid transparent; border-radius: 2px; cursor: pointer;
+}
+.bgw-panic-item:hover { border-color: #5a3f22; }
+.bgw-panic-item.selected { border-color: var(--gold-active, #C58C4E); background: #3B2412; }
+
+.bgw-item-grid { display: flex; flex-wrap: wrap; gap: 8px; }
+.bgw-item-chip { width: 50px; height: 50px; border-radius: 2px; overflow: hidden; border: 1px solid #3a2a18; cursor: default; }
+.bgw-item-icon { width: 100%; height: 100%; object-fit: cover; }
+
+.bgw-footer { display: flex; justify-content: flex-end; gap: 8px; padding-top: 10px; flex-shrink: 0; border-top: 1px solid #3a2a18; margin-top: 8px; }
+.bgw-back, .bgw-next, .bgw-finish { min-width: 90px; }
+.bgw-next:disabled { opacity: .4; cursor: not-allowed; }
+
+/* ═══ 升级对话框（level-up-dialog） ═══ */
+.level-up-dialog .window-content { padding: 0; background: transparent; }
+.lud-root {
+  display: flex; flex-direction: column; gap: 6px; padding: 18px;
+  color: #C9B79C; background: linear-gradient(180deg, #241a10 0%, #120c07 100%);
+  border-radius: 6px;
+}
+.lud-card-title { text-align: center; font-size: 26px; color: #E8D9C0; font-weight: bold; }
+.lud-card-subtitle { text-align: center; font-size: 13px; color: #8a7a6a; margin-bottom: 4px; }
+.lud-section-title {
+  font-size: 15px; color: #C9B79C; padding-bottom: 6px;
+  border-bottom: 1px solid #5a3f22; margin-bottom: 4px;
+}
+.lud-rows { display: flex; flex-direction: column; gap: 10px; padding: 6px 0; }
+.lud-row { display: flex; align-items: center; gap: 10px; }
+.lud-label { color: #8a7a6a; flex: 1; }
+.lud-value { font-size: 20px; color: #C9B79C; min-width: 36px; text-align: center; }
+.lud-value-new { color: #C58C4E; font-weight: bold; }
+.lud-arrow { color: #8a7a6a; font-size: 16px; }
+.lud-item-list { display: flex; flex-direction: column; gap: 6px; min-height: 40px; padding: 4px 0; }
+.lud-item-row { display: flex; align-items: center; gap: 10px; padding: 4px 0; }
+.lud-item-icon { width: 40px; height: 40px; object-fit: cover; border-radius: 2px; border: 1px solid #3a2a18; }
+.lud-item-name { color: #C9B79C; }
+.lud-empty { text-align: center; color: #6a5a48; padding: 10px 0; font-size: 13px; }
+.lud-footer { display: flex; justify-content: center; padding-top: 10px; }
+.lud-footer .sheet-btn { width: 100%; }
+
+/* ═══ BUFF Title 卡 + 物品描述文本 linkify chip ═══ */
+
+/* BUFF Title 卡：图标+名字 / 金色渐变分割线 / 说明文字（自适应高度，不套用基础卡的固定 500px） */
+.limbus-buff-title-card {
+  width: 300px; height: auto; max-height: none;
+  padding: 10px 12px;
+}
+.limbus-buff-title-card .btc-header {
+  display: flex; align-items: center; gap: 8px;
+}
+.limbus-buff-title-card .btc-icon {
+  width: 28px; height: 28px; object-fit: cover; border-radius: 4px; flex-shrink: 0;
+}
+.limbus-buff-title-card .btc-name {
+  font-size: 18px; font-weight: bold; color: #E8D9C0;
+}
+.limbus-buff-title-card .btc-divider {
+  height: 1px; margin: 8px 0;
+  background: linear-gradient(90deg, transparent 0%, var(--gold-active, #C58C4E) 50%, transparent 100%);
+}
+.limbus-buff-title-card .btc-desc {
+  font-size: 13px; line-height: 1.6; color: var(--text-sub, #C9B79C);
+  white-space: normal;
+}
+
+/* 描述文本内的 【BUFF】/"物品" 悬停 chip */
+.desc-buff-chip {
+  color: #E5B681; cursor: help; font-weight: bold;
+}
+.desc-buff-chip:hover { color: #C58C4E; text-decoration: underline; }
+.desc-item-chip {
+  color: #9FC2E0; cursor: help; font-weight: bold;
+}
+.desc-item-chip:hover { color: #6FA8D8; text-decoration: underline; }
+
+/* [触发时机] 静态标签（不可悬停搜索，仅按类别着色） */
+.desc-trigger-chip { font-weight: bold; }
+.desc-trigger-chip.trigger-blue   { color: #9FC2E0; }
+.desc-trigger-chip.trigger-green  { color: #7FBF7F; }
+.desc-trigger-chip.trigger-orange { color: #E0A050; }
+.desc-trigger-chip.trigger-red    { color: #E84444; }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   【陷入混乱】token 悬浮字样
+   容器挂在 Foundry 的 #hud 层里，位置用画布坐标写，平移/缩放由 #hud 自身的
+   transform 跟随，所以这里只负责样式。
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+#limbus-chaos-labels {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;   /* 不挡 token 点击 */
+  z-index: 1;
+}
+
+/* 混乱特效底图：铺在 token 上、字样之下。
+   --chaos-vfx-scale 相对 token 尺寸放大（1 = 正好一格）。 */
+#limbus-chaos-labels .limbus-chaos-vfx {
+  position: absolute;
+  --chaos-vfx-scale: 1.35;
+  transform: translate(-50%, -50%) scale(var(--chaos-vfx-scale));
+  object-fit: contain;
+  pointer-events: none;
+  user-select: none;
+  opacity: .9;
+  animation: limbus-chaos-vfx-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes limbus-chaos-vfx-pulse {
+  0%, 100% { opacity: .9;  }
+  50%      { opacity: .65; }
+}
+
+#limbus-chaos-labels .limbus-chaos-label {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  white-space: nowrap;
+  pointer-events: none;
+  user-select: none;
+
+  font-family: "Noto Sans SC", "Microsoft YaHei", sans-serif;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  line-height: 1;
+  color: #FFFFFF;
+
+  /* 深色描边 + 橙红外发光，模拟原作混乱字样 */
+  -webkit-text-stroke: 0.12em #2A0D05;
+  paint-order: stroke fill;
+  text-shadow:
+      0 0 0.18em #FF6A1E,
+      0 0 0.42em #C2360C,
+      0 0.06em 0.12em rgba(0, 0, 0, .85);
+}
+
+/* 整体逆时针倾斜 10°，呼吸动画也放在这一层，避免和外层的居中位移打架 */
+#limbus-chaos-labels .limbus-chaos-inner {
+  display: inline-block;
+  transform: rotate(-10deg);
+  animation: limbus-chaos-label-pulse 1.6s ease-in-out infinite;
+}
+
+/* 单字上下错开：陷、混偏上，入、乱偏下 */
+#limbus-chaos-labels .limbus-chaos-char {
+  display: inline-block;
+}
+#limbus-chaos-labels .limbus-chaos-char--up   { transform: translateY(-0.10em); }
+#limbus-chaos-labels .limbus-chaos-char--down { transform: translateY( 0.10em); }
+
+/* 等级后缀 + 作为上标，不参与错位 */
+#limbus-chaos-labels .limbus-chaos-plus {
+  display: inline-block;
+  font-size: 0.7em;
+  vertical-align: super;
+}
+
+@keyframes limbus-chaos-label-pulse {
+  0%, 100% { transform: rotate(-10deg) scale(1);    opacity: 1;   }
+  50%      { transform: rotate(-10deg) scale(1.04); opacity: .88; }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   拼点 TOTAL 演出（clash-total-fx.mjs）
+   两条倾斜黑条从左下 / 右上切入，数字随骰子动画滚动，
+   骰子落定后分段揭示（骰值 → 加值 → 各 BUFF）并累加成最终 TOTAL。
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+#limbus-clash-fx {
+  --lcfx-angle:   13deg;    /* 黑条倾斜角 */
+  --lcfx-h:       290px;    /* 黑条厚度 */
+  --lcfx-offset:  220px;    /* 向画面外推出的距离（决定角落三角形大小） */
+  --lcfx-num:     137px;    /* TOTAL 数字字号 */
+  --lcfx-label:   54px;     /* "TOTAL" 字号 */
+  --lcfx-part:    30px;     /* 分段小条字号 */
+  --lcfx-gap:     29px;     /* TOTAL / 数字 / 分段之间的间距 */
+  --lcfx-pad:     61vmax;   /* 黑条内容距画面边缘的距离 */
+  --lcfx-die:     55px;     /* 硬币大小 */
+  --lcfx-die-gap: 17px;     /* 硬币间距 */
+  --lcfx-die-row: 15px;     /* 硬币条与 TOTAL 的距离 */
+  --lcfx-die-face: 20px;    /* 硬币上的点数字号（素材自带点数时不生效） */
+  --lcfx-combo:   60px;     /* 连击字号 */
+  --lcfx-combo-jitter: 80px;/* 连击随机落点范围 */
+  --lcfx-bg:      #0b0b0b;
+  --lcfx-win:     #ffe9a8;
+  --lcfx-lose:    #9b9b9b;
+  --lcfx-accent:  #34c8df;  /* 增益分段 */
+  --lcfx-neg:     #E5443A;  /* 减益分段 / 公式重投标记 */
+
+  position: fixed;
+  inset: 0;
+  z-index: 200;             /* 盖过画布与 HUD，低于对话框 */
+  pointer-events: none;
+  overflow: hidden;
+  font-family: "Impact", "Haettenschweiler", "Arial Black", "Noto Sans SC", sans-serif;
+}
+
+#limbus-clash-fx .lcfx-band {
+  position: absolute;
+  width: 260vmax;
+  height: var(--lcfx-h);
+  background: var(--lcfx-bg);
+  display: none;                 /* is-active 时才参与布局 */
+  align-items: center;
+  gap: var(--lcfx-gap);
+  opacity: 0;
+  box-shadow: 0 0 40px rgba(0, 0, 0, .8);
+}
+#limbus-clash-fx .lcfx-band.is-active { display: flex; }
+
+/* 硬币条在上、TOTAL 在下 */
+#limbus-clash-fx .lcfx-col {
+  display: flex;
+  flex-direction: column;
+  gap: var(--lcfx-die-row);
+}
+#limbus-clash-fx .lcfx-band--atk .lcfx-col { align-items: flex-start; }
+#limbus-clash-fx .lcfx-band--def .lcfx-col { align-items: flex-end; }
+#limbus-clash-fx .lcfx-row {
+  display: flex;
+  align-items: center;
+  gap: var(--lcfx-gap);
+}
+
+/* 骰子条（硬币）：一般骰子=硬币正面，【不可摧毁】=不可摧毁的硬币 */
+#limbus-clash-fx .lcfx-dice {
+  display: flex;
+  align-items: center;
+  gap: var(--lcfx-die-gap);
+  font-size: var(--lcfx-die-face);
+}
+#limbus-clash-fx .lcfx-band--def .lcfx-dice { flex-direction: row-reverse; }
+#limbus-clash-fx .lcfx-die {
+  width:  var(--lcfx-die);
+  height: var(--lcfx-die);
+  flex: 0 0 auto;
+  object-fit: contain;
+  border: none;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, .8));
+  animation: lcfx-die-in .3s cubic-bezier(.2, 1.5, .4, 1);
+}
+@keyframes lcfx-die-in {
+  from { opacity: 0; transform: translateY(-14px) scale(.7); }
+  to   { opacity: 1; transform: none; }
+}
+/* 交锋失败：抖动闪白；不可摧毁碎后留场变暗 */
+#limbus-clash-fx .lcfx-die.is-shatter { animation: lcfx-die-shatter .1s linear; }
+@keyframes lcfx-die-shatter {
+  0%,100% { transform: translate(0, 0) rotate(0); }
+  25%     { transform: translate(-4px, 2px) rotate(-8deg); }
+  50%     { transform: translate(4px, -2px) rotate(8deg); filter: brightness(2.4); }
+  75%     { transform: translate(-3px, 3px) rotate(-4deg); }
+}
+#limbus-clash-fx .lcfx-die.is-broken {
+  filter: brightness(.4) saturate(.5) drop-shadow(0 2px 4px rgba(0, 0, 0, .8));
+}
+
+/* 进攻方：左下角，由下往上切入 */
+#limbus-clash-fx .lcfx-band--atk {
+  left: -60vmax;
+  bottom: calc(var(--lcfx-offset) * -1);
+  transform: rotate(var(--lcfx-angle)) translateY(160%);
+  transform-origin: 50% 50%;
+  justify-content: flex-start;
+  padding-left: var(--lcfx-pad);
+  --lcfx-from-y: 160%;
+}
+/* 防守方：右上角，由上往下切入 */
+#limbus-clash-fx .lcfx-band--def {
+  right: -60vmax;
+  top: calc(var(--lcfx-offset) * -1);
+  transform: rotate(var(--lcfx-angle)) translateY(-160%);
+  transform-origin: 50% 50%;
+  justify-content: flex-end;
+  padding-right: var(--lcfx-pad);
+  --lcfx-from-y: -160%;
+}
+
+/* 黑条朝画面角落的那一侧补满黑色：::after 跟随黑条一起旋转，
+   沿边缘无缝延伸出去，填掉旋转后露在角上的楔形空白 */
+#limbus-clash-fx .lcfx-band::after {
+  content: "";
+  position: absolute;
+  left: 0; right: 0;
+  height: 200vh;
+  background: var(--lcfx-bg);
+}
+#limbus-clash-fx .lcfx-band--atk::after { top: 100%; }
+#limbus-clash-fx .lcfx-band--def::after { bottom: 100%; }
+
+/* ── 流动边框：贴在黑条朝屏幕中心的那条长边上 ──────────────────────────
+   黑条是 260vmax 宽且旋转过的，两端都在屏幕外，canvas 只覆盖可见的那一段
+   （left/width 与 ClashFlowEdge.FLOW_LEFT / FLOW_SPAN 保持一致）。
+   高度要容得下 粗细 + 起伏 + 撕裂 的总幅度，不够就会被裁掉边缘。 */
+#limbus-clash-fx .lcfx-flow {
+  position: absolute;
+  width: 120vmax;
+  height: 64px;
+  pointer-events: none;
+  z-index: 1;                    /* 压在文字下面，不挡 TOTAL 数字 */
+}
+/* 横向锚点必须跟黑条自身的锚点一致，否则可见段对不上：
+   攻方 left:-60vmax → 可见段在局部 60~160vmax，从左锚 52vmax 起算刚好罩住；
+   守方 right:-60vmax → 可见段在局部 100~200vmax，必须从右锚 52vmax 起算。
+   只写 left 的话守方右侧会露出一截没有流体。 */
+#limbus-clash-fx .lcfx-band--atk .lcfx-flow { left:  52vmax; }
+#limbus-clash-fx .lcfx-band--def .lcfx-flow { right: 52vmax; }
+/* 攻方在画面下方 → 内侧是它的上沿；守方在上方 → 内侧是下沿 */
+#limbus-clash-fx .lcfx-band--atk .lcfx-flow { top: -32px; }
+#limbus-clash-fx .lcfx-band--def .lcfx-flow { bottom: -32px; }
+/* 黑条的 ::after 填角块会盖住外侧，这里把流体抬到它上面 */
+#limbus-clash-fx .lcfx-band::after { z-index: 0; }
+#limbus-clash-fx .lcfx-band .lcfx-col { position: relative; z-index: 2; }
+
+#limbus-clash-fx .lcfx-band.is-in  { animation: lcfx-in  .42s cubic-bezier(.16, .9, .3, 1) forwards; }
+#limbus-clash-fx .lcfx-band.is-out { animation: lcfx-out .58s cubic-bezier(.45, 0, .7, .35) forwards; }
+
+@keyframes lcfx-in {
+  from { opacity: 0; transform: rotate(var(--lcfx-angle)) translateY(var(--lcfx-from-y)); }
+  to   { opacity: 1; transform: rotate(var(--lcfx-angle)) translateY(0); }
+}
+@keyframes lcfx-out {
+  from { opacity: 1; transform: rotate(var(--lcfx-angle)) translateY(0); }
+  to   { opacity: 0; transform: rotate(var(--lcfx-angle)) translateY(var(--lcfx-from-y)); }
+}
+
+#limbus-clash-fx .lcfx-label {
+  font-size: var(--lcfx-label);
+  letter-spacing: .12em;
+  color: #fff;
+  transform: translateY(-6px);
+}
+#limbus-clash-fx .lcfx-num {
+  font-size: var(--lcfx-num);
+  line-height: .9;
+  color: #fff;
+  font-variant-numeric: tabular-nums;
+  min-width: 2.2ch;
+  text-align: center;
+  text-shadow: 0 0 24px rgba(255, 255, 255, .25);
+}
+#limbus-clash-fx .lcfx-band.win  .lcfx-num { color: var(--lcfx-win); text-shadow: 0 0 34px rgba(255, 200, 90, .75); }
+#limbus-clash-fx .lcfx-band.lose .lcfx-num { color: var(--lcfx-lose); }
+#limbus-clash-fx .lcfx-band.win  { box-shadow: 0 0 60px rgba(255, 190, 80, .35); }
+
+/* 定格 / 累加时的弹跳 */
+#limbus-clash-fx .lcfx-num.settle { animation: lcfx-settle .38s cubic-bezier(.2, 1.6, .4, 1); }
+#limbus-clash-fx .lcfx-num.bump   { animation: lcfx-bump   .26s cubic-bezier(.2, 1.6, .4, 1); }
+@keyframes lcfx-settle {
+  0%   { transform: scale(1.45); filter: brightness(2.2); }
+  100% { transform: scale(1);    filter: brightness(1); }
+}
+@keyframes lcfx-bump {
+  0%   { transform: scale(1.22); filter: brightness(1.8); }
+  100% { transform: scale(1); }
+}
+
+/* 分段小条 */
+#limbus-clash-fx .lcfx-parts { display: flex; align-items: center; gap: 12px; }
+#limbus-clash-fx .lcfx-band--def .lcfx-parts { flex-direction: row-reverse; }
+#limbus-clash-fx .lcfx-part {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: var(--lcfx-part);
+  letter-spacing: .04em;
+  color: var(--lcfx-accent);
+  border: 2px solid currentColor;
+  border-radius: 4px;
+  padding: 2px 10px;
+  white-space: nowrap;
+  opacity: 0;
+  transform: translateY(10px) scale(.85);
+}
+#limbus-clash-fx .lcfx-part .lcfx-pname {
+  font-size: .66em;
+  color: #b9b0a2;
+  font-family: "Noto Sans SC", "Microsoft YaHei", sans-serif;
+}
+#limbus-clash-fx .lcfx-part--dice { color: #fff; }
+#limbus-clash-fx .lcfx-part--neg  { color: var(--lcfx-neg); }
+#limbus-clash-fx .lcfx-part.show  { animation: lcfx-part-in .34s cubic-bezier(.2, 1.5, .4, 1) forwards; }
+@keyframes lcfx-part-in {
+  0%   { opacity: 0; transform: translateY(10px) scale(.85); }
+  60%  { opacity: 1; transform: translateY(0) scale(1.12); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* 公式重投标记 */
+#limbus-clash-fx .lcfx-reroll {
+  font-size: 26px;
+  letter-spacing: .1em;
+  color: var(--lcfx-neg);
+  border: 2px solid currentColor;
+  border-radius: 3px;
+  padding: 2px 10px;
+  font-family: "Noto Sans SC", "Microsoft YaHei", sans-serif;
+  display: none;
+}
+#limbus-clash-fx .lcfx-reroll.show { display: inline-block; animation: lcfx-part-in .3s ease-out; }
+
+/* 连击字样：中心附近瞬间出现、缓慢淡出，可同屏叠多个 */
+#limbus-clash-fx .lcfx-combos { position: fixed; inset: 0; pointer-events: none; }
+#limbus-clash-fx .lcfx-combo {
+  position: fixed;
+  left: 50%;
+  top:  34%;
+  --lcfx-cx: 0px;
+  --lcfx-cy: 0px;
+  transform: translate(calc(-50% + var(--lcfx-cx)), calc(-50% + var(--lcfx-cy))) rotate(-15deg);
+  font-family: "Noto Sans SC", "Source Han Sans SC", "Microsoft YaHei", "SimHei", sans-serif;
+  font-weight: 900;
+  font-size:   var(--lcfx-combo);
+  letter-spacing: .06em;
+  color: #fff;
+  text-shadow: 0 0 14px rgba(0, 0, 0, .95), 0 2px 4px rgba(0, 0, 0, .9);
+  opacity: 1;
+  animation: lcfx-combo-fade 1.1s linear forwards;
+}
+#limbus-clash-fx .lcfx-combo.final { color: var(--lcfx-win); }
+@keyframes lcfx-combo-fade {
+  0%   { opacity: 1; }
+  45%  { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+/* ── 6bag 丢弃：碎裂 + 补位（角色卡战斗页 / 快捷 HUD） ─────────────── */
+@keyframes limbus-slot-break {
+  0%   { opacity: 1; transform: scale(1)    rotate(0deg); filter: brightness(1); }
+  35%  { opacity: 1; transform: scale(1.12) rotate(-4deg); filter: brightness(2.2); }
+  100% { opacity: 0; transform: scale(.62)  rotate(6deg);  filter: brightness(.6); }
+}
+.limbuscompany .combat-skill-slot--breaking,
+.qa-skill-slot--breaking {
+  animation: limbus-slot-break .26s cubic-bezier(.3,.1,.6,1) forwards;
+  pointer-events: none;
+}
+
+/* 新牌从右边推进来；右侧的牌整体左移一格 */
+@keyframes limbus-slot-slide-in {
+  0%   { opacity: 0; transform: translateX(34px) scale(.85); }
+  100% { opacity: 1; transform: translateX(0)    scale(1); }
+}
+@keyframes limbus-slot-shift-left {
+  0%   { transform: translateX(34px); }
+  100% { transform: translateX(0); }
+}
+.limbuscompany .combat-skill-slot--slide-in   { animation: limbus-slot-slide-in .32s ease-out backwards; }
+.limbuscompany .combat-skill-slot--shift-left { animation: limbus-slot-shift-left .3s ease-out backwards; }
+
+/* ── 技能卡：攻击容量 ≥ 2 时的扩散设置 ───────────────────────────── */
+.limbuscompany .spread-box { display: none; align-items: center; gap: 4px; margin-left: 6px; }
+.limbuscompany .spread-box.on { display: inline-flex; }
+.limbuscompany .spread-ft { font-size: .65rem; color: var(--text-sub); }
+.limbuscompany .spread-badge {
+  margin-left: 6px; font-size: .62rem; padding: 1px 5px; border-radius: 2px;
+  background: #33291A; color: #E8C9A2; border: 1px solid var(--border-gold);
+}
+
+/* ── 容量扩散：目标处的 +N（累计 TOTAL 走拼点那套左下角黑条） ──────── */
+.lcvfx-layer .lcvfx-plus {
+  position: absolute; transform: translate(-50%, -50%);
+  font-size: 1.4rem; font-weight: 900; color: #FFD98A;
+  text-shadow: 0 0 10px rgba(255, 200, 110, .9), 0 2px 3px #000;
+  pointer-events: none; animation: lcvfx-plus-fly .6s ease-out forwards;
+}
+@keyframes lcvfx-plus-fly {
+  0%   { opacity: 0; transform: translate(-50%, -50%)  scale(.5); }
+  30%  { opacity: 1; transform: translate(-50%, -80%)  scale(1.1); }
+  100% { opacity: 0; transform: translate(-50%, -180%) scale(.9); }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   拼点小特效（破币 / 瞬移）
+   破币画在屏幕坐标层，瞬移画在 #hud 的画布坐标层。
+   ═══════════════════════════════════════════════════════════════ */
+
+.lcvfx-layer {
+  --lcvfx-ring-w:      6px;     /* 圆环粗细 */
+  --lcvfx-ring-ms:     520ms;   /* 扩散时长 */
+  --lcvfx-ring-color:  #ffe9a8;
+  --lcvfx-spark-ms:    460ms;
+  --lcvfx-spark-color: #fff2c4;
+  --lcvfx-wind-ms:     380ms;   /* 风线存续时长 */
+  --lcvfx-wind-thick:  3px;
+  --lcvfx-wind-color:  #bfe9ff;
+  --lcvfx-ghost-ms:    420ms;
+}
+
+.lcvfx-layer { pointer-events: none; }
+
+/* 屏幕坐标层：给角色卡 / 快捷 HUD 这类界面元素上的特效用（如丢弃技能的破币） */
+#limbus-clash-vfx-screen {
+  position: fixed; inset: 0; z-index: 10000; overflow: hidden;
+}
+
+/* ── 破币：空心圆 + 火花 ─────────────────────────────────────────── */
+.lcvfx-layer .lcvfx-ring {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  border: var(--lcvfx-ring-w) solid var(--lcvfx-ring-color);
+  border-radius: 50%;
+  animation: lcvfx-ring-out var(--lcvfx-ring-ms) cubic-bezier(.2, .7, .3, 1) forwards;
+}
+.lcvfx-layer .lcvfx-ring--inner {
+  animation-duration: calc(var(--lcvfx-ring-ms) * 1.35);
+  border-width: calc(var(--lcvfx-ring-w) / 2);
+  opacity: .7;
+}
+@keyframes lcvfx-ring-out {
+  0%   { opacity: 1;  transform: translate(-50%, -50%) scale(.15); filter: brightness(2.2); }
+  70%  { opacity: .8; }
+  100% { opacity: 0;  transform: translate(-50%, -50%) scale(1);   filter: brightness(1); }
+}
+
+.lcvfx-layer .lcvfx-sparks { position: absolute; transform: translate(-50%, -50%); }
+.lcvfx-layer .lcvfx-spark {
+  position: absolute;
+  left: 0; top: 0;
+  height: 2px;
+  background: linear-gradient(90deg, var(--lcvfx-spark-color), transparent);
+  transform-origin: 0 50%;
+  animation: lcvfx-spark-fly var(--lcvfx-spark-ms) cubic-bezier(.1, .8, .3, 1) forwards;
+}
+@keyframes lcvfx-spark-fly {
+  0%   { opacity: 1; transform: rotate(var(--a)) translateX(0)          scaleX(.4); }
+  35%  { opacity: 1; }
+  100% { opacity: 0; transform: rotate(var(--a)) translateX(var(--d))   scaleX(1); }
+}
+
+/* ── 瞬移：风线 + 残影 ───────────────────────────────────────────── */
+.lcvfx-layer .lcvfx-dash {
+  position: absolute;
+  transform-origin: 0 50%;
+  height: 0;
+}
+.lcvfx-layer .lcvfx-wind {
+  position: absolute;
+  left: 0;
+  height: var(--lcvfx-wind-thick);
+  background: linear-gradient(90deg, transparent, var(--lcvfx-wind-color) 30%, #fff 60%, transparent);
+  border-radius: 2px;
+  opacity: 0;
+  animation: lcvfx-wind-go var(--lcvfx-wind-ms) cubic-bezier(.15, .85, .25, 1) forwards;
+}
+@keyframes lcvfx-wind-go {
+  0%   { opacity: 0; transform: translateX(0)   scaleX(.2); }
+  25%  { opacity: 1; }
+  100% { opacity: 0; transform: translateX(20%) scaleX(1); }
+}
+.lcvfx-layer .lcvfx-ghost {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  border: 2px solid var(--lcvfx-wind-color);
+  background: radial-gradient(circle, rgba(191, 233, 255, .35), transparent 70%);
+  animation: lcvfx-ghost-fade var(--lcvfx-ghost-ms) ease-out forwards;
+}
+@keyframes lcvfx-ghost-fade {
+  0%   { opacity: .9; transform: translate(-50%, -50%) scale(1); }
+  100% { opacity: 0;  transform: translate(-50%, -50%) scale(1.35); }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   物品批量导入（#limbus-csv-import）
+   ═══════════════════════════════════════════════════════════════ */
+
+#limbus-csv-import .window-content {
+  padding:    0;
+  overflow-y: auto;
+  background: var(--bg-darkest);
+}
+
+.csvi-body {
+  display:        flex;
+  flex-direction: column;
+}
+
+.csvi-section {
+  padding:       10px 12px;
+  border-bottom: 1px solid #3A2A18;
+}
+.csvi-section:last-child { border-bottom: none; }
+
+.csvi-section-header {
+  display:       flex;
+  align-items:   center;
+  gap:           8px;
+  margin-bottom: 6px;
+}
+.csvi-section-title {
+  font-size:   0.9rem;
+  color:       var(--gold-active, #C9A227);
+  font-weight: bold;
+}
+.csvi-count    { font-size: 0.8rem; color: var(--text-main); opacity: 0.8; }
+.csvi-filename { font-size: 0.8rem; color: var(--text-main); opacity: 0.7; }
+
+.csvi-text-btn {
+  margin-left: auto;
+  background:  none;
+  border:      none;
+  color:       var(--gold-mid, #8A6A2A);
+  font-size:   0.78rem;
+  cursor:      pointer;
+  width:       auto;
+  padding:     0;
+}
+.csvi-text-btn:hover { color: var(--gold-active, #C9A227); }
+
+/* ── 设置行 ─────────────────────────────────────────────────── */
+
+.csvi-config {
+  display:     flex;
+  align-items: flex-end;
+  gap:         10px;
+  flex-wrap:   wrap;
+}
+.csvi-field {
+  display:        flex;
+  flex-direction: column;
+  gap:            3px;
+  flex:           1 1 180px;
+}
+.csvi-label { font-size: 0.78rem; opacity: 0.85; }
+.csvi-field select { width: 100%; }
+
+.csvi-btn {
+  padding:       4px 14px;
+  font-size:     0.85rem;
+  background:    var(--bg-title-bar);
+  border:        1px solid #5A3A18;
+  border-radius: 2px;
+  color:         var(--text-main);
+  cursor:        pointer;
+  white-space:   nowrap;
+  transition:    background 0.15s, border-color 0.15s;
+}
+.csvi-btn:hover:not(:disabled) {
+  background:   var(--gold-mid);
+  border-color: var(--gold-active);
+  color:        var(--bg-darkest);
+}
+.csvi-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+/* ── 文件区 ─────────────────────────────────────────────────── */
+
+.csvi-dropzone {
+  display:        flex;
+  flex-direction: column;
+  gap:            5px;
+  padding:        8px;
+  border:         1px dashed #5A3A18;
+  border-radius:  3px;
+  margin-bottom:  6px;
+}
+.csvi-hint { font-size: 0.75rem; opacity: 0.7; line-height: 1.4; }
+
+.csvi-paste {
+  width:       100%;
+  font-family: "Consolas", "Courier New", monospace;
+  font-size:   0.78rem;
+  resize:      vertical;
+}
+
+/* ── 预览表 ─────────────────────────────────────────────────── */
+
+.csvi-preview-wrap {
+  max-height: 220px;
+  overflow:   auto;
+  border:     1px solid #3A2A18;
+}
+.csvi-preview {
+  border-collapse: collapse;
+  font-size:       0.75rem;
+  width:           max-content;
+  min-width:       100%;
+}
+.csvi-preview th,
+.csvi-preview td {
+  border:      1px solid #3A2A18;
+  padding:     2px 6px;
+  white-space: nowrap;
+  max-width:   220px;
+  overflow:    hidden;
+  text-overflow: ellipsis;
+}
+.csvi-preview th {
+  background: var(--bg-title-bar);
+  color:      var(--gold-active, #C9A227);
+  position:   sticky;
+  top:        0;
+}
+
+.csvi-empty {
+  font-size: 0.8rem;
+  opacity:   0.6;
+  padding:   10px 0;
+}
+
+/* ── 列头对照 ───────────────────────────────────────────────── */
+
+.csvi-columns {
+  display:   flex;
+  flex-wrap: wrap;
+  gap:       4px;
+  margin-bottom: 6px;
+}
+.csvi-col-chip {
+  font-size:     0.72rem;
+  padding:       1px 6px;
+  border:        1px solid #5A3A18;
+  border-radius: 8px;
+  cursor:        help;
+}
+.csvi-note {
+  font-size:   0.73rem;
+  opacity:     0.75;
+  line-height: 1.5;
+  margin:      4px 0;
+}
+.csvi-note code {
+  font-size:  0.72rem;
+  padding:    0 3px;
+  background: rgba(0, 0, 0, 0.35);
+}
+
+/* ── 校验信息 ───────────────────────────────────────────────── */
+
+.csvi-msgs {
+  margin:      6px 0 0;
+  padding-left:18px;
+  font-size:   0.75rem;
+  line-height: 1.5;
+  max-height:  140px;
+  overflow-y:  auto;
+}
+.csvi-warn  li { color: #D6A94A; }
+.csvi-error li { color: #D45B4A; }
+
+/* ── 执行 ───────────────────────────────────────────────────── */
+
+.csvi-actions { display: flex; justify-content: flex-end; }
+.csvi-actions .csvi-btn { padding: 5px 24px; }
+
+/* 物品侧边栏的批量导入按钮 */
+#items .directory-header .limbus-csv-import,
+.items-sidebar .limbus-csv-import { flex: 0 0 auto; }
+
+/* ── 背景卡：合集分类 + 势力标签移入信息列并置底 ─────────────────────────
+   第一行标签用 margin-top:auto 把这一组推到信息列底部，与左侧 100px 图标下沿齐平。 */
+.limbuscompany .background-sheet .equip-info-col > .bg-tags-row:first-of-type {
+  margin-top: auto;
+}
+.limbuscompany .background-sheet .bg-tags-row {
+  padding: 0;
+  border: none;
+  margin: 0;
+}
+.limbuscompany .background-sheet .bg-tags-row .tags-area {
+  padding: 0;
+  gap: 4px;
+}
+
+/* 合集分类：纯文字色块，不描边（与下方势力标签的边框样式区分开） */
+.limbuscompany .background-sheet .bg-category {
+  color: #E8C199;
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: .8rem;
+  letter-spacing: .04em;
+}
+
+/* 背景卡的简介：改为按内容撑高，不参与伸缩。
+   .item-desc-block 默认是 flex:1（grow/shrink 都为 1、basis 0），在背景卡这种
+   下面还有"等级物品"若干区块的布局里会被压扁到 basis 附近，而块内富文本没有
+   裁剪，于是文字溢出压在下一节上面。 */
+.limbuscompany .background-sheet .item-desc-block {
+  flex: 0 0 auto;
+  min-height: 80px;
+}
+
+/* ── 武器：近战/远程 + 攻击范围 ─────────────────────────────────────── */
+.limbuscompany .equip-range-row {
+  display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+  font-size: .72rem; color: var(--text-sub); padding: 2px 0;
+}
+.limbuscompany .equip-rangetype-sel { width: 68px; }
+.limbuscompany .equip-range-input {
+  width: 46px; background: rgba(0,0,0,.25); border: 1px solid var(--border-gold);
+  border-radius: 2px; color: var(--text-main); font-size: .72rem; padding: 0 4px;
+}
+.limbuscompany .equip-range-ft,
+.limbuscompany .equip-range-display { color: var(--text-dim); }
+.limbuscompany .equip-rangetype-badge {
+  padding: 0 6px; border-radius: 2px; background: rgba(95,62,33,.35);
+  border: 1px solid var(--border-gold); color: var(--text-main);
+}
+.limbuscompany .equip-rangetype-badge.is-ranged {
+  background: rgba(47,97,87,.35); border-color: #4E9A8C; color: #BFE6DC;
+}
+
+/* ─── 【大招就绪】十字星芒 ──────────────────────────────────────────────
+   canvas 由 module/helpers/ready-sparkle.mjs 动态插入，绝对定位居中覆盖在
+   图标上、向外扩到图标的 4/3（对应 100×100 图层 / 75×75 图标的实装比例）。
+   宿主必须 position:relative 且 overflow 可见，否则星芒会错位或被裁。 */
+.limbus-ready-sparkle {
+  position:       absolute;
+  pointer-events: none;
+  z-index:        5;
+}
+
+/* 战斗页技能槽：.combat-skill-slot-wrap 本身已是 relative + overflow:visible */
+.limbuscompany .combat-section       { overflow: visible; }
+.limbuscompany .ego-combat-section   { overflow: visible; }
+
+/* 快捷 HUD：技能行与 EGO 行需要定位上下文，且不能裁掉外扩的画布 */
+.limbuscompany .qa-skill-row,
+.limbuscompany .qa-ego-row {
+  position: relative;
+  overflow: visible;
+}
+
+/* 小队 HUD：头像所在的主行 */
+.squad-main-row {
+  position: relative;
+  overflow: visible;
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   对抗聊天：生命值结算块
+   卡片外壳、50px 圆头像标题、金色分割线全部沿用原有美术，这里只是补上
+   模板里新增的那几样：护盾蓝字、带混乱阈值刻度的血条、触发行、
+   40px 缩小版（容量扩散的多目标用）。
+   ══════════════════════════════════════════════════════════════════════ */
+
+/* 生命值一行：先前生命值（含蓝色护盾） → 现在生命值 / 上限 */
+.lc-hp-num {
+  font-size: 1.05rem; line-height: 1.4; margin: 2px 0 0;
+  font-variant-numeric: tabular-nums;
+}
+.lc-hp-num .from { color: #9A8462; }
+.lc-hp-num .sh   { color: #7FB6D6; }          /* 护盾层数 */
+.lc-hp-num .arw  { color: #C9A84C; padding: 0 5px; }
+.lc-hp-num .to   { color: #E84444; font-weight: bold; font-size: 1.25rem; }
+.lc-hp-num .max  { color: #6A5A48; font-size: .78rem; }
+
+/* 血条：实心=结算后剩余，斜纹=本次损失，竖线=混乱阈值（灰=已击穿） */
+.lc-hp-bar {
+  position: relative; height: 10px; margin: 6px 0 0;
+  background: #241612; border: 1px solid #3A2018; border-radius: 2px; overflow: hidden;
+}
+.lc-hp-bar .fill {
+  position: absolute; left: 0; top: 0; bottom: 0;
+  background: linear-gradient(90deg, #8B1A1A, #B84444);
+}
+.lc-hp-bar .ghost {
+  position: absolute; top: 0; bottom: 0;
+  background: repeating-linear-gradient(45deg, rgba(232,68,68,.30) 0 4px, transparent 4px 8px);
+}
+.lc-hp-bar .thr {
+  position: absolute; top: -1px; bottom: -1px; width: 2px; background: #C9A84C;
+}
+.lc-hp-bar .thr.fired { background: #6A5A48; }
+
+/* 触发行：破裂 / 沉沦 / 震颤引爆 / 追加伤害 / 不可破坏 / 流血 */
+.lc-take-trig { margin-top: 7px; }
+.lc-take-trig .r { display: flex; gap: 7px; font-size: .78rem; line-height: 1.7; }
+.lc-take-trig .k {
+  color: #C9A84C; flex: none; min-width: 72px;
+  border-left: 2px solid #C9A84C; padding-left: 6px;
+}
+.lc-take-trig .v   { color: #E8C9A2; min-width: 0; }
+.lc-take-trig .v b { color: #E84444; }
+
+.lc-hp-blk + .lc-hp-blk { margin-top: 10px; }
+
+/* ── 40px 缩小版：容量扩散的多目标 ─────────────────────────────────── */
+.lc-hp-blk.sm + .lc-hp-blk.sm {
+  margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(201,168,76,.16);
+}
+.lc-hp-blk.sm .row40 { display: flex; align-items: center; gap: 9px; }
+.lc-hp-blk.sm .row40 img {
+  width: 40px; height: 40px; border-radius: 50%; object-fit: cover;
+  border: 2px solid #C9A84C; flex-shrink: 0;
+}
+.lc-hp-blk.sm .row40 .who { font-size: 12px; color: #9A8462; flex: none; }
+.lc-hp-blk.sm .row40 .lc-hp-num { margin: 0 0 0 auto; font-size: .9rem; text-align: right; }
+.lc-hp-blk.sm .row40 .lc-hp-num .to { font-size: 1.1rem; }
+.lc-hp-blk.sm .lc-hp-bar    { margin-top: 5px; }
+.lc-hp-blk.sm .lc-take-trig { margin-top: 5px; }
+.lc-hp-blk.sm .lc-take-trig .r { font-size: .75rem; line-height: 1.6; }
+.lc-hp-blk.sm .lc-take-trig .k { min-width: 64px; }
+
+/* 容量扩散的技能行 */
+.lc-spread-meta      { font-size: .85rem; line-height: 1.5; }
+.lc-spread-meta .sk  { color: #E8C9A2; }
+.lc-spread-meta .mode{ color: #9A8462; font-size: .78rem; }
+.lc-spread-meta .mode .ft { color: #EBBD68; }
+
+/* 结算结果 / 重新骰掷：主次两级，配色沿用原按钮 */
+.lc-btn-row { display: flex; gap: 8px; align-items: stretch; margin-top: 2px; }
+.lc-btn-row .lc-btn {
+  height: 30px; padding: 0 14px; border-radius: 2px;
+  font-size: .85rem; cursor: pointer; font-family: inherit;
+}
+.lc-btn-row .lc-btn.primary { background: #5F3E22; color: #E8C9A2; border: 1px solid #C9A84C; flex: 1; }
+.lc-btn-row .lc-btn.dim     { background: #241B12; color: #9A8462; border: 1px solid #5A3A1A; }
+.lc-btn-row .lc-btn.dim:hover { color: #C9A84C; border-color: #8A7231; }
+
+/* 拼点对抗卡「▼ 详细信息」折叠区：按触发时机分组 */
+.lc-trig-g + .lc-trig-g { margin-top: 5px; }
+.lc-trig-g > .k {
+  font-size: .78rem; color: #C9A84C; font-weight: bold; line-height: 1.4;
+  border-left: 2px solid #C9A84C; padding-left: 6px;
+}
+.lc-trig-g > .v { color: #E8C9A2; padding-left: 14px; font-size: .78rem; line-height: 1.65; }
+.lc-trig-g > .v .src { color: #6A5A48; }
+
+/* ══ 形象（纸娃娃）：物品 Tab 左栏的第二种视图 ═════════════════════════ */
+.limbuscompany .equip-panel-foot {
+  display: flex; gap: 6px; justify-content: center; margin-top: 6px;
+}
+.limbuscompany .equip-panel-foot .toolbar-btn { padding: 2px 10px; font-size: 12px; }
+.limbuscompany .equip-panel-foot .toolbar-btn.active {
+  color: #15110E; background: var(--gold-active); border-color: var(--gold-active); font-weight: bold;
+}
+
+.limbuscompany .doll-stage {
+  position: relative; width: 100%; aspect-ratio: 3 / 4; overflow: hidden;
+  background: #0e0b09; border: 1px solid var(--border-gold); border-radius: 3px;
+}
+.limbuscompany .doll-layer {
+  position: absolute; width: 42%; height: auto;
+  transform-origin: center center; pointer-events: none; user-select: none;
+}
+.limbuscompany .doll-layer.doll-hidden { display: none; }
+/* 只有编辑模式下图层才可点，平时纯展示 */
+.limbuscompany .doll-stage.doll-editing .doll-layer { pointer-events: auto; cursor: grab; }
+.limbuscompany .doll-stage.doll-editing .doll-layer:active { cursor: grabbing; }
+.limbuscompany .doll-stage.doll-editing .doll-layer.doll-sel {
+  outline: 1px dashed var(--gold-active); outline-offset: 2px;
+}
+.limbuscompany .doll-hint {
+  margin-top: 4px; font-size: 11px; color: var(--text-dim); line-height: 1.6; text-align: center;
+}
+.limbuscompany .doll-hint b { color: var(--gold-active); }
+.limbuscompany .doll-head-pick,
+.limbuscompany .doll-reset {
+  margin-left: 6px; cursor: pointer; color: var(--text-sub); text-decoration: underline;
+}
+.limbuscompany .doll-head-pick:hover { color: var(--gold-active); }
+/* 头图层：永远最前，编辑时可拖 */
+
+
+.limbuscompany .doll-reset:hover { color: var(--red-danger); }
+
+/* ══ 物品栏 / 技能栏 列表行·配色（调参台导出） ══ */
+.limbuscompany .item-list-panel .group-header,
+.limbuscompany .skill-list-panel .group-header {
+  position: sticky; top: 0; z-index: 2;
+  padding: 3px 6px 3px 8px;
+  background: linear-gradient(90deg, rgba(59,36,18,1.00),
+    rgba(59,36,18,0.18) 60%, transparent);
+  border-top: none;
+  border-bottom: 1px solid rgba(95,62,34,0.35);
+  font-size: .72rem; letter-spacing: 0.10em; color: #b08a5e;
+}
+.limbuscompany .item-list-panel .group-header::before,
+.limbuscompany .skill-list-panel .group-header::before {
+  content: ""; width: 2px; flex: 0 0 2px; height: 11px; border-radius: 1px;
+  background: linear-gradient(180deg, #e7b956, rgba(231,185,86,0.15));
+}
+.limbuscompany .item-list-panel .group-header:hover,
+.limbuscompany .skill-list-panel .group-header:hover {
+  background: linear-gradient(90deg, rgba(59,36,18,1.00),
+    rgba(59,36,18,0.35) 60%, transparent);
+  color: var(--text-main);
+}
+.limbuscompany .group-count { opacity: .75; }
+
+.limbuscompany .list-header {
+  color: #b08a5e; font-size: 0.80rem; letter-spacing: .12em;
+  padding-bottom: 3px; border-bottom-color: rgba(95,62,34,0.50);
+}
+
+.limbuscompany .item-row,
+.limbuscompany .skill-row {
+  position: relative; min-height: 32px; padding: 0 4px 0 8px;
+  border-bottom: 1px solid rgba(95,62,34,0.14);
+  transition: background .12s;
+}
+.limbuscompany .item-row::before,
+.limbuscompany .skill-row::before {
+  content: ""; position: absolute; left: 0; top: 4px; bottom: 4px; width: 2px;
+  background: transparent; border-radius: 1px; transition: background .12s;
+}
+.limbuscompany .item-row:hover,
+.limbuscompany .skill-row:hover { background: rgba(95,62,34,0.35); }
+.limbuscompany .item-row:hover::before,
+.limbuscompany .skill-row:hover::before { background: rgba(95,62,34,0.11); }
+
+.limbuscompany .item-row.item-row-equipped,
+.limbuscompany .item-row.skill-row-equipped,
+.limbuscompany .skill-row.skill-row-equipped {
+  background: linear-gradient(90deg, rgba(89,62,38,1.00),
+    rgba(89,62,38,0.23) 55%, transparent);
+}
+.limbuscompany .item-row.item-row-equipped::before,
+.limbuscompany .item-row.skill-row-equipped::before,
+.limbuscompany .skill-row.skill-row-equipped::before {
+  background: linear-gradient(180deg, #e7b956, #e7b956);
+  box-shadow: 0 0 5px rgba(231,185,86,0.90);
+}
+.limbuscompany .item-row.item-row-equipped:hover,
+.limbuscompany .item-row.skill-row-equipped:hover,
+.limbuscompany .skill-row.skill-row-equipped:hover {
+  background: linear-gradient(90deg, rgba(89,62,38,1.00),
+    rgba(89,62,38,0.46) 55%, transparent);
+}
+
+.limbuscompany .item-row .item-icon,
+.limbuscompany .skill-row .item-icon {
+  width: 24px; height: 24px; border: none; border-radius: 3px;
+  filter: saturate(.9) brightness(0.91);
+  transition: filter .12s, transform .12s;
+}
+.limbuscompany .item-row:hover .item-icon,
+.limbuscompany .skill-row:hover .item-icon {
+  filter: saturate(1.05) brightness(1.06); transform: scale(1.06);
+}
+
+.limbuscompany .item-row .col-name,
+.limbuscompany .skill-row .col-name {
+  color: #e8caa2; font-size: 0.70rem; letter-spacing: .03em;
+}
+.limbuscompany .item-row .col-cat,
+.limbuscompany .skill-row .col-cat { color: #e7b956; font-size: 0.70rem; }
+.limbuscompany .item-row .col-qty,
+.limbuscompany .item-row .col-cap,
+.limbuscompany .item-row .col-stellar,
+.limbuscompany .skill-row .col-qty,
+.limbuscompany .skill-row .col-stellar {
+  color: #e7b956; font-size: 0.70rem;
+  font-variant-numeric: tabular-nums; font-feature-settings: "tnum";
+}
+.limbuscompany .item-row .col-cap:empty::after,
+.limbuscompany .item-row .col-stellar:empty::after { content: "—"; color: rgba(231,185,86,0.50); }
+
+.limbuscompany .skill-row .col-sin {
+  display: inline-flex; align-items: center; justify-content: center; gap: 4px;
+  font-size: 0.70rem;
+}
+.limbuscompany .skill-row .col-sin::before {
+  content: ""; width: 6px; height: 6px; border-radius: 50%;
+  background: currentColor; box-shadow: 0 0 4px currentColor; opacity: .85;
+}
+
+.limbuscompany .item-row .col-actions .action-btn,
+.limbuscompany .skill-row .col-actions .action-btn {
+  width: 24px; height: 24px; flex: 0 0 24px;
+  opacity: 0.35; transition: opacity .12s, color .12s, background .12s;
+}
+.limbuscompany .item-row:hover .col-actions .action-btn,
+.limbuscompany .skill-row:hover .col-actions .action-btn { opacity: 1; }
+.limbuscompany .item-row .col-actions .action-btn.fav-active,
+.limbuscompany .skill-row .col-actions .action-btn.fav-active { opacity: 1; }
+.limbuscompany .action-btn:hover {
+  color: #e7b956; background: rgba(231,185,86,0.18);
+}
+
+/* 罪孽列改用图标（24px），去掉原来的文字与小圆点 */
+.limbuscompany .skill-row .col-sin::before { content: none; }
+.limbuscompany .skill-row .col-sin .sin-icon {
+  width: 24px; height: 24px; object-fit: contain; display: block;
+  filter: brightness(.95); transition: filter .12s, transform .12s;
+}
+.limbuscompany .skill-row:hover .col-sin .sin-icon {
+  filter: brightness(1.1); transform: scale(1.06);
+}
+
+/* 盖掉 Foundry 核心的 button:hover/:focus 红色发光描边 */
+.limbuscompany .action-btn,
+.limbuscompany .action-btn:hover,
+.limbuscompany .action-btn:focus,
+.limbuscompany .action-btn:active,
+.limbuscompany .toolbar-btn:hover,
+.limbuscompany .toolbar-btn:focus {
+  outline: none; border-color: transparent;
+  box-shadow: none !important; text-shadow: none;
+}
+.limbuscompany .action-btn:focus-visible { outline: 1px solid var(--gold-active); outline-offset: -1px; }
+
+/* ══ Tab 指示条：一条金线在 Tab 之间平滑滑动 ══════════════════════ */
+/* 各 Tab 自己的指示条取消，改由 nav 上唯一一条负责移动 */
+.limbuscompany .sheet-tabs .item::after,
+.limbuscompany .sheet-tabs .item:hover::after,
+.limbuscompany .sheet-tabs .item.active::after { content: none; }
+
+.limbuscompany nav.sheet-tabs { position: relative; }
+.limbuscompany nav.sheet-tabs::after {
+  content: ""; position: absolute; bottom: 0; left: 0;
+  width: calc(100% / var(--tab-n, 3)); height: 2px;
+  transform: translateX(calc(var(--tab-i, 0) * 100%));
+  transition: transform .3s cubic-bezier(.4, 0, .2, 1);
+  background: linear-gradient(90deg, transparent 8%, #E7B956 32%, #E7B956 68%, transparent 92%);
+  box-shadow: 0 0 8px rgba(231, 185, 86, .34);
+  pointer-events: none; will-change: transform;
+}
+/* 首帧定位不滑动 */
+.limbuscompany nav.sheet-tabs.tab-nav-init::after { transition: none; }
+.limbuscompany .sheet-tabs .item { transition: color .18s, background .18s; }
+
+/* 系统开了「减少动态效果」时也保留这条滑动：位移只有 2px 高的细线，
+   不构成前庭刺激；只把时长收短一点。 */
+@media (prefers-reduced-motion: reduce) {
+  .limbuscompany nav.sheet-tabs::after { transition: transform .18s cubic-bezier(.4, 0, .2, 1); }
+}
+
+/* 不依赖 JS 的兜底：直接按第几个 .item 处于 .active 定位金线 */
+.limbuscompany nav.sheet-tabs:has(.item:nth-child(1).active)::after { transform: translateX(0%); }
+.limbuscompany nav.sheet-tabs:has(.item:nth-child(2).active)::after { transform: translateX(100%); }
+.limbuscompany nav.sheet-tabs:has(.item:nth-child(3).active)::after { transform: translateX(200%); }
+.limbuscompany nav.sheet-tabs:has(.item:nth-child(4).active)::after { transform: translateX(300%); }
+
+/* 商人打烊 */
+.limbuscompany .mc-chip.mc-closed-toggle.on {
+  background: rgba(150, 40, 40, .35); border-color: #A24B3C; color: #F0B9A8;
+}
+.limbuscompany .mc-grid-box { position: relative; }
+.limbuscompany .mc-closed-veil {
+  position: absolute; inset: 0; z-index: 5;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(8, 6, 5, .82);
+  color: #8A6E52; font-size: 26px; letter-spacing: .5em; text-indent: .5em;
+  border: 1px solid var(--border-gold); border-radius: 3px; user-select: none;
+}
+
+/* ══ 配方表物品卡 ═══════════════════════════════════════════════════ */
+.limbuscompany .rb-toolbar {
+  display: flex; align-items: baseline; gap: 10px; padding: 2px 2px 6px;
+}
+.limbuscompany .rb-count { color: var(--gold-active); font-size: .8rem; }
+.limbuscompany .rb-hint  { color: var(--text-dim); font-size: .68rem; }
+
+.limbuscompany .rb-list { display: flex; flex-direction: column; gap: 4px; }
+.limbuscompany .rb-row {
+  display: grid; grid-template-columns: 34px 1fr auto auto; gap: 8px;
+  align-items: center; padding: 5px 6px;
+  background: rgba(95, 62, 33, .10);
+  border: 1px solid rgba(95, 62, 33, .35); border-radius: 3px;
+}
+.limbuscompany .rb-row:hover { background: rgba(95, 62, 33, .2); }
+.limbuscompany .rb-out-img {
+  width: 34px; height: 34px; object-fit: contain; border-radius: 3px;
+  background: #100C0A; border: 1px solid rgba(95, 62, 33, .5);
+}
+.limbuscompany .rb-name { color: var(--text-main); font-size: .82rem; }
+.limbuscompany .rb-ing  { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 2px; }
+.limbuscompany .rb-ing-chip {
+  display: inline-flex; align-items: center; gap: 3px;
+  font-size: .66rem; color: #9B8060;
+  background: rgba(0, 0, 0, .3); border-radius: 2px; padding: 1px 4px;
+}
+.limbuscompany .rb-ing-chip img { width: 13px; height: 13px; object-fit: contain; }
+.limbuscompany .rb-ing-none { font-size: .66rem; color: var(--text-dim); font-style: italic; }
+.limbuscompany .rb-out { font-size: .72rem; color: var(--gold-active); white-space: nowrap; }
+.limbuscompany .rb-row-actions { display: flex; gap: 2px; }
+.limbuscompany .rb-empty {
+  padding: 10px 6px; font-size: .75rem; color: var(--text-dim); font-style: italic;
+}
+
+/* ══ 窗口标题栏整合（方案 B：隐藏标题 + 右上角 ⋮ 收纳） ══════════════ */
+.window-app.lc-hd-collapsed .window-header {
+  height: 30px; padding: 0 6px; gap: 2px;
+  background: #0B0908; border-bottom: 1px solid #5C4128;
+  align-items: center;
+}
+.window-app.lc-hd-collapsed .window-header .window-title { display: none; }
+
+.window-app.lc-hd-collapsed .window-header a.header-button,
+.window-app.lc-hd-collapsed .window-header .header-control {
+  width: 22px; height: 22px; padding: 0; margin: 0; flex: 0 0 auto;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 3px; font-size: 12px; color: #7A6249;
+  opacity: .35; border: none; box-shadow: none !important;
+  transition: opacity .14s, color .14s, background .14s;
+}
+/* 按钮上的文字标签只在标题栏里藏掉；进了 ⋮ 菜单要显示 */
+.window-app.lc-hd-collapsed .window-header a.header-button > span,
+.window-app.lc-hd-collapsed .window-header .header-control > span { display: none; }
+
+.window-app.lc-hd-collapsed:hover .window-header a.header-button,
+.window-app.lc-hd-collapsed:hover .window-header .header-control { opacity: 1; }
+.window-app.lc-hd-collapsed .window-header a.header-button:hover,
+.window-app.lc-hd-collapsed .window-header .header-control:hover {
+  color: #E7B956; background: rgba(231,185,86,.14);
+}
+.window-app.lc-hd-collapsed .window-header .close:hover,
+.window-app.lc-hd-collapsed .window-header [data-action="close"]:hover {
+  color: #E2705C; background: rgba(226,112,92,.16);
+}
+/* ⋮ 本身常亮一点，否则找不到入口 */
+.window-app.lc-hd-collapsed .window-header .lc-hd-dots { opacity: .7; }
+
+/* ⋮ 下拉 */
+.window-app .lc-hd-menu {
+  position: absolute; right: 4px; top: 32px; z-index: 60;
+  width: 150px; padding: 3px; margin: 0; list-style: none;
+  background: #15110E; border: 1px solid #5C4128; border-radius: 3px;
+  box-shadow: 0 6px 18px rgba(0,0,0,.75);
+}
+.window-app .lc-hd-menu[hidden] { display: none !important; }
+.window-app .lc-hd-menu li { display: block; padding: 0; margin: 0; }
+.window-app .lc-hd-menu li > a,
+.window-app .lc-hd-menu li > .header-control {
+  display: flex !important; align-items: center; gap: 7px;
+  width: auto !important; height: auto !important;
+  font-size: 11.5px; color: #9B6839 !important; opacity: 1 !important;
+  padding: 5px 8px !important; border-radius: 2px; white-space: nowrap;
+}
+.window-app .lc-hd-menu li > a > span,
+.window-app .lc-hd-menu li > .header-control > span { display: inline !important; }
+.window-app .lc-hd-menu li > a:hover,
+.window-app .lc-hd-menu li > .header-control:hover {
+  background: rgba(95,62,33,.35) !important; color: #E8CAA2 !important;
+}
+
+/* 标题栏：按钮右对齐、去掉底部分割线、关闭按钮只留 ✕ */
+.window-app.lc-hd-collapsed .window-header {
+  justify-content: flex-end;
+  border-bottom: none !important;
+  box-shadow: none !important;
+}
+/* 标题隐藏后没有撑开的元素了，补一个弹性占位把按钮顶到最右 */
+.window-app.lc-hd-collapsed .window-header::before {
+  content: ""; flex: 1 1 auto; align-self: stretch;
+}
+/* 关闭按钮的「关闭」二字是裸文本节点，用 font-size:0 抹掉，只留图标 */
+.window-app.lc-hd-collapsed .window-header a.header-button,
+.window-app.lc-hd-collapsed .window-header .header-control { font-size: 0; }
+.window-app.lc-hd-collapsed .window-header a.header-button > i,
+.window-app.lc-hd-collapsed .window-header .header-control > i { font-size: 12px; }
+/* 菜单里要看得见文字 */
+.window-app .lc-hd-menu li > a,
+.window-app .lc-hd-menu li > .header-control { font-size: 11.5px !important; }
+.window-app .lc-hd-menu li > a > i,
+.window-app .lc-hd-menu li > .header-control > i { font-size: 12px; }
+
+/* 「复制 UUID」小图标：从被隐藏的标题里捞出来后按普通标题栏按钮处理 */
+.window-app.lc-hd-collapsed .window-header > .document-id-link,
+.window-app.lc-hd-collapsed .window-header > a[data-action="copyUuid"] {
+  width: 22px; height: 22px; flex: 0 0 auto; font-size: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 3px; color: #7A6249; opacity: .35;
+  transition: opacity .14s, color .14s, background .14s;
+}
+.window-app.lc-hd-collapsed .window-header > .document-id-link > i,
+.window-app.lc-hd-collapsed .window-header > a[data-action="copyUuid"] > i { font-size: 12px; }
+.window-app.lc-hd-collapsed:hover .window-header > .document-id-link,
+.window-app.lc-hd-collapsed:hover .window-header > a[data-action="copyUuid"] { opacity: 1; }
+.window-app.lc-hd-collapsed .window-header > .document-id-link:hover,
+.window-app.lc-hd-collapsed .window-header > a[data-action="copyUuid"]:hover {
+  color: #E7B956; background: rgba(231,185,86,.14);
+}
+
+/* ⋮ 自己不带 header-button 类（避免命中 Foundry 的委托监听），样式单独给 */
+.window-app.lc-hd-collapsed .window-header .lc-hd-dots {
+  width: 22px; height: 22px; flex: 0 0 auto; font-size: 0; cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 3px; color: #7A6249; opacity: .7;
+  transition: opacity .14s, color .14s, background .14s;
+}
+.window-app.lc-hd-collapsed .window-header .lc-hd-dots > i { font-size: 12px; }
+.window-app.lc-hd-collapsed .window-header .lc-hd-dots:hover {
+  opacity: 1; color: #E7B956; background: rgba(231,185,86,.14);
+}
+
+/* 【制作】按钮内部的本地进度条（只有点的人看得见，不写文档） */
+.camp-craft-btn { position: relative; overflow: hidden; }
+.camp-craft-btn.crafting { pointer-events: none; color: #F0C96E; }
+.camp-craft-btn.crafting::before {
+  content: ""; position: absolute; left: 0; top: 0; bottom: 0;
+  width: var(--craft-p, 0%);
+  background: linear-gradient(90deg, rgba(231,185,86,.30), rgba(231,185,86,.55));
+  box-shadow: 0 0 8px rgba(231,185,86,.35) inset;
+  pointer-events: none; z-index: 0;
+}
+.camp-craft-btn.crafting::after {
+  content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 2px;
+  background: linear-gradient(90deg, #E7B956 var(--craft-p, 0%), transparent 0);
+}
+.camp-craft-btn > * { position: relative; z-index: 1; }
+
+/* ══ GM 控制台：角色按文件夹分组 ══════════════════════════════════ */
+.limbuscompany .gmc-section-header .gmc-search {
+  flex: 1; min-width: 80px; margin: 0 4px;
+  background: var(--bg-panel); border: 1px solid var(--border-gold);
+  color: var(--text-main); font-family: var(--font-main); font-size: .72rem;
+  border-radius: 2px; padding: 2px 6px;
+}
+/* 【全选】【清空】改成方形图标按钮 */
+.limbuscompany .gmc-icon-btn {
+  width: 24px; height: 22px; flex: 0 0 24px; padding: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: var(--bg-panel); border: 1px solid var(--border-gold);
+  color: var(--text-sub); border-radius: 2px; cursor: pointer;
+  font-size: .72rem; transition: color .12s, border-color .12s, background .12s;
+}
+.limbuscompany .gmc-icon-btn:hover {
+  color: var(--gold-active); border-color: var(--gold-active);
+  background: rgba(95,62,33,.3);
+}
+
+/* 分组：拖放区改成竖向堆叠的一组组 */
+.limbuscompany .gmc-drop-zone { display: block; }
+.limbuscompany .gmc-folder { margin-bottom: 4px; }
+.limbuscompany .gmc-folder-head {
+  display: flex; align-items: center; gap: 5px; cursor: pointer; user-select: none;
+  padding: 2px 6px 2px 4px; border-radius: 2px;
+  background: linear-gradient(90deg, rgba(95,62,33,.34), rgba(95,62,33,.06) 60%, transparent);
+  border-bottom: 1px solid rgba(95,62,33,.35);
+  font-size: .72rem; letter-spacing: .06em; color: #B08A5E;
+}
+.limbuscompany .gmc-folder-head:hover { color: var(--text-main); }
+.limbuscompany .gmc-folder-caret { font-size: .6rem; width: 10px; }
+.limbuscompany .gmc-folder-ic    { color: #8A6E52; font-size: .7rem; }
+.limbuscompany .gmc-folder-name  { flex: 1; }
+.limbuscompany .gmc-folder-count { color: var(--gold-active); font-size: .66rem; }
+.limbuscompany .gmc-folder-btn {
+  width: 20px; height: 18px; display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 2px; color: #7A6249; font-size: .68rem; cursor: pointer;
+  transition: color .12s, background .12s;
+}
+.limbuscompany .gmc-folder-btn:hover { color: var(--gold-active); background: rgba(231,185,86,.16); }
+.limbuscompany .gmc-folder-body {
+  display: flex; flex-wrap: wrap; gap: 6px; padding: 6px 2px 2px;
+}
+.limbuscompany .gmc-folder-collapsed .gmc-folder-body { display: none; }
+
+/* 【下个回合】移到左侧按钮组（消耗品上方）：按 .qa-btn 的规格排版，
+   但保留原来的金底高亮，让它在一列按钮里依然是最显眼的那个 */
+.qa-btn-group--left .qa-next-turn-btn {
+  margin-left: 0;
+  width: 100%;
+  padding: 6px 12px;
+  font-size: 14px;
+  border-radius: 4px;
+}
+
+/* ══ 快捷 HUD·恐惧鉴定（布局 C：数字压在图标右下角） ══════════════════
+   纯计数显示：无边框、无底色、无 hover 反馈 */
+.qa-panic-check {
+  display: flex; align-items: center;
+  gap: 13px;
+  margin-top: 2px;
+  padding: 4px 11px;
+  background: none;
+  border: none;
+  border-radius: 0;
+  cursor: default;
+  transition: none;
+}
+.qa-panic-check:hover { border-color: transparent; }
+
+.qa-panic-item { display: flex; align-items: center; position: relative; gap: 0; }
+.qa-panic-item img { width: 34px; height: 34px; display: block; }
+.qa-panic-num { position: absolute; right: -2px; bottom: -2px; }
+
+.qa-panic-num {
+  font-size: 22px; font-weight: 500; line-height: 1;
+  -webkit-text-stroke: 3px #0b0908;
+  paint-order: stroke fill;
+}
+.qa-panic-resolve .qa-panic-num {
+  color: #ffffff;
+  text-shadow: 0 0 5.0px rgba(93,173,226,0.40);
+}
+.qa-panic-fear .qa-panic-num {
+  color: #ffffff;
+  text-shadow: 0 0 5.0px rgba(231,76,60,0.40);
+}
+
+/* ══ 物品 Title 卡·排版（调参台导出） ══ */
+/* 不能裸写 .limbus-title-card：BUFF 卡是自适应高度的，写在前面会被这条后来居上地
+   压成固定 500px（症状：BUFF 卡凭空变高一大截），所以显式排除它 */
+.limbus-title-card:not(.limbus-buff-title-card) {
+  width: 280px; height: 500px; max-height: 500px;
+}
+
+.limbus-title-card-equip .tce-header {
+  font-size: 20px;
+  padding: 15px 12px;
+  display: flex; align-items: baseline; gap: 8px;
+}
+/* 可堆叠物品：数量 ×N 挂在标题条右端 */
+.limbus-title-card-equip .tce-header .tce-name { flex: 1; min-width: 0; }
+.limbus-title-card-equip .tce-header .tce-qty {
+  font-size: 20px; font-weight: bold; flex-shrink: 0;
+  opacity: .9; font-variant-numeric: tabular-nums;
+}
+
+.limbus-title-card-equip .tce-info-row {
+  padding: 2px 12px 4px;
+}
+.limbus-title-card-equip .tce-info-left { gap: 5px; }
+.limbus-title-card-equip .tce-subtype   { font-size: 14px; }
+.limbus-title-card-equip .tce-category  { font-size: 12px; }
+/* 稀有度：并在「类型·分类」同一排，靠右 */
+.limbus-title-card-equip .tce-rarity {
+  font-size: 13px; font-weight: bold;
+  margin-left: auto; letter-spacing: .06em;
+}
+
+.limbus-title-card-equip .tce-modifiers { gap: 10px; }
+.limbus-title-card-equip .modifier-row .mod-icon {
+  width: 17px; height: 17px;
+}
+.limbus-title-card-equip .modifier-row .mod-val,
+.limbus-title-card-equip .modifier-row .resist-display { font-size: 12px; }
+
+.limbus-title-card-equip .tce-tags { gap: 6px; }
+.limbus-title-card-equip .tce-tags .tc-skill-tag {
+  font-size: 12px; padding: 0px 4px;
+}
+
+.limbus-title-card-equip .tce-desc {
+  font-size: 12px; line-height: 1.5;
+  padding: 9px 14px;
+}
+.limbus-title-card-equip .tce-footer {
+  font-size: 14px;
+  padding: 6px 14px 8px;
+}
+/* 页脚：装备＝星芒 + 眼，两者一起靠右、间隔 15px；其余只有眼 */
+.limbus-title-card-equip .tce-footer { justify-content: flex-end; gap: 4px; }
+.limbus-title-card-equip .tce-footer .tce-foot-sep { width: 15px; flex: 0 0 15px; }
+.limbus-title-card-equip .tc-eye-icon { width: 18px; height: 18px; object-fit: contain; }
+.limbus-title-card-equip .tc-eye-cost { color: var(--gold-active); font-variant-numeric: tabular-nums; }
+
+/* ══ 技能 Title 卡·排版（调参台导出） ══ */
+.limbus-title-card-skill { width: 280px; height: 500px; max-height: 500px; }
+
+.limbus-title-card-skill .tc-header {
+  font-size: 18px; line-height: 1.15; font-weight: bold;
+  padding: 18px 12px;
+  display: flex; align-items: baseline; gap: 8px;
+}
+.limbus-title-card-skill .tc-header .tc-name { flex: 1; min-width: 0; }
+.limbus-title-card-skill .tc-header .tc-lv {
+  font-size: 12px; flex-shrink: 0; opacity: .92; letter-spacing: .06em;
+}
+/* 罪孽：标题条里 Lv 右边，只放图标 */
+.limbus-title-card-skill .tc-header .tc-sin-ic {
+  width: 24px; height: 24px; flex-shrink: 0;
+  object-fit: contain; align-self: center;
+  filter: drop-shadow(0 0 3px rgba(0,0,0,.6));
+}
+
+.limbus-title-card-skill .tcs-row {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  padding: 1px 12px;
+}
+/* 类型：基础/E.G.O = Offense_Level.webp，守备 = block.webp；单独靠右 */
+.limbus-title-card-skill .tcs-kind-ic {
+  width: 22px; height: 22px; object-fit: contain; flex-shrink: 0;
+  margin-left: auto;
+}
+.limbus-title-card-skill .tcs-cat  { font-size: 11px; color: #9B6839;
+  display: inline-flex; align-items: center; gap: 4px; }
+.limbus-title-card-skill .tcs-cat .tc-cat-icon { width: 14px; height: 14px; object-fit: contain; }
+.limbus-title-card-skill .tcs-formula { font-size: 18px; color: #E8CAA1; font-weight: bold;
+  font-variant-numeric: tabular-nums; }
+.limbus-title-card-skill .tcs-dice { font-size: 11px; color: #C9A84C; }
+
+.limbus-title-card-skill .tc-weight {
+  display: flex; align-items: center; gap: 4px;
+  padding: 1px 12px;
+}
+.limbus-title-card-skill .tc-weight-label { font-size: 13px; color: #9B6839; margin-right: 2px; }
+.limbus-title-card-skill .tc-weight-sq {
+  width: 12px; height: 12px; background: #C9A84C; border-radius: 2px;
+}
+.limbus-title-card-skill .tcs-spread { font-size: 11px; color: #B08A5E; margin-left: 6px; }
+
+.limbus-title-card-skill .tcs-flags {
+  display: flex; flex-wrap: wrap; gap: 4px;
+  padding: 1px 12px;
+}
+.limbus-title-card-skill .tcs-flag {
+  font-size: 11px; padding: 1px 6px;
+  border-radius: 2px; border: 1px solid currentColor;
+}
+.limbus-title-card-skill .f-noequip { color: #C88A6A; }
+.limbus-title-card-skill .f-noclash { color: #C4553D; }
+.limbus-title-card-skill .f-cover   { color: #5DADE2; }
+.limbus-title-card-skill .f-indis   { color: #B07FD6; }
+
+.limbus-title-card-skill .tcs-costs,
+.limbus-title-card-skill .tcs-res {
+  display: flex; flex-wrap: wrap; gap: 8px;
+  padding: 1px 12px;
+  font-size: 12px;
+}
+.limbus-title-card-skill .tcs-cost-item,
+.limbus-title-card-skill .tcs-res-item { display: inline-flex; align-items: center; gap: 3px; }
+.limbus-title-card-skill .tcs-cost-item img,
+.limbus-title-card-skill .tcs-res-item img { width: 14px; height: 14px; object-fit: contain; }
+.limbus-title-card-skill .tcs-cost-label { color: #9B6839; }
+
+.limbus-title-card-skill .tc-tags {
+  display: flex; flex-wrap: wrap; gap: 6px;
+  padding: 1px 12px;
+}
+.limbus-title-card-skill .tc-tags .tc-skill-tag {
+  font-size: 12px; padding: 0px 4px;
+}
+
+.limbus-title-card-skill .tc-desc {
+  font-size: 12px; line-height: 1.5;
+  padding: 8px 14px;
+}
+.limbus-title-card-skill .tc-footer {
+  display: flex; align-items: center; justify-content: flex-end; gap: 4px;
+  padding: 6px 14px;
+  font-size: 14px;
+}
+
+/* E.G.O 两形态：卡片底部提示当前形态与切换键 */
+.limbus-title-card-skill .tcs-form-hint {
+  padding: 0 14px 6px;
+  font-size: 11px; color: #8A6E52; text-align: right; flex-shrink: 0;
+}
+
+/* ══ 回合开始横幅（素材版）══
+   顺序：黑条 → 钟淡入并由大缩到正常 → 红线与 TURN+回合数出现 → 钟逆时针摆一下 → 淡出
+   素材：assets/icons/GUI/turn_clock.webp / turn_line.webp / turn_word.webp */
+.lc-turn-banner {
+  position: fixed; left: 0; right: 0; top: 46%;
+  height: 121px; transform: translateY(-50%);
+  display: flex; align-items: center; justify-content: center;
+  pointer-events: none; z-index: 100; opacity: 0;
+}
+.lc-turn-banner.show { opacity: 1; }
+
+/* ① 黑条 */
+.lc-turn-banner .lc-tb-band {
+  position: absolute; inset: 0;
+  background: linear-gradient(90deg, transparent,
+    rgba(7,6,5,0.83) 8%,
+    rgba(7,6,5,0.83) 92%, transparent);
+  transform: scaleY(0); transform-origin: center;
+}
+/* ② 钟（层级只压在黑条上面） */
+.lc-turn-banner .lc-tb-clock {
+  position: absolute; left: 50%; top: 50%; z-index: 1; opacity: 0;
+  width: 280px;
+  transform: translate(-50%, -50%) translate(0px, 0px);
+  transform-origin: center;
+  filter: drop-shadow(0 0 8px rgba(0,0,0,.8));
+}
+.lc-turn-banner .lc-tb-clock img { width: 100%; height: auto; display: block; }
+/* ③ 红线（上下两条在同一张图里，整张缩放定位） */
+.lc-turn-banner .lc-tb-line {
+  /* 用 px 不用 %：% 是相对屏幕宽度的，调参台舞台只有 680px 宽，
+     到了全屏（1900px+）红线会被放大近三倍，两条线之间也被撑得很开 */
+  position: absolute; left: 50%; top: 50%; width: 394px; z-index: 2;
+  transform: translate(-50%, -50%) translate(0px, 4px) scaleX(0);
+  transform-origin: center;
+  opacity: 1.00;
+}
+.lc-turn-banner .lc-tb-line img { width: 100%; height: auto; display: block; }
+/* ③ TURN + 回合数 */
+.lc-turn-banner .lc-tb-text {
+  position: absolute; left: 0; right: 0; top: 50%; z-index: 3; opacity: 0;
+  transform: translateY(-50%);
+  display: flex; align-items: center; justify-content: center; gap: 25px;
+}
+.lc-turn-banner .lc-tb-word {
+  width: 215px; flex-shrink: 0;
+  transform: translate(21px, -4px);
+}
+.lc-turn-banner .lc-tb-word img {
+  width: 100%; height: auto; display: block;
+  opacity: 1.00;
+  filter: drop-shadow(0 2px 10px rgba(0,0,0,.9));
+}
+.lc-turn-banner .lc-tb-num {
+  font-size: 69px; font-weight: bold; color: #dc4110;
+  line-height: 1; font-variant-numeric: tabular-nums;
+  transform: translate(-12px, -5px);
+  text-shadow: 0 0 13.8px rgba(220,65,16,0.55),
+               0 2px 10px rgba(0,0,0,.9);
+}
+
+/* ── 播放：黑条 0ms → 钟淡入 60ms → 红线与文字 220ms → 钟摆动 480ms → 淡出 780ms ──
+   摆动那条必须是 forwards 不能是 both：both 会在它的延迟期间就把 0% 关键帧
+   （只有 rotate、没有 scale）填上去，而它排在后面，会盖掉钟的缩放入场，
+   表现就是"钟直接以正常大小出现，看不到由大变小" */
+.lc-turn-banner.play .lc-tb-band {
+  animation: lc-tb-band 60ms cubic-bezier(.2,.9,.3,1) forwards,
+             lc-tb-out 500ms ease-in 780ms forwards;
+}
+.lc-turn-banner.play .lc-tb-clock {
+  animation: lc-tb-clock-in 160ms cubic-bezier(.14,.8,.28,1) 60ms both,
+             lc-tb-swing 100ms cubic-bezier(.36,.07,.19,.97) 480ms forwards,
+             lc-tb-out 500ms ease-in 780ms forwards;
+}
+.lc-turn-banner.play .lc-tb-line {
+  animation: lc-tb-line 260ms cubic-bezier(.16,.84,.3,1) 220ms both,
+             lc-tb-out 500ms ease-in 780ms forwards;
+}
+.lc-turn-banner.play .lc-tb-text {
+  animation: lc-tb-text 260ms cubic-bezier(.16,.84,.3,1) 220ms both,
+             lc-tb-out 500ms ease-in 780ms forwards;
+}
+
+@keyframes lc-tb-band { from { transform: scaleY(0); } to { transform: scaleY(1); } }
+@keyframes lc-tb-clock-in {
+  from { opacity: 0;
+         transform: translate(-50%,-50%) translate(0px, 0px) scale(3.40); }
+  to   { opacity: 1.00;
+         transform: translate(-50%,-50%) translate(0px, 0px) scale(1); }
+}
+@keyframes lc-tb-swing {
+  0%   { transform: translate(-50%,-50%) translate(0px, 0px) rotate(0deg); }
+  35%  { transform: translate(-50%,-50%) translate(0px, 0px) rotate(-15deg); }
+  70%  { transform: translate(-50%,-50%) translate(0px, 0px) rotate(5.3deg); }
+  100% { transform: translate(-50%,-50%) translate(0px, 0px) rotate(0deg); }
+}
+@keyframes lc-tb-line {
+  from { transform: translate(-50%,-50%) translate(0px, 4px) scaleX(0); }
+  to   { transform: translate(-50%,-50%) translate(0px, 4px) scaleX(1); }
+}
+@keyframes lc-tb-text {
+  from { opacity: 0; transform: translateY(-50%) scale(.86); }
+  to   { opacity: 1; transform: translateY(-50%) scale(1); }
+}
+@keyframes lc-tb-out { from { opacity: 1; } to { opacity: 0; } }
+
+/* 总时长（turn-banner.mjs 的 TOTAL_MS 要跟它一致）：1280 ms */
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   训练等级徽章（技能卡右上角）
+   规则书里的「默认Ⅲ级 / 精通Ⅳ级 / 强化Ⅴ级」。同一张卡挂多阶数值，
+   点击在本卡已有的几阶之间轮转，右键删掉当前阶。
+   素材：assets/icons/Base_icon/阶段等级N.webp —— 缺图时 onerror 会给徽章加
+   .no-art，退回纯文字罗马数字，不至于开天窗。
+   ═════════════════════════════════════════════════════════════════════════ */
+
+.skill-sheet .equip-header { position: relative; }
+
+.skill-sheet .skill-train-badge {
+  position: absolute;
+  top: 2px;
+  right: 4px;
+  width: 54px;
+  height: 54px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  user-select: none;
+  transition: transform 0.12s ease, filter 0.12s ease;
+}
+.skill-sheet .skill-train-badge:hover {
+  transform: scale(1.08);
+  filter: drop-shadow(0 0 4px rgba(201, 168, 76, 0.75));
+}
+
+.skill-sheet .skill-train-badge img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  pointer-events: none;
+}
+
+/* 有素材时不显示文字；缺图（.no-art）才退回罗马数字 */
+.skill-sheet .skill-train-badge .train-numeral { display: none; }
+.skill-sheet .skill-train-badge.no-art .train-numeral {
+  display: block;
+  font-size: 26px;
+  font-weight: 700;
+  line-height: 1;
+  color: #c9a84c;
+  text-shadow: 0 0 6px rgba(0, 0, 0, 0.8);
+}
+
+/* 当前显示的不是顶层那一套（即精通/强化出来的阶）时给个淡金底衬 */
+.skill-sheet .skill-train-badge.derived::after {
+  content: "";
+  position: absolute;
+  inset: -2px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(201, 168, 76, 0.22) 0%, transparent 70%);
+  pointer-events: none;
+  z-index: -1;
+}
+
+/* Title 卡标题条里的训练等级（罪孽图标右侧） */
+.limbus-title-card-skill .tc-header .tc-train-ic {
+  width: 24px;
+  height: 24px;
+  object-fit: contain;
+  flex: 0 0 auto;
+  margin-left: 4px;
+}
+.limbus-title-card-skill .tc-header .tc-train-num {
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1;
+  margin-left: 4px;
+  flex: 0 0 auto;
+  color: #f3e3b5;
+}
+
+/* 升级对话框：连升多级标记 + 奖励物品的来源等级 */
+.lud-multi {
+  margin-left: 8px;
+  padding: 1px 7px;
+  border-radius: 9px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #2a1c0a;
+  background: #c9a84c;
+  white-space: nowrap;
+}
+.lud-item-lv {
+  margin-left: auto;
+  padding-left: 8px;
+  font-size: 11px;
+  color: #c9a84c;
+  white-space: nowrap;
+}
+
+/* ── 升级对话框 · 第 2 步：训练等级强化 ────────────────────────────────── */
+.lud-train-hint {
+  margin: 2px 0 8px;
+  font-size: 12px;
+  color: #cfc0a0;
+}
+.lud-train-hint b { color: #c9a84c; font-size: 14px; }
+
+.lud-train-done {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+.lud-train-done span {
+  padding: 1px 7px;
+  border-radius: 9px;
+  font-size: 11px;
+  color: #2a1c0a;
+  background: #c9a84c;
+}
+
+.lud-train-list {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.lud-train-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 4px 7px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 0.12s ease, border-color 0.12s ease;
+}
+.lud-train-row:hover {
+  background: rgba(201, 168, 76, 0.14);
+  border-color: rgba(201, 168, 76, 0.55);
+}
+/* 已装备的那 7 个：左侧金条标出来，和列表里没装的区分开 */
+.lud-train-row.equipped { border-left: 3px solid #c9a84c; }
+.lud-train-row.disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.lud-train-icon {
+  width: 26px;
+  height: 26px;
+  object-fit: cover;
+  border-radius: 3px;
+  flex: 0 0 auto;
+}
+.lud-train-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.lud-train-slot {
+  padding: 0 6px;
+  border-radius: 8px;
+  font-size: 10px;
+  color: #2a1c0a;
+  background: #c9a84c;
+  white-space: nowrap;
+}
+.lud-train-lv {
+  font-size: 13px;
+  color: #c9a84c;
+  white-space: nowrap;
+}
+.lud-train-warn {
+  font-size: 10px;
+  color: #b06a4a;
+  white-space: nowrap;
+}
+
+/* 设置侧边栏里的规则书入口 */
+.limbus-rulebook-block {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+.limbus-rulebook-block h4.divider {
+  color: #c9a84c;
+  letter-spacing: .08em;
+}
+.limbus-rulebook-block button i {
+  margin-right: 6px;
+  color: #c9a84c;
+}
+
+/* ══ 技能 Title 卡·标题条：只留 名称 + 训练等级 ══ */
+/* 罪孽底色深浅不一，白字经常糊掉，给名称描一圈黑边。
+   --tc-name-stroke 就是那个旋钮，想粗想细改这一处即可。 */
+.limbus-title-card-skill .tc-header { --tc-name-stroke: 1px; }
+.limbus-title-card-skill .tc-header .tc-name {
+  color: #fff;
+  -webkit-text-stroke: var(--tc-name-stroke) #000;
+  paint-order: stroke fill;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, .55);
+}
+
+
+/* ══ 网格图块：名称与数量都浮在图上 ══ */
+/* 图铺满格子，名称左上、数量右下，两个都是 absolute，不参与 flex 布局，
+   所以加不加它们都不会把图挤小。×1 没有信息量，只有「可堆叠且 >1」才画。
+   两条都必须带 .cg-item-tile：上面那条 `.cg-item-tile > * { position: relative }`
+   权重是 (0,2,0)，选择器写短了会被它按回文档流，数量就掉到图片下面去。 */
+.limbuscompany .cg-item-tile .cg-tile-name {
+  display: block;
+  position: absolute;
+  left: 2px; top: 1px; right: 2px;
+  font-size: 0.62rem;
+  line-height: 1.15;
+  text-align: left;
+  color: #E8CAA1;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, .9), 0 0 3px rgba(0, 0, 0, .8);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.limbuscompany .cg-item-tile .cg-tile-qty {
+  position: absolute;
+  bottom: 1px; right: 2px;
+  font-size: 0.72rem;
+  font-weight: bold;
+  color: #E8CAA1;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, .9), 0 0 3px rgba(0, 0, 0, .8);
+  z-index: 2;
+}
+
+/* 商人图块底部有价格条，图标得给它让位 */
+.limbuscompany .mc-tile .cg-tile-icon { width: 84%; height: 84%; margin-bottom: 10px; }
+.limbuscompany .cg-item-tile.mc-tile .cg-tile-name { top: 12px; }   /* 顶上是数量角标 mc-qty */

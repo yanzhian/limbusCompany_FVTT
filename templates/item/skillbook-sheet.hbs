@@ -1,0 +1,119 @@
+{{!-- skillbook-sheet.hbs — 技能书物品卡 --}}
+<form class="limbuscompany item-sheet skillbook-sheet" autocomplete="off">
+
+  {{!-- ── 标题栏 ──────────────────────────────────────────────────── --}}
+  <div class="item-sheet-titlebar">
+    <span class="sheet-lock-icon {{#if isLocked}}locked{{else}}unlocked{{/if}}" title="{{#if isLocked}}点击解锁{{else}}点击锁定{{/if}}">
+      <i class="fas fa-{{#if isLocked}}lock{{else}}lock-open{{/if}}"></i>
+    </span>
+    <span class="sheet-type-label">技能书</span>
+  </div>
+
+  {{!-- ── 可滚动主体 ──────────────────────────────────────────────── --}}
+  <div class="equip-body">
+
+    {{!-- 顶部：图标（100×100）+ 右侧信息列 --}}
+    <div class="equip-header">
+
+      {{!-- 图标 --}}
+      <div class="equip-icon-col">
+        {{#if isEditable}}
+          <img src="{{item.img}}" class="item-sheet-icon" data-edit="img" title="更换图标" alt="icon">
+        {{else}}
+          <img src="{{item.img}}" class="item-sheet-icon" alt="icon">
+        {{/if}}
+      </div>
+
+      {{!-- 右侧信息列 --}}
+      <div class="equip-info-col">
+
+        {{!-- 名字 --}}
+        <div class="equip-name-row">
+          {{#if (and isEditable (not isLocked))}}
+            <input type="text" name="name" value="{{item.name}}" class="item-name-input"/>
+          {{else}}
+            <div class="item-name-display">{{item.name}}</div>
+          {{/if}}
+        </div>
+
+        {{!-- 类型 + 分类 --}}
+        <div class="equip-type-row">
+          <span class="equip-subtype-label">技能书</span>
+          <span class="equip-sep">　</span>
+          {{#if (and isEditable (not isLocked))}}
+            <input type="text" name="system.category" value="{{system.category}}" class="equip-category-input" placeholder="分类"/>
+          {{else}}
+            <span class="equip-category">{{system.category}}</span>
+          {{/if}}
+        </div>
+
+      </div>
+    </div>
+
+    {{!-- ── 标签 + 容量 + 眼 ──────────────────────────────────────── --}}
+    <div class="item-tags-row">
+      <div class="tags-area">
+        {{#if (and isEditable (not isLocked))}}
+          <input type="text" name="system.tags" value="{{join system.tags '/'}}" class="tags-input" placeholder="标签1/标签2"/>
+        {{else}}
+          {{#each (split system.tags '/')}}
+            <span class="tag">{{trim this}}</span>
+          {{/each}}
+        {{/if}}
+      </div>
+      <div class="item-capacity-group">
+        <span class="cap-label">容量</span>
+        {{#if (and isEditable (not isLocked))}}
+          <input type="number" name="system.capacity.w" value="{{system.capacity.w}}" class="cap-input" min="1" max="10"/>
+          <span class="cap-sep">×</span>
+          <input type="number" name="system.capacity.h" value="{{system.capacity.h}}" class="cap-input" min="1" max="10"/>
+        {{else}}
+          <span class="cap-display">{{system.capacity.w}}×{{system.capacity.h}}</span>
+        {{/if}}
+      </div>
+      <div class="item-cost-group">
+        <img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/眼.webp" class="cost-eye-icon" alt="眼">
+        {{#if (and isEditable (not isLocked))}}
+          <input type="number" name="system.cost" value="{{system.cost}}" class="cost-input" min="0"/>
+        {{else}}
+          <span class="cost-display">{{system.cost}}</span>
+        {{/if}}
+      </div>
+    </div>
+
+    {{!-- ── 分割线 ──────────────────────────────────────────────────── --}}
+    <div class="equip-divider"></div>
+
+    {{!-- ── 技能存放区（拖入 skill 类型物品，最多 16 个） ───────────── --}}
+    <div class="skillbook-toolbar">
+      <span class="skillbook-count">{{skillBookUsed}} / {{skillBookMax}}</span>
+    </div>
+
+    <div class="skillbook-dropzone">
+      {{#each skillSlots}}
+        <div class="skillbook-slot" data-idx="{{idx}}" data-item-uuid="{{uuid}}" data-item-name="{{item.name}}" title="{{item.name}}">
+          <div class="skill-slot-wrap">
+            <div class="skill-slot-octa" style="background:{{sinColor}}">
+              <img src="{{item.img}}" class="skill-slot-img" alt="{{item.name}}">
+            </div>
+          </div>
+        </div>
+      {{else}}
+        <div class="skillbook-empty-hint">将技能拖入此处</div>
+      {{/each}}
+    </div>
+
+    {{!-- ── 分割线 ──────────────────────────────────────────────────── --}}
+    <div class="equip-divider"></div>
+
+  </div>{{!-- /equip-body --}}
+
+  {{!-- ── 固定底部按钮栏 ─────────────────────────────────────────── --}}
+  <div class="item-sheet-footer">
+    <div class="footer-actions">
+      <button class="item-send-chat sheet-btn">发送聊天框</button>
+      <button type="button" class="skillbook-learn-btn sheet-btn">学习技能</button>
+    </div>
+  </div>
+
+</form>

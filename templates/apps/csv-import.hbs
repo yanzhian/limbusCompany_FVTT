@@ -1,0 +1,111 @@
+{{!-- csv-import.hbs — 物品批量导入（CSV / 表格） --}}
+<div class="csvi-body">
+
+  {{!-- ── 设置行 ────────────────────────────────────────────────── --}}
+  <section class="csvi-section csvi-config">
+    <label class="csvi-field">
+      <span class="csvi-label" title="表里有【类型】列时以该列为准，这里只作为没有类型列时的缺省值">缺省类型</span>
+      <select class="csvi-type">
+        {{#each types}}
+          <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+        {{/each}}
+      </select>
+    </label>
+
+    <label class="csvi-field">
+      <span class="csvi-label">导入到</span>
+      <select class="csvi-target">
+        <option value="world" {{#if targetWorld}}selected{{/if}}>世界物品列表</option>
+        {{#each packs}}
+          <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+        {{/each}}
+      </select>
+    </label>
+
+    <button type="button" class="csvi-btn csvi-template" title="下载当前类型的空白模板 CSV">
+      下载模板 CSV
+    </button>
+  </section>
+
+  {{!-- ── 数据输入 ──────────────────────────────────────────────── --}}
+  <section class="csvi-section">
+    <div class="csvi-section-header">
+      <span class="csvi-section-title">① 表格数据</span>
+      {{#if fileName}}<span class="csvi-filename">{{fileName}}</span>{{/if}}
+      <button type="button" class="csvi-text-btn csvi-clear">清空</button>
+    </div>
+
+    <div class="csvi-dropzone">
+      <input type="file" class="csvi-file" accept=".csv,.tsv,.txt,text/csv,text/tab-separated-values,text/plain">
+      <span class="csvi-hint">选择 / 拖入 CSV 或 TSV 文件，也可以直接从 Excel 复制整块单元格粘贴到下方。</span>
+    </div>
+
+    <textarea class="csvi-paste" rows="7"
+      placeholder="第一行必须是列头，例如：&#10;图标,完成,名称,类型,分类,罪孽,等级,骰数,攻击容量,骰类型,无法装备,标签,效果&#10;,FALSE,鹤斩·Ⅲ,基础技能,斩击,暴怒,1,1D4,1,,,收尾人/定事务所,[命中时]：…">{{rawText}}</textarea>
+  </section>
+
+  {{!-- ── 预览 ──────────────────────────────────────────────────── --}}
+  <section class="csvi-section">
+    <div class="csvi-section-header">
+      <span class="csvi-section-title">② 预览与校验</span>
+      <span class="csvi-count">可导入 {{count}} 条</span>
+      <button type="button" class="csvi-text-btn csvi-toggle-columns">
+        {{#if showColumns}}收起可用列头{{else}}查看可用列头{{/if}}
+      </button>
+    </div>
+
+    {{#if showColumns}}
+      <div class="csvi-columns">
+        {{#each columns}}
+          <span class="csvi-col-chip" title="{{note}}">{{header}}</span>
+        {{/each}}
+      </div>
+      <p class="csvi-note">
+        列按<strong>列头名</strong>匹配，与列的顺序无关，多余的空列不影响。
+        鼠标悬停列头可看填写格式。空格与 <code>-</code> 都表示留空；
+        「图标 / 区域1–6」为表格自用，导入时忽略；「完成」填真值 = 覆盖已有的同名同类型物品（激活效果不覆盖）。
+        表中有【类型】列时逐行决定物品类型，因此装备、技能、材料可以混在同一个文件里导入。
+      </p>
+    {{/if}}
+
+    {{#if preview}}
+      <div class="csvi-preview-wrap">
+        <table class="csvi-preview">
+          <thead>
+            <tr>{{#each preview.headers}}<th>{{this}}</th>{{/each}}</tr>
+          </thead>
+          <tbody>
+            {{#each preview.rows}}
+              <tr>{{#each this}}<td>{{this}}</td>{{/each}}</tr>
+            {{/each}}
+          </tbody>
+        </table>
+      </div>
+      {{#if preview.more}}
+        <div class="csvi-note">…另有 {{preview.more}} 行未在预览中显示。</div>
+      {{/if}}
+    {{else}}
+      <div class="csvi-empty">尚未载入数据。</div>
+    {{/if}}
+
+    {{#if warnings.length}}
+      <ul class="csvi-msgs csvi-warn">
+        {{#each warnings}}<li>{{this}}</li>{{/each}}
+      </ul>
+    {{/if}}
+
+    {{#if errors.length}}
+      <ul class="csvi-msgs csvi-error">
+        {{#each errors}}<li>{{this}}</li>{{/each}}
+      </ul>
+    {{/if}}
+  </section>
+
+  {{!-- ── 执行 ──────────────────────────────────────────────────── --}}
+  <section class="csvi-section csvi-actions">
+    <button type="button" class="csvi-btn csvi-import" {{#unless canImport}}disabled{{/unless}}>
+      导入 {{count}} 个物品
+    </button>
+  </section>
+
+</div>

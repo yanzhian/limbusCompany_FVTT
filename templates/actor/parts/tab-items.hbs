@@ -1,9 +1,38 @@
 {{!-- tab-items.hbs — 物品 Tab：九宫格装备栏 + 物品列表 --}}
 <div class="tab-inner tab-items-inner">
 
-  {{!-- ── 左侧：九宫格装备栏 ──────────────────────────────────────── --}}
+  {{!-- ── 左侧：九宫格装备栏 / 形象（两种视图切换） ──────────────── --}}
   <div class="equip-panel">
-    <div class="equip-panel-label">装备栏</div>
+    <div class="equip-panel-label">{{#if dollView}}形象{{else}}装备栏{{/if}}</div>
+
+    {{#if dollView}}
+      {{!-- 形象：立绘 + 各装备贴图，摆放参数存在装备自己身上 --}}
+      <div class="doll-stage{{#if dollEdit}} doll-editing{{/if}}">
+        {{!-- 不画底图：角色形象完全由「头 + 各装备图层」拼出来 --}}
+        {{#each dollLayers}}
+          <img src="{{img}}" class="doll-layer{{#if selected}} doll-sel{{/if}}{{#if hidden}} doll-hidden{{/if}}"
+               data-item-id="{{itemId}}" title="{{name}}"
+               style="left:{{x}}%;top:{{y}}%;width:{{w}}%;z-index:{{z}};
+                      transform:translate(-50%,-50%) rotate({{rot}}deg) scale({{scale}});">
+        {{/each}}
+        {{#if dollHead.img}}
+          {{!-- 头：永远在最上层 --}}
+          <img src="{{dollHead.img}}" class="doll-layer doll-head{{#if dollHead.selected}} doll-sel{{/if}}"
+               data-head="1" title="头"
+               style="left:{{dollHead.x}}%;top:{{dollHead.y}}%;width:{{dollHead.w}}%;z-index:9999;
+                      transform:translate(-50%,-50%) rotate({{dollHead.rot}}deg) scale({{dollHead.scale}});">
+        {{/if}}
+      </div>
+      {{#if dollEdit}}
+        <div class="doll-hint">
+          当前：<b>{{dollModeLabel}}</b>　·　拖动＝生效　·　<b>R</b> 旋转　<b>E</b> 缩放（再按一次回到移动）<br>
+          滚轮＝调整该装备的图层前后（头永远最前）
+          <span class="doll-head-pick" title="选一张头部图片，画在所有装备之上">
+            {{#if dollHead.img}}更换头像{{else}}添加头像{{/if}}</span>
+          <span class="doll-reset" title="把选中的这件恢复默认摆放">重置</span>
+        </div>
+      {{/if}}
+    {{else}}
     <div class="equip-grid">
       {{#each equipmentGrid}}
         <div class="equip-slot {{#if item}}equip-slot-filled{{else}}equip-slot-empty{{/if}}"
@@ -16,16 +45,25 @@
              draggable="{{#if item}}true{{else}}false{{/if}}">
           {{#if item}}
             <img src="{{item.img}}" alt="{{item.name}}" class="equip-slot-icon">
-            {{!-- 链接方向箭头 --}}
-            {{#if item.system.links.up}}    <div class="link-arrow up"></div>{{/if}}
-            {{#if item.system.links.down}}  <div class="link-arrow down"></div>{{/if}}
-            {{#if item.system.links.left}}  <div class="link-arrow left"></div>{{/if}}
-            {{#if item.system.links.right}} <div class="link-arrow right"></div>{{/if}}
           {{else}}
             <div class="equip-slot-placeholder"></div>
           {{/if}}
         </div>
       {{/each}}
+    </div>
+    {{/if}}
+
+    {{!-- 视图切换：九宫格 ↔ 形象；形象下再多一个「编辑形象」开关 --}}
+    {{!-- 形象系统关掉时（设置：启用形象系统）这一排整个不出现 --}}
+    <div class="equip-panel-foot"{{#unless dollEnabled}} style="display:none"{{/unless}}>
+      <button type="button" class="doll-view-toggle toolbar-btn">
+        {{#if dollView}}装备栏{{else}}形象{{/if}}
+      </button>
+      {{#if dollView}}
+        <button type="button" class="doll-edit-toggle toolbar-btn{{#if dollEdit}} active{{/if}}">
+          {{#if dollEdit}}完成{{else}}编辑形象{{/if}}
+        </button>
+      {{/if}}
     </div>
   </div>
 
@@ -38,7 +76,10 @@
       <div class="toolbar-btns">
         <button class="filter-favorite-btn toolbar-btn" title="收藏筛选"><i class="fas fa-star" aria-hidden="true"></i></button>
         <button class="filter-toggle-btn toolbar-btn" title="过滤"><i class="fas fa-filter" aria-hidden="true"></i></button>
-        <button class="filter-expand-all toolbar-btn" title="全部展开"><i class="fas fa-expand-alt" aria-hidden="true"></i></button>
+        <button class="item-view-toggle toolbar-btn {{#if itemGridView}}active{{/if}}"
+                title="{{#if itemGridView}}切换为列表视图{{else}}切换为网格视图{{/if}}">
+          <i class="fas fa-{{#if itemGridView}}list{{else}}th{{/if}}" aria-hidden="true"></i>
+        </button>
         <button class="filter-collapse-all toolbar-btn" title="全部折叠"><i class="fas fa-compress-alt" aria-hidden="true"></i></button>
         <button class="item-create-btn toolbar-btn {{#if inventoryOverCapacity}}btn-cap-blocked{{/if}}"
                 title="{{#if inventoryOverCapacity}}背包已满，无法添加{{else}}新建物品{{/if}}"
@@ -60,35 +101,46 @@
             <button class="filter-category-btn" data-category="consumable">消耗品</button>
             <button class="filter-category-btn" data-category="material">材料</button>
             <button class="filter-category-btn" data-category="container">容器</button>
-          </div>
-        </div>
-        <div class="filter-section">
-          <div class="filter-section-label">链接方向</div>
-          {{!-- 十字形布局：↑ / ← · → / ↓ --}}
-          <div class="filter-link-cross">
-            <div class="filter-link-row">
-              <button class="filter-link-btn" data-dir="up">↑</button>
-            </div>
-            <div class="filter-link-row">
-              <button class="filter-link-btn" data-dir="left">←</button>
-              <div class="filter-link-center"></div>
-              <button class="filter-link-btn" data-dir="right">→</button>
-            </div>
-            <div class="filter-link-row">
-              <button class="filter-link-btn" data-dir="down">↓</button>
-            </div>
+            <button class="filter-category-btn" data-category="skillbook">技能书</button>
+            <button class="filter-category-btn" data-category="recipebook">配方表</button>
           </div>
         </div>
         <button class="filter-apply-btn">过滤</button>
       </div>
     </div>
 
+    {{#if itemGridView}}
+    {{!-- ── 网格视图（6×N 自动打包，仅显示） ──────────────────────── --}}
+    <div class="bag-grid-wrap">
+      <div class="cg-wrap bag-cg" style="--grid-cols:{{bagGrid.cols}}; --grid-rows:{{bagGrid.rows}}">
+        {{#each bagGrid.cells}}
+          <div class="cg-cell {{#if occupied}}cg-occupied{{/if}}"
+               style="grid-column:{{col}}; grid-row:{{row}}"
+               data-x="{{x}}" data-y="{{y}}"></div>
+        {{/each}}
+        {{#each bagGrid.tiles}}
+          <div class="cg-item-tile rarity-{{rarity}} {{#if isContainer}}cg-tile-container{{/if}}"
+               style="grid-column:{{col}} / span {{w}}; grid-row:{{row}} / span {{h}}"
+               data-item-id="{{id}}"
+               data-item-uuid="{{uuid}}"
+               data-item-name="{{name}}"
+               data-x="{{x}}" data-y="{{y}}"
+               data-w="{{w}}" data-h="{{h}}"
+               draggable="true"
+               title="{{name}}（双击查看）">
+            <img src="{{img}}" class="cg-tile-icon" alt="{{name}}">
+            <span class="cg-tile-name">{{name}}</span>
+            {{#if showQty}}<span class="cg-tile-qty">×{{quantity}}</span>{{/if}}
+          </div>
+        {{/each}}
+      </div>
+    </div>
+    {{else}}
     {{!-- 列表表头 --}}
     <div class="list-header item-list-header">
       <span class="col-icon"></span>
       <span class="col-name">名称</span>
       <span class="col-cat">分类</span>
-      <span class="col-link">链接</span>
       <span class="col-qty">数量</span>
       <span class="col-cap">容量</span>
       <span class="col-stellar">星芒</span>
@@ -110,8 +162,7 @@
                 data-item-name="{{name}}"
                 data-type="{{type}}"
                 data-subtype="{{system.subtype}}"
-                data-tags="{{system.tags}}"
-                data-links="{{#if system.links}}{{#if system.links.up}}up,{{/if}}{{#if system.links.down}}down,{{/if}}{{#if system.links.left}}left,{{/if}}{{#if system.links.right}}right{{/if}}{{/if}}">
+                data-tags="{{join system.tags '/'}}">
               {{!-- 图标 --}}
               <span class="col-icon">
                 <img src="{{img}}" class="item-icon" data-item-id="{{_id}}" alt="{{name}}">
@@ -120,10 +171,6 @@
               <span class="col-name item-name">{{name}}</span>
               {{!-- 分类 --}}
               <span class="col-cat item-cat">{{system.category}}</span>
-              {{!-- 链接方向 --}}
-              <span class="col-link item-links">
-                {{#if system.links.up}}↑{{/if}}{{#if system.links.down}}↓{{/if}}{{#if system.links.left}}←{{/if}}{{#if system.links.right}}→{{/if}}
-              </span>
               {{!-- 数量 --}}
               <span class="col-qty item-qty">{{system.quantity}}</span>
               {{!-- 容量 --}}
@@ -132,11 +179,15 @@
               <span class="col-stellar item-stellar">{{stellarCost}}</span>
               {{!-- 操作 --}}
               <span class="col-actions">
-                {{#unless (eq type 'material')}}
-                  {{#unless (eq type 'container')}}
-                    <button class="item-activate action-btn" data-item-id="{{_id}}" title="激活">▶</button>
+                {{#if (eq type 'skillbook')}}
+                  <button class="item-learn-skillbook action-btn" data-item-id="{{_id}}" title="学习技能">▶</button>
+                {{else}}
+                  {{#unless (eq type 'material')}}
+                    {{#unless (eq type 'container')}}
+                      <button class="item-activate action-btn" data-item-id="{{_id}}" title="激活">▶</button>
+                    {{/unless}}
                   {{/unless}}
-                {{/unless}}
+                {{/if}}
                 <button class="item-more-menu action-btn" data-item-id="{{_id}}" title="更多">⋮</button>
                 <button class="item-favorite action-btn {{#if isFavorite}}fav-active{{/if}}" data-item-id="{{_id}}" title="收藏">★</button>
               </span>
@@ -147,6 +198,7 @@
     {{else}}
       <div class="list-empty">暂无物品</div>
     {{/each}}
+    {{/if}}{{!-- /itemGridView --}}
 
   </div>{{!-- /item-list-panel --}}
 

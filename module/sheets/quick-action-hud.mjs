@@ -7,11 +7,15 @@
  * 提供快捷访问：
  *   - 行动值（AP）硬币（点击切换）
  *   - 角色头像（单击折叠面板，双击打开角色卡，拖动移动 HUD）
- *   - 消耗品 / 装备 / 基础技能 / EGO技能 展开面板
+ *   - 消耗品 / 装备 展开面板；基础技能三格（点击/拖拽发起对抗）
  *   - HP 球 / 状态栏 / 理智球
  */
 
 import { ClashManager } from "../helpers/clash.mjs";
+import { CustomBuffRegistry } from "../helpers/custom-buffs.mjs";
+import { refreshReadySlots } from "../helpers/ready-sparkle.mjs";
+import { closeTitleCardUnlessLocked, toggleTitleCardLock,
+         attachHoverableTitleCard, buildBuffTitleCard } from "./item-sheet.mjs";
 
 /* ─── 常量 ────────────────────────────────────────────────────────────────── */
 
@@ -56,6 +60,88 @@ function _buffIconPath(type, name = "") {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
+   中央七边形血环几何常量
+   角度以正上方为 0°、顺时针增加（与 CSS conic-gradient / rotate 一致）。
+   起点 180° = 底部尖角，顺时针铺 310°，右下留 50° 缺口（由理智球盖住）。
+   扣血时红色从右下终点逆时针缩回底部尖角。混乱阈值刻度线共用这套映射。
+═══════════════════════════════════════════════════════════════════════════ */
+const QA_ARC_FROM = 180;
+const QA_ARC_LEN  = 310;
+
+/* 拖拽瞄准（杀戮尖塔式弧线箭头）：
+   位移超过阈值才从"点击"切换为"瞄准"；颜色为红色，吸附到目标时更亮。 */
+const QA_AIM_THRESHOLD  = 6;
+const QA_AIM_COLOR      = "#B43822";
+const QA_AIM_COLOR_SNAP = "#E5443A";
+
+/* BUFF 状态栏：默认格数 / 每行上限（每行上限需与 CSS 的
+   .qa-status-bar max-width 计算保持一致） */
+const QA_BUFF_DEFAULT = 8;
+const QA_BUFF_PER_ROW = 16;
+
+/* 技能边框图（中空边框，非技能图本身；技能自身的图用 item.img 垫底，
+   边框叠在其上层——见模板 .qa-skill-art / .qa-skill-frame）。
+   取图逻辑放在 ClashManager._skillFrameIcon（罪孽→文件名映射集中一处）。 */
+const SKILL_ICON_BASE = "systems/limbusCompany_FVTT/assets/icons/Skill/";
+/* 理智值配色：按数值在三个锚点之间线性插值
+   95 = #4F7A9C（蓝，清醒）／50 = #6A6A6A（灰，中间）／5 = #BF2B2A（红，濒临恐慌） */
+const SANITY_STOPS = [
+  { v:  5, c: [0xBF, 0x2B, 0x2A] },
+  { v: 50, c: [0x6A, 0x6A, 0x6A] },
+  { v: 95, c: [0x4F, 0x7A, 0x9C] },
+];
+const _hex = ([r, g, b]) =>
+  "#" + [r, g, b].map(n => Math.round(Math.max(0, Math.min(255, n))).toString(16).padStart(2, "0")).join("");
+
+/**
+ * 理智值 → 圆底色 / 描边色。
+ * @param {number} value 理智值（超出 5–95 会被夹取到端点色）
+ * @returns {{ bg: string, border: string }} 描边取底色的 0.62 倍亮度
+ */
+function _sanityColors(value) {
+  const v = Math.max(SANITY_STOPS[0].v, Math.min(SANITY_STOPS[2].v, Number(value) || 0));
+  let rgb = SANITY_STOPS[2].c;
+  for (let i = 0; i < SANITY_STOPS.length - 1; i++) {
+    const a = SANITY_STOPS[i], b = SANITY_STOPS[i + 1];
+    if (v >= a.v && v <= b.v) {
+      const t = (v - a.v) / (b.v - a.v);
+      rgb = a.c.map((ch, k) => ch + (b.c[k] - ch) * t);
+      break;
+    }
+  }
+  return { bg: _hex(rgb), border: _hex(rgb.map(ch => ch * 0.62)) };
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   EGO 环绕布局
+   七边形有 7 条边，底部两条已被生命值（左下）与理智值（右下）占用，
+   剩下 5 条正好对应 5 个 EGO 等级。下面是这 5 条边中点相对中心的方向角
+   （度，0°=正右、顺时针为正、y 轴向下，与 CSS 坐标系一致）：
+     ZAYIN 左下 / TET 左上 / HE 正上 / WAW 右上 / ALEPH 右下
+   QA_EGO_RADIUS 为槽位中心到七边形中心的距离，按 --hex-size 的百分比计。
+═══════════════════════════════════════════════════════════════════════════ */
+const QA_EGO_ANGLES = {
+  ZAYIN: 167.14,
+  TET:   218.57,
+  HE:    270,
+  WAW:   321.43,
+  ALEPH:  12.86,
+};
+const QA_EGO_RADIUS = 82;   // % of --hex-size
+
+/** 计算某个 EGO 等级槽位在七边形容器内的百分比坐标（配合 translate(-50%,-50%)） */
+function _egoSlotPos(grade) {
+  const rad = (QA_EGO_ANGLES[grade] ?? 270) * Math.PI / 180;
+  return {
+    x: (50 + QA_EGO_RADIUS * Math.cos(rad)).toFixed(2),
+    y: (50 + QA_EGO_RADIUS * Math.sin(rad)).toFixed(2),
+  };
+}
+
+/** 按罪孽+等级取技能边框图（EGO 用圆环框），委托给 ClashManager 的共用实现 */
+const _skillIcon = (item) => ClashManager._skillFrameIcon(item);
+
+/* ═══════════════════════════════════════════════════════════════════════════
    QuickActionHUD Application
 ═══════════════════════════════════════════════════════════════════════════ */
 
@@ -67,7 +153,7 @@ export class QuickActionHUD extends Application {
   /** 当前追踪的角色（选中 token 绑定的 actor） */
   _actor = null;
 
-  /** 当前展开的面板集合（"consumable" | "equipment" | "basic" | "ego"） */
+  /** 当前展开的面板集合（"consumable" | "equipment"） */
   _openPanels = new Set();
 
   /* ─── 默认选项 ─────────────────────────────────────────────────────────── */
@@ -111,7 +197,10 @@ export class QuickActionHUD extends Application {
 
     const sameActor = hud._actor?.id === actor.id;
     hud._actor = actor;
-    if (!sameActor) hud._openPanels.clear();
+    if (!sameActor) {
+      hud._openPanels.clear();
+      hud._egoMode = false;   // 换角色时退出 EGO 模式，避免状态带到下一个角色
+    }
     hud.render(true);
   }
 
@@ -123,9 +212,19 @@ export class QuickActionHUD extends Application {
     if (hud._actor.id === actor.id) hud.render(false);
   }
 
+  /** 战斗轮次/回合变化 → 重渲染，让"下个回合"按钮及时出现或消失 */
+  static onCombatChange() {
+    const hud = QuickActionHUD.instance;
+    if (hud?._actor) hud.render(false);
+  }
+
   /* ─── 隐藏 HUD ──────────────────────────────────────────────────────────── */
 
   _hide() {
+    // 关闭前先摘掉 BUFF 悬浮卡与瞄准箭头，避免 HUD 消失后残留在屏幕上
+    this._buffCardCtrls?.forEach(c => c.close?.());
+    this._buffCardCtrls = [];
+    this._destroyAimOverlay();
     $(`#${this.id}`).remove();
     this._element = null;
     this._actor   = null;
@@ -180,44 +279,6 @@ export class QuickActionHUD extends Application {
       html.find(`.qa-panel[data-panel="${p}"]`).css("display", "flex");
       html.find(`.qa-btn[data-panel="${p}"]`).addClass("qa-btn--active");
     });
-    this._syncEgoRelatedHud(html);
-  }
-
-  /** 恢复 EGO 相关技能切换按钮状态，恐慌时自动激活侵蚀形态 */
-  _syncEgoRelatedHud(html) {
-    if (!this._actor) return;
-    if (!this._egoRelatedHudMode) this._egoRelatedHudMode = {};
-
-    const sys      = this._actor.system;
-    const cfg      = CONFIG.LIMBUSCOMPANY ?? {};
-    const hasPanic = (sys.buffs ?? []).some(b => b.type === "panic" && b.whenAdded !== "下回合");
-
-    // 恐慌时自动激活有侵蚀形态的 EGO 槽
-    if (hasPanic) {
-      for (const grade of (cfg.EGO_GRADES ?? [])) {
-        const itemId  = sys.skills?.ego?.[grade];
-        if (!itemId) continue;
-        const egoItem = this._actor.items.get(itemId);
-        if (egoItem?.system?.relatedSkill?.erodeUuid) {
-          this._egoRelatedHudMode[itemId] = true;
-        }
-      }
-    }
-
-    // 将状态应用到 DOM
-    for (const [itemId, isRelated] of Object.entries(this._egoRelatedHudMode)) {
-      if (!isRelated) continue;
-      const $btn  = html.find(`.qa-ego-related-toggle[data-item-id="${itemId}"]`);
-      const $slot = html.find(`.qa-ego-skill-slot[data-item-id="${itemId}"] img`);
-      $btn.addClass("related-active");
-      const mainItem = this._actor.items.get(itemId);
-      if (!mainItem) continue;
-      const uuid = (hasPanic && mainItem.system?.relatedSkill?.erodeUuid)
-        ? mainItem.system.relatedSkill.erodeUuid
-        : mainItem.system?.relatedSkill?.itemUuid;
-      const relItem = uuid && typeof fromUuidSync !== "undefined" ? fromUuidSync(uuid) : null;
-      if (relItem) $slot.attr("src", relItem.img ?? "");
-    }
   }
 
   /* ─── 数据准备 ───────────────────────────────────────────────────────────── */
@@ -230,18 +291,26 @@ export class QuickActionHUD extends Application {
     const cfg = CONFIG.LIMBUSCOMPANY ?? {};
 
     // AP 硬币
-    const apCoins = [0, 1, 2].map(i => ({
-      index:  i,
-      active: i < (sys.ap?.value ?? 0),
-    }));
+    // 行动值无上限，至少画 3 枚硬币
+    const apVal   = sys.ap?.value ?? 0;
+    const apCoins = Array.from({ length: Math.max(3, apVal) },
+      (_, i) => ({ index: i, active: i < apVal }));
 
     // 状态 BUFF：仅显示本回合有效的（排除"下回合"）
     const activeBuffs = (sys.buffs ?? []).filter(b => b.whenAdded !== "下回合");
-    // 补齐至 8 的整数倍，最少 8 格
-    const slotCount = Math.max(8, Math.ceil(activeBuffs.length / 8) * 8);
+    // 槽位数量：默认 8 格；超过 8 个后先向右补满整行（16 格），
+    // 装满 16 格才继续向下换行（每行 16 格，由 CSS 的 max-width 控制换行位置）
+    const slotCount = activeBuffs.length <= QA_BUFF_DEFAULT
+      ? QA_BUFF_DEFAULT
+      : Math.ceil(activeBuffs.length / QA_BUFF_PER_ROW) * QA_BUFF_PER_ROW;
     const buffSlots = Array.from({ length: slotCount }, (_, i) => {
       const buff = activeBuffs[i] ?? null;
-      return { index: i, buff, icon: buff ? _buffIcon(buff.type, buff.icon) : "" };
+      const handler = buff ? CustomBuffRegistry.get(buff.type) : null;
+      return {
+        index: i, buff,
+        icon:        buff ? _buffIcon(buff.type, buff.icon) : "",
+        description: handler?.description ?? "",
+      };
     });
 
     // 装备格物品（排除空格）
@@ -262,46 +331,111 @@ export class QuickActionHUD extends Application {
       return {
         slotIndex: i,
         item,
+        icon:      _skillIcon(item),
         sinColor:  item ? (cfg.SIN_COLORS?.[item.system?.sinType] ?? "#C9A84C") : "#443322",
-        isActive:  i < 2,   // 0,1 = 激活中（金色边框），2 = 预备（红色边框）
+        isActive:  i < 2,   // 0,1 = 激活可用；2 = 准备（半透明，下一个补上来的）
+        isPending: i === 2,
       };
     });
 
-    // EGO 技能
-    const egoSkills = (cfg.EGO_GRADES ?? []).map(grade => {
+    // ── 中央七边形：生命值血环 / 混乱阈值刻度 ────────────────────────────
+    // 血环几何：起点 180°（底部尖角），顺时针铺 310°，右下留 50° 缺口（被理智球盖住）
+    const hpValue = sys.hp?.value ?? 0;
+    const hpMax   = Math.max(1, sys.hp?.max ?? 1);
+    const hpPct   = Math.max(0, Math.min(1, hpValue / hpMax));
+
+    // 混乱阈值白线：与血环同一套映射，落在"血量掉到该百分比时红色会退到的位置"
+    const chaosLines = (sys.chaosThresholds ?? []).map(t => ({
+      percent:   t.percent ?? 0,
+      triggered: !!t.triggered,
+      angle:     QA_ARC_FROM + QA_ARC_LEN * ((t.percent ?? 0) / 100),
+    }));
+
+    // ── EGO 模式：环绕七边形显示 5 个等级（空槽不显示）────────────────────
+    const egoSlots = (cfg.EGO_GRADES ?? []).map(grade => {
       const itemId = sys.skills?.ego?.[grade] ?? null;
       const item   = itemId ? actor.items.get(itemId) : null;
-      return {
-        grade,
-        item,
-        sinColor:   item ? (cfg.SIN_COLORS?.[item.system?.sinType] ?? "#443322") : "#443322",
-        hasRelated: !!(item?.system?.relatedSkill?.itemUuid),
-      };
-    });
+      if (!item) return null;                       // 该等级为空 → 不显示
+      const pos = _egoSlotPos(grade);
+      return { grade, item, x: pos.x, y: pos.y };
+    }).filter(Boolean);
+
+    // 理智值：数值越低越偏红，越高越偏蓝（见 _sanityColors 锚点）
+    const sanValue  = sys.sanity?.value ?? 50;
+    const sanColors = _sanityColors(sanValue);
+
+    // ── "下一回合"按钮显示条件 ───────────────────────────────────────────
+    // 玩家：必须处于已开始的遭遇战中、且当前正轮到本角色行动；
+    // GM：只要遭遇战进行中就一直显示（GM 同时控制多个角色，不受"轮到谁"限制）。
+    const combat       = game.combat;
+    const inCombat     = !!combat?.started;
+    const isMyTurn     = inCombat && combat.combatant?.actor?.id === actor.id;
+    const showNextTurn = inCombat && (game.user.isGM || isMyTurn);
 
     return {
       actorImg:       actor.img  ?? "icons/svg/mystery-man.svg",
       actorName:      actor.name ?? "",
       apCoins,
-      hpValue:        sys.hp?.value     ?? 0,
-      sanValue:       sys.sanity?.value ?? 50,
+      showNextTurn,
+      isMyTurn,
+      hpValue,
+      hpMax,
+      hpPct:          hpPct.toFixed(4),
+      chaosLines,
+      panicFear:      sys.panicCounters?.fear    ?? 0,
+      panicResolve:   sys.panicCounters?.resolve ?? 0,
+      sanValue:       sanValue,
+      sanColor:       sanColors.bg,
+      sanBorder:      sanColors.border,
+      egoMode:        !!this._egoMode,
+      egoSlots,
+      egoFrame:       `${SKILL_ICON_BASE}E.G.O.webp`,
       buffSlots,
       equipmentItems,
       consumableItems,
       basicSkills,
-      egoSkills,
     };
   }
 
   async close(options = {}) {
-    this._onHudItemHoverEnd();
+    this._onHudItemHoverEnd(true);
+    this._buffCardCtrls?.forEach(c => c.close?.());
+    this._buffCardCtrls = [];
+    this._destroyAimOverlay();
     return super.close(options);
   }
 
   /* ─── 事件监听 ───────────────────────────────────────────────────────────── */
 
+  /**
+   * 重渲染后补播补位动画：被打出格右侧的技能左移，最右格从右侧滑入。
+   * 由 _castSkill 通过 this._slideFromSlot 埋点，播一次即清。
+   */
+  _replaySlotSlide(html) {
+    const from = this._slideFromSlot;
+    if (from == null) return;
+    this._slideFromSlot = null;
+
+    const $slots = html.find(".qa-skill-row .qa-skill-slot");
+    if (!$slots.length) return;
+    const last = $slots.length - 1;
+    $slots.each((i, el) => {
+      if (i < from) return;                       // 左侧的牌原地不动
+      const $s = $(el);
+      $s.addClass(i === last ? "qa-skill-slot--entering" : "qa-skill-slot--shifting");
+      setTimeout(() => $s.removeClass("qa-skill-slot--entering qa-skill-slot--shifting"), 400);
+    });
+  }
+
   activateListeners(html) {
     super.activateListeners(html);
+    this._replaySlotSlide(html);
+
+    // ── 【大招就绪】星芒：技能槽与 EGO 槽都参与 ───────────────────────────
+    if (this._actor) {
+      refreshReadySlots(html, this._actor,
+        ".qa-skill-slot[data-item-id], .qa-ego-slot[data-item-id]");
+    }
 
     // ── AP 硬币点击（与角色卡逻辑一致） ──────────────────────────────────
     html.find(".qa-ap-coin").on("click", async (e) => {
@@ -309,7 +443,7 @@ export class QuickActionHUD extends Application {
       const idx    = parseInt(e.currentTarget.dataset.index);
       const cur    = this._actor.system.ap.value;
       const newVal = idx < cur ? idx : idx + 1;
-      await this._actor.update({ "system.ap.value": Math.min(3, Math.max(0, newVal)) });
+      await this._actor.update({ "system.ap.value": Math.max(0, newVal) });
     });
 
     // ── 面板展开/折叠按钮 ─────────────────────────────────────────────────
@@ -323,6 +457,10 @@ export class QuickActionHUD extends Application {
         $panel.hide();
         $btn.removeClass("qa-btn--active");
       } else {
+        // 关闭其他已开面板，保持同一时刻只有一个面板展开
+        html.find(".qa-panel").hide();
+        html.find(".qa-btn[data-panel]").removeClass("qa-btn--active");
+        this._openPanels.clear();
         this._openPanels.add(panelKey);
         $panel.css("display", "flex");
         $btn.addClass("qa-btn--active");
@@ -330,7 +468,7 @@ export class QuickActionHUD extends Application {
     });
 
     // ── 头像交互 ─────────────────────────────────────────────────────────
-    // 单击折叠所有已开面板；双击打开角色卡；拖动移动 HUD
+    // 单击折叠所有已开面板；双击切换 E.G.O / 基础面板；拖动移动 HUD
     let _clickTimer = null;
 
     html.find(".qa-avatar").on("click", (e) => {
@@ -338,7 +476,6 @@ export class QuickActionHUD extends Application {
       _clickTimer = setTimeout(() => {
         _clickTimer = null;
         if (this._dragging) return;   // 拖动后不触发单击
-        // 有面板开着 → 全部关闭；全关着 → 不做操作
         if (this._openPanels.size > 0) {
           this._openPanels.clear();
           html.find(".qa-panel").hide();
@@ -347,10 +484,14 @@ export class QuickActionHUD extends Application {
       }, 220);
     });
 
+    // 双击：在 E.G.O 与 基础技能面板之间切换。
+    // 只切换根节点上的 class、不重新渲染——两套元素都常驻 DOM，
+    // 这样 CSS 的 opacity 过渡才能真正播放出淡入淡出。
     html.find(".qa-avatar").on("dblclick", () => {
       clearTimeout(_clickTimer);
       _clickTimer = null;
-      this._actor?.sheet?.render(true);
+      this._egoMode = !this._egoMode;
+      this.element?.toggleClass("qa-hud--ego", this._egoMode);
     });
 
     // ── 拖动（按住头像拖动整个 HUD） ──────────────────────────────────────
@@ -388,12 +529,28 @@ export class QuickActionHUD extends Application {
         .on("mouseup.qahud",   onMouseUp);
     });
 
+    // ── 基础技能格：点击发起对抗 / 长按拖到 token 指定目标 ───────────────
+    this._bindSkillSlots(html);
+
+    // ── 下一回合：推进战斗轮次 ──────────────────────────────────────────
+    html.find(".qa-next-turn-btn").on("click", () => this._nextTurn());
+
+    // ── 刷新：同步角色卡战斗页基础技能（未激活则代替执行"激活"）─────────
+    html.find(".qa-refresh-btn").on("click", async (e) => {
+      const btn = $(e.currentTarget);
+      btn.addClass("qa-spin");
+      setTimeout(() => btn.removeClass("qa-spin"), 340);
+      await this._refreshCombatBag();
+    });
+
     // ── 状态栏：空格 → 添加 BUFF；有 BUFF 格 → 打开角色卡战斗页 ─────────
     html.find(".qa-buff-slot--empty").on("click", () => this._showAddBuffDialog());
     html.find(".qa-buff-slot--filled").on("click", () => this._openCombatTab());
 
-    // ── HP / 理智球点击：打开角色卡 ──────────────────────────────────────
-    html.find(".qa-hp-ball, .qa-san-ball").on("click", () => this._actor?.sheet?.render(true));
+    // ── 七边形 HP / 理智数字点击：打开角色卡 ─────────────────────────────
+    html.find(".qa-hex-hp, .qa-hex-san").on("click", () => this._actor?.sheet?.render(true));
+
+    // ── 恐惧鉴定：点击打开角色卡战斗页（恐慌计数在那里可手动调整） ───────
 
     // ── 装备激活 ──────────────────────────────────────────────────────────
     html.find(".qa-equip-activate").on("click", async (e) => {
@@ -413,112 +570,32 @@ export class QuickActionHUD extends Application {
       await this._activateItem(item);
     });
 
-    // ── 基础技能槽点击 → 发起对抗（与角色卡战斗Tab 逻辑一致） ────────────
-    html.find(".qa-basic-skill-slot[data-item-id]").on("click", async (e) => {
-      const itemId    = e.currentTarget.dataset.itemId;
-      const slotIndex = parseInt(e.currentTarget.dataset.slotIndex ?? "-1");
-      if (!itemId || !this._actor) return;
-      const item = this._actor.items.get(itemId);
-      if (!item) return;
-
-      // 只有激活槽（0, 1）可以发起对抗，预备槽（2）不可点击
-      if (slotIndex > 1) {
-        ui.notifications.warn("只有激活槽中的技能可以发起对抗");
-        return;
-      }
-
-      if ((this._actor.system.ap?.value ?? 0) <= 0) {
-        ui.notifications.warn("行动值不足，无法发起对抗");
-        return;
-      }
-
-      // 确保战斗袋已初始化
-      this._ensureBagState();
-
-      // 记录 sheet 是否已渲染（用于判断是否需要手动推进袋）
-      const sheetRendered = !!(this._actor.sheet?.rendered && this._actor.sheet?.element?.length);
-
-      // 传入真实 slotIndex，ClashManager 会调用 sheet._animateCombatSkillUse(slotIndex)
-      await ClashManager.showInitiateDialog(this._actor, item, slotIndex);
-
-      // 若 sheet 未渲染（_animateCombatSkillUse 提前 return），手动推进袋状态
-      if (!sheetRendered) {
-        this._advanceBagStateManually(slotIndex);
-      }
-
-      // 在袋状态更新后重渲 HUD（有动画时等 400ms，无动画时稍微延迟）
-      setTimeout(() => this.render(false), sheetRendered ? 420 : 60);
-    });
-
-    // ── EGO 技能槽点击 → 发起对抗 ────────────────────────────────────────
-    html.find(".qa-ego-skill-slot[data-item-id]").on("click", async (e) => {
-      const itemId = e.currentTarget.dataset.itemId;
-      if (!itemId || !this._actor) return;
-      let item = this._actor.items.get(itemId);
-      if (!item) return;
-
-      // 若处于相关技能模式，使用相关技能（恐慌时用侵蚀形态）
-      if (this._egoRelatedHudMode?.[itemId]) {
-        const hasPanic = (this._actor.system.buffs ?? []).some(
-          b => b.type === "panic" && b.whenAdded !== "下回合"
-        );
-        const uuid = (hasPanic && item.system?.relatedSkill?.erodeUuid)
-          ? item.system.relatedSkill.erodeUuid
-          : item.system?.relatedSkill?.itemUuid;
-        if (uuid) {
-          const relItem = typeof fromUuidSync !== "undefined" ? fromUuidSync(uuid) : null;
-          if (relItem) item = relItem;
-        }
-      }
-      await ClashManager.showInitiateDialog(this._actor, item, -2);
-    });
-
-    // ── EGO 相关技能切换按钮 ────────────────────────────────────────────
-    html.find(".qa-ego-related-toggle").on("click", (e) => {
-      e.stopPropagation();
-      const itemId = e.currentTarget.dataset.itemId;
-      if (!itemId || !this._actor) return;
-      if (!this._egoRelatedHudMode) this._egoRelatedHudMode = {};
-
-      const isNowRelated = !this._egoRelatedHudMode[itemId];
-      this._egoRelatedHudMode[itemId] = isNowRelated;
-      $(e.currentTarget).toggleClass("related-active", isNowRelated);
-
-      // 同步到角色卡 sheet 状态
-      const sheet = this._actor.sheet;
-      if (sheet) {
-        if (!sheet._egoRelatedMode) sheet._egoRelatedMode = {};
-        sheet._egoRelatedMode[itemId] = isNowRelated;
-      }
-
-      // 更新 EGO 槽图片
-      const mainItem = this._actor.items.get(itemId);
-      if (!mainItem) return;
-      const hasPanic = (this._actor.system.buffs ?? []).some(
-        b => b.type === "panic" && b.whenAdded !== "下回合"
-      );
-      const $slot = html.find(`.qa-ego-skill-slot[data-item-id="${itemId}"] img`);
-      if (isNowRelated) {
-        const uuid = (hasPanic && mainItem.system?.relatedSkill?.erodeUuid)
-          ? mainItem.system.relatedSkill.erodeUuid
-          : mainItem.system?.relatedSkill?.itemUuid;
-        const relItem = uuid && typeof fromUuidSync !== "undefined" ? fromUuidSync(uuid) : null;
-        if (relItem) $slot.attr("src", relItem.img ?? "");
-      } else {
-        $slot.attr("src", mainItem.img ?? "");
-      }
-    });
-
     // ── 技能 / 物品悬浮 Title 卡（与角色卡一致） ──────────────────────────
     const hoverTargets = [
-      ".qa-basic-skill-slot[data-item-id]",
-      ".qa-ego-skill-slot[data-item-id]",
+      ".qa-skill-slot[data-item-id]",
+      ".qa-ego-slot[data-item-id]",
       ".qa-panel-item[data-item-id]",
     ].join(", ");
 
     html.find(hoverTargets)
       .on("mouseenter", (e) => this._onHudItemHover(e))
-      .on("mouseleave", () => this._onHudItemHoverEnd());
+      .on("mouseleave", () => this._onHudItemHoverEnd())
+      .on("mousedown", (ev) => {
+        if (ev.button !== 1) return;
+        ev.preventDefault();
+        toggleTitleCardLock(this._hudTitleCard);
+      });
+
+    // ── BUFF 格悬浮 Title 卡（复用物品卡/角色卡同一套 BUFF 卡片）───────────
+    // attachHoverableTitleCard 自带中键锁定与卡内 chip 嵌套卡逻辑，
+    // 返回的 controller 需在重渲染/关闭时清理，避免卡片残留。
+    this._buffCardCtrls?.forEach(c => c.close?.());
+    this._buffCardCtrls = [];
+    html.find(".qa-buff-slot--filled[data-buff-name]").each((_, el) => {
+      this._buffCardCtrls.push(
+        attachHoverableTitleCard(el, () => buildBuffTitleCard(el.dataset.buffName))
+      );
+    });
   }
 
   /* ─── 内部辅助 ───────────────────────────────────────────────────────────── */
@@ -554,7 +631,7 @@ export class QuickActionHUD extends Application {
     const sheet  = this._actor.sheet;
     if (!sheet?._buildTitleCard) return;
 
-    this._onHudItemHoverEnd();
+    this._onHudItemHoverEnd(true);
     this._hudTitleCard = sheet._buildTitleCard(item);
 
     // HUD 尺寸较小，优先显示在 HUD 左侧；空间不足则显示在右侧
@@ -566,8 +643,12 @@ export class QuickActionHUD extends Application {
     if (left < 8) left = rect.right + 8;
     const top    = Math.max(8, Math.min(rect.top, window.innerHeight - cardH - 8));
 
+    // 卡内 chip 弹出的嵌套卡会自动取"本卡 z-index + 1"，从而盖在本卡上面
+    // （见 item-sheet.mjs 的 _positionTitleCard）
     this._hudTitleCard.css({ position: "fixed", left, top, zIndex: 99999 });
     $("body").append(this._hudTitleCard);
+    this._hudTitleCard.on("mouseenter", () => clearTimeout(this._hudTitleCardCloseTimer));
+    this._hudTitleCard.on("mouseleave", () => this._onHudItemHoverEnd());
 
     // 允许鼠标在图标上滚动时滚动描述区
     this._hudTitleCardWheelEl = el;
@@ -580,14 +661,28 @@ export class QuickActionHUD extends Application {
     el.addEventListener("wheel", this._hudTitleCardWheelHandler, { passive: false });
   }
 
-  _onHudItemHoverEnd() {
+  /**
+   * @param {boolean} [force=false]  true=立即强制关闭（忽略锁定）；
+   *   false=延迟 150ms 软关闭（锁定的卡片会被 closeTitleCardUnlessLocked 拦下）
+   */
+  _clearHudTitleCardWheel() {
     if (this._hudTitleCardWheelEl && this._hudTitleCardWheelHandler) {
       this._hudTitleCardWheelEl.removeEventListener("wheel", this._hudTitleCardWheelHandler);
     }
     this._hudTitleCardWheelEl = null;
     this._hudTitleCardWheelHandler = null;
-    this._hudTitleCard?.remove();
-    this._hudTitleCard = null;
+  }
+
+  _onHudItemHoverEnd(force = false) {
+    if (!force) {
+      clearTimeout(this._hudTitleCardCloseTimer);
+      this._hudTitleCardCloseTimer = setTimeout(() => this._onHudItemHoverEnd(true), 150);
+      return;
+    }
+    clearTimeout(this._hudTitleCardCloseTimer);
+    this._clearHudTitleCardWheel();
+    closeTitleCardUnlessLocked(this._hudTitleCard);
+    if (!this._hudTitleCard?.data("tcLocked")) this._hudTitleCard = null;
   }
 
   /**
@@ -608,28 +703,310 @@ export class QuickActionHUD extends Application {
       equipped:    basicIds,
       slots:       bag1.slice(0, 6),
       pool:        bag2,
-      relatedMode: {},
     };
   }
 
+  // 注：原 _advanceBagStateManually() 已移除。
+  // 战斗袋的推进统一由 actor-sheet._animateCombatSkillUse() 负责——它内部
+  // 已区分角色卡开着（播完动画再推进）与关着（直接推进）两种情况。HUD 侧
+  // 再补一次会导致关闭角色卡时重复推进，技能跳着走。
+
+  /* ─── 基础技能格：点击发起对抗 / 长按拖到 token 指定目标 ───────────────── */
+
   /**
-   * 手动推进战斗袋（当角色卡 sheet 未渲染、_animateCombatSkillUse 提前返回时调用）。
-   * 逻辑与 actor-sheet._drawNextFromPool + slots.splice/push 一致。
+   * 绑定三个基础技能格的交互：
+   * - 单击            → 发起对抗（不指定目标）
+   * - 长按 300ms 后拖拽 → 拖到画布 token 上松开，指定该角色为唯一可响应目标
+   * 两条路径最终都走 ClashManager.showInitiateDialog（弹"发起对抗"确认框，
+   * 可填加值修正），确认后才真正打出；取消则技能保留、不消耗行动值。
    */
-  _advanceBagStateManually(slotIndex) {
-    const state = this._actor?.sheet?._combatBagState;
-    if (!state) return;
+  _bindSkillSlots(html) {
+    let aiming = null;   // { el, itemId, slotIndex, sx, sy }
 
-    // 移除已使用的槽
-    state.slots.splice(slotIndex, 1);
+    const endAim = () => {
+      aiming?.el.removeClass("qa-skill-slot--aiming");
+      this._destroyAimOverlay();
+      aiming = null;
+      $(document).off("mousemove.qaSkillDrag mouseup.qaSkillDrag");
+    };
 
-    // 从 pool 取下一张；pool 耗尽则重洗
-    if (!state.pool.length) {
-      state.pool = [...(state.equipped ?? [])].sort(() => Math.random() - 0.5);
+    /** 屏幕坐标 → 画布 token（命中测试） */
+    const tokenAt = (clientX, clientY) => {
+      if (!canvas?.ready) return null;
+      const t = canvas.canvasCoordinatesFromClient?.({ x: clientX, y: clientY })
+        ?? canvas.clientCoordinatesToCanvas?.({ x: clientX, y: clientY });
+      if (!t) return null;
+      return canvas.tokens?.placeables?.find(tk =>
+        t.x >= tk.x && t.x <= tk.x + tk.w && t.y >= tk.y && t.y <= tk.y + tk.h) ?? null;
+    };
+
+    /** 自己不能作为自己发起的对抗的目标（否则会发出一张没人能响应的对抗卡） */
+    const isSelfToken = (tk) => !!tk && tk.actor?.id === this._actor?.id;
+
+    /** token 中心（画布坐标）→ 屏幕坐标，用于把箭头吸附到目标中心 */
+    const tokenScreenCenter = (tk) => {
+      const c = tk.center ?? { x: tk.x + tk.w / 2, y: tk.y + tk.h / 2 };
+      const p = canvas.clientCoordinatesFromCanvas?.(c);
+      if (p) return p;
+      // 回退：直接用舞台变换矩阵换算
+      const m = canvas.stage?.worldTransform;
+      return m ? { x: c.x * m.a + m.tx, y: c.y * m.d + m.ty } : null;
+    };
+
+    // 基础技能格与 EGO 环绕槽共用同一套"点击发起 / 拖拽指定目标"交互。
+    // 区别只在 slotIndex：基础技能传战斗槽下标（会推进 6-bag），
+    // EGO 传 -2（不属于 6-bag，只扣行动值）。
+    html.find(".qa-skill-slot--ready, .qa-ego-slot").on("mousedown", (ev) => {
+      if (ev.button !== 0) return;
+      ev.preventDefault();
+      ev.stopPropagation();
+
+      const el        = $(ev.currentTarget);
+      const itemId    = el.data("itemId");
+      const slotIndex = el.hasClass("qa-ego-slot") ? -2 : Number(el.data("slotIndex"));
+      if (!itemId) return;
+
+      const startX = ev.clientX, startY = ev.clientY;
+      const rect   = el[0].getBoundingClientRect();
+      const srcX   = rect.left + rect.width  / 2;
+      const srcY   = rect.top  + rect.height / 2;
+
+      $(document)
+        .on("mousemove.qaSkillDrag", (e) => {
+          // 位移超过阈值才进入瞄准模式（未超过则仍视为点击）
+          if (!aiming) {
+            if (Math.hypot(e.clientX - startX, e.clientY - startY) < QA_AIM_THRESHOLD) return;
+            aiming = { el, itemId, slotIndex, sx: srcX, sy: srcY };
+            el.addClass("qa-skill-slot--aiming");
+            this._createAimOverlay();
+          }
+          // 悬停自己时不吸附（视同空地），避免误以为可以指定自己
+          const tk = tokenAt(e.clientX, e.clientY);
+          const tc = (tk && !isSelfToken(tk)) ? tokenScreenCenter(tk) : null;
+          if (tc) this._updateAimOverlay(aiming.sx, aiming.sy, tc.x, tc.y, true);
+          else    this._updateAimOverlay(aiming.sx, aiming.sy, e.clientX, e.clientY, false);
+        })
+        .on("mouseup.qaSkillDrag", async (e) => {
+          // 未进入瞄准模式 → 视为单击，不指定目标
+          if (!aiming) {
+            endAim();
+            await this._castSkill(itemId, slotIndex, "");
+            return;
+          }
+          const tk = tokenAt(e.clientX, e.clientY);
+          endAim();
+          if (isSelfToken(tk)) {
+            ui.notifications.warn("不能对自己发起对抗，已取消本次指定");
+            return;
+          }
+          const targetActorId = tk?.actor?.id ?? "";
+          if (!targetActorId) {
+            ui.notifications.warn("未指向任何 Token，已取消本次指定");
+            return;
+          }
+          await this._castSkill(itemId, slotIndex, targetActorId);
+        });
+    });
+  }
+
+  /* ─── 拖拽瞄准箭头（杀戮尖塔式弧线 + 分段圆点 + 目标瞄准环）───────────── */
+
+  /** 创建全屏 SVG 覆盖层（pointer-events:none，不拦截画布交互） */
+  _createAimOverlay() {
+    this._destroyAimOverlay();
+    const NS  = "http://www.w3.org/2000/svg";
+    const svg = document.createElementNS(NS, "svg");
+    svg.setAttribute("class", "qa-aim-overlay");
+
+    const ring = document.createElementNS(NS, "circle");   // 目标瞄准环
+    ring.setAttribute("fill", "none");
+    ring.setAttribute("stroke-width", "3");
+    ring.style.display = "none";
+
+    const dots = document.createElementNS(NS, "g");        // 分段圆点（曲线本体）
+    const head = document.createElementNS(NS, "polygon");  // 箭头
+
+    svg.append(ring, dots, head);
+    document.body.appendChild(svg);
+    this._aim = { svg, ring, dots, head, NS };
+  }
+
+  _destroyAimOverlay() {
+    this._aim?.svg?.remove();
+    this._aim = null;
+  }
+
+  /**
+   * 更新瞄准箭头。
+   * 曲线为二次贝塞尔：起点=技能格中心，终点=光标/目标中心，
+   * 控制点抬到两端上方形成外凸弧线（距离越远弧度越大，封顶 220px）。
+   * 沿曲线排布由细到粗的圆点，模拟杀戮尖塔的锥形指向效果。
+   */
+  _updateAimOverlay(sx, sy, ex, ey, snapped) {
+    const aim = this._aim;
+    if (!aim) return;
+    const { NS, dots, head, ring } = aim;
+
+    const color = snapped ? QA_AIM_COLOR_SNAP : QA_AIM_COLOR;
+    const p0 = { x: sx, y: sy };
+    const p2 = { x: ex, y: ey };
+    const dist = Math.hypot(ex - sx, ey - sy);
+    const p1 = { x: (sx + ex) / 2, y: Math.min(sy, ey) - Math.min(220, 60 + dist * 0.32) };
+
+    const bez  = (t) => ({
+      x: (1-t)*(1-t)*p0.x + 2*(1-t)*t*p1.x + t*t*p2.x,
+      y: (1-t)*(1-t)*p0.y + 2*(1-t)*t*p1.y + t*t*p2.y,
+    });
+    const bezD = (t) => ({
+      x: 2*(1-t)*(p1.x-p0.x) + 2*t*(p2.x-p1.x),
+      y: 2*(1-t)*(p1.y-p0.y) + 2*t*(p2.y-p1.y),
+    });
+
+    // 末端留出箭头长度，避免圆点戳穿箭头
+    const tEnd = 0.90;
+    const N = 16;
+    dots.textContent = "";
+    for (let i = 0; i <= N; i++) {
+      const k = i / N;
+      const p = bez(k * tEnd);
+      const c = document.createElementNS(NS, "circle");
+      c.setAttribute("cx", p.x);
+      c.setAttribute("cy", p.y);
+      c.setAttribute("r", 2.5 + 5.5 * k);          // 由细到粗
+      c.setAttribute("fill", color);
+      c.setAttribute("opacity", 0.35 + 0.65 * k);
+      dots.appendChild(c);
     }
-    const nextId = state.pool.shift() ?? null;
-    state.slots.push(nextId);
-    // state 是 Map 中对象的引用，直接 mutate 即已生效，无需重新 set
+
+    // 箭头：位于曲线末端，朝向该点切线方向
+    const tip = bez(1);
+    const d   = bezD(1);
+    const ang = Math.atan2(d.y, d.x);
+    const L = snapped ? 30 : 24, W = snapped ? 20 : 16;
+    const pt = (dx, dy) =>
+      `${tip.x + dx*Math.cos(ang) - dy*Math.sin(ang)},${tip.y + dx*Math.sin(ang) + dy*Math.cos(ang)}`;
+    head.setAttribute("points", `${pt(0,0)} ${pt(-L, W/2)} ${pt(-L*0.72, 0)} ${pt(-L,-W/2)}`);
+    head.setAttribute("fill", color);
+
+    // 吸附到目标时显示瞄准环
+    if (snapped) {
+      ring.style.display = "";
+      ring.setAttribute("cx", ex);
+      ring.setAttribute("cy", ey);
+      ring.setAttribute("r", 52);
+      ring.setAttribute("stroke", color);
+      ring.setAttribute("opacity", ".9");
+    } else {
+      ring.style.display = "none";
+    }
+  }
+
+  /**
+   * 打出一个基础技能：弹发起对抗确认框，确认后播"飞走 + 补位"动画。
+   * showInitiateDialog 内部已负责扣 AP / 推进 6-bag（slotIndex >= 0），
+   * 这里只负责 HUD 侧的动画表现，动画结束后重渲染取最新状态。
+   */
+  async _castSkill(itemId, slotIndex, targetActorId = "") {
+    const actor = this._actor;
+    const item  = actor?.items.get(itemId);
+    if (!actor || !item) return;
+
+    // 基础技能只有激活槽（0/1）可用，准备槽（2）不可用；
+    // slotIndex 为负表示不来自 6-bag（-2 = EGO 等非战斗槽来源），不受此限制
+    if (slotIndex > 1) {
+      ui.notifications.warn("只有激活槽中的技能可以发起对抗");
+      return;
+    }
+    // 兜底：指定目标不能是发起者自己（否则发出的对抗卡没有任何角色能响应）
+    if (targetActorId && targetActorId === actor.id) {
+      ui.notifications.warn("不能对自己发起对抗");
+      return;
+    }
+    // 确保战斗袋已初始化（状态存在模块级 Map 中，按 actorId 索引，
+    // 关闭角色卡也不会丢失）
+    this._ensureBagState();
+
+    const ok = await ClashManager.showInitiateDialog(actor, item, slotIndex, targetActorId);
+    if (!ok) return;   // 取消：技能保留在槽位，不播动画、不推进袋
+
+    // 注意：战斗袋的推进完全交给 clash.mjs → sheet._animateCombatSkillUse()，
+    // 它内部已分别处理"角色卡开着"（播动画后推进）与"角色卡关着"
+    // （!this.element.length 时直接推进）两种情况。这里不能再补一次
+    // _advanceBagStateManually，否则角色卡关闭时会推进两次，技能跳着走、
+    // 看起来像被打乱。
+
+    if (slotIndex < 0) {
+      // 非战斗槽来源（EGO 等）：不属于 6-bag，没有补位概念，只播一次打出反馈
+      this.element?.find(`.qa-ego-slot[data-item-id="${itemId}"]`).addClass("qa-skill-slot--casting");
+    } else {
+      // 打出格向上飞走；它右侧的格子左移补位，左侧的保持不动
+      const row = this.element?.find(".qa-skill-row");
+      row?.find(`.qa-skill-slot[data-slot-index="${slotIndex}"]`).addClass("qa-skill-slot--casting");
+      row?.find(".qa-skill-slot").each((_, el) => {
+        const idx = Number(el.dataset.slotIndex);
+        if (idx > slotIndex) $(el).addClass("qa-skill-slot--shifting");
+      });
+    }
+    // 打出动画结束后重渲染。重渲染会整块换掉 DOM，动画类随之丢失 —— 所以把
+    // "从第几格起要补位"记下来，等新 DOM 建好后在 activateListeners 里补播，
+    // 否则新槽位是瞬间出现的，看起来就是闪一下（角色卡那边不重渲染所以顺滑）。
+    setTimeout(() => {
+      if (slotIndex >= 0) this._slideFromSlot = slotIndex;
+      this.render(false);
+    }, 430);
+  }
+
+  /**
+   * 推进到下一回合。
+   * GM 直接调用 combat.nextTurn()；玩家没有修改 Combat 文档的权限，
+   * 通过既有的 system.limbusCompany_FVTT socket 通道委托 GM 执行
+   * （与 ClashManager._safeDocUpdate 的委托思路一致）。
+   */
+  async _nextTurn() {
+    const combat = game.combat;
+    if (!combat?.started) {
+      ui.notifications.warn("当前没有进行中的遭遇战");
+      return;
+    }
+
+    if (game.user.isGM) {
+      await combat.nextTurn();
+      return;
+    }
+
+    // 玩家：仅允许在轮到自己控制的角色时结束回合
+    if (combat.combatant?.actor?.id !== this._actor?.id) {
+      ui.notifications.warn("现在不是你的回合");
+      return;
+    }
+    game.socket.emit("system.limbusCompany_FVTT", {
+      type:     "gmNextTurn",
+      combatId: combat.id,
+      userId:   game.user.id,
+    });
+  }
+
+  /**
+   * 刷新：与角色卡战斗页的 6-bag 同步。
+   * 角色卡尚未激活战斗槽时，代替执行一次"激活"（初始化 6-bag）。
+   */
+  async _refreshCombatBag() {
+    const sheet = this._actor?.sheet;
+    if (!sheet) return;
+
+    if (!sheet._combatBagState) {
+      // 未激活 → 代替执行"激活"：初始化 6-bag（不依赖角色卡是否已渲染）
+      this._ensureBagState();
+      if (!sheet._combatBagState) {
+        ui.notifications.warn("没有已装备的基础技能，无法激活战斗槽");
+        return;
+      }
+      ui.notifications.info("已激活战斗槽（6-bag）");
+    }
+
+    // 角色卡开着时同步刷新它的槽位显示，两边保持一致
+    if (sheet.rendered && sheet.element?.length) sheet._renderCombatSlots?.(sheet.element);
+    this.render(false);
   }
 
   /** 打开角色卡并切换到战斗 Tab */
@@ -679,8 +1056,8 @@ export class QuickActionHUD extends Application {
           </select>
         </div>
         <div class="form-group inline-row">
-          <label>强度</label><input type="number" name="intensity" value="1" min="0" style="width:60px"/>
-          <label style="margin-left:8px">层数</label><input type="number" name="stacks" value="1" min="0" style="width:60px"/>
+          <label>强度</label><input type="number" name="intensity" value="0" min="0" style="width:60px"/>
+          <label style="margin-left:8px">层数</label><input type="number" name="stacks" value="0" min="0" style="width:60px"/>
         </div>
       </div>`;
 
@@ -695,8 +1072,8 @@ export class QuickActionHUD extends Application {
             const type      = html.find("[name='buffType']").val();
             const custom    = html.find("[name='customName']").val();
             const whenAdded = html.find("[name='whenAdded']").val();
-            const intensity = parseInt(html.find("[name='intensity']").val()) || 1;
-            const stacks    = parseInt(html.find("[name='stacks']").val())    || 1;
+            const intensity = parseInt(html.find("[name='intensity']").val()) || 0;
+            const stacks    = parseInt(html.find("[name='stacks']").val())    || 0;
             const name      = type === "custom" ? (custom || "自定义") : _buffLabel(type);
             await actor.addBuff({ type, name, intensity, stacks, whenAdded,
               icon: _buffIconPath(type, name) });

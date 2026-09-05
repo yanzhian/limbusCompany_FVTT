@@ -52,6 +52,25 @@
           {{/if}}
         </div>
 
+        {{!-- 武器专用：近战/远程 + 攻击范围（格 → ft）--}}
+        {{#if isWeapon}}
+          <div class="equip-range-row">
+            {{#if (and isEditable (not isLocked))}}
+              <select name="system.rangeType" class="equip-subtype-sel equip-rangetype-sel">
+                <option value="melee"  {{#eq system.rangeType "melee"}}selected{{/eq}}>近战</option>
+                <option value="ranged" {{#eq system.rangeType "ranged"}}selected{{/eq}}>远程</option>
+              </select>
+              <span class="equip-range-label">攻击范围</span>
+              <input type="number" name="system.range" value="{{system.range}}"
+                     class="equip-range-input" min="0" max="99"/>
+              <span class="equip-range-ft">格（{{rangeFt}}）</span>
+            {{else}}
+              <span class="equip-rangetype-badge {{#eq system.rangeType "ranged"}}is-ranged{{/eq}}">{{rangeTypeLabel}}</span>
+              <span class="equip-range-display">{{system.range}} 格 · {{rangeFt}}</span>
+            {{/if}}
+          </div>
+        {{/if}}
+
         {{!-- 数值修正 + 链接方向 --}}
         <div class="equip-stats-links-row">
           <div class="equip-stats">
@@ -89,18 +108,6 @@
               </div>
             {{/unless}}
           </div>
-
-          {{!-- 链接方向（右侧对齐） --}}
-          <div class="link-dir-group" role="group" aria-label="链接方向">
-            {{#each linkDirs}}
-              <button type="button" class="link-dir-btn link-dir-{{this}} {{#if (lookup ../linksActive this)}}link-active{{/if}}"
-                      data-dir="{{this}}"
-                      {{#if (or ../isLocked (not ../isEditable))}}disabled{{/if}}
-                      title="链接 {{this}}">
-                <img src="systems/limbusCompany_FVTT/assets/icons/Base_icon/Link.svg" class="link-dir-icon" alt="链接 {{this}}">
-              </button>
-            {{/each}}
-          </div>
         </div>
 
         {{!-- 物理抗性（仅上装） --}}
@@ -137,7 +144,7 @@
     <div class="item-tags-row">
       <div class="tags-area">
         {{#if (and isEditable (not isLocked))}}
-          <input type="text" name="system.tags" value="{{system.tags}}" class="tags-input" placeholder="标签1/标签2"/>
+          <input type="text" name="system.tags" value="{{join system.tags '/'}}" class="tags-input" placeholder="标签1/标签2"/>
         {{else}}
           {{#each (split system.tags '/')}}
             <span class="tag">{{trim this}}</span>
@@ -162,6 +169,24 @@
           <span class="cost-display">{{system.cost}}</span>
         {{/if}}
       </div>
+      {{!-- 稀有度：只管战利品随机池权重与网格光晕，不参与定价 --}}
+      <div class="item-rarity-group rarity-{{system.rarity}}">
+        <span class="rarity-dot"></span>
+        {{#if (and isEditable (not isLocked))}}
+          <select name="system.rarity" class="rarity-select">
+            {{!-- v13 移除了内置的 select 块助手：助手不存在时整块被当成假值跳过，
+                  下拉里一个 option 都不会渲染（表现就是"选不了也存不上"）。
+                  改用本系统自己注册的 eq 助手逐个标 selected。 --}}
+            <option value="common"   {{#eq system.rarity "common"}}selected{{/eq}}>平装</option>
+            <option value="fine"     {{#eq system.rarity "fine"}}selected{{/eq}}>精良</option>
+            <option value="epic"     {{#eq system.rarity "epic"}}selected{{/eq}}>史诗</option>
+            <option value="artistic" {{#eq system.rarity "artistic"}}selected{{/eq}}>艺术</option>
+            <option value="mythic"   {{#eq system.rarity "mythic"}}selected{{/eq}}>神话</option>
+          </select>
+        {{else}}
+          <span class="rarity-display">{{rarityLabel}}</span>
+        {{/if}}
+      </div>
     </div>
 
     {{!-- ── 分割线 ──────────────────────────────────────────────────── --}}
@@ -172,7 +197,7 @@
       {{#if (and isEditable (not isLocked))}}
         {{editor system.effect target="system.effect" button=false editable=true engine="prosemirror"}}
       {{else}}
-        <div class="item-desc-display">{{{system.effect}}}</div>
+        <div class="item-desc-display">{{{linkify system.effect}}}</div>
       {{/if}}
     </div>
 

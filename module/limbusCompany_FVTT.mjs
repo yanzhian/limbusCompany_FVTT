@@ -9,6 +9,9 @@
  */
 
 import { LIMBUSCOMPANY }   from "./config.mjs";
+import { registerHeaderCollapse } from "./helpers/window-header.mjs";
+import { registerTurnBanner } from "./helpers/turn-banner.mjs";
+import { registerRulebook } from "./helpers/rulebook.mjs";
 import { LimbusActor, CharacterData, MerchantData, CampData, LootData }  from "./documents/actor.mjs";
 import {
   LimbusItem,
@@ -17,6 +20,10 @@ import {
   ConsumableData,
   MaterialData,
   ContainerData,
+  SkillBookData,
+  RecipeBookData,
+  PanicData,
+  BackgroundData,
 } from "./documents/item.mjs";
 import { LimbusActorSheet }   from "./sheets/actor-sheet.mjs";
 import { LimbusItemSheet }    from "./sheets/item-sheet.mjs";
@@ -26,10 +33,16 @@ import { LimbusLootSheet }    from "./sheets/loot-sheet.mjs";
 import { GMConsole }          from "./sheets/gm-console.mjs";
 import { SquadHUD }           from "./sheets/squad-hud.mjs";
 import { ClashManager }     from "./helpers/clash.mjs";
-import { CustomBuffRegistry, resolveBuffHandler } from "./helpers/custom-buffs.mjs";
+import { CustomBuffRegistry, resolveBuffHandler, FieldResourceRegistry } from "./helpers/custom-buffs.mjs";
+import { linkifyHtml } from "./helpers/linkify.mjs";
 import { SinResourceHUD }   from "./helpers/sin-resource-hud.mjs";
 import { QuickActionHUD }   from "./sheets/quick-action-hud.mjs";
 import { registerItemPiles } from "./helpers/item-piles.mjs";
+import { ChaosTokenLabel }   from "./helpers/chaos-token-label.mjs";
+import { ClashTotalFX }     from "./helpers/clash-total-fx.mjs";
+import { ClashKnockback } from "./helpers/knockback.mjs";
+import { ClashVFX }       from "./helpers/clash-vfx.mjs";
+import { TokenRingHUD }   from "./helpers/token-ring-hud.mjs";
 
 /* ─── Item Piles 联动注册 ─────────────────────────────────────────────────── */
 
@@ -84,6 +97,11 @@ Hooks.once("init", () => {
 
   // 暴露 SinResourceHUD 到全局，供宏/控制台调用
   globalThis.SinResourceHUD = SinResourceHUD;
+  // 调试用：控制台里可直接 ClashTotalFX.DEBUG = true 观察 TOTAL 演出参数
+  globalThis.ClashTotalFX = ClashTotalFX;
+  // 击退系统：ClashKnockback.ENABLED = false 可随时整套关掉
+  globalThis.ClashKnockback = ClashKnockback;
+  globalThis.ClashVFX = ClashVFX;
 
   // 注册全局罪孽资源 setting（需在 init 阶段注册 setting）
   SinResourceHUD.init();
@@ -93,7 +111,9 @@ Hooks.once("init", () => {
   game.socket.on("system.limbusCompany_FVTT", async (msg) => {
     await SinResourceHUD.handleSocketMsg(msg);
     await ClashManager.handleSocketMsg(msg);
-    await _handleMerchantSocketMsg(msg);
+    await ClashTotalFX.handleSocketMsg(msg);
+    ClashVFX.handleSocketMsg(msg);
+    await LimbusMerchantSheet.handleSocketMsg(msg);
     await LimbusCampSheet.handleSocketMsg(msg);
     await LimbusLootSheet.handleSocketMsg(msg);
   });
@@ -120,6 +140,10 @@ Hooks.once("init", () => {
     consumable: ConsumableData,
     material:   MaterialData,
     container:  ContainerData,
+    skillbook:  SkillBookData,
+    recipebook: RecipeBookData,
+    panic:      PanicData,
+    background: BackgroundData,
   };
 
   // ── 注册 Actor Sheet ───────────────────────────────────────────────────
@@ -178,8 +202,14 @@ Hooks.once("init", () => {
     restricted: true,
   });
 
+  // 规则书入口：设置侧边栏按钮 + F1（keybindings 只能在 init 期注册）
+  registerRulebook();
+
   // 注册小队 HUD 世界设置
   SquadHUD.init();
+
+  // Token 生命环 HUD（客户端开关）
+  TokenRingHUD.init();
 
   // ── 预加载 HBS 模板 ───────────────────────────────────────────────────
   _preloadTemplates();
@@ -197,13 +227,36 @@ Hooks.once("setup", () => {
 /* ─── Hooks.once("ready") ────────────────────────────────────────────────── */
 
 Hooks.once("ready", () => {
+  // 回合开始横幅（黑条 → 钟表 → TURN + 回合数）
+  registerTurnBanner();
+
+  // 窗口标题栏整合：隐藏标题，除关闭外的按钮收进右上角 ⋮
+  registerHeaderCollapse([
+    "LimbusActorSheet", "LimbusItemSheet", "LimbusMerchantSheet",
+    "LimbusCampSheet", "LimbusLootSheet",
+    "BackgroundWizard", "LevelUpDialog", "GMConsole", "CSVImportDialog",
+  ]);
+
   console.log("limbusCompany_FVTT | 系统已就绪。");
+
+  // 【展示稀有度】：开关状态落到 body 上
+  _applyRarityDisplay(game.settings.get("limbusCompany_FVTT", "showRarity"));
 
   // 显示全局罪孽资源 HUD
   SinResourceHUD.create();
 
+  // Token 生命环 HUD：挂钩子并画一遍现有 Token
+  TokenRingHUD.ready();
+
+  // 商人卡左栏画的是玩家角色的背包，那边变了要跟着刷新
+  LimbusMerchantSheet.init();
+
   // 创建快捷操作 HUD 单例（选中 Token 时自动渲染）
   QuickActionHUD.create();
+
+  // 【陷入混乱】token 悬浮字样
+  ChaosTokenLabel.init();
+  ChaosTokenLabel.refresh();
 
   // ── 过滤 ui.notifications 弹出的聊天清理竞态红色警告 ──────────────────
   // ui.notifications 在 ready 之后才可用，因此在此处 patch
@@ -220,11 +273,132 @@ Hooks.once("ready", () => {
 
   // GM 在线时执行一次迁移：把所有现有角色及其场景 Token 改为 linked
   if (game.user.isGM) _migrateTokenLinks();
+
+  // GM 在线时校正一次超标的 BUFF 层数（规矩就是规矩）
+  if (game.user.isGM) _clampBuffStacks();
+
+  // GM 在线时还原一次残留的临时骰面改动（上次对抗中途断线/刷新留下的）
+  if (game.user.isGM) _restoreItemTempMods();
+
+  // GM 在线时把粘连在一起的标签拆开（历史数据修复）
+  if (game.user.isGM) _normalizeItemTags();
 });
+
+/**
+ * 加载时修复：把 ["收尾人/黎明事务所"] 这种粘连在一起的标签拆成多个。
+ *
+ * 数组型 tags 曾经被整串写进一个元素（输入框里的 "a/b" 直接塞给 ArrayField），
+ * 导致卡面上两个标签连成一个、标签匹配也对不上。这里在世界加载时统一拆开。
+ */
+async function _normalizeItemTags() {
+  const SEP = /[\/,，;；]/;
+  let fixed = 0;
+  const scan = async (items) => {
+    for (const item of items ?? []) {
+      const raw = item.system?.tags;
+      if (!Array.isArray(raw) || !raw.some(t => SEP.test(String(t)))) continue;
+      const list = raw.flatMap(t => String(t).split(SEP)).map(t => t.trim()).filter(Boolean);
+      try {
+        await item.update({ "system.tags": list });
+        fixed++;
+        console.log(`limbusCompany_FVTT | 标签拆分：${item.name} → ${list.join(" / ")}`);
+      } catch (err) {
+        console.warn("limbusCompany_FVTT | 标签拆分失败", item.name, err);
+      }
+    }
+  };
+  await scan(game.items);
+  for (const actor of game.actors) await scan(actor.items);
+  if (fixed) ui.notifications.info(`已拆分 ${fixed} 件物品里粘连的标签`);
+}
+
+/**
+ * 加载时兜底：把上次攻击没来得及还原的骰数/面数/基础值/攻击容量改回原值。
+ *
+ * 正常流程会在 [攻击后] 之后还原（见 ClashManager._restoreAllItemMods），
+ * 中途刷新页面或断线时可能留下 flags.limbusCompany_FVTT.tempMods，这里补一刀。
+ */
+async function _restoreItemTempMods() {
+  const { ClashManager } = await import("./helpers/clash.mjs");
+  let fixed = 0;
+  const scan = async (items) => {
+    for (const item of items ?? []) {
+      const mods = item.getFlag?.("limbusCompany_FVTT", "tempMods");
+      if (!mods || !Object.keys(mods).length) continue;
+      try { await ClashManager._restoreItemMods(item); fixed++; }
+      catch (err) { console.warn("limbusCompany_FVTT | 临时骰面还原失败", item.name, err); }
+    }
+  };
+  await scan(game.items);
+  for (const actor of game.actors) await scan(actor.items);
+  if (fixed) console.log(`limbusCompany_FVTT | 已还原 ${fixed} 件物品的临时骰面改动`);
+}
+
+/**
+ * 加载时校正：把所有角色身上超过注册上限（maxStacks）的 BUFF 层数钳回上限。
+ *
+ * 上限此前因为「自定义 BUFF 以中文名当 type」而失效过，存量存档里可能留着
+ * 15 层上限却叠到 99 的 BUFF；这里在世界加载时一次性纠正，之后由 _addBuff 把关。
+ */
+async function _clampBuffStacks() {
+  let fixedActors = 0, fixedBuffs = 0;
+  for (const actor of game.actors) {
+    const buffs = actor.system?.buffs;
+    if (!Array.isArray(buffs) || !buffs.length) continue;
+
+    let changed = false;
+    const next = buffs.map(b => {
+      const h      = resolveBuffHandler(b);
+      const maxS   = h?.maxStacks    ?? Infinity;
+      const maxI   = h?.maxIntensity ?? Infinity;
+      const overS  = Number.isFinite(maxS) && (b.stacks    ?? 0) > maxS;
+      const overI  = Number.isFinite(maxI) && (b.intensity ?? 0) > maxI;
+      if (!overS && !overI) return b;
+      changed = true; fixedBuffs++;
+      const parts = [];
+      if (overS) parts.push(`层数 ${b.stacks} → ${maxS}`);
+      if (overI) parts.push(`强度 ${b.intensity} → ${maxI}`);
+      console.warn(`limbusCompany_FVTT | 【${b.name ?? b.type}】${parts.join("，")}（${actor.name}）`);
+      return { ...b, ...(overS ? { stacks: maxS } : {}), ...(overI ? { intensity: maxI } : {}) };
+    });
+    if (!changed) continue;
+
+    try {
+      await actor.update({ "system.buffs": next });
+      fixedActors++;
+    } catch (err) {
+      console.warn("limbusCompany_FVTT | BUFF 层数校正失败", actor.name, err);
+    }
+  }
+  if (fixedBuffs) {
+    ui.notifications.info(`已校正 ${fixedActors} 名角色的 ${fixedBuffs} 个超上限 BUFF`);
+  }
+}
 
 // 画布每次就绪时再次确保双击补丁存在（重连/重载场景后仍生效）
 Hooks.on("canvasReady", () => {
   _installTokenDoubleClickOpenActorSheet();
+});
+
+/* ─── 物品侧边栏：批量导入按钮（仅 GM） ─────────────────────────────────── */
+
+Hooks.on("renderItemDirectory", (app, html) => {
+  if (!game.user.isGM) return;
+  // v13 传入原生 HTMLElement，旧版传 jQuery，这里统一取原生节点
+  const root = html instanceof HTMLElement ? html : html?.[0];
+  const header = root?.querySelector(".directory-header .header-actions")
+              ?? root?.querySelector(".directory-header");
+  if (!header || header.querySelector(".limbus-csv-import")) return;
+
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "limbus-csv-import";
+  btn.innerHTML = `<i class="fas fa-file-csv"></i> 批量导入`;
+  btn.addEventListener("click", async () => {
+    const { CSVImportDialog } = await import("./sheets/csv-import-dialog.mjs");
+    CSVImportDialog.open();
+  });
+  header.appendChild(btn);
 });
 
 /* ─── 对抗结算触发：GM 端捕获玩家委托的结算请求 ──────────────────────────── */
@@ -262,12 +436,27 @@ Hooks.on("createChatMessage", async (message) => {
 /* ─── 对抗聊天框按钮交互 ─────────────────────────────────────────────────── */
 
 Hooks.on("renderChatMessage", (_message, html, _data) => {
+  // 「▼ 详细信息」等折叠：拼点对抗 / 单方面攻击 / 容量扩散 / 先攻骰掷都有。
+  // 必须绑在 flags 守卫**之前**——先攻骰掷那张卡是纯 content、没有 flags，
+  // 挡在守卫后面的话它的折叠永远点不开。
+  html.find(".limbus-detail-toggle-row").on("click", function () {
+    const $sec = $(this).next(".limbus-detail-section");
+    const open = $sec.toggle().is(":visible");
+    const $cap = $(this).find(".limbus-detail-toggle");
+    $cap.text((open ? "▲" : "▼") + $cap.text().slice(1));
+  });
+
   const flags = _message.flags?.limbusCompany_FVTT;
   if (!flags?.type) return;
 
   // ── 发起对抗聊天框：对抗 / 承受 ──
   if (flags.type === "clash-initiate") {
     html.find(".clash-btn-clash").on("click", () => {
+      // 【无法拼点】：兜底拦截（按钮本身已不渲染，旧卡或手动调用仍可能走到这里）
+      if (flags.noClash) {
+        ui.notifications?.warn("这张技能【无法拼点】，只能承受。");
+        return;
+      }
       ClashManager.showRespondDialog(_message.id, flags);
     });
     html.find(".clash-btn-take").on("click", () => {
@@ -275,28 +464,66 @@ Hooks.on("renderChatMessage", (_message, html, _data) => {
     });
   }
 
-  // ── 加重扩散承受聊天框 ──
+  // ── 容量扩散承受聊天框 ──
   if (flags.type === "clash-weight-spread") {
     html.find(".clash-btn-weight-take").on("click", () => {
       ClashManager.handleWeightTake(_message.id, flags);
     });
   }
 
-  // ── 拼点结算聊天框：承受（扣血） / 再次骰掷（平局） ──
+  // ── 拼点结算聊天框：结算结果（自动扣血）/ 重新骰掷（仅 GM）──
   if (flags.type === "clash-resolve") {
-    html.find(".clash-btn-apply-damage").on("click", async (e) => {
+    // 整局重掷：仅 GM，按钮本身也只渲染给 GM
+    html.find(".clash-btn-redo").on("click", async () => {
+      if (!game.user.isGM) return;
+      const ok = await Dialog.confirm({
+        title:   "重新骰掷",
+        content: "<p>把这一场对抗从头再打一遍？</p>"
+               + "<p style='color:#B84444;font-size:.85rem;'>上一次已经发生的效果不会回滚"
+               + "（加出去的 BUFF、扣掉的资源都还在），重打会再触发一次。</p>",
+      });
+      if (!ok) return;
+      // 单方面攻击卡复用同一处理器，重掷走各自的入口
+      if (flags.directRedo) await ClashManager.redoDirectTake(flags.directRedo);
+      else                  await ClashManager.redoClash(flags.redoData);
+    });
+    html.find(".clash-btn-settle").on("click", async (e) => {
       const targetActorId = e.currentTarget.dataset.targetActorId ?? flags.targetActorId;
       const damage        = parseInt(e.currentTarget.dataset.damage ?? flags.damage) || 0;
-      await ClashManager.handleApplyDamage(targetActorId, damage);
-      // 加重扩散：攻击方赢且 weight>=2 时，在扣血后发出扩散承受卡
+      // 本场对抗的全部承受合并成一张卡：【流血】要排在拼点伤害之前记账，
+      // 血条的「先前生命值」才是流血之前那个数
+      ClashManager._beginTakeAgg();
+      // 沉沦降理智可能把人打进【士气低落】——聚合成一张【恐慌鉴定】卡
+      ClashManager._beginPanicAgg();
+      await ClashManager.settleBleed(flags.bleedMsgs ?? []);
+      // 闪避/完全格挡 + 【不可摧毁】反击 / [追加伤害]：拼点本身 0 伤害，
+      // 只落挂在后面那几份
+      if (damage > 0 || !(flags.unbreakable || flags.extraDmg)) {
+        await ClashManager.handleApplyDamage(targetActorId, damage, flags.takeEffects ?? [],
+          flags.attackerId ?? "");
+      }
+      // 【不可摧毁】拼点失败反击：和拼点伤害同一个按钮一起结算
+      const ub = flags.unbreakable;
+      if (ub?.targetActorId && (ub.damage ?? 0) > 0) {
+        await ClashManager.handleApplyDamage(ub.targetActorId, ub.damage, [], ub.attackerId ?? "");
+      }
+      // [追加伤害]：时间上在主伤害之后，排在最后记账
+      await ClashManager.runExtraDamage(flags.extraDmg ?? []);
+      await ClashManager._flushTakeAgg();
+      await ClashManager._flushPanicAgg();
+      // [拼点失败] 之类的效果发起的新对抗：排到这里，伤害落地之后再弹
+      if (flags.skillLaunches) await ClashManager.runSkillLaunches(flags.skillLaunches);
+      // 反应检查：延后到伤害落地之后，前置条件读到的才是结算后的数值
+      if (flags.reactionCheck) await ClashManager.runReactionCheck(flags.reactionCheck);
+      // 容量扩散：打出伤害的一方攻击容量 >=2 时，在扣血后发出扩散承受卡
       const ws = flags.weightSpread;
       if (ws && (ws.weight ?? 1) >= 2) {
         const atkActor = game.actors.get(ws.attackerId);
-        await ClashManager._sendWeightSpreadCard(ws, atkActor);
+        const tgt      = game.actors.get(targetActorId);
+        await ClashManager._sendWeightSpreadCard(ws, atkActor, tgt ? {
+          actorId: tgt.id, name: tgt.name, dmg: damage, note: "拼点命中",
+        } : null);
       }
-    });
-    html.find(".clash-btn-reroll").on("click", () => {
-      ClashManager.rerollClash(flags.rerollData);
     });
     // 理智变化折叠行
     html.find(".limbus-sanity-toggle-row").on("click", function () {
@@ -308,19 +535,51 @@ Hooks.on("renderChatMessage", (_message, html, _data) => {
 
   // ── 反击聊天框：双方承受按钮 ──
   if (flags.type === "clash-counter") {
-    html.find(".clash-btn-apply-damage").on("click", (e) => {
-      const targetActorId = e.currentTarget.dataset.targetActorId;
-      const damage        = parseInt(e.currentTarget.dataset.damage) || 0;
-      ClashManager.handleApplyDamage(targetActorId, damage);
+    // 反击是一次交锋两边同时挨打，结算就该是一下——和拼点对抗一样，
+    // 一个【结算结果】把双方的伤害一起落地，不再拆成两个按钮各点各的
+    html.find(".clash-btn-settle").on("click", async () => {
+      ClashManager._beginTakeAgg();
+      // 沉沦降理智可能把人打进【士气低落】——聚合成一张【恐慌鉴定】卡
+      ClashManager._beginPanicAgg();
+      await ClashManager.settleBleed(flags.bleedMsgs ?? []);
+      // 反击是一次交锋两边同时挨打：各自的伤害来源就是对面
+      await ClashManager.handleApplyDamage(flags.defActorId, flags.damageToDefActor ?? 0, [], flags.atkActorId ?? "");
+      await ClashManager.handleApplyDamage(flags.atkActorId, flags.damageToAtkActor ?? 0, [], flags.defActorId ?? "");
+      await ClashManager.runExtraDamage(flags.extraDmg ?? []);
+      await ClashManager._flushTakeAgg();
+      await ClashManager._flushPanicAgg();
+      // [拼点失败] 之类的效果发起的新对抗：排到这里，伤害落地之后再弹
+      if (flags.skillLaunches) await ClashManager.runSkillLaunches(flags.skillLaunches);
+      if (flags.reactionCheck) await ClashManager.runReactionCheck(flags.reactionCheck);
+    });
+    html.find(".clash-btn-redo").on("click", async () => {
+      if (!game.user.isGM) return;
+      const ok = await Dialog.confirm({
+        title:   "重新骰掷",
+        content: "<p>把这一场对抗从头再打一遍？</p>"
+               + "<p style='color:#B84444;font-size:.85rem;'>上一次已经发生的效果不会回滚"
+               + "（加出去的 BUFF、扣掉的资源都还在），重打会再触发一次。</p>",
+      });
+      if (ok) await ClashManager.redoClash(flags.redoData);
     });
   }
 
   // ── 格挡聊天框：承受按钮 ──
   if (flags.type === "clash-block") {
-    html.find(".clash-btn-apply-damage").on("click", (e) => {
+    html.find(".clash-btn-apply-damage").on("click", async (e) => {
       const targetActorId = e.currentTarget.dataset.targetActorId ?? flags.targetActorId;
       const damage        = parseInt(e.currentTarget.dataset.damage ?? flags.damage) || 0;
-      ClashManager.handleApplyDamage(targetActorId, damage);
+      ClashManager._beginTakeAgg();
+      // 沉沦降理智可能把人打进【士气低落】——聚合成一张【恐慌鉴定】卡
+      ClashManager._beginPanicAgg();
+      await ClashManager.settleBleed(flags.bleedMsgs ?? []);
+      await ClashManager.handleApplyDamage(targetActorId, damage, [], flags.atkActorId ?? "");
+      await ClashManager.runExtraDamage(flags.extraDmg ?? []);
+      await ClashManager._flushTakeAgg();
+      await ClashManager._flushPanicAgg();
+      // [拼点失败] 之类的效果发起的新对抗：排到这里，伤害落地之后再弹
+      if (flags.skillLaunches) await ClashManager.runSkillLaunches(flags.skillLaunches);
+      if (flags.reactionCheck) await ClashManager.runReactionCheck(flags.reactionCheck);
     });
   }
 });
@@ -393,6 +652,17 @@ Hooks.on("updateActor", (actor) => {
   SquadHUD.onActorUpdate(actor);
 });
 
+/** 角色物品增删改 → 刷新打开中的营地卡（左栏角色背包面板） */
+const _refreshOpenCampSheets = (item) => {
+  if (item?.parent?.type !== "character") return;
+  for (const app of Object.values(ui.windows)) {
+    if (app instanceof LimbusCampSheet) app.render(false);
+  }
+};
+Hooks.on("createItem", _refreshOpenCampSheets);
+Hooks.on("deleteItem", _refreshOpenCampSheets);
+Hooks.on("updateItem", _refreshOpenCampSheets);
+
 /** Token 数据变化（非链接 Token）→ 也刷新 HUD */
 Hooks.on("updateToken", (token) => {
   const actor = token.actor;
@@ -401,6 +671,12 @@ Hooks.on("updateToken", (token) => {
     SquadHUD.onActorUpdate(actor);
   }
 });
+
+/** 战斗轮次/回合变化 → 刷新 HUD，让"下个回合"按钮及时出现或消失 */
+const _refreshHudOnCombat = () => QuickActionHUD.onCombatChange();
+Hooks.on("updateCombat",  _refreshHudOnCombat);
+Hooks.on("deleteCombat",  _refreshHudOnCombat);
+Hooks.on("createCombat",  _refreshHudOnCombat);
 
 /* ─── 战斗钩子 ───────────────────────────────────────────────────────────── */
 
@@ -411,15 +687,58 @@ Hooks.on("combatStart", (combat) => {
   for (const combatant of combat.combatants) {
     const actor = combatant.actor;
     if (!actor || actor.type !== "character") continue;
-    actor.longRest().then(() => {
+    actor.longRest().then(async () => {
       // longRest 已重置 HP/理智/AP/混乱阈值
       // 但战斗开始时不重置 HP，仅重置其他值
-      actor.update({
-        "system.sanity.value":    50,
-        "system.ap.value":        3,
-        "system.chaosThresholds": actor.system.getDefaultChaosThresholds?.() ?? [],
+      await actor.update({
+        "system.sanity.value":         50,
+        "system.ap.value":             3,
+        "system.chaosThresholds":      actor.system.getDefaultChaosThresholds?.() ?? [],
+        "system.panicCounters.fear":    0,
+        "system.panicCounters.resolve": 0,
       });
+      await actor.unsetFlag("limbusCompany_FVTT", "lowMoraleFiredEncounter");
     });
+  }
+
+  // ── 场地资源：遭遇战开始时，扫描全体角色背景 tags，命中则激活对应场地 ──
+  // 仅 GM 端执行一次，避免多客户端并发写入 world setting
+  if (game.user.isGM) {
+    (async () => {
+      const tagSet = new Set();
+      for (const combatant of combat.combatants) {
+        const actor  = combatant.actor;
+        const bgUuid = actor?.system?.background?.uuid;
+        if (!bgUuid) continue;
+        const bgItem = await fromUuid(bgUuid).catch(() => null);
+        for (const t of ClashManager._itemTags(bgItem)) {
+          const trimmed = t.trim();
+          if (trimmed) tagSet.add(trimmed);
+        }
+      }
+      for (const [name, def] of FieldResourceRegistry) {
+        if (def.triggerBackgroundTags?.some(t => tagSet.has(t))) {
+          await SinResourceHUD.ensureFieldResourceActive(name);
+        }
+      }
+    })();
+  }
+});
+
+/** 战斗结束（删除 Combat 文档）：重置遭遇战触发次数计数 */
+Hooks.on("deleteCombat", async (combat) => {
+  if (!game.user.isGM) return;
+  for (const combatant of combat.combatants) {
+    const actor = combatant.actor;
+    if (!actor) continue;
+    await actor.unsetFlag("limbusCompany_FVTT", "encounterFireCounts");
+    await actor.unsetFlag("limbusCompany_FVTT", "turnFireCounts");
+    // 每回合 BUFF 获得额度（maxGainPerRound）重置
+    await actor.unsetFlag("limbusCompany_FVTT", "buffRoundGain");
+    await actor.unsetFlag("limbusCompany_FVTT", "lowMoraleFiredEncounter");
+    if (actor.type === "character") {
+      await actor.update({ "system.panicCounters.fear": 0, "system.panicCounters.resolve": 0 });
+    }
   }
 });
 
@@ -430,20 +749,50 @@ Hooks.on("combatRound", (combat, _updateData, _options) => {
   // 在每个 combatant 轮次末尾由 combatTurn 钩子处理
 });
 
+// 去重：记录最近已处理的 combatId+round，防止 updateEmbeddedDocuments 引发的二次触发
+const _processedRoundKey = new Map();
+
 Hooks.on("updateCombat", async (combat, changed) => {
   // ── 每轮（round）结束：统一清 BUFF + 燃烧/充能/呼吸衰减（仅 GM 执行） ──
   if (!("round" in changed)) return;
   if (!game.user.isGM) return;
 
-  const TURN_END = CONFIG.LIMBUSCOMPANY?.TURN_END_BUFF_TYPES ?? new Set();
+  // 同一场战斗同一 round 只处理一次（防止批量更新先攻引发二次触发）
+  const dedupKey = `${combat.id}:${combat.round}`;
+  if (_processedRoundKey.get(dedupKey)) return;
+  _processedRoundKey.set(dedupKey, true);
+
+  const TURN_END     = CONFIG.LIMBUSCOMPANY?.TURN_END_BUFF_TYPES ?? new Set();
+  const CHAOS_TYPES  = CONFIG.LIMBUSCOMPANY?.CHAOS_TYPES ?? ["chaos", "chaos_plus", "chaos_double_plus"];
+  const CHAOS_EXTEND = CONFIG.LIMBUSCOMPANY?.CHAOS_EXTEND_TAG ?? "延续回合";
+
+  // 全体角色的回合开始/结束 Activity 消息各汇总为一条折叠消息
+  const endMsgs   = [];
+  const startMsgs = [];
+  // 回合结束期间的 [陷入混乱时]（烧伤跳动打进混乱那类）收进「上回合结束」
+  const _prevAmbient = ClashManager._ambientActMsgs;
+  ClashManager._ambientActMsgs = endMsgs;
+  // 全体角色的恐慌/坚定鉴定合并成一张【恐慌鉴定】卡（结构比照【先攻骰掷】）
+  ClashManager._beginPanicAgg();
 
   for (const combatant of combat.combatants) {
     const actor = combatant.actor;
     if (!actor || actor.type !== "character") continue;
     const buffs = actor.system.buffs ?? [];
 
-    // 每轮重置拼点胜利计数（用于理智增加量递增计算）
+    // 每轮重置拼点胜利计数 & 每回合效果触发次数
     await actor.unsetFlag("limbusCompany_FVTT", "clashWinsThisRound");
+    await actor.unsetFlag("limbusCompany_FVTT", "turnFireCounts");
+    // 骰数/面数/基础值/攻击容量的临时改动兜底还原。
+    // 对抗流程在 [攻击后] 会精确还原参战的那几件，但【激活】([使用时])、
+    // [回合开始时]、[反应] 这些非对抗路径同样能改这四个字段，却没有收尾——
+    // 不兜这一下就永久留在物品上了。
+    await ClashManager.restoreActorItemMods(actor);
+
+    // 每回合 BUFF 获得额度（maxGainPerRound）——这里才是"每回合"。
+    // 漏了这一句时它只在 deleteCombat 里清，等于整场战斗共用一份额度：
+    // 【炎蝶之棺】攒满 20 层后，后面每一轮都再也加不上，直到战斗结束。
+    await actor.unsetFlag("limbusCompany_FVTT", "buffRoundGain");
 
     // ── 回合结束 BUFF 清理与晋升 ────────────────────────────────────────
     // 移除本轮有效的临时 BUFF（强壮/虚弱/混乱/恐慌等），将下回合 BUFF 转为本回合
@@ -451,10 +800,20 @@ Hooks.on("updateCombat", async (combat, changed) => {
     const panicActivating = buffs.some(b => b.type === "panic" && b.whenAdded === "下回合");
 
     // Step 1: 移除本回合结束即清除的 BUFF
-    const afterRemove = buffs.filter(b => !(TURN_END.has(b.type) && b.whenAdded !== "下回合"));
+    // 【陷入混乱】例外：持续「本回合 + 下回合」，本轮结束时不移除，
+    // 而是打上 CHAOS_EXTEND 标记（仍视为已生效），下一轮结束才真正移除。
+    const afterRemove = buffs.filter(b => {
+      if (CHAOS_TYPES.includes(b.type)) return b.whenAdded !== CHAOS_EXTEND;
+      return !(TURN_END.has(b.type) && b.whenAdded !== "下回合");
+    });
 
-    // Step 2: 将下回合 BUFF 晋升为本回合
-    const promoted = afterRemove.map(b => b.whenAdded === "下回合" ? { ...b, whenAdded: "本回合" } : b);
+    // Step 2: 将下回合 BUFF 晋升为本回合；混乱则由本回合转入延续回合
+    const promoted = afterRemove.map(b => {
+      if (CHAOS_TYPES.includes(b.type) && b.whenAdded !== "下回合") {
+        return { ...b, whenAdded: CHAOS_EXTEND };
+      }
+      return b.whenAdded === "下回合" ? { ...b, whenAdded: "本回合" } : b;
+    });
 
     // Step 3: 合并同类型 BUFF（intensity 与 stacks 相加，保留先出现者的 id/name/icon）
     const mergedMap = new Map();
@@ -473,25 +832,41 @@ Hooks.on("updateCombat", async (combat, changed) => {
     // 恐慌结束（上回合有恐慌，且本轮没有新的下回合恐慌）：恢复理智至 50
     if (panicWasActive && !panicActivating) {
       await actor.update({ "system.sanity.value": 50 });
-      await ChatMessage.create({
-        speaker: ChatMessage.getSpeaker({ actor }),
-        content: `<div class="limbuscompany chat-clash"><strong>${actor.name}</strong> 恢复神志，理智恢复至 <strong>50</strong>。</div>`,
+      endMsgs.push({
+        trigger: "回合结束时", itemName: "恐慌结束",
+        msgs: [`<strong>${actor.name}</strong> 恢复神志，理智恢复至 <strong>50</strong>`],
       });
     }
 
-    // 恐慌 BUFF 本回合首次激活：清空 AP 并公告
+    // 恐慌 BUFF 本回合首次激活：公告并触发恐慌卡效果
+    // （具体效果如清空 AP 由恐慌卡的「恐慌触发时」activities 配置）
     if (panicActivating) {
-      await actor.update({ "system.ap.value": 0 });
-      await ChatMessage.create({
-        speaker: ChatMessage.getSpeaker({ actor }),
-        content: `<div class="limbuscompany chat-clash"><strong>${actor.name}</strong>【陷入恐慌】！无法使用基础及守备技能，E.G.O 不消耗理智但罪孽资源 ×1.5。</div>`,
+      endMsgs.push({
+        trigger: "回合结束时", itemName: "陷入恐慌",
+        msgs: [`<strong>${actor.name}</strong>【陷入恐慌】！无法使用基础及守备技能，`
+             + `E.G.O 不消耗理智但罪孽资源 ×1.5`],
       });
+      await actor.triggerPanicActivities?.("panic");
     }
-    // 一轮结束进入下一轮：非恐慌角色补满行动点
+    // 一轮结束进入下一轮：行动值恢复到默认值（已高于默认值的不动，也不封顶）
     // （第 0→1 轮由 combatStart 钩子已处理，跳过）
     else if ((changed.round ?? 0) > 1) {
-      await actor.update({ "system.ap.value": actor.system.ap.max ?? 3 });
+      // 补满：不足 3 枚的补到 3；已经 3 枚以上的不动，也不封顶
+      const apDefault = actor.system.ap?.max ?? 3;
+      if ((actor.system.ap?.value ?? 0) < apDefault) {
+        await actor.update({ "system.ap.value": apDefault });
+      }
     }
+
+
+    // 陷入恐慌：理智 ≤10 时，回合结束自动做一次坚定/恐慌鉴定
+    if ((actor.system.sanity?.value ?? 50) <= 10) {
+      await actor.performPanicCheck?.();
+    }
+
+    // 回合开始（本次 hook 同时代表"下一回合开始"）：
+    // 若恐慌/坚定计数存在已点亮的"3"，清空双方计数
+    await actor.clearPanicCountersIfTriggered?.();
 
     // 更新后重新读取 buffs（上面 update 已改变数据）
     const freshBuffs = actor.system.buffs ?? [];
@@ -499,22 +874,24 @@ Hooks.on("updateCombat", async (combat, changed) => {
     // 【燃烧】：受到强度点固定伤害，层数-1
     const burnBuff = freshBuffs.find(b => b.type === "burn");
     if (burnBuff && burnBuff.stacks > 0) {
-      const dmg   = burnBuff.intensity ?? 0;
+      // 自定义 BUFF 可修正烧伤伤害 / 设定生命值下限（如【炎蝶之棺】【黎明之火】）
+      const burnMods = ClashManager.applyTickDamageMods(actor, burnBuff.intensity ?? 0, "burn");
+      const dmg   = burnMods.damage;
       const oldHp = actor.system.hp?.value ?? 0;
-      const newHp = Math.max(0, oldHp - dmg);
+      const newHp = ClashManager.applyHpFloor(oldHp, oldHp - dmg, burnMods.hpFloor);
       const maxHpForBurn = actor.system.hp?.max ?? 1;
       const chaosTriggeredByBurn = (actor.system.chaosThresholds ?? []).some(
         t => !t.triggered && newHp <= maxHpForBurn * t.percent / 100
       );
       await actor.update({ "system.hp.value": newHp });
       await actor.reduceBuffStacks?.("burn");
-      if (actor.checkAndTriggerChaos) await actor.checkAndTriggerChaos(newHp, oldHp, { silent: true });
-      await ChatMessage.create({
-        speaker: ChatMessage.getSpeaker({ actor }),
-        content: `<div class="limbuscompany chat-clash">
-          <strong>${actor.name}</strong>【燃烧】发作：受到 <strong>${dmg}</strong> 点固定伤害。
-          （HP ${oldHp} → ${newHp}）${chaosTriggeredByBurn ? "　<span style='color:#E84444;font-weight:bold;'>——【陷入混乱】！</span>" : ""}
-        </div>`,
+      await ClashManager._tickFieldResources("burn", dmg, 1);
+      if (actor.checkAndTriggerChaos) await actor.checkAndTriggerChaos(newHp, oldHp, { silent: true, source: "burn" });
+      endMsgs.push({
+        trigger: "回合结束时", itemName: "燃烧",
+        msgs: [`<strong>${actor.name}</strong> 受到 <strong>${dmg}</strong> 点固定伤害`
+             + `（HP ${oldHp} → ${newHp}）`
+             + (chaosTriggeredByBurn ? `　<span style="color:#E84444;font-weight:bold;">【陷入混乱】</span>` : "")],
       });
     }
 
@@ -535,14 +912,58 @@ Hooks.on("updateCombat", async (combat, changed) => {
     const customBuffsSnapshot = [...(actor.system?.buffs ?? [])];
     for (const buff of customBuffsSnapshot) {
       const handler = resolveBuffHandler(buff);
-      if (typeof handler?.onRoundEnd === "function") {
-        await handler.onRoundEnd(actor, buff);
+      if (typeof handler?.onRoundEnd !== "function") continue;
+      // 与 onRoundStart 对称：返回字符串则并入「回合结束时」折叠汇总消息
+      const msg = await handler.onRoundEnd(actor, buff);
+      if (typeof msg === "string" && msg) {
+        endMsgs.push({ trigger: "回合结束时", itemName: handler.label ?? buff.name ?? buff.type, msgs: [msg] });
+      }
+    }
+
+    // ── 临时技能转换：还原「本回合结束时」到期的那些 ─────────────────────
+    await ClashManager._revertTempSkillConverts(actor, "endOfTurn");
+
+    // ── 场地资源 onRoundStart 钩子：每回合开始对每个行动角色调用一次 ──────
+    for (const [fieldName, def] of FieldResourceRegistry) {
+      if (typeof def.onRoundStart !== "function") continue;
+      try {
+        await def.onRoundStart({
+          actor,
+          addBuff: (type, intensity, stacks, whenAdded) =>
+            ClashManager._addBuff(actor, type, intensity, stacks, whenAdded),
+        });
+      } catch (err) {
+        console.error(`场地资源【${fieldName}】onRoundStart 执行出错`, err);
+      }
+    }
+
+    // ── 【震颤】回合结束衰减：层数 -1（特殊震颤由同步跟随，归零则一并消失）──
+    const tremorLeft = await ClashManager.decayTremorFamily(actor);
+    if (tremorLeft === 0) {
+      endMsgs.push({
+        trigger: "回合结束时", itemName: "震颤",
+        msgs: [`<strong>${actor.name}</strong> 的【震颤】已消散。`],
+      });
+    }
+
+    // ── 震颤族全部消失时，连带移除【振幅转换】【振幅纠缠】 ────────────────
+    await ClashManager._cleanupTremorDependents(actor);
+
+    // ── 自定义 BUFF onRoundStart 钩子 ────────────────────────────────────
+    // 在 onRoundEnd 之后重新取快照：回合结束时被移除的 BUFF 不应再吃回合开始效果
+    for (const buff of [...(actor.system?.buffs ?? [])]) {
+      const handler = resolveBuffHandler(buff);
+      if (typeof handler?.onRoundStart !== "function") continue;
+      const msg = await handler.onRoundStart(actor, buff);
+      if (typeof msg === "string" && msg) {
+        startMsgs.push({ trigger: "回合开始时", itemName: handler.label ?? buff.name ?? buff.type, msgs: [msg] });
       }
     }
 
     // ── Activity 触发：[回合结束时] 与 [回合开始时] ─────────────────────
-    const sys      = actor.system ?? {};
-    const roundCtx = { owner: actor, atkActor: actor, defActor: null };
+    // 收集到全体共享的桶，循环结束后统一发折叠汇总消息（避免刷屏）
+    const sys       = actor.system ?? {};
+    const roundCtx  = { owner: actor, atkActor: actor, defActor: null };
 
     // 已装备技能
     const skillIds = [
@@ -553,8 +974,8 @@ Hooks.on("updateCombat", async (combat, changed) => {
     for (const skillId of skillIds) {
       const skillItem = actor.items.get(skillId);
       if (!skillItem) continue;
-      await ClashManager._applyActivities(skillItem, "回合结束时", { ...roundCtx, _fireCounts: {} });
-      await ClashManager._applyActivities(skillItem, "回合开始时", { ...roundCtx, _fireCounts: {} });
+      await ClashManager._applyActivities(skillItem, "回合结束时", { ...roundCtx, _fireCounts: {}, _actMsgs: endMsgs });
+      await ClashManager._applyActivities(skillItem, "回合开始时", { ...roundCtx, _fireCounts: {}, _actMsgs: startMsgs });
     }
 
     // 装备栏中的物品（只有装入装备格的才触发）
@@ -562,9 +983,20 @@ Hooks.on("updateCombat", async (combat, changed) => {
       const eqId   = sys.equipment?.[`slot${i}`];
       const eqItem = eqId ? actor.items.get(eqId) : null;
       if (!eqItem) continue;
-      await ClashManager._applyActivities(eqItem, "回合结束时", { ...roundCtx, _fireCounts: {} });
-      await ClashManager._applyActivities(eqItem, "回合开始时", { ...roundCtx, _fireCounts: {} });
+      await ClashManager._applyActivities(eqItem, "回合结束时", { ...roundCtx, _fireCounts: {}, _actMsgs: endMsgs });
+      await ClashManager._applyActivities(eqItem, "回合开始时", { ...roundCtx, _fireCounts: {}, _actMsgs: startMsgs });
     }
+  }
+
+  ClashManager._ambientActMsgs = _prevAmbient;
+  await ClashManager._flushPanicAgg();
+
+  // 回合结束/开始的触发汇总不再各发一条，统一并进下面那张先攻骰掷卡。
+  // 没有先攻卡可挂时（第 0→1 轮、或全场没有 character）才退回单独发。
+  const _hasInitCard = (changed.round ?? 0) > 1;
+  if (!_hasInitCard) {
+    await ClashManager._flushActMsgs(endMsgs,   null, { title: "回合结束时" });
+    await ClashManager._flushActMsgs(startMsgs, null, { title: "回合开始时" });
   }
 
   // ── 一轮结束进入下一轮：重掷所有角色先攻 ──────────────────────────────
@@ -572,14 +1004,79 @@ Hooks.on("updateCombat", async (combat, changed) => {
   // 先全部骰好并发聊天，最后一次性批量写入先攻值，只触发一次排序
   if ((changed.round ?? 0) > 1) {
     const initiativeUpdates = [];
+    const initiativeRows    = [];
     for (const combatant of combat.combatants) {
       const actor = combatant.actor;
       if (!actor || actor.type !== "character") continue;
-      const roll = await actor.rollSpeedInitiative({ updateCombatant: false });
-      initiativeUpdates.push({ _id: combatant.id, initiative: roll.finalTotal ?? roll.total });
+      const roll = await actor.rollSpeedInitiative({ updateCombatant: false, chatMessage: false });
+      const finalTotal = roll.finalTotal ?? roll.total;
+      initiativeUpdates.push({ _id: combatant.id, initiative: finalTotal });
+      initiativeRows.push({
+        id:       combatant.id,
+        img:      actor.img,
+        name:     actor.name,
+        speedMin: roll.speedMin ?? 0,
+        speedMax: roll.speedMax ?? 0,
+        finalTotal,
+      });
     }
     if (initiativeUpdates.length > 0) {
       await combat.updateEmbeddedDocuments("Combatant", initiativeUpdates);
+
+      // ── 重掷之后必须把行动指针拨回新顺序的第一位 ──────────────────────
+      // Combat#_onUpdateDescendantDocuments 在 Combatant 改动后会重排 turns，
+      // 并把 turn 调成「原来那个当前角色」在新顺序里的下标——那是为"战斗中途
+      // 手改某人先攻、不该打断当前行动者"设计的。但本系统是每轮重掷全员先攻，
+      // nextRound() 刚把 turn 归 0（旧顺序的第一位 A），重排后 Foundry 又把
+      // turn 拨回 A 在新顺序里的位置，于是「新顺序是 B,D,A,C 却从 A 开始」。
+      // 这里在重排落地后再显式写一次 turn，覆盖掉那次自动校正。
+      // 注意：此刻本地 combat.turn 仍是 0（那次自动 update 尚未回程），
+      // 必须 diff:false，否则会被差分成空更新而发不出去。
+      // turn === null 表示"当前没有轮到任何人"（nextRound 会原样保留），不干预。
+      if (combat.turn !== null) {
+        let newTurn = 0;
+        if (combat.settings?.skipDefeated) {
+          const alive = combat.turns.findIndex(t => !t.isDefeated);
+          if (alive > 0) newTurn = alive;
+        }
+        await combat.update({ turn: newTurn }, { diff: false });
+      }
+
+      // 全体先攻汇总为一张卡：按战斗跟踪器重排后的真实顺序列出（含序号）
+      const turnOrder = new Map(combat.turns.map((t, i) => [t.id, i]));
+      initiativeRows.sort((a, b) => (turnOrder.get(a.id) ?? 0) - (turnOrder.get(b.id) ?? 0));
+      const rowsHtml = initiativeRows.map(r => `
+        <div style="display:flex;align-items:center;gap:8px;margin:4px 0;">
+          <span style="color:#E8C9A2;opacity:.6;font-size:.8rem;min-width:1.2em;text-align:right;">${(turnOrder.get(r.id) ?? 0) + 1}</span>
+          <img src="${r.img}" alt="${r.name}"
+               style="width:30px;height:30px;object-fit:cover;border-radius:50%;border:2px solid #3A5A1A;">
+          <span style="color:#E8C9A2;font-size:.85rem;flex:1;">${r.name}</span>
+          <span class="initiative-speed-range">${r.speedMin}–${r.speedMax}</span>
+          <span class="initiative-arrow">→</span>
+          <span class="initiative-total">${r.finalTotal}</span>
+        </div>`).join("");
+      // 上回合结束 / 本回合开始的触发效果并进来，各自折叠
+      const endFold = ClashManager._buildDetailsFold(endMsgs,   { label: "上回合结束" });
+      const startFold = ClashManager._buildDetailsFold(startMsgs, { label: "回合开始" });
+      await ChatMessage.create({
+        content: `
+          <div class="limbus-initiative-card" style="padding:10px 12px 8px;">
+            <div class="ic-title" style="font-size:20px;">第 ${changed.round} 回合 · 先攻骰掷</div>
+            <div style="height:30px;"></div>
+            <div class="ic-gold-divider"></div>
+            ${rowsHtml}
+            <div class="ic-gold-divider"></div>
+            ${endFold}
+            ${endFold ? '<div style="height:30px;"></div>' : ""}
+            ${startFold}
+            ${startFold ? '<div style="height:30px;"></div>' : ""}
+            ${(endFold || startFold) ? '<div class="ic-gold-divider"></div>' : ""}
+          </div>`,
+      });
+    } else {
+      // 没人可骰先攻 → 没有卡可挂，触发汇总照旧单独发
+      await ClashManager._flushActMsgs(endMsgs,   null, { title: "回合结束时" });
+      await ClashManager._flushActMsgs(startMsgs, null, { title: "回合开始时" });
     }
   }
 });
@@ -661,7 +1158,106 @@ async function _migrateTokenLinks() {
  * 注册游戏系统设置（globalSins 已由 SinResourceHUD.init() 在 init 钩子中注册）
  */
 function _registerSettings() {
-  // 保留槽位，后续阶段按需添加
+  // 拼点 TOTAL 演出开关（每个玩家各自设置）
+  game.settings.register("limbusCompany_FVTT", "clashTotalFx", {
+    name:    "拼点 TOTAL 演出",
+    hint:    "双方确定技能开骰时播放全屏 TOTAL 动画；关闭后只保留骰子动画。",
+    scope:   "client",
+    config:  true,
+    type:    Boolean,
+    default: true,
+  });
+
+  // 演出节奏：一回合往往要打好几次拼点，标准节奏容易拖沓
+  game.settings.register("limbusCompany_FVTT", "knockbackMode", {
+    name:    "击退模式",
+    hint:    "开启后，贴身拼点每次分出胜负都会按胜方点数把对手击退（10/20/30 点 → 1/2/3 格），"
+           + "胜方随即瞬移追击；被击退的一方背后若是墙则撞墙，触发【震颤引爆】。"
+           + "关闭则双方始终原地对拼。由 GM 设定，对全场生效。",
+    scope:   "world",
+    config:  true,
+    type:    Boolean,
+    default: true,
+  });
+
+  // 营地 / 商人的「站得够近才能开」判定半径
+  game.settings.register("limbusCompany_FVTT", "interactRange", {
+    name:    "营地 / 商人 交互距离（格）",
+    hint:    "玩家的 Token 与营地 / 商人 Token 之间不超过这个格数才能打开面板"
+           + "（按 Token 占地的边缘算，紧贴＝1 格，斜向也算 1 格）。"
+           + "填 0 关闭距离限制。GM 永远不受限；任一方在当前场景没有 Token 时也放行。",
+    scope:   "world",
+    config:  true,
+    type:    Number,
+    range:   { min: 0, max: 20, step: 1 },
+    default: 3,
+  });
+
+  // 角色卡改良版外观：并行的试验模板，方便边用边调，默认关闭
+  game.settings.register("limbusCompany_FVTT", "sheetRedesign", {
+    name:    "角色卡·改良版外观（调试）",
+    hint:    "换用 character-sheet-redesign.hbs / .css 这套试验外观："
+           + "三层视觉层级（身份区 / 主导航 / 工作区）、带图标的 Tab、底部资源栏。"
+           + "功能与旧版完全一致（复用同一批 parts），只是外框与样式不同；"
+           + "改样式只需刷新页面，不用重启世界。",
+    scope:   "client",
+    config:  true,
+    type:    Boolean,
+    default: false,
+    onChange: () => {
+      // 立刻把已打开的角色卡换成另一套模板
+      for (const app of Object.values(ui.windows)) {
+        if (app?.actor?.type === "character") app.render(true);
+      }
+    },
+  });
+
+  // 形象（纸娃娃）系统：整套功能的总开关，默认关闭
+  game.settings.register("limbusCompany_FVTT", "dollSystem", {
+    name:    "启用形象系统",
+    hint:    "开启后角色卡【物品】页左栏多一个【形象】视图：把各装备的贴图和一张头部图片"
+           + "拼成角色形象，可拖动摆放、R 旋转、E 缩放、滚轮调图层前后。"
+           + "关闭则左栏只有九宫格装备栏（默认）。由 GM 设定，对全场生效。",
+    scope:   "world",
+    config:  true,
+    type:    Boolean,
+    default: false,
+  });
+
+  // 稀有度光晕：纯装饰，GM 可以整场关掉（不想用稀有度、或不想让玩家一眼看穿箱子里的货色）
+  game.settings.register("limbusCompany_FVTT", "showRarity", {
+    name:    "展示稀有度",
+    hint:    "在背包 / 货架 / 仓库 / 战利品箱的物品格上，按稀有度画一层中心光晕"
+           + "（平装绿 → 精良蓝 → 史诗紫 → 艺术金 → 神话红，越稀有越亮）。"
+           + "关闭后只是不画光晕，物品卡上的稀有度仍可正常设置。由 GM 设定，对全场生效。",
+    scope:   "world",
+    config:  true,
+    type:    Boolean,
+    default: true,
+    onChange: (v) => _applyRarityDisplay(v),
+  });
+
+  game.settings.register("limbusCompany_FVTT", "clashTotalFxSpeed", {
+    name:    "拼点 TOTAL 演出节奏",
+    hint:    "缩放演出各阶段的时长（不含骰子动画本身——那取决于 Dice So Nice 的动画速度设置）。",
+    scope:   "client",
+    config:  true,
+    type:    String,
+    choices: {
+      slow:     "慢速（默认的 3 倍时长）",
+      standard: "默认",
+      fast:     "快速（默认的 1/3 时长）",
+    },
+    default: "standard",
+  });
+}
+
+/**
+ * 【展示稀有度】开关落到 <body> 上：关掉时挂 .limbus-no-rarity，
+ * CSS 那边一条规则把所有格子的光晕 display:none，不用重渲染任何面板。
+ */
+function _applyRarityDisplay(enabled) {
+  document.body?.classList.toggle("limbus-no-rarity", !enabled);
 }
 
 /**
@@ -672,6 +1268,7 @@ async function _preloadTemplates() {
     // Actor sheets
     "systems/limbusCompany_FVTT/templates/actor/merchant-sheet.hbs",
     "systems/limbusCompany_FVTT/templates/actor/character-sheet.hbs",
+    "systems/limbusCompany_FVTT/templates/actor/character-sheet-redesign.hbs",
     "systems/limbusCompany_FVTT/templates/actor/camp-sheet.hbs",
     "systems/limbusCompany_FVTT/templates/actor/parts/header.hbs",
     "systems/limbusCompany_FVTT/templates/actor/parts/tab-items.hbs",
@@ -682,8 +1279,13 @@ async function _preloadTemplates() {
     "systems/limbusCompany_FVTT/templates/item/skill-sheet.hbs",
     "systems/limbusCompany_FVTT/templates/item/consumable-sheet.hbs",
     "systems/limbusCompany_FVTT/templates/item/container-sheet.hbs",
-    // Combat
-    "systems/limbusCompany_FVTT/templates/combat/combat-hud.hbs",
+    "systems/limbusCompany_FVTT/templates/item/skillbook-sheet.hbs",
+    "systems/limbusCompany_FVTT/templates/item/recipebook-sheet.hbs",
+    "systems/limbusCompany_FVTT/templates/item/panic-sheet.hbs",
+    "systems/limbusCompany_FVTT/templates/item/background-sheet.hbs",
+    "systems/limbusCompany_FVTT/templates/apps/background-wizard.hbs",
+    "systems/limbusCompany_FVTT/templates/apps/level-up-dialog.hbs",
+    "systems/limbusCompany_FVTT/templates/apps/csv-import.hbs",
     // Partials
     "systems/limbusCompany_FVTT/templates/partials/title-card.hbs",
     "systems/limbusCompany_FVTT/templates/partials/activity-editor.hbs",
@@ -727,28 +1329,6 @@ function _localizeConfig() {
   }
 }
 
-/* ─── 商人购买 Socket 处理（GM 端执行库存扣减） ──────────────────────────── */
-
-/**
- * 处理来自玩家的商人购买 socket 消息。
- * 仅 GM 执行，负责更新 merchant actor 上对应 Item 的 stock。
- * @param {object} msg
- */
-async function _handleMerchantSocketMsg(msg) {
-  if (msg.type !== "merchantPurchase") return;
-  if (!game.user.isGM) return;
-
-  const merchant = game.actors.get(msg.merchantId);
-  const item     = merchant?.items.get(msg.itemId);
-  if (!item) return;
-
-  const currentStock = item.system.stock ?? -1;
-  if (currentStock === -1) return; // 无限库存，不处理
-
-  const newStock = Math.max(0, currentStock - 1);
-  await item.update({ "system.stock": newStock });
-}
-
 /* ─── Handlebars 辅助函数注册 ────────────────────────────────────────────── */
 
 Hooks.once("init", () => {
@@ -768,8 +1348,21 @@ Hooks.once("init", () => {
   /** 返回 n 次重复的数组（用于 each 循环生成 n 个元素） */
   Handlebars.registerHelper("times", (n, _options) => Array.from({ length: n }, (_, i) => i));
 
-  /** 判断两个值是否相等 */
-  Handlebars.registerHelper("eq", (a, b) => a === b);
+  /**
+   * 判断两个值是否相等。**两种用法都支持**：
+   *   · 子表达式：`{{#if (eq a b)}}`      → 返回布尔值
+   *   · 块助手：  `{{#eq a b}}selected{{/eq}}` → 相等时输出块内容
+   * 只写成值助手的话，块用法里 Handlebars 会把 options 当第二个参数传进来，
+   * 助手又从不调用 options.fn，结果块内容永远不输出——所有
+   * `{{#eq}}selected{{/eq}}` 的下拉都会退回第一项（选了远程却显示近战就是这么来的）。
+   */
+  Handlebars.registerHelper("eq", function (a, b, options) {
+    const same = a === b;
+    if (options && typeof options.fn === "function") {
+      return same ? options.fn(this) : options.inverse(this);
+    }
+    return same;
+  });
 
   /** 逻辑与（子表达式用：(and a b)） */
   Handlebars.registerHelper("and", (a, b) => Boolean(a) && Boolean(b));
@@ -777,17 +1370,46 @@ Hooks.once("init", () => {
   /** 逻辑非（子表达式用：(not a)） */
   Handlebars.registerHelper("not", (a) => !a);
 
+  /** 逻辑或：任意个参数，任一为真即真（末位的 options 对象自动忽略） */
+  Handlebars.registerHelper("or", (...args) => {
+    args.pop();                       // Handlebars 总会在末尾塞一个 options
+    return args.some(Boolean);
+  });
+
   /** 分割字符串为数组（SafeString 安全）*/
   Handlebars.registerHelper("split", (str, sep) => {
+    // tags 这类字段有的类型存数组、有的存 "标签1/标签2" 字符串，两种都要认——
+    // 数组直接用，否则才按分隔符切（数组走 String() 会被拼成 "a,b"，切不出来）
+    if (Array.isArray(str)) return str.map(t => String(t).trim()).filter(Boolean);
     const s    = str instanceof Handlebars.SafeString ? str.toString() : String(str ?? "");
     const sep2 = sep instanceof Handlebars.SafeString ? sep.toString() : String(sep ?? "/");
-    return s.split(sep2).filter(Boolean);
+    return s.split(sep2).map(t => t.trim()).filter(Boolean);
+  });
+
+  /** 数组 → "a/b" 文本（输入框回显用；字符串原样返回） */
+  Handlebars.registerHelper("join", (arr, sep) => {
+    const sep2 = sep instanceof Handlebars.SafeString ? sep.toString() : String(sep ?? "/");
+    if (Array.isArray(arr)) return arr.map(t => String(t).trim()).filter(Boolean).join(sep2);
+    return String(arr ?? "");
   });
 
   /** 去除字符串首尾空格 */
   Handlebars.registerHelper("trim", (str) => {
     const s = str instanceof Handlebars.SafeString ? str.toString() : String(str ?? "");
     return s.trim();
+  });
+
+  /**
+   * 物品描述文本自动替换（三种记号互不冲突，各管各的）：
+   *   【XXX】 → BUFF 图标+名字的可悬停 chip（悬停显示 BUFF Title 卡）
+   *   "XXX"  → 物品引用的可悬停 chip（悬停按名字搜索世界物品/合集包，显示物品 Title 卡）
+   *   [XXX]  → 触发时机静态标签（按类别着色，不可悬停搜索）
+   * 核心逻辑在 helpers/linkify.mjs（item-sheet.mjs 构建 Title 卡时也复用同一份），
+   * 与 item-sheet.mjs 的 .desc-buff-chip / .desc-item-chip 悬停绑定配套使用。
+   */
+  Handlebars.registerHelper("linkify", (html) => {
+    const raw = html instanceof Handlebars.SafeString ? html.toString() : String(html ?? "");
+    return new Handlebars.SafeString(linkifyHtml(raw));
   });
 
   /** 判断值是否大于 */
@@ -834,7 +1456,8 @@ Hooks.once("init", () => {
 
   /** 返回罪孽图标路径 */
   Handlebars.registerHelper("sinIcon", (sinType) => {
-    const sin = sinType?.charAt(0).toUpperCase() + sinType?.slice(1);
+    if (typeof sinType !== "string" || !sinType) return "";
+    const sin = sinType.charAt(0).toUpperCase() + sinType.slice(1);
     return `systems/limbusCompany_FVTT/assets/icons/Base_icon/${sin}_icon.webp`;
   });
 });
