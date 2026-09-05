@@ -2515,16 +2515,11 @@ function _buildSkillTitleCard(item, formOverride = null) {
 
   const ICON = "systems/limbusCompany_FVTT/assets/icons/Base_icon/";
 const sinColor    = cfg.SIN_COLORS?.[sys.sinType] ?? "#5F3E21";
-  const sinIcon     = cfg.SIN_ICON_PATHS?.[sys.sinType] ?? "";
-  const sinLabel    = cfg.SIN_LABELS_ZH?.[sys.sinType] ?? "";
   const stellarCost = item.getStellarCost?.() ?? sys.stellarCost ?? 0;
   const tags = (Array.isArray(sys.tags) ? sys.tags : String(sys.tags ?? "").split("/"))
     .map(t => String(t).trim()).filter(Boolean);
   const weightCount = Number(sys.weight ?? 0);
   const descText    = linkifyHtml(sys.effectDesc ?? sys.description ?? "");
-
-  // 等级：基础/守备写 Lv.N，EGO 写评级（ZAYIN…）
-  const lvText = sys.type === "ego" ? (sys.egoDiceRating ?? "") : `Lv.${sys.level ?? 1}`;
 
   // 训练等级徽章：基础/守备技能才有（E.G.O 走觉醒/侵蚀）。素材缺失时退回罗马数字。
   const trainLv = sys.type === "ego" ? 0 : (sys.trainLevel ?? 3);
@@ -2572,15 +2567,13 @@ const sinColor    = cfg.SIN_COLORS?.[sys.sinType] ?? "#5F3E21";
         + `${ic ? `<img src="${ic}" alt="">` : ""}${r.multiplier}</span>`;
     });
 
-  // 排版：名称+等级+罪孽图标 → 分类·骰式·骰型（类型图标靠右）→ 攻击容量 →
+  // 排版：名称+训练等级（等级/罪孽在别处能看到，标题条不再重复）→ 分类·骰式·骰型（类型图标靠右）→ 攻击容量 →
   //       标记 → 消耗 → 抗性 → 武器限制 → 标签 → 金线 → 描述 → 金线 → 页脚
   // 没填的字段整块不渲染，空技能卡不会留下一堆空行
   const card = _wireCardInteractivity($(`<div class="limbus-title-card limbus-title-card-skill"
        data-ego-form="${useCor ? "corrode" : "awaken"}">
     <div class="tc-header" style="background:${sinColor}">
       <span class="tc-name">${item.name}</span>
-      ${lvText ? `<span class="tc-lv">${lvText}</span>` : ""}
-      ${sinIcon ? `<img src="${sinIcon}" class="tc-sin-ic" alt="${sinLabel}" title="${sinLabel}">` : ""}
       ${trainIcoHtml}
     </div>
     <div class="tcs-row">
@@ -2970,7 +2963,10 @@ function _buildCondRow(cond, idx, cfg) {
   const perNDimOpts = [
     ["stacks","层数"],["intensity","强度"],
   ].map(([v,l]) => `<option value="${v}" ${perNDim === v ? "selected":""}>${l}</option>`).join("");
-  const buffLabel  = _keyToLabel(cond?.buff ?? "", cond?.buffCustom ?? "");
+  // 【比较值】/【每】可以填多条 BUFF（求和），存的是 buffs 数组，回填时用 / 拼回去
+  const buffLabel  = (Array.isArray(cond?.buffs) && cond.buffs.length > 1)
+    ? cond.buffs.map(k => _keyToLabel(k, cond?.buffCustom ?? "")).join(" / ")
+    : _keyToLabel(cond?.buff ?? "", cond?.buffCustom ?? "");
 
   const attrTypeOpts = [
     ["hp","生命值"],["sanity","理智值"],["ap","行动值"],
@@ -3017,7 +3013,9 @@ function _buildCondRow(cond, idx, cfg) {
         <span class="ae-cond-buff-sec" ${isBuffSec ? "" : 'style="display:none"'}>
           <label>BUFF</label>
           <input class="ae-input cond-buff" type="text" list="ae-buff-dl"
-                 placeholder="输入或选择BUFF…" autocomplete="off" style="width:100px;"
+                 placeholder="${(isCompare || isPerN) ? "多条用 / 分隔＝求和" : "输入或选择BUFF…"}"
+                 title="${(isCompare || isPerN) ? "填多条时算的是它们的和，如「烧伤 / 流血」" : ""}"
+                 autocomplete="off" style="width:${(isCompare || isPerN) ? 160 : 100}px;"
                  value="${_esc(buffLabel)}">
           <span class="ae-cond-intensity-sec" ${(isCompare || isPerN) ? 'style="display:none"' : ""}>
             <label>强度≥</label>
@@ -3778,6 +3776,12 @@ function _bindCondType(html) {
     row.find(".ae-cond-intensity-sec").toggle(!isCompare && !isPerN);
     row.find(".cond-stacks-label").toggle(!isCompare);
     row.find(".ae-cond-cmp-sec").toggle(isCompare);
+    // 【比较值】/【每】才能填多条求和，切过去时把输入框的提示与宽度一起换掉
+    const multi = isCompare || isPerN;
+    row.find(".cond-buff")
+      .attr("placeholder", multi ? "多条用 / 分隔＝求和" : "输入或选择BUFF…")
+      .attr("title", multi ? "填多条时算的是它们的和，如「烧伤 / 流血」" : "")
+      .css("width", multi ? "160px" : "100px");
   });
   html.find(".cond-equip-pereach").off("change").on("change", function () {
     $(this).closest(".ae-cond-row").find(".ae-cond-equip-max").toggle(this.checked);
@@ -3998,10 +4002,15 @@ function _readActivityForm(html, original) {
         value:      parseInt($r.find(".cond-sin-value").val()) || 0,
       });
     } else if (condType === "buffCompare") {
+      // BUFF 栏用 / 分隔可填多条，比较的是它们的和（「烧伤与流血强度之和 ≥ 6」）。
+      // buff 仍写第一条：老代码路径和 _preStr 的兜底都还读它。
+      const cmpKeys = String($r.find(".cond-buff").val() ?? "")
+        .split("/").map(x => resolveKey(x)).filter(Boolean);
       preconditions.push({
         type:       "buffCompare",
         target:     $r.find(".cond-target").val() || "self",
-        buff:       resolveKey($r.find(".cond-buff").val()),
+        buff:       cmpKeys[0] ?? "",
+        buffs:      cmpKeys,
         buffCustom: "",
         compareDim: $r.find(".cond-cmp-dim").val() || "stacks",
         comparison: $r.find(".cond-stacks-cmp").val() || "eq",
@@ -4010,10 +4019,16 @@ function _readActivityForm(html, original) {
       });
     } else {
       const isPerN = condType === "perN";
+      // 【每】和【比较值】一样支持 / 分隔的多条 BUFF 求和；
+      // 【拥有】/【未拥有】不拆——那两条的语义是单条阈值，拆了会含糊。
+      const perKeys = isPerN
+        ? String($r.find(".cond-buff").val() ?? "").split("/").map(x => resolveKey(x)).filter(Boolean)
+        : [];
       preconditions.push({
         type:       isPerN ? "perN" : (condType === "noBuff" ? "noBuff" : "hasBuff"),
         target:     $r.find(".cond-target").val()  || "self",
-        buff:       resolveKey($r.find(".cond-buff").val()),
+        buff:       isPerN ? (perKeys[0] ?? "") : resolveKey($r.find(".cond-buff").val()),
+        ...(isPerN ? { buffs: perKeys } : {}),
         buffCustom: "",
         intensity:  isPerN ? 0 : (parseInt($r.find(".cond-intensity").val()) || 0),
         stacks:     parseInt($r.find(".cond-stacks").val())    || 0,

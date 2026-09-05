@@ -368,6 +368,24 @@ export class ClashManager {
     return { intensity: b?.intensity ?? 0, stacks: b?.stacks ?? 0 };
   }
 
+  /**
+   * 自定义 BUFF 对攻击/防御等级的修正合计。
+   * 钩子签名：modifyLevels(actor, buff) → { atk, def }（两者均可省略）
+   */
+  static _customLevelMod(actor) {
+    const out = { atk: 0, def: 0 };
+    // 只统计"本回合"生效的 BUFF，与 _getBuff 的口径一致
+    const buffs = (actor?.system?.buffs ?? []).filter(b => b.whenAdded !== "下回合");
+    for (const buff of buffs) {
+      const handler = resolveBuffHandler(buff);
+      if (typeof handler?.modifyLevels !== "function") continue;
+      const r = handler.modifyLevels(actor, buff) ?? {};
+      out.atk += Number(r.atk ?? 0);
+      out.def += Number(r.def ?? 0);
+    }
+    return out;
+  }
+
   /** 有效攻击等级（含装备 atkAdj + atk.extra + BUFF 层数） */
   static _effAtkLv(actor) {
     if (!actor) return 0;
@@ -378,7 +396,8 @@ export class ClashManager {
       .reduce((s, eq) => s + Number(eq.system?.atkAdj ?? 0), 0);
     const gs = (t) => ClashManager._getBuffVal(actor, t).stacks;
     return (sys.atk?.base ?? 0) + (sys.atk?.extra ?? 0) + equipAdj
-         + gs("atkLevelUp") - gs("atkLevelDown");
+         + gs("atkLevelUp") - gs("atkLevelDown")
+         + ClashManager._customLevelMod(actor).atk;
   }
 
   /** 有效防御等级（含装备 defAdj + def.extra + BUFF 层数） */
@@ -391,7 +410,8 @@ export class ClashManager {
       .reduce((s, eq) => s + Number(eq.system?.defAdj ?? 0), 0);
     const gs = (t) => ClashManager._getBuffVal(actor, t).stacks;
     return (sys.def?.base ?? 0) + (sys.def?.extra ?? 0) + equipAdj
-         + gs("defLevelUp") - gs("defLevelDown");
+         + gs("defLevelUp") - gs("defLevelDown")
+         + ClashManager._customLevelMod(actor).def;
   }
 
   /**
@@ -1521,19 +1541,27 @@ export class ClashManager {
           continue;
         }
 
-        if (!pre.buff) continue;
+        if (!pre.buff && !(pre.buffs ?? []).length) continue;
         const preBuffType = pre.buff === "custom" ? (pre.buffCustom || "custom") : pre.buff;
         const precTgt = pre.target === "self" ? owner : other;
         const buff    = precTgt ? ClashManager._getBuff(precTgt, preBuffType) : null;
 
         if (pre.type === "buffCompare") {
           // 【比较值】：BUFF 层数或强度（compareDim）与指定值比较。
-          // **没有这条 BUFF ≠ 这条 BUFF 为 0**——身上根本没有时本条一律不成立，
-          // 否则「拥有 0 层【光札】」会对所有从没拿过光札的人恒真、反复触发。
+          //
+          // 【多条 BUFF 求和】编辑器里 BUFF 栏用 / 分隔可填多条，此时比较的是
+          // 它们的**和**（「【烧伤】与【流血】强度之和 ≥ 6」就是这么写的）。
+          // 单条时 pre.buffs 只有一项，与老数据行为完全一致。
+          //
+          // **一条都没有 ≠ 和为 0**——身上一条都没挂时本条一律不成立，
+          // 否则「层数 ≤ 3」会对所有从没沾过这些 BUFF 的人恒真、反复触发。
           // 需要"没有"语义请用【未拥有】(noBuff)。
-          if (!buff) { precondFail = true; break; }
-          const have = (pre.compareDim ?? "stacks") === "intensity"
-            ? (buff?.intensity ?? 0) : (buff?.stacks ?? 0);
+          // 挂了其中一条、另一条没有时，缺的那条按 0 计入求和——那是真的 0。
+          const dim  = (pre.compareDim ?? "stacks") === "intensity" ? "intensity" : "stacks";
+          const keys = ClashManager._preBuffKeys(pre);
+          const buffs = keys.map(k => (precTgt ? ClashManager._getBuff(precTgt, k) : null));
+          if (!buffs.some(Boolean)) { precondFail = true; break; }
+          const have = buffs.reduce((s, b) => s + (b?.[dim] ?? 0), 0);
           if (!ClashManager._cmp(have, pre.comparison ?? "eq", pre.stacks ?? 0)) { precondFail = true; break; }
           continue;
         }
@@ -1543,10 +1571,15 @@ export class ClashManager {
           // 如"目标每有 8 级【烧伤】"实际指的是强度而非层数，需按强度计算倍数。
           // 维度≥ N（N = pre.stacks）才满足，倍数 = floor(当前值 / N)，可选上限 maxTimes。
           // 注：不再额外检查"强度≥"门槛——"每"只关心倍数怎么算，不需要"拥有"式的额外强度阈值。
+          // 【多条 BUFF 求和】与【比较值】同一套写法：BUFF 栏用 / 分隔可填多条，
+          // 倍数按它们的和算（「每拥有【流血】与【烧伤】强度之和 4 级」）。
+          // 一条都没挂时不成立；挂了其中一条时缺的那条按 0 计入和。
           const dim  = pre.perNDim === "intensity" ? "intensity" : "stacks";
           const n    = Math.max(1, pre.stacks ?? 1);
-          if (!buff) { precondFail = true; break; }
-          const haveVal = dim === "intensity" ? (buff.intensity ?? 0) : (buff.stacks ?? 0);
+          const perBuffs = ClashManager._preBuffKeys(pre)
+            .map(k => (precTgt ? ClashManager._getBuff(precTgt, k) : null));
+          if (!perBuffs.some(Boolean)) { precondFail = true; break; }
+          const haveVal = perBuffs.reduce((s, b) => s + (b?.[dim] ?? 0), 0);
           if (haveVal < n) { precondFail = true; break; }
           let times = Math.floor(haveVal / n);
           if ((pre.maxTimes ?? 0) > 0) times = Math.min(times, pre.maxTimes);
@@ -6630,6 +6663,16 @@ export class ClashManager {
    * 反应卡上的「前置条件」一行——把 precondition 对象翻译成人话。
    * 编辑器里能配的类型都覆盖到，认不出来的退回类型名，不至于空一格。
    */
+  /**
+   * 前置条件里涉及的 BUFF type 列表——多条求和用 `buffs`，单条用 `buff`。
+   * 老数据只有 `buff`，走同一条路出来就是单元素数组。
+   */
+  static _preBuffKeys(pre) {
+    const list = Array.isArray(pre?.buffs) && pre.buffs.length ? pre.buffs
+               : (pre?.buff ? [pre.buff] : []);
+    return list.map(k => (k === "custom" ? (pre.buffCustom || "custom") : k)).filter(Boolean);
+  }
+
   static _preStr(pre) {
     if (!pre?.type) return "";
     const who  = (pre.target === "target" || pre.target === "allEnemy" || pre.target === "allEnemyOther")
@@ -6645,8 +6688,19 @@ export class ClashManager {
       return `${who}拥有${q.length ? ` ${q.join("／")}` : ""}【${bn}】`;
     }
     if (t === "noBuff")      return `${who}未拥有【${bn}】`;
-    if (t === "perN")        return `${who}每 ${pre.stacks ?? 1} ${pre.perNDim === "intensity" ? "级" : "层"}【${bn}】`;
-    if (t === "buffCompare") return `${who}的【${bn}】${pre.compareDim === "intensity" ? "强度" : "层数"} ${cmp} ${pre.stacks ?? 0}`;
+    if (t === "perN") {
+      const ns  = ClashManager._preBuffKeys(pre).map(k => ClashManager._buffLabel(k));
+      const lbl = ns.length > 1 ? `${ns.map(n => `【${n}】`).join("与")}之和`
+                                : `【${ns[0] ?? bn}】`;
+      const cap = (pre.maxTimes ?? 0) > 0 ? `（最多 ${pre.maxTimes} 次）` : "";
+      return `${who}每 ${pre.stacks ?? 1} ${pre.perNDim === "intensity" ? "级" : "层"}${lbl}${cap}`;
+    }
+    if (t === "buffCompare") {
+      const names = ClashManager._preBuffKeys(pre).map(k => ClashManager._buffLabel(k));
+      const label = names.length > 1 ? `${names.map(n => `【${n}】`).join("与")}之和`
+                                     : `【${names[0] ?? bn}】`;
+      return `${who}的${label}${pre.compareDim === "intensity" ? "强度" : "层数"} ${cmp} ${pre.stacks ?? 0}`;
+    }
     if (t === "baseAttr") {
       const AL = { hp: "生命值", sanity: "理智", ap: "行动值", sm: "星尘",
                    str: "力量", agi: "敏捷", con: "体质", int: "智力", per: "感知", cha: "魅力" };

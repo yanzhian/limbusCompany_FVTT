@@ -167,6 +167,8 @@ export async function buildPlacementGrid(placements, {
       rotated:     p.rotated ?? false,
       show:        !q || (item.name ?? "").toLowerCase().includes(q),
       isContainer: item.type === "container",
+      // 数量角标只给「可堆叠且不止一件」的（同 bag-grid.mjs）
+      showQty:     !!item.system?.stackable && (item.system?.quantity ?? 1) > 1,
       // 稀有度：见 bag-grid.mjs 同名字段
       rarity:      item.system?.rarity ?? "",
       item: {

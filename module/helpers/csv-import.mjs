@@ -102,8 +102,10 @@ const V_SPREAD    = "__spread";
 const V_EGO_RES   = "__egoRes";
 /** 「攻击范围」列：留空 = 近战 1 格；"2" = 近战 2 格；"远程6" = 远程 6 格 */
 const V_RANGE     = "__range";
-/** 「完成」列：值为真时整行跳过（已经导入过的条目不再重复导入） */
+/** 「完成」列：值为真时**覆盖**世界/合集包里的同名同类型物品（找不到则新建） */
 const V_DONE      = "__done";
+/** 打在物品数据上的临时标记：这一行要走「覆盖已有」而不是「新建」。写库前会被剥掉 */
+export const UPDATE_FLAG = "__csvUpdate";
 /** 「训练等级」列：基础/守备填 Ⅲ/Ⅳ/Ⅴ，E.G.O 填 觉醒/侵蚀 —— 同一列两种含义 */
 const V_TRAIN     = "__train";
 
@@ -120,7 +122,7 @@ const WEAK_MULT   = "x2.0";
 export const COLUMN_ALIASES = {
   // ── 仅供表格自己看的列，导入时忽略 ────────────────────────────────────
   "图标": IGNORE, "备注": IGNORE,
-  // 「完成」列填 是/TRUE/√ 等真值时，整行跳过不导入
+  // 「完成」列填 是/TRUE/√ 等真值时，覆盖已有的同名同类型物品（见 UPDATE_FLAG）
   "完成": V_DONE, "已完成": V_DONE, "done": V_DONE,
   "区域1": IGNORE, "区域2": IGNORE, "区域3": IGNORE,
   "区域4": IGNORE, "区域5": IGNORE, "区域6": IGNORE,
@@ -138,10 +140,11 @@ export const COLUMN_ALIASES = {
   "简介": "system.description", "背景描述": "system.description",
   "星芒": "system.stellarCost", "星芒费用": "system.stellarCost",
   "容量": V_CAPACITY,               // "2x3" → capacity.w / capacity.h
-  "价格": "system.price", "售价": "system.price",
+  // 价格 = 物品的「眼」价：卡面显示与商人报价（merchant-sheet 的 baseCostOf）
+  // 读的都是 system.cost。早先这里映射到 system.price——那是个全仓无人读取的
+  // 遗留字段，已随本次改动从各 schema 删除，导入的价格等于写进了黑洞。
+  "价格": "system.cost", "售价": "system.cost", "眼": "system.cost",
   "数量": "system.quantity",
-  "库存": "system.stock",
-  "隐藏": "system.hidden",
   "收藏": "system.favorited",
   "稀有度": "system.rarity",        // 平装 / 精良 / 史诗 / 艺术 / 神话
   "可堆叠": "system.stackable",
@@ -429,7 +432,8 @@ const isBlank = (t) => t === "" || t === "-" || t === "—" || t === "/";
  * 「完成」列的真值判定 —— 反向白名单。
  * 只有这些写法（大小写、全半角都认）算「未完成」：
  *   空 / - / — / / / 否 / 假 / 未 / 未完成 / 没有 / no / n / false / f / 0 / x / × / ✗ / ✘
- * 其余任何非空内容（TRUE、是、√、已导入、日期、备注…）一律视为已完成，整行跳过。
+ * 其余任何非空内容（TRUE、是、√、已导入、日期、备注…）一律视为已完成 ——
+ * 即「这一行是权威值」，导入时用它**覆盖**世界里的同名同类型物品。
  * 这样写是因为表格里这一列的写法五花八门，漏判会导致重复导入。
  */
 const DONE_FALSE = new Set([
@@ -691,16 +695,18 @@ export function buildItemData(rows, defaultType) {
   const unknownReported = new Set();
   const typeIdx = paths.indexOf("type");
   const doneIdx = paths.indexOf(V_DONE);
-  let   skipped = 0;                     // 因「完成」而跳过的行数
+  let   marked  = 0;                     // 标了「完成」、要覆盖已有物品的行数
 
   for (let r = 1; r < rows.length; r++) {
     const row    = rows[r];
     const lineNo = r + 1;
 
-    // ── 「完成」列为真 → 整行跳过 ────────────────────────────────────────
-    // 放在最前面：已完成的行不参与类型判定，也不逐列解析，
-    // 因此这行即便有解析不了的内容也不会报错。
-    if (doneIdx >= 0 && isDoneMark(row[doneIdx])) { skipped++; continue; }
+    // ── 「完成」列为真 → 这一行以覆盖方式导入 ────────────────────────────
+    // 早先是"整行跳过"（避免重复导入）。但那样一来，改一个已经做好的物品
+    // 就只能进 Foundry 手动改，表格反而成了只写一次的东西。
+    // 现在改成：标了完成 = 这一行是权威值，用它覆盖世界里的同名同类型物品。
+    const isUpdate = doneIdx >= 0 && isDoneMark(row[doneIdx]);
+    if (isUpdate) marked++;
 
     // ── 先定类型：中文写法（基础技能 / 上装 / 消耗品…）映射到物品类型，
     //    并带出随类型固定的字段（技能的 system.type、装备的 system.subtype）──
@@ -778,11 +784,13 @@ export function buildItemData(rows, defaultType) {
       continue;
     }
 
+    if (isUpdate) data[UPDATE_FLAG] = true;
     items.push(data);
   }
 
-  if (skipped > 0) {
-    warnings.push(`「完成」列已标记的 ${skipped} 行已跳过，未导入。`);
+  if (marked > 0) {
+    warnings.push(`「完成」列已标记 ${marked} 行：这些会**覆盖**已有的同名同类型物品`
+      + `（激活效果不会被覆盖）；找不到对应物品的则新建。`);
   }
 
   return { items: mergeSkillVariants(items, warnings), errors, warnings };
@@ -900,6 +908,7 @@ export function mergeSkillVariants(items, warnings = []) {
         warnings.push(`「${name}」有两行都填了【侵蚀】，后一行已忽略。`);
         dropped.add(i);
       }
+      if (row[UPDATE_FLAG]) base[UPDATE_FLAG] = true;
       reportShared(row, base, EGO_SHARED, "【侵蚀】");
       foundry.utils.setProperty(base, "system.corrode", buildForm(row, EGO_OVERRIDABLE));
       dropped.add(corrode[0]);
@@ -939,6 +948,7 @@ export function mergeSkillVariants(items, warnings = []) {
         continue;
       }
       seen.add(lv);
+      if (row[UPDATE_FLAG]) base[UPDATE_FLAG] = true;
       reportShared(row, base, TRAIN_SHARED, `训练等级 ${lv}`);
       foundry.utils.setProperty(base, `system.trainForms.lv${lv}`,
                                 buildForm(row, TRAIN_OVERRIDABLE));
@@ -958,7 +968,7 @@ export function mergeSkillVariants(items, warnings = []) {
 // ═══════════════════════════════════════════════════════════════════════════
 
 /** 各类型的模板列（与实际编辑用的表格布局一致；「图标/区域N」为表格自用，导入时忽略；
-    「完成」列填真值时整行跳过，见 isDoneMark） */
+    「完成」列填真值时覆盖已有的同名同类型物品，见 isDoneMark） */
 const TEMPLATE_COLUMNS = {
   equipment:  ["完成", "名称", "类型", "攻击等级", "防御等级", "速度",
                "抗性", "弱性", "分类", "稀有度", "星芒", "容量", "标签", "效果",
@@ -1037,6 +1047,7 @@ const COLUMN_NOTES = {
   "容量扩散": "攻击容量≥2 时生效，形如 [链式扩散3] / 广域乱射2，数字为范围格数（留空=链式1格）",
   "无法装备": "填 是/否、TRUE/FALSE",
   "援护防御": "填 是/否、TRUE/FALSE；标记为【援护防御】专属技能",
+  "价格":     "物品的「眼」价——卡面上显示、商人也按它报价（写入 system.cost）",
   "训练等级": "一列两用：基础/守备填 Ⅲ/Ⅳ/Ⅴ（或 3/4/5、默认/精通/强化），E.G.O 填 觉醒/侵蚀。同名的几行会合并成同一张卡的多套数值，留空的格子沿用打底那一行——基础/守备沿用低一阶，侵蚀沿用觉醒。共用列（基础/守备：名称·类型·分类·罪孽·等级·标签；E.G.O：名称·罪孽·EGO等级·罪孽资源消耗·抗性修改·标签·骰子类型）一律取打底那一行的值",
   "无法拼点": "填 是/否、TRUE/FALSE；被锁定的目标只能【承受】，不能对抗",
   "攻击范围": "仅武器：留空=近战1格；填数字=近战N格（长矛/锁链）；填「远程6」=远程6格",
@@ -1049,8 +1060,7 @@ const COLUMN_NOTES = {
   "可复用":   "填 是/否、TRUE/FALSE",
   "无限耐久": "填 是/否、TRUE/FALSE",
   "图标":     "表格自用，导入时忽略",
-  "完成":     "填 是/TRUE/√ 等真值时**整行跳过**，用来避免重复导入已完成的条目；留空则正常导入",
-  "完成":     "表格自用，导入时忽略",
+  "完成":     "填 是/TRUE/√ 等真值 = 这一行是权威值，导入时**覆盖**世界/合集包里的同名同类型物品（激活效果不覆盖；找不到则新建）；留空则一律新建",
 };
 
 /**

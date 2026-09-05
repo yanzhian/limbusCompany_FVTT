@@ -166,6 +166,7 @@ export class LimbusLootSheet extends ActorSheet {
         entry.revealed = revealed;
         entry.masked   = masked;
         entry.rotated  = placement.rotated && entry.w !== entry.h;
+        if (masked) entry.showQty = false;   // 未揭晓连数量也不能漏
         entry.item     = masked
           ? { id: item.id, name: "???", img: "icons/svg/mystery-man.svg", quantity: null }
           : { id: item.id, name: item.name, img: item.img,

@@ -912,12 +912,20 @@ registerCustomBuff("resentmentTattoo", {
 
 /**
  * 【复仇账簿】
- * - 最大值：20 层
+ * - 最大值：30 层
+ * - 每 5 层：攻击等级 +1、防御等级 +1
  */
 registerCustomBuff("vengeanceLedger", {
   label:       "复仇账簿",
-  description: "- 最大值：20 层",
-  maxStacks:   20,
+  description: "- 最大值：30 层\n"
+    + "- 每带有 5 层本效果，使自身的攻击等级 +1、防御等级 +1",
+  maxStacks:   30,
+
+  modifyLevels(_actor, buff) {
+    const bonus = Math.floor((buff.stacks ?? 0) / 5);
+    if (bonus <= 0) return;
+    return { atk: bonus, def: bonus };
+  },
 });
 
 /* ─── 【炎蝶之棺】/【黎明之火】——共用被动 + 各自主动 ───────────────────── */
