@@ -108,6 +108,9 @@ const V_DONE      = "__done";
 export const UPDATE_FLAG = "__csvUpdate";
 /** 「训练等级」列：基础/守备填 Ⅰ～Ⅴ，E.G.O 填 觉醒/侵蚀 —— 同一列两种含义 */
 const V_TRAIN     = "__train";
+/** 「效果/描述」列：字段名逐类型不同（技能是 effectDesc，装备/消耗品/材料是 effect，
+ *  恐慌卡/背景是 description），固定路径会写进不存在的字段，交给 parseEffectText 按类型定 */
+const V_EFFECT    = "__effect";
 
 /** 抗性 / 弱性列的倍率写法 */
 const RESIST_MULT = "x0.5";
@@ -135,7 +138,7 @@ export const COLUMN_ALIASES = {
   // ── 通用 ──────────────────────────────────────────────────────────────
   "分类": V_CATEGORY,               // 技能：斩击 / 反击-打击 / 可拼点反击-斩击；其余：自由文本
   "标签": "system.tags",
-  "效果": "system.effect", "描述": "system.effect", "效果描述": "system.effect",
+  "效果": V_EFFECT, "描述": V_EFFECT, "效果描述": V_EFFECT,
   "副标题": "system.subtitle",
   "简介": "system.description", "背景描述": "system.description",
   "星芒": "system.stellarCost", "星芒费用": "system.stellarCost",
@@ -630,8 +633,30 @@ function parseTrainCell(text) {
   return { __error: `「${t}」既不是训练等级（Ⅰ～Ⅴ / 1～5 / 默认·精通·强化）也不是 E.G.O 形态（觉醒/侵蚀）` };
 }
 
+/**
+ * 「效果 / 描述」列：同一列在不同物品类型上落到不同字段。
+ * 容器 / 技能书 / 配方表 的 schema 里没有任何描述字段，返回空对象 = 整列忽略。
+ */
+const EFFECT_FIELD_BY_TYPE = {
+  skill:      "system.effectDesc",
+  equipment:  "system.effect",
+  consumable: "system.effect",
+  material:   "system.effect",
+  panic:      "system.description",
+  background: "system.description",
+};
+
+function parseEffectText(text, itemType) {
+  const path = EFFECT_FIELD_BY_TYPE[itemType];
+  if (!path) return {};                      // 这类物品没有描述字段
+  const t = String(text ?? "").trim();
+  if (!t || t === "-") return {};
+  return { [path]: t };
+}
+
 function parseVirtualColumn(marker, text, itemType) {
   switch (marker) {
+    case V_EFFECT:   return parseEffectText(text, itemType);
     case V_CATEGORY: return parseCategory(text, itemType);
     case V_DICE:     return parseDice(text);
     case V_LEVEL:    return parseLevel(text);
@@ -985,10 +1010,12 @@ const TEMPLATE_COLUMNS = {
   material:   ["图标", "完成", "名称", "类型", "分类", "稀有度", "可复用", "无限耐久",
                "可堆叠", "数量", "容量", "标签", "效果", "价格",
                "内部数量", "允许类型", "允许分类"],
-  skillbook:  ["图标", "完成", "名称", "类型", "分类", "标签", "效果", "价格", "容量"],
-  recipebook: ["图标", "完成", "名称", "类型", "分类", "标签", "效果", "价格", "容量"],
+  // 技能书/配方表的 schema 里没有描述字段，所以不列「效果」——书里装什么
+  // （技能 / 配方）只能在卡上编辑，CSV 建的是空书
+  skillbook:  ["图标", "完成", "名称", "类型", "分类", "标签", "价格", "容量"],
+  recipebook: ["图标", "完成", "名称", "类型", "分类", "标签", "价格", "容量"],
   panic:      ["图标", "完成", "名称", "类型", "标签", "效果"],
-  background: ["图标", "完成", "名称", "类型", "副标题", "分类", "标签", "简介"],
+  background: ["图标", "完成", "名称", "类型", "副标题", "分类", "标签", "简介", "容量"],
 };
 
 /** 模板示例行：给出各类型最典型的一条，照着改即可 */
@@ -1010,7 +1037,14 @@ const TEMPLATE_EXAMPLE = {
   material:   { "名称": "绳索", "类型": "材料", "分类": "建材", "稀有度": "平装",
                 "可堆叠": "TRUE", "数量": "1", "容量": "1x1" },
   background: { "名称": "中指", "类型": "背景", "副标题": "中指-长兄", "分类": "帮派",
-                "标签": "中指/手指", "简介": "永不遗忘。中指的核心理念就是记仇。" },
+                "标签": "中指/手指", "简介": "永不遗忘。中指的核心理念就是记仇。",
+                "容量": "1x1" },
+  skillbook:  { "名称": "剑术入门", "类型": "技能书", "分类": "剑术",
+                "标签": "剑术/入门", "价格": "120", "容量": "1x1" },
+  recipebook: { "名称": "野外炊事手册", "类型": "配方表", "分类": "烹饪",
+                "标签": "营地/烹饪", "价格": "80", "容量": "1x1" },
+  panic:      { "名称": "深渊的低语", "类型": "恐慌卡", "标签": "陷入恐慌",
+                "效果": "回合开始时，对最近的一名单位发起一次攻击。" },
 };
 
 /**
@@ -1042,6 +1076,9 @@ const COLUMN_NOTES = {
   "容量":     "形如 2x3（背包占格）",
   "内部数量": "形如 4x8（容器内部网格）",
   "标签":     "用 / 或 、分隔",
+  "效果":     "落到哪个字段随类型走：技能→效果描述、装备/消耗品/材料→效果、恐慌卡/背景→简介；容器/技能书/配方表没有描述字段，填了也不写",
+  "副标题":   "仅背景：显示在背景名下方，如「中指-长兄」",
+  "简介":     "仅背景：背景卡正文（富文本）。初始物品与等级奖励物品无法用 CSV 填，需在背景卡上拖入",
   "罪孽资源消耗": "形如 暴怒2，怠惰2，傲慢4（分隔符可省）",
   "抗性修改": "形如 暴怒x0.5傲慢x0.5怠惰x2.0（分隔符可省）",
   "容量扩散": "攻击容量≥2 时生效，形如 [链式扩散3] / 广域乱射2，数字为范围格数（留空=链式1格）",
