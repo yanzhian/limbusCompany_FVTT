@@ -161,3 +161,10 @@ Full formulas and constants: `module/config.mjs` (`LIMBUSCOMPANY.*`) and `Charac
 - **No 平局**: a dodge that ties counts as a successful dodge. There is no tie-break path — don't reintroduce one.
 - **Level-up** (`LimbusActor.getLevelUpPreview()` / `.levelUpByXp()`, dialog in `module/sheets/level-up-dialog.mjs`): preview is a pure read (no mutation) so the dialog can show before/after values before the player confirms. `LEVEL_XP[N]` = XP to go from Lv N to N+1 (`MAX_LEVEL` 50; read it via `getXpForLevel()`, which also handles past-table-end). XP **≥** the threshold levels up; each level **deducts** its own threshold and the remainder carries over, so one big XP grant can chain several levels at once — which is why attribute points count every multiple of 10 *crossed* and `levelRewards` are collected for **every** level crossed, not just the final one. The dialog is 3 steps: values → 训练等级 强化 (only when this level-up granted any) → reward items.
 - **训练等级 强化 quota**: one per `LIMBUSCOMPANY.TRAIN_UPGRADE_EVERY` (3) levels, computed as `floor(next/N) - floor(cur/N)` so multi-level jumps grant several. Nothing is banked on the actor — the player spends it inside the level-up dialog or forfeits it. Candidates come from `getTrainUpgradeCandidates()`: **all** non-E.G.O skills the actor owns, with the 6 basic + 1 defense equipped ones sorted first and slot-labelled (a skill only in the list can be upgraded too). A stage with no authored `trainForms.lvN` data is shown disabled, since spending the quota there would change nothing.
+
+## Foundry v14 升级
+
+若本次任务是**把系统升到 Foundry VTT v14**，先读 `V14升级.md` —— 那里有必改项（`renderChatMessageHTML`
+钩子、`TextEditor` / `loadTemplates` / `Actors`·`Items` 的命名空间迁移）、明确**不要**做的事
+（不要为了 v14 把 13 个 ApplicationV1 类重写成 ApplicationV2 —— V1 的删除排期在 v16），
+以及一份必须手点的验收清单。非升级任务忽略该文件。
