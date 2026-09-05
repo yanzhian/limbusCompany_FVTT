@@ -359,6 +359,9 @@ export class LimbusItemSheet extends ItemSheet {
       context.fp = corrode ? "system.corrode."
                  : tSrc   ? `system.trainForms.${tKey}.`
                           : "system.";
+      // {{editor}} 的 target 只能整串传，模板里拼不出来（没有 concat 助手），
+      // 所以这里先拼好。少了它就会退回 system.effectDesc，把高阶的描述写进打底那一阶。
+      context.fpDescTarget = `${context.fp}effectDesc`;
       // 侵蚀形态没有自己的 diceType / 三个布尔 / 反击类型（E.G.O 两形态共用这些），
       // 训练等级则每阶各存一份 —— 这两处前缀因此要分开算
       context.fpDice   = corrode ? "system." : context.fp;

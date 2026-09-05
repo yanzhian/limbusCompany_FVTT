@@ -328,11 +328,9 @@
       {{!-- ── 描述区 ──────────────────────────────────────────────── --}}
       <div class="item-desc-block">
         {{#if (and isEditable (not isLocked))}}
-          {{#if isCorrode}}
-            {{editor form.effectDesc target="system.corrode.effectDesc" button=false editable=true engine="prosemirror"}}
-          {{else}}
-            {{editor form.effectDesc target="system.effectDesc" button=false editable=true engine="prosemirror"}}
-          {{/if}}
+          {{!-- target 必须跟着当前形态走（觉醒/侵蚀、训练等级各存一份描述）：
+                写死 system.effectDesc 会把高阶的描述存进打底那一阶。 --}}
+          {{editor form.effectDesc target=fpDescTarget button=false editable=true engine="prosemirror"}}
         {{else}}
           <div class="item-desc-display">{{{linkify form.effectDesc}}}</div>
         {{/if}}
