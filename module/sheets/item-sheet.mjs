@@ -25,9 +25,15 @@ const BG_ITEM_BLOCKED_TYPES = ["background", "panic", "skill"];
 /** 训练等级的罗马数字写法（规则书里 默认Ⅲ级 / 精通Ⅳ级 / 强化Ⅴ级） */
 export const TRAIN_NUMERALS = { 1: "Ⅰ", 2: "Ⅱ", 3: "Ⅲ", 4: "Ⅳ", 5: "Ⅴ" };
 
-/** 训练等级徽章素材；素材缺失时模板会退回纯文字罗马数字 */
-export const trainLevelIcon = (lv) =>
-  `systems/limbusCompany_FVTT/assets/icons/Base_icon/阶段等级${Number(lv) || 3}.webp`;
+/**
+ * 训练等级徽章素材；素材缺失时模板会退回纯文字罗马数字。
+ * Ⅰ～Ⅴ 都能取到路径——Ⅰ 目前没有素材，走的就是那条退回分支，
+ * 哪天补上 阶段等级1.webp 直接就显示了，不用改代码。
+ */
+export const trainLevelIcon = (lv) => {
+  const n = Math.min(5, Math.max(1, Number(lv) || 3));
+  return `systems/limbusCompany_FVTT/assets/icons/Base_icon/阶段等级${n}.webp`;
+};
 
 /**
  * 拖动 payload 里随身携带的物品"身份卡"：容器限制判定只看类型/分类/子类型，
@@ -197,7 +203,7 @@ export class LimbusItemSheet extends ItemSheet {
   /**
    * 训练等级徽章：
    *   · 左键       —— 在这张卡已有的几阶之间轮转（锁定时仅 GM）
-   *   · Shift+左键 —— 解锁时新开一阶（Ⅲ→Ⅳ→Ⅴ），用当前那一套数值打底
+   *   · Shift+左键 —— 解锁时新开一阶（当前阶 +1，最高 Ⅴ），用当前那一套数值打底
    *   · 右键       —— 删掉当前这一阶（见 _onTrainLevelDelete）
    * 新建单独放在 Shift 上：轮转是高频操作，不该顺手就多出一阶数据。
    */
