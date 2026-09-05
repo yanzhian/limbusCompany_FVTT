@@ -106,7 +106,7 @@ const V_RANGE     = "__range";
 const V_DONE      = "__done";
 /** 打在物品数据上的临时标记：这一行要走「覆盖已有」而不是「新建」。写库前会被剥掉 */
 export const UPDATE_FLAG = "__csvUpdate";
-/** 「训练等级」列：基础/守备填 Ⅲ/Ⅳ/Ⅴ，E.G.O 填 觉醒/侵蚀 —— 同一列两种含义 */
+/** 「训练等级」列：基础/守备填 Ⅰ～Ⅴ，E.G.O 填 觉醒/侵蚀 —— 同一列两种含义 */
 const V_TRAIN     = "__train";
 
 /** 抗性 / 弱性列的倍率写法 */
@@ -183,7 +183,7 @@ export const COLUMN_ALIASES = {
   "武器限制": "system.weaponRestriction",
   "技能描述": "system.effectDesc",
   // 训练等级：同名的几行会合并成同一张卡的多套数值，见 mergeSkillVariants
-  //   基础/守备 → Ⅲ/Ⅳ/Ⅴ（训练等级）
+  //   基础/守备 → Ⅰ～Ⅴ（训练等级，规则书常用的是 Ⅲ/Ⅳ/Ⅴ）
   //   E.G.O     → 觉醒/侵蚀（形态）
   "训练等级": V_TRAIN, "阶段等级": V_TRAIN, "形态": V_TRAIN,
 
@@ -617,7 +617,7 @@ function parseEgoRes(text) {
 /**
  * 「训练等级」列：一列两用，按填的内容自己判断是哪一种。
  *   觉醒 / 侵蚀 → E.G.O 形态（system.egoForm）
- *   Ⅲ/Ⅳ/Ⅴ…    → 训练等级（system.trainLevel）
+ *   Ⅰ～Ⅴ       → 训练等级（system.trainLevel）
  * 两者都是"同一张卡的另一套数值"，合并逻辑也共用一套（见 mergeSkillVariants）。
  */
 function parseTrainCell(text) {
@@ -627,7 +627,7 @@ function parseTrainCell(text) {
   if (ego) return { "system.egoForm": ego };
   const lv = TRAIN_LEVEL_ALIASES[t] ?? TRAIN_LEVEL_ALIASES[t.toUpperCase()];
   if (lv) return { "system.trainLevel": lv };
-  return { __error: `「${t}」既不是训练等级（Ⅲ/Ⅳ/Ⅴ）也不是 E.G.O 形态（觉醒/侵蚀）` };
+  return { __error: `「${t}」既不是训练等级（Ⅰ～Ⅴ / 1～5 / 默认·精通·强化）也不是 E.G.O 形态（觉醒/侵蚀）` };
 }
 
 function parseVirtualColumn(marker, text, itemType) {
@@ -800,7 +800,7 @@ export function buildItemData(rows, defaultType) {
  * 把「同名 + 填了训练等级列」的几行技能合并成**同一张卡**的多套数值。
  *
  * 「训练等级」这一列一列两用：
- *   基础 / 守备 → Ⅲ / Ⅳ / Ⅴ，合并成 system.trainForms.lvN
+ *   基础 / 守备 → Ⅰ ～ Ⅴ，合并成 system.trainForms.lvN
  *   E.G.O       → 觉醒 / 侵蚀，合并成 system.corrode
  *
  * 规则书里 Ⅲ→Ⅳ→Ⅴ 是同一个技能被练上去，不是三张不同的卡；因此走和
@@ -808,7 +808,7 @@ export function buildItemData(rows, defaultType) {
  * 更高的几阶写进 system.trainForms.lvN。
  *
  * 留空的单元格不会写进 form —— 于是"没填的字段自动沿用低阶"这件事天然成立，
- * 表里只需要填 Ⅳ 阶真正变了的那几列。
+ * 表里只需要填高一阶真正变了的那几列。
  *
  * @param {object[]} items    解析出来的物品数据
  * @param {string[]} warnings 合并情况写回这里给导入面板显示
@@ -921,7 +921,7 @@ export function mergeSkillVariants(items, warnings = []) {
     const strayForm = idxs.filter(i => items[i].system.egoForm !== undefined);
     if (strayForm.length) {
       warnings.push(`「${name}」不是 E.G.O，「训练等级」列里的觉醒/侵蚀已忽略——`
-        + `这一列对基础/守备技能应填 Ⅲ/Ⅳ/Ⅴ。`);
+        + `这一列对基础/守备技能应填 Ⅰ～Ⅴ。`);
       for (const i of strayForm) delete items[i].system.egoForm;
     }
     const lvIdxs = idxs.filter(i => items[i].system.trainLevel !== undefined);
@@ -1048,7 +1048,7 @@ const COLUMN_NOTES = {
   "无法装备": "填 是/否、TRUE/FALSE",
   "援护防御": "填 是/否、TRUE/FALSE；标记为【援护防御】专属技能",
   "价格":     "物品的「眼」价——卡面上显示、商人也按它报价（写入 system.cost）",
-  "训练等级": "一列两用：基础/守备填 Ⅲ/Ⅳ/Ⅴ（或 3/4/5、默认/精通/强化），E.G.O 填 觉醒/侵蚀。同名的几行会合并成同一张卡的多套数值，留空的格子沿用打底那一行——基础/守备沿用低一阶，侵蚀沿用觉醒。共用列（基础/守备：名称·类型·分类·罪孽·等级·标签；E.G.O：名称·罪孽·EGO等级·罪孽资源消耗·抗性修改·标签·骰子类型）一律取打底那一行的值",
+  "训练等级": "一列两用：基础/守备填 Ⅰ～Ⅴ（或 1～5；Ⅲ/Ⅳ/Ⅴ 也可写作 默认/精通/强化），E.G.O 填 觉醒/侵蚀。同名的几行会合并成同一张卡的多套数值，留空的格子沿用打底那一行——基础/守备沿用低一阶，侵蚀沿用觉醒。共用列（基础/守备：名称·类型·分类·罪孽·等级·标签；E.G.O：名称·罪孽·EGO等级·罪孽资源消耗·抗性修改·标签·骰子类型）一律取打底那一行的值",
   "无法拼点": "填 是/否、TRUE/FALSE；被锁定的目标只能【承受】，不能对抗",
   "攻击范围": "仅武器：留空=近战1格；填数字=近战N格（长矛/锁链）；填「远程6」=远程6格",
   "允许类型": "容器存放限制·类型，多个用 / 分隔（消耗品/材料），留空=不限制",
