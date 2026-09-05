@@ -272,8 +272,9 @@ export class CSVImportDialog extends Application {
     // 放在图片之前：解析不到的名字要能拦下这次导入让人先补物品。
     clearItemIndex();
     const refWarn = [];
+    // 覆盖那批要连 doc 一起传：配方表是「合并进已有的书」，得看得到原有配方
     const refCount = (await resolvePendingRefs(toCreate, refWarn))
-                   + (await resolvePendingRefs(updates.map(u => u.data), refWarn));
+                   + (await resolvePendingRefs(updates, refWarn));
 
     // ── 没填「图片」列的，按物品名去 assets/ 里捞一张同名图 ──
     // 覆盖的那批只在原物品还是默认图标时才补，玩家自己换过的图不动。

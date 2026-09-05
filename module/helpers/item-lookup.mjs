@@ -86,9 +86,15 @@ export async function makeItemRef(name) {
  * @param {string[]} warnings  找不到的名字往这里记
  * @returns {Promise<number>} 成功解析的引用条数
  */
-export async function resolvePendingRefs(datas, warnings = []) {
+export async function resolvePendingRefs(entries, warnings = []) {
   let n = 0;
   const missing = new Map();              // 名字 → 用到它的物品名，去重后一起报
+
+  /** 只要图和快照，找不到就留个占位图，不算错——配方允许引用还没做出来的产物 */
+  const softLook = async (name) => {
+    const item = await findItemByName(name);
+    return item ?? null;
+  };
 
   const refsOf = async (names, ownerName) => {
     const out = [];
@@ -103,7 +109,10 @@ export async function resolvePendingRefs(datas, warnings = []) {
     return out;
   };
 
-  for (const d of (datas ?? [])) {
+  for (const entry of (entries ?? [])) {
+    // 覆盖导入时传 { data, doc }，新建时直接传数据本身
+    const d   = entry?.data ?? entry;
+    const doc = entry?.doc ?? null;
     const pending = d?.[PENDING_REFS];
     if (!pending) continue;
     delete d[PENDING_REFS];               // 不能写进文档
@@ -129,6 +138,50 @@ export async function resolvePendingRefs(datas, warnings = []) {
         }
       }
       foundry.utils.setProperty(d, "system.skills", skills);
+    }
+    // 配方表：ingredients 存的是 名字+图+数量（不是 uuid 引用），所以找不到
+    // 也能建——只是没有图。产出额外存一份快照，卡面能显示产物的图标与信息。
+    if (pending.recipes?.length) {
+      const built = [];
+      for (const r of pending.recipes) {
+        const out = await softLook(r.outputName);
+        const ingredients = [];
+        for (const ing of r.ingredients) {
+          const it = await softLook(ing.name);
+          ingredients.push({
+            name:     ing.name,
+            img:      it?.img ?? "icons/svg/item-bag.svg",
+            quantity: ing.quantity,
+          });
+          if (it) n++;
+        }
+        const outData = out ? out.toObject() : null;
+        if (outData) { delete outData._id; n++; }
+        built.push({
+          id:             foundry.utils.randomID(),
+          name:           r.outputName,          // 配方名就用产物名
+          hidden:         false,
+          ingredients,
+          outputName:     r.outputName,
+          outputImg:      out?.img ?? "icons/svg/item-bag.svg",
+          outputQuantity: r.outputQuantity,
+          outputItemData: outData,
+        });
+      }
+      // 覆盖已有配方表时是**合并**：同名配方替换，新配方追加，原有的别的配方保留
+      if (doc) {
+        const old  = foundry.utils.deepClone(doc.system?.recipes ?? []);
+        const byName = new Map(built.map(r => [r.outputName, r]));
+        const kept = old.map(o => {
+          const hit = byName.get(o.outputName);
+          if (!hit) return o;
+          byName.delete(o.outputName);
+          return { ...hit, id: o.id };           // 保留原 id，营地那边的引用不断
+        });
+        foundry.utils.setProperty(d, "system.recipes", [...kept, ...byName.values()]);
+      } else {
+        foundry.utils.setProperty(d, "system.recipes", built);
+      }
     }
     if (pending.levelRewards?.length) {
       const rewards = [];

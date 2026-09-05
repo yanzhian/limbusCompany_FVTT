@@ -119,6 +119,14 @@ const V_BG_ITEMS  = "__bgItems";
 const V_BG_REWARD = "__bgReward";
 /** 技能书「技能」列：`"鹤斩"x3"芒流"x2` → 收录 3 份鹤斩、2 份芒流 */
 const V_SB_SKILLS = "__sbSkills";
+/* ── 配方表：一行一个配方，靠「配方清单」列归到同一本书 ────────────────
+ * 「量 / 数量」的含义随它前面那一列走（产出后面的是产出数量，材料后面的是
+ * 该材料的用量），所以这几个标记要在读列头时按位置改写，见 _pairRecipeHeaders。 */
+const V_RCP_OUT     = "__rcpOut";        // 产出
+const V_RCP_OUT_QTY = "__rcpOutQty";     // 产出后面那个 数量/量
+const V_RCP_STATION = "__rcpStation";    // 建筑/设备（写成排在最前的一条材料）
+const V_RCP_ING     = "__rcpIng";        // 材料N（改写成 __rcpIng:N）
+const V_RCP_ING_QTY = "__rcpIngQty";     // 材料N 后面那个 量（改写成 __rcpIngQty:N）
 
 /** 抗性 / 弱性列的倍率写法 */
 const RESIST_MULT = "x0.5";
@@ -150,6 +158,9 @@ export const COLUMN_ALIASES = {
   "副标题": "system.subtitle",
   "初始物品": V_BG_ITEMS, "起始物品": V_BG_ITEMS,
   "技能": V_SB_SKILLS, "收录技能": V_SB_SKILLS,
+  "配方清单": "name",               // 配方表的书名：同名的几行整合成一本
+  "产出": V_RCP_OUT, "成品": V_RCP_OUT,
+  "建筑/设备": V_RCP_STATION, "建筑": V_RCP_STATION, "设备": V_RCP_STATION,
   "等级奖励": V_BG_REWARD, "升级奖励": V_BG_REWARD,
   "简介": "system.description", "背景描述": "system.description",
   "星芒": "system.stellarCost", "星芒费用": "system.stellarCost",
@@ -452,6 +463,9 @@ const isBlank = (t) => t === "" || t === "-" || t === "—" || t === "/";
  */
 const DONE_FALSE = new Set([
   "否", "假", "未", "未完成", "没有", "no", "n", "false", "f", "0", "x", "×", "✗", "✘",
+  // 空复选框：表格里常见的「还没做」写法。少了它们，一整列 ☐ 会被全判成已完成，
+  // 于是新建变成覆盖——找不到同名物品倒还好，找得到就把人家改了。
+  "☐", "□", "▢", "◻", "◽", "⬜", "[]", "[ ]", "( )", "〇", "○",
 ]);
 function isDoneMark(text) {
   const t = String(text ?? "").trim();
@@ -701,6 +715,71 @@ function parseBgRewards(text) {
  * 少打一个引号（"樱闪"x1花札洗切"x1）也照样能拆对。做法是先把引号和常见
  * 分隔符统统当成断点，再走一遍 token：形如 xN 的就贴给前一个名字。
  */
+/**
+ * 配方表的列头按位置配对：「量 / 数量」跟着它**前面**那一列走。
+ *
+ *   产出 | 数量 | 建筑/设备 | 材料1 | 量 | 材料2 | 量 …
+ *          ↑产出数量                    ↑材料1用量  ↑材料2用量
+ *
+ * 材料列数不限（材料1…材料N 都认，编号以列头里的数字为准，没数字就按出现次序）。
+ * 表里没有「产出」也没有「材料N」时本函数什么都不改，所以对其它类型无副作用
+ * （别的表里的「数量」还是 system.quantity）。
+ *
+ * @param {string[]} headerRow 原始列头
+ * @param {(string|null)[]} paths resolveColumnPath 的结果，就地改写
+ */
+function _pairRecipeHeaders(headerRow, paths) {
+  let ingSeq = 0;
+  let ctx = null;                        // "out" | { idx } | null
+  for (let c = 0; c < headerRow.length; c++) {
+    const h = String(headerRow[c] ?? "").trim();
+
+    const ing = h.match(/^材料\s*(\d*)$/);
+    if (ing) {
+      const idx = ing[1] ? parseInt(ing[1]) : ++ingSeq;
+      ingSeq = Math.max(ingSeq, idx);
+      paths[c] = `${V_RCP_ING}:${idx}`;
+      ctx = { idx };
+      continue;
+    }
+    if (paths[c] === V_RCP_OUT) { ctx = "out"; continue; }
+
+    if (/^(量|数量)$/.test(h)) {
+      if (ctx === "out")        { paths[c] = V_RCP_OUT_QTY; ctx = null; continue; }
+      if (ctx && ctx.idx != null) { paths[c] = `${V_RCP_ING_QTY}:${ctx.idx}`; ctx = null; continue; }
+      continue;                          // 不跟在产出/材料后面的「数量」保持原意
+    }
+    ctx = null;                          // 隔了一列就断开，避免跨列误配
+  }
+}
+
+/** 配方：产出 / 产出数量 / 设备 / 材料N / 材料N用量，统统先挂在待解析结构上 */
+function parseRecipeCell(marker, text) {
+  const t = String(text ?? "").trim();
+  const base = `${PENDING_REFS}.recipe`;
+  if (marker === V_RCP_OUT)     return t ? { [`${base}.outputName`]: t } : {};
+  // 建筑/设备当成一条材料写在最前面（编号 000，材料 1..N 是 001 起）。
+  // schema 因此不用新增字段；「合成时到底消不消耗它」交给营地那边的开关管。
+  if (marker === V_RCP_STATION) {
+    return t ? { [`${base}.ing.000.name`]: t, [`${base}.ing.000.quantity`]: 1 } : {};
+  }
+  if (marker === V_RCP_OUT_QTY) {
+    if (!t) return {};
+    const n = parseInt(t);
+    if (!Number.isFinite(n)) return { __error: `「${t}」不是数字` };
+    return { [`${base}.outputQuantity`]: Math.max(1, n) };
+  }
+  const ing = marker.match(/^(__rcpIng|__rcpIngQty):(\d+)$/);
+  if (!ing) return {};
+  const [, kind, idxStr] = ing;
+  const key = `${base}.ing.${idxStr.padStart(3, "0")}`;   // 补零，Object.entries 才按序
+  if (kind === "__rcpIng") return t ? { [`${key}.name`]: t } : {};
+  if (!t) return {};
+  const n = parseInt(t);
+  if (!Number.isFinite(n)) return { __error: `「${t}」不是数字` };
+  return { [`${key}.quantity`]: Math.max(1, n) };
+}
+
 function parseSkillBookSkills(text) {
   const raw = String(text ?? "").trim();
   if (!raw || raw === "-") return {};
@@ -749,6 +828,8 @@ function parseVirtualColumn(marker, text, itemType) {
     case V_BG_ITEMS:  return parseBgItems(text);
     case V_BG_REWARD: return parseBgRewards(text);
     case V_SB_SKILLS: return parseSkillBookSkills(text);
+    case V_RCP_OUT: case V_RCP_OUT_QTY: case V_RCP_STATION:
+      return parseRecipeCell(marker, text);
     case V_CATEGORY: return parseCategory(text, itemType);
     case V_DICE:     return parseDice(text);
     case V_LEVEL:    return parseLevel(text);
@@ -759,6 +840,10 @@ function parseVirtualColumn(marker, text, itemType) {
     case V_RANGE:    return parseRange(text);
     case V_EGO_RES:  return parseEgoRes(text);
     case V_TRAIN:    return parseTrainCell(text);
+    default: break;
+  }
+  if (marker.startsWith(V_RCP_ING)) return parseRecipeCell(marker, text);
+  switch (marker) {
     case V_CAPACITY: {
       const r = parseWxH(text);
       if (!r) return {};
@@ -802,6 +887,8 @@ export function buildItemData(rows, defaultType) {
     if (t === "类型" || t.toLowerCase() === "type") return "type";
     return resolveColumnPath(h);
   });
+  // 「量 / 数量」的含义随前一列走，先把配方表的列头配对好
+  _pairRecipeHeaders(headerRow, paths);
 
   if (!paths.some(p => p === "name")) {
     errors.push("缺少「名称」列（列头写 名称 或 name）。");
@@ -910,7 +997,8 @@ export function buildItemData(rows, defaultType) {
       + `（激活效果不会被覆盖）；找不到对应物品的则新建。`);
   }
 
-  return { items: mergeSkillVariants(items, warnings), errors, warnings };
+  const merged = mergeRecipeRows(mergeSkillVariants(items, warnings), warnings);
+  return { items: merged, errors, warnings };
 }
 
 /**
@@ -931,6 +1019,60 @@ export function buildItemData(rows, defaultType) {
  * @param {string[]} warnings 合并情况写回这里给导入面板显示
  * @returns {object[]} 合并后的物品数据
  */
+/**
+ * 配方表：一行一个配方，同一个「配方清单」名下的几行整合成**一本书**。
+ *
+ * 书本身的字段（稀有度 / 价格 / 容量 / 分类 / 标签）取第一行的；
+ * 每行的 产出·数量·设备·材料N 变成 recipes 里的一条，等导入时再把名字
+ * 换成图（resolvePendingRefs）。「完成」只要有一行标了，整本就走覆盖。
+ *
+ * @param {object[]} items
+ * @param {string[]} warnings
+ * @returns {object[]} 合并后的物品数组
+ */
+export function mergeRecipeRows(items, warnings = []) {
+  const groups = new Map();                      // 书名 → 行下标数组
+  items.forEach((it, i) => {
+    if (it?.type !== "recipebook") return;
+    if (!it[PENDING_REFS]?.recipe) return;       // 没有配方内容的行按普通物品处理
+    const key = String(it.name ?? "").trim();
+    if (!key) return;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(i);
+  });
+  if (!groups.size) return items;
+
+  const dropped = new Set();
+  for (const [name, idxs] of groups) {
+    const base    = items[idxs[0]];
+    const recipes = [];
+    for (const i of idxs) {
+      const r = items[i][PENDING_REFS].recipe;
+      delete items[i][PENDING_REFS].recipe;
+      // ing 是 { "000": {name, quantity}, "001": … }，补零过所以键序即列序
+      const ing = Object.keys(r.ing ?? {}).sort()
+        .map(k => r.ing[k])
+        .filter(x => x?.name)
+        .map(x => ({ name: x.name, quantity: Math.max(1, x.quantity ?? 1) }));
+      if (!r.outputName) {
+        warnings.push(`「${name}」有一行没填「产出」，该行已跳过。`);
+        continue;
+      }
+      recipes.push({ outputName: r.outputName,
+                     outputQuantity: Math.max(1, r.outputQuantity ?? 1),
+                     ingredients: ing });
+      if (i !== idxs[0] && items[i][UPDATE_FLAG]) base[UPDATE_FLAG] = true;
+      if (i !== idxs[0]) dropped.add(i);
+    }
+    base[PENDING_REFS] ??= {};
+    base[PENDING_REFS].recipes = recipes;
+    if (idxs.length > 1) {
+      warnings.push(`「${name}」的 ${recipes.length} 条配方已整合为同一本配方表。`);
+    }
+  }
+  return items.filter((_, i) => !dropped.has(i));
+}
+
 export function mergeSkillVariants(items, warnings = []) {
   // ── 基础/守备：训练等级 Ⅲ→Ⅳ→Ⅴ ──────────────────────────────────────
   // 名称 / 类型 / 分类 / 罪孽 / 等级 / 标签 跨阶共用，一律取最低那一阶的
@@ -1105,7 +1247,10 @@ const TEMPLATE_COLUMNS = {
   // 技能书/配方表的 schema 里没有描述字段，所以不列「效果」——书里装什么
   // （技能 / 配方）只能在卡上编辑，CSV 建的是空书
   skillbook:  ["图标", "完成", "名称", "类型", "分类", "标签", "技能", "价格", "容量"],
-  recipebook: ["图标", "完成", "名称", "类型", "分类", "标签", "价格", "容量"],
+  // 配方表：一行一个配方，靠「配方清单」归到同一本书。材料列数不限，
+  // 按 材料N + 量 成对往后加即可
+  recipebook: ["配方清单", "稀有度", "价格", "完成", "产出", "数量", "建筑/设备",
+               "材料1", "量", "材料2", "量", "材料3", "量", "材料4", "量"],
   panic:      ["图标", "完成", "名称", "类型", "标签", "效果"],
   background: ["图标", "完成", "名称", "类型", "副标题", "分类", "标签", "简介",
                "初始物品", "等级奖励", "容量"],
@@ -1138,8 +1283,9 @@ const TEMPLATE_EXAMPLE = {
                 "标签": "收尾人/定事务所",
                 "技能": '"鹤斩"x3"芒流"x2"樱闪"x1"花札洗切"x1',
                 "价格": "120", "容量": "1x1" },
-  recipebook: { "名称": "野外炊事手册", "类型": "配方表", "分类": "烹饪",
-                "标签": "营地/烹饪", "价格": "80", "容量": "1x1" },
+  recipebook: { "配方清单": "加工材料 · 熔炉", "稀有度": "平装", "价格": "0",
+                "产出": "铁锭", "数量": "1", "建筑/设备": "熔炉",
+                "材料1": "金属片", "材料2": "煤" },
   panic:      { "名称": "深渊的低语", "类型": "恐慌卡", "标签": "陷入恐慌",
                 "效果": "回合开始时，对最近的一名单位发起一次攻击。" },
 };
@@ -1176,6 +1322,10 @@ const COLUMN_NOTES = {
   "效果":     "落到哪个字段随类型走：技能→效果描述、装备/消耗品/材料→效果、恐慌卡/背景→简介；容器/技能书/配方表没有描述字段，填了也不写",
   "副标题":   "仅背景：显示在背景名下方，如「中指-长兄」",
   "技能":     "仅技能书：收录哪些技能，写**已存在技能的名字**。`\"鹤斩\"x3\"芒流\"x2` 表示收 3 份鹤斩、2 份芒流；xN 省略＝1 份，引号和分隔符都可省",
+  "配方清单": "仅配方表：这本配方表的名字。同名的几行会整合成同一本书；覆盖导入时同名配方替换、新配方追加，书里原有的别的配方保留",
+  "产出":     "仅配方表：合成产物的名字（也用作配方名）。按名字找已存在的物品取图与快照，找不到也能建，只是没有图",
+  "建筑/设备": "仅配方表：写成排在最前的一条材料（熔炉、制药台…）。要不要真的消耗它由营地那边的开关决定",
+  "材料1":    "仅配方表：材料名，后面紧跟一列「量」写用量。材料列数不限，材料1/材料2/… 一直加下去",
   "初始物品": "仅背景：建卡时直接获得的物品，写**已存在物品的名字**，多件用 ，或、分隔。找不到名字会在导入前报错",
   "等级奖励": "仅背景：形如「15：花札组，20：强化技能书」；一级给多件就接着写「15：A，B，20：C」。同样按名字找已存在的物品",
   "简介":     "仅背景：背景卡正文（富文本）。初始物品与等级奖励物品无法用 CSV 填，需在背景卡上拖入",
