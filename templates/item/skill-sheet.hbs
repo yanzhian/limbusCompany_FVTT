@@ -29,9 +29,9 @@
               同一张卡挂多阶数值，点击在本卡已有的几阶之间轮转；
               解锁状态下点最后一阶会以当前数值打底新开一阶，右键删除当前阶。 --}}
         {{#if showTrainLevel}}
-          <div class="skill-train-badge{{#if trainMulti}} multi{{/if}}{{#unless trainIsBase}} derived{{/unless}}"
+          <div class="skill-train-badge{{#if trainMulti}} multi{{/if}}{{#unless trainIsBase}} derived{{/unless}}{{#unless trainCanToggle}} locked{{/unless}}"
                data-level="{{trainLevel}}"
-               title="训练等级 {{trainNumeral}}{{#if trainMulti}}（本卡有 {{trainLevels.length}} 阶，左键切换）{{/if}}&#10;Shift+左键：新开一阶　右键：删除当前阶">
+               title="训练等级 {{trainNumeral}}{{#if trainCanToggle}}{{#if trainMulti}}（本卡有 {{trainLevels.length}} 阶，左键切换）{{/if}}&#10;Shift+左键：新开一阶　右键：删除当前阶{{else}}&#10;（已锁定，解锁后才能切换训练等级）{{/if}}">
             <img src="{{trainIcon}}" alt="{{trainNumeral}}" draggable="false"
                  onerror="this.closest('.skill-train-badge').classList.add('no-art'); this.remove();">
             <span class="train-numeral">{{trainNumeral}}</span>

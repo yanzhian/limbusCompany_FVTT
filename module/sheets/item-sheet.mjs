@@ -185,8 +185,18 @@ export class LimbusItemSheet extends ItemSheet {
   }
 
   /**
+   * 训练等级徽章能不能点。
+   *
+   * 轮转会真的改写 system.trainLevel（整张卡换一套数值），不是纯展示，
+   * 所以锁上时只留给 GM；玩家想切得先解锁，跟卡面其他可编辑项一个规矩。
+   */
+  get _canToggleTrain() {
+    return this.isEditable && (game.user.isGM || !this.isLocked);
+  }
+
+  /**
    * 训练等级徽章：
-   *   · 左键       —— 在这张卡已有的几阶之间轮转（锁定状态下也能看）
+   *   · 左键       —— 在这张卡已有的几阶之间轮转（锁定时仅 GM）
    *   · Shift+左键 —— 解锁时新开一阶（Ⅲ→Ⅳ→Ⅴ），用当前那一套数值打底
    *   · 右键       —— 删掉当前这一阶（见 _onTrainLevelDelete）
    * 新建单独放在 Shift 上：轮转是高频操作，不该顺手就多出一阶数据。
@@ -197,6 +207,7 @@ export class LimbusItemSheet extends ItemSheet {
     const levels  = this._trainLevels;
     const cur     = src.trainLevel ?? 3;
     const idx     = levels.indexOf(cur);
+    if (!this._canToggleTrain) return;
     const canEdit = this.isEditable && !this.isLocked;
 
     if (!(event.shiftKey && canEdit && cur < 5)) {
@@ -334,6 +345,8 @@ export class LimbusItemSheet extends ItemSheet {
       context.trainIsBase    = tLv === tBase;
       // 这张卡到底有没有"同名卡"（多阶数值），有才值得显示成可点的轮转徽章
       context.trainMulti     = this._trainLevels.length > 1;
+      // 锁定时只有 GM 能切阶；玩家看到的是个不可点的徽章
+      context.trainCanToggle = this._canToggleTrain;
 
       // 表单字段前缀：写进当前形态自己那一套
       //   侵蚀 → system.corrode.*；非基础阶的训练等级 → system.trainForms.lvN.*

@@ -10341,3 +10341,7 @@ input.item-piles-quantity {
 /* 商人图块底部有价格条，图标得给它让位 */
 .limbuscompany .mc-tile .cg-tile-icon { width: 84%; height: 84%; margin-bottom: 10px; }
 .limbuscompany .cg-item-tile.mc-tile .cg-tile-name { top: 12px; }   /* 顶上是数量角标 mc-qty */
+
+/* 训练等级徽章：锁定状态下玩家点不动（GM 不受限，不会带上 .locked） */
+.limbuscompany .skill-train-badge.locked { cursor: default; }
+.limbuscompany .skill-train-badge.locked:hover { filter: none; transform: none; }
