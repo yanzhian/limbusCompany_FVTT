@@ -7134,25 +7134,29 @@ export class ClashManager {
     }
 
     if (type === "perN") {
-      if (!targetActor || !pre.buff) return false;
+      // 多条 BUFF 求和：与 _applyActivities 同一口径（见那里的注释）
+      const keys = ClashManager._preBuffKeys(pre);
+      if (!targetActor || !keys.length) return false;
       const buffs = targetActor.system?.buffs ?? [];
-      const found = buffs.find(b => b.type === pre.buff || b.name === pre.buff);
-      if (!found) return false;
+      const found = keys.map(k => buffs.find(b => b.type === k || b.name === k) ?? null);
+      if (!found.some(Boolean)) return false;
       const dim = pre.perNDim === "intensity" ? "intensity" : "stacks";
-      const haveVal = dim === "intensity" ? (found.intensity ?? 0) : (found.stacks ?? 0);
+      const haveVal = found.reduce((s, f) => s + (f?.[dim] ?? 0), 0);
       const n = pre.stacks ?? 1;
       return n > 0 && (haveVal % n === 0);
     }
 
     if (type === "buffCompare") {
-      if (!targetActor || !pre.buff) return false;
+      // 多条 BUFF 求和：与 _applyActivities 同一口径（见那里的注释）
+      const keys = ClashManager._preBuffKeys(pre);
+      if (!targetActor || !keys.length) return false;
       const buffs = targetActor.system?.buffs ?? [];
-      const found = buffs.find(b => b.type === pre.buff || b.name === pre.buff);
-      // 没有这条 BUFF ≠ 这条 BUFF 为 0（与 _applyActivities 里的判定保持一致）：
+      const found = keys.map(k => buffs.find(b => b.type === k || b.name === k) ?? null);
+      // 一条都没有 ≠ 和为 0（与 _applyActivities 里的判定保持一致）：
       // 身上根本没有时本条不成立，否则「拥有 0 层【光札】」对谁都恒真，[反应] 会一直触发
-      if (!found) return false;
-      const have  = (pre.compareDim ?? "stacks") === "intensity"
-        ? (found.intensity ?? 0) : (found.stacks ?? 0);
+      if (!found.some(Boolean)) return false;
+      const dim   = (pre.compareDim ?? "stacks") === "intensity" ? "intensity" : "stacks";
+      const have  = found.reduce((s, f) => s + (f?.[dim] ?? 0), 0);
       return ClashManager._cmp(have, pre.comparison ?? "eq", pre.stacks ?? 0);
     }
 

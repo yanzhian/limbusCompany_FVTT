@@ -145,7 +145,7 @@ All cross-cutting constants (sin types/labels/icon paths, damage types, EGO grad
 
 ### Design docs (authoritative for game rules)
 
-`开发总览.md` is the project's own index/table-of-contents for design docs — read it first when you need the *rules rationale* behind a mechanic, not just its data shape. `策划文件/` holds the detailed rule specs (character sheet layout, clash/contest flow, item card specs per type) that this codebase implements; when a game-mechanic question isn't answerable from code alone, check the matching file there before guessing. `assets/icons/GUI/` has UI mockup screenshots used as pixel-reference during sheet/dialog implementation.
+`开发总览.md` is the project's own index/table-of-contents for design docs — read it first when you need the *rules rationale* behind a mechanic, not just its data shape. `策划文件/` now holds only the two live docs — `规则书.md` (the player-facing rules) and `效果JSON批量制作规范.md` (**the** authority for Activity JSON: triggers, preconditions, costs, effects, BUFF registry keys). Everything else moved to `策划文件/归档/` (character sheet layout, clash/contest flow, item card specs per type): those are **older than the code** and are history, not rules — read them for intent, but when they disagree with the code, the code wins. `assets/icons/GUI/` has UI mockup screenshots used as pixel-reference during sheet/dialog implementation.
 
 ## Core data model quick-reference
 
