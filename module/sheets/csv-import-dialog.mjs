@@ -19,6 +19,7 @@ import {
   fillMissingImages,
   fillMissingImagesForUpdates,
 } from "../helpers/asset-lookup.mjs";
+import { clearItemIndex, resolvePendingRefs } from "../helpers/item-lookup.mjs";
 
 const PREVIEW_ROWS = 8;
 
@@ -267,6 +268,13 @@ export class CSVImportDialog extends Application {
       updates.push({ doc: hits[0], data });
     }
 
+    // ── 按名字解析物品引用（背景的初始物品 / 等级奖励）──
+    // 放在图片之前：解析不到的名字要能拦下这次导入让人先补物品。
+    clearItemIndex();
+    const refWarn = [];
+    const refCount = (await resolvePendingRefs(toCreate, refWarn))
+                   + (await resolvePendingRefs(updates.map(u => u.data), refWarn));
+
     // ── 没填「图片」列的，按物品名去 assets/ 里捞一张同名图 ──
     // 覆盖的那批只在原物品还是默认图标时才补，玩家自己换过的图不动。
     clearAssetIndex();
@@ -279,6 +287,10 @@ export class CSVImportDialog extends Application {
     const ok = await Dialog.confirm({
       title:   "确认批量导入",
       content: `<p>目标：<b>${targetLabel}</b></p><p>${lines.join("，")}。</p>`
+             + (refCount
+                 ? `<p style="color:#8a9a5b">已按名字解析到 <b>${refCount}</b> 个物品引用。</p>` : "")
+             + (refWarn.length
+                 ? `<p style="color:#b06a4a">${refWarn.join("<br>")}</p>` : "")
              + (imgFilled
                  ? `<p style="color:#8a9a5b">已按物品名自动匹配到 <b>${imgFilled}</b> 张图片。</p>` : "")
              + (updates.length

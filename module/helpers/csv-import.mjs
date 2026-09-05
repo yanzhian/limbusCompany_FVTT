@@ -17,6 +17,8 @@
  *       await Item.createDocuments(items);
  */
 
+import { PENDING_REFS } from "./item-lookup.mjs";
+
 // ═══════════════════════════════════════════════════════════════════════════
 //  分隔符文本解析
 // ═══════════════════════════════════════════════════════════════════════════
@@ -111,6 +113,10 @@ const V_TRAIN     = "__train";
 /** 「效果/描述」列：字段名逐类型不同（技能是 effectDesc，装备/消耗品/材料是 effect，
  *  恐慌卡/背景是 description），固定路径会写进不存在的字段，交给 parseEffectText 按类型定 */
 const V_EFFECT    = "__effect";
+/** 背景「初始物品」列：按名字引用已存在的物品，解析推迟到导入时（查合集包是异步的） */
+const V_BG_ITEMS  = "__bgItems";
+/** 背景「等级奖励」列：`15：A，B，20：C` → 两组奖励 */
+const V_BG_REWARD = "__bgReward";
 
 /** 抗性 / 弱性列的倍率写法 */
 const RESIST_MULT = "x0.5";
@@ -140,6 +146,8 @@ export const COLUMN_ALIASES = {
   "标签": "system.tags",
   "效果": V_EFFECT, "描述": V_EFFECT, "效果描述": V_EFFECT,
   "副标题": "system.subtitle",
+  "初始物品": V_BG_ITEMS, "起始物品": V_BG_ITEMS,
+  "等级奖励": V_BG_REWARD, "升级奖励": V_BG_REWARD,
   "简介": "system.description", "背景描述": "system.description",
   "星芒": "system.stellarCost", "星芒费用": "system.stellarCost",
   "容量": V_CAPACITY,               // "2x3" → capacity.w / capacity.h
@@ -646,6 +654,43 @@ const EFFECT_FIELD_BY_TYPE = {
   background: "system.description",
 };
 
+/**
+ * 「初始物品」：物品名列表，逗号 / 顿号 / 分号分隔。
+ * 这里只把名字拆出来挂着，真正找物品在 item-lookup.mjs 的 resolvePendingRefs——
+ * 查合集包是异步的，而 CSV 预览必须同步出结果。
+ */
+function parseBgItems(text) {
+  const names = String(text ?? "").split(/[,，、;；]/).map(s => s.trim()).filter(Boolean);
+  if (!names.length) return {};
+  return { [`${PENDING_REFS}.startingItems`]: names };
+}
+
+/**
+ * 「等级奖励」：`15：花札组，20：强化技能书`，一组可以给多件：`15：A，B，20：C`。
+ *
+ * 分隔符不做硬性要求——「等级：」出现一次就开一组，后面的名字都算这一组的，
+ * 直到下一个「N：」为止。这样 15：A，B，20：C 和 15：A、B；20：C 都能解析。
+ */
+function parseBgRewards(text) {
+  const raw = String(text ?? "").trim();
+  if (!raw) return {};
+  const groups = [];
+  let cur = null;
+  for (const tok of raw.split(/[,，、;；]/).map(s => s.trim()).filter(Boolean)) {
+    const m = tok.match(/^(\d+)\s*[:：]\s*(.*)$/);
+    if (m) {
+      cur = { level: parseInt(m[1]), names: [] };
+      groups.push(cur);
+      if (m[2].trim()) cur.names.push(m[2].trim());
+      continue;
+    }
+    if (!cur) return { __error: `「${raw}」缺少等级前缀，应写成「15：物品名，20：物品名」` };
+    cur.names.push(tok);
+  }
+  if (!groups.length) return {};
+  return { [`${PENDING_REFS}.levelRewards`]: groups };
+}
+
 function parseEffectText(text, itemType) {
   const path = EFFECT_FIELD_BY_TYPE[itemType];
   if (!path) return {};                      // 这类物品没有描述字段
@@ -657,6 +702,8 @@ function parseEffectText(text, itemType) {
 function parseVirtualColumn(marker, text, itemType) {
   switch (marker) {
     case V_EFFECT:   return parseEffectText(text, itemType);
+    case V_BG_ITEMS:  return parseBgItems(text);
+    case V_BG_REWARD: return parseBgRewards(text);
     case V_CATEGORY: return parseCategory(text, itemType);
     case V_DICE:     return parseDice(text);
     case V_LEVEL:    return parseLevel(text);
@@ -1015,7 +1062,8 @@ const TEMPLATE_COLUMNS = {
   skillbook:  ["图标", "完成", "名称", "类型", "分类", "标签", "价格", "容量"],
   recipebook: ["图标", "完成", "名称", "类型", "分类", "标签", "价格", "容量"],
   panic:      ["图标", "完成", "名称", "类型", "标签", "效果"],
-  background: ["图标", "完成", "名称", "类型", "副标题", "分类", "标签", "简介", "容量"],
+  background: ["图标", "完成", "名称", "类型", "副标题", "分类", "标签", "简介",
+               "初始物品", "等级奖励", "容量"],
 };
 
 /** 模板示例行：给出各类型最典型的一条，照着改即可 */
@@ -1038,6 +1086,8 @@ const TEMPLATE_EXAMPLE = {
                 "可堆叠": "TRUE", "数量": "1", "容量": "1x1" },
   background: { "名称": "中指", "类型": "背景", "副标题": "中指-长兄", "分类": "帮派",
                 "标签": "中指/手指", "简介": "永不遗忘。中指的核心理念就是记仇。",
+                "初始物品": "中指-怨恨纹身，中指-长兄",
+                "等级奖励": "15：中指-墨镜，20：中指-技能书",
                 "容量": "1x1" },
   skillbook:  { "名称": "剑术入门", "类型": "技能书", "分类": "剑术",
                 "标签": "剑术/入门", "价格": "120", "容量": "1x1" },
@@ -1078,6 +1128,8 @@ const COLUMN_NOTES = {
   "标签":     "用 / 或 、分隔",
   "效果":     "落到哪个字段随类型走：技能→效果描述、装备/消耗品/材料→效果、恐慌卡/背景→简介；容器/技能书/配方表没有描述字段，填了也不写",
   "副标题":   "仅背景：显示在背景名下方，如「中指-长兄」",
+  "初始物品": "仅背景：建卡时直接获得的物品，写**已存在物品的名字**，多件用 ，或、分隔。找不到名字会在导入前报错",
+  "等级奖励": "仅背景：形如「15：花札组，20：强化技能书」；一级给多件就接着写「15：A，B，20：C」。同样按名字找已存在的物品",
   "简介":     "仅背景：背景卡正文（富文本）。初始物品与等级奖励物品无法用 CSV 填，需在背景卡上拖入",
   "罪孽资源消耗": "形如 暴怒2，怠惰2，傲慢4（分隔符可省）",
   "抗性修改": "形如 暴怒x0.5傲慢x0.5怠惰x2.0（分隔符可省）",
