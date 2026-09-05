@@ -1029,7 +1029,10 @@ export class LimbusActorSheet extends ActorSheet {
 
   async _onDrop(event) {
     event.preventDefault();
-    const data = TextEditor.getDragEventData(event);
+    // v13 把 TextEditor 挪进了 foundry.applications.ux，老版本还在全局。
+    // 这是拖拽落点的入口（装备槽 / 技能槽 / 6 格背包 / 背景卡），断了就是「拖进去没反应」。
+    const TE   = foundry.applications?.ux?.TextEditor?.implementation ?? globalThis.TextEditor;
+    const data = TE.getDragEventData(event);
 
     if (data.type === "Item") return this._onDropItem(event, data);
     return super._onDrop(event, data);

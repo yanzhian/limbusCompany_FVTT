@@ -147,6 +147,11 @@ Hooks.once("init", () => {
   };
 
   // ── 注册 Actor Sheet ───────────────────────────────────────────────────
+  // v13 把 Actors / Items 这两个全局集合挪进了 foundry.documents.collections，
+  // 老版本还在全局。取不到的话所有 sheet 注册不上，文档会回落到 Foundry 默认表单。
+  const Actors = foundry.documents?.collections?.Actors ?? globalThis.Actors;
+  const Items  = foundry.documents?.collections?.Items  ?? globalThis.Items;
+
   Actors.registerSheet("limbusCompany_FVTT", LimbusActorSheet, {
     types:       ["character"],
     makeDefault: true,
@@ -435,7 +440,23 @@ Hooks.on("createChatMessage", async (message) => {
 
 /* ─── 对抗聊天框按钮交互 ─────────────────────────────────────────────────── */
 
-Hooks.on("renderChatMessage", (_message, html, _data) => {
+/**
+ * v13 起 `renderChatMessage` 被 `renderChatMessageHTML` 取代，新钩子第二个参数是
+ * 原生 HTMLElement 而不是 jQuery。这里两个名字都注册，入口处统一包回 jQuery，
+ * 函数体一行不用动，v12~v14 同一份代码都能跑。
+ *
+ * 去重那两行不能省：v13 对旧钩子留了兼容垫片，同一次渲染新旧钩子会各喊一遍，
+ * 两边都绑就是【结算结果】点一次结算两次（伤害算两遍）。标记打在元素上，
+ * 每次渲染都是新元素，所以重渲染不会被误挡。
+ */
+const _onRenderChatMessage = (_message, htmlArg, _data) => {
+  const root = htmlArg instanceof HTMLElement ? htmlArg : htmlArg?.[0];
+  if (root) {
+    if (root.dataset.limbusChatBound === "1") return;
+    root.dataset.limbusChatBound = "1";
+  }
+  const html = htmlArg instanceof HTMLElement ? $(htmlArg) : htmlArg;
+
   // 「▼ 详细信息」等折叠：拼点对抗 / 单方面攻击 / 容量扩散 / 先攻骰掷都有。
   // 必须绑在 flags 守卫**之前**——先攻骰掷那张卡是纯 content、没有 flags，
   // 挡在守卫后面的话它的折叠永远点不开。
@@ -582,7 +603,14 @@ Hooks.on("renderChatMessage", (_message, html, _data) => {
       if (flags.reactionCheck) await ClashManager.runReactionCheck(flags.reactionCheck);
     });
   }
-});
+};
+
+Hooks.on("renderChatMessageHTML", _onRenderChatMessage);   // v13+
+// v13 起旧钩子只剩兼容垫片，注册它除了触发一次去重、还会让核心每条消息刷一行弃用警告，
+// 所以能判出版本时就不注册。判不出来（game 还没装配好）就照常注册，交给上面的标记去重。
+if ((globalThis.game?.release?.generation ?? 0) < 13) {
+  Hooks.on("renderChatMessage", _onRenderChatMessage);     // v12 兜底，可择机删
+}
 
 
 /* ─── 角色卡 <-> 场上 Token 双向同步（非链接 Token） ─────────────────────── */
@@ -1299,7 +1327,10 @@ async function _preloadTemplates() {
     // Loot sheet
     "systems/limbusCompany_FVTT/templates/actor/loot-sheet.hbs",
   ];
-  return loadTemplates(templatePaths);
+  // v13 把 loadTemplates 挪进了 foundry.applications.handlebars，老版本还在全局。
+  // 取不到的话所有 partial 渲染不出来。
+  const load = foundry.applications?.handlebars?.loadTemplates ?? globalThis.loadTemplates;
+  return load(templatePaths);
 }
 
 /**
