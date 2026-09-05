@@ -2311,9 +2311,14 @@ export class ClashManager {
             if (!name) { descStr = "相关技能转换：未配置技能名字"; break; }
             const newItem = (relOwner.items ?? []).find(it => it.type === "skill" && it.name === name && it.id !== item.id);
             if (!newItem) { descStr = `相关技能转换：背包中找不到技能【${name}】`; break; }
-            // 转换时长：permanent（默认，老数据）/ afterUse（转换后的技能被用掉一次）/
-            //           afterClash（本次结算后）/ endOfTurn（本回合结束时）
-            const relUntil = ["afterUse", "afterClash", "endOfTurn"].includes(eff.relDuration)
+            // 转换时长：permanent（字段缺省值，老数据；**长休也不还原**）/
+            //           afterUse（转换后的技能被用掉一次）/ afterClash（本次结算后）/
+            //           endOfTurn（本回合结束时）/ untilRest（长休时还原）
+            //
+            // untilRest 不需要自己的到期检查：它只登记进临时转换表，而长休调的是
+            // _revertTempSkillConverts(actor, "all")，会把表里剩下的全部还原。
+            // 换句话说"没有更早的到期条件"就是它的语义。
+            const relUntil = ["afterUse", "afterClash", "endOfTurn", "untilRest"].includes(eff.relDuration)
               ? eff.relDuration : "";
             // 换掉的槽位由 replaceSkillSlot 直接报回来（它自己最清楚动了哪几格）。
             // 事后再 findSkillSlot 找是错的：那时槽位里装的已经是新技能，同一 tick 里
@@ -2336,7 +2341,8 @@ export class ClashManager {
             }
             const relUntilLabel = relUntil === "afterUse"   ? "（使用一次后还原）"
                                 : relUntil === "afterClash" ? "（本次结算后还原）"
-                                : relUntil === "endOfTurn"  ? "（本回合结束时还原）" : "永久";
+                                : relUntil === "endOfTurn"  ? "（本回合结束时还原）"
+                                : relUntil === "untilRest"  ? "（长休时还原）" : "永久";
             descStr = replaced
               ? `【${item.name}】${relUntil ? "临时" : relUntilLabel}转换为【${newItem.name}】${relUntil ? relUntilLabel : ""}`
               : `相关技能转换：未找到【${item.name}】所在的技能槽位`;

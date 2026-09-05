@@ -3603,15 +3603,18 @@ function _buildEffectRow(eff, idx, cfg) {
                  value="${_esc(eff?.relSkillName ?? "")}" placeholder="技能名字（在背包/技能列表中检索）" style="width:130px;" autocomplete="off">
           <label>时长</label>
           <select class="ae-sel eff-relconvert-duration">${
-            [["permanent","永久"],["afterUse","使用一次后还原"],
-             ["afterClash","本次结算后还原"],["endOfTurn","本回合结束时还原"]]
+            [["afterUse","使用一次后还原"],["afterClash","本次结算后还原"],
+             ["endOfTurn","本回合结束时还原"],["untilRest","长休时还原"],
+             ["permanent","永久（长休也不还原）"]]
               .map(([v,l]) => `<option value="${v}" ${(eff?.relDuration ?? "permanent") === v ? "selected" : ""}>${l}</option>`)
               .join("")
           }</select>
           <span class="ae-eff-relconvert-hint">替换本技能在角色技能槽中的位置（在背包/技能列表按名字检索目标技能）。
           「还原」由这条转换自己负责，目标技能上<strong>不需要</strong>再写一条转回去——那样会让共用同一强化形态的其他路径也被一起还原。
           <br>【使用一次后还原】：换上来的形态被真正投出去一次后还原；多个槽位（如基础槽＋守备槽）换成同一张时，
-          任一边用掉，另一边也一并还原——整体只算一次。</span>
+          任一边用掉，另一边也一并还原——整体只算一次。
+          <br>【长休时还原】：没有更早的到期条件，一直留到下次长休。想让状态跨战斗保留但别永远赖着，用这个。
+          <br>【永久】：<strong>长休也不还原</strong>，只能靠另一条转换换回来——确定要一直留着才选。</span>
         </span>
         </div>
       </div>
