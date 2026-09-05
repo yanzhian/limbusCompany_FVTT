@@ -112,6 +112,24 @@ export async function resolvePendingRefs(datas, warnings = []) {
       foundry.utils.setProperty(d, "system.startingItems",
         await refsOf(pending.startingItems, d.name));
     }
+    // 技能书：{ uuid, itemData } 的形状，与卡上拖入时一致。
+    // 份数就是**重复几条**——slots 是按下标渲染的，重复条目各占一格。
+    if (pending.skills?.length) {
+      const skills = [];
+      for (const { name, count } of pending.skills) {
+        const item = await findItemByName(name);
+        if (!item) {
+          if (!missing.has(name)) missing.set(name, new Set());
+          missing.get(name).add(d.name);
+          continue;
+        }
+        for (let i = 0; i < Math.max(1, count ?? 1); i++) {
+          skills.push({ uuid: item.uuid, itemData: null });
+          n++;
+        }
+      }
+      foundry.utils.setProperty(d, "system.skills", skills);
+    }
     if (pending.levelRewards?.length) {
       const rewards = [];
       for (const grp of pending.levelRewards) {

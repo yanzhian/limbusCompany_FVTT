@@ -117,6 +117,8 @@ const V_EFFECT    = "__effect";
 const V_BG_ITEMS  = "__bgItems";
 /** 背景「等级奖励」列：`15：A，B，20：C` → 两组奖励 */
 const V_BG_REWARD = "__bgReward";
+/** 技能书「技能」列：`"鹤斩"x3"芒流"x2` → 收录 3 份鹤斩、2 份芒流 */
+const V_SB_SKILLS = "__sbSkills";
 
 /** 抗性 / 弱性列的倍率写法 */
 const RESIST_MULT = "x0.5";
@@ -147,6 +149,7 @@ export const COLUMN_ALIASES = {
   "效果": V_EFFECT, "描述": V_EFFECT, "效果描述": V_EFFECT,
   "副标题": "system.subtitle",
   "初始物品": V_BG_ITEMS, "起始物品": V_BG_ITEMS,
+  "技能": V_SB_SKILLS, "收录技能": V_SB_SKILLS,
   "等级奖励": V_BG_REWARD, "升级奖励": V_BG_REWARD,
   "简介": "system.description", "背景描述": "system.description",
   "星芒": "system.stellarCost", "星芒费用": "system.stellarCost",
@@ -691,6 +694,47 @@ function parseBgRewards(text) {
   return { [`${PENDING_REFS}.levelRewards`]: groups };
 }
 
+/**
+ * 技能书「技能」列：`"鹤斩"x3"芒流"x2"樱闪"x1` → 每个名字带一个份数。
+ *
+ * 写法故意收得很宽——引号可有可无、分隔符可有可无、xN 省略就是 1 份，
+ * 少打一个引号（"樱闪"x1花札洗切"x1）也照样能拆对。做法是先把引号和常见
+ * 分隔符统统当成断点，再走一遍 token：形如 xN 的就贴给前一个名字。
+ */
+function parseSkillBookSkills(text) {
+  const raw = String(text ?? "").trim();
+  if (!raw || raw === "-") return {};
+  const tokens = raw
+    .replace(/[""“”]/g, "\n")
+    .split(/[\n,，、;；]/)
+    .map(s => s.trim())
+    .filter(Boolean);
+
+  const out = [];                          // [{ name, count }]
+  for (const tok of tokens) {
+    // 单独的 x3：份数贴给上一个名字
+    const only = tok.match(/^[x×*]\s*(\d+)$/i);
+    if (only) {
+      if (!out.length) return { __error: `「${tok}」前面没有技能名` };
+      out[out.length - 1].count = Math.max(1, parseInt(only[1]));
+      continue;
+    }
+    // x3名字：份数属于上一个（少打一个引号时会长这样），名字另起一条
+    const lead = tok.match(/^[x×*]\s*(\d+)\s*(.+)$/i);
+    if (lead) {
+      if (out.length) out[out.length - 1].count = Math.max(1, parseInt(lead[1]));
+      out.push({ name: lead[2].trim(), count: 1 });
+      continue;
+    }
+    // 名字x3 连写
+    const both = tok.match(/^(.+?)\s*[x×*]\s*(\d+)$/i);
+    if (both) { out.push({ name: both[1].trim(), count: Math.max(1, parseInt(both[2])) }); continue; }
+    out.push({ name: tok, count: 1 });
+  }
+  if (!out.length) return {};
+  return { [`${PENDING_REFS}.skills`]: out };
+}
+
 function parseEffectText(text, itemType) {
   const path = EFFECT_FIELD_BY_TYPE[itemType];
   if (!path) return {};                      // 这类物品没有描述字段
@@ -704,6 +748,7 @@ function parseVirtualColumn(marker, text, itemType) {
     case V_EFFECT:   return parseEffectText(text, itemType);
     case V_BG_ITEMS:  return parseBgItems(text);
     case V_BG_REWARD: return parseBgRewards(text);
+    case V_SB_SKILLS: return parseSkillBookSkills(text);
     case V_CATEGORY: return parseCategory(text, itemType);
     case V_DICE:     return parseDice(text);
     case V_LEVEL:    return parseLevel(text);
@@ -1059,7 +1104,7 @@ const TEMPLATE_COLUMNS = {
                "内部数量", "允许类型", "允许分类"],
   // 技能书/配方表的 schema 里没有描述字段，所以不列「效果」——书里装什么
   // （技能 / 配方）只能在卡上编辑，CSV 建的是空书
-  skillbook:  ["图标", "完成", "名称", "类型", "分类", "标签", "价格", "容量"],
+  skillbook:  ["图标", "完成", "名称", "类型", "分类", "标签", "技能", "价格", "容量"],
   recipebook: ["图标", "完成", "名称", "类型", "分类", "标签", "价格", "容量"],
   panic:      ["图标", "完成", "名称", "类型", "标签", "效果"],
   background: ["图标", "完成", "名称", "类型", "副标题", "分类", "标签", "简介",
@@ -1089,8 +1134,10 @@ const TEMPLATE_EXAMPLE = {
                 "初始物品": "中指-怨恨纹身，中指-长兄",
                 "等级奖励": "15：中指-墨镜，20：中指-技能书",
                 "容量": "1x1" },
-  skillbook:  { "名称": "剑术入门", "类型": "技能书", "分类": "剑术",
-                "标签": "剑术/入门", "价格": "120", "容量": "1x1" },
+  skillbook:  { "名称": "定事务所-技能书", "类型": "技能书", "分类": "剑术",
+                "标签": "收尾人/定事务所",
+                "技能": '"鹤斩"x3"芒流"x2"樱闪"x1"花札洗切"x1',
+                "价格": "120", "容量": "1x1" },
   recipebook: { "名称": "野外炊事手册", "类型": "配方表", "分类": "烹饪",
                 "标签": "营地/烹饪", "价格": "80", "容量": "1x1" },
   panic:      { "名称": "深渊的低语", "类型": "恐慌卡", "标签": "陷入恐慌",
@@ -1128,6 +1175,7 @@ const COLUMN_NOTES = {
   "标签":     "用 / 或 、分隔",
   "效果":     "落到哪个字段随类型走：技能→效果描述、装备/消耗品/材料→效果、恐慌卡/背景→简介；容器/技能书/配方表没有描述字段，填了也不写",
   "副标题":   "仅背景：显示在背景名下方，如「中指-长兄」",
+  "技能":     "仅技能书：收录哪些技能，写**已存在技能的名字**。`\"鹤斩\"x3\"芒流\"x2` 表示收 3 份鹤斩、2 份芒流；xN 省略＝1 份，引号和分隔符都可省",
   "初始物品": "仅背景：建卡时直接获得的物品，写**已存在物品的名字**，多件用 ，或、分隔。找不到名字会在导入前报错",
   "等级奖励": "仅背景：形如「15：花札组，20：强化技能书」；一级给多件就接着写「15：A，B，20：C」。同样按名字找已存在的物品",
   "简介":     "仅背景：背景卡正文（富文本）。初始物品与等级奖励物品无法用 CSV 填，需在背景卡上拖入",
