@@ -142,7 +142,7 @@ footer kbd{font:11.5px ui-monospace,monospace;color:#c6d8d4;
       <div><h1>点缀层调参台</h1><div class="overline">GARNISH LAYER / ATTACK-VFX</div></div>
     </div>
     <p class="note"><b>原渲染器一行没改</b><br>
-      点缀是外面套的一层子类，只补 时间 / 镜头 / 空气，不再画第二条刀光。</p>
+      点缀是外面套的一层子类，只补 时间 / 镜头 / 空气。<br>打击另做了一版：先抡出弧线与风，命中带方向。</p>
   </header>
 
   <div class="lab">
@@ -163,7 +163,7 @@ footer kbd{font:11.5px ui-monospace,monospace;color:#c6d8d4;
         <button type="button" class="mode" data-mode="slash" aria-pressed="true">
           <strong>斩击</strong><span>7 式 · 横斩 / 弧斩 / 回旋重斩</span><kbd>1</kbd></button>
         <button type="button" class="mode" data-mode="strike" aria-pressed="false">
-          <strong>打击</strong><span>5 式 · 重击 / 上挑 / 震荡</span><kbd>2</kbd></button>
+          <strong>打击</strong><span>5 式 · 下砸 / 上挑 / 横扫 / 直拳 / 冲拳</span><kbd>2</kbd></button>
         <button type="button" class="mode" data-mode="thrust" aria-pressed="false">
           <strong>突刺</strong><span>5 式 · 快刺 / 螺旋 / 贯穿</span><kbd>3</kbd></button>
       </div>
@@ -171,6 +171,8 @@ footer kbd{font:11.5px ui-monospace,monospace;color:#c6d8d4;
       <div class="bar">
         <label class="chk"><input type="checkbox" id="toggle" checked>
           <span id="toggleLbl">点缀：开</span></label>
+        <label class="chk"><input type="checkbox" id="legacy">
+          <span id="legacyLbl">打击：新版</span></label>
         <label class="chk"><input type="checkbox" id="slow">0.4× 慢放</label>
         <label class="chk">背景
           <select id="bg">
@@ -201,7 +203,7 @@ footer kbd{font:11.5px ui-monospace,monospace;color:#c6d8d4;
   </section>
 
   <footer>
-    <kbd>1</kbd><kbd>2</kbd><kbd>3</kbd> 切换类别　<kbd>空格</kbd> 出手　<kbd>G</kbd> 开关点缀（用来直接对比原版）。
+    <kbd>1</kbd><kbd>2</kbd><kbd>3</kbd> 切换类别　<kbd>空格</kbd> 出手　<kbd>G</kbd> 开关点缀　<kbd>B</kbd> 打击新旧版对比。
     点缀层只在<strong>接触时刻</strong>起一次，所以 17 个动作都能吃到，不用逐个改。
   </footer>
   <p class="sr" id="say" aria-live="polite"></p>
@@ -839,6 +841,9 @@ class GarnishFX extends AttackVFX {
     this.garnishOn = true;
     this.shake = 0;
     this.bursts = [];
+    // 打击重做用的风参数（见 blunt2.js）；bluntLegacy=true 时切回旧版打击
+    this.wind = { ...WIND };
+    this.bluntLegacy = false;
   }
 
   /** 这一招真正「打到」的时刻：斩击算弧线走到落点，其余用 contactAt */
@@ -1032,6 +1037,324 @@ class GarnishFX extends AttackVFX {
 window.GarnishFX = GarnishFX;
 
 
+/* ═══════════════════════════════════════════════════════════════════════════
+ *  打击 · 重做
+ *
+ *  旧版廉价在两处：一是接触时画的那个尖刺星形，那形状本身就是「免费素材」味；
+ *  二是根本没有「挥」——力量凭空出现在落点上，观众看不到它是怎么来的。
+ *
+ *  钝器的身份是**弧线**和它拖出来的**风**。所以这版：
+ *
+ *    · 抡的招（下砸 / 上挑 / 横扫）先走一段圆弧，弧上拖一条又宽又淡的风带；
+ *      风带是**空气**不是刀光——低透明、边缘羽化、只有前缘一条白线。
+ *    · 直的招（直拳 / 冲拳）没有弧，改成拳前的压缩锥 + 身后的拖影。
+ *    · 接触不再画星形，改成「垂直于来向的压扁」+ 顺着去向甩出的几片尘楔。
+ *      力有方向，所以命中也必须是偏的，不能是对称的。
+ *
+ *  只覆盖 blunt() 这一个方法——旧版还在 super.blunt 里，页面上可随时切回对比。
+ * ═════════════════════════════════════════════════════════════════════════ */
+
+const WIND = { span: 1.0, width: 1.0, alpha: 1.0, strands: 3 };
+
+/** 抡击：ac 是接触时刻的角度，span 是抡过来的弧长（正负决定顺逆时针） */
+function swingSpec(ac, span, opt = {}) {
+  return {
+    kind: 'swing', ac, a0: ac - span, a1: ac + span * 0.22,
+    R: opt.R ?? 178, flat: opt.flat ?? 0.86, lag: opt.lag ?? 1.05,
+    band: opt.band ?? 34, headR: opt.headR ?? 26, ...opt,
+  };
+}
+
+const BLUNT_V2 = [
+  { id: 'strike-smash', name: '下砸', rotate: 0, power: 1.25, heavy: true,
+    travelMs: 168, ...swingSpec(0, 1.85, { R: 170, flat: 0.94, band: 46, lag: 1.05, headR: 31 }),
+    radius: 168, rays: 11, stretch: 1, style: 'smash' },
+
+  { id: 'strike-uppercut', name: '上挑', rotate: 0, power: 0.95,
+    travelMs: 132, ...swingSpec(Math.PI, 1.72, { R: 158, flat: 0.9, band: 30, lag: 0.92 }),
+    radius: 126, rays: 8, stretch: 1.25, style: 'uppercut' },
+
+  { id: 'strike-sweep', name: '横扫', rotate: 0.06, power: 1.05,
+    travelMs: 146, ...swingSpec(-Math.PI / 2, 2.05, { R: 188, flat: 0.4, band: 42, lag: 1.18 }),
+    radius: 150, rays: 9, stretch: 1.45, style: 'sweep' },
+
+  { id: 'strike-jab', name: '直拳', rotate: 0, power: 0.9,
+    kind: 'punch', travelMs: 96, reach: 132, fist: 21, drag: 210,
+    radius: 118, rays: 9, stretch: 1.1, style: 'jab' },
+
+  { id: 'strike-rush', name: '冲拳', rotate: -0.05, power: 1.3, heavy: true,
+    kind: 'punch', travelMs: 138, reach: 178, fist: 27, drag: 330, dash: true,
+    radius: 158, rays: 12, stretch: 1.15, style: 'rush' },
+];
+
+/** 圆弧上的一点：支点被挪到「接触点正好落在原点」的位置 */
+function arcPt(h, a, rMul = 1) {
+  const R = h.R * rMul;
+  return [Math.cos(a) * R - Math.cos(h.ac) * h.R,
+          (Math.sin(a) * R - Math.sin(h.ac) * h.R) * h.flat];
+}
+
+Object.assign(GarnishFX.prototype, {
+
+  /** 覆盖点就这一个方法：drawHit 里 family==='strike' 会调它 */
+  blunt(h, age) {
+    if (this.bluntLegacy || !h.kind) return AttackVFX.prototype.blunt.call(this, h, age);
+    if (h.kind === 'swing') this.swingBlunt(h, age);
+    else this.punchBlunt(h, age);
+  },
+
+  /* ── 抡击 ───────────────────────────────────────────────────────────── */
+
+  swingBlunt(h, age) {
+    const c = this.ctx, W = this.wind;
+    const dir = Math.sign(h.a1 - h.a0) || 1;
+    const p   = smoothstep(age / h.travelMs);
+    const aHead = lerp(h.a0, h.a1, Math.min(1.12, p));
+    // 收尾：接触之后风带的尾巴追上来，整条变短再散掉
+    const shrink = 1 - 0.62 * smoothstep((age - h.contactAt) / 240);
+    const aTail = aHead - h.lag * W.span * shrink * dir;
+    const fade  = 1 - smoothstep((age - h.contactAt - 40) / 300);
+    if (fade <= 0.002 && age > h.contactAt) return this.bluntContact(h, age);
+
+    const band = h.band * W.width;
+    // 靠近头部最厚，尾端收尖——风是被推出去的，不是一条等宽的带子
+    const prof = u => Math.pow(clamp(u), 0.62) * (0.35 + 0.65 * Math.pow(u, 1.6));
+
+    const sweep = (outer, inner, rgb, alpha) => {
+      if (alpha < 0.002) return;
+      const n = 40;
+      c.fillStyle = color(rgb, alpha);
+      c.beginPath();
+      for (let i = 0; i <= n; i++) {
+        const u = i / n, a = lerp(aTail, aHead, u);
+        c.lineTo(...arcPt(h, a, 1 + prof(u) * outer / h.R));
+      }
+      for (let i = n; i >= 0; i--) {
+        const u = i / n, a = lerp(aTail, aHead, u);
+        c.lineTo(...arcPt(h, a, 1 - prof(u) * inner / h.R));
+      }
+      c.closePath();
+      c.fill();
+    };
+
+    c.save();
+    c.globalAlpha *= fade * W.alpha;
+    // 三层羽化：外圈最淡最宽，越往里越实。风的量感全在最外那层。
+    sweep(band * 1.95, band * 1.15, MINT, 0.115);
+    sweep(band * 1.10, band * 0.62, PALE, 0.175);
+    sweep(band * 0.48, band * 0.28, PALE, 0.245);
+
+    // 前缘：唯一一条亮线，只在靠近头部的那一段才提亮
+    c.lineCap = 'round';
+    for (let k = 0; k < 2; k++) {
+      c.strokeStyle = color(k ? WHITE : PALE, k ? 0.38 : 0.3);
+      c.lineWidth = k ? 1.2 : 3.6;
+      c.beginPath();
+      for (let i = 0; i <= 28; i++) {
+        const u = 0.42 + (i / 28) * 0.58, a = lerp(aTail, aHead, u);
+        c.lineTo(...arcPt(h, a, 1 + prof(u) * band * 0.42 / h.R));
+      }
+      c.stroke();
+    }
+
+    // 内部的几缕气流：不同半径、不同起步，风才有层次而不是一块糖纸
+    for (let j = 0; j < W.strands; j++) {
+      const off = (j - (W.strands - 1) / 2) * (band * 0.5);
+      const lag = 0.055 * (j + 1);
+      c.strokeStyle = color(j % 2 ? PALE : MINT, 0.26 - j * 0.04);
+      c.lineWidth = j ? 0.7 : 1.1;
+      c.beginPath();
+      for (let i = 0; i <= 30; i++) {
+        const u = clamp(i / 30 - lag);
+        c.lineTo(...arcPt(h, lerp(aTail, aHead, u), 1 + off / h.R));
+      }
+      c.stroke();
+    }
+
+    // 头部质量：钝器的重量在这一坨软光里，不是在亮线上
+    const hp = arcPt(h, aHead);
+    const hr = h.headR * (0.75 + 0.35 * p) * h.power;
+    const g = c.createRadialGradient(hp[0], hp[1], 0, hp[0], hp[1], hr);
+    g.addColorStop(0, color(WHITE, 0.4));
+    g.addColorStop(0.35, color(PALE, 0.16));
+    g.addColorStop(1, color(MINT, 0));
+    c.fillStyle = g;
+    c.fillRect(hp[0] - hr, hp[1] - hr, hr * 2, hr * 2);
+    c.restore();
+
+    this.bluntContact(h, age);
+  },
+
+  /* ── 直拳 / 冲拳 ─────────────────────────────────────────────────────── */
+
+  punchBlunt(h, age) {
+    const c = this.ctx, W = this.wind;
+    const p = smoothstep(age / h.travelMs);
+    const x = lerp(-h.reach * 1.45, 0, Math.min(1.1, p));
+    const fade = 1 - smoothstep((age - h.contactAt - 30) / 260);
+
+    if (fade > 0.002) {
+      c.save();
+      c.globalAlpha *= fade * W.alpha;
+      const drag = h.drag * W.span, fr = h.fist * W.width;
+
+      // 拳后的拖锥：越靠近拳头越窄——空气是被拽着走的
+      const cone = (len, w, rgb, alpha) => {
+        const g = c.createLinearGradient(x - len, 0, x, 0);
+        g.addColorStop(0, color(rgb, 0));
+        g.addColorStop(0.55, color(rgb, alpha * 0.55));
+        g.addColorStop(1, color(rgb, alpha));
+        c.fillStyle = g;
+        c.beginPath();
+        c.moveTo(x - len, 0);
+        c.quadraticCurveTo(x - len * 0.45, -w * 1.15, x, -w * 0.42);
+        c.lineTo(x, w * 0.42);
+        c.quadraticCurveTo(x - len * 0.45, w * 1.15, x - len, 0);
+        c.closePath();
+        c.fill();
+      };
+      cone(drag * 1.15, fr * 1.9, MINT, 0.075);
+      cone(drag * 0.8,  fr * 1.15, PALE, 0.12);
+      cone(drag * 0.42, fr * 0.55, WHITE, 0.2);
+
+      // 拳前的压缩：接触前一小段，空气被顶成一片薄壁
+      const push = clamp((age - h.travelMs * 0.45) / (h.travelMs * 0.55));
+      if (push > 0 && age < h.contactAt + 40) {
+        const w = fr * (1.1 + push * 0.9), d = 12 + push * 20;
+        c.strokeStyle = color(PALE, 0.22 * (1 - Math.abs(push - 0.7) * 1.4));
+        c.lineWidth = 1.6;
+        c.beginPath();
+        c.moveTo(x + d, -w);
+        c.quadraticCurveTo(x + d + w * 0.62, 0, x + d, w);
+        c.stroke();
+      }
+
+      // 冲拳：身体位移的速度线，比拳本身长得多
+      if (h.dash) {
+        for (let j = 0; j < 4; j++) {
+          const y = (j - 1.5) * 15, t = clamp((age - j * 9) / (h.travelMs + 60));
+          const x1 = lerp(-h.reach * 1.6, x - 18, t);
+          const x0 = x1 - lerp(200, 60, t);
+          const g = c.createLinearGradient(x0, y, x1, y);
+          g.addColorStop(0, color(MINT, 0));
+          g.addColorStop(1, color(PALE, 0.16 * (1 - t)));
+          c.fillStyle = g;
+          c.fillRect(x0, y - 1, x1 - x0, 2);
+        }
+      }
+
+      // 拳头本体
+      const hr = fr * (0.8 + 0.3 * p) * h.power;
+      const g = c.createRadialGradient(x, 0, 0, x, 0, hr);
+      g.addColorStop(0, color(WHITE, 0.42));
+      g.addColorStop(0.38, color(PALE, 0.17));
+      g.addColorStop(1, color(MINT, 0));
+      c.fillStyle = g;
+      c.fillRect(x - hr, -hr, hr * 2, hr * 2);
+      c.restore();
+    }
+    this.bluntContact(h, age);
+  },
+
+  /* ── 命中：有方向的压扁，不是对称的星 ──────────────────────────────── */
+
+  bluntContact(h, age) {
+    const t = age - h.contactAt;
+    if (t < 0) return;
+    const c = this.ctx, P = h.power;
+
+    // 去向：抡击取接触点的切线，直拳就是 +x
+    let vx = 1, vy = 0;
+    if (h.kind === 'swing') {
+      vx = -Math.sin(h.ac); vy = Math.cos(h.ac) * h.flat;
+      const m = Math.hypot(vx, vy) || 1; vx /= m; vy /= m;
+    }
+    const dirA = Math.atan2(vy, vx);
+
+    const flash = this.pulse(t, 13, 26, h.heavy ? 150 : 118);
+    const mist  = this.pulse(t, 28, 48, 225);
+
+    c.save();
+    this.glow(h.radius * 0.7, mist * 0.32 * P);
+
+    // 压扁：垂直于来向被拍平的一团，力的方向一眼可读
+    if (flash > 0.003) {
+      c.save();
+      c.rotate(dirA);
+      const grow = 0.7 + easeOut(t / 90) * 0.55;
+      const rx = 30 * P * grow, ry = 62 * P * grow;
+      const g = c.createRadialGradient(0, 0, 0, 0, 0, ry);
+      g.addColorStop(0, color(WHITE, flash * 0.9));
+      g.addColorStop(0.42, color(PALE, flash * 0.4));
+      g.addColorStop(1, color(MINT, 0));
+      c.save(); c.scale(rx / ry, 1);
+      c.fillStyle = g; c.fillRect(-ry, -ry, ry * 2, ry * 2);
+      c.restore();
+      // 一条贴着接触面的横向亮线
+      c.strokeStyle = color(WHITE, flash * 0.75);
+      c.lineWidth = 1.4;
+      c.beginPath(); c.moveTo(0, -ry * 0.78); c.lineTo(0, ry * 0.78); c.stroke();
+      c.restore();
+    }
+
+    // 尘楔：顺着去向甩出去，左右不对称——力不会平均分给四周
+    for (let i = 0; i < 5; i++) {
+      const local = t - 8 - i * 6, f = this.pulse(local, 22, 34, 210);
+      if (f < 0.003) continue;
+      const spread = (i - 2) * 0.34 + Math.sin(i * 3.7 + h.seed) * 0.1;
+      const len = (54 + i % 2 * 30) * P * (0.5 + easeOut(local / 150));
+      c.save();
+      c.rotate(dirA + spread);
+      const g = c.createLinearGradient(0, 0, len, 0);
+      g.addColorStop(0, color(PALE, f * 0.3));
+      g.addColorStop(1, color(MINT, 0));
+      c.fillStyle = g;
+      c.beginPath();
+      c.moveTo(0, -3.5 * f);
+      c.quadraticCurveTo(len * 0.5, -9 * f, len, 0);
+      c.quadraticCurveTo(len * 0.5, 9 * f, 0, 3.5 * f);
+      c.closePath(); c.fill();
+      c.restore();
+    }
+
+    // 压力波：这条是原版就有的，形状对，留着
+    const waves = h.heavy ? 2 : 1;
+    for (let j = 0; j < waves; j++) {
+      const w = t - 12 - j * 40, f = this.pulse(w, 30, 58, 215) * (j ? 0.13 : 0.2);
+      const radius = lerp(26, h.radius, easeOut(w / 235));
+      c.save(); c.rotate(dirA);
+      this.pressureArc(radius, 0.62, -2.5, 1.75, f, 5);
+      this.pressureArc(radius * 1.05, 0.62, 0.6, 1.6, f * 0.7, 3.4);
+      c.restore();
+    }
+
+    // 碎屑：偏向去向那一侧
+    for (let i = 0; i < 9; i++) {
+      const local = t - 20 - i * 5, f = this.pulse(local, 22, 30, 240);
+      if (f < 0.003) continue;
+      const a = dirA + (i * 2.399 + h.seed) % 2.2 - 1.1;
+      const dist = 18 + Math.max(0, local) * (0.3 + (i % 3) * 0.09);
+      c.save();
+      c.translate(Math.cos(a) * dist, Math.sin(a) * dist);
+      c.rotate(a + 0.4);
+      c.fillStyle = color(i % 3 ? PALE : MINT, f * 0.5);
+      const w = (3 + i % 3) * f;
+      c.beginPath(); c.moveTo(-w * 1.7, 0); c.lineTo(w, -w * 0.6); c.lineTo(w * 0.4, w);
+      c.closePath(); c.fill();
+      c.restore();
+    }
+    c.restore();
+  },
+});
+
+/* 换掉 打击 的招式表，并把接触时刻/落点算好交给原有的火花与点缀层 */
+ATTACKS.strike.variants = BLUNT_V2.map(v => {
+  const h = { ...v, at: 24, family: 'strike', type: 'blunt', impact: [0, 0], life: 660 };
+  h.contactAt = h.travelMs * 0.78;
+  return h;
+});
+
+
 /* ---- 调参台 -------------------------------------------------------------- */
 
 const stage  = document.getElementById('stage');
@@ -1089,6 +1412,8 @@ document.addEventListener('keydown', ev => {
     ev.preventDefault(); trigger();
   }
   if (ev.code === 'KeyG') { ev.preventDefault(); toggle.checked = !toggle.checked; applyToggle(); }
+  if (ev.code === 'KeyB') { ev.preventDefault(); legacy.checked = !legacy.checked;
+                            legacy.dispatchEvent(new Event('change')); }
 });
 
 /* ---- 旋钮 ---------------------------------------------------------------- */
@@ -1121,6 +1446,12 @@ const KNOBS = [
     ['embers.rise',  '上飘', 0, 190, 2,    ''],
     ['embers.ms',    '时长', 200, 1700, 20, 'ms'],
   ]],
+  ['打击 · 风', [
+    ['wind.span',    '风长',  0.3, 2,  0.05, '×'],
+    ['wind.width',   '风幅',  0.3, 2,  0.05, '×'],
+    ['wind.alpha',   '浓度',  0,   2,  0.05, '×'],
+    ['wind.strands', '气流条数', 0, 6, 1,    ''],
+  ]],
   ['地面尘扫（仅重招）', [
     ['smear.alpha',  '强度', 0, 1,   0.01, ''],
     ['smear.radius', '扩散', 60, 520, 10,  ''],
@@ -1129,10 +1460,12 @@ const KNOBS = [
   ]],
 ];
 
-const get = (path) => path.split('.').reduce((o, k) => o[k], engine.g);
+// wind.* 存在 engine.wind 上（属于打击重做，不属于点缀层），其余在 engine.g
+const root = (path) => path.startsWith('wind.') ? engine : engine.g;
+const get = (path) => path.split('.').reduce((o, k) => o[k], root(path));
 const set = (path, v) => {
   const parts = path.split('.');
-  let o = engine.g;
+  let o = root(path);
   for (let i = 0; i < parts.length - 1; i++) o = o[parts[i]];
   o[parts.at(-1)] = v;
 };
@@ -1169,6 +1502,13 @@ function applyToggle() {
   stage.classList.toggle('plain', !toggle.checked);
 }
 toggle.addEventListener('change', applyToggle);
+const legacy = document.getElementById('legacy');
+legacy.addEventListener('change', () => {
+  engine.bluntLegacy = legacy.checked;
+  document.getElementById('legacyLbl').textContent =
+    legacy.checked ? '打击：旧版' : '打击：新版';
+  if (selected === 'strike') engine.clear();
+});
 document.getElementById('slow').addEventListener('change', ev => {
   engine.speed = ev.target.checked ? 0.4 : 1;
 });
@@ -1177,7 +1517,9 @@ document.getElementById('bg').addEventListener('change', ev => {
 });
 
 const out = document.getElementById('json');
-function dumpJSON() { out.textContent = JSON.stringify(engine.g, null, 2); }
+function dumpJSON() {
+  out.textContent = JSON.stringify({ GARNISH: engine.g, WIND: engine.wind }, null, 2);
+}
 
 document.getElementById('copy').addEventListener('click', async () => {
   const btn = document.getElementById('copy');
@@ -1188,6 +1530,7 @@ document.getElementById('copy').addEventListener('click', async () => {
 });
 document.getElementById('reset').addEventListener('click', () => {
   engine.g = JSON.parse(JSON.stringify(GARNISH));
+  engine.wind = { ...WIND };
   deck.querySelectorAll('input[type=range]').forEach(inp => {
     const v = get(inp.dataset.path);
     inp.value = v;
