@@ -178,6 +178,16 @@ footer b{color:#c6d8d4;font-weight:400}
       </div>
 
       <div class="grp">
+        <h3>尺度</h3>
+        <div class="row"><span class="lb">特效</span>
+          <input type="range" id="vfxScale" min="0.3" max="1.4" step="0.05" value="1"></div>
+        <div class="row"><span class="lb"></span>
+          <span class="out" id="scaleOut">1.00×</span></div>
+        <p class="hint">特效比两个 token 的间距大就会糊成一片。
+          实装时这个值该跟着 <b>canvas.grid.size</b> 走。</p>
+      </div>
+
+      <div class="grp">
         <h3>罪孽色</h3>
         <div class="row"><span class="lb">攻方</span><select id="sinA"></select></div>
         <div class="row"><span class="lb">守方</span><select id="sinD"></select></div>
@@ -190,7 +200,17 @@ footer b{color:#c6d8d4;font-weight:400}
         <div class="row"><span class="lb">交锋</span>
           <input type="range" id="ex" min="1" max="6" step="1" value="3"></div>
         <div class="row"><span class="lb"></span>
-          <span class="out"><span id="exOut">3</span> 次 · 每次碎一枚币</span></div>
+          <span class="out"><span id="exOut">3</span> 次 · 双方对撞</span></div>
+        <div class="row"><span class="lb">守方</span>
+          <select id="catD">
+            <option value="slash">斩击</option>
+            <option value="strike">打击</option>
+            <option value="thrust" selected>突刺</option>
+          </select></div>
+        <label class="chk" style="margin-top:9px;font-size:12.5px">
+          <input type="checkbox" id="coinEvery">每次交锋都碎币</label>
+        <p class="hint">默认只有最后一次碎——规则书里赢家是在<b>对抗结束时</b>
+          才砸掉输家一枚币。想要每一声「叮」都碎就勾上。</p>
       </div>
 
       <div class="grp">
@@ -1581,7 +1601,8 @@ const cvA = document.getElementById('fxA'), cvD = document.getElementById('fxD')
 window.fxA = fxA; window.fxD = fxD;
 
 const tokA = document.getElementById('tokA'), tokD = document.getElementById('tokD');
-const st = { sinA: 'wrath', sinD: 'pride', cat: 'slash', formula: '3D6+2', ex: 3, level: 'full' };
+const st = { sinA: 'wrath', sinD: 'pride', cat: 'slash', catD: 'thrust',
+             formula: '3D6+2', ex: 3, level: 'full', coinEvery: false };
 let timers = [];
 
 function pos(el) {
@@ -1616,7 +1637,32 @@ function stop() {
 const at = (ms, fn) => timers.push(setTimeout(fn, ms));
 function setPhase(t) { document.getElementById('phase').textContent = t; }
 
-/** 整段演出：交锋 N 次（每次碎一枚币）→ 停一拍 → 最后一击挥 diceCount 次 */
+/**
+ * 这一发实际打中的时刻（引擎毫秒）。招式各不相同，拼刀的火花必须踩在
+ * 两边**都**够到中点的那一帧上，不能用一个拍脑袋的固定延迟。
+ */
+function contactMs(fx) {
+  const e = fx.effects.at(-1);
+  const h = e?.hits?.[0];
+  if (!h) return 90;
+  return (h.at ?? 0) + (h.family === 'slash' ? fx.contact(h) : (h.contactAt ?? 60));
+}
+
+/**
+ * 一次交锋：双方**同时**朝中点挥出，兵器在那里撞上。
+ * 火花与破币等到两边都够到中点才放。
+ */
+function exchange(mid, ang, coin) {
+  fxA.play(st.cat,  mid.x, mid.y);
+  fxD.play(st.catD, mid.x, mid.y);
+  const wait = Math.max(contactMs(fxA), contactMs(fxD)) / (fxA.speed || 1);
+  at(wait, () => {
+    fxA.clashAt(mid.x, mid.y, ang, { side: -1, power: 1.05 });
+    fxD.clashAt(mid.x, mid.y, ang, { side: 1, coin, power: 0.95 });
+  });
+}
+
+/** 整段演出：交锋 N 次（双方对撞）→ 停一拍 → 最后一击挥 diceCount 次 */
 function playSequence() {
   stop();
   const n = st.ex, hits = diceCount(st.formula);
@@ -1627,20 +1673,21 @@ function playSequence() {
 
   const a = pos(tokA), d = pos(tokD);
   const mid = { x: (a.x + d.x) / 2, y: (a.y + d.y) / 2 };
-  const gap = st.level === 'lite' ? 190 : 330;
+  const gap = (st.level === 'lite' ? 260 : 460) / (fxA.speed || 1);
 
   for (let i = 0; i < n; i++) {
+    // 规则书里赢家是在**对抗结束时**才砸掉输家一枚币，所以默认只有最后一次碎；
+    // 想要每一声叮都碎一枚，勾上那个开关即可
+    const coin = st.coinEvery || i === n - 1;
     at(i * gap, () => {
-      setPhase(`交锋 ${i + 1} / ${n} · 破币`);
-      // 拼刀画在两张画布上各一半，于是攻守两色在同一处相撞
-      fxA.clashAt(mid.x, mid.y, ang, { side: -1, power: 1 });
-      fxD.clashAt(mid.x, mid.y, ang, { side: 1, coin: true, power: 0.9 });
+      setPhase(`交锋 ${i + 1} / ${n}${coin ? ' · 破币' : ''}`);
+      exchange(mid, ang, coin);
     });
   }
 
-  const t0 = n * gap + (st.level === 'lite' ? 120 : 300);
+  const t0 = n * gap + (st.level === 'lite' ? 150 : 420) / (fxA.speed || 1);
   for (let j = 0; j < hits; j++) {
-    at(t0 + j * (st.level === 'lite' ? 90 : 135), () => {
+    at(t0 + j * (st.level === 'lite' ? 90 : 135) / (fxA.speed || 1), () => {
       setPhase(`最后一击 ${j + 1} / ${hits}`);
       // 每一击落点稍微散开，连挥才不像同一帧复读
       const k = (j - (hits - 1) / 2) * 13;
@@ -1669,6 +1716,11 @@ document.querySelectorAll('[data-cat]').forEach(el => el.addEventListener('click
     x.setAttribute('aria-pressed', String(x.dataset.cat === st.cat)));
 }));
 
+const catDEl = document.getElementById('catD');
+catDEl.addEventListener('change', () => { st.catD = catDEl.value; });
+const coinEl = document.getElementById('coinEvery');
+coinEl.addEventListener('change', () => { st.coinEvery = coinEl.checked; });
+
 const fEl = document.getElementById('formula');
 const syncDice = () => {
   st.formula = fEl.value || '1D6';
@@ -1689,6 +1741,15 @@ document.getElementById('level').addEventListener('change', ev => {
     lite: '只留命中闪光，不画挥舞与风',
     off:  '一律不画，聊天框照常出结果',
   }[st.level];
+});
+
+// 特效尺度：引擎本来就有 scale（进 get fit），这里露出来。
+// 实装时它应该跟着 canvas.grid.size 走——特效比 token 间距大就会糊成一片。
+const scEl = document.getElementById('vfxScale');
+scEl.addEventListener('input', () => {
+  const v = parseFloat(scEl.value);
+  fxA.scale = fxD.scale = v;
+  document.getElementById('scaleOut').textContent = v.toFixed(2) + '×';
 });
 
 document.getElementById('shake').addEventListener('change', ev => {
