@@ -1,0 +1,1745 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0b1114">
+<meta name="description" content="对抗演出预览：特效自抖不动镜头、罪孽色、攻守对准、拼刀破币、最后一击按骰子数量连挥。">
+<title>对抗演出预览台</title>
+<style>
+:root{
+  color-scheme:dark;
+  --bg:#0b1114; --surface:#111a1e; --surface-2:#0e1619; --line:#263439;
+  --line-2:#34464a; --muted:#94a8ad; --text:#eef5f3; --mint:#a8f8e9;
+  --serif:STSong,"Songti SC","Noto Serif CJK SC",serif;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);
+  font-family:Inter,"PingFang SC","Microsoft YaHei",sans-serif;font-size:15px}
+button,select,input{font:inherit;color:inherit}
+button{cursor:pointer;background:none;border:0}
+:focus-visible{outline:2px solid var(--mint);outline-offset:4px}
+main{max-width:1360px;margin:auto;padding:26px 34px 40px}
+
+header{display:flex;align-items:flex-end;justify-content:space-between;gap:24px;margin-bottom:18px}
+.brand{display:flex;align-items:center;gap:15px}
+.brand-mark{width:38px;height:38px;border:1px solid #44665f;display:grid;place-items:center;
+  color:var(--mint);font:23px var(--serif);transform:rotate(-6deg)}
+h1{margin:0;font:500 25px var(--serif);letter-spacing:.11em}
+.overline{font-size:11.5px;letter-spacing:.17em;color:var(--muted);margin-top:5px}
+.note{font-size:12.5px;color:var(--muted);text-align:right;line-height:1.75;max-width:44ch}
+.note b{font-weight:400;color:#c6d4d2}
+
+.lab{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:16px;align-items:start}
+@media(max-width:1060px){.lab{grid-template-columns:1fr}}
+
+.stage{position:relative;height:clamp(400px,56vh,620px);overflow:hidden;isolation:isolate;
+  border:1px solid var(--line);touch-action:none;
+  background:radial-gradient(ellipse at 50% 52%,#192b2f 0%,#101a1f 45%,#0d1519 80%)}
+.stage::after{content:"";position:absolute;inset:14px;pointer-events:none;opacity:.6;
+  background:
+    linear-gradient(#5c7776,#5c7776) left top/17px 1px no-repeat,
+    linear-gradient(#5c7776,#5c7776) left top/1px 17px no-repeat,
+    linear-gradient(#5c7776,#5c7776) right bottom/17px 1px no-repeat,
+    linear-gradient(#5c7776,#5c7776) right bottom/1px 17px no-repeat}
+canvas{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+svg.guides{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+.tok{position:absolute;width:62px;height:62px;transform:translate(-50%,-50%);
+  border-radius:50%;border:2px solid var(--c,#a8f8e9);cursor:grab;
+  background:radial-gradient(circle at 50% 42%,#1d2b30,#0e181c);
+  display:grid;place-items:center;font:500 17px var(--serif);letter-spacing:.1em;
+  color:var(--c,#a8f8e9);box-shadow:0 0 0 1px #0b1114,0 0 18px -6px var(--c,#a8f8e9);
+  touch-action:none;user-select:none;z-index:3}
+.tok:active{cursor:grabbing}
+.tok small{position:absolute;top:calc(100% + 7px);left:50%;transform:translateX(-50%);
+  font:400 11px/1 Inter,sans-serif;letter-spacing:.1em;color:var(--muted);white-space:nowrap}
+#tokA{left:26%;top:52%}
+#tokD{left:74%;top:52%}
+.hud{position:absolute;top:20px;left:24px;right:24px;display:flex;justify-content:space-between;
+  gap:16px;z-index:2;pointer-events:none;font-size:13px;letter-spacing:.11em}
+.hud b{color:var(--mint);font-weight:400;margin-right:10px}
+.hud small{display:block;margin-top:6px;color:#94b3b3;font-size:11.5px;letter-spacing:.03em}
+.hud .r{color:#b1c7ca;font-size:12px;text-align:right}
+
+.cats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:12px}
+.cat{position:relative;border:1px solid var(--line);background:var(--surface);
+  padding:12px 15px;text-align:left;transition:background .16s,border-color .16s}
+.cat:hover{border-color:#668b82;background:#142125}
+.cat[aria-pressed="true"]{border-color:#96dcca;background:#182b2c}
+.cat[aria-pressed="true"]::before{content:"";position:absolute;left:-1px;top:13px;bottom:13px;
+  width:3px;background:var(--mint)}
+.cat strong{display:block;font:500 18px var(--serif);letter-spacing:.12em}
+.cat span{display:block;margin-top:3px;font-size:11.5px;color:#a4b9bb}
+
+.bar{display:flex;flex-wrap:wrap;align-items:center;gap:16px;margin-top:12px;
+  border:1px solid var(--line);background:var(--surface-2);padding:12px 16px}
+.chk{display:flex;align-items:center;gap:8px;font-size:13.5px;color:var(--muted);cursor:pointer}
+input[type=checkbox]{width:16px;height:16px;accent-color:var(--mint);cursor:pointer;margin:0}
+.play{margin-left:auto;padding:11px 30px;border:1px solid var(--mint);background:var(--mint);
+  color:#102a27;font-weight:600;font-size:14px;border-radius:2px;
+  transition:background .15s,transform .12s}
+.play:hover{background:#d3fff5}
+.play:active{transform:translateY(1px)}
+.ghost{padding:10px 18px;border:1px solid var(--line-2);border-radius:2px;font-size:13px;
+  color:#cfe2e6;transition:border-color .15s,color .15s}
+.ghost:hover{border-color:var(--mint);color:var(--mint)}
+
+.panel{border:1px solid var(--line);background:var(--surface)}
+.panel h2{margin:0;padding:13px 16px;font:500 13px var(--serif);letter-spacing:.18em;
+  color:var(--mint);border-bottom:1px solid var(--line)}
+.grp{padding:13px 16px;border-bottom:1px solid #1c282c}
+.grp:last-child{border-bottom:0}
+.grp h3{margin:0 0 9px;font-size:12px;font-weight:400;letter-spacing:.14em;color:var(--muted)}
+.row{display:grid;grid-template-columns:64px minmax(0,1fr);gap:10px;align-items:center;
+  margin-bottom:8px;font-size:12.5px}
+.row:last-child{margin-bottom:0}
+.row .lb{color:#b6c8ca}
+select,input[type=text]{width:100%;border:1px solid var(--line-2);background:#131f23;
+  border-radius:3px;padding:6px 9px;font-size:13px}
+input[type=range]{width:100%;accent-color:var(--mint);cursor:pointer;margin:0}
+.out{font:12px ui-monospace,monospace;color:var(--mint);font-variant-numeric:tabular-nums}
+.hint{margin:7px 0 0;font-size:11.5px;color:#7f9498;line-height:1.6}
+.swings{display:flex;align-items:baseline;gap:7px;margin-top:8px;font-size:12.5px;color:var(--muted)}
+.swings b{font:500 21px var(--serif);color:var(--mint)}
+footer{margin-top:18px;padding-top:15px;border-top:1px solid #202f33;
+  font-size:12px;color:#829b9f;line-height:1.85;max-width:96ch}
+footer kbd{font:11.5px ui-monospace,monospace;color:#c6d8d4;
+  border:1px solid var(--line);border-radius:3px;padding:1px 5px;margin-right:3px}
+footer b{color:#c6d8d4;font-weight:400}
+@media(max-width:750px){
+  main{padding:18px 16px}
+  header{flex-direction:column;align-items:flex-start;gap:10px}
+  .note{text-align:left}
+  .stage{height:clamp(320px,46vh,440px)}
+  .play{width:100%;margin-left:0}
+}
+@media(prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <div class="brand">
+      <div class="brand-mark" aria-hidden="true">演</div>
+      <div><h1>对抗演出预览台</h1><div class="overline">CLASH SEQUENCE / FVTT PREVIEW</div></div>
+    </div>
+    <p class="note"><b>镜头一动不动</b><br>
+      震动只作用在特效自己身上，地图和 token 都不移位——
+      接 canvas.stage 会跟玩家平移打架，异常一次就永久偏。</p>
+  </header>
+
+  <div class="lab">
+    <div>
+      <section class="stage" id="stage">
+        <div class="hud">
+          <div><b id="phase">待命</b>
+            <small>拖动两个 token 可以改朝向，特效会跟着对准</small></div>
+          <div class="r">最近一击 · <span id="picked">—</span></div>
+        </div>
+        <svg class="guides" aria-hidden="true">
+          <line id="aim" stroke="#4d6a70" stroke-width="1" stroke-dasharray="4 6"></line>
+          <circle id="midDot" r="3.5" fill="none" stroke="#7fa4a8" stroke-width="1"></circle>
+        </svg>
+        <canvas id="fxA" aria-hidden="true"></canvas>
+        <canvas id="fxD" aria-hidden="true"></canvas>
+        <div class="tok" id="tokA">攻<small>ATTACKER</small></div>
+        <div class="tok" id="tokD">守<small>DEFENDER</small></div>
+      </section>
+
+      <div class="cats" role="group" aria-label="攻击类别">
+        <button type="button" class="cat" data-cat="slash" aria-pressed="true">
+          <strong>斩击</strong><span>7 式随机</span></button>
+        <button type="button" class="cat" data-cat="strike" aria-pressed="false">
+          <strong>打击</strong><span>下砸 / 上挑 / 横扫 / 直拳 / 冲拳</span></button>
+        <button type="button" class="cat" data-cat="thrust" aria-pressed="false">
+          <strong>突刺</strong><span>5 式随机</span></button>
+      </div>
+
+      <div class="bar">
+        <label class="chk"><input type="checkbox" id="shake" checked>特效自抖</label>
+        <label class="chk"><input type="checkbox" id="slow">0.4× 慢放</label>
+        <button type="button" class="ghost" id="stopBtn">停止</button>
+        <button type="button" class="play" id="play">播放整段演出</button>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>演出设置</h2>
+
+      <div class="grp">
+        <h3>世界设定 · 演出特效</h3>
+        <div class="row"><span class="lb">等级</span>
+          <select id="level">
+            <option value="full">完整</option>
+            <option value="lite">简化</option>
+            <option value="off">关闭</option>
+          </select></div>
+        <p class="hint" id="levelHint">挥舞、风、命中、余韵全画</p>
+      </div>
+
+      <div class="grp">
+        <h3>罪孽色</h3>
+        <div class="row"><span class="lb">攻方</span><select id="sinA"></select></div>
+        <div class="row"><span class="lb">守方</span><select id="sinD"></select></div>
+        <p class="hint">特效按罪孽染色。罪孽色是规则信息，武器颜色只是风味，
+          所以有罪孽时武器颜色不参与。</p>
+      </div>
+
+      <div class="grp">
+        <h3>拼点</h3>
+        <div class="row"><span class="lb">交锋</span>
+          <input type="range" id="ex" min="1" max="6" step="1" value="3"></div>
+        <div class="row"><span class="lb"></span>
+          <span class="out"><span id="exOut">3</span> 次 · 每次碎一枚币</span></div>
+      </div>
+
+      <div class="grp">
+        <h3>最后一击</h3>
+        <div class="row"><span class="lb">骰式</span>
+          <input type="text" id="formula" value="3D6+2" spellcheck="false"></div>
+        <div class="swings">挥舞 <b id="swings">3</b> 次</div>
+        <p class="hint">次数取骰式里的<b>骰子数量</b>，不是点数——3D6 挥三次，1D12 挥一次。</p>
+      </div>
+    </div>
+  </div>
+
+  <footer>
+    <kbd>空格</kbd> 播放　<kbd>Esc</kbd> 停止。<b>拼刀</b>落在两者中点、垂直于连线；
+    <b>破币</b>画在输币那一侧，先裂后碎。<b>最后一击</b>落在守方身上，每击落点略微错开，
+    连挥才不像同一帧复读。罪孽色走的是<b>色相旋转</b>——白色芯不受影响，所以高光始终是白的；
+    攻守各一张画布，才能在同一处相撞时各染各的色。
+  </footer>
+</main>
+
+<script>
+'use strict';
+/*
+ * Standalone Canvas 2D attack effects. No image/video/CDN dependencies.
+ * Reuse the renderer classes, catalogs and math helpers above the UI section:
+ * const fx = new AttackVFX(yourTransparentCanvas);
+ * const picked = fx.play('slash', x, y); // 'strike' or 'thrust'; CSS pixels.
+ * Each call uniformly selects ONE independent animation from that category.
+ * picked = {category, id, name}; repeated draws may select the same animation.
+ * fx.speed = 0.5; fx.scale = 1; fx.clear(); fx.destroy();
+ * The canvas is transparent; the preview background belongs to the page.
+ */
+const TAU=Math.PI*2;
+const clamp=(v,a=0,b=1)=>Math.min(b,Math.max(a,v));
+const lerp=(a,b,t)=>a+(b-a)*t;
+const easeOut=t=>1-Math.pow(1-clamp(t),3);
+const rand=(a,b)=>a+Math.random()*(b-a);
+const color=(rgb,a)=>`rgba(${rgb},${clamp(a)})`;
+const WHITE='242,255,250', PALE='174,255,241', MINT='66,241,218', TEAL='15,131,132';
+const MODES={
+  sweep:{name:'洗法',index:'01',duration:1330,hits:[
+    {at:70,type:'arc',rx:222,ry:82,start:-2.88,span:4.54,rotate:-.20,width:30,dir:1,power:.85,impact:[187,6],life:540},
+    {at:620,type:'arc',rx:214,ry:195,start:-2.67,span:4.65,rotate:.11,width:44,dir:1,power:1.1,impact:[187,5],life:640,dash:true}
+  ]},
+  thrust:{name:'刺法',index:'02',duration:1620,hits:[
+    {at:70,type:'thrust',rx:176,ry:98,start:-2.9,span:3.9,rotate:.03,width:20,dir:1,power:.9,impact:[205,0],life:470},
+    {at:480,type:'thrust',rx:187,ry:115,start:-3.03,span:4.1,rotate:-.07,width:26,dir:1,power:1,impact:[219,0],life:480},
+    {at:1010,type:'arc',rx:249,ry:89,start:-3.1,span:4.65,rotate:.32,width:36,dir:1,power:1.15,impact:[205,8],life:600,dash:true}
+  ]},
+  heavy:{name:'骨断',index:'03',duration:1710,hits:[
+    {at:150,type:'arc',rx:211,ry:90,start:-3.01,span:3.9,rotate:.30,width:36,dir:1,power:.9,impact:[190,24],life:490},
+    {at:850,type:'arc',rx:229,ry:201,start:-3.17,span:5.17,rotate:-.12,width:57,dir:1,power:1.5,impact:[214,12],life:770,dash:true,heavy:true}
+  ]}
+};
+
+class LegacyBladeVFX {
+  constructor(canvas){
+    this.canvas=canvas;this.ctx=canvas.getContext('2d');
+    if(!this.ctx)throw new Error('Canvas 2D is unavailable.');
+    this.width=1;this.height=1;this.dpr=1;this.speed=1;this.scale=1;
+    this.effects=[];this.time=0;this.last=0;this.raf=0;this.preview=null;this.onActivity=null;this.destroyed=false;
+    this.tick=this.tick.bind(this);this.resize=this.resize.bind(this);
+    this.observer=new ResizeObserver(this.resize);this.observer.observe(canvas);
+    this.resize();
+  }
+  resize(){
+    const box=this.canvas.getBoundingClientRect();this.width=box.width||1;this.height=box.height||1;
+    this.dpr=Math.min(window.devicePixelRatio||1,2);this.canvas.width=Math.round(this.width*this.dpr);this.canvas.height=Math.round(this.height*this.dpr);
+    this.draw();
+  }
+  get fit(){return Math.min(1.15,this.width/760,this.height/475)*this.scale;}
+  build(mode,x,y){
+    const m=MODES[mode]||MODES.sweep;
+    return {mode,x,y,start:this.time,fit:this.fit,duration:m.duration,hits:m.hits.map(h=>({...h,seed:Math.random()*1000,sparks:this.makeSparks(h)}))};
+  }
+  play(mode='sweep',x=this.width/2,y=this.height/2){
+    if(this.destroyed)return;
+    this.preview=null;
+    // Bound simultaneous sequences to keep repeated touch/click input responsive.
+    if(this.effects.length>=5)this.effects.shift();
+    this.effects.push(this.build(mode,x,y));
+    if(this.onActivity)this.onActivity(true);
+    if(!this.raf){this.last=performance.now();this.raf=requestAnimationFrame(this.tick);}
+  }
+  showPreview(mode){
+    this.clear();this.preview=this.build(mode,this.width*.48,this.height*.48);this.draw();
+  }
+  clear(){
+    cancelAnimationFrame(this.raf);this.raf=0;this.effects=[];this.preview=null;
+    this.ctx.clearRect(0,0,this.canvas.width,this.canvas.height);if(this.onActivity)this.onActivity(false);
+  }
+  destroy(){this.clear();this.observer.disconnect();this.destroyed=true;}
+  tick(now){
+    this.raf=0;this.time+=Math.min(now-this.last,50)*this.speed;this.last=now;
+    this.effects=this.effects.filter(e=>this.time-e.start<e.duration);
+    this.draw();
+    if(this.effects.length)this.raf=requestAnimationFrame(this.tick);else if(this.onActivity)this.onActivity(false);
+  }
+  makeSparks(h){
+    return Array.from({length:h.heavy?53:32},(_,i)=>{
+      const a=rand(-Math.PI,Math.PI),v=rand(85,440)*(h.heavy?1.25:1);
+      return {a,v,len:rand(6,25),life:rand(230,540),delay:rand(55,145),offset:rand(-24,24),warm:i%11===0};
+    });
+  }
+  draw(){
+    const c=this.ctx;c.setTransform(this.dpr,0,0,this.dpr,0,0);c.clearRect(0,0,this.width,this.height);
+    if(this.preview){const e=this.preview;e.x=this.width*.46;e.y=this.height*.48;e.fit=this.fit;c.save();c.globalAlpha=.80;this.drawSequence(e, e.mode==='heavy'?1052:e.mode==='thrust'?662:832,true);c.restore();}
+    for(const e of this.effects)this.drawSequence(e,this.time-e.start,false);
+  }
+  drawSequence(e,t,preview){
+    const c=this.ctx;c.save();c.translate(e.x,e.y);c.scale(e.fit,e.fit);
+    for(const h of e.hits){
+      const age=t-h.at;
+      if(age<0&&age>-100&&!preview)this.windup(h,-age/100);
+      if(age>=0&&age<h.life)this.drawHit(h,age);
+    }
+    c.restore();
+  }
+  windup(h,t){
+    const c=this.ctx;c.save();c.globalCompositeOperation='lighter';c.strokeStyle=color(PALE,(1-t)*.14);c.lineWidth=.8;
+    c.beginPath();c.ellipse(-24,10,110*(.6+t*.4),24,0,Math.PI*.9,TAU*1.1);c.stroke();c.restore();
+  }
+  drawHit(h,age){
+    const c=this.ctx;
+    // Fast blade reveal, a brief impact hold, then a longer translucent afterimage.
+    const reveal=easeOut(age/145),fade=Math.pow(1-clamp((age-160)/(h.life-160)),1.65);
+    const drift=clamp((age-160)/h.life);
+    c.save();c.rotate(h.rotate);c.translate(h.dash?lerp(-38,26,reveal):0,0);
+    c.globalCompositeOperation='lighter';
+    if(h.heavy){this.ribbon(h,reveal,fade*.16,1.085+drift*.15,.86,36);this.ribbon(h,reveal,fade*.18,.94+drift*.1,.7,-27);}
+    this.ribbon(h,reveal,fade*.12,1.035+drift*.045,1.55,6);
+    this.ribbon(h,reveal,fade,1+drift*.035,1,0);
+    // An offset, pale wind trail gives depth without a complete luminous ring.
+    this.filaments(h,reveal,fade,age);
+    if(h.type==='thrust')this.spear(h,age,fade,reveal);
+    if(h.dash)this.dashLines(h,age,fade,reveal);
+    this.edgeChips(h,age,fade,reveal);
+    this.impact(h,age);
+    this.particles(h,age);
+    c.restore();
+  }
+  point(h,u,mult=1,offset=0,inner=0){
+    const a=h.start+h.span*u;
+    return [Math.cos(a)*(h.rx*mult-inner),Math.sin(a)*(h.ry*mult-inner*.72)+offset];
+  }
+  thickness(h,u,progress){
+    const envelope=Math.pow(Math.sin(Math.PI*clamp(u/progress)),.66);
+    const taper=.46+.65*u;
+    const tooth=(Math.pow(Math.max(0,Math.sin(u*83+h.seed)),8)*.36+Math.pow(Math.max(0,Math.sin(u*139+h.seed)),14)*.19)*clamp((u-.3)*4);
+    return Math.max(0,h.width*envelope*taper*(1-tooth));
+  }
+  ribbon(h,progress,alpha,mult,widthMult,offset){
+    if(progress<.005||alpha<.001)return;
+    const c=this.ctx,n=110;const end=progress;
+    c.save();c.globalAlpha*=alpha;
+    const gradient=c.createLinearGradient(-h.rx,-h.ry,h.rx,h.ry*.45);
+    gradient.addColorStop(0,color(PALE,.12));gradient.addColorStop(.24,color(MINT,.50));gradient.addColorStop(.54,color(PALE,.85));gradient.addColorStop(.8,color(WHITE,.99));gradient.addColorStop(1,color(MINT,.23));
+    c.fillStyle=gradient;c.beginPath();
+    for(let i=0;i<=n;i++){const u=end*i/n,p=this.point(h,u,mult,offset);i?c.lineTo(...p):c.moveTo(...p);}
+    for(let i=n;i>=0;i--){const u=end*i/n,thick=this.thickness(h,u,end)*widthMult,p=this.point(h,u,mult,offset,thick);c.lineTo(...p);}
+    c.closePath();c.fill();
+    // Narrow white outer edge, cut into tapered strokes rather than a uniform ring.
+    c.lineCap='round';
+    for(let k=0;k<3;k++){
+      c.strokeStyle=k===0?color(MINT,.3):k===1?color(PALE,.94):color(WHITE,1);
+      c.lineWidth=k===0?7:k===1?2.3:1.1;
+      c.beginPath();
+      for(let i=0;i<=n;i++){const u=end*i/n,p=this.point(h,u,mult,offset,k===2?1:0);i?c.lineTo(...p):c.moveTo(...p);}
+      c.stroke();
+    }
+    // Internal brush strands retain the thin translucent body visible in the reference.
+    for(let j=0;j<3;j++){
+      c.strokeStyle=color(j===1?TEAL:WHITE,j===1?.54:.35);c.lineWidth=1+j*.6;c.beginPath();
+      for(let i=0;i<=70;i++){const u=end*(.14+i/70*.72),w=this.thickness(h,u,end)*(.3+j*.2),p=this.point(h,u,mult,offset,w);i?c.lineTo(...p):c.moveTo(...p);}
+      c.stroke();
+    }
+    c.restore();
+  }
+  filaments(h,progress,fade,age){
+    const c=this.ctx;c.save();
+    for(let j=0;j<7;j++){
+      const lag=.045*j,head=clamp(progress-lag);if(head<.01)continue;
+      c.strokeStyle=color(j%3===0?MINT:WHITE,fade*(.24-j*.02));c.lineWidth=j<3?1.35:.6;
+      const mult=1+(j-2)*.029+age*.000022;c.beginPath();
+      for(let i=0;i<=72;i++){const u=head*(.045+i/72*.94),p=this.point(h,u,mult,(j-3)*2.5);i?c.lineTo(...p):c.moveTo(...p);}
+      c.stroke();
+    }c.restore();
+  }
+  spear(h,age,fade,reveal){
+    const c=this.ctx,alpha=fade*clamp(age/35),tip=lerp(-105,h.impact[0]+140,easeOut(age/100));
+    c.save();c.globalAlpha*=alpha;
+    const g=c.createLinearGradient(-280,0,tip,0);g.addColorStop(0,color(MINT,0));g.addColorStop(.45,color(PALE,.75));g.addColorStop(.75,color(WHITE,1));g.addColorStop(1,color(MINT,.1));
+    c.fillStyle=g;
+    c.beginPath();c.moveTo(-300,-4);c.lineTo(80,-7);c.lineTo(tip,0);c.lineTo(46,4);c.lineTo(-250,2);c.lineTo(0,0);c.closePath();c.fill();
+    c.fillStyle=color(WHITE,.96);c.beginPath();c.moveTo(-116,-1.1);c.lineTo(tip,0);c.lineTo(-86,1.5);c.closePath();c.fill();
+    c.fillStyle=color('255,181,94',.7*clamp(1-(age-90)/160));c.beginPath();c.moveTo(-165,-2);c.lineTo(h.impact[0]+16,0);c.lineTo(-116,1);c.closePath();c.fill();c.restore();
+  }
+  dashLines(h,age,fade,reveal){
+    const c=this.ctx,f=fade*clamp((age-24)/45)*Math.pow(1-clamp((age-180)/360),1.6);
+    if(f<=0)return;
+    c.save();c.globalAlpha*=f;
+    for(let j=0;j<5;j++){
+      const y=-20+j*14,x=-310+(j%2)*53,len=(j%2?302:380)*reveal,w=j%2?3:8;
+      const g=c.createLinearGradient(x,y,x+len,y);g.addColorStop(0,color(MINT,0));g.addColorStop(.36,color(PALE,.7));g.addColorStop(.65,color(WHITE,.93));g.addColorStop(1,color(PALE,0));
+      c.fillStyle=g;c.beginPath();c.moveTo(x,y);c.lineTo(x+len*.65,y-w);c.lineTo(x+len,y-1);c.lineTo(x+len*.45,y+w*.4);c.lineTo(x+len*.6,y);c.closePath();c.fill();
+    }c.restore();
+  }
+  edgeChips(h,age,fade,progress){
+    const c=this.ctx;c.save();
+    for(let i=0;i<26;i++){
+      const u=(i+.5)/27;if(u>progress)continue;
+      const wobble=Math.sin(i*12.13+h.seed),p=this.point(h,u,1.035+Math.max(0,age-100)*.00010,0);
+      const a=h.start+h.span*u+Math.PI/2,s=(3+Math.abs(wobble)*9)*fade;
+      c.save();c.translate(p[0],p[1]);c.rotate(a+.25*wobble);c.fillStyle=color(WHITE,fade*.75);
+      c.beginPath();c.moveTo(-s,0);c.lineTo(s,-1.2);c.lineTo(s*.4,1.6);c.closePath();c.fill();c.restore();
+    }c.restore();
+  }
+  impact(h,age){
+    const t=age-85;if(t<0||t>420)return;
+    const c=this.ctx,burst=Math.exp(-Math.max(0,t-28)/88)*clamp(t/18),power=h.power;
+    c.save();c.translate(...h.impact);c.scale(power,power);
+    // Local glow only: no full-screen flash.
+    const glow=c.createRadialGradient(0,0,0,0,0,104);
+    glow.addColorStop(0,color(PALE,burst*.55));glow.addColorStop(.22,color(MINT,burst*.19));glow.addColorStop(1,color(MINT,0));c.fillStyle=glow;c.fillRect(-105,-105,210,210);
+    const spike=(length,width,angle,a)=>{c.save();c.rotate(angle);c.fillStyle=color(WHITE,a);c.beginPath();c.moveTo(-length,0);c.lineTo(-width,-width*.55);c.lineTo(0,-width*1.1);c.lineTo(width,-width*.45);c.lineTo(length,0);c.lineTo(width,width*.45);c.lineTo(0,width*1.1);c.lineTo(-width,width*.55);c.closePath();c.fill();c.restore();};
+    const expansion=.85+easeOut(t/75)*.2;
+    spike(131*expansion,4.1,0,burst);spike(70*expansion,3.2,1.26,burst*.86);spike(51,2.3,-.70,burst*.64);spike(40,1.7,.52,burst*.67);
+    c.fillStyle=color(WHITE,burst);c.beginPath();c.arc(0,0,4.3*burst,0,TAU);c.fill();c.restore();
+  }
+  particles(h,age){
+    const c=this.ctx;c.save();
+    for(const p of h.sparks){
+      const ms=age-p.delay;if(ms<0||ms>p.life)continue;
+      const t=ms/1000,f=Math.pow(1-ms/p.life,1.65),distance=p.v*t*.83;
+      const x=h.impact[0]+Math.cos(p.a)*distance,y=h.impact[1]+p.offset*.2+Math.sin(p.a)*distance+38*t*t;
+      c.save();c.translate(x,y);c.rotate(p.a+.2*t);c.fillStyle=color(p.warm?'255,197,108':(p.v>270?WHITE:PALE),f*(p.warm?.55:.9));
+      const len=p.len*f;c.beginPath();c.moveTo(-len,0);c.lineTo(len*.23,-1.1*f);c.lineTo(len*.7,0);c.lineTo(0,1.35*f);c.closePath();c.fill();c.restore();
+    }c.restore();
+  }
+}
+// Each point of the trail has its own birth time and fade envelope.
+// Defaults: 20 ms soft onset; 105–165 ms travel; edge fades before the mist.
+// Set fx.smooth=false to compare against the supplied renderer.
+const smoothstep=t=>{t=clamp(t);return t*t*(3-2*t);};
+class BladeVFX extends LegacyBladeVFX {
+  constructor(canvas){super(canvas);this.smooth=true;}
+  showPreview(){this.clear();} // A still slash must not blink away when playback starts.
+  travel(h){return h.type==='thrust'?105:h.heavy?165:140;}
+  birth(h,u){return this.travel(h)*(1-Math.pow(1-clamp(u),1/1.65));}
+  head(h,age){return 1-Math.pow(1-clamp(age/this.travel(h)),1.65);}
+  contact(h){
+    if(h.type==='thrust')return 66;
+    const angle=Math.atan2(h.impact[1]/h.ry,h.impact[0]/h.rx);
+    const u=clamp((angle-h.start)/h.span);
+    return this.birth(h,u);
+  }
+  build(mode,x,y){
+    const e=super.build(mode,x,y);
+    if(this.smooth===false)return e;
+    for(const h of e.hits){
+      h.sparks=h.sparks.slice(0,h.heavy?29:18).map(p=>({...p,
+        delay:this.contact(h)+rand(8,72),life:rand(180,390),len:p.len*.72,v:p.v*.82
+      }));
+      h.tailEnd=Math.max(h.life,...h.sparks.map(p=>p.delay+p.life));
+    }
+    e.duration=Math.max(...e.hits.map(h=>h.at+h.tailEnd))+24;
+    return e;
+  }
+  drawSequence(e,t,preview){
+    if(this.smooth===false)return super.drawSequence(e,t,preview);
+    const c=this.ctx;c.save();c.translate(e.x,e.y);c.scale(e.fit,e.fit);
+    for(const h of e.hits){
+      const age=t-h.at;
+      if(age<0&&age>-70&&!preview)this.windup(h,-age/70);
+      if(age>=0&&age<(h.tailEnd||h.life))this.drawHit(h,age);
+    }
+    c.restore();
+  }
+  windup(h,t){
+    if(this.smooth===false)return super.windup(h,t);
+    const c=this.ctx;c.save();c.rotate(h.rotate);c.globalCompositeOperation='lighter';
+    c.strokeStyle=color(PALE,Math.sin(Math.PI*t)*.13);c.lineWidth=.8;c.beginPath();
+    for(let i=0;i<=18;i++){const p=this.point(h,.075*i/18);i?c.lineTo(...p):c.moveTo(...p);}
+    c.stroke();c.restore();
+  }
+  envelope(h,u,age,layer='body'){
+    const local=age-this.birth(h,u);
+    if(local<=0)return 0;
+    const heavy=h.heavy?1.14:1;
+    const timings=layer==='edge'?[13,55,155]:layer==='mist'?[34,106,280]:[20,82,218];
+    const [attack,hold,release]=timings;
+    return smoothstep(local/attack)*(1-smoothstep((local-hold*heavy)/(release*heavy)));
+  }
+  drawHit(h,age){
+    if(this.smooth===false)return super.drawHit(h,age);
+    const c=this.ctx,head=this.head(h,age);
+    c.save();c.rotate(h.rotate);c.translate(h.dash?lerp(-38,26,head):0,0);c.globalCompositeOperation='lighter';
+    // Supporting arc is narrow and dim for thrusts, which read along the spear.
+    this.flowRibbon(h,age,head,h.type==='thrust'?.43:1);
+    this.flowFilaments(h,age,head);
+    if(h.type==='thrust')this.flowSpear(h,age);
+    if(h.dash)this.flowDash(h,age);
+    this.flowChips(h,age);
+    // Match impact to the point where the moving blade reaches the target.
+    const contactAge=age-this.contact(h);
+    if(contactAge>=0&&contactAge<235){
+      c.save();c.globalAlpha*=.8*(1-smoothstep((contactAge-155)/80));
+      super.impact(h,contactAge+85);c.restore();
+    }
+    this.flowParticles(h,age);
+    c.restore();
+  }
+  flowRibbon(h,age,head,strength){
+    const c=this.ctx,n=120,heavy=h.heavy?1.14:1;
+    const drift=clamp((age-160)/h.life)*.017;
+    // Sweep the rear boundary forward; fade layers on independent envelopes.
+    // Continuous paths avoid seams and do not depend on conic gradients.
+    const layer=(kind,inset,lineWidth,gain,rgb)=>{
+      const edge=kind==='edge';
+      const tail=smoothstep((age-(edge?90:125))/((edge?205:260)*heavy));
+      const alpha=smoothstep(age/(edge?16:24))*(1-smoothstep((age-(edge?85:170))/((edge?210:250)*heavy)));
+      if(tail>=head||alpha<.001)return;
+      const profile=u=>{
+        const base=Math.pow(Math.max(0,Math.sin(Math.PI*u)),.72)*(.42+.63*u);
+        const tooth=1-.12*Math.pow(Math.max(0,Math.sin(u*91+h.seed)),9);
+        const tips=smoothstep((head-u)/.065)*smoothstep((u-tail)/.075);
+        return h.width*base*tooth*tips*(.58+.42*this.envelope(h,u,age));
+      };
+      const p=this.point(h,tail,1+drift),q=this.point(h,head,1+drift);
+      const g=c.createLinearGradient(p[0],p[1],q[0]+.001,q[1]);
+      g.addColorStop(0,color(rgb||MINT,0));
+      g.addColorStop(.16,color(rgb||PALE,.48));
+      g.addColorStop(.55,color(rgb||WHITE,.88));
+      g.addColorStop(.86,color(rgb||PALE,.75));
+      g.addColorStop(1,color(rgb||WHITE,0));
+      c.save();c.globalAlpha*=alpha*gain*strength;
+      c.beginPath();
+      for(let i=0;i<=n;i++){
+        const u=lerp(tail,head,i/n),p=this.point(h,u,1+drift,0,lineWidth?profile(u)*inset:0);
+        i?c.lineTo(...p):c.moveTo(...p);
+      }
+      if(lineWidth){c.strokeStyle=g;c.lineWidth=lineWidth;c.lineCap='butt';c.stroke();}
+      else {
+        for(let i=n;i>=0;i--){const u=lerp(tail,head,i/n);c.lineTo(...this.point(h,u,1+drift,0,profile(u)*inset));}
+        c.closePath();c.fillStyle=g;c.fill();
+      }
+      c.restore();
+    };
+    layer('body',1,0,.9);
+    layer('edge',.28,0,.32,WHITE);
+    layer('body',0,7,.075,MINT);
+    layer('edge',0,2.3,.52,PALE);
+    layer('edge',0,1,1,WHITE);
+    layer('body',.32,.65,.27,WHITE);
+    layer('body',.7,1.2,.18,MINT);
+  }
+  flowFilaments(h,age,head){
+    const c=this.ctx,count=h.heavy?5:3;
+    for(let j=0;j<count;j++){
+      const lag=12+j*11,localAge=age-lag;if(localAge<0)continue;
+      const end=this.head(h,localAge),mult=1+(j-1)*.017+Math.max(0,age-150)*.000025;
+      for(let i=0;i<64;i++){
+        const u=i/64,v=Math.min((i+1)/64,end);if(u>=end)break;
+        const alpha=this.envelope(h,(u+v)/2,localAge,'mist')*(.15-j*.019)
+          *Math.sin(Math.PI*u)*(h.type==='thrust'?.5:1);
+        c.strokeStyle=color(j%2?PALE:MINT,alpha);c.lineWidth=j===0?1.1:.65;
+        c.beginPath();c.moveTo(...this.point(h,u,mult,j-1));c.lineTo(...this.point(h,v,mult,j-1));c.stroke();
+      }
+    }
+  }
+  flowSpear(h,age){
+    const c=this.ctx,head=1-Math.pow(1-clamp(age/100),2),tip=lerp(-220,h.impact[0]+125,head);
+    const attack=smoothstep(age/22),tail=lerp(-290,tip-70,smoothstep((age-100)/260));
+    const fade=attack*(1-smoothstep((age-100)/240));if(fade<.001)return;
+    c.save();c.globalAlpha*=fade;
+    const g=c.createLinearGradient(tail,0,Math.max(tail+1,tip),0);
+    g.addColorStop(0,color(MINT,0));g.addColorStop(.48,color(PALE,.38));g.addColorStop(.88,color(WHITE,.95));g.addColorStop(1,color(WHITE,0));
+    c.fillStyle=g;const w=5.5*attack;
+    c.beginPath();c.moveTo(tail,-w*.2);c.lineTo(lerp(tail,tip,.69),-w);c.lineTo(tip,0);c.lineTo(lerp(tail,tip,.63),w*.52);c.lineTo(tail,w*.1);c.closePath();c.fill();
+    c.fillStyle=color(WHITE,.85*(1-smoothstep((age-75)/150)));
+    c.beginPath();c.moveTo(lerp(tail,tip,.25),-.65);c.lineTo(tip,0);c.lineTo(lerp(tail,tip,.28),.7);c.closePath();c.fill();c.restore();
+  }
+  flowDash(h,age){
+    const c=this.ctx;
+    for(let j=0;j<3;j++){
+      const t=age-18-j*12,f=smoothstep(t/28)*(1-smoothstep((t-95)/185));if(f<.001)continue;
+      const end=lerp(-180,98-j*23,easeOut(t/100)),start=lerp(-310,end-70,smoothstep((t-110)/180));
+      const y=-18+j*21,w=j===1?3.2:1.6;
+      const g=c.createLinearGradient(start,y,Math.max(start+1,end),y);
+      g.addColorStop(0,color(MINT,0));g.addColorStop(.67,color(PALE,f*.38));g.addColorStop(1,color(WHITE,0));
+      c.fillStyle=g;c.beginPath();c.moveTo(start,y);c.lineTo(lerp(start,end,.72),y-w);c.lineTo(end,y);c.lineTo(lerp(start,end,.6),y+w*.35);c.closePath();c.fill();
+    }
+  }
+  flowChips(h,age){
+    const c=this.ctx;
+    for(let i=0;i<13;i++){
+      const u=(i+.8)/15,local=age-this.birth(h,u)-28-i%3*9;
+      const f=smoothstep(local/22)*(1-smoothstep((local-30)/170));if(f<.001)continue;
+      const wobble=Math.sin(i*12.13+h.seed),p=this.point(h,u,1.022+Math.max(0,local)*.00006);
+      c.save();c.translate(...p);c.rotate(h.start+h.span*u+Math.PI/2+.18*wobble);
+      const s=(2+Math.abs(wobble)*5)*f;c.fillStyle=color(PALE,f*.48);
+      c.beginPath();c.moveTo(-s,0);c.lineTo(s,-.65);c.lineTo(s*.2,.9);c.closePath();c.fill();c.restore();
+    }
+  }
+  flowParticles(h,age){
+    const c=this.ctx;
+    for(const p of h.sparks){
+      const ms=age-p.delay;if(ms<=0||ms>=p.life)continue;
+      const t=ms/1000,f=smoothstep(ms/20)*Math.pow(1-ms/p.life,1.7);
+      const distance=p.v*t*.83,x=h.impact[0]+Math.cos(p.a)*distance;
+      const y=h.impact[1]+p.offset*.2+Math.sin(p.a)*distance+38*t*t;
+      c.save();c.translate(x,y);c.rotate(p.a+.2*t);c.fillStyle=color(p.warm?'255,197,108':PALE,f*(p.warm?.4:.68));
+      const len=p.len*(.3+.7*f);c.beginPath();c.moveTo(-len,0);c.lineTo(len*.23,-.8*f);c.lineTo(len*.7,0);c.lineTo(0,f);c.closePath();c.fill();c.restore();
+    }
+  }
+}
+
+// One input selects exactly one variant, uniformly from its category.
+const ATTACKS={
+  slash:{name:'斩击',index:'01',variants:[
+    ...MODES.sweep.hits,...MODES.thrust.hits,...MODES.heavy.hits
+  ].map((h,i)=>({...h,at:24,family:'slash',id:'slash-'+(i+1),
+    name:['回旋横斩','大弧斩','短切穿斩','长切穿斩','疾进斜斩','下劈斩','回旋重斩'][i]}))},
+  strike:{name:'打击',index:'02',variants:[
+    {id:'strike-1',name:'正面重击',rotate:0,power:1,radius:120,rays:11,stretch:1,style:'burst'},
+    {id:'strike-2',name:'上挑打击',rotate:-1.48,power:.95,radius:111,rays:8,stretch:1.3,style:'rising'},
+    {id:'strike-3',name:'斜向敲击',rotate:.70,power:1,radius:130,rays:9,stretch:1.16,style:'side'},
+    {id:'strike-4',name:'震荡重锤',rotate:Math.PI/2,power:1.3,radius:167,rays:13,stretch:.9,style:'hammer',heavy:true},
+    {id:'strike-5',name:'压缩爆破',rotate:-.18,power:1.1,radius:142,rays:7,stretch:1.05,style:'crush'}
+  ].map(h=>({...h,at:24,family:'strike',type:'blunt',impact:[0,0],life:640,contactAt:h.heavy?72:52}))},
+  thrust:{name:'突刺',index:'03',variants:[
+    {id:'thrust-1',name:'直线快刺',rotate:0,width:5,reach:205,travelMs:104,style:'needle',power:.8},
+    {id:'thrust-2',name:'斜上挑刺',rotate:-.53,width:7,reach:217,travelMs:119,style:'lift',power:.9},
+    {id:'thrust-3',name:'斜下贯刺',rotate:.50,width:6,reach:240,travelMs:98,style:'dive',power:1},
+    {id:'thrust-4',name:'螺旋穿刺',rotate:-.06,width:7,reach:219,travelMs:138,style:'spiral',power:1.1},
+    {id:'thrust-5',name:'重型贯穿',rotate:.05,width:13,reach:267,travelMs:151,style:'lance',power:1.35,heavy:true}
+  ].map(h=>({...h,at:24,family:'thrust',type:'pierce',impact:[0,0],life:640}))}
+};
+
+class AttackVFX extends BladeVFX {
+  play(category='slash',x=this.width/2,y=this.height/2){
+    super.play(category,x,y);
+    return this.lastPick;
+  }
+  build(category,x,y){
+    category=ATTACKS[category]?category:'slash';
+    const pool=ATTACKS[category].variants;
+    const h={...pool[Math.floor(Math.random()*pool.length)],seed:rand(0,1000)};
+    if(h.family==='slash'){
+      h.sparks=this.makeSparks(h).slice(0,h.heavy?29:18).map(p=>({...p,
+        delay:this.contact(h)+rand(8,72),life:rand(180,390),len:p.len*.72,v:p.v*.82
+      }));
+    }else{
+      if(h.family==='thrust'){
+        let lo=0,hi=1;
+        for(let i=0;i<18;i++){const m=(lo+hi)/2;if(smoothstep(m)<260/(260+h.reach))lo=m;else hi=m;}
+        h.contactAt=h.travelMs*(lo+hi)/2;
+      }
+      h.sparks=Array.from({length:h.family==='strike'?(h.heavy?29:21):(h.heavy?21:13)},(_,i)=>{
+        let a=rand(-Math.PI,Math.PI);
+        if(h.family==='thrust')a=i%4===0?rand(2.5,3.8):rand(-1.10,1.10);
+        else if(h.style==='rising'||h.style==='side')a=i%5===0?a:rand(-1.2,1.2);
+        return {a,v:rand(100,h.heavy?480:365),len:rand(4,h.family==='strike'?15:11),life:rand(210,430),
+          delay:h.contactAt+rand(9,78),offset:rand(-10,10),warm:i%13===0};
+      });
+    }
+    h.tailEnd=Math.max(h.life,...h.sparks.map(p=>p.delay+p.life));
+    this.lastPick={category,id:h.id,name:h.name};
+    return {mode:category,variantId:h.id,variantName:h.name,x,y,start:this.time,fit:this.fit,
+      duration:h.at+h.tailEnd+24,hits:[h]};
+  }
+  windup(h,t){if(h.family==='slash')super.windup(h,t);}
+  drawHit(h,age){
+    if(h.family==='slash'){super.drawHit(h,age);return;}
+    const c=this.ctx;c.save();c.rotate(h.rotate);c.globalCompositeOperation='lighter';
+    if(h.family==='strike')this.blunt(h,age);else this.pierce(h,age);
+    this.flowParticles(h,age);c.restore();
+  }
+  pulse(age,attack=20,hold=45,release=190){
+    return smoothstep(age/attack)*(1-smoothstep((age-hold)/release));
+  }
+  streak(x0,x1,y,width,alpha,tint=PALE){
+    if(alpha<.001||x1<=x0)return;
+    const c=this.ctx,g=c.createLinearGradient(x0,y,x1,y);
+    g.addColorStop(0,color(MINT,0));g.addColorStop(.57,color(tint,alpha*.6));
+    g.addColorStop(.84,color(WHITE,alpha));g.addColorStop(1,color(WHITE,0));
+    c.fillStyle=g;c.beginPath();c.moveTo(x0,y);c.lineTo(lerp(x0,x1,.76),y-width);
+    c.lineTo(x1,y);c.lineTo(lerp(x0,x1,.64),y+width*.52);c.closePath();c.fill();
+  }
+  glow(radius,alpha){
+    if(alpha<.001)return;
+    const c=this.ctx,g=c.createRadialGradient(0,0,0,0,0,radius);
+    g.addColorStop(0,color(PALE,alpha));g.addColorStop(.2,color(MINT,alpha*.32));g.addColorStop(1,color(MINT,0));
+    c.fillStyle=g;c.fillRect(-radius,-radius,radius*2,radius*2);
+  }
+  pressureArc(radius,flat,start,span,alpha,width){
+    if(alpha<.001)return;
+    const c=this.ctx,n=52;
+    // A tapered band leaves an open, broken pressure wave instead of a ring.
+    c.fillStyle=color(PALE,alpha);c.beginPath();
+    for(let i=0;i<=n;i++){
+      const a=start+span*i/n,x=Math.cos(a)*radius,y=Math.sin(a)*radius*flat;
+      i?c.lineTo(x,y):c.moveTo(x,y);
+    }
+    for(let i=n;i>=0;i--){
+      const a=start+span*i/n,r=radius-width*Math.sin(Math.PI*i/n);
+      c.lineTo(Math.cos(a)*r,Math.sin(a)*r*flat);
+    }
+    c.closePath();c.fill();
+  }
+  blunt(h,age){
+    const c=this.ctx,t=age-h.contactAt;
+    const approach=this.pulse(age,20,h.contactAt-12,120);
+    const head=lerp(-154,24,smoothstep(age/(h.contactAt+16)));
+    if(h.style==='rising'||h.style==='side'||h.style==='hammer'){
+      this.streak(-202,head,0,h.heavy?15:10,approach*.45);
+      this.streak(-169,head-20,-17,2.2,approach*.26);
+      this.streak(-146,head-39,17,1.8,approach*.23);
+    }
+    if(t<0)return;
+    const flash=this.pulse(t,16,28,h.heavy?167:130),mist=this.pulse(t,30,50,240);
+    const expansion=lerp(.65,1.09,easeOut(t/100));
+    this.glow(h.radius*.82,mist*.37*h.power);
+    // Irregular, compact contact silhouette. The bright center retreats first.
+    for(let layer=0;layer<2;layer++){
+      const alpha=(layer===0?mist*.18:flash*.89)*h.power;
+      if(alpha<.001)continue;
+      c.fillStyle=color(layer===0?MINT:WHITE,alpha);c.beginPath();
+      for(let i=0;i<h.rays*2;i++){
+        const a=TAU*i/(h.rays*2)+.09*Math.sin(i*7.19+h.seed);
+        const wobble=.76+.24*Math.sin(i*13.3+h.seed);
+        const reach=i%2?(12+8*wobble)*h.power:(26+38*wobble)*h.power;
+        const r=reach*expansion*(layer===0?1.21:1),x=Math.cos(a)*r*h.stretch,y=Math.sin(a)*r;
+        i?c.lineTo(x,y):c.moveTo(x,y);
+      }
+      c.closePath();c.fill();
+    }
+    const waves=h.heavy?2:1;
+    for(let j=0;j<waves;j++){
+      const w=t-14-j*38,f=this.pulse(w,30,58,215)*(j?.15:.24);
+      const radius=lerp(28,h.radius,easeOut(w/235));
+      const flat=h.style==='hammer'?.45:h.style==='rising'?.68:.84;
+      c.save();if(h.style==='hammer')c.rotate(-h.rotate);
+      this.pressureArc(radius,flat,-2.82+.2*j,1.98,f,5.5-j);
+      this.pressureArc(radius*1.04,flat,.26,1.82,f*.77,3.7);c.restore();
+    }
+    if(h.style==='crush'){
+      const f=this.pulse(t,14,31,165),r=lerp(10,92,easeOut(t/170));
+      for(let j=0;j<4;j++){
+        c.save();c.rotate(j*Math.PI/2+.28);this.streak(-r,Math.max(-r+1,-r+52*f),0,4.2,f*.7);c.restore();
+      }
+    }
+    // Chunkier debris supports the mass of a hit; it appears after contact.
+    for(let i=0;i<9;i++){
+      const local=t-23-i*5,f=this.pulse(local,22,30,240);if(f<.001)continue;
+      const a=i*2.399+h.seed,dist=21+Math.max(0,local)*(.27+(i%3)*.08);
+      c.save();c.translate(Math.cos(a)*dist,Math.sin(a)*dist);c.rotate(a+.4);
+      c.fillStyle=color(i%3?PALE:MINT,f*.52);
+      const w=(3+i%3)*f;c.beginPath();c.moveTo(-w*1.7,0);c.lineTo(w,-w*.6);c.lineTo(w*.4,w);c.closePath();c.fill();c.restore();
+    }
+  }
+  pierce(h,age){
+    const c=this.ctx,travel=smoothstep(age/h.travelMs),tip=lerp(-260,h.reach,travel);
+    const tail=lerp(-292,h.reach-18,smoothstep((age-115)/260));
+    const body=this.pulse(age,22,125,h.heavy?270:220),core=this.pulse(age,14,82,160);
+    this.streak(tail,tip,0,h.width,body*.9);
+    this.streak(tail-12,tip,0,h.width*2.3,body*.11,MINT);
+    if(tip>tail&&core>.001){
+      c.fillStyle=color(WHITE,core*.92);c.beginPath();
+      c.moveTo(lerp(tail,tip,.31),-1.0);c.lineTo(tip,0);c.lineTo(lerp(tail,tip,.33),1.0);c.closePath();c.fill();
+    }
+    const strands=h.heavy?5:3;
+    for(let j=0;j<strands;j++){
+      const lag=13+j*9,local=age-lag,f=this.pulse(local,24,90,205);
+      const end=lerp(-205,h.reach-35-j*12,smoothstep(local/h.travelMs));
+      const start=lerp(-295+j*9,end-16,smoothstep((local-105)/235));
+      const y=(j-(strands-1)/2)*(h.heavy?10:8);
+      this.streak(start,end,y,j%2?1.2:1.8,f*.30);
+    }
+    if(h.style==='spiral'&&tip>tail){
+      for(let k=0;k<2;k++){
+        c.strokeStyle=color(k?PALE:MINT,body*.41);c.lineWidth=k?.75:1.3;c.beginPath();
+        for(let i=0;i<=100;i++){
+          const u=i/100,x=lerp(tail,tip,u),envelope=Math.sin(Math.PI*u);
+          const y=Math.sin(u*TAU*2.2-age*.014+k*Math.PI)*19*envelope;
+          i?c.lineTo(x,y):c.moveTo(x,y);
+        }
+        c.stroke();
+      }
+    }
+    const t=age-h.contactAt;
+    if(t<0)return;
+    const flash=this.pulse(t,13,26,130),mist=this.pulse(t,25,45,205);
+    this.glow(h.heavy?88:62,mist*.29*h.power);
+    for(let j=0;j<3;j++){
+      c.save();c.rotate(j===0?0:j===1?1.22:-.86);
+      const length=(j===0?70:j===1?40:27)*h.power*(.82+.18*easeOut(t/80));
+      c.fillStyle=color(WHITE,flash*(j===0?.92:.6));c.beginPath();
+      c.moveTo(-length,0);c.lineTo(-2,-2.6);c.lineTo(length,0);c.lineTo(2,2.6);c.closePath();c.fill();c.restore();
+    }
+    // Small transverse air wakes reinforce penetration without a large slash.
+    for(let j=0;j<(h.heavy?2:1);j++){
+      const local=t-19-j*32,f=this.pulse(local,23,47,185);
+      c.save();c.translate(-12-j*41+easeOut(local/150)*15,0);
+      const radius=lerp(10,h.heavy?55:35,easeOut(local/185));
+      c.scale(.36,1);this.pressureArc(radius,1,-1.25,2.5,f*.27,3.2);c.restore();
+    }
+  }
+}
+window.AttackVFX=AttackVFX;
+window.BladeVFX=AttackVFX;
+
+/* ═══════════════════════════════════════════════════════════════════════════
+ *  点缀层 —— 不改上面那套渲染器，只在外面套一层子类。
+ *
+ *  上面画的是「刀光本身」：缎带、矛身、冲击多边形。
+ *  这一层刻意不再画第二条刀光，只补三样它没有的东西：
+ *
+ *      时间 —— 命中瞬间的定格（hitstop）
+ *      镜头 —— 一次衰减的微震
+ *      空气 —— 接触辉光 / 冲击环 / 余烬 / 地面尘扫
+ *
+ *  分工清楚，所以加进去不会跟原来的线条抢戏，关掉也不影响原效果。
+ *
+ *      const fx = new GarnishFX(canvas);
+ *      fx.garnishOn = true;            // 总开关，false 时等同于原版
+ *      fx.g.shake.amp = 7;             // 参数见 GARNISH
+ *      fx.play('slash', x, y);
+ * ═════════════════════════════════════════════════════════════════════════ */
+
+const GARNISH = {
+  // 命中定格：越过接触时刻的一小段时间被压慢，重量感几乎全靠它
+  hitstop: { scale: 0.20, ms: 46 },
+  // 镜头微震：幅度按招式威力缩放，指数衰减
+  shake:   { amp: 7.0, decay: 95 },
+  // 接触辉光：很短的一团加色光，给白闪一个落点
+  bloom:   { alpha: 0.55, radius: 130, ms: 95 },
+  // 冲击环：一圈快速外扩的扁椭圆，边缘带一点起伏
+  ring:    { alpha: 0.28, radius: 185, ms: 250, width: 2.2, flat: 0.78 },
+  // 余烬：慢速上飘的小点，填住原效果结束后的空白尾巴
+  embers:  { count: 9, alpha: 0.50, rise: 62, ms: 800 },
+  // 地面尘扫：只给重招，一道贴地的扁光晕
+  smear:   { alpha: 0.20, radius: 235, ms: 430, y: 34 },
+};
+
+class GarnishFX extends AttackVFX {
+  constructor(canvas) {
+    super(canvas);
+    this.g = JSON.parse(JSON.stringify(GARNISH));
+    this.garnishOn = true;
+    this.shake = 0;
+    this.bursts = [];
+    // 打击重做用的风参数（见 blunt2.js）；bluntLegacy=true 时切回旧版打击
+    this.wind = { ...WIND };
+    this.bluntLegacy = false;
+  }
+
+  /** 这一招真正「打到」的时刻：斩击算弧线走到落点，其余用 contactAt */
+  contactOf(h) {
+    return h.family === 'slash' ? this.contact(h) : (h.contactAt ?? 0);
+  }
+
+  build(category, x, y) {
+    const e = super.build(category, x, y);
+    const h = e.hits[0];
+    e.garnish = {
+      at: h.at + this.contactOf(h),
+      fired: false,
+      power: h.power ?? 1,
+      heavy: !!h.heavy,
+    };
+    return e;
+  }
+
+  /** 定格：任何一发处在接触后的窗口内，整条时间轴就被压慢 */
+  scaleNow() {
+    if (!this.garnishOn) return 1;
+    const { scale, ms } = this.g.hitstop;
+    if (ms <= 0) return 1;
+    for (const e of this.effects) {
+      const ge = e.garnish;
+      if (!ge) continue;
+      const age = this.time - e.start;
+      if (age >= ge.at && age < ge.at + ms) return scale;
+    }
+    return 1;
+  }
+
+  onContact(e, ge) {
+    if (!this.garnishOn) return;
+    const P = ge.power * (ge.heavy ? 1.25 : 1);
+    // 落点：原效果是 translate(e.x,e.y) → scale(fit) → rotate(h.rotate) 之后
+    // 在 h.impact 处画命中的，所以点缀也要走同一条变换，否则环和光会飘在半空
+    const h  = e.hits[0];
+    const ca = Math.cos(h.rotate ?? 0), sa = Math.sin(h.rotate ?? 0);
+    const ix = (h.impact?.[0] ?? 0), iy = (h.impact?.[1] ?? 0);
+    if (this.g.shake.amp > 0) {
+      this.shake = Math.min(1.5, this.g.shake.amp / 10 * P);
+    }
+    const cnt = Math.round(this.g.embers.count * (ge.heavy ? 1.4 : 1));
+    this.bursts.push({
+      x: e.x, y: e.y,
+      ox: ix * ca - iy * sa, oy: ix * sa + iy * ca,
+      t0: this.time, power: P, heavy: ge.heavy,
+      seed: rand(0, 999),
+      life: Math.max(this.g.ring.ms, this.g.embers.ms, this.g.smear.ms, this.g.bloom.ms) + 40,
+      embers: Array.from({ length: cnt }, () => ({
+        a: rand(-Math.PI, Math.PI), v: rand(18, 76), size: rand(1.1, 3.2),
+        delay: rand(0, 190), life: rand(0.55, 1) * this.g.embers.ms, sway: rand(-1, 1),
+      })),
+    });
+  }
+
+  tick(now) {
+    this.raf = 0;
+    const real = Math.min(now - this.last, 50);
+    this.last = now;
+    this.time += real * this.speed * this.scaleNow();
+    this.shake *= Math.exp(-real / Math.max(1, this.g.shake.decay));
+
+    for (const e of this.effects) {
+      const ge = e.garnish;
+      if (!ge || ge.fired) continue;
+      if (this.time - e.start >= ge.at) { ge.fired = true; this.onContact(e, ge); }
+    }
+
+    this.effects = this.effects.filter(e => this.time - e.start < e.duration);
+    this.bursts  = this.bursts.filter(b => this.time - b.t0 < b.life);
+    this.draw();
+
+    if (this.effects.length || this.bursts.length) {
+      this.raf = requestAnimationFrame(this.tick);
+    } else {
+      this.shake = 0;
+      if (this.onActivity) this.onActivity(false);
+    }
+  }
+
+  clear() {
+    this.bursts = [];
+    this.shake = 0;
+    super.clear();
+  }
+
+  draw() {
+    const c = this.ctx;
+    if (!c) return;
+    c.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+    c.clearRect(0, 0, this.width, this.height);
+    // 构造期 super() 里的 resize() 会先跑一次 draw，那时 this.g 还不存在
+    const ready = !!this.g;
+    c.save();
+    if (ready && this.garnishOn && this.shake > 0.004) {
+      const n = performance.now(), s = this.shake;
+      c.translate(Math.sin(n * 0.091) * this.g.shake.amp * 1.5 * s,
+                  Math.cos(n * 0.139) * this.g.shake.amp * s);
+    }
+    for (const e of this.effects) this.drawSequence(e, this.time - e.start, false);
+    if (ready && this.garnishOn) this.drawGarnish();
+    c.restore();
+  }
+
+  drawGarnish() {
+    const c = this.ctx, g = this.g;
+    for (const b of this.bursts) {
+      const ms = this.time - b.t0;
+      c.save();
+      c.translate(b.x, b.y);
+      c.scale(this.fit, this.fit);
+      c.translate(b.ox, b.oy);
+      c.globalCompositeOperation = 'lighter';
+
+      // ① 接触辉光
+      const bl = 1 - smoothstep(ms / Math.max(1, g.bloom.ms));
+      if (g.bloom.alpha > 0 && bl > 0.004) {
+        const r = g.bloom.radius * b.power;
+        const rg = c.createRadialGradient(0, 0, 0, 0, 0, r);
+        rg.addColorStop(0, color(WHITE, g.bloom.alpha * bl));
+        rg.addColorStop(0.18, color(PALE, g.bloom.alpha * bl * 0.45));
+        rg.addColorStop(1, color(MINT, 0));
+        c.fillStyle = rg;
+        c.fillRect(-r, -r, r * 2, r * 2);
+      }
+
+      // ② 冲击环：扁椭圆，边缘带起伏，快出慢消
+      const rp = clamp(ms / Math.max(1, g.ring.ms));
+      if (g.ring.alpha > 0 && rp < 1) {
+        const R = (30 + easeOut(rp) * g.ring.radius) * b.power;
+        const a = Math.pow(1 - rp, 1.7) * g.ring.alpha;
+        c.strokeStyle = color(PALE, a);
+        c.lineWidth = Math.max(0.4, g.ring.width * (1 - rp * 0.7));
+        c.beginPath();
+        for (let i = 0; i <= 56; i++) {
+          const th = (i / 56) * TAU;
+          const w = 1 + Math.sin(th * 5 + b.seed) * 0.022 + Math.sin(th * 11 + b.seed * 2) * 0.011;
+          const x = Math.cos(th) * R * w, y = Math.sin(th) * R * g.ring.flat * w;
+          i ? c.lineTo(x, y) : c.moveTo(x, y);
+        }
+        c.closePath();
+        c.stroke();
+        c.strokeStyle = color(WHITE, a * 0.5);
+        c.lineWidth = Math.max(0.3, g.ring.width * 0.35);
+        c.stroke();
+      }
+
+      // ③ 地面尘扫：只给重招，贴地的一道扁光
+      if (b.heavy && g.smear.alpha > 0) {
+        const sp = clamp(ms / Math.max(1, g.smear.ms));
+        if (sp < 1) {
+          const R = (40 + easeOut(sp) * g.smear.radius) * b.power;
+          const a = Math.pow(1 - sp, 1.5) * g.smear.alpha;
+          const rg = c.createRadialGradient(0, g.smear.y, 0, 0, g.smear.y, R);
+          rg.addColorStop(0, color(PALE, a * 0.75));
+          rg.addColorStop(0.55, color(MINT, a * 0.3));
+          rg.addColorStop(1, color(MINT, 0));
+          c.save();
+          c.translate(0, g.smear.y);
+          c.scale(1, 0.17);
+          c.translate(0, -g.smear.y);
+          c.fillStyle = rg;
+          c.fillRect(-R, g.smear.y - R, R * 2, R * 2);
+          c.restore();
+        }
+      }
+
+      // ④ 余烬：慢速上飘，专门用来填原效果结束后的那段空白
+      if (g.embers.alpha > 0) {
+        for (const p of b.embers) {
+          const t0 = ms - p.delay;
+          if (t0 < 0 || t0 > p.life) continue;
+          const k = t0 / p.life, t = t0 / 1000;
+          const f = Math.sin(Math.PI * Math.pow(k, 0.75));
+          const d = p.v * t;
+          const x = Math.cos(p.a) * d + Math.sin(t * 3.1 + p.sway * 4) * 7 * k;
+          const y = Math.sin(p.a) * d * 0.5 - g.embers.rise * easeOut(k);
+          c.fillStyle = color(p.size > 2.4 ? WHITE : PALE, f * g.embers.alpha);
+          c.beginPath();
+          c.arc(x, y, p.size * (1 - k * 0.4), 0, TAU);
+          c.fill();
+        }
+      }
+      c.restore();
+    }
+  }
+}
+window.GarnishFX = GarnishFX;
+
+
+/* ═══════════════════════════════════════════════════════════════════════════
+ *  打击 · 重做
+ *
+ *  旧版廉价在两处：一是接触时画的那个尖刺星形，那形状本身就是「免费素材」味；
+ *  二是根本没有「挥」——力量凭空出现在落点上，观众看不到它是怎么来的。
+ *
+ *  钝器的身份是**弧线**和它拖出来的**风**。所以这版：
+ *
+ *    · 抡的招（下砸 / 上挑 / 横扫）先走一段圆弧，弧上拖一条又宽又淡的风带；
+ *      风带是**空气**不是刀光——低透明、边缘羽化、只有前缘一条白线。
+ *    · 直的招（直拳 / 冲拳）没有弧，改成拳前的压缩锥 + 身后的拖影。
+ *    · 接触不再画星形，改成「垂直于来向的压扁」+ 顺着去向甩出的几片尘楔。
+ *      力有方向，所以命中也必须是偏的，不能是对称的。
+ *
+ *  只覆盖 blunt() 这一个方法——旧版还在 super.blunt 里，页面上可随时切回对比。
+ * ═════════════════════════════════════════════════════════════════════════ */
+
+const WIND = { span: 1.0, width: 1.0, alpha: 1.0, strands: 3 };
+
+/** 抡击：ac 是接触时刻的角度，span 是抡过来的弧长（正负决定顺逆时针） */
+function swingSpec(ac, span, opt = {}) {
+  return {
+    kind: 'swing', ac, a0: ac - span, a1: ac + span * 0.22,
+    R: opt.R ?? 178, flat: opt.flat ?? 0.86, lag: opt.lag ?? 1.05,
+    band: opt.band ?? 34, headR: opt.headR ?? 26, ...opt,
+  };
+}
+
+const BLUNT_V2 = [
+  { id: 'strike-smash', name: '下砸', rotate: 0, power: 1.25, heavy: true,
+    travelMs: 168, ...swingSpec(0, 1.85, { R: 170, flat: 0.94, band: 46, lag: 1.05, headR: 31 }),
+    radius: 168, rays: 11, stretch: 1, style: 'smash' },
+
+  { id: 'strike-uppercut', name: '上挑', rotate: 0, power: 0.95,
+    travelMs: 132, ...swingSpec(Math.PI, 1.72, { R: 158, flat: 0.9, band: 30, lag: 0.92 }),
+    radius: 126, rays: 8, stretch: 1.25, style: 'uppercut' },
+
+  { id: 'strike-sweep', name: '横扫', rotate: 0.06, power: 1.05,
+    travelMs: 146, ...swingSpec(-Math.PI / 2, 2.05, { R: 188, flat: 0.4, band: 42, lag: 1.18 }),
+    radius: 150, rays: 9, stretch: 1.45, style: 'sweep' },
+
+  { id: 'strike-jab', name: '直拳', rotate: 0, power: 0.9,
+    kind: 'punch', travelMs: 96, reach: 132, fist: 21, drag: 210,
+    radius: 118, rays: 9, stretch: 1.1, style: 'jab' },
+
+  { id: 'strike-rush', name: '冲拳', rotate: -0.05, power: 1.3, heavy: true,
+    kind: 'punch', travelMs: 138, reach: 178, fist: 27, drag: 330, dash: true,
+    radius: 158, rays: 12, stretch: 1.15, style: 'rush' },
+];
+
+/** 圆弧上的一点：支点被挪到「接触点正好落在原点」的位置 */
+function arcPt(h, a, rMul = 1) {
+  const R = h.R * rMul;
+  return [Math.cos(a) * R - Math.cos(h.ac) * h.R,
+          (Math.sin(a) * R - Math.sin(h.ac) * h.R) * h.flat];
+}
+
+Object.assign(GarnishFX.prototype, {
+
+  /** 覆盖点就这一个方法：drawHit 里 family==='strike' 会调它 */
+  blunt(h, age) {
+    if (this.bluntLegacy || !h.kind) return AttackVFX.prototype.blunt.call(this, h, age);
+    if (h.kind === 'swing') this.swingBlunt(h, age);
+    else this.punchBlunt(h, age);
+  },
+
+  /* ── 抡击 ───────────────────────────────────────────────────────────── */
+
+  swingBlunt(h, age) {
+    const c = this.ctx, W = this.wind;
+    const dir = Math.sign(h.a1 - h.a0) || 1;
+    const p   = smoothstep(age / h.travelMs);
+    const aHead = lerp(h.a0, h.a1, Math.min(1.12, p));
+    // 收尾：接触之后风带的尾巴追上来，整条变短再散掉
+    const shrink = 1 - 0.62 * smoothstep((age - h.contactAt) / 240);
+    const aTail = aHead - h.lag * W.span * shrink * dir;
+    const fade  = 1 - smoothstep((age - h.contactAt - 40) / 300);
+    if (fade <= 0.002 && age > h.contactAt) return this.bluntContact(h, age);
+
+    const band = h.band * W.width;
+    // 靠近头部最厚，尾端收尖——风是被推出去的，不是一条等宽的带子
+    const prof = u => Math.pow(clamp(u), 0.62) * (0.35 + 0.65 * Math.pow(u, 1.6));
+
+    const sweep = (outer, inner, rgb, alpha) => {
+      if (alpha < 0.002) return;
+      const n = 40;
+      c.fillStyle = color(rgb, alpha);
+      c.beginPath();
+      for (let i = 0; i <= n; i++) {
+        const u = i / n, a = lerp(aTail, aHead, u);
+        c.lineTo(...arcPt(h, a, 1 + prof(u) * outer / h.R));
+      }
+      for (let i = n; i >= 0; i--) {
+        const u = i / n, a = lerp(aTail, aHead, u);
+        c.lineTo(...arcPt(h, a, 1 - prof(u) * inner / h.R));
+      }
+      c.closePath();
+      c.fill();
+    };
+
+    c.save();
+    c.globalAlpha *= fade * W.alpha;
+    // 三层羽化：外圈最淡最宽，越往里越实。风的量感全在最外那层。
+    sweep(band * 1.95, band * 1.15, MINT, 0.115);
+    sweep(band * 1.10, band * 0.62, PALE, 0.175);
+    sweep(band * 0.48, band * 0.28, PALE, 0.245);
+
+    // 前缘：唯一一条亮线，只在靠近头部的那一段才提亮
+    c.lineCap = 'round';
+    for (let k = 0; k < 2; k++) {
+      c.strokeStyle = color(k ? WHITE : PALE, k ? 0.38 : 0.3);
+      c.lineWidth = k ? 1.2 : 3.6;
+      c.beginPath();
+      for (let i = 0; i <= 28; i++) {
+        const u = 0.42 + (i / 28) * 0.58, a = lerp(aTail, aHead, u);
+        c.lineTo(...arcPt(h, a, 1 + prof(u) * band * 0.42 / h.R));
+      }
+      c.stroke();
+    }
+
+    // 内部的几缕气流：不同半径、不同起步，风才有层次而不是一块糖纸
+    for (let j = 0; j < W.strands; j++) {
+      const off = (j - (W.strands - 1) / 2) * (band * 0.5);
+      const lag = 0.055 * (j + 1);
+      c.strokeStyle = color(j % 2 ? PALE : MINT, 0.26 - j * 0.04);
+      c.lineWidth = j ? 0.7 : 1.1;
+      c.beginPath();
+      for (let i = 0; i <= 30; i++) {
+        const u = clamp(i / 30 - lag);
+        c.lineTo(...arcPt(h, lerp(aTail, aHead, u), 1 + off / h.R));
+      }
+      c.stroke();
+    }
+
+    // 头部质量：钝器的重量在这一坨软光里，不是在亮线上
+    const hp = arcPt(h, aHead);
+    const hr = h.headR * (0.75 + 0.35 * p) * h.power;
+    const g = c.createRadialGradient(hp[0], hp[1], 0, hp[0], hp[1], hr);
+    g.addColorStop(0, color(WHITE, 0.4));
+    g.addColorStop(0.35, color(PALE, 0.16));
+    g.addColorStop(1, color(MINT, 0));
+    c.fillStyle = g;
+    c.fillRect(hp[0] - hr, hp[1] - hr, hr * 2, hr * 2);
+    c.restore();
+
+    this.bluntContact(h, age);
+  },
+
+  /* ── 直拳 / 冲拳 ─────────────────────────────────────────────────────── */
+
+  punchBlunt(h, age) {
+    const c = this.ctx, W = this.wind;
+    const p = smoothstep(age / h.travelMs);
+    const x = lerp(-h.reach * 1.45, 0, Math.min(1.1, p));
+    const fade = 1 - smoothstep((age - h.contactAt - 30) / 260);
+
+    if (fade > 0.002) {
+      c.save();
+      c.globalAlpha *= fade * W.alpha;
+      const drag = h.drag * W.span, fr = h.fist * W.width;
+
+      // 拳后的拖锥：越靠近拳头越窄——空气是被拽着走的
+      const cone = (len, w, rgb, alpha) => {
+        const g = c.createLinearGradient(x - len, 0, x, 0);
+        g.addColorStop(0, color(rgb, 0));
+        g.addColorStop(0.55, color(rgb, alpha * 0.55));
+        g.addColorStop(1, color(rgb, alpha));
+        c.fillStyle = g;
+        c.beginPath();
+        c.moveTo(x - len, 0);
+        c.quadraticCurveTo(x - len * 0.45, -w * 1.15, x, -w * 0.42);
+        c.lineTo(x, w * 0.42);
+        c.quadraticCurveTo(x - len * 0.45, w * 1.15, x - len, 0);
+        c.closePath();
+        c.fill();
+      };
+      cone(drag * 1.15, fr * 1.9, MINT, 0.075);
+      cone(drag * 0.8,  fr * 1.15, PALE, 0.12);
+      cone(drag * 0.42, fr * 0.55, WHITE, 0.2);
+
+      // 拳前的压缩：接触前一小段，空气被顶成一片薄壁
+      const push = clamp((age - h.travelMs * 0.45) / (h.travelMs * 0.55));
+      if (push > 0 && age < h.contactAt + 40) {
+        const w = fr * (1.1 + push * 0.9), d = 12 + push * 20;
+        c.strokeStyle = color(PALE, 0.22 * (1 - Math.abs(push - 0.7) * 1.4));
+        c.lineWidth = 1.6;
+        c.beginPath();
+        c.moveTo(x + d, -w);
+        c.quadraticCurveTo(x + d + w * 0.62, 0, x + d, w);
+        c.stroke();
+      }
+
+      // 冲拳：身体位移的速度线，比拳本身长得多
+      if (h.dash) {
+        for (let j = 0; j < 4; j++) {
+          const y = (j - 1.5) * 15, t = clamp((age - j * 9) / (h.travelMs + 60));
+          const x1 = lerp(-h.reach * 1.6, x - 18, t);
+          const x0 = x1 - lerp(200, 60, t);
+          const g = c.createLinearGradient(x0, y, x1, y);
+          g.addColorStop(0, color(MINT, 0));
+          g.addColorStop(1, color(PALE, 0.16 * (1 - t)));
+          c.fillStyle = g;
+          c.fillRect(x0, y - 1, x1 - x0, 2);
+        }
+      }
+
+      // 拳头本体
+      const hr = fr * (0.8 + 0.3 * p) * h.power;
+      const g = c.createRadialGradient(x, 0, 0, x, 0, hr);
+      g.addColorStop(0, color(WHITE, 0.42));
+      g.addColorStop(0.38, color(PALE, 0.17));
+      g.addColorStop(1, color(MINT, 0));
+      c.fillStyle = g;
+      c.fillRect(x - hr, -hr, hr * 2, hr * 2);
+      c.restore();
+    }
+    this.bluntContact(h, age);
+  },
+
+  /* ── 命中：有方向的压扁，不是对称的星 ──────────────────────────────── */
+
+  bluntContact(h, age) {
+    const t = age - h.contactAt;
+    if (t < 0) return;
+    const c = this.ctx, P = h.power;
+
+    // 去向：抡击取接触点的切线，直拳就是 +x
+    let vx = 1, vy = 0;
+    if (h.kind === 'swing') {
+      vx = -Math.sin(h.ac); vy = Math.cos(h.ac) * h.flat;
+      const m = Math.hypot(vx, vy) || 1; vx /= m; vy /= m;
+    }
+    const dirA = Math.atan2(vy, vx);
+
+    const flash = this.pulse(t, 13, 26, h.heavy ? 150 : 118);
+    const mist  = this.pulse(t, 28, 48, 225);
+
+    c.save();
+    this.glow(h.radius * 0.7, mist * 0.32 * P);
+
+    // 压扁：垂直于来向被拍平的一团，力的方向一眼可读
+    if (flash > 0.003) {
+      c.save();
+      c.rotate(dirA);
+      const grow = 0.7 + easeOut(t / 90) * 0.55;
+      const rx = 30 * P * grow, ry = 62 * P * grow;
+      const g = c.createRadialGradient(0, 0, 0, 0, 0, ry);
+      g.addColorStop(0, color(WHITE, flash * 0.9));
+      g.addColorStop(0.42, color(PALE, flash * 0.4));
+      g.addColorStop(1, color(MINT, 0));
+      c.save(); c.scale(rx / ry, 1);
+      c.fillStyle = g; c.fillRect(-ry, -ry, ry * 2, ry * 2);
+      c.restore();
+      // 一条贴着接触面的横向亮线
+      c.strokeStyle = color(WHITE, flash * 0.75);
+      c.lineWidth = 1.4;
+      c.beginPath(); c.moveTo(0, -ry * 0.78); c.lineTo(0, ry * 0.78); c.stroke();
+      c.restore();
+    }
+
+    // 尘楔：顺着去向甩出去，左右不对称——力不会平均分给四周
+    for (let i = 0; i < 5; i++) {
+      const local = t - 8 - i * 6, f = this.pulse(local, 22, 34, 210);
+      if (f < 0.003) continue;
+      const spread = (i - 2) * 0.34 + Math.sin(i * 3.7 + h.seed) * 0.1;
+      const len = (54 + i % 2 * 30) * P * (0.5 + easeOut(local / 150));
+      c.save();
+      c.rotate(dirA + spread);
+      const g = c.createLinearGradient(0, 0, len, 0);
+      g.addColorStop(0, color(PALE, f * 0.3));
+      g.addColorStop(1, color(MINT, 0));
+      c.fillStyle = g;
+      c.beginPath();
+      c.moveTo(0, -3.5 * f);
+      c.quadraticCurveTo(len * 0.5, -9 * f, len, 0);
+      c.quadraticCurveTo(len * 0.5, 9 * f, 0, 3.5 * f);
+      c.closePath(); c.fill();
+      c.restore();
+    }
+
+    // 压力波：这条是原版就有的，形状对，留着
+    const waves = h.heavy ? 2 : 1;
+    for (let j = 0; j < waves; j++) {
+      const w = t - 12 - j * 40, f = this.pulse(w, 30, 58, 215) * (j ? 0.13 : 0.2);
+      const radius = lerp(26, h.radius, easeOut(w / 235));
+      c.save(); c.rotate(dirA);
+      this.pressureArc(radius, 0.62, -2.5, 1.75, f, 5);
+      this.pressureArc(radius * 1.05, 0.62, 0.6, 1.6, f * 0.7, 3.4);
+      c.restore();
+    }
+
+    // 碎屑：偏向去向那一侧
+    for (let i = 0; i < 9; i++) {
+      const local = t - 20 - i * 5, f = this.pulse(local, 22, 30, 240);
+      if (f < 0.003) continue;
+      const a = dirA + (i * 2.399 + h.seed) % 2.2 - 1.1;
+      const dist = 18 + Math.max(0, local) * (0.3 + (i % 3) * 0.09);
+      c.save();
+      c.translate(Math.cos(a) * dist, Math.sin(a) * dist);
+      c.rotate(a + 0.4);
+      c.fillStyle = color(i % 3 ? PALE : MINT, f * 0.5);
+      const w = (3 + i % 3) * f;
+      c.beginPath(); c.moveTo(-w * 1.7, 0); c.lineTo(w, -w * 0.6); c.lineTo(w * 0.4, w);
+      c.closePath(); c.fill();
+      c.restore();
+    }
+    c.restore();
+  },
+});
+
+/* 换掉 打击 的招式表，并把接触时刻/落点算好交给原有的火花与点缀层 */
+ATTACKS.strike.variants = BLUNT_V2.map(v => {
+  const h = { ...v, at: 24, family: 'strike', type: 'blunt', impact: [0, 0], life: 660 };
+  h.contactAt = h.travelMs * 0.78;
+  return h;
+});
+
+
+/* ═══════════════════════════════════════════════════════════════════════════
+ *  对抗演出层
+ *
+ *  三件事，都是为了能直接搬进 FVTT：
+ *
+ *  ① 震动不碰镜头。每个特效绕**自己的原点**抖，地图纹丝不动。
+ *     实装时接 canvas.stage.pivot 会跟玩家的平移打架、异常一次就永久偏了，
+ *     而且多端各震各的。5–8px 的自抖已经能读成「打中了」。
+ *
+ *  ② 罪孽色靠**色相旋转**，不改渲染器。原调色板是青绿系（MINT≈172°），
+ *     整张画布转到目标罪孽的色相即可；白色芯不受色相影响，所以高光还是白的。
+ *     这里用 CSS filter 挂在 canvas 元素上（GPU 合成、零 JS 开销）；
+ *     到了 FVTT 换成 PIXI 的 ColorMatrixFilter，同一个数学。
+ *     攻守各一张画布，才能各染各的色 —— 也正对应 FVTT 里每个 token 一个 sprite。
+ *
+ *  ③ 特效对准。所有招式的 rotate 都加上「攻方→守方」的朝向角，
+ *     拼刀落在两者中点，最后一击落在守方身上。
+ * ═════════════════════════════════════════════════════════════════════════ */
+
+const SIN_COLORS = {
+  wrath:'#FD0001', lust:'#FA6D07', sloth:'#c9a110', gluttony:'#77b808',
+  gloom:'#0a94b3', pride:'#074BD8', envy:'#9503DA',
+};
+const SIN_LABELS = {
+  wrath:'暴怒', lust:'色欲', sloth:'怠惰', gluttony:'暴食',
+  gloom:'忧郁', pride:'傲慢', envy:'嫉妒',
+};
+/** 原调色板 MINT #42F1DA 的色相，色相旋转的起点 */
+const BASE_HUE = 172;
+
+function hueOf(hex) {
+  const n = parseInt(hex.slice(1), 16);
+  const r = (n >> 16 & 255) / 255, g = (n >> 8 & 255) / 255, b = (n & 255) / 255;
+  const mx = Math.max(r, g, b), mn = Math.min(r, g, b), d = mx - mn;
+  if (!d) return 0;
+  let h;
+  if (mx === r) h = ((g - b) / d) % 6;
+  else if (mx === g) h = (b - r) / d + 2;
+  else h = (r - g) / d + 4;
+  return (h * 60 + 360) % 360;
+}
+
+/** 某个罪孽对应的 CSS filter：色相转过去，再按饱和度补一点 */
+function sinFilter(sin) {
+  const hex = SIN_COLORS[sin] ?? '#42F1DA';
+  const d = ((hueOf(hex) - BASE_HUE) % 360 + 540) % 360 - 180;
+  // 怠惰/暴食这类黄绿色相在 hue-rotate 后容易发灰，统一提一点饱和
+  return `hue-rotate(${d.toFixed(1)}deg) saturate(1.15)`;
+}
+
+/* ── 演出等级：对应世界设定【演出特效】 ─────────────────────────────────
+ *   full   完整（默认）
+ *   lite   简化 —— 只留命中，不画挥舞与风；给低配机器/嫌花的桌
+ *   off    关闭 —— 一律不画，聊天框照常出结果
+ * ─────────────────────────────────────────────────────────────────────── */
+const VFX_LEVELS = { full: '完整', lite: '简化', off: '关闭' };
+
+Object.assign(GarnishFX.prototype, {
+  /** 朝向角：build 时加到招式自己的 rotate 上 */
+  aim: 0,
+  vfxLevel: 'full',
+
+  /** 拼刀：一次交锋，硬币碎在 side<0 的那一边 */
+  clashAt(x, y, angle, opt = {}) {
+    if (this.vfxLevel === 'off') return;
+    this.sparksList ??= [];
+    this.sparksList.push({
+      x, y, angle, t0: this.time, life: 620,
+      side: opt.side ?? 1, coin: !!opt.coin, power: opt.power ?? 1,
+      seed: rand(0, 999),
+      bits: Array.from({ length: opt.coin ? 7 : 0 }, (_, i) => ({
+        a: angle + Math.PI / 2 + rand(-1.1, 1.1) + (i % 2 ? Math.PI : 0),
+        v: rand(90, 320), spin: rand(-8, 8), size: rand(3.5, 7), life: rand(320, 620),
+      })),
+      shards: Array.from({ length: 16 }, () => ({
+        a: angle + Math.PI / 2 + rand(-0.75, 0.75) + (Math.random() < 0.5 ? Math.PI : 0),
+        v: rand(160, 620), len: rand(7, 22), life: rand(160, 380), delay: rand(0, 60),
+      })),
+    });
+    if (!this.raf) { this.last = performance.now(); this.raf = requestAnimationFrame(this.tick); }
+    if (this.onActivity) this.onActivity(true);
+  },
+});
+
+/* tick / draw 要把拼刀也算进「还活着」与「要画」 */
+const _tick = GarnishFX.prototype.tick;
+GarnishFX.prototype.tick = function (now) {
+  this.sparksList = (this.sparksList ?? []).filter(s => this.time - s.t0 < s.life);
+  _tick.call(this, now);
+  if (!this.raf && this.sparksList.length) {
+    this.last = performance.now();
+    this.raf = requestAnimationFrame(this.tick);
+  }
+};
+
+const _drawG = GarnishFX.prototype.drawGarnish;
+GarnishFX.prototype.drawGarnish = function () {
+  _drawG.call(this);
+  this.drawClashes();
+};
+
+GarnishFX.prototype.drawClashes = function () {
+  const c = this.ctx;
+  for (const s of (this.sparksList ?? [])) {
+    const ms = this.time - s.t0;
+    c.save();
+    c.translate(s.x, s.y);
+    c.scale(this.fit, this.fit);
+    c.rotate(s.angle);
+    c.globalCompositeOperation = 'lighter';
+
+    // ① 交锋的那一下：一枚沿接触面压扁的透镜，垂直于来向
+    const f = smoothstep(ms / 18) * (1 - smoothstep((ms - 40) / 150));
+    if (f > 0.003) {
+      const L = 74 * s.power, w = 9 * s.power;
+      const g = c.createLinearGradient(0, -L, 0, L);
+      g.addColorStop(0, color(MINT, 0));
+      g.addColorStop(0.5, color(WHITE, f));
+      g.addColorStop(1, color(MINT, 0));
+      c.fillStyle = g;
+      c.beginPath();
+      c.moveTo(0, -L);
+      c.quadraticCurveTo(w, 0, 0, L);
+      c.quadraticCurveTo(-w, 0, 0, -L);
+      c.fill();
+      // 十字光：横向那一道短，交锋是「顶住」不是「穿过」
+      const hg = c.createLinearGradient(-46, 0, 46, 0);
+      hg.addColorStop(0, color(PALE, 0));
+      hg.addColorStop(0.5, color(WHITE, f * 0.85));
+      hg.addColorStop(1, color(PALE, 0));
+      c.fillStyle = hg;
+      c.fillRect(-46, -1.2, 92, 2.4);
+      // 罪孽色的底光：白芯不吃色相旋转，只有这层能把颜色亮出来
+      const rg = c.createRadialGradient(0, 0, 0, 0, 0, 96 * s.power);
+      rg.addColorStop(0, color(MINT, f * 0.5));
+      rg.addColorStop(0.4, color(PALE, f * 0.22));
+      rg.addColorStop(1, color(MINT, 0));
+      c.fillStyle = rg;
+      c.fillRect(-96 * s.power, -96 * s.power, 192 * s.power, 192 * s.power);
+    }
+
+    // ② 火花：只朝接触面两侧飞，不是四散
+    for (const p of s.shards) {
+      const t0 = ms - p.delay;
+      if (t0 < 0 || t0 > p.life) continue;
+      const k = Math.pow(1 - t0 / p.life, 1.6), t = t0 / 1000;
+      const d = p.v * t * 0.8;
+      const x = Math.cos(p.a - s.angle) * d, y = Math.sin(p.a - s.angle) * d + 150 * t * t;
+      c.save(); c.translate(x, y); c.rotate(p.a - s.angle);
+      c.fillStyle = color(p.v > 380 ? WHITE : PALE, k * 0.9);
+      const L = p.len * k;
+      c.beginPath(); c.moveTo(-L, 0); c.lineTo(L * 0.3, -1.1 * k);
+      c.lineTo(L * 0.75, 0); c.lineTo(0, 1.3 * k); c.closePath(); c.fill();
+      c.restore();
+    }
+
+    // ③ 硬币破碎：输的那一方掉一枚，碎成几片飞开
+    if (s.coin) {
+      const cp = clamp(ms / 150);
+      c.save();
+      c.rotate(-s.angle);                       // 币面朝屏幕，不跟着来向转
+      c.translate(s.side * 34, -26);
+      if (cp < 1) {
+        // 裂开前：完整的一枚，中间一道越来越亮的裂缝
+        c.strokeStyle = color(WHITE, (1 - cp) * 0.9);
+        c.lineWidth = 2;
+        c.beginPath(); c.arc(0, 0, 13, 0, TAU); c.stroke();
+        c.strokeStyle = color(WHITE, cp);
+        c.lineWidth = 1 + cp * 2;
+        c.beginPath(); c.moveTo(-13, -3); c.lineTo(13, 3); c.stroke();
+      }
+      for (const b of s.bits) {
+        const t0 = ms - 150;
+        if (t0 < 0 || t0 > b.life) continue;
+        const k = Math.pow(1 - t0 / b.life, 1.5), t = t0 / 1000;
+        c.save();
+        c.translate(Math.cos(b.a) * b.v * t, Math.sin(b.a) * b.v * t + 260 * t * t);
+        c.rotate(b.spin * t);
+        c.strokeStyle = color(PALE, k * 0.95);
+        c.lineWidth = 1.8;
+        c.beginPath();
+        c.arc(0, 0, b.size, 0, 2.1);
+        c.stroke();
+        c.restore();
+      }
+      c.restore();
+    }
+    c.restore();
+  }
+};
+
+/* 招式的朝向：所有变体都加上 aim；lite 等级只留命中 */
+const _build = GarnishFX.prototype.build;
+GarnishFX.prototype.build = function (cat, x, y) {
+  const e = _build.call(this, cat, x, y);
+  for (const h of e.hits) h.rotate = (h.rotate ?? 0) + this.aim;
+  // play(x,y) 得是「打在这里」，不是「效果原点在这里」。
+  // 斩击各式的落点写在 h.impact 上（如 [187,6]），原来那张台子永远打在画面正中，
+  // 所以偏出去 190px 也看不出来；一旦要对准守方，就整个打空了。
+  // 把原点往回挪一个「旋转后的落点」，命中就正好落在传进来的坐标上。
+  const h0 = e.hits[0];
+  if (h0) {
+    const ca = Math.cos(h0.rotate ?? 0), sa = Math.sin(h0.rotate ?? 0);
+    const ix = h0.impact?.[0] ?? 0, iy = h0.impact?.[1] ?? 0;
+    e.x -= (ix * ca - iy * sa) * e.fit;
+    e.y -= (ix * sa + iy * ca) * e.fit;
+  }
+  if (this.vfxLevel === 'lite') {
+    for (const h of e.hits) { h.at = 0; h.travelMs = 1; h.contactAt = 0; }
+  }
+  return e;
+};
+
+
+/* ---- 演出台 -------------------------------------------------------------- */
+
+const stage = document.getElementById('stage');
+// 攻守各一张画布：色相旋转挂在元素上，才能各染各的罪孽色
+const fxA = new GarnishFX(document.getElementById('fxA'));
+const fxD = new GarnishFX(document.getElementById('fxD'));
+const cvA = document.getElementById('fxA'), cvD = document.getElementById('fxD');
+window.fxA = fxA; window.fxD = fxD;
+
+const tokA = document.getElementById('tokA'), tokD = document.getElementById('tokD');
+const st = { sinA: 'wrath', sinD: 'pride', cat: 'slash', formula: '3D6+2', ex: 3, level: 'full' };
+let timers = [];
+
+function pos(el) {
+  const r = el.getBoundingClientRect(), s = stage.getBoundingClientRect();
+  return { x: r.left - s.left + r.width / 2, y: r.top - s.top + r.height / 2 };
+}
+function aimAngle() {
+  const a = pos(tokA), d = pos(tokD);
+  return Math.atan2(d.y - a.y, d.x - a.x);
+}
+function applyTint() {
+  cvA.style.filter = sinFilter(st.sinA);
+  cvD.style.filter = sinFilter(st.sinD);
+  tokA.style.setProperty('--c', SIN_COLORS[st.sinA]);
+  tokD.style.setProperty('--c', SIN_COLORS[st.sinD]);
+}
+
+/** 骰式里的骰子数量 = 最后一击挥几次。1D4+2 → 1；3D6 → 3 */
+function diceCount(f) {
+  const m = String(f).toUpperCase().match(/(\d*)\s*D\s*\d+/);
+  if (!m) return 1;
+  return Math.max(1, Math.min(8, parseInt(m[1] || '1')));
+}
+
+function stop() {
+  timers.forEach(clearTimeout);
+  timers = [];
+  fxA.clear(); fxD.clear();
+  fxA.sparksList = []; fxD.sparksList = [];
+  setPhase('待命');
+}
+const at = (ms, fn) => timers.push(setTimeout(fn, ms));
+function setPhase(t) { document.getElementById('phase').textContent = t; }
+
+/** 整段演出：交锋 N 次（每次碎一枚币）→ 停一拍 → 最后一击挥 diceCount 次 */
+function playSequence() {
+  stop();
+  const n = st.ex, hits = diceCount(st.formula);
+  const ang = aimAngle();
+  fxA.aim = ang; fxD.aim = ang + Math.PI;
+  fxA.vfxLevel = fxD.vfxLevel = st.level;
+  if (st.level === 'off') { setPhase('演出已关闭'); return; }
+
+  const a = pos(tokA), d = pos(tokD);
+  const mid = { x: (a.x + d.x) / 2, y: (a.y + d.y) / 2 };
+  const gap = st.level === 'lite' ? 190 : 330;
+
+  for (let i = 0; i < n; i++) {
+    at(i * gap, () => {
+      setPhase(`交锋 ${i + 1} / ${n} · 破币`);
+      // 拼刀画在两张画布上各一半，于是攻守两色在同一处相撞
+      fxA.clashAt(mid.x, mid.y, ang, { side: -1, power: 1 });
+      fxD.clashAt(mid.x, mid.y, ang, { side: 1, coin: true, power: 0.9 });
+    });
+  }
+
+  const t0 = n * gap + (st.level === 'lite' ? 120 : 300);
+  for (let j = 0; j < hits; j++) {
+    at(t0 + j * (st.level === 'lite' ? 90 : 135), () => {
+      setPhase(`最后一击 ${j + 1} / ${hits}`);
+      // 每一击落点稍微散开，连挥才不像同一帧复读
+      const k = (j - (hits - 1) / 2) * 13;
+      const picked = fxA.play(st.cat, d.x - Math.cos(ang) * 6 + Math.sin(ang) * k,
+                                      d.y - Math.sin(ang) * 6 - Math.cos(ang) * k);
+      document.getElementById('picked').textContent = picked.name;
+    });
+  }
+  at(t0 + hits * 140 + 900, () => setPhase('待命'));
+}
+
+/* ---- 控件 ---------------------------------------------------------------- */
+
+const sinSel = (id, key) => {
+  const el = document.getElementById(id);
+  el.innerHTML = Object.entries(SIN_LABELS)
+    .map(([k, v]) => `<option value="${k}" ${st[key] === k ? 'selected' : ''}>${v}</option>`).join('');
+  el.addEventListener('change', () => { st[key] = el.value; applyTint(); });
+};
+sinSel('sinA', 'sinA');
+sinSel('sinD', 'sinD');
+
+document.querySelectorAll('[data-cat]').forEach(el => el.addEventListener('click', () => {
+  st.cat = el.dataset.cat;
+  document.querySelectorAll('[data-cat]').forEach(x =>
+    x.setAttribute('aria-pressed', String(x.dataset.cat === st.cat)));
+}));
+
+const fEl = document.getElementById('formula');
+const syncDice = () => {
+  st.formula = fEl.value || '1D6';
+  document.getElementById('swings').textContent = diceCount(st.formula);
+};
+fEl.addEventListener('input', syncDice);
+
+const exEl = document.getElementById('ex');
+exEl.addEventListener('input', () => {
+  st.ex = parseInt(exEl.value);
+  document.getElementById('exOut').textContent = st.ex;
+});
+
+document.getElementById('level').addEventListener('change', ev => {
+  st.level = ev.target.value;
+  document.getElementById('levelHint').textContent = {
+    full: '挥舞、风、命中、余韵全画',
+    lite: '只留命中闪光，不画挥舞与风',
+    off:  '一律不画，聊天框照常出结果',
+  }[st.level];
+});
+
+document.getElementById('shake').addEventListener('change', ev => {
+  const v = ev.target.checked ? 7 : 0;
+  fxA.g.shake.amp = v; fxD.g.shake.amp = v;
+});
+document.getElementById('slow').addEventListener('change', ev => {
+  fxA.speed = fxD.speed = ev.target.checked ? 0.4 : 1;
+});
+document.getElementById('play').addEventListener('click', playSequence);
+document.getElementById('stopBtn').addEventListener('click', stop);
+document.addEventListener('keydown', ev => {
+  if (['INPUT', 'SELECT', 'TEXTAREA'].includes(ev.target.tagName)) return;
+  if (ev.code === 'Space') { ev.preventDefault(); playSequence(); }
+  if (ev.code === 'Escape') stop();
+});
+
+/* 拖动 token —— 用来验「特效是不是真的对准了」*/
+for (const tok of [tokA, tokD]) {
+  tok.addEventListener('pointerdown', ev => {
+    ev.preventDefault();
+    tok.setPointerCapture(ev.pointerId);
+    const s = stage.getBoundingClientRect();
+    const move = e => {
+      const x = clamp((e.clientX - s.left) / s.width, 0.06, 0.94);
+      const y = clamp((e.clientY - s.top) / s.height, 0.1, 0.9);
+      tok.style.left = (x * 100) + '%';
+      tok.style.top  = (y * 100) + '%';
+      drawAimLine();
+    };
+    const up = () => { tok.removeEventListener('pointermove', move);
+                       tok.removeEventListener('pointerup', up); };
+    tok.addEventListener('pointermove', move);
+    tok.addEventListener('pointerup', up);
+  });
+}
+
+const aimLine = document.getElementById('aim');
+function drawAimLine() {
+  const a = pos(tokA), d = pos(tokD);
+  aimLine.setAttribute('x1', a.x); aimLine.setAttribute('y1', a.y);
+  aimLine.setAttribute('x2', d.x); aimLine.setAttribute('y2', d.y);
+  const m = document.getElementById('midDot');
+  m.setAttribute('cx', (a.x + d.x) / 2); m.setAttribute('cy', (a.y + d.y) / 2);
+}
+
+applyTint();
+syncDice();
+requestAnimationFrame(drawAimLine);
+window.addEventListener('resize', drawAimLine);
+
+</script>
+</body>
+</html>
