@@ -1,0 +1,1205 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0b1114">
+<meta name="description" content="给 attack-vfx-random 的 17 个动作加一层点缀：命中定格、镜头微震、接触辉光、冲击环、余烬、地面尘扫。">
+<title>点缀层调参台 · attack-vfx</title>
+<style>
+:root{
+  color-scheme:dark;
+  --bg:#0b1114; --surface:#111a1e; --surface-2:#0e1619; --line:#263439;
+  --line-2:#34464a; --muted:#94a8ad; --text:#eef5f3; --mint:#a8f8e9;
+  --serif:STSong,"Songti SC","Noto Serif CJK SC",serif;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);
+  font-family:Inter,"PingFang SC","Microsoft YaHei",sans-serif;font-size:15px}
+button,select,input{font:inherit;color:inherit}
+button{cursor:pointer;background:none;border:0}
+:focus-visible{outline:2px solid var(--mint);outline-offset:4px}
+main{max-width:1400px;margin:auto;padding:26px 34px 40px}
+
+header{display:flex;align-items:flex-end;justify-content:space-between;gap:24px;margin-bottom:20px}
+.brand{display:flex;align-items:center;gap:15px}
+.brand-mark{width:38px;height:38px;border:1px solid #44665f;display:grid;place-items:center;
+  color:var(--mint);font:23px var(--serif);transform:rotate(-6deg)}
+h1{margin:0;font:500 25px var(--serif);letter-spacing:.11em}
+.overline{font-size:11.5px;letter-spacing:.17em;color:var(--muted);margin-top:5px}
+.note{font-size:12.5px;color:var(--muted);text-align:right;line-height:1.75;max-width:40ch}
+.note b{font-weight:400;color:#c6d4d2}
+
+.lab{display:grid;grid-template-columns:minmax(0,1fr) 318px;gap:16px;align-items:start}
+@media(max-width:1080px){.lab{grid-template-columns:1fr}}
+
+/* 舞台 —— 沿用你那张的取景：中央渐变、四角标记、准星 */
+.stage{position:relative;height:clamp(400px,58vh,660px);overflow:hidden;isolation:isolate;
+  border:1px solid var(--line);cursor:crosshair;touch-action:manipulation;
+  background:radial-gradient(ellipse at 52% 49%,#192b2f 0%,#101a1f 44%,#0d1519 78%)}
+.stage[data-bg="gray"]{background:#808080}
+.stage[data-bg="checker"]{background-color:#20272b;
+  background-image:conic-gradient(#30373b 25%,transparent 0 50%,#30373b 0 75%,transparent 0);
+  background-size:32px 32px}
+.stage::after{content:"";position:absolute;inset:14px;pointer-events:none;opacity:.65;
+  background:
+    linear-gradient(#5c7776,#5c7776) left top/17px 1px no-repeat,
+    linear-gradient(#5c7776,#5c7776) left top/1px 17px no-repeat,
+    linear-gradient(#5c7776,#5c7776) right bottom/17px 1px no-repeat,
+    linear-gradient(#5c7776,#5c7776) right bottom/1px 17px no-repeat}
+canvas#fx{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+.stage-top{position:absolute;top:22px;left:26px;right:26px;display:flex;
+  justify-content:space-between;gap:18px;z-index:2;pointer-events:none}
+.scene{font-size:13.5px;letter-spacing:.12em}
+.scene b{color:var(--mint);font-weight:400;margin-right:11px}
+.scene small{display:block;margin-top:7px;color:#94b3b3;font-size:12px;letter-spacing:.03em}
+.state{font-size:12px;letter-spacing:.11em;color:#b1c7ca}
+.tagon{position:absolute;right:26px;bottom:22px;z-index:2;pointer-events:none;
+  font-size:11.5px;letter-spacing:.13em;color:var(--mint);opacity:.85}
+.stage.plain .tagon{color:#7d9296}
+.reticle{position:absolute;left:50%;top:50%;width:18px;height:18px;
+  transform:translate(-50%,-50%);opacity:.4;pointer-events:none}
+.reticle::before,.reticle::after{content:"";position:absolute;background:#8ba6a8}
+.reticle::before{width:18px;height:1px;top:9px}
+.reticle::after{width:1px;height:18px;left:9px}
+.stage.playing .reticle{opacity:0}
+
+/* 类别 + 工具条 */
+.modes{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:12px}
+.mode{position:relative;border:1px solid var(--line);background:var(--surface);
+  padding:13px 16px;text-align:left;transition:background .16s,border-color .16s}
+.mode:hover{border-color:#668b82;background:#142125}
+.mode[aria-pressed="true"]{border-color:#96dcca;background:#182b2c}
+.mode[aria-pressed="true"]::before{content:"";position:absolute;left:-1px;top:14px;bottom:14px;
+  width:3px;background:var(--mint)}
+.mode strong{display:block;font:500 19px var(--serif);letter-spacing:.12em}
+.mode span{display:block;margin-top:4px;font-size:12px;color:#a4b9bb}
+.mode kbd{position:absolute;top:10px;right:11px;font:11px ui-monospace,monospace;color:#a6bbb8}
+
+.bar{display:flex;flex-wrap:wrap;align-items:center;gap:18px;margin-top:12px;
+  border:1px solid var(--line);background:var(--surface-2);padding:12px 16px}
+.chk{display:flex;align-items:center;gap:8px;font-size:13.5px;color:var(--muted);cursor:pointer}
+input[type=checkbox]{width:16px;height:16px;accent-color:var(--mint);cursor:pointer;margin:0}
+select{border:1px solid var(--line-2);background:#131f23;border-radius:3px;
+  padding:6px 9px;font-size:13px}
+#toggleLbl{color:var(--mint);letter-spacing:.06em}
+.stage.plain~.bar #toggleLbl{color:var(--muted)}
+.launch{margin-left:auto;padding:11px 26px;border:1px solid var(--mint);background:var(--mint);
+  color:#102a27;font-weight:600;font-size:14px;border-radius:2px;min-width:150px;
+  transition:background .15s,transform .12s}
+.launch:hover{background:#d3fff5}
+.launch:active{transform:translateY(1px)}
+
+/* 旋钮栏 */
+.panel{border:1px solid var(--line);background:var(--surface)}
+.panel h2{margin:0;padding:13px 16px;font:500 13px var(--serif);letter-spacing:.18em;
+  color:var(--mint);border-bottom:1px solid var(--line);position:sticky;top:0;
+  background:var(--surface);z-index:1}
+.grp{padding:13px 16px;border-bottom:1px solid #1c282c}
+.grp:last-child{border-bottom:0}
+.grp h3{margin:0 0 9px;font-size:12px;font-weight:400;letter-spacing:.14em;color:var(--muted)}
+.knob{display:grid;grid-template-columns:56px minmax(0,1fr) 52px;gap:9px;
+  align-items:center;margin-bottom:7px;font-size:12.5px}
+.klab{color:#b6c8ca}
+input[type=range]{width:100%;accent-color:var(--mint);cursor:pointer;margin:0}
+output{font:12px ui-monospace,monospace;color:var(--mint);text-align:right;
+  font-variant-numeric:tabular-nums}
+
+/* 导出 */
+.export{margin-top:16px;border:1px solid var(--line);background:var(--surface-2)}
+.export .hd{display:flex;align-items:center;gap:12px;padding:11px 16px;
+  border-bottom:1px solid var(--line)}
+.export h2{margin:0;font:500 13px var(--serif);letter-spacing:.16em;color:var(--mint)}
+.export .hint{font-size:12px;color:var(--muted)}
+.export .btns{margin-left:auto;display:flex;gap:8px}
+.export button{border:1px solid var(--line-2);padding:6px 14px;font-size:12.5px;
+  color:#cfe2e6;border-radius:2px;transition:border-color .15s,color .15s}
+.export button:hover{border-color:var(--mint);color:var(--mint)}
+pre{margin:0;padding:14px 16px;overflow-x:auto;font:12.5px/1.65 ui-monospace,monospace;
+  color:#bcd6d2}
+footer{margin-top:18px;padding-top:15px;border-top:1px solid #202f33;
+  font-size:12px;color:#829b9f;line-height:1.8;max-width:88ch}
+footer kbd{font:11.5px ui-monospace,monospace;color:#c6d8d4;
+  border:1px solid var(--line);border-radius:3px;padding:1px 5px;margin-right:3px}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0)}
+@media(max-width:750px){
+  main{padding:18px 16px}
+  header{flex-direction:column;align-items:flex-start;gap:10px}
+  .note{text-align:left}
+  .stage{height:clamp(320px,48vh,470px)}
+  .modes{gap:7px}.mode{padding:11px 10px}.mode kbd{display:none}
+  .launch{width:100%;margin-left:0}
+  .panel{max-height:none}
+}
+@media(prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <div class="brand">
+      <div class="brand-mark" aria-hidden="true">缀</div>
+      <div><h1>点缀层调参台</h1><div class="overline">GARNISH LAYER / ATTACK-VFX</div></div>
+    </div>
+    <p class="note"><b>原渲染器一行没改</b><br>
+      点缀是外面套的一层子类，只补 时间 / 镜头 / 空气，不再画第二条刀光。</p>
+  </header>
+
+  <div class="lab">
+    <div>
+      <section class="stage" id="stage" data-bg="dark" tabindex="0" role="button"
+               aria-label="演示区域，点击任意位置随机播放一个动作">
+        <div class="stage-top">
+          <div class="scene"><b id="sceneName">斩击</b><span id="sceneVar">7 式随机</span>
+            <small>点击画面任意位置出手</small></div>
+          <div class="state" id="sceneState">待触发</div>
+        </div>
+        <div class="reticle" aria-hidden="true"></div>
+        <canvas id="fx" aria-hidden="true"></canvas>
+        <div class="tagon" id="tagon">GARNISH</div>
+      </section>
+
+      <div class="modes" role="group" aria-label="选择攻击类别">
+        <button type="button" class="mode" data-mode="slash" aria-pressed="true">
+          <strong>斩击</strong><span>7 式 · 横斩 / 弧斩 / 回旋重斩</span><kbd>1</kbd></button>
+        <button type="button" class="mode" data-mode="strike" aria-pressed="false">
+          <strong>打击</strong><span>5 式 · 重击 / 上挑 / 震荡</span><kbd>2</kbd></button>
+        <button type="button" class="mode" data-mode="thrust" aria-pressed="false">
+          <strong>突刺</strong><span>5 式 · 快刺 / 螺旋 / 贯穿</span><kbd>3</kbd></button>
+      </div>
+
+      <div class="bar">
+        <label class="chk"><input type="checkbox" id="toggle" checked>
+          <span id="toggleLbl">点缀：开</span></label>
+        <label class="chk"><input type="checkbox" id="slow">0.4× 慢放</label>
+        <label class="chk">背景
+          <select id="bg">
+            <option value="dark">深色</option>
+            <option value="gray">参考灰</option>
+            <option value="checker">透明网格</option>
+          </select></label>
+        <button type="button" class="launch" id="launch">随机斩击</button>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>点缀参数</h2>
+      <div id="deck"></div>
+    </div>
+  </div>
+
+  <section class="export">
+    <div class="hd">
+      <h2>导出</h2>
+      <span class="hint">整段替换 <code>GARNISH</code> 常量即可</span>
+      <div class="btns">
+        <button type="button" id="reset">还原默认</button>
+        <button type="button" id="copy">复制 JSON</button>
+      </div>
+    </div>
+    <pre id="json"></pre>
+  </section>
+
+  <footer>
+    <kbd>1</kbd><kbd>2</kbd><kbd>3</kbd> 切换类别　<kbd>空格</kbd> 出手　<kbd>G</kbd> 开关点缀（用来直接对比原版）。
+    点缀层只在<strong>接触时刻</strong>起一次，所以 17 个动作都能吃到，不用逐个改。
+  </footer>
+  <p class="sr" id="say" aria-live="polite"></p>
+</main>
+
+<script>
+'use strict';
+/*
+ * Standalone Canvas 2D attack effects. No image/video/CDN dependencies.
+ * Reuse the renderer classes, catalogs and math helpers above the UI section:
+ * const fx = new AttackVFX(yourTransparentCanvas);
+ * const picked = fx.play('slash', x, y); // 'strike' or 'thrust'; CSS pixels.
+ * Each call uniformly selects ONE independent animation from that category.
+ * picked = {category, id, name}; repeated draws may select the same animation.
+ * fx.speed = 0.5; fx.scale = 1; fx.clear(); fx.destroy();
+ * The canvas is transparent; the preview background belongs to the page.
+ */
+const TAU=Math.PI*2;
+const clamp=(v,a=0,b=1)=>Math.min(b,Math.max(a,v));
+const lerp=(a,b,t)=>a+(b-a)*t;
+const easeOut=t=>1-Math.pow(1-clamp(t),3);
+const rand=(a,b)=>a+Math.random()*(b-a);
+const color=(rgb,a)=>`rgba(${rgb},${clamp(a)})`;
+const WHITE='242,255,250', PALE='174,255,241', MINT='66,241,218', TEAL='15,131,132';
+const MODES={
+  sweep:{name:'洗法',index:'01',duration:1330,hits:[
+    {at:70,type:'arc',rx:222,ry:82,start:-2.88,span:4.54,rotate:-.20,width:30,dir:1,power:.85,impact:[187,6],life:540},
+    {at:620,type:'arc',rx:214,ry:195,start:-2.67,span:4.65,rotate:.11,width:44,dir:1,power:1.1,impact:[187,5],life:640,dash:true}
+  ]},
+  thrust:{name:'刺法',index:'02',duration:1620,hits:[
+    {at:70,type:'thrust',rx:176,ry:98,start:-2.9,span:3.9,rotate:.03,width:20,dir:1,power:.9,impact:[205,0],life:470},
+    {at:480,type:'thrust',rx:187,ry:115,start:-3.03,span:4.1,rotate:-.07,width:26,dir:1,power:1,impact:[219,0],life:480},
+    {at:1010,type:'arc',rx:249,ry:89,start:-3.1,span:4.65,rotate:.32,width:36,dir:1,power:1.15,impact:[205,8],life:600,dash:true}
+  ]},
+  heavy:{name:'骨断',index:'03',duration:1710,hits:[
+    {at:150,type:'arc',rx:211,ry:90,start:-3.01,span:3.9,rotate:.30,width:36,dir:1,power:.9,impact:[190,24],life:490},
+    {at:850,type:'arc',rx:229,ry:201,start:-3.17,span:5.17,rotate:-.12,width:57,dir:1,power:1.5,impact:[214,12],life:770,dash:true,heavy:true}
+  ]}
+};
+
+class LegacyBladeVFX {
+  constructor(canvas){
+    this.canvas=canvas;this.ctx=canvas.getContext('2d');
+    if(!this.ctx)throw new Error('Canvas 2D is unavailable.');
+    this.width=1;this.height=1;this.dpr=1;this.speed=1;this.scale=1;
+    this.effects=[];this.time=0;this.last=0;this.raf=0;this.preview=null;this.onActivity=null;this.destroyed=false;
+    this.tick=this.tick.bind(this);this.resize=this.resize.bind(this);
+    this.observer=new ResizeObserver(this.resize);this.observer.observe(canvas);
+    this.resize();
+  }
+  resize(){
+    const box=this.canvas.getBoundingClientRect();this.width=box.width||1;this.height=box.height||1;
+    this.dpr=Math.min(window.devicePixelRatio||1,2);this.canvas.width=Math.round(this.width*this.dpr);this.canvas.height=Math.round(this.height*this.dpr);
+    this.draw();
+  }
+  get fit(){return Math.min(1.15,this.width/760,this.height/475)*this.scale;}
+  build(mode,x,y){
+    const m=MODES[mode]||MODES.sweep;
+    return {mode,x,y,start:this.time,fit:this.fit,duration:m.duration,hits:m.hits.map(h=>({...h,seed:Math.random()*1000,sparks:this.makeSparks(h)}))};
+  }
+  play(mode='sweep',x=this.width/2,y=this.height/2){
+    if(this.destroyed)return;
+    this.preview=null;
+    // Bound simultaneous sequences to keep repeated touch/click input responsive.
+    if(this.effects.length>=5)this.effects.shift();
+    this.effects.push(this.build(mode,x,y));
+    if(this.onActivity)this.onActivity(true);
+    if(!this.raf){this.last=performance.now();this.raf=requestAnimationFrame(this.tick);}
+  }
+  showPreview(mode){
+    this.clear();this.preview=this.build(mode,this.width*.48,this.height*.48);this.draw();
+  }
+  clear(){
+    cancelAnimationFrame(this.raf);this.raf=0;this.effects=[];this.preview=null;
+    this.ctx.clearRect(0,0,this.canvas.width,this.canvas.height);if(this.onActivity)this.onActivity(false);
+  }
+  destroy(){this.clear();this.observer.disconnect();this.destroyed=true;}
+  tick(now){
+    this.raf=0;this.time+=Math.min(now-this.last,50)*this.speed;this.last=now;
+    this.effects=this.effects.filter(e=>this.time-e.start<e.duration);
+    this.draw();
+    if(this.effects.length)this.raf=requestAnimationFrame(this.tick);else if(this.onActivity)this.onActivity(false);
+  }
+  makeSparks(h){
+    return Array.from({length:h.heavy?53:32},(_,i)=>{
+      const a=rand(-Math.PI,Math.PI),v=rand(85,440)*(h.heavy?1.25:1);
+      return {a,v,len:rand(6,25),life:rand(230,540),delay:rand(55,145),offset:rand(-24,24),warm:i%11===0};
+    });
+  }
+  draw(){
+    const c=this.ctx;c.setTransform(this.dpr,0,0,this.dpr,0,0);c.clearRect(0,0,this.width,this.height);
+    if(this.preview){const e=this.preview;e.x=this.width*.46;e.y=this.height*.48;e.fit=this.fit;c.save();c.globalAlpha=.80;this.drawSequence(e, e.mode==='heavy'?1052:e.mode==='thrust'?662:832,true);c.restore();}
+    for(const e of this.effects)this.drawSequence(e,this.time-e.start,false);
+  }
+  drawSequence(e,t,preview){
+    const c=this.ctx;c.save();c.translate(e.x,e.y);c.scale(e.fit,e.fit);
+    for(const h of e.hits){
+      const age=t-h.at;
+      if(age<0&&age>-100&&!preview)this.windup(h,-age/100);
+      if(age>=0&&age<h.life)this.drawHit(h,age);
+    }
+    c.restore();
+  }
+  windup(h,t){
+    const c=this.ctx;c.save();c.globalCompositeOperation='lighter';c.strokeStyle=color(PALE,(1-t)*.14);c.lineWidth=.8;
+    c.beginPath();c.ellipse(-24,10,110*(.6+t*.4),24,0,Math.PI*.9,TAU*1.1);c.stroke();c.restore();
+  }
+  drawHit(h,age){
+    const c=this.ctx;
+    // Fast blade reveal, a brief impact hold, then a longer translucent afterimage.
+    const reveal=easeOut(age/145),fade=Math.pow(1-clamp((age-160)/(h.life-160)),1.65);
+    const drift=clamp((age-160)/h.life);
+    c.save();c.rotate(h.rotate);c.translate(h.dash?lerp(-38,26,reveal):0,0);
+    c.globalCompositeOperation='lighter';
+    if(h.heavy){this.ribbon(h,reveal,fade*.16,1.085+drift*.15,.86,36);this.ribbon(h,reveal,fade*.18,.94+drift*.1,.7,-27);}
+    this.ribbon(h,reveal,fade*.12,1.035+drift*.045,1.55,6);
+    this.ribbon(h,reveal,fade,1+drift*.035,1,0);
+    // An offset, pale wind trail gives depth without a complete luminous ring.
+    this.filaments(h,reveal,fade,age);
+    if(h.type==='thrust')this.spear(h,age,fade,reveal);
+    if(h.dash)this.dashLines(h,age,fade,reveal);
+    this.edgeChips(h,age,fade,reveal);
+    this.impact(h,age);
+    this.particles(h,age);
+    c.restore();
+  }
+  point(h,u,mult=1,offset=0,inner=0){
+    const a=h.start+h.span*u;
+    return [Math.cos(a)*(h.rx*mult-inner),Math.sin(a)*(h.ry*mult-inner*.72)+offset];
+  }
+  thickness(h,u,progress){
+    const envelope=Math.pow(Math.sin(Math.PI*clamp(u/progress)),.66);
+    const taper=.46+.65*u;
+    const tooth=(Math.pow(Math.max(0,Math.sin(u*83+h.seed)),8)*.36+Math.pow(Math.max(0,Math.sin(u*139+h.seed)),14)*.19)*clamp((u-.3)*4);
+    return Math.max(0,h.width*envelope*taper*(1-tooth));
+  }
+  ribbon(h,progress,alpha,mult,widthMult,offset){
+    if(progress<.005||alpha<.001)return;
+    const c=this.ctx,n=110;const end=progress;
+    c.save();c.globalAlpha*=alpha;
+    const gradient=c.createLinearGradient(-h.rx,-h.ry,h.rx,h.ry*.45);
+    gradient.addColorStop(0,color(PALE,.12));gradient.addColorStop(.24,color(MINT,.50));gradient.addColorStop(.54,color(PALE,.85));gradient.addColorStop(.8,color(WHITE,.99));gradient.addColorStop(1,color(MINT,.23));
+    c.fillStyle=gradient;c.beginPath();
+    for(let i=0;i<=n;i++){const u=end*i/n,p=this.point(h,u,mult,offset);i?c.lineTo(...p):c.moveTo(...p);}
+    for(let i=n;i>=0;i--){const u=end*i/n,thick=this.thickness(h,u,end)*widthMult,p=this.point(h,u,mult,offset,thick);c.lineTo(...p);}
+    c.closePath();c.fill();
+    // Narrow white outer edge, cut into tapered strokes rather than a uniform ring.
+    c.lineCap='round';
+    for(let k=0;k<3;k++){
+      c.strokeStyle=k===0?color(MINT,.3):k===1?color(PALE,.94):color(WHITE,1);
+      c.lineWidth=k===0?7:k===1?2.3:1.1;
+      c.beginPath();
+      for(let i=0;i<=n;i++){const u=end*i/n,p=this.point(h,u,mult,offset,k===2?1:0);i?c.lineTo(...p):c.moveTo(...p);}
+      c.stroke();
+    }
+    // Internal brush strands retain the thin translucent body visible in the reference.
+    for(let j=0;j<3;j++){
+      c.strokeStyle=color(j===1?TEAL:WHITE,j===1?.54:.35);c.lineWidth=1+j*.6;c.beginPath();
+      for(let i=0;i<=70;i++){const u=end*(.14+i/70*.72),w=this.thickness(h,u,end)*(.3+j*.2),p=this.point(h,u,mult,offset,w);i?c.lineTo(...p):c.moveTo(...p);}
+      c.stroke();
+    }
+    c.restore();
+  }
+  filaments(h,progress,fade,age){
+    const c=this.ctx;c.save();
+    for(let j=0;j<7;j++){
+      const lag=.045*j,head=clamp(progress-lag);if(head<.01)continue;
+      c.strokeStyle=color(j%3===0?MINT:WHITE,fade*(.24-j*.02));c.lineWidth=j<3?1.35:.6;
+      const mult=1+(j-2)*.029+age*.000022;c.beginPath();
+      for(let i=0;i<=72;i++){const u=head*(.045+i/72*.94),p=this.point(h,u,mult,(j-3)*2.5);i?c.lineTo(...p):c.moveTo(...p);}
+      c.stroke();
+    }c.restore();
+  }
+  spear(h,age,fade,reveal){
+    const c=this.ctx,alpha=fade*clamp(age/35),tip=lerp(-105,h.impact[0]+140,easeOut(age/100));
+    c.save();c.globalAlpha*=alpha;
+    const g=c.createLinearGradient(-280,0,tip,0);g.addColorStop(0,color(MINT,0));g.addColorStop(.45,color(PALE,.75));g.addColorStop(.75,color(WHITE,1));g.addColorStop(1,color(MINT,.1));
+    c.fillStyle=g;
+    c.beginPath();c.moveTo(-300,-4);c.lineTo(80,-7);c.lineTo(tip,0);c.lineTo(46,4);c.lineTo(-250,2);c.lineTo(0,0);c.closePath();c.fill();
+    c.fillStyle=color(WHITE,.96);c.beginPath();c.moveTo(-116,-1.1);c.lineTo(tip,0);c.lineTo(-86,1.5);c.closePath();c.fill();
+    c.fillStyle=color('255,181,94',.7*clamp(1-(age-90)/160));c.beginPath();c.moveTo(-165,-2);c.lineTo(h.impact[0]+16,0);c.lineTo(-116,1);c.closePath();c.fill();c.restore();
+  }
+  dashLines(h,age,fade,reveal){
+    const c=this.ctx,f=fade*clamp((age-24)/45)*Math.pow(1-clamp((age-180)/360),1.6);
+    if(f<=0)return;
+    c.save();c.globalAlpha*=f;
+    for(let j=0;j<5;j++){
+      const y=-20+j*14,x=-310+(j%2)*53,len=(j%2?302:380)*reveal,w=j%2?3:8;
+      const g=c.createLinearGradient(x,y,x+len,y);g.addColorStop(0,color(MINT,0));g.addColorStop(.36,color(PALE,.7));g.addColorStop(.65,color(WHITE,.93));g.addColorStop(1,color(PALE,0));
+      c.fillStyle=g;c.beginPath();c.moveTo(x,y);c.lineTo(x+len*.65,y-w);c.lineTo(x+len,y-1);c.lineTo(x+len*.45,y+w*.4);c.lineTo(x+len*.6,y);c.closePath();c.fill();
+    }c.restore();
+  }
+  edgeChips(h,age,fade,progress){
+    const c=this.ctx;c.save();
+    for(let i=0;i<26;i++){
+      const u=(i+.5)/27;if(u>progress)continue;
+      const wobble=Math.sin(i*12.13+h.seed),p=this.point(h,u,1.035+Math.max(0,age-100)*.00010,0);
+      const a=h.start+h.span*u+Math.PI/2,s=(3+Math.abs(wobble)*9)*fade;
+      c.save();c.translate(p[0],p[1]);c.rotate(a+.25*wobble);c.fillStyle=color(WHITE,fade*.75);
+      c.beginPath();c.moveTo(-s,0);c.lineTo(s,-1.2);c.lineTo(s*.4,1.6);c.closePath();c.fill();c.restore();
+    }c.restore();
+  }
+  impact(h,age){
+    const t=age-85;if(t<0||t>420)return;
+    const c=this.ctx,burst=Math.exp(-Math.max(0,t-28)/88)*clamp(t/18),power=h.power;
+    c.save();c.translate(...h.impact);c.scale(power,power);
+    // Local glow only: no full-screen flash.
+    const glow=c.createRadialGradient(0,0,0,0,0,104);
+    glow.addColorStop(0,color(PALE,burst*.55));glow.addColorStop(.22,color(MINT,burst*.19));glow.addColorStop(1,color(MINT,0));c.fillStyle=glow;c.fillRect(-105,-105,210,210);
+    const spike=(length,width,angle,a)=>{c.save();c.rotate(angle);c.fillStyle=color(WHITE,a);c.beginPath();c.moveTo(-length,0);c.lineTo(-width,-width*.55);c.lineTo(0,-width*1.1);c.lineTo(width,-width*.45);c.lineTo(length,0);c.lineTo(width,width*.45);c.lineTo(0,width*1.1);c.lineTo(-width,width*.55);c.closePath();c.fill();c.restore();};
+    const expansion=.85+easeOut(t/75)*.2;
+    spike(131*expansion,4.1,0,burst);spike(70*expansion,3.2,1.26,burst*.86);spike(51,2.3,-.70,burst*.64);spike(40,1.7,.52,burst*.67);
+    c.fillStyle=color(WHITE,burst);c.beginPath();c.arc(0,0,4.3*burst,0,TAU);c.fill();c.restore();
+  }
+  particles(h,age){
+    const c=this.ctx;c.save();
+    for(const p of h.sparks){
+      const ms=age-p.delay;if(ms<0||ms>p.life)continue;
+      const t=ms/1000,f=Math.pow(1-ms/p.life,1.65),distance=p.v*t*.83;
+      const x=h.impact[0]+Math.cos(p.a)*distance,y=h.impact[1]+p.offset*.2+Math.sin(p.a)*distance+38*t*t;
+      c.save();c.translate(x,y);c.rotate(p.a+.2*t);c.fillStyle=color(p.warm?'255,197,108':(p.v>270?WHITE:PALE),f*(p.warm?.55:.9));
+      const len=p.len*f;c.beginPath();c.moveTo(-len,0);c.lineTo(len*.23,-1.1*f);c.lineTo(len*.7,0);c.lineTo(0,1.35*f);c.closePath();c.fill();c.restore();
+    }c.restore();
+  }
+}
+// Each point of the trail has its own birth time and fade envelope.
+// Defaults: 20 ms soft onset; 105–165 ms travel; edge fades before the mist.
+// Set fx.smooth=false to compare against the supplied renderer.
+const smoothstep=t=>{t=clamp(t);return t*t*(3-2*t);};
+class BladeVFX extends LegacyBladeVFX {
+  constructor(canvas){super(canvas);this.smooth=true;}
+  showPreview(){this.clear();} // A still slash must not blink away when playback starts.
+  travel(h){return h.type==='thrust'?105:h.heavy?165:140;}
+  birth(h,u){return this.travel(h)*(1-Math.pow(1-clamp(u),1/1.65));}
+  head(h,age){return 1-Math.pow(1-clamp(age/this.travel(h)),1.65);}
+  contact(h){
+    if(h.type==='thrust')return 66;
+    const angle=Math.atan2(h.impact[1]/h.ry,h.impact[0]/h.rx);
+    const u=clamp((angle-h.start)/h.span);
+    return this.birth(h,u);
+  }
+  build(mode,x,y){
+    const e=super.build(mode,x,y);
+    if(this.smooth===false)return e;
+    for(const h of e.hits){
+      h.sparks=h.sparks.slice(0,h.heavy?29:18).map(p=>({...p,
+        delay:this.contact(h)+rand(8,72),life:rand(180,390),len:p.len*.72,v:p.v*.82
+      }));
+      h.tailEnd=Math.max(h.life,...h.sparks.map(p=>p.delay+p.life));
+    }
+    e.duration=Math.max(...e.hits.map(h=>h.at+h.tailEnd))+24;
+    return e;
+  }
+  drawSequence(e,t,preview){
+    if(this.smooth===false)return super.drawSequence(e,t,preview);
+    const c=this.ctx;c.save();c.translate(e.x,e.y);c.scale(e.fit,e.fit);
+    for(const h of e.hits){
+      const age=t-h.at;
+      if(age<0&&age>-70&&!preview)this.windup(h,-age/70);
+      if(age>=0&&age<(h.tailEnd||h.life))this.drawHit(h,age);
+    }
+    c.restore();
+  }
+  windup(h,t){
+    if(this.smooth===false)return super.windup(h,t);
+    const c=this.ctx;c.save();c.rotate(h.rotate);c.globalCompositeOperation='lighter';
+    c.strokeStyle=color(PALE,Math.sin(Math.PI*t)*.13);c.lineWidth=.8;c.beginPath();
+    for(let i=0;i<=18;i++){const p=this.point(h,.075*i/18);i?c.lineTo(...p):c.moveTo(...p);}
+    c.stroke();c.restore();
+  }
+  envelope(h,u,age,layer='body'){
+    const local=age-this.birth(h,u);
+    if(local<=0)return 0;
+    const heavy=h.heavy?1.14:1;
+    const timings=layer==='edge'?[13,55,155]:layer==='mist'?[34,106,280]:[20,82,218];
+    const [attack,hold,release]=timings;
+    return smoothstep(local/attack)*(1-smoothstep((local-hold*heavy)/(release*heavy)));
+  }
+  drawHit(h,age){
+    if(this.smooth===false)return super.drawHit(h,age);
+    const c=this.ctx,head=this.head(h,age);
+    c.save();c.rotate(h.rotate);c.translate(h.dash?lerp(-38,26,head):0,0);c.globalCompositeOperation='lighter';
+    // Supporting arc is narrow and dim for thrusts, which read along the spear.
+    this.flowRibbon(h,age,head,h.type==='thrust'?.43:1);
+    this.flowFilaments(h,age,head);
+    if(h.type==='thrust')this.flowSpear(h,age);
+    if(h.dash)this.flowDash(h,age);
+    this.flowChips(h,age);
+    // Match impact to the point where the moving blade reaches the target.
+    const contactAge=age-this.contact(h);
+    if(contactAge>=0&&contactAge<235){
+      c.save();c.globalAlpha*=.8*(1-smoothstep((contactAge-155)/80));
+      super.impact(h,contactAge+85);c.restore();
+    }
+    this.flowParticles(h,age);
+    c.restore();
+  }
+  flowRibbon(h,age,head,strength){
+    const c=this.ctx,n=120,heavy=h.heavy?1.14:1;
+    const drift=clamp((age-160)/h.life)*.017;
+    // Sweep the rear boundary forward; fade layers on independent envelopes.
+    // Continuous paths avoid seams and do not depend on conic gradients.
+    const layer=(kind,inset,lineWidth,gain,rgb)=>{
+      const edge=kind==='edge';
+      const tail=smoothstep((age-(edge?90:125))/((edge?205:260)*heavy));
+      const alpha=smoothstep(age/(edge?16:24))*(1-smoothstep((age-(edge?85:170))/((edge?210:250)*heavy)));
+      if(tail>=head||alpha<.001)return;
+      const profile=u=>{
+        const base=Math.pow(Math.max(0,Math.sin(Math.PI*u)),.72)*(.42+.63*u);
+        const tooth=1-.12*Math.pow(Math.max(0,Math.sin(u*91+h.seed)),9);
+        const tips=smoothstep((head-u)/.065)*smoothstep((u-tail)/.075);
+        return h.width*base*tooth*tips*(.58+.42*this.envelope(h,u,age));
+      };
+      const p=this.point(h,tail,1+drift),q=this.point(h,head,1+drift);
+      const g=c.createLinearGradient(p[0],p[1],q[0]+.001,q[1]);
+      g.addColorStop(0,color(rgb||MINT,0));
+      g.addColorStop(.16,color(rgb||PALE,.48));
+      g.addColorStop(.55,color(rgb||WHITE,.88));
+      g.addColorStop(.86,color(rgb||PALE,.75));
+      g.addColorStop(1,color(rgb||WHITE,0));
+      c.save();c.globalAlpha*=alpha*gain*strength;
+      c.beginPath();
+      for(let i=0;i<=n;i++){
+        const u=lerp(tail,head,i/n),p=this.point(h,u,1+drift,0,lineWidth?profile(u)*inset:0);
+        i?c.lineTo(...p):c.moveTo(...p);
+      }
+      if(lineWidth){c.strokeStyle=g;c.lineWidth=lineWidth;c.lineCap='butt';c.stroke();}
+      else {
+        for(let i=n;i>=0;i--){const u=lerp(tail,head,i/n);c.lineTo(...this.point(h,u,1+drift,0,profile(u)*inset));}
+        c.closePath();c.fillStyle=g;c.fill();
+      }
+      c.restore();
+    };
+    layer('body',1,0,.9);
+    layer('edge',.28,0,.32,WHITE);
+    layer('body',0,7,.075,MINT);
+    layer('edge',0,2.3,.52,PALE);
+    layer('edge',0,1,1,WHITE);
+    layer('body',.32,.65,.27,WHITE);
+    layer('body',.7,1.2,.18,MINT);
+  }
+  flowFilaments(h,age,head){
+    const c=this.ctx,count=h.heavy?5:3;
+    for(let j=0;j<count;j++){
+      const lag=12+j*11,localAge=age-lag;if(localAge<0)continue;
+      const end=this.head(h,localAge),mult=1+(j-1)*.017+Math.max(0,age-150)*.000025;
+      for(let i=0;i<64;i++){
+        const u=i/64,v=Math.min((i+1)/64,end);if(u>=end)break;
+        const alpha=this.envelope(h,(u+v)/2,localAge,'mist')*(.15-j*.019)
+          *Math.sin(Math.PI*u)*(h.type==='thrust'?.5:1);
+        c.strokeStyle=color(j%2?PALE:MINT,alpha);c.lineWidth=j===0?1.1:.65;
+        c.beginPath();c.moveTo(...this.point(h,u,mult,j-1));c.lineTo(...this.point(h,v,mult,j-1));c.stroke();
+      }
+    }
+  }
+  flowSpear(h,age){
+    const c=this.ctx,head=1-Math.pow(1-clamp(age/100),2),tip=lerp(-220,h.impact[0]+125,head);
+    const attack=smoothstep(age/22),tail=lerp(-290,tip-70,smoothstep((age-100)/260));
+    const fade=attack*(1-smoothstep((age-100)/240));if(fade<.001)return;
+    c.save();c.globalAlpha*=fade;
+    const g=c.createLinearGradient(tail,0,Math.max(tail+1,tip),0);
+    g.addColorStop(0,color(MINT,0));g.addColorStop(.48,color(PALE,.38));g.addColorStop(.88,color(WHITE,.95));g.addColorStop(1,color(WHITE,0));
+    c.fillStyle=g;const w=5.5*attack;
+    c.beginPath();c.moveTo(tail,-w*.2);c.lineTo(lerp(tail,tip,.69),-w);c.lineTo(tip,0);c.lineTo(lerp(tail,tip,.63),w*.52);c.lineTo(tail,w*.1);c.closePath();c.fill();
+    c.fillStyle=color(WHITE,.85*(1-smoothstep((age-75)/150)));
+    c.beginPath();c.moveTo(lerp(tail,tip,.25),-.65);c.lineTo(tip,0);c.lineTo(lerp(tail,tip,.28),.7);c.closePath();c.fill();c.restore();
+  }
+  flowDash(h,age){
+    const c=this.ctx;
+    for(let j=0;j<3;j++){
+      const t=age-18-j*12,f=smoothstep(t/28)*(1-smoothstep((t-95)/185));if(f<.001)continue;
+      const end=lerp(-180,98-j*23,easeOut(t/100)),start=lerp(-310,end-70,smoothstep((t-110)/180));
+      const y=-18+j*21,w=j===1?3.2:1.6;
+      const g=c.createLinearGradient(start,y,Math.max(start+1,end),y);
+      g.addColorStop(0,color(MINT,0));g.addColorStop(.67,color(PALE,f*.38));g.addColorStop(1,color(WHITE,0));
+      c.fillStyle=g;c.beginPath();c.moveTo(start,y);c.lineTo(lerp(start,end,.72),y-w);c.lineTo(end,y);c.lineTo(lerp(start,end,.6),y+w*.35);c.closePath();c.fill();
+    }
+  }
+  flowChips(h,age){
+    const c=this.ctx;
+    for(let i=0;i<13;i++){
+      const u=(i+.8)/15,local=age-this.birth(h,u)-28-i%3*9;
+      const f=smoothstep(local/22)*(1-smoothstep((local-30)/170));if(f<.001)continue;
+      const wobble=Math.sin(i*12.13+h.seed),p=this.point(h,u,1.022+Math.max(0,local)*.00006);
+      c.save();c.translate(...p);c.rotate(h.start+h.span*u+Math.PI/2+.18*wobble);
+      const s=(2+Math.abs(wobble)*5)*f;c.fillStyle=color(PALE,f*.48);
+      c.beginPath();c.moveTo(-s,0);c.lineTo(s,-.65);c.lineTo(s*.2,.9);c.closePath();c.fill();c.restore();
+    }
+  }
+  flowParticles(h,age){
+    const c=this.ctx;
+    for(const p of h.sparks){
+      const ms=age-p.delay;if(ms<=0||ms>=p.life)continue;
+      const t=ms/1000,f=smoothstep(ms/20)*Math.pow(1-ms/p.life,1.7);
+      const distance=p.v*t*.83,x=h.impact[0]+Math.cos(p.a)*distance;
+      const y=h.impact[1]+p.offset*.2+Math.sin(p.a)*distance+38*t*t;
+      c.save();c.translate(x,y);c.rotate(p.a+.2*t);c.fillStyle=color(p.warm?'255,197,108':PALE,f*(p.warm?.4:.68));
+      const len=p.len*(.3+.7*f);c.beginPath();c.moveTo(-len,0);c.lineTo(len*.23,-.8*f);c.lineTo(len*.7,0);c.lineTo(0,f);c.closePath();c.fill();c.restore();
+    }
+  }
+}
+
+// One input selects exactly one variant, uniformly from its category.
+const ATTACKS={
+  slash:{name:'斩击',index:'01',variants:[
+    ...MODES.sweep.hits,...MODES.thrust.hits,...MODES.heavy.hits
+  ].map((h,i)=>({...h,at:24,family:'slash',id:'slash-'+(i+1),
+    name:['回旋横斩','大弧斩','短切穿斩','长切穿斩','疾进斜斩','下劈斩','回旋重斩'][i]}))},
+  strike:{name:'打击',index:'02',variants:[
+    {id:'strike-1',name:'正面重击',rotate:0,power:1,radius:120,rays:11,stretch:1,style:'burst'},
+    {id:'strike-2',name:'上挑打击',rotate:-1.48,power:.95,radius:111,rays:8,stretch:1.3,style:'rising'},
+    {id:'strike-3',name:'斜向敲击',rotate:.70,power:1,radius:130,rays:9,stretch:1.16,style:'side'},
+    {id:'strike-4',name:'震荡重锤',rotate:Math.PI/2,power:1.3,radius:167,rays:13,stretch:.9,style:'hammer',heavy:true},
+    {id:'strike-5',name:'压缩爆破',rotate:-.18,power:1.1,radius:142,rays:7,stretch:1.05,style:'crush'}
+  ].map(h=>({...h,at:24,family:'strike',type:'blunt',impact:[0,0],life:640,contactAt:h.heavy?72:52}))},
+  thrust:{name:'突刺',index:'03',variants:[
+    {id:'thrust-1',name:'直线快刺',rotate:0,width:5,reach:205,travelMs:104,style:'needle',power:.8},
+    {id:'thrust-2',name:'斜上挑刺',rotate:-.53,width:7,reach:217,travelMs:119,style:'lift',power:.9},
+    {id:'thrust-3',name:'斜下贯刺',rotate:.50,width:6,reach:240,travelMs:98,style:'dive',power:1},
+    {id:'thrust-4',name:'螺旋穿刺',rotate:-.06,width:7,reach:219,travelMs:138,style:'spiral',power:1.1},
+    {id:'thrust-5',name:'重型贯穿',rotate:.05,width:13,reach:267,travelMs:151,style:'lance',power:1.35,heavy:true}
+  ].map(h=>({...h,at:24,family:'thrust',type:'pierce',impact:[0,0],life:640}))}
+};
+
+class AttackVFX extends BladeVFX {
+  play(category='slash',x=this.width/2,y=this.height/2){
+    super.play(category,x,y);
+    return this.lastPick;
+  }
+  build(category,x,y){
+    category=ATTACKS[category]?category:'slash';
+    const pool=ATTACKS[category].variants;
+    const h={...pool[Math.floor(Math.random()*pool.length)],seed:rand(0,1000)};
+    if(h.family==='slash'){
+      h.sparks=this.makeSparks(h).slice(0,h.heavy?29:18).map(p=>({...p,
+        delay:this.contact(h)+rand(8,72),life:rand(180,390),len:p.len*.72,v:p.v*.82
+      }));
+    }else{
+      if(h.family==='thrust'){
+        let lo=0,hi=1;
+        for(let i=0;i<18;i++){const m=(lo+hi)/2;if(smoothstep(m)<260/(260+h.reach))lo=m;else hi=m;}
+        h.contactAt=h.travelMs*(lo+hi)/2;
+      }
+      h.sparks=Array.from({length:h.family==='strike'?(h.heavy?29:21):(h.heavy?21:13)},(_,i)=>{
+        let a=rand(-Math.PI,Math.PI);
+        if(h.family==='thrust')a=i%4===0?rand(2.5,3.8):rand(-1.10,1.10);
+        else if(h.style==='rising'||h.style==='side')a=i%5===0?a:rand(-1.2,1.2);
+        return {a,v:rand(100,h.heavy?480:365),len:rand(4,h.family==='strike'?15:11),life:rand(210,430),
+          delay:h.contactAt+rand(9,78),offset:rand(-10,10),warm:i%13===0};
+      });
+    }
+    h.tailEnd=Math.max(h.life,...h.sparks.map(p=>p.delay+p.life));
+    this.lastPick={category,id:h.id,name:h.name};
+    return {mode:category,variantId:h.id,variantName:h.name,x,y,start:this.time,fit:this.fit,
+      duration:h.at+h.tailEnd+24,hits:[h]};
+  }
+  windup(h,t){if(h.family==='slash')super.windup(h,t);}
+  drawHit(h,age){
+    if(h.family==='slash'){super.drawHit(h,age);return;}
+    const c=this.ctx;c.save();c.rotate(h.rotate);c.globalCompositeOperation='lighter';
+    if(h.family==='strike')this.blunt(h,age);else this.pierce(h,age);
+    this.flowParticles(h,age);c.restore();
+  }
+  pulse(age,attack=20,hold=45,release=190){
+    return smoothstep(age/attack)*(1-smoothstep((age-hold)/release));
+  }
+  streak(x0,x1,y,width,alpha,tint=PALE){
+    if(alpha<.001||x1<=x0)return;
+    const c=this.ctx,g=c.createLinearGradient(x0,y,x1,y);
+    g.addColorStop(0,color(MINT,0));g.addColorStop(.57,color(tint,alpha*.6));
+    g.addColorStop(.84,color(WHITE,alpha));g.addColorStop(1,color(WHITE,0));
+    c.fillStyle=g;c.beginPath();c.moveTo(x0,y);c.lineTo(lerp(x0,x1,.76),y-width);
+    c.lineTo(x1,y);c.lineTo(lerp(x0,x1,.64),y+width*.52);c.closePath();c.fill();
+  }
+  glow(radius,alpha){
+    if(alpha<.001)return;
+    const c=this.ctx,g=c.createRadialGradient(0,0,0,0,0,radius);
+    g.addColorStop(0,color(PALE,alpha));g.addColorStop(.2,color(MINT,alpha*.32));g.addColorStop(1,color(MINT,0));
+    c.fillStyle=g;c.fillRect(-radius,-radius,radius*2,radius*2);
+  }
+  pressureArc(radius,flat,start,span,alpha,width){
+    if(alpha<.001)return;
+    const c=this.ctx,n=52;
+    // A tapered band leaves an open, broken pressure wave instead of a ring.
+    c.fillStyle=color(PALE,alpha);c.beginPath();
+    for(let i=0;i<=n;i++){
+      const a=start+span*i/n,x=Math.cos(a)*radius,y=Math.sin(a)*radius*flat;
+      i?c.lineTo(x,y):c.moveTo(x,y);
+    }
+    for(let i=n;i>=0;i--){
+      const a=start+span*i/n,r=radius-width*Math.sin(Math.PI*i/n);
+      c.lineTo(Math.cos(a)*r,Math.sin(a)*r*flat);
+    }
+    c.closePath();c.fill();
+  }
+  blunt(h,age){
+    const c=this.ctx,t=age-h.contactAt;
+    const approach=this.pulse(age,20,h.contactAt-12,120);
+    const head=lerp(-154,24,smoothstep(age/(h.contactAt+16)));
+    if(h.style==='rising'||h.style==='side'||h.style==='hammer'){
+      this.streak(-202,head,0,h.heavy?15:10,approach*.45);
+      this.streak(-169,head-20,-17,2.2,approach*.26);
+      this.streak(-146,head-39,17,1.8,approach*.23);
+    }
+    if(t<0)return;
+    const flash=this.pulse(t,16,28,h.heavy?167:130),mist=this.pulse(t,30,50,240);
+    const expansion=lerp(.65,1.09,easeOut(t/100));
+    this.glow(h.radius*.82,mist*.37*h.power);
+    // Irregular, compact contact silhouette. The bright center retreats first.
+    for(let layer=0;layer<2;layer++){
+      const alpha=(layer===0?mist*.18:flash*.89)*h.power;
+      if(alpha<.001)continue;
+      c.fillStyle=color(layer===0?MINT:WHITE,alpha);c.beginPath();
+      for(let i=0;i<h.rays*2;i++){
+        const a=TAU*i/(h.rays*2)+.09*Math.sin(i*7.19+h.seed);
+        const wobble=.76+.24*Math.sin(i*13.3+h.seed);
+        const reach=i%2?(12+8*wobble)*h.power:(26+38*wobble)*h.power;
+        const r=reach*expansion*(layer===0?1.21:1),x=Math.cos(a)*r*h.stretch,y=Math.sin(a)*r;
+        i?c.lineTo(x,y):c.moveTo(x,y);
+      }
+      c.closePath();c.fill();
+    }
+    const waves=h.heavy?2:1;
+    for(let j=0;j<waves;j++){
+      const w=t-14-j*38,f=this.pulse(w,30,58,215)*(j?.15:.24);
+      const radius=lerp(28,h.radius,easeOut(w/235));
+      const flat=h.style==='hammer'?.45:h.style==='rising'?.68:.84;
+      c.save();if(h.style==='hammer')c.rotate(-h.rotate);
+      this.pressureArc(radius,flat,-2.82+.2*j,1.98,f,5.5-j);
+      this.pressureArc(radius*1.04,flat,.26,1.82,f*.77,3.7);c.restore();
+    }
+    if(h.style==='crush'){
+      const f=this.pulse(t,14,31,165),r=lerp(10,92,easeOut(t/170));
+      for(let j=0;j<4;j++){
+        c.save();c.rotate(j*Math.PI/2+.28);this.streak(-r,Math.max(-r+1,-r+52*f),0,4.2,f*.7);c.restore();
+      }
+    }
+    // Chunkier debris supports the mass of a hit; it appears after contact.
+    for(let i=0;i<9;i++){
+      const local=t-23-i*5,f=this.pulse(local,22,30,240);if(f<.001)continue;
+      const a=i*2.399+h.seed,dist=21+Math.max(0,local)*(.27+(i%3)*.08);
+      c.save();c.translate(Math.cos(a)*dist,Math.sin(a)*dist);c.rotate(a+.4);
+      c.fillStyle=color(i%3?PALE:MINT,f*.52);
+      const w=(3+i%3)*f;c.beginPath();c.moveTo(-w*1.7,0);c.lineTo(w,-w*.6);c.lineTo(w*.4,w);c.closePath();c.fill();c.restore();
+    }
+  }
+  pierce(h,age){
+    const c=this.ctx,travel=smoothstep(age/h.travelMs),tip=lerp(-260,h.reach,travel);
+    const tail=lerp(-292,h.reach-18,smoothstep((age-115)/260));
+    const body=this.pulse(age,22,125,h.heavy?270:220),core=this.pulse(age,14,82,160);
+    this.streak(tail,tip,0,h.width,body*.9);
+    this.streak(tail-12,tip,0,h.width*2.3,body*.11,MINT);
+    if(tip>tail&&core>.001){
+      c.fillStyle=color(WHITE,core*.92);c.beginPath();
+      c.moveTo(lerp(tail,tip,.31),-1.0);c.lineTo(tip,0);c.lineTo(lerp(tail,tip,.33),1.0);c.closePath();c.fill();
+    }
+    const strands=h.heavy?5:3;
+    for(let j=0;j<strands;j++){
+      const lag=13+j*9,local=age-lag,f=this.pulse(local,24,90,205);
+      const end=lerp(-205,h.reach-35-j*12,smoothstep(local/h.travelMs));
+      const start=lerp(-295+j*9,end-16,smoothstep((local-105)/235));
+      const y=(j-(strands-1)/2)*(h.heavy?10:8);
+      this.streak(start,end,y,j%2?1.2:1.8,f*.30);
+    }
+    if(h.style==='spiral'&&tip>tail){
+      for(let k=0;k<2;k++){
+        c.strokeStyle=color(k?PALE:MINT,body*.41);c.lineWidth=k?.75:1.3;c.beginPath();
+        for(let i=0;i<=100;i++){
+          const u=i/100,x=lerp(tail,tip,u),envelope=Math.sin(Math.PI*u);
+          const y=Math.sin(u*TAU*2.2-age*.014+k*Math.PI)*19*envelope;
+          i?c.lineTo(x,y):c.moveTo(x,y);
+        }
+        c.stroke();
+      }
+    }
+    const t=age-h.contactAt;
+    if(t<0)return;
+    const flash=this.pulse(t,13,26,130),mist=this.pulse(t,25,45,205);
+    this.glow(h.heavy?88:62,mist*.29*h.power);
+    for(let j=0;j<3;j++){
+      c.save();c.rotate(j===0?0:j===1?1.22:-.86);
+      const length=(j===0?70:j===1?40:27)*h.power*(.82+.18*easeOut(t/80));
+      c.fillStyle=color(WHITE,flash*(j===0?.92:.6));c.beginPath();
+      c.moveTo(-length,0);c.lineTo(-2,-2.6);c.lineTo(length,0);c.lineTo(2,2.6);c.closePath();c.fill();c.restore();
+    }
+    // Small transverse air wakes reinforce penetration without a large slash.
+    for(let j=0;j<(h.heavy?2:1);j++){
+      const local=t-19-j*32,f=this.pulse(local,23,47,185);
+      c.save();c.translate(-12-j*41+easeOut(local/150)*15,0);
+      const radius=lerp(10,h.heavy?55:35,easeOut(local/185));
+      c.scale(.36,1);this.pressureArc(radius,1,-1.25,2.5,f*.27,3.2);c.restore();
+    }
+  }
+}
+window.AttackVFX=AttackVFX;
+window.BladeVFX=AttackVFX;
+
+/* ═══════════════════════════════════════════════════════════════════════════
+ *  点缀层 —— 不改上面那套渲染器，只在外面套一层子类。
+ *
+ *  上面画的是「刀光本身」：缎带、矛身、冲击多边形。
+ *  这一层刻意不再画第二条刀光，只补三样它没有的东西：
+ *
+ *      时间 —— 命中瞬间的定格（hitstop）
+ *      镜头 —— 一次衰减的微震
+ *      空气 —— 接触辉光 / 冲击环 / 余烬 / 地面尘扫
+ *
+ *  分工清楚，所以加进去不会跟原来的线条抢戏，关掉也不影响原效果。
+ *
+ *      const fx = new GarnishFX(canvas);
+ *      fx.garnishOn = true;            // 总开关，false 时等同于原版
+ *      fx.g.shake.amp = 7;             // 参数见 GARNISH
+ *      fx.play('slash', x, y);
+ * ═════════════════════════════════════════════════════════════════════════ */
+
+const GARNISH = {
+  // 命中定格：越过接触时刻的一小段时间被压慢，重量感几乎全靠它
+  hitstop: { scale: 0.20, ms: 46 },
+  // 镜头微震：幅度按招式威力缩放，指数衰减
+  shake:   { amp: 7.0, decay: 95 },
+  // 接触辉光：很短的一团加色光，给白闪一个落点
+  bloom:   { alpha: 0.55, radius: 130, ms: 95 },
+  // 冲击环：一圈快速外扩的扁椭圆，边缘带一点起伏
+  ring:    { alpha: 0.28, radius: 185, ms: 250, width: 2.2, flat: 0.78 },
+  // 余烬：慢速上飘的小点，填住原效果结束后的空白尾巴
+  embers:  { count: 9, alpha: 0.50, rise: 62, ms: 800 },
+  // 地面尘扫：只给重招，一道贴地的扁光晕
+  smear:   { alpha: 0.20, radius: 235, ms: 430, y: 34 },
+};
+
+class GarnishFX extends AttackVFX {
+  constructor(canvas) {
+    super(canvas);
+    this.g = JSON.parse(JSON.stringify(GARNISH));
+    this.garnishOn = true;
+    this.shake = 0;
+    this.bursts = [];
+  }
+
+  /** 这一招真正「打到」的时刻：斩击算弧线走到落点，其余用 contactAt */
+  contactOf(h) {
+    return h.family === 'slash' ? this.contact(h) : (h.contactAt ?? 0);
+  }
+
+  build(category, x, y) {
+    const e = super.build(category, x, y);
+    const h = e.hits[0];
+    e.garnish = {
+      at: h.at + this.contactOf(h),
+      fired: false,
+      power: h.power ?? 1,
+      heavy: !!h.heavy,
+    };
+    return e;
+  }
+
+  /** 定格：任何一发处在接触后的窗口内，整条时间轴就被压慢 */
+  scaleNow() {
+    if (!this.garnishOn) return 1;
+    const { scale, ms } = this.g.hitstop;
+    if (ms <= 0) return 1;
+    for (const e of this.effects) {
+      const ge = e.garnish;
+      if (!ge) continue;
+      const age = this.time - e.start;
+      if (age >= ge.at && age < ge.at + ms) return scale;
+    }
+    return 1;
+  }
+
+  onContact(e, ge) {
+    if (!this.garnishOn) return;
+    const P = ge.power * (ge.heavy ? 1.25 : 1);
+    // 落点：原效果是 translate(e.x,e.y) → scale(fit) → rotate(h.rotate) 之后
+    // 在 h.impact 处画命中的，所以点缀也要走同一条变换，否则环和光会飘在半空
+    const h  = e.hits[0];
+    const ca = Math.cos(h.rotate ?? 0), sa = Math.sin(h.rotate ?? 0);
+    const ix = (h.impact?.[0] ?? 0), iy = (h.impact?.[1] ?? 0);
+    if (this.g.shake.amp > 0) {
+      this.shake = Math.min(1.5, this.g.shake.amp / 10 * P);
+    }
+    const cnt = Math.round(this.g.embers.count * (ge.heavy ? 1.4 : 1));
+    this.bursts.push({
+      x: e.x, y: e.y,
+      ox: ix * ca - iy * sa, oy: ix * sa + iy * ca,
+      t0: this.time, power: P, heavy: ge.heavy,
+      seed: rand(0, 999),
+      life: Math.max(this.g.ring.ms, this.g.embers.ms, this.g.smear.ms, this.g.bloom.ms) + 40,
+      embers: Array.from({ length: cnt }, () => ({
+        a: rand(-Math.PI, Math.PI), v: rand(18, 76), size: rand(1.1, 3.2),
+        delay: rand(0, 190), life: rand(0.55, 1) * this.g.embers.ms, sway: rand(-1, 1),
+      })),
+    });
+  }
+
+  tick(now) {
+    this.raf = 0;
+    const real = Math.min(now - this.last, 50);
+    this.last = now;
+    this.time += real * this.speed * this.scaleNow();
+    this.shake *= Math.exp(-real / Math.max(1, this.g.shake.decay));
+
+    for (const e of this.effects) {
+      const ge = e.garnish;
+      if (!ge || ge.fired) continue;
+      if (this.time - e.start >= ge.at) { ge.fired = true; this.onContact(e, ge); }
+    }
+
+    this.effects = this.effects.filter(e => this.time - e.start < e.duration);
+    this.bursts  = this.bursts.filter(b => this.time - b.t0 < b.life);
+    this.draw();
+
+    if (this.effects.length || this.bursts.length) {
+      this.raf = requestAnimationFrame(this.tick);
+    } else {
+      this.shake = 0;
+      if (this.onActivity) this.onActivity(false);
+    }
+  }
+
+  clear() {
+    this.bursts = [];
+    this.shake = 0;
+    super.clear();
+  }
+
+  draw() {
+    const c = this.ctx;
+    if (!c) return;
+    c.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+    c.clearRect(0, 0, this.width, this.height);
+    // 构造期 super() 里的 resize() 会先跑一次 draw，那时 this.g 还不存在
+    const ready = !!this.g;
+    c.save();
+    if (ready && this.garnishOn && this.shake > 0.004) {
+      const n = performance.now(), s = this.shake;
+      c.translate(Math.sin(n * 0.091) * this.g.shake.amp * 1.5 * s,
+                  Math.cos(n * 0.139) * this.g.shake.amp * s);
+    }
+    for (const e of this.effects) this.drawSequence(e, this.time - e.start, false);
+    if (ready && this.garnishOn) this.drawGarnish();
+    c.restore();
+  }
+
+  drawGarnish() {
+    const c = this.ctx, g = this.g;
+    for (const b of this.bursts) {
+      const ms = this.time - b.t0;
+      c.save();
+      c.translate(b.x, b.y);
+      c.scale(this.fit, this.fit);
+      c.translate(b.ox, b.oy);
+      c.globalCompositeOperation = 'lighter';
+
+      // ① 接触辉光
+      const bl = 1 - smoothstep(ms / Math.max(1, g.bloom.ms));
+      if (g.bloom.alpha > 0 && bl > 0.004) {
+        const r = g.bloom.radius * b.power;
+        const rg = c.createRadialGradient(0, 0, 0, 0, 0, r);
+        rg.addColorStop(0, color(WHITE, g.bloom.alpha * bl));
+        rg.addColorStop(0.18, color(PALE, g.bloom.alpha * bl * 0.45));
+        rg.addColorStop(1, color(MINT, 0));
+        c.fillStyle = rg;
+        c.fillRect(-r, -r, r * 2, r * 2);
+      }
+
+      // ② 冲击环：扁椭圆，边缘带起伏，快出慢消
+      const rp = clamp(ms / Math.max(1, g.ring.ms));
+      if (g.ring.alpha > 0 && rp < 1) {
+        const R = (30 + easeOut(rp) * g.ring.radius) * b.power;
+        const a = Math.pow(1 - rp, 1.7) * g.ring.alpha;
+        c.strokeStyle = color(PALE, a);
+        c.lineWidth = Math.max(0.4, g.ring.width * (1 - rp * 0.7));
+        c.beginPath();
+        for (let i = 0; i <= 56; i++) {
+          const th = (i / 56) * TAU;
+          const w = 1 + Math.sin(th * 5 + b.seed) * 0.022 + Math.sin(th * 11 + b.seed * 2) * 0.011;
+          const x = Math.cos(th) * R * w, y = Math.sin(th) * R * g.ring.flat * w;
+          i ? c.lineTo(x, y) : c.moveTo(x, y);
+        }
+        c.closePath();
+        c.stroke();
+        c.strokeStyle = color(WHITE, a * 0.5);
+        c.lineWidth = Math.max(0.3, g.ring.width * 0.35);
+        c.stroke();
+      }
+
+      // ③ 地面尘扫：只给重招，贴地的一道扁光
+      if (b.heavy && g.smear.alpha > 0) {
+        const sp = clamp(ms / Math.max(1, g.smear.ms));
+        if (sp < 1) {
+          const R = (40 + easeOut(sp) * g.smear.radius) * b.power;
+          const a = Math.pow(1 - sp, 1.5) * g.smear.alpha;
+          const rg = c.createRadialGradient(0, g.smear.y, 0, 0, g.smear.y, R);
+          rg.addColorStop(0, color(PALE, a * 0.75));
+          rg.addColorStop(0.55, color(MINT, a * 0.3));
+          rg.addColorStop(1, color(MINT, 0));
+          c.save();
+          c.translate(0, g.smear.y);
+          c.scale(1, 0.17);
+          c.translate(0, -g.smear.y);
+          c.fillStyle = rg;
+          c.fillRect(-R, g.smear.y - R, R * 2, R * 2);
+          c.restore();
+        }
+      }
+
+      // ④ 余烬：慢速上飘，专门用来填原效果结束后的那段空白
+      if (g.embers.alpha > 0) {
+        for (const p of b.embers) {
+          const t0 = ms - p.delay;
+          if (t0 < 0 || t0 > p.life) continue;
+          const k = t0 / p.life, t = t0 / 1000;
+          const f = Math.sin(Math.PI * Math.pow(k, 0.75));
+          const d = p.v * t;
+          const x = Math.cos(p.a) * d + Math.sin(t * 3.1 + p.sway * 4) * 7 * k;
+          const y = Math.sin(p.a) * d * 0.5 - g.embers.rise * easeOut(k);
+          c.fillStyle = color(p.size > 2.4 ? WHITE : PALE, f * g.embers.alpha);
+          c.beginPath();
+          c.arc(x, y, p.size * (1 - k * 0.4), 0, TAU);
+          c.fill();
+        }
+      }
+      c.restore();
+    }
+  }
+}
+window.GarnishFX = GarnishFX;
+
+
+/* ---- 调参台 -------------------------------------------------------------- */
+
+const stage  = document.getElementById('stage');
+const engine = new GarnishFX(document.getElementById('fx'));
+window.attackFX = engine;
+
+let selected = 'slash';
+const sceneName = document.getElementById('sceneName');
+const sceneVar  = document.getElementById('sceneVar');
+const sceneState= document.getElementById('sceneState');
+const launch    = document.getElementById('launch');
+const say       = document.getElementById('say');
+
+engine.onActivity = live => {
+  stage.classList.toggle('playing', live);
+  sceneState.textContent = live ? '播放中' : '待触发';
+};
+
+function selectMode(cat) {
+  selected = cat;
+  const m = ATTACKS[cat];
+  engine.clear();
+  document.querySelectorAll('[data-mode]').forEach(el =>
+    el.setAttribute('aria-pressed', String(el.dataset.mode === cat)));
+  sceneName.textContent = m.name;
+  sceneVar.textContent  = m.variants.length + ' 式随机';
+  launch.textContent    = '随机' + m.name;
+}
+
+function trigger(x = engine.width * 0.48, y = engine.height * 0.49) {
+  const picked = engine.play(selected, x, y);
+  sceneVar.textContent = picked.name;
+  say.textContent = '已触发 ' + picked.name;
+}
+
+document.querySelectorAll('[data-mode]').forEach(el =>
+  el.addEventListener('click', () => selectMode(el.dataset.mode)));
+stage.addEventListener('click', ev => {
+  if (ev.detail === 0) { trigger(); return; }
+  const r = stage.getBoundingClientRect();
+  trigger(ev.clientX - r.left, ev.clientY - r.top);
+});
+stage.addEventListener('keydown', ev => {
+  if (ev.code === 'Enter' && !ev.repeat) { ev.preventDefault(); trigger(); }
+});
+launch.addEventListener('click', () => trigger());
+
+document.addEventListener('keydown', ev => {
+  if (ev.altKey || ev.ctrlKey || ev.metaKey || ev.repeat) return;
+  if (['INPUT', 'SELECT', 'TEXTAREA'].includes(ev.target.tagName)) return;
+  const mode = { Digit1: 'slash', Digit2: 'strike', Digit3: 'thrust' }[ev.code];
+  if (mode) { ev.preventDefault(); selectMode(mode); return; }
+  if (ev.code === 'Space') {
+    if (ev.target.closest('button')) return;
+    ev.preventDefault(); trigger();
+  }
+  if (ev.code === 'KeyG') { ev.preventDefault(); toggle.checked = !toggle.checked; applyToggle(); }
+});
+
+/* ---- 旋钮 ---------------------------------------------------------------- */
+// 每个旋钮声明成 [路径, 标签, 最小, 最大, 步长, 单位]。id 一律加 k- 前缀，
+// 免得跟页面上某个元素的 id 撞——撞了取到的是 DOM 节点，导出里会冒出 NaN。
+const KNOBS = [
+  ['命中定格', [
+    ['hitstop.scale', '时间缩放', 0.05, 1, 0.01, '×'],
+    ['hitstop.ms',    '定格时长', 0,   140, 1,   'ms'],
+  ]],
+  ['镜头微震', [
+    ['shake.amp',   '幅度',   0, 22,  0.5, 'px'],
+    ['shake.decay', '衰减',  30, 260, 5,   'ms'],
+  ]],
+  ['接触辉光', [
+    ['bloom.alpha',  '强度', 0, 1,   0.01, ''],
+    ['bloom.radius', '半径', 20, 300, 5,   ''],
+    ['bloom.ms',     '时长', 20, 260, 5,   'ms'],
+  ]],
+  ['冲击环', [
+    ['ring.alpha',  '强度', 0, 1,   0.01, ''],
+    ['ring.radius', '扩散', 40, 420, 5,   ''],
+    ['ring.width',  '粗细', 0.4, 9, 0.1,  'px'],
+    ['ring.flat',   '压扁', 0.2, 1, 0.01, ''],
+    ['ring.ms',     '时长', 60, 620, 10,  'ms'],
+  ]],
+  ['余烬', [
+    ['embers.count', '数量', 0, 26,  1,    ''],
+    ['embers.alpha', '强度', 0, 1,   0.01, ''],
+    ['embers.rise',  '上飘', 0, 190, 2,    ''],
+    ['embers.ms',    '时长', 200, 1700, 20, 'ms'],
+  ]],
+  ['地面尘扫（仅重招）', [
+    ['smear.alpha',  '强度', 0, 1,   0.01, ''],
+    ['smear.radius', '扩散', 60, 520, 10,  ''],
+    ['smear.y',      '地面高度', -40, 130, 2, ''],
+    ['smear.ms',     '时长', 100, 900, 10, 'ms'],
+  ]],
+];
+
+const get = (path) => path.split('.').reduce((o, k) => o[k], engine.g);
+const set = (path, v) => {
+  const parts = path.split('.');
+  let o = engine.g;
+  for (let i = 0; i < parts.length - 1; i++) o = o[parts[i]];
+  o[parts.at(-1)] = v;
+};
+
+const deck = document.getElementById('deck');
+deck.innerHTML = KNOBS.map(([group, rows]) => `
+  <section class="grp">
+    <h3>${group}</h3>
+    ${rows.map(([path, label, min, max, step, unit]) => `
+      <label class="knob" for="k-${path}">
+        <span class="klab">${label}</span>
+        <input type="range" id="k-${path}" data-path="${path}"
+               min="${min}" max="${max}" step="${step}" value="${get(path)}">
+        <output id="o-${path}">${get(path)}${unit}</output>
+      </label>`).join('')}
+  </section>`).join('');
+
+const UNITS = Object.fromEntries(KNOBS.flatMap(([, rows]) => rows.map(r => [r[0], r[5]])));
+deck.querySelectorAll('input[type=range]').forEach(inp => {
+  inp.addEventListener('input', () => {
+    const p = inp.dataset.path, v = parseFloat(inp.value);
+    set(p, v);
+    document.getElementById('o-' + p).textContent = v + UNITS[p];
+    dumpJSON();
+  });
+});
+
+/* ---- 开关 / 导出 --------------------------------------------------------- */
+
+const toggle = document.getElementById('toggle');
+function applyToggle() {
+  engine.garnishOn = toggle.checked;
+  document.getElementById('toggleLbl').textContent = toggle.checked ? '点缀：开' : '点缀：关（原版）';
+  stage.classList.toggle('plain', !toggle.checked);
+}
+toggle.addEventListener('change', applyToggle);
+document.getElementById('slow').addEventListener('change', ev => {
+  engine.speed = ev.target.checked ? 0.4 : 1;
+});
+document.getElementById('bg').addEventListener('change', ev => {
+  stage.dataset.bg = ev.target.value;
+});
+
+const out = document.getElementById('json');
+function dumpJSON() { out.textContent = JSON.stringify(engine.g, null, 2); }
+
+document.getElementById('copy').addEventListener('click', async () => {
+  const btn = document.getElementById('copy');
+  try { await navigator.clipboard.writeText(out.textContent); btn.textContent = '已复制'; }
+  catch { const r = document.createRange(); r.selectNode(out);
+          getSelection().removeAllRanges(); getSelection().addRange(r); btn.textContent = '已选中，Ctrl+C'; }
+  setTimeout(() => { btn.textContent = '复制 JSON'; }, 1600);
+});
+document.getElementById('reset').addEventListener('click', () => {
+  engine.g = JSON.parse(JSON.stringify(GARNISH));
+  deck.querySelectorAll('input[type=range]').forEach(inp => {
+    const v = get(inp.dataset.path);
+    inp.value = v;
+    document.getElementById('o-' + inp.dataset.path).textContent = v + UNITS[inp.dataset.path];
+  });
+  dumpJSON();
+});
+
+selectMode('slash');
+applyToggle();
+dumpJSON();
+
+</script>
+</body>
+</html>
