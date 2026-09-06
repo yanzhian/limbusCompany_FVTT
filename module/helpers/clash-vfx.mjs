@@ -10,6 +10,8 @@
  * 三者都由某一台机器（多数时候是 GM）驱动，需要广播给所有人。
  */
 
+import { VfxStage } from "./vfx/vfx-stage.mjs";
+
 export class ClashVFX {
 
   /** 系统 socket 频道（与 ClashManager 共用同一条） */
@@ -261,6 +263,50 @@ export class ClashVFX {
     this._emit({ type: "clashVfx", kind: "pan", point });
   }
 
+  /* ─── ③ 攻击特效（招式本体，见 vfx/attack-vfx.mjs）──────────────────── */
+
+  /**
+   * 一次交锋：攻守双方同时朝中点挥出，兵器在那里撞上。
+   * 破币默认只在对抗**结束**那一次——规则书里赢家是在对抗结束时才砸掉输家一枚币。
+   */
+  static broadcastClash(atkActor, defActor, opt = {}) {
+    const point = this.midPoint(atkActor, defActor);
+    if (!point) return;
+    const payload = {
+      x: point.x, y: point.y,
+      aim: this.angleBetween(atkActor, defActor),
+      sinA: opt.sinA ?? "", sinD: opt.sinD ?? "",
+      catA: opt.catA ?? "slash", catD: opt.catD ?? "slash",
+      coin: !!opt.coin,
+    };
+    VfxStage.clash(payload);
+    this._emit({ type: "clashVfx", kind: "clashHit", data: payload });
+  }
+
+  /**
+   * 最后一击：朝目标挥 swings 次（= 骰式里的骰子数量）。
+   * @param {Actor} atkActor @param {Actor} tgtActor
+   */
+  static broadcastStrike(atkActor, tgtActor, opt = {}) {
+    const to = this.centerOf(tgtActor);
+    if (!to) return;
+    const payload = {
+      x: to.x, y: to.y,
+      aim: this.angleBetween(atkActor, tgtActor),
+      sin: opt.sin ?? "", category: opt.category ?? "slash",
+      swings: opt.swings ?? 1,
+    };
+    VfxStage.strike(payload);
+    this._emit({ type: "clashVfx", kind: "strike", data: payload });
+  }
+
+  /** 攻方 → 目标的朝向；取不到 token 时朝右，至少不会画反 */
+  static angleBetween(from, to) {
+    const a = this.centerOf(from), b = this.centerOf(to);
+    if (!a || !b) return 0;
+    return Math.atan2(b.y - a.y, b.x - a.x);
+  }
+
   /** 取某个 Actor 在当前场景 token 的中心点 */
   static centerOf(actor) {
     if (!actor || !canvas?.ready) return null;
@@ -277,5 +323,7 @@ export class ClashVFX {
     else if (msg.kind === "dash") this.dash(msg.from, msg.to);
     else if (msg.kind === "pan") this.panTo(msg.point);
     else if (msg.kind === "plus") this.plus(msg.point, msg.value);
+    else if (msg.kind === "clashHit") VfxStage.clash(msg.data ?? {});
+    else if (msg.kind === "strike") VfxStage.strike(msg.data ?? {});
   }
 }

@@ -4146,12 +4146,23 @@ export class ClashManager {
           await ClashManager._safeDocUpdate(loserActor,
             { "system.ap.value": apOf(loserActor) - 1 });
           ClashTotalFX._log(`胜方摧毁 ${loserActor?.name ?? "败方"} 1 枚行动币`);
+          // 破币的那一次对撞：硬币碎在败方那一侧
+          ClashVFX.broadcastClash(atkActor, defActor, {
+            sinA: atkItem?.system?.sinType ?? "", sinD: defItem?.system?.sinType ?? "",
+            catA: ClashManager._vfxCategory(atkItem), catD: ClashManager._vfxCategory(defItem),
+            coin: true,
+          });
         }
         break;
       }
 
-      // 续拼——刀剑相击处炸一朵（币不扣，只是把失败次数用掉一次）
+      // 续拼——两边同时朝中点挥出，兵器在那里撞上（币不扣，只是把失败次数用掉一次）
       ClashVFX.broadcastBurst(ClashVFX.midPoint(atkActor, defActor));
+      ClashVFX.broadcastClash(atkActor, defActor, {
+        sinA: atkItem?.system?.sinType ?? "", sinD: defItem?.system?.sinType ?? "",
+        catA: ClashManager._vfxCategory(atkItem), catD: ClashManager._vfxCategory(defItem),
+        coin: false,        // 币是对抗结束时才碎的，见下面那处
+      });
       // 一般骰每失败一次累计 -1 拼点威力；【不可摧毁】免惩罚
       if (!loserUnbreak) pen[loserSide] += 1;
       lastRerollSide = loserSide;
@@ -4172,9 +4183,15 @@ export class ClashManager {
         startDice: () => ClashManager._showDiceEach([{ roll: winRoll, actor: winActor }]),
       });
 
-      // 最后一击：刀剑相击处同样炸一朵，随后只震退、不追击
+      // 最后一击：朝败方连挥，次数 = 骰式里的骰子数量（3D6 挥三次）
       const loseActor = winSide === "atk" ? defActor : atkActor;
+      const winItem   = winSide === "atk" ? atkItem : defItem;
       ClashVFX.broadcastBurst(ClashVFX.midPoint(atkActor, defActor));
+      ClashVFX.broadcastStrike(winActor, loseActor, {
+        sin:      winItem?.system?.sinType ?? "",
+        category: ClashManager._vfxCategory(winItem),
+        swings:   ClashManager._vfxSwings(winItem),
+      });
       await ClashKnockback.repel({
         winner: winActor, loser: loseActor,
         winScore: winParts.reduce((a, p) => a + (p.value ?? 0), 0),
@@ -6719,6 +6736,32 @@ export class ClashManager {
                                         .filter(Boolean).map(x => ClashManager._sinLabel(x)).join("／")} 属性的骰`;
     if (t === "category")    return `对方使用了 ${(pre.categories ?? []).map(c => ClashManager._catLabel(c)).join("／")} 类技能`;
     return t;
+  }
+
+  /* ─── 演出特效的两个换算 ──────────────────────────────────────────────── */
+
+  /**
+   * 技能分类 → 特效类别。
+   * 守备技能的 category 是 dodge/block/counter/…，物理类型在 counterType 上，
+   * 所以要先走 _physCatOf 拿到真正的斩/打/突。取不到就当斩击。
+   */
+  static _vfxCategory(item) {
+    const sys = item?.system ?? {};
+    const phys = ClashManager._physCatOf({
+      category: sys.category ?? "", counterType: sys.counterType ?? "",
+    }) || sys.category;
+    return { slash: "slash", blunt: "strike", pierce: "thrust" }[phys] ?? "slash";
+  }
+
+  /**
+   * 挥舞次数 = 骰式里的**骰子数量**（不是点数）：3D6+2 → 3，1D12 → 1。
+   * 负面骰写作 20-1D8，同样取那个 1。
+   */
+  static _vfxSwings(item) {
+    const f = String(item?.system?.diceFormula ?? "").toUpperCase();
+    const m = f.match(/(\d*)\s*D\s*\d+/);
+    if (!m) return 1;
+    return Math.max(1, Math.min(8, parseInt(m[1] || "1")));
   }
 
   /** 反应卡上的「触发效果说明」——列全部效果，不是只取第一条 */

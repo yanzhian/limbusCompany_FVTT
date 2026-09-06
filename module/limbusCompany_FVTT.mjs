@@ -12,6 +12,7 @@ import { LIMBUSCOMPANY }   from "./config.mjs";
 import { registerHeaderCollapse } from "./helpers/window-header.mjs";
 import { registerTurnBanner } from "./helpers/turn-banner.mjs";
 import { registerRulebook } from "./helpers/rulebook.mjs";
+import { VfxStage }         from "./helpers/vfx/vfx-stage.mjs";
 import { LimbusActor, CharacterData, MerchantData, CampData, LootData }  from "./documents/actor.mjs";
 import {
   LimbusItem,
@@ -102,6 +103,7 @@ Hooks.once("init", () => {
   // 击退系统：ClashKnockback.ENABLED = false 可随时整套关掉
   globalThis.ClashKnockback = ClashKnockback;
   globalThis.ClashVFX = ClashVFX;
+  globalThis.VfxStage = VfxStage;      // 控制台里可直接 VfxStage.strike({...}) 试招
 
   // 注册全局罪孽资源 setting（需在 init 阶段注册 setting）
   SinResourceHUD.init();
@@ -376,6 +378,9 @@ async function _clampBuffStacks() {
 }
 
 // 画布每次就绪时再次确保双击补丁存在（重连/重载场景后仍生效）
+// 换场景：旧场景残留的特效连同它们的画布一起丢掉，坐标系已经不是同一个了
+Hooks.on("canvasReady", () => VfxStage.destroy());
+
 Hooks.on("canvasReady", () => {
   _installTokenDoubleClickOpenActorSheet();
 });
@@ -676,6 +681,7 @@ Hooks.on("updateToken", (token) => {
 const _refreshHudOnCombat = () => QuickActionHUD.onCombatChange();
 Hooks.on("updateCombat",  _refreshHudOnCombat);
 Hooks.on("deleteCombat",  _refreshHudOnCombat);
+Hooks.on("deleteCombat",  () => VfxStage.clear());   // 脱战清场
 Hooks.on("createCombat",  _refreshHudOnCombat);
 
 /* ─── 战斗钩子 ───────────────────────────────────────────────────────────── */
@@ -1191,6 +1197,48 @@ function _registerSettings() {
     type:    Number,
     range:   { min: 0, max: 20, step: 1 },
     default: 3,
+  });
+
+  // ── 演出特效 ────────────────────────────────────────────────────────────
+  // 招式本体（斩击/打击/突刺）与拼刀对撞的总开关。三档而不是开关，是因为
+  // 低配机器、或者纯粹嫌花的桌，往往只想留「打中了」这一下。
+  game.settings.register("limbusCompany_FVTT", "vfxLevel", {
+    name:    "演出特效",
+    hint:    "对抗时在场上画出招式：交锋时双方兵器在两个 token 的中点对撞，"
+           + "最后一击按骰式里的骰子数量连挥（3D6 挥三次）。"
+           + "【完整】挥舞、风、命中、余韵全画；【简化】只留命中闪光；"
+           + "【关闭】一律不画，聊天框照常出结果。由 GM 设定，对全场生效。",
+    scope:   "world",
+    config:  true,
+    type:    String,
+    choices: { full: "完整", lite: "简化", off: "关闭" },
+    default: "full",
+    onChange: () => VfxStage.clear(),
+  });
+
+  // 震动是**特效自己抖**，不动镜头——接 canvas.stage.pivot 会跟玩家平移打架，
+  // 异常一次就永久偏，而且每个客户端视野不同、震幅也不一致。
+  // 即便如此仍留一个客户端开关：晕动症因人而异。
+  game.settings.register("limbusCompany_FVTT", "vfxShake", {
+    name:    "特效震动",
+    hint:    "命中瞬间让特效自身轻微抖动。**镜头与地图不会移动**，"
+           + "所以不会打断你正在拖动画布的操作。仅影响你自己这一端。",
+    scope:   "client",
+    config:  true,
+    type:    Boolean,
+    default: true,
+  });
+
+  // 招式是按「一格 100px」画的，所以默认跟着场景格子缩放；这里是额外的手调系数
+  game.settings.register("limbusCompany_FVTT", "vfxScale", {
+    name:    "演出特效缩放",
+    hint:    "特效尺寸已经跟着场景格子走，这里再乘一个系数。"
+           + "觉得一刀扫掉半张地图就调小，觉得不够有存在感就调大。",
+    scope:   "world",
+    config:  true,
+    type:    Number,
+    range:   { min: 0.3, max: 1.6, step: 0.05 },
+    default: 0.7,
   });
 
   // 形象（纸娃娃）系统：整套功能的总开关，默认关闭

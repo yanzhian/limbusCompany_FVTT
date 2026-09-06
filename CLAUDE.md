@@ -130,6 +130,19 @@ Activity messages are **collected, never sent individually**. `ctx._actMsgs` is 
 
 Special tremors (`specialTremor: true`) follow 【震颤】's rules wholesale: 0 层即消失 (`_pruneZeroTremors`), and `_addBuff` treats a passed-in 0 as 1 for the whole tremor family, not just base `tremor`.
 
+### Attack VFX (`module/helpers/vfx/`)
+
+`attack-vfx.mjs` is a self-contained Canvas 2D renderer (no assets, no CDN): 斩击 7 式 / 打击 5 式 / 突刺 5 式, one picked at random per call, plus a garnish layer (命中定格 / 特效自抖 / 接触辉光 / 冲击环 / 余烬 / 地面尘扫). It is tuned in `scratchpad-attack-garnish.html` and `scratchpad-clash-sequence.html` — the `GARNISH` and `WIND` constants are those labs' exports, so **re-tune there, paste back**, don't hand-edit numbers.
+
+`vfx-stage.mjs` puts it on the Foundry canvas. Four things about it are easy to get wrong:
+
+- **It is a viewport-fixed canvas re-projected every frame** through `canvas.stage.worldTransform`, not a child of `#hud`. Effects therefore store **world** coordinates and follow pan/zoom for free, and stay crisp when zoomed in (a `#hud` child gets CSS-scaled and goes blurry).
+- **One canvas per 罪孽.** Sin colour is a hue rotation, and CSS `filter` is a whole-canvas property — attacker and defender colliding at the midpoint can only be tinted separately if they draw on separate canvases. `_deck(sin)` creates them on demand. White cores are unaffected by hue-rotate, which is why highlights stay white.
+- **Shake never touches the camera.** It is a translate applied *inside* the world transform, so only the effect jitters. Driving `canvas.stage.pivot` fights the player's own panning, leaves the view permanently offset if it ever throws mid-animation, and desyncs across clients with different viewports.
+- **`play(x, y)` means "hit here", not "origin here".** Slash variants carry an internal `h.impact` offset (e.g. `[187, 6]`), so `build()` shifts the effect origin back by the rotated impact. Without that the whole slash lands ~190px past the target.
+
+Call sites are in `clash.mjs` via `ClashVFX.broadcastClash` / `broadcastStrike` (same socket channel and dispatch as the older burst/dash/pan effects): each 交锋 plays both sides colliding at the midpoint, the coin breaks on the exchange that actually destroys a coin, and the final blow swings `_vfxSwings(item)` times — the **dice count** of the formula (3D6 → 3), not the roll. Everything is gated by the world setting `vfxLevel` (完整/简化/关闭); `vfxShake` is per-client and `vfxScale` multiplies the grid-derived size.
+
 ### Canvas overlays (`module/helpers/token-ring-hud.mjs`, `ready-sparkle.mjs`)
 
 `TokenRingHUD` draws the under-token 生命环 + 生命值 / 理智圆 / BUFF 图标行. Two things about it are easy to get wrong:
