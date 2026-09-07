@@ -779,7 +779,19 @@ export class ClashManager {
     if (CustomBuffRegistry.has(type)) {
       return CustomBuffRegistry.get(type).label ?? type;
     }
-    return labels[type] ?? type;
+    if (labels[type]) return labels[type];
+
+    // 上面那张表是手写的，漏掉了 config 里派生出来的 20 条条件威力 BUFF
+    //（slashPowerUp…envyPowerDown）。漏了的后果不只是名字：_addBuff 里 name 和
+    // icon 都取这个返回值，取不到就把原始 key 当名字显示成「slashPowerUp」，
+    // 图标也跑去找 Custom_buffs/slashPowerUp.webp（实际在 Buff_icon/斩击威力提升.webp）。
+    // 所以这里兜到 BUFF_TYPES —— 那是所有类型的全集，新增类型不必再来改这张表。
+    const conf = CONFIG?.LIMBUSCOMPANY?.BUFF_TYPES?.[type];
+    if (conf) {
+      // 值可能是 i18n key（LIMBUSCOMPANY.Buff.Xxx），也可能已经是中文字面量
+      return conf.startsWith("LIMBUSCOMPANY.") ? (game.i18n?.localize?.(conf) ?? conf) : conf;
+    }
+    return type;
   }
 
   /** 给角色添加或叠加 BUFF。已有同类型则层数和强度均累加；无则新增。 */
