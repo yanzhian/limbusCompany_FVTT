@@ -3062,9 +3062,21 @@ function _buildCondRow(cond, idx, cfg) {
         <span class="ae-cond-attr-sec" ${isAttrSec ? "" : 'style="display:none"'}>
           <label>属性</label>
           <select class="ae-sel cond-attr-type">${attrTypeOpts}</select>
-          <select class="ae-sel cond-comparison">${cmpOpts}</select>
+          <!-- 勾了「每」之后比较符没有意义（问的是有几个 N，不是够不够 N），所以藏掉 -->
+          <span class="ae-cond-attr-cmp" ${cond?.perEach ? 'style="display:none"' : ""}>
+            <select class="ae-sel cond-comparison">${cmpOpts}</select>
+          </span>
           <input class="ae-input-sm cond-attr-value" type="text"
-                 value="${_esc(cond?.attrValue ?? "")}" placeholder="50 或 5%">
+                 value="${_esc(cond?.attrValue ?? "")}"
+                 placeholder="${cond?.perEach ? "每N点" : "50 或 5%"}">
+          <label title="勾选后，属性值本身成为后续效果的倍数（每 N 点算一次）">
+            <input type="checkbox" class="cond-attr-pereach" ${cond?.perEach ? "checked" : ""}> 每
+          </label>
+          <span class="ae-cond-attr-max" ${cond?.perEach ? "" : 'style="display:none"'}>
+            <label>最大倍数</label>
+            <input class="ae-input-sm cond-attr-max" type="number" min="0"
+                   value="${cond?.maxTimes ?? 0}" placeholder="0=无限">
+          </span>
         </span>
         <!-- 使用技能：名称/标签 与 等级 均可选，填了的才检查、两个都填则需同时满足 -->
         <span class="ae-cond-skill-sec" ${isSkillSec ? "" : 'style="display:none"'}>
@@ -3812,6 +3824,13 @@ function _bindCondType(html) {
   html.find(".cond-equip-pereach").off("change").on("change", function () {
     $(this).closest(".ae-cond-row").find(".ae-cond-equip-max").toggle(this.checked);
   });
+  html.find(".cond-attr-pereach").off("change").on("change", function () {
+    const row = $(this).closest(".ae-cond-row");
+    row.find(".ae-cond-attr-max").toggle(this.checked);
+    // 「每」模式下比较符无意义，藏掉免得误以为还要配
+    row.find(".ae-cond-attr-cmp").toggle(!this.checked);
+    row.find(".cond-attr-value").attr("placeholder", this.checked ? "每N点" : "50 或 5%");
+  });
   html.find(".cond-pern-dim").off("change").on("change", function () {
     const row   = $(this).closest(".ae-cond-row");
     const type  = row.find(".cond-type").val();
@@ -3959,12 +3978,17 @@ function _readActivityForm(html, original) {
     const $r      = $(el);
     const condType = $r.find(".cond-type").val() || "hasBuff";
     if (condType === "baseAttr") {
+      const attrPer = $r.find(".cond-attr-pereach").is(":checked");
       preconditions.push({
         type:       "baseAttr",
         target:     $r.find(".cond-target").val() || "self",
         attrType:   $r.find(".cond-attr-type").val() || "hp",
         comparison: $r.find(".cond-comparison").val() || "lt",
         attrValue:  $r.find(".cond-attr-value").val()?.trim() || "0",
+        ...(attrPer ? {
+          perEach:  true,
+          maxTimes: parseInt($r.find(".cond-attr-max").val()) || 0,
+        } : {}),
         ..._readBgTagMeta($r, "cond"),
       });
     } else if (condType === "useSkill") {

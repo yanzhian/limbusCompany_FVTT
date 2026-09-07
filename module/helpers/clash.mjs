@@ -1516,6 +1516,19 @@ export class ClashManager {
           if (!precTgt) { precondFail = true; break; }
           const curVal   = ClashManager._getAttrVal(precTgt, pre.attrType ?? "hp");
           const threshold = ClashManager._parseThreshold(pre.attrValue ?? "0", precTgt, pre.attrType ?? "hp");
+
+          // 【每】：属性值本身当倍数来源，与 perN / equipped 同一套口径。
+          // 勾了「每」之后 attrValue 是「每 N」里的 N，比较符不再参与——
+          // 「每 1 行动值 +1」问的是有几个 1，不是"是否大于 1"。
+          if (pre.perEach) {
+            const n = Math.max(1, threshold || 1);
+            if (curVal < n) { precondFail = true; break; }
+            let times = Math.floor(curVal / n);
+            if ((pre.maxTimes ?? 0) > 0) times = Math.min(times, pre.maxTimes);
+            perMultipliers.push(times);
+            continue;
+          }
+
           if (!ClashManager._cmp(curVal, pre.comparison ?? "lt", threshold)) { precondFail = true; break; }
           continue;
         }
@@ -6739,7 +6752,12 @@ export class ClashManager {
     if (t === "baseAttr") {
       const AL = { hp: "生命值", sanity: "理智", ap: "行动值", sm: "星尘",
                    str: "力量", agi: "敏捷", con: "体质", int: "智力", per: "感知", cha: "魅力" };
-      return `${who}的${AL[pre.attrType] ?? pre.attrType ?? "属性"} ${cmp} ${pre.attrValue ?? 0}`;
+      const an = AL[pre.attrType] ?? pre.attrType ?? "属性";
+      if (pre.perEach) {
+        const cap = (pre.maxTimes ?? 0) > 0 ? `（最多 ${pre.maxTimes} 次）` : "";
+        return `${who}每有 ${pre.attrValue ?? 1} 点${an}${cap}`;
+      }
+      return `${who}的${an} ${cmp} ${pre.attrValue ?? 0}`;
     }
     if (t === "equipped")    return `${who}装备了 ${Math.max(1, pre.count ?? 1)} 件指定物品`;
     if (t === "background")  return `${who}的背景为「${pre.bgName ?? ""}」`;
@@ -7224,6 +7242,12 @@ export class ClashManager {
     if (type === "baseAttr") {
       if (!targetActor) return false;
       const curVal = ClashManager._getAttrVal(targetActor, pre.attrType ?? "hp");
+      // [反应] 不吃倍数，但勾了「每」时比较符是没意义的，按「≥N」判
+      if (pre.perEach) {
+        const n = Math.max(1, ClashManager._parseThreshold(
+          pre.attrValue ?? "0", targetActor, pre.attrType ?? "hp") || 1);
+        return curVal >= n;
+      }
       const threshold = ClashManager._parseThreshold(pre.attrValue ?? "0", targetActor, pre.attrType ?? "hp");
       return ClashManager._cmp(curVal, pre.comparison ?? "lt", threshold);
     }

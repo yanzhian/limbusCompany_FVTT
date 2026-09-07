@@ -203,6 +203,20 @@
 ```
 `attrType`：`hp` / `sanity` / `ap`。`attrValue` 是字符串，支持百分比等写法。
 
+**「每」模式**：加上 `perEach: true`，属性值本身就成了倍数来源，与【每】(`perN`) 同一套口径——
+此时 `attrValue` 是「每 N 点」里的 **N**，`comparison` 不再参与判定（问的是有几个 N，不是够不够 N）。
+
+```json
+{ "type": "baseAttr", "target": "self", "attrType": "ap",
+  "attrValue": "1", "perEach": true, "maxTimes": 5 }
+```
+> 「[攻击时]：每有 1 点行动值，本骰基础值 +1（最大值 5）」
+> —— 效果侧写 `{ "type": "baseValue", "value": "+1" }` 即可，倍数会自动乘上去。
+
+`maxTimes` 是**倍数**上限，0 = 无限。和 §4.2 一样，卡面写的「最大值」指效果总量，
+所以 `maxTimes = 最大值 ÷ 单次效果值`（上例单次 +1、最大 5，故 5）。
+属性不足 1 个 N 时本条不成立。
+
 ### 4.5 其余类型
 
 | type | 字段 | 用途 |
