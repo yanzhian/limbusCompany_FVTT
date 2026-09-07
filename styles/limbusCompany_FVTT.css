@@ -10360,19 +10360,17 @@ input.item-piles-quantity {
 /* ══ 学习等级 ══ */
 /* 「学」常驻在升级按钮左边。原来 .level-up-btn 自己带 45px 左边距把自己顶到位，
    现在这个位置交给「学」，升级按钮只留一个小间隔（同权重后写的赢）。 */
+/* 配色与升级按钮一致：金底、深棕描边、图标为黑 */
 .limbuscompany .learn-points-btn {
   width: 22px; height: 22px;
   margin-left: 45px;
-  border: 1px solid var(--border-gold);
+  border: 1px solid #A7861A;
   border-radius: 3px;
-  background: rgba(24, 15, 8, .9);
-  color: var(--gold-active);
+  background: #F3CE40;
+  color: #2B1C00;
   font-weight: bold; line-height: 1; padding: 0; cursor: pointer;
 }
-.limbuscompany .learn-points-btn:hover {
-  background: rgba(95, 62, 33, .55);
-  color: #F9DD6F;
-}
+.limbuscompany .learn-points-btn:hover { background: #F9DD6F; }
 .limbuscompany .level-up-btn { margin-left: 6px; }
 
 .learn-points-dialog .lpd-balance {
