@@ -10362,7 +10362,11 @@ input.item-piles-quantity {
    现在这个位置交给「学」，升级按钮只留一个小间隔（同权重后写的赢）。 */
 /* 配色与升级按钮一致：金底、深棕描边、图标为黑 */
 .limbuscompany .learn-points-btn {
+  /* 父容器是 flex，光写 width 会被拉伸/压缩，所以三条一起钉死 */
   width: 22px; height: 22px;
+  min-width: 22px; max-width: 22px;
+  flex: 0 0 22px;
+  box-sizing: border-box;
   margin-left: 45px;
   border: 1px solid #A7861A;
   border-radius: 3px;
