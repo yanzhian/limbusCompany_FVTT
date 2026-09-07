@@ -719,6 +719,7 @@ export class LimbusActorSheet extends ActorSheet {
 
     // ── 升级按钮（经验值 > 升级阈值） ───────────────────────────────────
     html.find(".level-up-btn").on("click", this._onLevelUpClick.bind(this));
+    html.find(".learn-points-btn").on("click", this._onLearnPointsClick.bind(this));
 
     // ── 长休 ─────────────────────────────────────────────────────────────
     html.find(".long-rest-btn").on("click", () => this.actor.longRest());
@@ -2402,6 +2403,17 @@ export class LimbusActorSheet extends ActorSheet {
     event.preventDefault();
     const { LevelUpDialog } = await import("./level-up-dialog.mjs");
     new LevelUpDialog(this.actor).render(true);
+  }
+
+  /**
+   * 【学习等级】：升级对话框第 2 步的常驻版本。
+   * 升级时点太快跳过了强化那一步，或者点数来自任务/高人指点（GM 手发），
+   * 都从这里花。按钮常驻——点数是存量，跟这次能不能升级无关。
+   */
+  async _onLearnPointsClick(event) {
+    event.preventDefault();
+    const { LearnPointsDialog } = await import("./learn-points-dialog.mjs");
+    new LearnPointsDialog(this.actor).render(true);
   }
 
   /* ─── 编辑锁 ─────────────────────────────────────────────────────────────── */

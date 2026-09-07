@@ -1318,6 +1318,7 @@ async function _preloadTemplates() {
     "systems/limbusCompany_FVTT/templates/item/background-sheet.hbs",
     "systems/limbusCompany_FVTT/templates/apps/background-wizard.hbs",
     "systems/limbusCompany_FVTT/templates/apps/level-up-dialog.hbs",
+    "systems/limbusCompany_FVTT/templates/apps/learn-points-dialog.hbs",
     "systems/limbusCompany_FVTT/templates/apps/csv-import.hbs",
     // Partials
     "systems/limbusCompany_FVTT/templates/partials/title-card.hbs",

@@ -1,0 +1,63 @@
+{{!-- 学习等级：升级对话框第 2 步的常驻版本。
+      点数是存量，升级时没花完、或者由 GM 单独发放的，都在这里花。 --}}
+<div class="level-up-dialog-body learn-points-body">
+
+  <div class="lud-section-title">学习等级 · {{actorName}}</div>
+
+  <div class="lpd-balance">
+    <span class="lpd-label">学习点数</span>
+    {{#if isGM}}
+      <input type="number" class="lpd-input" value="{{points}}" min="0" step="1">
+      <button type="button" class="lpd-save sheet-btn">保存</button>
+      <span class="lpd-gm-hint">GM 可直接改：任务奖励、高人指点都从这里发</span>
+    {{else}}
+      <b class="lud-points">{{points}}</b><span class="lpd-unit">点</span>
+    {{/if}}
+  </div>
+
+  <div class="lud-train-hint">
+    点一个技能花点数把它的训练等级提升一阶。<br>
+    <small>价格看技能自己的等级：Lv.1 花 1 点、Lv.2 花 2 点、Lv.3 花 5 点。点数不会作废。</small>
+  </div>
+
+  {{#if done.length}}
+    <div class="lud-train-done">
+      {{#each done}}<span>{{name}} {{from}}→{{to}}（-{{cost}}）</span>{{/each}}
+    </div>
+  {{/if}}
+
+  <div class="lud-train-list">
+    {{#each candidates}}
+      <div class="lud-train-row{{#unless canUpgrade}} disabled{{/unless}}{{#if equipped}} equipped{{/if}}"
+           data-item-id="{{id}}" data-item-uuid="{{uuid}}" data-cost="{{cost}}"
+           title="{{#if maxed}}已经是 Ⅴ 阶，无法再强化{{else if hasNextData}}{{#if affordable}}花 {{cost}} 点强化到 {{nextNumeral}} 阶{{else}}点数不足：需要 {{cost}} 点{{/if}}{{else}}这张卡还没写 {{nextNumeral}} 阶的数值，强化了也不会有变化{{/if}}">
+        <img src="{{img}}" class="lud-train-icon" alt="{{name}}">
+        <span class="lud-train-name">{{name}}</span>
+        {{#if equipped}}<span class="lud-train-slot">{{slotLabel}}</span>{{/if}}
+        <span class="lud-train-lv">
+          {{numeral}}{{#if canUpgrade}} <span class="lud-arrow">→</span> <b>{{nextNumeral}}</b>{{/if}}
+        </span>
+        {{#unless maxed}}
+          <span class="lud-train-cost{{#unless affordable}} poor{{/unless}}">Lv.{{skillLevel}} · {{cost}} 点</span>
+        {{/unless}}
+        {{#unless canUpgrade}}
+          <span class="lud-train-warn">{{#if maxed}}已满阶
+            {{~else if hasNextData}}点数不足
+            {{~else}}无 {{nextNumeral}} 阶数据{{/if}}</span>
+        {{/unless}}
+      </div>
+    {{else}}
+      <div class="lud-empty">没有可强化的技能</div>
+    {{/each}}
+  </div>
+
+  {{#unless canBuyAny}}
+    {{#if hasUpgradable}}
+      <div class="lpd-note">点数不够，攒够了再来。</div>
+    {{/if}}
+  {{/unless}}
+
+  <div class="lud-footer">
+    <button type="button" class="lud-finish sheet-btn">关闭</button>
+  </div>
+</div>
