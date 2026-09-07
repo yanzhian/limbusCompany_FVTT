@@ -604,15 +604,128 @@ registerCustomBuff("shield", {
 /**
  * 【刺入之矢】
  * - 最大值：1 层
- * - 持有时斩击抗性强制为 x2.0
+ * - 若自己的斩击抗性不是 x2.0，则转换为 x1.5
+ *   （已经是 x2.0 的不动——那是更糟的处境，这条不该把它变好）
  */
 registerCustomBuff("piercingArrow", {
   label:       "刺入之矢",
-  description: "- 最大值：1 层\n- 将自己的斩击抗性转换为 x2.0",
+  description: "- 最大值：1 层\n- 若自己的斩击抗性不为 x2.0，将其转换为 x1.5",
   maxStacks:   1,
 
-  modifyResistances(_actor, _buff, _res) {
-    return { slash: "x2.0" };
+  modifyResistances(_actor, _buff, res) {
+    // res.slash 是 "xN.0" 形式的字符串；只在它不等于 x2.0 时才改写
+    return String(res?.slash ?? "") === "x2.0" ? undefined : { slash: "x1.5" };
+  },
+});
+
+/**
+ * 【瞄准目标】
+ * - 最大值：4 层
+ * 纯层数资源，由【狙击姿势】按消耗掉的行动值产出，具体怎么用由技能效果决定。
+ */
+registerCustomBuff("aimTarget", {
+  label:       "瞄准目标",
+  description: "- 最大值：4 层",
+  maxStacks:   4,
+});
+
+/**
+ * 【狙击姿势】
+ * - 回合开始时：消耗**全部**行动值，每消耗 1 点为自己添加 1 层【瞄准目标】
+ *
+ * 行动币在这套规则里是「拼点时能输几次」，全部押上去换瞄准层数＝这一回合
+ * 放弃拼点韧性去换一次准头。所以这里清的是 ap.value 而不是扣固定值。
+ */
+registerCustomBuff("snipeStance", {
+  label:       "狙击姿势",
+  description: "- 回合开始时：消耗全部行动值，每消耗 1 点行动值为自己添加 1 层【瞄准目标】",
+
+  async onRoundStart(actor, _buff) {
+    const ap = actor.system?.ap?.value ?? 0;
+    if (ap <= 0) return;
+    const { ClashManager } = await import("./clash.mjs");
+    await ClashManager._safeDocUpdate(actor, { "system.ap.value": 0 });
+    await ClashManager._addBuff(actor, "aimTarget", 0, ap, "本回合");
+    return `消耗 <strong>${ap}</strong> 点行动值，获得 <strong>${ap}</strong> 层【瞄准目标】。`;
+  },
+});
+
+/**
+ * 【充能力场】
+ * - 回合开始时：获得 5 层【护盾】；背景标签含「W公司」时额外获得 10 层
+ * - 回合结束时：每有 1 层为自己添加 1 层【充能】，并解除本效果
+ */
+registerCustomBuff("chargeField", {
+  label:       "充能力场",
+  description: "- 回合开始时：获得 5 层【护盾】，背景标签为「W公司」额外获得 10 层\n"
+    + "- 回合结束时：每有 1 层为你添加 1 层【充能】，并解除本效果",
+
+  async onRoundStart(actor, _buff) {
+    const { ClashManager } = await import("./clash.mjs");
+    const tags  = await ClashManager._getBackgroundTags(actor);
+    const bonus = tags.includes("W公司") ? 10 : 0;
+    const total = 5 + bonus;
+    await ClashManager._addBuff(actor, "shield", 0, total, "本回合");
+    return `获得 <strong>${total}</strong> 层【护盾】`
+      + (bonus ? `（W公司 +${bonus}）` : "") + "。";
+  },
+
+  async onRoundEnd(actor, buff) {
+    const stacks = buff.stacks ?? 0;
+    const { ClashManager } = await import("./clash.mjs");
+    // 用「本回合」而不是「下回合」：充能是持续资源，本轮的 -1 衰减在自定义
+    // onRoundEnd 钩子**之前**就跑完了，所以这里加的不会被当场扣掉；
+    // 而「下回合」会另起一行，要等下回合开始才并回去，玩家当场看不到。
+    if (stacks > 0) await ClashManager._addBuff(actor, "charge", 0, stacks, "本回合");
+    await ClashManager._removeBuff(actor, buff.type ?? "chargeField");
+    return stacks > 0
+      ? `转化为 <strong>${stacks}</strong> 层【充能】，【充能力场】解除。`
+      : "【充能力场】解除。";
+  },
+});
+
+/**
+ * 【载荷】
+ * - 最大值：6 层
+ * - 攻击时：每有 2 层获得 1 层【攻击等级提升】（最多 3 层，每回合 1 次）；
+ *   背景标签为「W公司」时额外添加 3 层（同样每回合 1 次）
+ * - 回合结束时：解除本效果
+ *
+ * 两笔加成各自独立限次：主加成没触发（层数不足 2）时，W公司 那 3 层照给——
+ * 它的条件是背景而不是层数。
+ */
+registerCustomBuff("payload", {
+  label:       "载荷",
+  description: "- 最大值：6 层\n"
+    + "- 攻击时：每有 2 层获得 1 层【攻击等级提升】（最大 3 层，每回合 1 次）；"
+    + "背景标签为「W公司」额外添加 3 层（每回合 1 次）\n"
+    + "- 回合结束时：解除本效果",
+  maxStacks:   6,
+
+  async onAttack(actor, buff, ctx) {
+    const { ClashManager } = await import("./clash.mjs");
+    const notes = [];
+
+    // 每 2 层 → 1 层，最多 3 层（6 层封顶正好 3 层）
+    const times = Math.min(Math.floor((buff.stacks ?? 0) / 2), 3);
+    if (times > 0 && await _consumeRoundUse(actor, "payload")) {
+      await ctx.addBuff("atkLevelUp", 0, times, "本回合");
+      notes.push(`每 2 层【载荷】→ <strong>${times}</strong> 层【攻击等级提升】`);
+    }
+
+    // W公司 的额外 3 层：条件是背景不是层数，所以单独限次、单独判定
+    const tags = await ClashManager._getBackgroundTags(actor);
+    if (tags.includes("W公司") && await _consumeRoundUse(actor, "payloadWCorp")) {
+      await ctx.addBuff("atkLevelUp", 0, 3, "本回合");
+      notes.push("W公司 额外 <strong>3</strong> 层【攻击等级提升】");
+    }
+    return notes.join("，") ? notes.join("，") + "。" : undefined;
+  },
+
+  async onRoundEnd(actor, buff) {
+    const { ClashManager } = await import("./clash.mjs");
+    await ClashManager._removeBuff(actor, buff.type ?? "payload");
+    return "【载荷】解除。";
   },
 });
 
