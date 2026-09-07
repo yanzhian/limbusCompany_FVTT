@@ -10393,3 +10393,7 @@ input.item-piles-quantity {
 .learn-points-dialog .lpd-note {
   margin-top: 8px; font-size: 12px; color: var(--text-dim); text-align: center;
 }
+
+/* 「学习等级」用合起来的书本图标；规则书那边用的是 fa-book-open，两个别撞 */
+.limbuscompany .learn-points-btn { display: grid; place-items: center; }
+.limbuscompany .learn-points-btn i { font-size: 11px; line-height: 1; }
