@@ -169,7 +169,21 @@ LIMBUSCOMPANY.MAX_LEVEL = 50;
  * 满级 50 ÷ 3 = 16 次。可选的技能不限于已装备的 7 个——
  * 技能列表里没装上去的（含要「强化 Lv.3 技能」的那些）同样能挑。
  */
-LIMBUSCOMPANY.TRAIN_UPGRADE_EVERY = 3;
+/**
+ * 学习点数：升 1 级得 1 点，**可以存着**不必当场花掉。
+ * 强化一个技能的训练等级要花点数，价格看**技能自身的等级**（不是要升到第几阶）——
+ * 主力 Lv.3 技能升一阶就要 5 点，杂鱼 Lv.1 只要 1 点。
+ * 旧规则是「每 3 级白给一次名额、不论强弱」，6 级就能把 Lv.3 拉满；
+ * 现在同样到 6 级只有 6 点，够把 Lv.3 升一阶多一点，剩下的得攒。
+ */
+LIMBUSCOMPANY.LEARN_POINTS_PER_LEVEL = 1;
+
+/** 技能等级 → 强化一阶所需学习点数 */
+LIMBUSCOMPANY.TRAIN_UPGRADE_COST = { 1: 1, 2: 2, 3: 5 };
+
+/** 取某个技能升一阶的花费；等级异常时按最贵算，避免白给 */
+LIMBUSCOMPANY.trainUpgradeCost = (skillLevel) =>
+  LIMBUSCOMPANY.TRAIN_UPGRADE_COST[skillLevel] ?? 5;
 
 /**
  * 从 Lv `level` 升到 Lv `level+1` 所需的经验值。

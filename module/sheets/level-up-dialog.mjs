@@ -4,7 +4,8 @@
  * 三阶段：
  *   1. 提升生命值/星光（等级/生命值/星光/经验：原→现），点击"下一步"实际应用升级
  *      （写入数据 + 按背景 levelRewards 发放本次跨过的每一级的奖励物品）
- *   2. 训练等级强化：每 TRAIN_UPGRADE_EVERY 级 1 次名额，挑技能升阶。
+ *   2. 训练等级强化：花学习点数（每级得 1 点、可存）挑技能升阶，
+ *      价格看技能自身等级（Lv.1/2/3 → 1/2/5 点）。
  *      已装备的 6 基础 + 1 守备排在前面，但**不限于**它们——技能列表里
  *      没装上去的同样能挑（「强化 Lv.3 技能」常常就是还没装的那张）。
  *      本次没有名额时这一步自动跳过。
@@ -31,8 +32,7 @@ export class LevelUpDialog extends Application {
     this.actor = actor;
     this.step = 1;
     this.result = null; // levelUpByXp() 返回的预览/结果数据，后两步展示用
-    this._trainLeft = 0; // 本次还剩几次训练等级强化名额
-    this._trainDone = []; // 已经升过的：[{ name, from, to }]
+    this._trainDone = []; // 已经升过的：[{ name, from, to, cost }]
     this._titleCard = null;
   }
 
@@ -42,10 +42,14 @@ export class LevelUpDialog extends Application {
     ctx.bgName = (await fromUuid(this.actor.system.background?.uuid ?? "").catch(() => null))?.name ?? "";
     ctx.preview = this.step === 1 ? await this.actor.getLevelUpPreview() : this.result;
     if (this.step === 2) {
-      ctx.trainLeft  = this._trainLeft;
+      // 点数是存量不是本次名额，所以每次重绘都从角色身上现取
+      ctx.points     = this.actor.system.learnPoints ?? 0;
       ctx.trainDone  = this._trainDone;
       ctx.candidates = this.actor.getTrainUpgradeCandidates();
       ctx.equippedCount = ctx.candidates.filter(c => c.equipped).length;
+      ctx.cheapest   = Math.min(...ctx.candidates
+        .filter(c => c.hasNextData && !c.maxed).map(c => c.cost), Infinity);
+      ctx.canBuyAny  = ctx.candidates.some(c => c.canUpgrade);
     }
     return ctx;
   }
@@ -102,28 +106,35 @@ export class LevelUpDialog extends Application {
     const result = await this.actor.levelUpByXp();
     if (!result) return;
     this.result = result;
-    this._trainLeft = result.trainUpgrades ?? 0;
     this._trainDone = [];
-    // 这一级没给强化名额就直接跳到奖励物品那一步
-    if (this._trainLeft > 0) { this.step = 2; this.render(); }
+    // 点数可以存着，所以只要**买得起任何一个**就进这一步；
+    // 一分钱都不够（或没有可升的技能）时直接跳到奖励物品
+    const canBuy = this.actor.getTrainUpgradeCandidates().some(c => c.canUpgrade);
+    if (canBuy) { this.step = 2; this.render(); }
     else this._toStep3();
   }
 
-  /** 选中一个技能，训练等级 +1；名额用完自动进入下一步 */
+  /**
+   * 选中一个技能，花点数把训练等级 +1。
+   * 点数是存量：买完还买得起就留在这一步继续买，买不起了才走下一步。
+   * 剩下的点数不会作废——留着下次升级再花。
+   */
   async _onPickTrain(event) {
     event.preventDefault();
-    if (this._trainLeft <= 0) return;
-    const row = event.currentTarget;
-    const id  = row.dataset.itemId;
+    const row  = event.currentTarget;
+    const id   = row.dataset.itemId;
     const item = this.actor.items.get(id);
     if (!item) return;
     const from = item.system?.trainLevel ?? 3;
+    const cost = Number(row.dataset.cost) || 0;
+    // 扣费与校验都在 applyTrainUpgrade 里，付不起会自己弹提示并返回 false
     if (!await this.actor.applyTrainUpgrade(id)) return;
     const NUM = { 1: "Ⅰ", 2: "Ⅱ", 3: "Ⅲ", 4: "Ⅳ", 5: "Ⅴ" };
-    this._trainDone.push({ name: item.name, from: NUM[from] ?? from, to: NUM[from + 1] ?? from + 1 });
-    this._trainLeft -= 1;
-    if (this._trainLeft > 0) this.render();
-    else this._toStep3();
+    this._trainDone.push({
+      name: item.name, cost,
+      from: NUM[from] ?? from, to: NUM[from + 1] ?? from + 1,
+    });
+    this.render();
   }
 
   _toStep3() {

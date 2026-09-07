@@ -35,36 +35,51 @@
           <span class="lud-arrow">→</span>
           <span class="lud-value lud-value-new">{{preview.stellarTo}}</span>
         </div>
+        {{!-- 学习点数：每级 1 点，存在角色身上不作废，所以这里显示的是总量 --}}
+        <div class="lud-row">
+          <span class="lud-label">学习点数</span>
+          <span class="lud-value">{{preview.learnPointsFrom}}</span>
+          <span class="lud-arrow">→</span>
+          <span class="lud-value lud-value-new">{{preview.learnPointsTo}}</span>
+        </div>
       </div>
       <div class="lud-footer">
         <button type="button" class="lud-next sheet-btn">下一步</button>
       </div>
     {{/if}}
 
-    {{!-- 第 2 步：训练等级强化。已装备的排在前面，但技能列表里没装的同样能挑 --}}
+    {{!-- 第 2 步：花学习点数强化训练等级。已装备的排在前面，没装的同样能挑。
+          点数是**存量**，这一步花不完的会留到下次升级。 --}}
     {{#if (eq step 2)}}
       <div class="lud-section-title">强化训练等级</div>
       <div class="lud-train-hint">
-        还可强化 <b>{{trainLeft}}</b> 次 —— 点一个技能把它的训练等级提升一阶
+        学习点数 <b class="lud-points">{{points}}</b> 点
+        —— 点一个技能花点数把它的训练等级提升一阶。<br>
+        <small>价格看技能自己的等级：Lv.1 花 1 点、Lv.2 花 2 点、Lv.3 花 5 点。花不完的点数会留到下次。</small>
       </div>
       {{#if trainDone.length}}
         <div class="lud-train-done">
-          {{#each trainDone}}<span>{{name}} {{from}}→{{to}}</span>{{/each}}
+          {{#each trainDone}}<span>{{name}} {{from}}→{{to}}（-{{cost}}）</span>{{/each}}
         </div>
       {{/if}}
       <div class="lud-train-list">
         {{#each candidates}}
           <div class="lud-train-row{{#unless canUpgrade}} disabled{{/unless}}{{#if equipped}} equipped{{/if}}"
-               data-item-id="{{id}}"
-               title="{{#if maxed}}已经是 Ⅴ 阶，无法再强化{{else if hasNextData}}强化到 {{nextNumeral}} 阶{{else}}这张卡还没写 {{nextNumeral}} 阶的数值，强化了也不会有变化{{/if}}">
+               data-item-id="{{id}}" data-cost="{{cost}}"
+               title="{{#if maxed}}已经是 Ⅴ 阶，无法再强化{{else if hasNextData}}{{#if affordable}}花 {{cost}} 点强化到 {{nextNumeral}} 阶{{else}}点数不足：需要 {{cost}} 点{{/if}}{{else}}这张卡还没写 {{nextNumeral}} 阶的数值，强化了也不会有变化{{/if}}">
             <img src="{{img}}" class="lud-train-icon" alt="{{name}}">
             <span class="lud-train-name">{{name}}</span>
             {{#if equipped}}<span class="lud-train-slot">{{slotLabel}}</span>{{/if}}
             <span class="lud-train-lv">
               {{numeral}}{{#if canUpgrade}} <span class="lud-arrow">→</span> <b>{{nextNumeral}}</b>{{/if}}
             </span>
+            {{#unless maxed}}
+              <span class="lud-train-cost{{#unless affordable}} poor{{/unless}}">Lv.{{skillLevel}} · {{cost}} 点</span>
+            {{/unless}}
             {{#unless canUpgrade}}
-              <span class="lud-train-warn">{{#if maxed}}已满阶{{else}}无 {{nextNumeral}} 阶数据{{/if}}</span>
+              <span class="lud-train-warn">{{#if maxed}}已满阶
+                {{~else if hasNextData}}点数不足
+                {{~else}}无 {{nextNumeral}} 阶数据{{/if}}</span>
             {{/unless}}
           </div>
         {{else}}
@@ -72,7 +87,8 @@
         {{/each}}
       </div>
       <div class="lud-footer">
-        <button type="button" class="lud-skip sheet-btn">稍后再说</button>
+        <button type="button" class="lud-skip sheet-btn">
+          {{#if canBuyAny}}留着点数，下一步{{else}}下一步{{/if}}</button>
       </div>
     {{/if}}
 

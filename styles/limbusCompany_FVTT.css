@@ -10345,3 +10345,14 @@ input.item-piles-quantity {
 /* 训练等级徽章：锁定状态下玩家点不动（GM 不受限，不会带上 .locked） */
 .limbuscompany .skill-train-badge.locked { cursor: default; }
 .limbuscompany .skill-train-badge.locked:hover { filter: none; transform: none; }
+
+/* 升级对话框 · 学习点数 */
+.lud-points { color: var(--gold-active); font-variant-numeric: tabular-nums; }
+.lud-train-hint small { display: inline-block; margin-top: 4px; color: var(--text-dim); }
+.lud-train-cost {
+  margin-left: auto; padding: 0 7px;
+  font-size: 11.5px; color: var(--gold-active);
+  border: 1px solid var(--border-gold); border-radius: 2px;
+  font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+.lud-train-cost.poor { color: var(--text-dim); border-color: var(--text-dim); opacity: .7; }

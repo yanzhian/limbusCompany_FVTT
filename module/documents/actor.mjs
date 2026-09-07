@@ -237,6 +237,9 @@ export class CharacterData extends foundry.abstract.TypeDataModel {
 
       // ── 属性点（每 10 级 +1） ─────────────────────────────────────────
       attrPoints: new fields.NumberField({ required: true, integer: true, min: 0, initial: 0 }),
+
+      // 学习点数：升级得到，用来强化技能的训练等级。**可以存着**，不必当场花掉
+      learnPoints: new fields.NumberField({ required: true, integer: true, min: 0, initial: 0 }),
     };
   }
 
@@ -884,16 +887,17 @@ export class LimbusActor extends Actor {
       }
     }
 
-    // 训练等级强化名额：每 TRAIN_UPGRADE_EVERY 级 1 次，连升时跨过几个就给几次
-    const every = cfg.TRAIN_UPGRADE_EVERY ?? 0;
-    const trainUpgrades = every > 0
-      ? Math.floor(nextLevel / every) - Math.floor(currentLevel / every)
-      : 0;
+    // 学习点数：每级 1 点，连升几级就给几点。点数存在角色身上，不用当场花
+    const perLevel     = cfg.LEARN_POINTS_PER_LEVEL ?? 1;
+    const gainedPoints = (nextLevel - currentLevel) * perLevel;
+    const nextPoints   = (sys.learnPoints ?? 0) + gainedPoints;
 
     return {
       currentLevel, nextLevel,
       levelsGained: nextLevel - currentLevel,
-      trainUpgrades,
+      gainedPoints,
+      learnPointsFrom: sys.learnPoints ?? 0,
+      learnPointsTo:   nextPoints,
       xpFrom: sys.xp.value ?? 0, xpTo: xpLeft, xpConsumed: consumed,
       hpFrom: sys.hp.max, hpTo: nextHPMax, hpValueTo: nextHPValue,
       stellarFrom: sys.stellarMotes.max, stellarTo: nextStellarMax,
@@ -921,6 +925,7 @@ export class LimbusActor extends Actor {
       "system.level":             preview.nextLevel,
       "system.xp.value":          preview.xpTo,
       "system.attrPoints":        preview.attrPointsTo,
+      "system.learnPoints":       preview.learnPointsTo,
       "system.stellarMotes.max":  preview.stellarTo,
       "system.hp.max":            preview.hpTo,
       "system.hp.value":          preview.hpValueTo,
@@ -954,7 +959,9 @@ export class LimbusActor extends Actor {
    */
   getTrainUpgradeCandidates() {
     const NUM = { 1: "Ⅰ", 2: "Ⅱ", 3: "Ⅲ", 4: "Ⅳ", 5: "Ⅴ" };
+    const cfg = CONFIG.LIMBUSCOMPANY ?? {};
     const sys = this.system;
+    const points = sys.learnPoints ?? 0;
     const basic = sys.skills?.basic ?? [];
     const defId = sys.skills?.defense ?? null;
 
@@ -971,13 +978,18 @@ export class LimbusActor extends Actor {
       const next = lv + 1;
       // 下一阶有没有真的写过数值——没写的话这次强化等于白花
       const hasNextData = !!item.system?.trainForms?.[`lv${next}`]?.initialized;
+      // 花费看**技能自身的等级**（Lv.1/2/3），不是要升到第几阶
+      const cost = cfg.trainUpgradeCost?.(item.system?.level ?? 1)
+                ?? (cfg.TRAIN_UPGRADE_COST?.[item.system?.level ?? 1] ?? 5);
       rows.push({
         id: item.id, uuid: item.uuid, name: item.name, img: item.img,
         level: lv, numeral: NUM[lv] ?? lv, nextNumeral: NUM[next] ?? next,
+        skillLevel: item.system?.level ?? 1,
+        cost, affordable: points >= cost,
         equipped:  slotOf.has(item.id),
         slotLabel: slotOf.get(item.id) ?? "",
         hasNextData,
-        canUpgrade: next <= 5 && hasNextData,
+        canUpgrade: next <= 5 && hasNextData && points >= cost,
         maxed: next > 5,
       });
     }
@@ -1003,7 +1015,19 @@ export class LimbusActor extends Actor {
     if (item.system?.type === "ego") return false;
     const next = (item.system?.trainLevel ?? 3) + 1;
     if (next > 5) return false;
+
+    // 点数在这里扣，不在对话框里——宏或其它入口调用时同样要付钱
+    const cfg   = CONFIG.LIMBUSCOMPANY ?? {};
+    const cost  = cfg.trainUpgradeCost?.(item.system?.level ?? 1) ?? 5;
+    const have  = this.system.learnPoints ?? 0;
+    if (have < cost) {
+      ui.notifications?.warn?.(
+        `学习点数不足：强化【${item.name}】需要 ${cost} 点，当前只有 ${have} 点。`);
+      return false;
+    }
+
     await item.update({ "system.trainLevel": next });
+    await this.update({ "system.learnPoints": have - cost });
     return true;
   }
 
