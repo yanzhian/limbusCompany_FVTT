@@ -78,6 +78,11 @@ Hooks.once("diceSoNiceReady", (dice3d) => {
   const _RE = /ChatMessage\s+"[A-Za-z0-9]+" does not exist!/;
 
   // ① 过滤 console.error 直接输出
+  //
+  // 【副作用，排查时注意】包装之后，Chrome 的控制台会把**所有** console.error
+  // 的来源都标成这一行（limbusCompany_FVTT.mjs:84）——因为我们是最后一个调用者。
+  // 真正的出错位置在堆栈的**下一行**（例如 `load @ foundry.mjs:...`）。
+  // 看到「本文件抛了个八竿子打不着的错」时，先往下看一行再怀疑本系统。
   const _origError = console.error.bind(console);
   console.error = (...args) => {
     if (args.length > 0 && typeof args[0] === "string" && _RE.test(args[0])) return;
