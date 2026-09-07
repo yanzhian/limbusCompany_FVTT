@@ -819,7 +819,9 @@ function parseEffectText(text, itemType) {
   if (!path) return {};                      // 这类物品没有描述字段
   const t = String(text ?? "").trim();
   if (!t || t === "-") return {};
-  return { [path]: t };
+  // 虚拟列绕过 coerceValue，所以富文本处理要在这里自己做一遍——
+  // 少了它，整段效果会挤成一行（自动断行原本挂在 coerceValue 的 HTMLField 分支上）
+  return { [path]: richTextFromCsv(t) };
 }
 
 function parseVirtualColumn(marker, text, itemType) {
