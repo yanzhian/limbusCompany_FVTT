@@ -74,6 +74,12 @@
  *                                             // dealDamage 的 category（物理分类）与 sinType（罪孽）均可留空，
  *                                             // 分别按物理抗性 / 罪孽抗性结算
  *                                             // 返回字符串则并入本次结算的 ⚡ 活动消息
+ *     onAttackEnd(actor, buff, ctx) {},      // 自己 [攻击后] 调用（异步，与同名 Activity 同一时点）；
+ *                                             // 与 onHit 的区别：**没打中也会触发**。
+ *                                             // ctx = { item, category, sinType, target,
+ *                                             //          addBuff, addBuffTo, getBuff }
+ *                                             // 每回合限次同样用 _consumeRoundUse(actor, key, max)
+ *                                             // 返回字符串则并入本次结算的活动消息
  *   });
  *
  * 以上所有钩子均为可选。未提供的钩子不会被调用。
@@ -731,18 +737,74 @@ registerCustomBuff("payload", {
 
 /**
  * 【血炎】
- * - 最大值：3 层
+ * - 最大值：3 层，获得时刷新不叠加
+ * - 不会因【烧伤】伤害陷入混乱，且【烧伤】伤害不会把自己压到 1 点以下
+ * - [命中时]：为目标添加 1 级【破裂】和 1 级【烧伤】，自己恢复 3 理智值
+ * - [攻击后]：理智值为 95 时，下回合为自己添加 1 层【迅捷】和 1 层【攻击等级提升】（每回合 3 次）
  * - 回合结束时层数 -1，归零时移除
  */
 registerCustomBuff("bloodFlame", {
   label:         "血炎",
-  description:   "- 最大值：3 层\n- 获得层数时刷新（替换），不叠加\n- 回合结束时层数减少 1，归零时移除\n- 不会因【烧伤】伤害而陷入混乱",
+  description:   "- 最大值：3 层\n"
+    + "- 获得层数时刷新（替换），不叠加\n"
+    + "- 不会因【烧伤】伤害陷入混乱，【烧伤】伤害不会使自身生命值降至 1 点以下\n"
+    + "- 回合结束时层数减少 1，归零时移除\n"
+    + "[命中时]：为目标添加 1 级【破裂】和 1 级【烧伤】，为自己恢复 3 理智值\n"
+    + "[攻击后]：若理智值为 95，下回合为自己添加 1 层【迅捷】和 1 层【攻击等级提升】（每回合 3 次）",
   maxStacks:     3,
   refreshOnGain: true,
 
   /** 仅免疫来自烧伤的混乱触发 */
   beforeChaos(_actor, _buff, ctx) {
     if (ctx?.source === "burn") return { immune: true };
+  },
+
+  /** 烧伤打不死人：跳动伤害路径下把本次伤害的血线钉在 1 点 */
+  modifyIncomingDamage(_actor, _buff, ctx) {
+    if (ctx?.source !== "burn") return;
+    return { hpFloor: 1, note: "【血炎】：【烧伤】伤害不会使生命值降至 1 点以下。" };
+  },
+
+  /**
+   * 命中：给目标 1 级【破裂】+ 1 级【烧伤】，自己回 3 理智。
+   * 两个 debuff 都只加**强度**不加层，所以不能走 addBuffTo——
+   * 基础 BUFF 那条路径会把 0 层订正成 1 层（同【黎明之火】的坑）。
+   */
+  async onHit(actor, buff, ctx) {
+    const target = ctx?.target;
+    const { ClashManager } = await import("./clash.mjs");
+
+    if (target) {
+      const buffs = foundry.utils.deepClone(target.system?.buffs ?? []);
+      for (const [type, name] of [["rupture", "破裂"], ["burn", "烧伤"]]) {
+        const bi = buffs.findIndex(b => b.type === type && (b.whenAdded ?? "本回合") !== "下回合");
+        if (bi >= 0) buffs[bi].intensity = (buffs[bi].intensity ?? 0) + 1;
+        else buffs.push({
+          id: foundry.utils.randomID(), type, name,
+          icon: `systems/limbusCompany_FVTT/assets/icons/Buff_icon/${name}.webp`,
+          intensity: 1, stacks: 1, whenAdded: "本回合",
+        });
+      }
+      await ClashManager._safeDocUpdate(target, { "system.buffs": buffs });
+    }
+
+    const cur = actor.system?.sanity?.value ?? 50;
+    const next = Math.min(95, cur + 3);
+    if (next !== cur) await _safeUpdate(actor, { "system.sanity.value": next });
+
+    const parts = [];
+    if (target) parts.push(`为 <strong>${target.name}</strong> 添加 <strong>1</strong> 级【破裂】与 <strong>1</strong> 级【烧伤】`);
+    if (next !== cur) parts.push(`自身理智 +${next - cur}（${cur} → <strong>${next}</strong>）`);
+    return parts.length ? `【血炎】：${parts.join("，")}。` : undefined;
+  },
+
+  /** 攻击后：理智满值（95）时，下回合拿【迅捷】与【攻击等级提升】各 1 层 */
+  async onAttackEnd(actor, _buff, ctx) {
+    if ((actor.system?.sanity?.value ?? 0) < 95) return;
+    if (!await _consumeRoundUse(actor, "bloodFlameFull", 3)) return;
+    await ctx.addBuff("swift",      0, 1, "下回合");
+    await ctx.addBuff("atkLevelUp", 0, 1, "下回合");
+    return "【血炎】：理智值 95 —— 下回合获得 <strong>1</strong> 层【迅捷】与 <strong>1</strong> 层【攻击等级提升】。";
   },
 
   async onRoundEnd(actor, buff) {
@@ -756,6 +818,26 @@ registerCustomBuff("bloodFlame", {
       buffs[idx].stacks = newStacks;
     }
     await _safeUpdate(actor, { "system.buffs": buffs });
+  },
+});
+
+/**
+ * 【血斗本能】
+ * - 最大值：20 层
+ * - [回合结束时]：每有 10 层，下回合为自己添加 1 层【迅捷】
+ * 层数不自然衰减，靠技能自己加减（与【动力：鬼怪之火】同一套路）。
+ */
+registerCustomBuff("bloodDuelInstinct", {
+  label:       "血斗本能",
+  description: "- 最大值：20 层\n[回合结束时]：每有 10 层，下回合为自己添加 1 层【迅捷】",
+  maxStacks:   20,
+
+  async onRoundEnd(actor, buff) {
+    const times = Math.floor((buff.stacks ?? 0) / 10);
+    if (times <= 0) return;
+    const { ClashManager } = await import("./clash.mjs");
+    await ClashManager._addBuff(actor, "swift", 0, times, "下回合");
+    return `【血斗本能】（${buff.stacks} 层）：下回合获得 <strong>${times}</strong> 层【迅捷】。`;
   },
 });
 
