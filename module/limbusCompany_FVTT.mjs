@@ -1154,6 +1154,25 @@ function _installTokenDoubleClickOpenActorSheet() {
     };
   }
 
+  // 双击是"两次被接受的单击"叠出来的：MouseInteractionManager 先按 _canControl
+  // 判第一次左键，判不过就不进 CLICKED 状态，第二次也就永远凑不成 clickLeft2。
+  // 悬停有框、双击没反应，卡的就是这一步。设施 Token 放行"选中"，但——
+  const originalCanControl = tokenProto._canControl;
+  if (typeof originalCanControl === "function") {
+    tokenProto._canControl = function(user, event) {
+      if (_isFacility(this)) return true;
+      return originalCanControl.call(this, user, event);
+    };
+  }
+  // ——不放行"拖动"：设施摆在哪儿是 GM 的事，玩家能点开不等于能搬走。
+  const originalCanDrag = tokenProto._canDrag;
+  if (typeof originalCanDrag === "function") {
+    tokenProto._canDrag = function(user, event) {
+      if (_isFacility(this) && !game.user.isGM) return false;
+      return originalCanDrag.call(this, user, event);
+    };
+  }
+
   // 双击的前提是这块 Token "看得见"：MouseInteractionManager 用 _canView 决定
   // 要不要派发 clickLeft2。权限为「无」时 Foundry 的 _canView 直接 false，
   // 上面那段补丁根本没机会跑——这才是"PL 双击设施 Token 没反应"的真正原因。
