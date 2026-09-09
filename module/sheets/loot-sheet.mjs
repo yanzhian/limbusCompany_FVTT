@@ -15,8 +15,18 @@
 import { buildItemTitleCard, closeTitleCardUnlessLocked, toggleTitleCardLock } from "./item-sheet.mjs";
 import { buildPlacementGrid, canPlace, autoPlace } from "../helpers/grid-layout.mjs";
 import { GridDnD } from "../helpers/grid-dnd.mjs";
+import { guardInteractRange } from "../helpers/proximity.mjs";
 
 export class LimbusLootSheet extends ActorSheet {
+
+  /**
+   * 距离守卫：玩家的 Token 得走到宝箱旁边（默认 3 格内）才能开面板。
+   * GM 不受限；设置里把「交互距离」调成 0 即可整场关闭。见 helpers/proximity.mjs。
+   */
+  async _render(force, options = {}) {
+    if (!guardInteractRange(this.actor, "战利品")) return;
+    return super._render(force, options);
+  }
 
   /** @override */
   static get defaultOptions() {

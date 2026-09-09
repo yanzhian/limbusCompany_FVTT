@@ -1117,11 +1117,12 @@ function _installTokenDoubleClickOpenActorSheet() {
         return;
       }
 
-      // 战利品：**不看权限**。宝箱本来就是给全队开的，把每个箱子都调成
-      // 「观察者」太琐碎，而且权限一给，玩家在侧边栏也就能翻到它了。
-      // 这里只放开"打开这张卡"；箱子里的写操作（揭晓 / 拾取 / 拿钱）一律
-      // 还是走 GM socket 代执行，权限该拦的仍然拦得住。
-      if (baseActor?.type === "loot") {
+      // 场景设施（战利品 / 营地 / 商人）：**不看权限**。这些卡本来就是给全队
+      // 用的，逐个调「观察者」太琐碎，而且权限一给，玩家在侧边栏也就能翻到
+      // 它们了。这里只放开"打开这张卡"；卡里的写操作（揭晓 / 拾取 / 存取 /
+      // 买卖）一律还是走 GM socket 代执行，权限该拦的仍然拦得住。
+      // 走近才能开的限制由各 Sheet 的 _render 守卫负责（见 helpers/proximity.mjs）。
+      if (["loot", "camp", "merchant"].includes(baseActor?.type)) {
         event?.preventDefault?.();
         event?.stopPropagation?.();
         this.release?.();
@@ -1205,8 +1206,8 @@ function _registerSettings() {
 
   // 营地 / 商人的「站得够近才能开」判定半径
   game.settings.register("limbusCompany_FVTT", "interactRange", {
-    name:    "营地 / 商人 交互距离（格）",
-    hint:    "玩家的 Token 与营地 / 商人 Token 之间不超过这个格数才能打开面板"
+    name:    "营地 / 商人 / 战利品 交互距离（格）",
+    hint:    "玩家的 Token 与营地 / 商人 / 战利品 Token 之间不超过这个格数才能打开面板"
            + "（按 Token 占地的边缘算，紧贴＝1 格，斜向也算 1 格）。"
            + "填 0 关闭距离限制。GM 永远不受限；任一方在当前场景没有 Token 时也放行。",
     scope:   "world",
