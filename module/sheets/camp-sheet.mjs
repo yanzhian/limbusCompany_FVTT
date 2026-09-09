@@ -39,12 +39,10 @@ export class LimbusCampSheet extends ActorSheet {
     return foundry.utils.mergeObject(super.defaultOptions, {
       classes:   ["limbuscompany", "sheet", "actor", "camp"],
       template:  "systems/limbusCompany_FVTT/templates/actor/camp-sheet.hbs",
-      // 全屏铺开：营地是"停下来整理东西"的界面，配方与仓库都想要横向空间，
-      // 而它被压在其他窗口之下（见 bringToTop），铺满也不会挡住别的卡
-      width:     window.innerWidth,
-      height:    window.innerHeight,
-      top:       0,
-      left:      0,
+      // 窗口化：按内容需要的宽度开（配方 420 + 仓库 900 + 背包 ~330 + 边距），
+      // 但不超过视口的 92%——2K 上铺满整屏只会让三栏之间空出一大片。
+      width:     Math.min(Math.round(window.innerWidth * 0.92), 1720),
+      height:    Math.min(Math.round(window.innerHeight * 0.92), 980),
       resizable: true,
       // 重渲染时保持这些容器的滚动位置（拖动仓库物品后不回顶）
       scrollY:   [".camp-warehouse-grid-wrap", ".camp-char-grid-wrap", ".camp-recipe-list"],
@@ -378,6 +376,8 @@ export class LimbusCampSheet extends ActorSheet {
             uuid: tile.dataset.itemUuid ?? "",
             x: p.x, y: p.y, w: p.w ?? 1, h: p.h ?? 1,
             placementIdx: idx,
+            // 取出到背包时按这个朝向落地（不带就会"转回去"）
+            rotated: !!p.rotated,
             fromCampWarehouse: {
               campActorId:  this.actor.id,
               placementIdx: idx,
@@ -482,6 +482,9 @@ export class LimbusCampSheet extends ActorSheet {
             type: "Item", uuid,
             x: t.x, y: t.y, w: t.w, h: t.h,
             placementIdx: (charGrid.tiles ?? []).indexOf(t),
+            // 旋转态必须跟着 payload 走：落进仓库时要按转过的尺寸算，
+            // 否则物品一跨栏就"转回去"了
+            rotated: !!t.rotated,
             fromBag: { actorId: charGrid.actorId, itemId: t.id },
           };
         },
@@ -574,9 +577,16 @@ export class LimbusCampSheet extends ActorSheet {
     const item = await fromUuid(raw.uuid ?? "").catch(() => null);
     if (!item) return;
     const qty = item.system?.quantity ?? 1;
-    // 取出后物品会以新 id 进入角色背包，落点交给渲染时的自动补位；
-    // 这里先记下期望落点，_executeItemTake 完成后由角色卡侧写实。
-    await this._executeItemTake(this.actor.id, raw.uuid, idx, qty);
+
+    // 落点与旋转一路带到取出流程：取出后物品是**新 id**，不写一条 bagLayout
+    // 的话渲染时只能自动补位，于是"放哪儿它都自己找地方"。抓取偏移与 R 的
+    // 口径与仓库内移动一致（按过 R 则偏移作废，按转后的尺寸落地）。
+    const srcRot = !!raw.rotated;
+    const rot    = raw.rotatePending ? !srcRot : srcRot;
+    const offX   = raw.rotatePending ? 0 : (raw.fromCampWarehouse.offX ?? 0);
+    const offY   = raw.rotatePending ? 0 : (raw.fromCampWarehouse.offY ?? 0);
+    await this._executeItemTake(this.actor.id, raw.uuid, idx, qty,
+      { x: x - offX, y: y - offY, rotated: rot });
   }
 
   /* ─── 网格尺寸编辑（GM） ─────────────────────────────────────────────── */
@@ -680,17 +690,22 @@ export class LimbusCampSheet extends ActorSheet {
         sourceActorId: sourceActor.id,
         itemData:      dropped.toObject(),
         targetX, targetY,
+        rotated:       raw.rotatePending ? !raw.rotated : !!raw.rotated,
         userId: game.user.id,
       });
       return;
     }
 
-    // GM 直接执行
-    const cap = dropped.system?.capacity ?? { w: 1, h: 1 };
-    const w = Math.max(1, cap.w ?? 1), h = Math.max(1, cap.h ?? 1);
+    // GM 直接执行。旋转态来自 payload（背包图块转过 90°）再叠加拖动中按下的 R——
+    // 两个都不看的话，转过的物品一进仓库就变回原来的朝向。
+    const cap    = dropped.system?.capacity ?? { w: 1, h: 1 };
+    const srcRot = !!raw.rotated;
+    const rot    = raw.rotatePending ? !srcRot : srcRot;
+    const w = Math.max(1, rot ? (cap.h ?? 1) : (cap.w ?? 1));
+    const h = Math.max(1, rot ? (cap.w ?? 1) : (cap.h ?? 1));
 
     const place = this._whCanPlace(targetX, targetY, w, h, cols, rows)
-      ? { x: targetX, y: targetY, w, h, rotated: false }
+      ? { x: targetX, y: targetY, w, h, rotated: rot }
       : this._whAutoPlace(w, h);
     if (!place) return void ui.notifications.warn("仓库空间不足，无法放置该物品。");
 
@@ -1000,10 +1015,10 @@ export class LimbusCampSheet extends ActorSheet {
   /**
    * 取出物品执行：GM 直接执行，玩家通过 socket 委托 GM。
    */
-  async _executeItemTake(campActorId, itemUuid, placementIdx, quantity) {
+  async _executeItemTake(campActorId, itemUuid, placementIdx, quantity, place = null) {
     if (game.user.isGM) {
       await LimbusCampSheet._gmExecuteTakeItem({
-        campActorId, itemUuid, placementIdx, quantity, userId: game.user.id,
+        campActorId, itemUuid, placementIdx, quantity, place, userId: game.user.id,
         charId: game.user.character?.id ?? null,
       });
     } else {
@@ -1011,7 +1026,7 @@ export class LimbusCampSheet extends ActorSheet {
       if (!myChar) { ui.notifications.warn("找不到你的角色。"); return; }
       game.socket.emit("system.limbusCompany_FVTT", {
         type: "campTakeItem",
-        campActorId, itemUuid, placementIdx, quantity,
+        campActorId, itemUuid, placementIdx, quantity, place,
         userId: game.user.id,
         charId: myChar.id,
       });
@@ -1443,7 +1458,7 @@ export class LimbusCampSheet extends ActorSheet {
 
   /* ─── 静态：GM 端执行取出物品 ──────────────────────────────────────── */
 
-  static async _gmExecuteTakeItem({ campActorId, itemUuid, placementIdx, quantity, userId, charId }) {
+  static async _gmExecuteTakeItem({ campActorId, itemUuid, placementIdx, quantity, place = null, userId, charId }) {
     const campActor = game.actors.get(campActorId);
     if (!campActor) return;
 
@@ -1487,12 +1502,35 @@ export class LimbusCampSheet extends ActorSheet {
       await LimbusCampSheet._migrateContainerContents(playerChar, newItem, campActorId);
     }
 
+    // 落点：拖到哪格就摆哪格。新物品是新 id，不写 bagLayout 的话
+    // packBagGrid 只能自动补位——那正是"放哪儿它都自己找地方"的原因。
+    // 放不下（越界 / 压住别人）就不写，让自动补位兜底。
+    if (newItem && place) {
+      const cap  = newItem.system?.capacity ?? {};
+      const rot  = !!place.rotated;
+      const w    = Math.max(1, rot ? (cap.h ?? 1) : (cap.w ?? 1));
+      const h    = Math.max(1, rot ? (cap.w ?? 1) : (cap.h ?? 1));
+      const grid = packBagGrid(getBagItems(playerChar), BAG_COLS, BAG_ROWS,
+        playerChar.system.bagLayout ?? []);
+      const others = (grid.tiles ?? [])
+        .filter(t => t.id !== newItem.id)
+        .map(t => ({ x: t.x, y: t.y, w: t.w, h: t.h }));
+      const x = Math.max(0, place.x ?? 0), y = Math.max(0, place.y ?? 0);
+      if (canPlace(others, x, y, w, h, BAG_COLS, Math.max(BAG_ROWS, grid.rows ?? BAG_ROWS))) {
+        const layout = foundry.utils.deepClone(playerChar.system.bagLayout ?? []);
+        const hit = layout.find(e => e.itemId === newItem.id);
+        if (hit) { hit.x = x; hit.y = y; hit.rotated = rot; }
+        else layout.push({ itemId: newItem.id, x, y, rotated: rot });
+        await playerChar.update({ "system.bagLayout": layout });
+      }
+    }
+
     ui.notifications.info(`${item.name} ×${qty} 已移至 ${playerChar.name} 的背包。`);
   }
 
   /* ─── 静态：GM 端执行玩家拖入物品 ─────────────────────────────────── */
 
-  static async _gmExecuteDropItem({ campActorId, itemUuid, sourceActorId, itemData, targetX, targetY }) {
+  static async _gmExecuteDropItem({ campActorId, itemUuid, sourceActorId, itemData, targetX, targetY, rotated = false }) {
     const campActor = game.actors.get(campActorId);
     if (!campActor) return;
 
@@ -1517,11 +1555,13 @@ export class LimbusCampSheet extends ActorSheet {
     const data = foundry.utils.deepClone(itemData);
     delete data._id;
     const cap = data.system?.capacity ?? { w: 1, h: 1 };
-    const w = Math.max(1, cap.w ?? 1), h = Math.max(1, cap.h ?? 1);
+    // 旋转态由拖动侧传来，这里照着摆——否则玩家拖进来的物品会转回原朝向
+    const w = Math.max(1, rotated ? (cap.h ?? 1) : (cap.w ?? 1));
+    const h = Math.max(1, rotated ? (cap.w ?? 1) : (cap.h ?? 1));
 
     // 优先放目标格，否则自动寻位
     let place = canPlace(targetX, targetY, w, h)
-      ? { x: targetX, y: targetY, w, h, rotated: false }
+      ? { x: targetX, y: targetY, w, h, rotated }
       : null;
     if (!place) {
       outer: for (let y = 0; y < rows; y++) {

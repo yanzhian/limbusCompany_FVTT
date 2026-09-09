@@ -10556,8 +10556,9 @@ input.item-piles-quantity {
 .camp-sheet .camp-char-grid-wrap { display: flex; justify-content: center; }
 .camp-sheet .camp-title-dock     { align-items: flex-start; }
 
-/* ── 标题栏：锁 → 图标 → 名称，一排靠左 ──────────────────────────────
-   先前把名称绝对居中，结果图标和锁被甩到左端，和标题隔着半个屏幕。 */
+/* ── 标题栏：锁与图标靠左，名称绝对居中 ──────────────────────────────
+   名称若跟着 flex 排，就会被左边的锁和图标推得偏左；绝对定位才真的居中。
+   关掉指针事件，免得它压在锁上面点不着。 */
 .camp-sheet { --camp-title-size: 42px; }
 .camp-sheet .camp-titlebar {
   position:    relative;
@@ -10566,9 +10567,11 @@ input.item-piles-quantity {
   gap:         10px;
 }
 .camp-sheet .camp-title-name {
-  position:       static;
-  transform:      none;
-  flex:           0 1 auto;
+  position:       absolute;
+  left:           50%;
+  transform:      translateX(-50%);
+  pointer-events: none;
+  flex:           none;
   font-size:      var(--camp-title-size);
   font-weight:    600;
   letter-spacing: .04em;
@@ -10589,6 +10592,8 @@ input.item-piles-quantity {
   outline:        1px solid var(--gold-active);
   outline-offset: 1px;
 }
+/* 解锁后名称是输入框，得能点——上面那条 pointer-events:none 只针对纯展示 */
+.camp-sheet input.camp-title-input { pointer-events: auto; }
 .camp-sheet input.camp-title-input {
   background:  rgba(0, 0, 0, .35);
   border:      1px solid var(--border-gold);
