@@ -24,7 +24,9 @@ export class LimbusLootSheet extends ActorSheet {
    * GM 不受限；设置里把「交互距离」调成 0 即可整场关闭。见 helpers/proximity.mjs。
    */
   async _render(force, options = {}) {
-    if (!guardInteractRange(this.actor, "战利品")) return;
+    // limbusToken：双击进来的那一块 Token（见主入口 _wireFacilityToken）。
+    // 同名设施可能摆好几处，指名道姓地比才不会"站在 A 箱旁边开了 B 箱"。
+    if (!guardInteractRange(this.actor, "战利品", { token: options.limbusToken ?? null })) return;
     return super._render(force, options);
   }
 

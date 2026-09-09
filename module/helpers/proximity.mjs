@@ -36,12 +36,23 @@ export function tokenGridGap(a, b) {
   return Math.max(dRow, dCol);
 }
 
-/** 当前用户在本场景里"算数"的 Token：选中的 > 主控角色的 */
+/**
+ * 当前用户在本场景里"算数"的 Token：选中的 > 主控角色的 > 场上任一自己拥有的角色。
+ *
+ * 第三档是后来补的：没设主控角色、又没选中 Token 的玩家（双击设施打开面板
+ * 时很常见——他压根没点自己的小人）原本会落到"找不到 Token"，而那条分支是
+ * **放行**，于是距离限制形同虚设。
+ */
 function _myTokens() {
   const controlled = canvas?.tokens?.controlled ?? [];
   if (controlled.length) return controlled;
+
   const mine = game.user?.character?.getActiveTokens?.(false, false) ?? [];
-  return mine.filter(t => t?.scene?.id === canvas?.scene?.id || !t?.scene);
+  const inScene = mine.filter(t => t?.scene?.id === canvas?.scene?.id || !t?.scene);
+  if (inScene.length) return inScene;
+
+  return (canvas?.tokens?.placeables ?? [])
+    .filter(t => t?.actor?.type === "character" && t.actor.isOwner);
 }
 
 /**
@@ -51,7 +62,7 @@ function _myTokens() {
  * @returns {{ok: boolean, gap: number|null, range: number}}
  *          ok=false 时 gap 是最近的那个距离（null 表示压根没找到 Token）
  */
-export function isWithinInteractRange(actor) {
+export function isWithinInteractRange(actor, { token = null } = {}) {
   let range = 3;
   try { range = game.settings.get("limbusCompany_FVTT", "interactRange") ?? 3; }
   catch { /* 设置没注册（早期加载）时用默认值 */ }
@@ -59,7 +70,9 @@ export function isWithinInteractRange(actor) {
   // 0 = 关闭距离限制；GM 不受限
   if (!range || game.user?.isGM) return { ok: true, gap: null, range };
 
-  const targets = actor?.getActiveTokens?.(false, false) ?? [];
+  // 明确给了 Token（双击进来的那一块）就只跟它比：同名设施可能摆了好几处，
+  // 拿"任意一块最近的"算距离会让站在 A 号箱子旁边的人打开 B 号箱子。
+  const targets = token ? [token] : (actor?.getActiveTokens?.(false, false) ?? []);
   const mine    = _myTokens();
   // 任一方在当前场景没有 Token：放行（见文件头说明）
   if (!targets.length || !mine.length) return { ok: true, gap: null, range };
@@ -82,8 +95,8 @@ export function isWithinInteractRange(actor) {
  * @param {string} label 面板名，用于提示文案（"营地" / "商人"）
  * @returns {boolean} 允许打开
  */
-export function guardInteractRange(actor, label = "面板") {
-  const { ok, gap, range } = isWithinInteractRange(actor);
+export function guardInteractRange(actor, label = "面板", opts = {}) {
+  const { ok, gap, range } = isWithinInteractRange(actor, opts);
   if (ok) return true;
   ui.notifications?.warn(
     `离${label}太远了（${gap} 格），需要走到 ${range} 格以内。`);

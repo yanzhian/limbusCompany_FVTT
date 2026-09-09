@@ -1126,7 +1126,7 @@ function _installTokenDoubleClickOpenActorSheet() {
         event?.preventDefault?.();
         event?.stopPropagation?.();
         this.release?.();
-        baseActor.sheet?.render(true, { focus: true });
+        baseActor.sheet?.render(true, { focus: true, limbusToken: this });
         return;
       }
 
@@ -1226,7 +1226,9 @@ function _installTokenDoubleClickOpenActorSheet() {
         event?.preventDefault?.();
         event?.stopPropagation?.();
         const base = game.actors?.get(t.document?.actorId) ?? t.actor;
-        base?.sheet?.render(true, { focus: true });
+        // 把"点的是哪一块"一并交给 Sheet：距离守卫按这块算，
+        // 同名设施摆好几处时才不会拿最近的那块顶包
+        base?.sheet?.render(true, { focus: true, limbusToken: t });
       };
     }
     mim.__limbusFacilityWired = true;
