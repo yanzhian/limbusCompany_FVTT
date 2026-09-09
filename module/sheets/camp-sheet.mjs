@@ -776,6 +776,15 @@ export class LimbusCampSheet extends ActorSheet {
     const tile = event.currentTarget;
     $(tile).addClass("cg-tile-hover");
 
+    // 拖动中不建卡：一次拖拽会扫过十几个图块，每扫一个就重建一整张 Title 卡
+    // （解析 BUFF 图标、拼描述），这正是拖动发卡顿的原因。
+    if (GridDnD.dragging || document.body.classList.contains("cg-dragging-active")) return;
+
+    // 轻微防抖：鼠标快速掠过一排图块时只建最后停住的那一张
+    clearTimeout(this._campHoverTimer);
+    await new Promise((r) => { this._campHoverTimer = setTimeout(r, 70); });
+    if (!tile.isConnected || !tile.matches(":hover")) return;
+
     // 序号守卫：await 期间若已 hoverEnd/dragstart（序号推进），放弃追加，
     // 避免拖动中出现无法关闭的孤儿 Title 卡
     const seq = this._campHoverSeq = (this._campHoverSeq ?? 0) + 1;
@@ -807,6 +816,7 @@ export class LimbusCampSheet extends ActorSheet {
    */
   _onCgTileHoverEnd(event, force = false) {
     if (event?.currentTarget) $(event.currentTarget).removeClass("cg-tile-hover");
+    clearTimeout(this._campHoverTimer);
     // 展示区是**常驻**的：鼠标离开图块不清卡，卡一直留到扫过下一个图块为止。
     // 强制关闭（拖动开始 / 关窗）才真的收走。
     if (!force) return;
