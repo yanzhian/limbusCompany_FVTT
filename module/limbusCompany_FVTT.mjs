@@ -1136,6 +1136,24 @@ function _installTokenDoubleClickOpenActorSheet() {
     return original.call(this, event, ...args);
   };
 
+  // 设施 Token 是不是这三类之一（原型 Actor 为准：非 linked 的 Token
+  // 自带一份 actor 副本，type 一样，但取原型更稳）
+  const _isFacility = (tokenObj) => {
+    const base = game.actors?.get(tokenObj.document?.actorId) ?? tokenObj.actor;
+    return ["loot", "camp", "merchant"].includes(base?.type);
+  };
+  tokenProto.__limbusIsFacility = _isFacility;
+
+  // 悬停也要放行：不放行的话指针根本不认这块 Token（没有 hover 就没有
+  // "光标在我身上"这件事），双击自然也点不到。
+  const originalCanHover = tokenProto._canHover;
+  if (typeof originalCanHover === "function") {
+    tokenProto._canHover = function(user, event) {
+      if (_isFacility(this)) return true;
+      return originalCanHover.call(this, user, event);
+    };
+  }
+
   // 双击的前提是这块 Token "看得见"：MouseInteractionManager 用 _canView 决定
   // 要不要派发 clickLeft2。权限为「无」时 Foundry 的 _canView 直接 false，
   // 上面那段补丁根本没机会跑——这才是"PL 双击设施 Token 没反应"的真正原因。
@@ -1143,13 +1161,35 @@ function _installTokenDoubleClickOpenActorSheet() {
   const originalCanView = tokenProto._canView;
   if (typeof originalCanView === "function") {
     tokenProto._canView = function(user, event) {
-      const baseActor = game.actors?.get(this.document?.actorId) ?? this.actor;
-      if (["loot", "camp", "merchant"].includes(baseActor?.type)) return true;
+      if (_isFacility(this)) return true;
       return originalCanView.call(this, user, event);
     };
   }
 
   tokenProto.__limbusDblClickPatched = true;
+
+  // 最后一道：Foundry 会把玩家管不着的 Token 的 eventMode 关掉（"none"），
+  // 关掉之后 PIXI 连命中测试都不做，指针从它身上划过去什么都不会发生——
+  // 这就是"根本点不到那个 Token"。每次刷新后把设施 Token 重新打开成可交互。
+  Hooks.on("refreshToken", (token) => {
+    try {
+      if (!token?.__limbusIsFacility?.(token) && !_isFacility(token)) return;
+      if (token.eventMode === "none") token.eventMode = "static";
+      token.cursor = "pointer";
+    } catch { /* 刷新期取不到 actor 就算了，下一帧还会再来 */ }
+  });
+
+  // 进场景时先扫一遍：refreshToken 只在"有变化"时触发，
+  // 已经画好躺在那儿的设施 Token 等不到它。
+  Hooks.on("canvasReady", () => {
+    for (const t of canvas?.tokens?.placeables ?? []) {
+      try {
+        if (!_isFacility(t)) continue;
+        if (t.eventMode === "none") t.eventMode = "static";
+        t.cursor = "pointer";
+      } catch { /* 单块出错不影响其它 */ }
+    }
+  });
 }
 
 /* ─── Token linked 迁移（GM 启动时自动修复）────────────────────────────── */
