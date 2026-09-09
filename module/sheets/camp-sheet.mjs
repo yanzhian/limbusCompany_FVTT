@@ -431,6 +431,14 @@ export class LimbusCampSheet extends ActorSheet {
       event.preventDefault();
       this._showRecipeBookMenu(event, item);
     });
+    // 背包里的容器图块：拖到它上面 = 存入该容器（和仓库那侧同一套规则）
+    html.find(".camp-char-cg .cg-item-tile.cg-tile-container").on("dragover", (event) => {
+      event.preventDefault();
+      event.originalEvent.dataTransfer.dropEffect = "move";
+    });
+    html.find(".camp-char-cg .cg-item-tile.cg-tile-container")
+      .on("drop", this._onCharTileDropOnContainer.bind(this));
+
     // 背包图块悬停：Title 卡
     html.find(".camp-char-cg .cg-item-tile").on("mouseenter", this._onCgTileHoverStart.bind(this));
     html.find(".camp-char-cg .cg-item-tile").on("mousedown", (ev) => {
@@ -900,6 +908,56 @@ export class LimbusCampSheet extends ActorSheet {
     } else {
       game.socket.emit("system.limbusCompany_FVTT", payload);
     }
+  }
+
+  /* ─── 背包里的容器：接住"存入容器"的拖放 ─────────────────────────────
+   *
+   * 仓库那侧一直支持容器套容器（由容器自己的类型限制决定），营地里的背包却
+   * 没有这条路——图块连 cg-tile-container 类都没有，更没有 drop 监听，于是
+   * 同一个包在角色卡里能塞、在营地里塞不进去。这里补齐，规则与
+   * actor-sheet 的 _onBagTileDropOnContainer 完全一致（限制 + 环检测 + 自动寻位）。
+   */
+  async _onCharTileDropOnContainer(event) {
+    const grid  = this._charGridCache;
+    const actor = grid ? game.actors.get(grid.actorId) : null;
+    if (!actor?.isOwner) return;
+
+    const container = await fromUuid(event.currentTarget.dataset.itemUuid ?? "").catch(() => null);
+    if (container?.type !== "container") return;
+
+    let raw;
+    try { raw = JSON.parse(event.originalEvent.dataTransfer.getData("text/plain")); }
+    catch { return; }
+    if (raw?.type !== "Item" || !raw.uuid) return;
+
+    const dragged = await fromUuid(raw.uuid).catch(() => null);
+    if (!dragged || dragged.id === container.id) return;
+    // 只处理这个角色背包内的物品；仓库 → 背包容器请先取出再塞，
+    // 否则要在一次操作里同时改两个 Actor，权限与竞态都不好收拾
+    if (dragged.parent?.id !== actor.id) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+    this._onCgTileHoverEnd(null, true);
+
+    const verdict = canContainerAccept(container, dragged);
+    if (!verdict.ok) return void ui.notifications.warn(verdict.reason);
+    if (await wouldNest(container, dragged)) {
+      return void ui.notifications.warn("不能把容器放进它自己或它内部的容器里。");
+    }
+
+    const gw       = container.system.gridSize?.width  ?? 3;
+    const gh       = container.system.gridSize?.height ?? 3;
+    const contents = foundry.utils.deepClone(container.system.contents ?? []);
+    if (contents.some(p => p.uuid === dragged.uuid)) return;   // 已在里面
+    const cap = dragged.system?.capacity ?? { w: 1, h: 1 };
+    const place = autoPlace(contents, Math.max(1, cap.w ?? 1), Math.max(1, cap.h ?? 1), gw, gh, {
+      lockedSet: makeLockedSet(container.system.lockedCells ?? []),
+    });
+    if (!place) return void ui.notifications.warn(`【${container.name}】容量空间已满，无法存入。`);
+
+    contents.push({ uuid: dragged.uuid, x: place.x, y: place.y, w: place.w, h: place.h, rotated: place.rotated });
+    await container.update({ "system.contents": contents });
   }
 
   /* ─── 仓库图块旋转（GM） ─────────────────────────────────────────────── */
