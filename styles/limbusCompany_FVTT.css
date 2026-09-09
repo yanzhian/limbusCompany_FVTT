@@ -10624,11 +10624,16 @@ input.item-piles-quantity {
   height:     18px;
   object-fit: contain;
 }
-/* 按钮：矮一档，深底浅字（原来的 max-width:20px 把字挤没了） */
+/* 数值之后把剩余空间吃掉，按钮才会靠右站齐（原先这活儿是「眼」那个单位干的） */
+.loot-sheet .loot-currency-value { flex: 1; }
+
+/* 按钮：矮一档、定宽，深底浅字（原来的 max-width:20px 把字挤没了） */
 .loot-sheet .loot-currency-bar .sheet-btn,
 .loot-sheet .loot-currency-bar .loot-fill-btn {
-  max-width:     none;
-  padding:       2px 12px;
+  flex:          0 0 auto;
+  width:         86px;
+  text-align:    center;
+  padding:       2px 0;
   line-height:   1.5;
   font-size:     12px;
   background:    #0A0605;
