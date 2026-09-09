@@ -113,6 +113,9 @@
 ```
 
 - `stacks` 是「每 N」里的 **N**；`perNDim` 决定 N 数的是 `stacks`（层）还是 `intensity`（级）
+- ⚠ **`perN` 的 `intensity` 永远填 0**。「每 10 **级**【烧伤】」也写 `stacks: 10` + `perNDim: "intensity"`，
+  **不是** `intensity: 10`。把 N 写进 `intensity` 是最常犯的错，写错了这条前置直接判不出倍数。
+  （只有【拥有】`hasBuff` 与【比较值】`buffCompare` 的 `intensity` 才是"几级"的门槛值。）
 - `maxTimes` 是**倍数**上限，0 = 无限
 - 倍数会放大后续效果的**层数、强度和数值**（见 §7）
 
@@ -559,6 +562,7 @@
 |---|---|
 | 把两个不同条件塞进同一条 | 变成 AND，两个都满足才触发 |
 | `intensity` 与 `stacks` 混填 | 「3 级」写成 `stacks:3` 会变成 3 层 1 级 |
+| **`perN` 把 N 写进 `intensity`** | 「每 10 级」是 `stacks:10, perNDim:"intensity", intensity:0`；`perN` 的 `intensity` 恒为 0 |
 | 「最大值」直接填进 `maxTimes` | 单次效果值 >1 时上限翻倍（+2 × 6 = +12） |
 | 用中文名当 `buff` | 除非配 `custom`，否则匹配不到注册表，上限等特性失效 |
 | 写 `[攻击后]` 把骰数改回去 | 多余，系统已自动还原 |

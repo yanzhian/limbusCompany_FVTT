@@ -1,0 +1,624 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>营地卡布局调参台</title>
+<style>
+/* ══ 调参台外壳（不导出） ══════════════════════════════════════ */
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: #14100c; color: #d8cbb4;
+  font: 13px/1.5 "Microsoft YaHei", system-ui, sans-serif;
+  display: flex; height: 100vh; overflow: hidden;
+}
+#left  { flex: 1 1 auto; min-width: 0; padding: 10px; overflow: auto;
+         display: flex; flex-direction: column; }
+#right { flex: 0 0 320px; border-left: 1px solid #3B2412; overflow-y: auto;
+         padding: 12px; background: #0f0c09; }
+#right h3 { margin: 14px 0 6px; font-size: .82rem; color: #C9A84C;
+            border-bottom: 1px solid #3B2412; padding-bottom: 4px; }
+#right h3:first-child { margin-top: 0; }
+.row { display: flex; align-items: center; gap: 6px; margin: 5px 0; }
+.row label { flex: 0 0 112px; font-size: .72rem; color: #9c8f7a; }
+.row input[type=range] { flex: 1; min-width: 0; }
+.row .val { flex: 0 0 48px; text-align: right; font-size: .72rem; color: #C9A84C; }
+.hint { font-size: .68rem; color: #6f6555; margin: 4px 0 8px; line-height: 1.45; }
+#stage-bar { display: flex; align-items: center; gap: 10px; margin-bottom: 8px;
+             flex-shrink: 0; flex-wrap: wrap; }
+#stage-bar b { color: #C9A84C; font-size: .8rem; }
+#stage-bar button { padding: 3px 10px; cursor: pointer; background: #2a1d0f;
+                    color: #C9A84C; border: 1px solid #3B2412; border-radius: 3px;
+                    font-size: .74rem; }
+#stage-bar button:hover { background: #3a2814; }
+#widthOut, #heightOut { color: #C9A84C; font-variant-numeric: tabular-nums; }
+#viewport {
+  border: 1px solid #3B2412; border-radius: 4px; overflow: hidden;
+  background: #0a0806; width: var(--win-w); height: var(--win-h);
+  max-width: 100%; flex-shrink: 0; resize: both;
+}
+#exportWrap textarea {
+  width: 100%; height: 240px; background: #0a0806; color: #b9ad96;
+  border: 1px solid #3B2412; border-radius: 3px; font: 11px/1.45 monospace;
+  padding: 8px; resize: vertical;
+}
+#copyBtn { margin-top: 6px; width: 100%; padding: 6px; cursor: pointer;
+           background: #2a1d0f; color: #C9A84C; border: 1px solid #3B2412;
+           border-radius: 3px; font-size: .78rem; }
+#copyBtn:hover { background: #3a2814; }
+
+/* ══════════════════════════════════════════════════════════════
+   ↓↓↓ 可导出部分：营地卡样式 ↓↓↓
+   栏序：配方（左） | 仓库（中，唯一伸缩） | 角色背包（右）
+   ══════════════════════════════════════════════════════════════ */
+.camp-preview {
+  --bg-dark:      #17120c;
+  --bg-panel:     #1e1810;
+  --bg-title-bar: #241b11;
+  --border-gold:  #3B2412;
+  --gold-active:  #C9A84C;
+  --text-main:    #E4D8BE;
+  --text-sub:     #A79A81;
+  --text-dim:     #7A6E5B;
+
+  /* —— 可调项 —— */
+  --camp-recipe-w:   420px;  /* 左：配方栏宽 */
+  --camp-recipe-min: 300px;
+  --camp-char-w:     300px;  /* 右：角色栏宽（跟随格子边长自动够宽） */
+  --camp-char-min:   240px;
+  --camp-wh-min:     360px;  /* 中：仓库最小宽 */
+  --camp-cell:       52px;   /* 网格格子边长（左右两栏统一） */
+  --camp-gap:        3px;
+  --camp-pad:        10px;
+  --camp-header-h:   30px;
+  --camp-font:       1.1;    /* 字号总倍率（全屏放大用） */
+  --camp-dock-min:   200px;  /* Title 展示区最小高 */
+
+  display: flex; flex-direction: column; height: 100%;
+  background: var(--bg-dark); color: var(--text-main);
+  font-size: calc(13px * var(--camp-font));
+}
+
+/* ── 标题栏 ─────────────────────────────────────────────────── */
+.camp-titlebar {
+  display: flex; align-items: center; gap: 8px; flex-shrink: 0;
+  background: var(--bg-title-bar); padding: 6px 12px;
+  border-bottom: 1px solid var(--border-gold);
+}
+.camp-lock-toggle { cursor: pointer; color: var(--text-sub); padding: 2px 4px; }
+.camp-title-icon { width: 30px; height: 30px; border-radius: 4px;
+                   background: #3a2a18; flex-shrink: 0; }
+.camp-title-name { font-size: 1.1em; font-weight: 600; flex: 1;
+                   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.camp-title-label { font-size: .76em; color: var(--text-sub); flex-shrink: 0; }
+
+/* ── 主体三栏 ───────────────────────────────────────────────── */
+.camp-body { display: flex; flex: 1; overflow: hidden; min-height: 0; }
+.camp-recipe-panel, .camp-warehouse-panel, .camp-char-panel {
+  display: flex; flex-direction: column; overflow: hidden; min-width: 0;
+}
+/* 左：配方 */
+.camp-recipe-panel {
+  flex: 0 1 var(--camp-recipe-w);
+  min-width: var(--camp-recipe-min);
+  border-right: 1px solid var(--border-gold);
+}
+/* 中：仓库 —— 唯一吃掉多余宽度的面板 */
+.camp-warehouse-panel {
+  flex: 1 1 var(--camp-wh-min);
+  min-width: var(--camp-wh-min);
+  border-right: 1px solid var(--border-gold);
+}
+/* 右：角色背包 —— 宽度跟着格子走，5 列刚好放下 */
+.camp-char-panel {
+  flex: 0 0 auto;
+  width: max(var(--camp-char-min),
+             calc(5 * var(--camp-cell) + 4 * var(--camp-gap) + 2 * var(--camp-pad) + 14px));
+}
+
+/* ── 面板 header：三栏统一骨架 ──────────────────────────────── */
+.camp-panel-header {
+  display: flex; align-items: center; gap: 6px; flex-shrink: 0;
+  min-height: var(--camp-header-h);
+  padding: 4px 10px; font-size: .82em; font-weight: 600;
+  color: var(--text-sub); background: var(--bg-panel);
+  border-bottom: 1px solid var(--border-gold);
+}
+.camp-panel-header .ph-title { white-space: nowrap; overflow: hidden;
+                               text-overflow: ellipsis; }
+.camp-panel-header .ph-stat { margin-left: auto; font-size: .88em;
+                              font-weight: normal; color: var(--text-dim);
+                              white-space: nowrap; }
+.camp-char-avatar { width: 22px; height: 22px; border-radius: 50%;
+                    background: #4a3a22; border: 1px solid var(--border-gold);
+                    flex-shrink: 0; }
+.camp-grid-dim { width: 36px; padding: 1px 2px; text-align: center;
+                 background: rgba(255,255,255,.06); color: var(--text-main);
+                 border: 1px solid var(--border-gold); border-radius: 2px;
+                 font-size: .9em; }
+.icon-btn { background: none; border: none; color: var(--text-sub);
+            cursor: pointer; padding: 2px 4px; font-size: .9em; }
+.icon-btn:hover { color: var(--gold-active); }
+
+/* ── 网格 ───────────────────────────────────────────────────── */
+.camp-grid-wrap { flex: 1; overflow: auto; padding: var(--camp-pad); min-height: 0; }
+/* 角色背包 5×8=40 格固定，不参与拉伸；高度按内容，多出来的给 Title 展示区 */
+.camp-char-grid-wrap { flex: 0 0 auto; overflow: visible; }
+.cg-wrap {
+  display: grid; position: relative; width: max-content;
+  grid-template-columns: repeat(var(--grid-cols), var(--camp-cell));
+  grid-auto-rows: var(--camp-cell);
+  gap: var(--camp-gap);
+}
+.cg-cell { border: 1px solid #2c1f12; background: rgba(0,0,0,.3); border-radius: 2px; }
+.cg-item-tile {
+  position: relative; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; overflow: hidden;
+  border: 1px solid var(--border-gold); border-radius: 3px;
+  background: #241a10; cursor: grab; padding: 1px;
+}
+.cg-item-tile.selected { border-color: var(--gold-active);
+                         box-shadow: 0 0 0 1px var(--gold-active) inset; }
+.cg-tile-icon { width: 58%; height: 58%; background: #4a3a22; border-radius: 2px; }
+.cg-tile-name { font-size: calc(9px * var(--camp-font)); line-height: 1.1;
+                color: var(--text-sub); text-align: center; max-width: 100%;
+                overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.cg-tile-qty { position: absolute; bottom: 1px; right: 2px;
+               font-size: calc(9px * var(--camp-font)); color: var(--gold-active); }
+.rarity-rare { border-color: #3F7FBF; }
+.rarity-epic { border-color: #8E5FBF; }
+
+/* ── 搜索 / 提示 ────────────────────────────────────────────── */
+.camp-warehouse-toolbar { padding: 5px 10px; flex-shrink: 0;
+                          border-bottom: 1px solid var(--border-gold); }
+.camp-warehouse-search { width: 100%; padding: 4px 9px; font-size: .82em;
+                         background: rgba(255,255,255,.05); color: var(--text-main);
+                         border: 1px solid var(--border-gold); border-radius: 3px; }
+.camp-drag-hint { flex-shrink: 0; text-align: center; padding: 4px;
+                  font-size: .74em; color: var(--text-dim);
+                  border-top: 1px dashed var(--border-gold); }
+
+/* ══ 角色栏下方：Title 卡常驻展示区 ══════════════════════════ */
+/* 原本是跟随鼠标的 position:fixed 浮卡；放大后角色栏下方本就空着，
+   把卡钉在这里，鼠标划过图块就换内容，不再遮挡网格。 */
+.camp-title-dock {
+  flex: 1 1 auto; min-height: var(--camp-dock-min);
+  display: flex; align-items: flex-start; justify-content: center;
+  overflow: auto; padding: var(--camp-pad);
+  border-top: 1px solid var(--border-gold);
+  background: rgba(0, 0, 0, .22);
+}
+.camp-title-dock-empty {
+  margin: auto; text-align: center; font-size: .78em;
+  color: var(--text-dim); line-height: 1.8;
+}
+/* 展示区里的 Title 卡：撑满可用宽度，去掉浮卡的阴影/定位 */
+.camp-title-dock .limbus-title-card {
+  position: static !important; width: 100%; max-width: 100%;
+  margin: 0; box-shadow: none;
+}
+/* —— 以下仅为调参台里的 Title 卡外观仿真，落地时用真卡，不要导出 —— */
+.mock-card { width: 100%; border: 1px solid var(--border-gold); border-radius: 4px;
+             background: var(--bg-panel); overflow: hidden; }
+.mock-card .tc-header { display: flex; align-items: center; gap: 6px;
+                        padding: 5px 8px; background: #2b2013;
+                        border-bottom: 1px solid var(--border-gold); }
+.mock-card .tc-header .ic { width: 26px; height: 26px; border-radius: 3px;
+                            background: #4a3a22; }
+.mock-card .tc-name { font-size: .92em; color: var(--text-main); flex: 1; }
+.mock-card .tc-rarity { font-size: .74em; color: #8E5FBF; }
+.mock-card .tc-body { padding: 7px 9px; font-size: .78em; color: var(--text-sub);
+                      line-height: 1.6; }
+.mock-card .tc-rows { display: flex; gap: 10px; flex-wrap: wrap;
+                      margin-top: 6px; font-size: .76em; }
+.mock-card .tc-rows span { color: var(--gold-active); }
+.mock-card .tc-footer { display: flex; align-items: center; gap: 6px;
+                        padding: 4px 9px; font-size: .76em; color: var(--text-dim);
+                        border-top: 1px solid var(--border-gold); }
+
+/* ── 配方 ───────────────────────────────────────────────────── */
+.camp-recipe-list { flex: 1; overflow-y: auto; padding: 8px;
+                    display: flex; flex-direction: column; gap: 6px; }
+.camp-recipe-row { border: 1px solid var(--border-gold); border-radius: 4px;
+                   background: var(--bg-panel); padding: 5px 8px; }
+.camp-recipe-header-row { display: flex; align-items: center; gap: 7px; }
+.camp-recipe-output-icon { width: 26px; height: 26px; border-radius: 3px;
+                           background: #4a3a22; flex-shrink: 0; }
+.camp-recipe-name { font-size: .9em; color: var(--text-main); flex: 1;
+                    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.camp-recipe-btns { display: flex; align-items: center; gap: 2px; flex-shrink: 0; }
+.camp-craft-btn { padding: 3px 12px; font-size: .8em; cursor: pointer;
+                  background: #2a1d0f; color: var(--gold-active);
+                  border: 1px solid var(--border-gold); border-radius: 3px; }
+.camp-craft-disabled { opacity: .4; cursor: not-allowed; }
+.camp-recipe-detail-row { display: flex; align-items: center; gap: 5px;
+                          flex-wrap: wrap; margin-top: 4px;
+                          padding-left: calc(26px + 7px); }
+.camp-ing-chip, .camp-output-chip {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: .76em; padding: 2px 6px; border-radius: 9px;
+  background: rgba(0,0,0,.3); border: 1px solid #2c1f12; color: var(--text-sub);
+}
+.camp-ing-chip .dot, .camp-output-chip .dot {
+  width: 13px; height: 13px; border-radius: 2px; background: #4a3a22; }
+.ing-insufficient { color: #E8836B; border-color: #6b3428; }
+.camp-output-chip { color: var(--gold-active); border-color: #4a3a1a; }
+.camp-recipe-arrow { color: var(--text-dim); }
+</style>
+</head>
+<body>
+
+<div id="left">
+  <div id="stage-bar">
+    <b>预览</b>
+    <span><span id="widthOut">1600</span> × <span id="heightOut">900</span></span>
+    <input type="range" id="winW" min="900" max="2400" value="1600" style="width:180px">
+    <input type="range" id="winH" min="500" max="1400" value="900" style="width:140px">
+    <button id="fitBtn">按当前浏览器窗口（全屏模拟）</button>
+    <span style="font-size:.7rem;color:#6f6555">鼠标划过任一物品图块 → 右栏 Title 展示区换内容</span>
+  </div>
+  <div id="viewport" style="--win-w:1600px; --win-h:900px">
+    <div class="camp-preview" id="preview">
+
+      <div class="camp-titlebar">
+        <span class="camp-lock-toggle">🔓</span>
+        <div class="camp-title-icon"></div>
+        <span class="camp-title-name">迷雾边境营地</span>
+        <span class="camp-title-label">营地</span>
+      </div>
+
+      <div class="camp-body">
+
+        <!-- ══ 左：配方 ══ -->
+        <div class="camp-recipe-panel">
+          <div class="camp-panel-header">
+            <span class="ph-title">⚗ 配方</span>
+            <button class="icon-btn" style="margin-left:auto">＋</button>
+          </div>
+          <div class="camp-recipe-list" id="recipeList"></div>
+        </div>
+
+        <!-- ══ 中：仓库 ══ -->
+        <div class="camp-warehouse-panel">
+          <div class="camp-panel-header">
+            <span class="ph-title">📦 仓库</span>
+            <span class="ph-stat">23 件 / 剩余 26 格</span>
+            <input class="camp-grid-dim" value="7"><span style="font-size:.8em">×</span>
+            <input class="camp-grid-dim" value="7">
+          </div>
+          <div class="camp-warehouse-toolbar">
+            <input class="camp-warehouse-search" placeholder="搜索仓库物品…">
+          </div>
+          <div class="camp-grid-wrap">
+            <div class="cg-wrap" id="whGrid" style="--grid-cols:7"></div>
+          </div>
+          <div class="camp-drag-hint">↓ 将物品拖入网格以存入仓库</div>
+        </div>
+
+        <!-- ══ 右：角色背包 + Title 展示区 ══ -->
+        <div class="camp-char-panel">
+          <div class="camp-panel-header">
+            <div class="camp-char-avatar"></div>
+            <span class="ph-title">但丁</span>
+            <span class="ph-stat">14 / 40 格</span>
+          </div>
+          <div class="camp-grid-wrap camp-char-grid-wrap">
+            <div class="cg-wrap" id="charGrid" style="--grid-cols:5"></div>
+          </div>
+          <div class="camp-drag-hint">⇄ 仓库物品拖到此处取出</div>
+          <div class="camp-title-dock" id="titleDock">
+            <div class="camp-title-dock-empty">
+              鼠标划过物品<br>此处显示 Title 卡
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="right">
+  <h3>栏宽</h3>
+  <div class="hint">左配方 / 中仓库 / 右角色。仓库是唯一吃掉多余宽度的面板；
+    右栏宽度由格子边长推算（5 列刚好放下），不用手调。</div>
+  <div class="row"><label>配方栏 理想宽</label><input type="range" id="recW" min="240" max="640" value="420"><span class="val" id="recW_v"></span></div>
+  <div class="row"><label>配方栏 最小宽</label><input type="range" id="recMin" min="200" max="520" value="300"><span class="val" id="recMin_v"></span></div>
+  <div class="row"><label>仓库 最小宽</label><input type="range" id="whMin" min="240" max="800" value="360"><span class="val" id="whMin_v"></span></div>
+  <div class="row"><label>角色栏 最小宽</label><input type="range" id="charMin" min="180" max="420" value="240"><span class="val" id="charMin_v"></span></div>
+
+  <h3>网格</h3>
+  <div class="hint">左右两栏共用一个格子尺寸——两边要互相拖放，尺寸不同物品跨过去会突变。</div>
+  <div class="row"><label>格子边长</label><input type="range" id="cell" min="32" max="88" value="52"><span class="val" id="cell_v"></span></div>
+  <div class="row"><label>格子间距</label><input type="range" id="gap" min="0" max="10" value="3"><span class="val" id="gap_v"></span></div>
+  <div class="row"><label>面板内边距</label><input type="range" id="pad" min="0" max="24" value="10"><span class="val" id="pad_v"></span></div>
+
+  <h3>Title 展示区</h3>
+  <div class="row"><label>最小高</label><input type="range" id="dock" min="120" max="480" value="200"><span class="val" id="dock_v"></span></div>
+
+  <h3>排版</h3>
+  <div class="row"><label>header 高</label><input type="range" id="hh" min="22" max="52" value="30"><span class="val" id="hh_v"></span></div>
+  <div class="row"><label>字号倍率</label><input type="range" id="font" min="85" max="150" value="110"><span class="val" id="font_v"></span></div>
+
+  <div id="exportWrap">
+    <h3>导出（整段贴到 CSS 末尾）</h3>
+    <textarea id="exportBox" readonly></textarea>
+    <button id="copyBtn">复制</button>
+  </div>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const preview  = $("preview");
+const viewport = $("viewport");
+
+/* ── 假数据 ───────────────────────────────────────────────── */
+const ITEMS = [
+  ["长柄斧", 1, 2, "", 0], ["绷带", 1, 1, "", 4], ["铁矿石", 1, 1, "", 12],
+  ["旅行背包", 2, 2, "rare", 0], ["净水", 1, 1, "", 3], ["皮甲", 2, 2, "", 0],
+  ["月光结晶", 1, 1, "epic", 2], ["干粮", 1, 1, "", 8], ["麻绳", 1, 1, "", 5],
+  ["锻造锤", 1, 2, "rare", 0], ["空瓶", 1, 1, "", 6], ["兽皮", 1, 1, "", 9],
+];
+const CARD_INFO = {
+  "长柄斧":   ["装备 · 双手", "epic", "斩击 3D6+2，攻击时对【流血】目标追加 2 点伤害。", "斩 1.2 / 打 1.0 / 突 0.9", 3, 2],
+  "旅行背包": ["容器 · 2×2", "rare", "可容纳 6 格物品，放入后不计入背包占用。", "容量 3×2", 0, 0],
+  "月光结晶": ["材料 · 稀有", "epic", "月光下析出的结晶，炼金术的核心原料之一。", "—", 0, 0],
+  "锻造锤":   ["装备 · 单手", "rare", "打击 2D6+3，营地内可用于精炼类配方。", "打 1.3 / 斩 0.8", 2, 1],
+  "皮甲":     ["装备 · 躯干", "", "防御 +2，受到突刺伤害时减免 10%。", "突 0.9", 1, 1],
+};
+function cardFor(name) {
+  const [type, rarity, desc, mods, star, eye] =
+    CARD_INFO[name] ?? ["物品", "", "（暂无描述）", "—", 0, 0];
+  const rLabel = { epic: "史诗", rare: "稀有" }[rarity] ?? "普通";
+  const rColor = { epic: "#8E5FBF", rare: "#3F7FBF" }[rarity] ?? "#7A6E5B";
+  return `<div class="mock-card">
+    <div class="tc-header">
+      <div class="ic"></div>
+      <span class="tc-name">${name}</span>
+      <span class="tc-rarity" style="color:${rColor}">${rLabel}</span>
+    </div>
+    <div class="tc-body">
+      ${type}
+      <div>${desc}</div>
+      <div class="tc-rows">抗性修改 <span>${mods}</span></div>
+    </div>
+    <div class="tc-footer">✦ ${star} &nbsp;·&nbsp; 👁 ${eye}</div>
+  </div>`;
+}
+
+function fillGrid(el, cols, rows, items) {
+  el.innerHTML = "";
+  const occ = Array.from({ length: rows }, () => Array(cols).fill(false));
+  for (let y = 0; y < rows; y++) for (let x = 0; x < cols; x++) {
+    const c = document.createElement("div");
+    c.className = "cg-cell";
+    c.style.gridColumn = x + 1; c.style.gridRow = y + 1;
+    el.appendChild(c);
+  }
+  const place = (w, h) => {
+    for (let y = 0; y + h <= rows; y++) for (let x = 0; x + w <= cols; x++) {
+      let ok = true;
+      for (let j = 0; j < h && ok; j++) for (let i = 0; i < w; i++)
+        if (occ[y + j][x + i]) { ok = false; break; }
+      if (ok) {
+        for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) occ[y + j][x + i] = true;
+        return [x, y];
+      }
+    }
+    return null;
+  };
+  for (const [name, w, h, rarity, qty] of items) {
+    const pos = place(w, h); if (!pos) continue;
+    const t = document.createElement("div");
+    t.className = "cg-item-tile" + (rarity ? " rarity-" + rarity : "");
+    t.style.gridColumn = `${pos[0] + 1} / span ${w}`;
+    t.style.gridRow    = `${pos[1] + 1} / span ${h}`;
+    t.dataset.name = name;
+    t.innerHTML = `<div class="cg-tile-icon"></div><span class="cg-tile-name">${name}</span>`
+                + (qty ? `<span class="cg-tile-qty">×${qty}</span>` : "");
+    el.appendChild(t);
+  }
+}
+
+/* Title 展示区：划过图块换内容（落地时换成 buildItemTitleCard(item)） */
+const DOCK_EMPTY = `<div class="camp-title-dock-empty">鼠标划过物品<br>此处显示 Title 卡</div>`;
+function bindDock() {
+  document.querySelectorAll(".cg-item-tile").forEach((tile) => {
+    tile.addEventListener("mouseenter", () => {
+      document.querySelectorAll(".cg-item-tile").forEach((t) => t.classList.remove("selected"));
+      tile.classList.add("selected");
+      $("titleDock").innerHTML = cardFor(tile.dataset.name);
+    });
+  });
+}
+
+const RECIPES = [
+  ["简易绷带", [["麻布", 2, true], ["酒精", 1, true]], "绷带", 3, true],
+  ["精炼铁锭", [["铁矿石", 4, true], ["木炭", 2, false]], "铁锭", 1, false],
+  ["月光药剂", [["月光结晶", 1, true], ["净水", 2, true], ["草药", 3, true]], "月光药剂", 1, true],
+  ["强化皮甲", [["兽皮", 5, false], ["麻绳", 2, true], ["铁锭", 1, false], ["树脂", 1, true]], "强化皮甲", 1, false],
+  ["行军口粮", [["干粮", 2, true], ["盐", 1, true]], "行军口粮", 4, true],
+  ["净化之水", [["净水", 3, true], ["月光结晶", 1, true]], "圣水", 2, true],
+];
+function fillRecipes() {
+  const el = $("recipeList"); el.innerHTML = "";
+  for (const [name, ings, out, outQty, can] of RECIPES) {
+    const chips = ings.map(([n, q, ok]) =>
+      `<span class="camp-ing-chip${ok ? "" : " ing-insufficient"}"><span class="dot"></span>${n}×${q}</span>`).join("");
+    const row = document.createElement("div");
+    row.className = "camp-recipe-row";
+    row.innerHTML = `
+      <div class="camp-recipe-header-row">
+        <div class="camp-recipe-output-icon"></div>
+        <span class="camp-recipe-name">${name}</span>
+        <div class="camp-recipe-btns">
+          <button class="icon-btn">👁</button>
+          <button class="icon-btn">✎</button>
+          <button class="icon-btn">🗑</button>
+          <button class="camp-craft-btn${can ? "" : " camp-craft-disabled"}">制作</button>
+        </div>
+      </div>
+      <div class="camp-recipe-detail-row">
+        ${chips}<span class="camp-recipe-arrow">→</span>
+        <span class="camp-output-chip"><span class="dot"></span>${out}×${outQty}</span>
+      </div>`;
+    el.appendChild(row);
+  }
+}
+
+/* ── 滑块 ─────────────────────────────────────────────────── */
+const SLIDERS = [
+  ["recW",   "--camp-recipe-w",   "px"], ["recMin", "--camp-recipe-min", "px"],
+  ["whMin",  "--camp-wh-min",     "px"], ["charMin", "--camp-char-min",  "px"],
+  ["cell",   "--camp-cell",       "px"], ["gap",     "--camp-gap",       "px"],
+  ["pad",    "--camp-pad",        "px"], ["hh",      "--camp-header-h",  "px"],
+  ["dock",   "--camp-dock-min",   "px"],
+];
+
+function apply() {
+  for (const [id, varName, unit] of SLIDERS) {
+    const v = $(id).value;
+    preview.style.setProperty(varName, v + unit);
+    $(id + "_v").textContent = v + unit;
+  }
+  const f = $("font").value / 100;
+  preview.style.setProperty("--camp-font", f);
+  $("font_v").textContent = f.toFixed(2);
+
+  const w = +$("winW").value, h = +$("winH").value;
+  viewport.style.setProperty("--win-w", w + "px");
+  viewport.style.setProperty("--win-h", h + "px");
+  $("widthOut").textContent  = w;
+  $("heightOut").textContent = h;
+
+  fillGrid($("charGrid"), 5, 8, ITEMS.slice(0, 7));   /* 固定 40 格 */
+  fillGrid($("whGrid"),   7, 7, ITEMS);
+  bindDock();
+  $("titleDock").innerHTML = DOCK_EMPTY;
+  buildExport();
+}
+
+$("fitBtn").addEventListener("click", () => {
+  $("winW").value = Math.min(2400, Math.max(900, window.innerWidth - 360));
+  $("winH").value = Math.min(1400, Math.max(500, window.innerHeight - 90));
+  apply();
+});
+
+/* ── 导出 ─────────────────────────────────────────────────── */
+function buildExport() {
+  const g = (id) => $(id).value;
+  $("exportBox").value =
+`/* ── 营地卡布局 v2（scratchpad-camp-layout.html 导出） ──────────
+   栏序：配方（左） | 仓库（中，唯一伸缩） | 角色背包 + Title 展示区（右）
+   配套改动见 .hbs / .mjs：栏目换序、Title 卡改常驻、窗口全屏、图层压底 */
+.camp-sheet {
+  --camp-recipe-w:   ${g("recW")}px;
+  --camp-recipe-min: ${g("recMin")}px;
+  --camp-wh-min:     ${g("whMin")}px;
+  --camp-char-min:   ${g("charMin")}px;
+  --camp-cell:       ${g("cell")}px;
+  --camp-gap:        ${g("gap")}px;
+  --camp-pad:        ${g("pad")}px;
+  --camp-header-h:   ${g("hh")}px;
+  --camp-dock-min:   ${g("dock")}px;
+  --camp-font:       ${(g("font") / 100).toFixed(2)};
+
+  font-size: calc(13px * var(--camp-font));
+}
+
+/* 栏序由 .hbs 决定；宽度规则如下 */
+.camp-sheet .camp-recipe-panel,
+.camp-sheet .camp-warehouse-panel,
+.camp-sheet .camp-char-panel { min-width: 0; max-width: none; }
+
+.camp-sheet .camp-recipe-panel {
+  flex:         0 1 var(--camp-recipe-w);
+  min-width:    var(--camp-recipe-min);
+  border-right: 1px solid var(--border-gold);
+  border-left:  none;
+}
+.camp-sheet .camp-warehouse-panel {
+  flex:         1 1 var(--camp-wh-min);
+  min-width:    var(--camp-wh-min);
+  border-right: 1px solid var(--border-gold);
+}
+/* 角色栏：5 列 × 8 行 = 40 格固定，宽度按格子推算，不参与拉伸 */
+.camp-sheet .camp-char-panel {
+  flex:  0 0 auto;
+  width: max(var(--camp-char-min),
+             calc(5 * var(--camp-cell) + 4 * var(--camp-gap)
+                  + 2 * var(--camp-pad) + 14px));
+  border-right: none;
+}
+
+/* 网格：左右两栏共用尺寸（原 .camp-cg 的 --cell-size 是无效变量名，
+   cg-wrap 读的是 --cg-cell，所以那条 36px 一直没生效） */
+.limbuscompany .cg-wrap.camp-cg,
+.limbuscompany .cg-wrap.camp-char-cg {
+  --cg-cell: var(--camp-cell);
+  --cg-gap:  var(--camp-gap);
+}
+.camp-sheet .camp-warehouse-grid-wrap { padding: var(--camp-pad); min-height: 0; }
+/* 角色背包按内容定高，剩下的竖向空间让给 Title 展示区 */
+.camp-sheet .camp-char-grid-wrap {
+  flex:     0 0 auto;
+  overflow: visible;
+  padding:  var(--camp-pad);
+}
+
+.camp-sheet .camp-panel-header {
+  min-height: var(--camp-header-h);
+  padding:    4px 10px;
+}
+.camp-sheet .camp-panel-header .ph-stat,
+.camp-sheet .camp-warehouse-stats,
+.camp-sheet .camp-grid-size-label { margin-left: auto; }
+
+/* ── 角色栏下方：Title 卡常驻展示区 ──────────────────────────
+   取代原先跟随鼠标的 position:fixed 浮卡（camp-sheet.mjs:741）。 */
+.camp-title-dock {
+  flex:        1 1 auto;
+  min-height:  var(--camp-dock-min);
+  display:     flex;
+  align-items: flex-start;
+  justify-content: center;
+  overflow:    auto;
+  padding:     var(--camp-pad);
+  border-top:  1px solid var(--border-gold);
+  background:  rgba(0, 0, 0, .22);
+}
+.camp-title-dock-empty {
+  margin:      auto;
+  text-align:  center;
+  font-size:   .78em;
+  color:       var(--text-dim);
+  line-height: 1.8;
+}
+/* buildItemTitleCard() 造出来的卡默认是浮卡，钉进展示区要去掉定位与阴影 */
+.camp-title-dock .limbus-title-card {
+  position:   static !important;
+  width:      100%;
+  max-width:  100%;
+  margin:     0;
+  box-shadow: none;
+}
+
+/* ── 图层压底：营地卡永远在其他窗口之下 ──────────────────────
+   仅靠 CSS 不够（Foundry 的 bringToTop 会写内联 z-index），
+   .mjs 里要覆写 bringToTop() 一并处理。 */
+#camp-sheet-layer, .app.camp { z-index: 25 !important; }`;
+}
+
+$("copyBtn").addEventListener("click", () => {
+  $("exportBox").select(); document.execCommand("copy");
+  $("copyBtn").textContent = "已复制";
+  setTimeout(() => ($("copyBtn").textContent = "复制"), 1200);
+});
+
+document.querySelectorAll("#right input[type=range], #stage-bar input[type=range]")
+  .forEach((s) => s.addEventListener("input", apply));
+
+fillRecipes();
+apply();
+</script>
+</body>
+</html>

@@ -762,6 +762,32 @@ export class ClashManager {
         }
       }
     }
+
+    // ── 自定义 BUFF onAttackEnd 钩子（如【血炎】）───────────────────────
+    // 与 [攻击后] Activity 同一时点：所有对抗路径的 [攻击后] 都从这里过，
+    // 挂在这儿就不用去每条分支各插一行。命中与否都会触发，这正是
+    // [攻击后] 与 [命中时] 的区别。
+    if (trigger === "攻击后") {
+      for (const buff of foundry.utils.deepClone(owner.system?.buffs ?? [])) {
+        const handler = resolveBuffHandler(buff);
+        if (typeof handler?.onAttackEnd !== "function") continue;
+        const note = await handler.onAttackEnd(owner, buff, {
+          item,
+          category: item?.system?.category ?? "",
+          sinType:  item?.system?.sinType ?? "",
+          target:   ctx.other ?? null,
+          addBuff:  (type, intensity, stacks, whenAdded) => ClashManager._addBuff(owner, type, intensity, stacks, whenAdded),
+          addBuffTo: (targetActor, type, intensity, stacks, whenAdded) =>
+            ClashManager._addBuff(targetActor, type, intensity, stacks, whenAdded),
+          getBuff:  (type) => ClashManager._getBuff(owner, type),
+        });
+        if (typeof note === "string" && note) {
+          (ctx._actMsgs ??= []).push({
+            trigger: "攻击后", itemName: handler.label ?? buff.name ?? buff.type, msgs: [note],
+          });
+        }
+      }
+    }
   }
 
   static _buffLabel(type) {
