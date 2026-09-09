@@ -1192,23 +1192,62 @@ function _installTokenDoubleClickOpenActorSheet() {
   // 这就是"根本点不到那个 Token"。每次刷新后把设施 Token 重新打开成可交互。
   Hooks.on("refreshToken", (token) => {
     try {
-      if (!token?.__limbusIsFacility?.(token) && !_isFacility(token)) return;
+      if (!_isFacility(token)) return;
       if (token.eventMode === "none") token.eventMode = "static";
       token.cursor = "pointer";
     } catch { /* 刷新期取不到 actor 就算了，下一帧还会再来 */ }
   });
 
+  /**
+   * 直接改这块 Token 活着的交互管理器。
+   *
+   * 前面几处补丁改的是**原型**，而 MouseInteractionManager 的回调是在 Token
+   * 画出来那一刻 `this._onClickLeft2.bind(this)` **抓死**的：画得比补丁早，
+   * 抓走的就是原版方法，之后再怎么改原型都没用——现象正是
+   * 「_canHover/_canControl/_canView 全 true，双击依然没反应」。
+   * 所以这里连回调带权限一起换成我们自己的。
+   */
+  const _wireFacilityToken = (t) => {
+    if (!_isFacility(t)) return;
+    if (t.eventMode === "none") t.eventMode = "static";
+    t.cursor = "pointer";
+
+    const mim = t.mouseInteractionManager;
+    if (!mim || mim.__limbusFacilityWired) return;
+    if (mim.permissions) {
+      mim.permissions.clickLeft  = () => true;
+      mim.permissions.clickLeft2 = () => true;
+      mim.permissions.hoverIn    = () => true;
+      // 拖动仍旧只有 GM：能点开不等于能搬走
+      mim.permissions.dragStart  = () => game.user.isGM;
+    }
+    if (mim.callbacks) {
+      mim.callbacks.clickLeft2 = (event) => {
+        event?.preventDefault?.();
+        event?.stopPropagation?.();
+        const base = game.actors?.get(t.document?.actorId) ?? t.actor;
+        base?.sheet?.render(true, { focus: true });
+      };
+    }
+    mim.__limbusFacilityWired = true;
+  };
+
   // 进场景时先扫一遍：refreshToken 只在"有变化"时触发，
   // 已经画好躺在那儿的设施 Token 等不到它。
   Hooks.on("canvasReady", () => {
     for (const t of canvas?.tokens?.placeables ?? []) {
-      try {
-        if (!_isFacility(t)) continue;
-        if (t.eventMode === "none") t.eventMode = "static";
-        t.cursor = "pointer";
-      } catch { /* 单块出错不影响其它 */ }
+      try { _wireFacilityToken(t); } catch { /* 单块出错不影响其它 */ }
     }
   });
+  // 后来才放上去 / 重画的 Token
+  Hooks.on("drawToken", (t) => { try { _wireFacilityToken(t); } catch { /* 同上 */ } });
+
+  // 补丁装得比 canvasReady 晚时（本函数在 ready 里还会再调一次），当场补扫
+  if (canvas?.ready) {
+    for (const t of canvas.tokens?.placeables ?? []) {
+      try { _wireFacilityToken(t); } catch { /* 同上 */ }
+    }
+  }
 }
 
 /* ─── Token linked 迁移（GM 启动时自动修复）────────────────────────────── */
