@@ -10646,3 +10646,23 @@ input.item-piles-quantity {
   border-color: var(--gold-active);
   color:        var(--gold-active);
 }
+
+/* 战利品标题栏：解锁后图标可点（换图），名称就地改成输入框 */
+.loot-sheet .loot-title-icon.editable { cursor: pointer; }
+.loot-sheet .loot-title-icon.editable:hover {
+  outline:        1px solid var(--gold-active);
+  outline-offset: 1px;
+}
+.loot-sheet input.loot-title-input {
+  background:    rgba(0, 0, 0, .35);
+  border:        1px solid var(--border-gold);
+  border-radius: 3px;
+  color:         var(--text-main);
+  padding:       0 8px;
+  font-family:   inherit;
+  min-width:     6em;
+}
+.loot-sheet input.loot-title-input:focus {
+  outline:      none;
+  border-color: var(--gold-active);
+}

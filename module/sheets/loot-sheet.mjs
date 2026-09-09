@@ -132,6 +132,8 @@ export class LimbusLootSheet extends ActorSheet {
 
     ctx.isGM         = isGM;
     ctx.editUnlocked = this._editUnlocked;
+    // 标题栏的图标与名称：解锁后才可改，和其它编辑项同一把锁（与营地一致）
+    ctx.canEditTitle = isGM && this._editUnlocked;
     ctx.currency     = sys.currency ?? 0;
 
     const cols = Math.max(1, Math.min(20, sys.gridSize?.width  ?? 5));
@@ -403,6 +405,28 @@ export class LimbusLootSheet extends ActorSheet {
     html.find(".loot-lock-toggle").on("click", () => {
       this._editUnlocked = !this._editUnlocked;
       this.render(false);
+    });
+
+    // 解锁后：点标题图标换图
+    html.find(".loot-title-icon.editable").on("click", (ev) => {
+      ev.preventDefault();
+      const cur = this.actor.img || "";
+      const FP  = foundry.applications?.apps?.FilePicker?.implementation ?? FilePicker;
+      new FP({
+        type: "image", current: cur,
+        callback: (path) => this.actor.update({ img: path }),
+      }).browse(cur);
+    });
+
+    // 解锁后：改名称（回车或失焦保存；没改动就不写，免得白刷一次渲染）
+    const saveName = async (ev) => {
+      const next = (ev.currentTarget.value ?? "").trim();
+      if (!next || next === this.actor.name) return;
+      await this.actor.update({ name: next });
+    };
+    html.find(".loot-title-input").on("change", saveName);
+    html.find(".loot-title-input").on("keydown", (ev) => {
+      if (ev.key === "Enter") { ev.preventDefault(); ev.currentTarget.blur(); }
     });
 
     if (this._editUnlocked) {
