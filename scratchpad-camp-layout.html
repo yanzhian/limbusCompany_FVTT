@@ -1,0 +1,549 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>营地卡布局调参台</title>
+<style>
+/* ══ 调参台外壳（不导出） ══════════════════════════════════════ */
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: #14100c; color: #d8cbb4;
+  font: 13px/1.5 "Microsoft YaHei", system-ui, sans-serif;
+  display: flex; height: 100vh; overflow: hidden;
+}
+#left  { flex: 1 1 auto; min-width: 0; padding: 14px; overflow: auto; }
+#right { flex: 0 0 340px; border-left: 1px solid #3B2412; overflow-y: auto;
+         padding: 12px; background: #0f0c09; }
+#right h3 { margin: 16px 0 6px; font-size: .82rem; color: #C9A84C;
+            border-bottom: 1px solid #3B2412; padding-bottom: 4px; }
+#right h3:first-child { margin-top: 0; }
+.row { display: flex; align-items: center; gap: 6px; margin: 5px 0; }
+.row label { flex: 0 0 118px; font-size: .72rem; color: #9c8f7a; }
+.row input[type=range] { flex: 1; min-width: 0; }
+.row .val { flex: 0 0 46px; text-align: right; font-size: .72rem; color: #C9A84C; }
+.row.chk label { flex: 1; }
+.hint { font-size: .68rem; color: #6f6555; margin: 4px 0 8px; }
+#stage-bar { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+#stage-bar b { color: #C9A84C; font-size: .8rem; }
+#widthOut { color: #C9A84C; font-variant-numeric: tabular-nums; }
+#modeOut { padding: 2px 8px; border: 1px solid #3B2412; border-radius: 3px;
+           font-size: .72rem; color: #d8cbb4; }
+#exportWrap { margin-top: 14px; }
+#exportWrap textarea {
+  width: 100%; height: 260px; background: #0a0806; color: #b9ad96;
+  border: 1px solid #3B2412; border-radius: 3px; font: 11px/1.45 monospace;
+  padding: 8px; resize: vertical;
+}
+#copyBtn { margin-top: 6px; width: 100%; padding: 6px; cursor: pointer;
+           background: #2a1d0f; color: #C9A84C; border: 1px solid #3B2412;
+           border-radius: 3px; font-size: .78rem; }
+#copyBtn:hover { background: #3a2814; }
+
+/* ══ 预览外框：模拟 Foundry 窗口 ══════════════════════════════ */
+#viewport {
+  border: 1px solid #3B2412; border-radius: 4px; overflow: hidden;
+  background: #0a0806; margin: 0 auto;
+  width: var(--win-w); height: var(--win-h);
+  max-width: 100%;
+  resize: both;
+}
+
+/* ══════════════════════════════════════════════════════════════
+   ↓↓↓ 以下为可导出部分：营地卡样式 ↓↓↓
+   ══════════════════════════════════════════════════════════════ */
+.camp-preview {
+  --bg-dark:      #17120c;
+  --bg-panel:     #1e1810;
+  --bg-title-bar: #241b11;
+  --border-gold:  #3B2412;
+  --gold-active:  #C9A84C;
+  --text-main:    #E4D8BE;
+  --text-sub:     #A79A81;
+  --text-dim:     #7A6E5B;
+
+  /* —— 可调项 —— */
+  --camp-char-w:      265px;  /* 左栏理想宽 */
+  --camp-char-min:    200px;  /* 左栏最小宽 */
+  --camp-recipe-w:    400px;  /* 右栏理想宽 */
+  --camp-recipe-min:  300px;  /* 右栏最小宽 */
+  --camp-wh-min:      330px;  /* 仓库最小宽 */
+  --camp-cell:        44px;   /* 网格格子边长 */
+  --camp-gap:         2px;    /* 网格间距 */
+  --camp-pad:         8px;    /* 面板内边距 */
+  --camp-header-h:    28px;   /* 面板 header 高 */
+  --camp-font:        1;      /* 字号总倍率 */
+
+  display: flex; flex-direction: column; height: 100%;
+  background: var(--bg-dark); color: var(--text-main);
+  font-size: calc(13px * var(--camp-font));
+  container-type: inline-size;
+  container-name: camp;
+}
+
+/* ── 标题栏 ─────────────────────────────────────────────────── */
+.camp-titlebar {
+  display: flex; align-items: center; gap: 8px; flex-shrink: 0;
+  background: var(--bg-title-bar); padding: 6px 10px;
+  border-bottom: 1px solid var(--border-gold);
+}
+.camp-lock-toggle { cursor: pointer; color: var(--text-sub); padding: 2px 4px; }
+.camp-title-icon { width: 28px; height: 28px; border-radius: 4px;
+                   background: #3a2a18; flex-shrink: 0; }
+.camp-title-name { font-size: 1.05em; font-weight: 600; flex: 1;
+                   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.camp-title-label { font-size: .75em; color: var(--text-sub); flex-shrink: 0; }
+
+/* 窄宽下才出现的栏目切换 tab（宽窗口隐藏） */
+.camp-tabs { display: none; gap: 4px; margin-left: auto; flex-shrink: 0; }
+.camp-tab {
+  padding: 2px 10px; font-size: .75em; cursor: pointer; border-radius: 3px;
+  border: 1px solid var(--border-gold); color: var(--text-sub);
+  background: rgba(0,0,0,.25); white-space: nowrap;
+}
+.camp-tab.active { color: var(--gold-active); border-color: var(--gold-active);
+                   background: rgba(201,168,76,.12); }
+
+/* ── 主体 ───────────────────────────────────────────────────── */
+.camp-body { display: flex; flex: 1; overflow: hidden; min-height: 0; }
+
+.camp-char-panel, .camp-warehouse-panel, .camp-recipe-panel {
+  display: flex; flex-direction: column; overflow: hidden; min-width: 0;
+}
+/* 三栏都可伸缩：理想宽用 flex-basis，收缩到 min 为止 */
+.camp-char-panel {
+  flex: 1 1 var(--camp-char-w);
+  max-width: var(--camp-char-w);
+  min-width: var(--camp-char-min);
+  border-right: 1px solid var(--border-gold);
+}
+.camp-warehouse-panel {
+  flex: 4 1 var(--camp-wh-min);
+  min-width: var(--camp-wh-min);
+  border-right: 1px solid var(--border-gold);
+}
+.camp-recipe-panel {
+  flex: 2 1 var(--camp-recipe-w);
+  max-width: var(--camp-recipe-w);
+  min-width: var(--camp-recipe-min);
+}
+
+/* ── 面板 header：三栏统一骨架 ──────────────────────────────── */
+.camp-panel-header {
+  display: flex; align-items: center; gap: 6px; flex-shrink: 0;
+  min-height: var(--camp-header-h);
+  padding: 4px 8px; font-size: .8em; font-weight: 600;
+  color: var(--text-sub); background: var(--bg-panel);
+  border-bottom: 1px solid var(--border-gold);
+}
+.camp-panel-header .ph-title { white-space: nowrap; overflow: hidden;
+                               text-overflow: ellipsis; }
+.camp-panel-header .ph-stat { margin-left: auto; font-size: .9em;
+                              font-weight: normal; color: var(--text-dim);
+                              white-space: nowrap; }
+.camp-char-avatar { width: 20px; height: 20px; border-radius: 50%;
+                    background: #4a3a22; border: 1px solid var(--border-gold);
+                    flex-shrink: 0; }
+.camp-grid-dim { width: 34px; padding: 1px 2px; text-align: center;
+                 background: rgba(255,255,255,.06); color: var(--text-main);
+                 border: 1px solid var(--border-gold); border-radius: 2px;
+                 font-size: .9em; }
+.icon-btn { background: none; border: none; color: var(--text-sub);
+            cursor: pointer; padding: 2px 4px; font-size: .9em; }
+.icon-btn:hover { color: var(--gold-active); }
+
+/* ── 网格 ───────────────────────────────────────────────────── */
+.camp-grid-wrap { flex: 1; overflow: auto; padding: var(--camp-pad); min-height: 0; }
+.cg-wrap {
+  display: grid; position: relative; width: max-content;
+  grid-template-columns: repeat(var(--grid-cols), var(--camp-cell));
+  grid-auto-rows: var(--camp-cell);
+  gap: var(--camp-gap);
+}
+.cg-cell { border: 1px solid #2c1f12; background: rgba(0,0,0,.3); border-radius: 2px; }
+.cg-item-tile {
+  position: relative; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; overflow: hidden;
+  border: 1px solid var(--border-gold); border-radius: 3px;
+  background: #241a10; cursor: grab; padding: 1px;
+}
+.cg-tile-icon { width: 60%; height: 60%; background: #4a3a22; border-radius: 2px; }
+.cg-tile-name { font-size: calc(9px * var(--camp-font)); line-height: 1.1;
+                color: var(--text-sub); text-align: center;
+                max-width: 100%; overflow: hidden; white-space: nowrap;
+                text-overflow: ellipsis; }
+.cg-tile-qty { position: absolute; bottom: 1px; right: 2px;
+               font-size: calc(9px * var(--camp-font)); color: var(--gold-active); }
+.rarity-rare   { border-color: #3F7FBF; }
+.rarity-epic   { border-color: #8E5FBF; }
+
+/* ── 搜索 / 提示 ────────────────────────────────────────────── */
+.camp-warehouse-toolbar { padding: 4px 8px; flex-shrink: 0;
+                          border-bottom: 1px solid var(--border-gold); }
+.camp-warehouse-search { width: 100%; padding: 3px 8px; font-size: .8em;
+                         background: rgba(255,255,255,.05); color: var(--text-main);
+                         border: 1px solid var(--border-gold); border-radius: 3px; }
+.camp-drag-hint { flex-shrink: 0; text-align: center; padding: 3px;
+                  font-size: .72em; color: var(--text-dim);
+                  border-top: 1px dashed var(--border-gold); }
+
+/* ── 配方 ───────────────────────────────────────────────────── */
+.camp-recipe-list { flex: 1; overflow-y: auto; padding: 6px;
+                    display: flex; flex-direction: column; gap: 5px; }
+.camp-recipe-row { border: 1px solid var(--border-gold); border-radius: 4px;
+                   background: var(--bg-panel); padding: 4px 6px; }
+.camp-recipe-header-row { display: flex; align-items: center; gap: 6px; }
+.camp-recipe-output-icon { width: 22px; height: 22px; border-radius: 3px;
+                           background: #4a3a22; flex-shrink: 0; }
+.camp-recipe-name { font-size: .86em; color: var(--text-main); flex: 1;
+                    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.camp-recipe-btns { display: flex; align-items: center; gap: 2px; flex-shrink: 0; }
+.camp-craft-btn { padding: 2px 10px; font-size: .78em; cursor: pointer;
+                  background: #2a1d0f; color: var(--gold-active);
+                  border: 1px solid var(--border-gold); border-radius: 3px; }
+.camp-craft-disabled { opacity: .4; cursor: not-allowed; }
+.camp-recipe-detail-row { display: flex; align-items: center; gap: 4px;
+                          flex-wrap: wrap; margin-top: 3px;
+                          padding-left: calc(22px + 6px); }
+.camp-ing-chip, .camp-output-chip {
+  display: inline-flex; align-items: center; gap: 3px;
+  font-size: .74em; padding: 1px 5px; border-radius: 8px;
+  background: rgba(0,0,0,.3); border: 1px solid #2c1f12; color: var(--text-sub);
+}
+.camp-ing-chip .dot, .camp-output-chip .dot {
+  width: 12px; height: 12px; border-radius: 2px; background: #4a3a22; }
+.ing-insufficient { color: #E8836B; border-color: #6b3428; }
+.camp-output-chip { color: var(--gold-active); border-color: #4a3a1a; }
+.camp-recipe-arrow { color: var(--text-dim); font-size: .8em; }
+
+/* ══ 窄窗口：三栏 → 单栏 + 顶部 tab 切换 ═════════════════════ */
+@container camp (max-width: 860px) {
+  .camp-tabs { display: flex; }
+  .camp-title-label { display: none; }
+  .camp-body > * { display: none; }
+  .camp-body > .camp-pane-active { display: flex; flex: 1 1 auto;
+                                   max-width: none; min-width: 0;
+                                   border-right: none; }
+}
+</style>
+</head>
+<body>
+
+<div id="left">
+  <div id="stage-bar">
+    <b>预览</b>
+    <span>窗口宽 <span id="widthOut">1080</span>px</span>
+    <input type="range" id="winW" min="480" max="1600" value="1080" style="width:260px">
+    <span id="modeOut">三栏</span>
+    <span style="font-size:.7rem;color:#6f6555">（也可直接拖预览框右下角）</span>
+  </div>
+  <div id="viewport" style="--win-w:1080px; --win-h:580px">
+    <div class="camp-preview" id="preview">
+
+      <div class="camp-titlebar">
+        <span class="camp-lock-toggle">🔓</span>
+        <div class="camp-title-icon"></div>
+        <span class="camp-title-name">迷雾边境营地</span>
+        <span class="camp-title-label">营地</span>
+        <div class="camp-tabs">
+          <span class="camp-tab active" data-pane="char">背包</span>
+          <span class="camp-tab" data-pane="warehouse">仓库</span>
+          <span class="camp-tab" data-pane="recipe">配方</span>
+        </div>
+      </div>
+
+      <div class="camp-body">
+
+        <!-- 左：角色背包 -->
+        <div class="camp-char-panel camp-pane-active" data-pane="char">
+          <div class="camp-panel-header">
+            <div class="camp-char-avatar"></div>
+            <span class="ph-title">但丁</span>
+            <span class="ph-stat">14 / 36 格</span>
+          </div>
+          <div class="camp-grid-wrap">
+            <div class="cg-wrap" id="charGrid" style="--grid-cols:6"></div>
+          </div>
+          <div class="camp-drag-hint">⇄ 仓库物品拖到此处取出</div>
+        </div>
+
+        <!-- 中：仓库 -->
+        <div class="camp-warehouse-panel" data-pane="warehouse">
+          <div class="camp-panel-header">
+            <span class="ph-title">📦 仓库</span>
+            <span class="ph-stat">23 件 / 剩余 26 格</span>
+            <input class="camp-grid-dim" value="7"><span style="font-size:.8em">×</span>
+            <input class="camp-grid-dim" value="7">
+          </div>
+          <div class="camp-warehouse-toolbar">
+            <input class="camp-warehouse-search" placeholder="搜索仓库物品…">
+          </div>
+          <div class="camp-grid-wrap">
+            <div class="cg-wrap" id="whGrid" style="--grid-cols:7"></div>
+          </div>
+          <div class="camp-drag-hint">↓ 将物品拖入网格以存入仓库</div>
+        </div>
+
+        <!-- 右：配方 -->
+        <div class="camp-recipe-panel" data-pane="recipe">
+          <div class="camp-panel-header">
+            <span class="ph-title">⚗ 配方</span>
+            <button class="icon-btn" style="margin-left:auto">＋</button>
+          </div>
+          <div class="camp-recipe-list" id="recipeList"></div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="right">
+  <h3>栏宽 / 响应式</h3>
+  <div class="hint">三栏均可伸缩：理想宽 = flex-basis，收缩到最小宽为止；总最小宽超过窗口时切单栏 tab。</div>
+  <div class="row"><label>左栏 理想宽</label><input type="range" id="charW" min="160" max="420" value="265"><span class="val" id="charW_v"></span></div>
+  <div class="row"><label>左栏 最小宽</label><input type="range" id="charMin" min="120" max="360" value="200"><span class="val" id="charMin_v"></span></div>
+  <div class="row"><label>仓库 最小宽</label><input type="range" id="whMin" min="200" max="600" value="330"><span class="val" id="whMin_v"></span></div>
+  <div class="row"><label>右栏 理想宽</label><input type="range" id="recW" min="240" max="560" value="400"><span class="val" id="recW_v"></span></div>
+  <div class="row"><label>右栏 最小宽</label><input type="range" id="recMin" min="200" max="480" value="300"><span class="val" id="recMin_v"></span></div>
+  <div class="row"><label>单栏断点</label><input type="range" id="bp" min="600" max="1200" value="860"><span class="val" id="bp_v"></span></div>
+
+  <h3>网格</h3>
+  <div class="row"><label>格子边长</label><input type="range" id="cell" min="28" max="64" value="44"><span class="val" id="cell_v"></span></div>
+  <div class="row"><label>格子间距</label><input type="range" id="gap" min="0" max="8" value="2"><span class="val" id="gap_v"></span></div>
+  <div class="row"><label>面板内边距</label><input type="range" id="pad" min="0" max="16" value="8"><span class="val" id="pad_v"></span></div>
+
+  <h3>排版</h3>
+  <div class="row"><label>header 高</label><input type="range" id="hh" min="20" max="44" value="28"><span class="val" id="hh_v"></span></div>
+  <div class="row"><label>字号倍率</label><input type="range" id="font" min="80" max="130" value="100"><span class="val" id="font_v"></span></div>
+
+  <h3>预览窗口</h3>
+  <div class="row"><label>窗口高</label><input type="range" id="winH" min="380" max="900" value="580"><span class="val" id="winH_v"></span></div>
+
+  <div id="exportWrap">
+    <h3>导出（整段贴到 CSS 末尾）</h3>
+    <textarea id="exportBox" readonly></textarea>
+    <button id="copyBtn">复制</button>
+  </div>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const preview = $("preview");
+const viewport = $("viewport");
+
+/* ── 假数据：网格 ─────────────────────────────────────────── */
+const ITEMS = [
+  ["长柄斧", 1, 2, "", 0], ["绷带", 1, 1, "", 4], ["铁矿石", 1, 1, "", 12],
+  ["旅行背包", 2, 2, "rare", 0], ["净水", 1, 1, "", 3], ["皮甲", 2, 2, "", 0],
+  ["月光结晶", 1, 1, "epic", 2], ["干粮", 1, 1, "", 8], ["麻绳", 1, 1, "", 5],
+  ["锻造锤", 1, 2, "rare", 0], ["空瓶", 1, 1, "", 6], ["兽皮", 1, 1, "", 9],
+];
+function fillGrid(el, cols, rows, items) {
+  el.innerHTML = "";
+  const occ = Array.from({length: rows}, () => Array(cols).fill(false));
+  for (let y = 0; y < rows; y++) for (let x = 0; x < cols; x++) {
+    const c = document.createElement("div");
+    c.className = "cg-cell";
+    c.style.gridColumn = x + 1; c.style.gridRow = y + 1;
+    el.appendChild(c);
+  }
+  const place = (w, h) => {
+    for (let y = 0; y + h <= rows; y++) for (let x = 0; x + w <= cols; x++) {
+      let ok = true;
+      for (let j = 0; j < h && ok; j++) for (let i = 0; i < w; i++)
+        if (occ[y+j][x+i]) { ok = false; break; }
+      if (ok) { for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) occ[y+j][x+i] = true;
+                return [x, y]; }
+    }
+    return null;
+  };
+  for (const [name, w, h, rarity, qty] of items) {
+    const pos = place(w, h); if (!pos) continue;
+    const t = document.createElement("div");
+    t.className = "cg-item-tile" + (rarity ? " rarity-" + rarity : "");
+    t.style.gridColumn = `${pos[0]+1} / span ${w}`;
+    t.style.gridRow    = `${pos[1]+1} / span ${h}`;
+    t.title = name;
+    t.innerHTML = `<div class="cg-tile-icon"></div><span class="cg-tile-name">${name}</span>`
+                + (qty ? `<span class="cg-tile-qty">×${qty}</span>` : "");
+    el.appendChild(t);
+  }
+}
+
+/* ── 假数据：配方 ─────────────────────────────────────────── */
+const RECIPES = [
+  ["简易绷带", [["麻布", 2, true], ["酒精", 1, true]], "绷带", 3, true],
+  ["精炼铁锭", [["铁矿石", 4, true], ["木炭", 2, false]], "铁锭", 1, false],
+  ["月光药剂", [["月光结晶", 1, true], ["净水", 2, true], ["草药", 3, true]], "月光药剂", 1, true],
+  ["强化皮甲", [["兽皮", 5, false], ["麻绳", 2, true], ["铁锭", 1, false], ["树脂", 1, true]], "强化皮甲", 1, false],
+  ["行军口粮", [["干粮", 2, true], ["盐", 1, true]], "行军口粮", 4, true],
+];
+function fillRecipes() {
+  const el = $("recipeList"); el.innerHTML = "";
+  for (const [name, ings, out, outQty, can] of RECIPES) {
+    const chips = ings.map(([n, q, ok]) =>
+      `<span class="camp-ing-chip${ok ? "" : " ing-insufficient"}"><span class="dot"></span>${n}×${q}</span>`).join("");
+    const row = document.createElement("div");
+    row.className = "camp-recipe-row";
+    row.innerHTML = `
+      <div class="camp-recipe-header-row">
+        <div class="camp-recipe-output-icon"></div>
+        <span class="camp-recipe-name">${name}</span>
+        <div class="camp-recipe-btns">
+          <button class="icon-btn">👁</button>
+          <button class="icon-btn">✎</button>
+          <button class="icon-btn">🗑</button>
+          <button class="camp-craft-btn${can ? "" : " camp-craft-disabled"}">制作</button>
+        </div>
+      </div>
+      <div class="camp-recipe-detail-row">
+        ${chips}<span class="camp-recipe-arrow">→</span>
+        <span class="camp-output-chip"><span class="dot"></span>${out}×${outQty}</span>
+      </div>`;
+    el.appendChild(row);
+  }
+}
+
+/* ── 窄窗口 tab 切换 ──────────────────────────────────────── */
+document.querySelectorAll(".camp-tab").forEach((tab) => {
+  tab.addEventListener("click", () => {
+    document.querySelectorAll(".camp-tab").forEach((t) => t.classList.remove("active"));
+    tab.classList.add("active");
+    document.querySelectorAll(".camp-body > [data-pane]").forEach((p) => {
+      p.classList.toggle("camp-pane-active", p.dataset.pane === tab.dataset.pane);
+    });
+  });
+});
+
+/* ── 滑块绑定 ─────────────────────────────────────────────── */
+const SLIDERS = [
+  ["charW",  "--camp-char-w",     "px"], ["charMin", "--camp-char-min",   "px"],
+  ["whMin",  "--camp-wh-min",     "px"], ["recW",    "--camp-recipe-w",   "px"],
+  ["recMin", "--camp-recipe-min", "px"], ["cell",    "--camp-cell",       "px"],
+  ["gap",    "--camp-gap",        "px"], ["pad",     "--camp-pad",        "px"],
+  ["hh",     "--camp-header-h",   "px"],
+];
+const bpStyle = document.createElement("style");
+document.head.appendChild(bpStyle);
+
+function apply() {
+  for (const [id, varName, unit] of SLIDERS) {
+    const v = $(id).value;
+    preview.style.setProperty(varName, v + unit);
+    $(id + "_v").textContent = v + unit;
+  }
+  const f = $("font").value / 100;
+  preview.style.setProperty("--camp-font", f);
+  $("font_v").textContent = f.toFixed(2);
+
+  const bp = +$("bp").value;
+  $("bp_v").textContent = bp + "px";
+  bpStyle.textContent = `
+@container camp (max-width: ${bp}px) {
+  .camp-tabs { display: flex; }
+  .camp-title-label { display: none; }
+  .camp-body > * { display: none; }
+  .camp-body > .camp-pane-active { display: flex; flex: 1 1 auto;
+                                   max-width: none; min-width: 0; border-right: none; }
+}`;
+
+  const w = +$("winW").value, h = +$("winH").value;
+  viewport.style.setProperty("--win-w", w + "px");
+  viewport.style.setProperty("--win-h", h + "px");
+  $("widthOut").textContent = w;
+  $("winH_v").textContent = h + "px";
+  $("modeOut").textContent = w <= bp ? "单栏 · tab" : "三栏";
+
+  fillGrid($("charGrid"), 6, 6, ITEMS.slice(0, 7));
+  fillGrid($("whGrid"), 7, 7, ITEMS);
+  buildExport();
+}
+
+/* ── 导出 ─────────────────────────────────────────────────── */
+function buildExport() {
+  const g = (id) => $(id).value;
+  $("exportBox").value =
+`/* ── 营地卡布局（scratchpad-camp-layout.html 导出） ────────────── */
+.camp-sheet {
+  --camp-char-w:     ${g("charW")}px;
+  --camp-char-min:   ${g("charMin")}px;
+  --camp-wh-min:     ${g("whMin")}px;
+  --camp-recipe-w:   ${g("recW")}px;
+  --camp-recipe-min: ${g("recMin")}px;
+  --camp-cell:       ${g("cell")}px;
+  --camp-gap:        ${g("gap")}px;
+  --camp-pad:        ${g("pad")}px;
+  --camp-header-h:   ${g("hh")}px;
+  --camp-font:       ${(g("font")/100).toFixed(2)};
+
+  container-type: inline-size;
+  container-name: camp;
+  font-size: calc(13px * var(--camp-font));
+}
+
+/* 三栏都可伸缩：理想宽走 flex-basis，收缩到 min-width 为止 */
+.camp-sheet .camp-char-panel,
+.camp-sheet .camp-warehouse-panel,
+.camp-sheet .camp-recipe-panel { min-width: 0; }
+
+.camp-sheet .camp-char-panel {
+  flex:      1 1 var(--camp-char-w);
+  max-width: var(--camp-char-w);
+  min-width: var(--camp-char-min);
+}
+.camp-sheet .camp-warehouse-panel {
+  flex:      4 1 var(--camp-wh-min);
+  min-width: var(--camp-wh-min);
+}
+.camp-sheet .camp-recipe-panel {
+  flex:      2 1 var(--camp-recipe-w);
+  max-width: var(--camp-recipe-w);
+  min-width: var(--camp-recipe-min);
+}
+
+/* 网格：左右两栏格子尺寸统一（原 .camp-cg 的 --cell-size 是无效变量名） */
+.limbuscompany .cg-wrap.camp-cg,
+.limbuscompany .cg-wrap.camp-char-cg {
+  --cg-cell: var(--camp-cell);
+  --cg-gap:  var(--camp-gap);
+}
+.camp-sheet .camp-char-grid-wrap,
+.camp-sheet .camp-warehouse-grid-wrap { padding: var(--camp-pad); min-height: 0; }
+
+.camp-sheet .camp-panel-header {
+  min-height: var(--camp-header-h);
+  padding:    4px 8px;
+}
+.camp-sheet .camp-panel-header .ph-stat,
+.camp-sheet .camp-warehouse-stats,
+.camp-sheet .camp-grid-size-label { margin-left: auto; }
+
+/* 窄窗口：三栏折成单栏 + 标题栏 tab 切换（需要 .hbs 配合加 tab 与 data-pane） */
+@container camp (max-width: ${g("bp")}px) {
+  .camp-sheet .camp-tabs      { display: flex; }
+  .camp-sheet .camp-title-label { display: none; }
+  .camp-sheet .camp-body > *  { display: none; }
+  .camp-sheet .camp-body > .camp-pane-active {
+    display:      flex;
+    flex:         1 1 auto;
+    max-width:    none;
+    min-width:    0;
+    border-right: none;
+  }
+}`;
+}
+
+$("copyBtn").addEventListener("click", () => {
+  $("exportBox").select(); document.execCommand("copy");
+  $("copyBtn").textContent = "已复制";
+  setTimeout(() => ($("copyBtn").textContent = "复制"), 1200);
+});
+
+document.querySelectorAll("#right input[type=range]").forEach((s) =>
+  s.addEventListener("input", apply));
+
+fillRecipes();
+apply();
+</script>
+</body>
+</html>
