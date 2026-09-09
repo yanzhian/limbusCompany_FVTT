@@ -10502,7 +10502,48 @@ input.item-piles-quantity {
   box-shadow: none;
 }
 
-/* ── 图层压底：营地卡永远在其他窗口之下 ──────────────────────
-   仅靠 CSS 不够（Foundry 的 bringToTop 会写内联 z-index），
-   .mjs 里要覆写 bringToTop() 一并处理。 */
-#camp-sheet-layer, .app.camp { z-index: 25 !important; }
+/* ── 图层：画布与 HUD 之上，其他窗口之下 ──────────────────────
+   Foundry 给普通窗口的 z-index 从 100 起跳，所以钉在 90 = 营地铺满屏幕、
+   盖住画布与侧边栏，而点开的物品卡 / 聊天窗仍浮在营地之上。
+   仅靠 CSS 不够（bringToTop 会写内联 z-index），.mjs 里也覆写了一份。 */
+#camp-sheet-layer, .app.camp { z-index: 90 !important; }
+
+/* ── 营地卡 v3：全屏浮层化（对齐【简单任务】那种铺满盖住界面的观感）───────
+   三点改动：
+   ① 层级抬到画布与 HUD 之上、其他窗口之下——物品卡、聊天窗仍压在营地之上；
+   ② 窗体本身不再是一块实心面板，而是半透明幕布，地图从背后透出来；
+   ③ 屏幕越宽，左右两栏越往里收（1080p 收 0，2K 起才收）。 */
+.window-app.camp {
+  border:     none;
+  box-shadow: none;
+  background: transparent;
+  /* 幕布：地图透出来一点，注意力仍在营地上 */
+  backdrop-filter: blur(2px);
+}
+.window-app.camp .window-header {
+  background: rgba(0, 0, 0, .55);
+  border-bottom: 1px solid var(--border-gold);
+}
+.window-app.camp .window-content {
+  padding:    0;
+  background: rgba(0, 0, 0, .58);
+}
+
+/* 左右两栏向内收：1080p 不动，越宽收得越多，封顶 360px。
+   仓库是唯一伸缩的一栏，所以收进来的空间由它让出。 */
+.camp-sheet {
+  --camp-inset: clamp(0px, (100vw - 1920px) / 2, 360px);
+}
+.camp-sheet .camp-body {
+  padding-left:  var(--camp-inset);
+  padding-right: var(--camp-inset);
+}
+/* 收进来之后左右两栏的外侧边框就显得多余了，改成靠内侧的一条 */
+.camp-sheet .camp-recipe-panel { border-left:  1px solid var(--border-gold); }
+.camp-sheet .camp-char-panel   { border-left:  1px solid var(--border-gold); }
+
+/* 面板自己保持不透明，读数值时不被地图干扰；幕布只在栏外的留白处透出来 */
+.camp-sheet .camp-recipe-panel,
+.camp-sheet .camp-warehouse-panel,
+.camp-sheet .camp-char-panel { background: var(--bg-dark); }
+.camp-sheet { background: transparent; }

@@ -86,14 +86,15 @@ export class LimbusCampSheet extends ActorSheet {
   }
 
   /**
-   * 图层压底：营地卡永远待在其他窗口之下。
-   * 它是全屏的，若跟着 Foundry 的默认行为往上抬，点一下就把物品卡、聊天栏
-   * 全盖住了。CSS 的 `z-index: 25 !important` 拦得住样式表，拦不住这里写的
-   * **内联** z-index，所以两边都要做——覆写成"照常记录聚焦，但不改层级"。
+   * 图层钉死在 90：画布与侧边栏之上、其他窗口之下。
+   * 营地是全屏幕的一层幕布，跟着 Foundry 默认行为往上抬的话，点一下就把
+   * 物品卡、聊天栏全盖住了；普通窗口的 z-index 从 100 起跳，所以 90 正好是
+   * "盖住界面、盖不住窗口"。CSS 的 `!important` 拦得住样式表，拦不住这里的
+   * **内联** z-index，两边都要做。
    */
   bringToTop() {
     const el = this.element?.[0];
-    if (el) el.style.zIndex = "25";
+    if (el) el.style.zIndex = "90";
     ui.activeWindow = this;
   }
 
