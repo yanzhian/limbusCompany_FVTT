@@ -39,8 +39,12 @@ export class LimbusCampSheet extends ActorSheet {
     return foundry.utils.mergeObject(super.defaultOptions, {
       classes:   ["limbuscompany", "sheet", "actor", "camp"],
       template:  "systems/limbusCompany_FVTT/templates/actor/camp-sheet.hbs",
-      width:     1080,   /* 265(角色) + 400(仓库) + 400(配方) + 边距 */
-      height:    580,
+      // 全屏铺开：营地是"停下来整理东西"的界面，配方与仓库都想要横向空间，
+      // 而它被压在其他窗口之下（见 bringToTop），铺满也不会挡住别的卡
+      width:     window.innerWidth,
+      height:    window.innerHeight,
+      top:       0,
+      left:      0,
       resizable: true,
       // 重渲染时保持这些容器的滚动位置（拖动仓库物品后不回顶）
       scrollY:   [".camp-warehouse-grid-wrap", ".camp-char-grid-wrap", ".camp-recipe-list"],
@@ -77,7 +81,20 @@ export class LimbusCampSheet extends ActorSheet {
   async close(options = {}) {
     for (const [hook, id] of Object.entries(this._charWatchIds ?? {})) Hooks.off(hook, id);
     this._charWatchIds = null;
+    this._onCgTileHoverEnd(null, true);   // 收走还钉着的 Title 卡（可能被锁定）
     return super.close(options);
+  }
+
+  /**
+   * 图层压底：营地卡永远待在其他窗口之下。
+   * 它是全屏的，若跟着 Foundry 的默认行为往上抬，点一下就把物品卡、聊天栏
+   * 全盖住了。CSS 的 `z-index: 25 !important` 拦得住样式表，拦不住这里写的
+   * **内联** z-index，所以两边都要做——覆写成"照常记录聚焦，但不改层级"。
+   */
+  bringToTop() {
+    const el = this.element?.[0];
+    if (el) el.style.zIndex = "25";
+    ui.activeWindow = this;
   }
 
   /* ─── 状态 ──────────────────────────────────────────────────────────── */
@@ -727,21 +744,20 @@ export class LimbusCampSheet extends ActorSheet {
     const item = await fromUuid(uuid).catch(() => null);
     if (!item || seq !== this._campHoverSeq) return;
 
+    // 锁住的卡不换：中键锁定就是"钉住这一张"，鼠标再扫过别的图块也不动
+    if (this._campTitleCard?.data("tcLocked")) return;
+
+    const dock = this.element?.find(".camp-title-dock");
+    if (!dock?.length) return;
+
     this._onCgTileHoverEnd(null, true);
     this._campTitleCard = buildItemTitleCard(item);
     if (!this._campTitleCard) return;
 
-    // 定位：营地卡右侧，不够则左侧
-    const rect  = this.element[0].getBoundingClientRect();
-    const cardW = 280, cardH = 500;
-    let left = rect.right + 8;
-    if (left + cardW > window.innerWidth - 8) left = rect.left - cardW - 8;
-    const top = Math.max(8, Math.min(rect.top, window.innerHeight - cardH - 8));
-
-    this._campTitleCard.css({ position: "fixed", left, top, zIndex: 99998 });
-    $("body").append(this._campTitleCard);
-    this._campTitleCard.on("mouseenter", () => clearTimeout(this._campCloseTimer));
-    this._campTitleCard.on("mouseleave", () => this._onCgTileHoverEnd(null));
+    // 卡钉在角色栏下方的展示区里（营地卡现在是全屏，浮卡会挡住半张仓库），
+    // buildItemTitleCard 造出来的是浮卡，定位与阴影交给 .camp-title-dock 的 CSS 收拾
+    dock.children(".camp-title-dock-empty").hide();
+    dock.append(this._campTitleCard);
   }
 
   /**
@@ -751,15 +767,17 @@ export class LimbusCampSheet extends ActorSheet {
    */
   _onCgTileHoverEnd(event, force = false) {
     if (event?.currentTarget) $(event.currentTarget).removeClass("cg-tile-hover");
-    if (!force) {
-      clearTimeout(this._campCloseTimer);
-      this._campCloseTimer = setTimeout(() => this._onCgTileHoverEnd(null, true), 150);
-      return;
-    }
+    // 展示区是**常驻**的：鼠标离开图块不清卡，卡一直留到扫过下一个图块为止。
+    // 强制关闭（拖动开始 / 关窗）才真的收走。
+    if (!force) return;
     clearTimeout(this._campCloseTimer);
     this._campHoverSeq = (this._campHoverSeq ?? 0) + 1; // 使进行中的 hoverStart 失效
     closeTitleCardUnlessLocked(this._campTitleCard);
-    if (!this._campTitleCard?.data("tcLocked")) this._campTitleCard = null;
+    if (!this._campTitleCard?.data("tcLocked")) {
+      this._campTitleCard = null;
+      // 展示区空了就把占位提示放回来
+      this.element?.find(".camp-title-dock .camp-title-dock-empty").show();
+    }
   }
 
   /* ─── 仓库图块双击：容器直接打开 ────────────────────────────────────── */

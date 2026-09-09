@@ -10406,3 +10406,103 @@ input.item-piles-quantity {
 /* 「学习等级」用合起来的书本图标；规则书那边用的是 fa-book-open，两个别撞 */
 .limbuscompany .learn-points-btn { display: grid; place-items: center; }
 .limbuscompany .learn-points-btn i { font-size: 11px; line-height: 1; }
+
+/* ── 营地卡布局 v2（scratchpad-camp-layout.html 导出） ──────────
+   栏序：配方（左） | 仓库（中，唯一伸缩） | 角色背包 + Title 展示区（右）
+   配套改动见 .hbs / .mjs：栏目换序、Title 卡改常驻、窗口全屏、图层压底 */
+.camp-sheet {
+  --camp-recipe-w:   420px;
+  --camp-recipe-min: 300px;
+  --camp-wh-min:     360px;
+  --camp-char-min:   240px;
+  --camp-cell:       52px;
+  --camp-gap:        3px;
+  --camp-pad:        10px;
+  --camp-header-h:   30px;
+  --camp-dock-min:   200px;
+  --camp-font:       1.10;
+
+  font-size: calc(13px * var(--camp-font));
+}
+
+/* 栏序由 .hbs 决定；宽度规则如下 */
+.camp-sheet .camp-recipe-panel,
+.camp-sheet .camp-warehouse-panel,
+.camp-sheet .camp-char-panel { min-width: 0; max-width: none; }
+
+.camp-sheet .camp-recipe-panel {
+  flex:         0 1 var(--camp-recipe-w);
+  min-width:    var(--camp-recipe-min);
+  border-right: 1px solid var(--border-gold);
+  border-left:  none;
+}
+.camp-sheet .camp-warehouse-panel {
+  flex:         1 1 var(--camp-wh-min);
+  min-width:    var(--camp-wh-min);
+  border-right: 1px solid var(--border-gold);
+}
+/* 角色栏：5 列 × 8 行 = 40 格固定，宽度按格子推算，不参与拉伸 */
+.camp-sheet .camp-char-panel {
+  flex:  0 0 auto;
+  width: max(var(--camp-char-min),
+             calc(5 * var(--camp-cell) + 4 * var(--camp-gap)
+                  + 2 * var(--camp-pad) + 14px));
+  border-right: none;
+}
+
+/* 网格：左右两栏共用尺寸（原 .camp-cg 的 --cell-size 是无效变量名，
+   cg-wrap 读的是 --cg-cell，所以那条 36px 一直没生效） */
+.limbuscompany .cg-wrap.camp-cg,
+.limbuscompany .cg-wrap.camp-char-cg {
+  --cg-cell: var(--camp-cell);
+  --cg-gap:  var(--camp-gap);
+}
+.camp-sheet .camp-warehouse-grid-wrap { padding: var(--camp-pad); min-height: 0; }
+/* 角色背包按内容定高，剩下的竖向空间让给 Title 展示区 */
+.camp-sheet .camp-char-grid-wrap {
+  flex:     0 0 auto;
+  overflow: visible;
+  padding:  var(--camp-pad);
+}
+
+.camp-sheet .camp-panel-header {
+  min-height: var(--camp-header-h);
+  padding:    4px 10px;
+}
+.camp-sheet .camp-panel-header .ph-stat,
+.camp-sheet .camp-warehouse-stats,
+.camp-sheet .camp-grid-size-label { margin-left: auto; }
+
+/* ── 角色栏下方：Title 卡常驻展示区 ──────────────────────────
+   取代原先跟随鼠标的 position:fixed 浮卡（camp-sheet.mjs:741）。 */
+.camp-title-dock {
+  flex:        1 1 auto;
+  min-height:  var(--camp-dock-min);
+  display:     flex;
+  align-items: flex-start;
+  justify-content: center;
+  overflow:    auto;
+  padding:     var(--camp-pad);
+  border-top:  1px solid var(--border-gold);
+  background:  rgba(0, 0, 0, .22);
+}
+.camp-title-dock-empty {
+  margin:      auto;
+  text-align:  center;
+  font-size:   .78em;
+  color:       var(--text-dim);
+  line-height: 1.8;
+}
+/* buildItemTitleCard() 造出来的卡默认是浮卡，钉进展示区要去掉定位与阴影 */
+.camp-title-dock .limbus-title-card {
+  position:   static !important;
+  width:      100%;
+  max-width:  100%;
+  margin:     0;
+  box-shadow: none;
+}
+
+/* ── 图层压底：营地卡永远在其他窗口之下 ──────────────────────
+   仅靠 CSS 不够（Foundry 的 bringToTop 会写内联 z-index），
+   .mjs 里要覆写 bringToTop() 一并处理。 */
+#camp-sheet-layer, .app.camp { z-index: 25 !important; }
