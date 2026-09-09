@@ -10509,41 +10509,50 @@ input.item-piles-quantity {
 #camp-sheet-layer, .app.camp { z-index: 90 !important; }
 
 /* ── 营地卡 v3：全屏浮层化（对齐【简单任务】那种铺满盖住界面的观感）───────
-   三点改动：
    ① 层级抬到画布与 HUD 之上、其他窗口之下——物品卡、聊天窗仍压在营地之上；
-   ② 窗体本身不再是一块实心面板，而是半透明幕布，地图从背后透出来；
-   ③ 屏幕越宽，左右两栏越往里收（1080p 收 0，2K 起才收）。 */
+   ② 面板本身也半透明：底色 #0B0707 是实心的，只把窗体调透明的话，
+      三栏还是三块黑板，地图只能从栏外的留白透出来；
+   ③ 版式按 1080p 定死，不再随屏宽内收（宽屏就是三栏靠左、右边留空）。 */
 .window-app.camp {
   border:     none;
   box-shadow: none;
   background: transparent;
-  /* 幕布：地图透出来一点，注意力仍在营地上 */
   backdrop-filter: blur(2px);
 }
 .window-app.camp .window-header {
-  background: rgba(0, 0, 0, .55);
+  background:    rgba(11, 7, 7, .55);
   border-bottom: 1px solid var(--border-gold);
 }
 .window-app.camp .window-content {
   padding:    0;
-  background: rgba(0, 0, 0, .58);
+  background: transparent;
 }
 
-/* 左右两栏向内收：1080p 不动，越宽收得越多，封顶 360px。
-   仓库是唯一伸缩的一栏，所以收进来的空间由它让出。 */
 .camp-sheet {
-  --camp-inset: clamp(0px, (100vw - 1920px) / 2, 360px);
+  --camp-veil: .62;          /* 面板不透明度：0 = 全透，1 = 回到原来的实心 */
+  background:  transparent;
 }
-.camp-sheet .camp-body {
-  padding-left:  var(--camp-inset);
-  padding-right: var(--camp-inset);
-}
-/* 收进来之后左右两栏的外侧边框就显得多余了，改成靠内侧的一条 */
-.camp-sheet .camp-recipe-panel { border-left:  1px solid var(--border-gold); }
-.camp-sheet .camp-char-panel   { border-left:  1px solid var(--border-gold); }
-
-/* 面板自己保持不透明，读数值时不被地图干扰；幕布只在栏外的留白处透出来 */
+/* 三栏与幕布一律走半透明底色，地图能透过整张营地卡 */
+.camp-sheet .camp-body { background: rgba(11, 7, 7, calc(var(--camp-veil) * .5)); }
 .camp-sheet .camp-recipe-panel,
 .camp-sheet .camp-warehouse-panel,
-.camp-sheet .camp-char-panel { background: var(--bg-dark); }
-.camp-sheet { background: transparent; }
+.camp-sheet .camp-char-panel { background: rgba(11, 7, 7, var(--camp-veil)); }
+/* 标题栏、面板头、展示区这些原本各自写死了实色，一并换掉 */
+.camp-sheet .camp-titlebar     { background: rgba(11, 7, 7, .72); }
+.camp-sheet .camp-panel-header { background: rgba(11, 7, 7, .45); }
+.camp-sheet .camp-title-dock   { background: rgba(11, 7, 7, .30); }
+
+/* 角色背包：再宽一点，消掉那条横向滚动条。
+   14px 只够 cg-wrap 自己的边距，滚动条槽（约 12px）没算进去。 */
+.camp-sheet .camp-char-panel {
+  width: max(var(--camp-char-min),
+             calc(5 * var(--camp-cell) + 4 * var(--camp-gap)
+                  + 2 * var(--camp-pad) + 30px));
+}
+.camp-sheet .camp-char-grid-wrap { overflow-x: hidden; }
+
+/* ── 图层：画布与 HUD 之上，其他窗口之下 ──────────────────────
+   Foundry 给普通窗口的 z-index 从 100 起跳，所以钉在 90 = 营地铺满屏幕、
+   盖住画布与侧边栏，而点开的物品卡 / 聊天窗仍浮在营地之上。
+   仅靠 CSS 不够（bringToTop 会写内联 z-index），.mjs 里也覆写了一份。 */
+#camp-sheet-layer, .app.camp { z-index: 90 !important; }
