@@ -1240,6 +1240,9 @@ function _installTokenDoubleClickOpenActorSheet() {
       mim.callbacks.clickLeft2 = (event) => {
         event?.preventDefault?.();
         event?.stopPropagation?.();
+        // 顺手取消选中：设施被选中会挤掉"我的角色 Token"的位置，
+        // 也没人需要选中一个箱子
+        t.release?.();
         const base = game.actors?.get(t.document?.actorId) ?? t.actor;
         // 把"点的是哪一块"一并交给 Sheet：距离守卫按这块算，
         // 同名设施摆好几处时才不会拿最近的那块顶包

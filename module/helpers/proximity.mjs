@@ -44,15 +44,18 @@ export function tokenGridGap(a, b) {
  * **放行**，于是距离限制形同虚设。
  */
 function _myTokens() {
-  const controlled = canvas?.tokens?.controlled ?? [];
+  // 只认「自己的角色」。设施 Token 现在也是可以选中的（双击要靠它成立），
+  // 不过滤的话：点一下设施 → 它成了"选中的 Token" → 自己跟自己算距离 → 永远 0 格。
+  const isMyChar = (t) => t?.actor?.type === "character" && t.actor.isOwner;
+
+  const controlled = (canvas?.tokens?.controlled ?? []).filter(isMyChar);
   if (controlled.length) return controlled;
 
   const mine = game.user?.character?.getActiveTokens?.(false, false) ?? [];
   const inScene = mine.filter(t => t?.scene?.id === canvas?.scene?.id || !t?.scene);
   if (inScene.length) return inScene;
 
-  return (canvas?.tokens?.placeables ?? [])
-    .filter(t => t?.actor?.type === "character" && t.actor.isOwner);
+  return (canvas?.tokens?.placeables ?? []).filter(isMyChar);
 }
 
 /**
