@@ -347,15 +347,11 @@ export class LimbusLootSheet extends ActorSheet {
       const $t = $(tile);
       // 揭晓中：保持剪影 + 旋转 ♻（期间 revealed 仍为 false，无法拾取）
       $t.addClass("loot-tile--searching");
-      setTimeout(() => {
+      setTimeout(async () => {
         this._revealingSet.delete(idx);
         $t.removeClass("loot-tile--silhouette loot-tile--searching")
           .addClass("loot-tile--revealing");
-        game.socket.emit("system.limbusCompany_FVTT", {
-          type: "lootRevealItem",
-          lootActorId: this.actor.id, placementIdx: idx, itemUuid: uuid,
-          userId: game.user.id,
-        });
+        await this._requestReveal(idx, uuid);
       }, 800);
       return;
     }
@@ -374,6 +370,32 @@ export class LimbusLootSheet extends ActorSheet {
     });
     if (!confirmed) return;
     await this._executeItemTake(this.actor.id, uuid, idx, qty);
+  }
+
+  /**
+   * 请求把这一格标记为已揭晓。
+   *
+   * 原来一律 `socket.emit` 交给 GM，于是有两种情况会静默失败——而且失败得
+   * 很像"双击没反应"：动画照跑，随后 Actor 一重渲染，剪影又贴回来。
+   *   ① **没有 GM 在线**：消息发出去没人接；
+   *   ② 玩家其实对这个战利品 Actor 有 OWNER 权限（不少桌会这么配），
+   *      本可以自己写，却还是绕道找不存在的 GM。
+   * 现在能自己写就自己写，写不了才发 socket，并在没有 GM 在线时明说。
+   */
+  async _requestReveal(placementIdx, itemUuid) {
+    if (this.actor.canUserModify(game.user, "update")) {
+      return void await LimbusLootSheet._gmExecuteRevealItem({
+        lootActorId: this.actor.id, placementIdx, itemUuid,
+      });
+    }
+    if (!game.users.some(u => u.isGM && u.active)) {
+      return void ui.notifications.warn("需要有 GM 在线才能揭晓战利品。");
+    }
+    game.socket.emit("system.limbusCompany_FVTT", {
+      type: "lootRevealItem",
+      lootActorId: this.actor.id, placementIdx, itemUuid,
+      userId: game.user.id,
+    });
   }
 
   _activateGMListeners(html) {
@@ -788,6 +810,10 @@ export class LimbusLootSheet extends ActorSheet {
     } else {
       const myChar = game.user.character;
       if (!myChar) { ui.notifications.warn("找不到你的角色，无法拿走物品。"); return; }
+      // 与揭晓同理：没有 GM 在线时消息没人接，表现是"点了确认但什么都没发生"
+      if (!game.users.some(u => u.isGM && u.active)) {
+        return void ui.notifications.warn("需要有 GM 在线才能拿走战利品。");
+      }
       game.socket.emit("system.limbusCompany_FVTT", {
         type: "lootTakeItem",
         lootActorId, itemUuid, placementIdx, quantity,
@@ -1005,8 +1031,13 @@ export class LimbusLootSheet extends ActorSheet {
     const lootActor = game.actors.get(lootActorId);
     if (!lootActor) return;
     const contents = foundry.utils.deepClone(lootActor.system.lootContents ?? []);
-    const p = contents[placementIdx];
-    if (!p || p.uuid !== itemUuid) return; // 防竞态：索引已变
+    // 索引只是线索：这中间可能有人取走了别的格子，下标全体前移。
+    // 原来只认下标、uuid 对不上就默默 return，表现就是"双击了但还是 ???"。
+    let p = contents[placementIdx];
+    if (!p || (itemUuid && p.uuid !== itemUuid)) {
+      p = itemUuid ? contents.find(c => c.uuid === itemUuid) : null;
+    }
+    if (!p) return;
     if (p.revealed) return;
     p.revealed = true;
     await lootActor.update({ "system.lootContents": contents });
