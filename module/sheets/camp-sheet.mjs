@@ -153,6 +153,8 @@ export class LimbusCampSheet extends ActorSheet {
 
     ctx.isGM            = isGM;
     ctx.editUnlocked    = this._editUnlocked;
+    // 标题栏的图标与名称：解锁后才可改，和其它编辑项同一把锁
+    ctx.canEditTitle    = isGM && this._editUnlocked;
     ctx.description     = sys.description ?? "";
     ctx.warehouseSearch = this._warehouseSearch ?? "";
 
@@ -300,6 +302,28 @@ export class LimbusCampSheet extends ActorSheet {
     html.find(".camp-lock-toggle").on("click", () => {
       this._editUnlocked = !this._editUnlocked;
       this.render(false);
+    });
+
+    // 解锁后：点标题图标换图
+    html.find(".camp-title-icon.editable").on("click", (ev) => {
+      ev.preventDefault();
+      const cur = this.actor.img || "";
+      const FP  = foundry.applications?.apps?.FilePicker?.implementation ?? FilePicker;
+      new FP({
+        type: "image", current: cur,
+        callback: (path) => this.actor.update({ img: path }),
+      }).browse(cur);
+    });
+
+    // 解锁后：改营地名称（回车或失焦保存；没改动就不写，免得白刷一次渲染）
+    const saveName = async (ev) => {
+      const next = (ev.currentTarget.value ?? "").trim();
+      if (!next || next === this.actor.name) return;
+      await this.actor.update({ name: next });
+    };
+    html.find(".camp-title-input").on("change", saveName);
+    html.find(".camp-title-input").on("keydown", (ev) => {
+      if (ev.key === "Enter") { ev.preventDefault(); ev.currentTarget.blur(); }
     });
 
     // 仓库搜索

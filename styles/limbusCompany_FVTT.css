@@ -10508,42 +10508,30 @@ input.item-piles-quantity {
    仅靠 CSS 不够（bringToTop 会写内联 z-index），.mjs 里也覆写了一份。 */
 #camp-sheet-layer, .app.camp { z-index: 90 !important; }
 
-/* ── 营地卡 v3：全屏浮层化（对齐【简单任务】那种铺满盖住界面的观感）───────
-   ① 层级抬到画布与 HUD 之上、其他窗口之下——物品卡、聊天窗仍压在营地之上；
-   ② 面板本身也半透明：底色 #0B0707 是实心的，只把窗体调透明的话，
-      三栏还是三块黑板，地图只能从栏外的留白透出来；
-   ③ 版式按 1080p 定死，不再随屏宽内收（宽屏就是三栏靠左、右边留空）。 */
+/* ── 营地卡 v5：不透明 + 标题栏左对齐（图标 / 锁 / 名称一排）────────────
+   透明那一版看着"浮"，但读数值时地图一直在底下晃，最后还是回实心。
+   窗体只保留"铺满屏幕、层级压在其他窗口之下"这两点。 */
 .window-app.camp {
   border:     none;
   box-shadow: none;
-  background: transparent;
-  backdrop-filter: blur(2px);
+  background: var(--bg-dark);
 }
 .window-app.camp .window-header {
-  background:    rgba(11, 7, 7, .55);
+  background:    var(--bg-title-bar);
   border-bottom: 1px solid var(--border-gold);
 }
-.window-app.camp .window-content {
-  padding:    0;
-  background: transparent;
-}
+.window-app.camp .window-content { padding: 0; background: var(--bg-dark); }
 
-.camp-sheet {
-  --camp-veil: .62;          /* 面板不透明度：0 = 全透，1 = 回到原来的实心 */
-  background:  transparent;
-}
-/* 三栏与幕布一律走半透明底色，地图能透过整张营地卡 */
-.camp-sheet .camp-body { background: rgba(11, 7, 7, calc(var(--camp-veil) * .5)); }
+.camp-sheet { background: var(--bg-dark); }
+.camp-sheet .camp-body { background: var(--bg-dark); }
 .camp-sheet .camp-recipe-panel,
 .camp-sheet .camp-warehouse-panel,
-.camp-sheet .camp-char-panel { background: rgba(11, 7, 7, var(--camp-veil)); }
-/* 标题栏、面板头、展示区这些原本各自写死了实色，一并换掉 */
-.camp-sheet .camp-titlebar     { background: rgba(11, 7, 7, .72); }
-.camp-sheet .camp-panel-header { background: rgba(11, 7, 7, .45); }
-.camp-sheet .camp-title-dock   { background: rgba(11, 7, 7, .30); }
+.camp-sheet .camp-char-panel { background: var(--bg-dark); }
+.camp-sheet .camp-titlebar     { background: var(--bg-title-bar); }
+.camp-sheet .camp-panel-header { background: rgba(255, 255, 255, .035); }
+.camp-sheet .camp-title-dock   { background: rgba(0, 0, 0, .22); }
 
-/* 角色背包：再宽一点，消掉那条横向滚动条。
-   14px 只够 cg-wrap 自己的边距，滚动条槽（约 12px）没算进去。 */
+/* 角色背包：+30px 余量（cg-wrap 边距 + 滚动条槽），消掉那条横向滚动条 */
 .camp-sheet .camp-char-panel {
   width: max(var(--camp-char-min),
              calc(5 * var(--camp-cell) + 4 * var(--camp-gap)
@@ -10551,63 +10539,72 @@ input.item-piles-quantity {
 }
 .camp-sheet .camp-char-grid-wrap { overflow-x: hidden; }
 
-/* ── 图层：画布与 HUD 之上，其他窗口之下 ──────────────────────
-   Foundry 给普通窗口的 z-index 从 100 起跳，所以钉在 90 = 营地铺满屏幕、
-   盖住画布与侧边栏，而点开的物品卡 / 聊天窗仍浮在营地之上。
-   仅靠 CSS 不够（bringToTop 会写内联 z-index），.mjs 里也覆写了一份。 */
-#camp-sheet-layer, .app.camp { z-index: 90 !important; }
-
-/* ── 营地卡 v4：排版收口 ──────────────────────────────────────────────
-   2K 上暴露出来的三个排版问题，逐条对应：
-
-   ① **中栏被拉成一片空地。** 仓库是唯一 flex:1 的一栏，屏幕多出来的
-      600+px 全灌给了它，可网格只有 8×12 那么大 —— 于是"面板很宽、内容
-      很小"，视线在中间掉进一个洞里。给仓库设上限，多余宽度不再由它吸收。
-   ② **三栏靠左、右栏贴边。** 三栏成组居中之后，左右对称留白，幕布与地图
-      从两侧透出来，才是【简单任务】那种"浮层"观感。
-   ③ **网格在超宽面板里靠左。** 面板内再居中一次，标题栏的统计数字也就
-      和网格对得上了。
-
-   另外把标题按先前定的样式落进来：绝对居中、42px。 */
-
-/* ① + ② 三栏成组居中，仓库不再无限吃宽 */
+/* ── 排版：三栏成组居中，仓库不再无限吃宽 ────────────────────────────
+   仓库是唯一 flex:1 的一栏，宽屏上多出来的宽度全灌给它，网格却只有那么
+   点大，面板里就空出一片。限宽 + 整组居中，左右对称留白。 */
 .camp-sheet .camp-body { justify-content: center; }
 .camp-sheet .camp-warehouse-panel {
   flex:      1 1 var(--camp-wh-min);
   max-width: var(--camp-wh-max, 900px);
 }
-
-/* ③ 网格在面板里居中；面板头跟着用同一个内容宽度，数字才不会飘在远端 */
 .camp-sheet .camp-warehouse-grid-wrap {
   display:         flex;
   justify-content: center;
   align-items:     flex-start;
   overflow:        auto;
 }
-.camp-sheet .camp-char-grid-wrap {
-  display:         flex;
-  justify-content: center;
-}
+.camp-sheet .camp-char-grid-wrap { display: flex; justify-content: center; }
+.camp-sheet .camp-title-dock     { align-items: flex-start; }
 
-/* Title 展示区：卡片顶部对齐，别被拉成一张一米高的空卡 */
-.camp-sheet .camp-title-dock { align-items: flex-start; }
-
-/* 标题：绝对居中 + 42px。跟着 flex 走会被左边的锁与图标推偏，所以绝对定位，
-   并关掉指针事件——它压在标题栏上，挡住的话锁点不着。 */
+/* ── 标题栏：锁 → 图标 → 名称，一排靠左 ──────────────────────────────
+   先前把名称绝对居中，结果图标和锁被甩到左端，和标题隔着半个屏幕。 */
 .camp-sheet { --camp-title-size: 42px; }
-.camp-sheet .camp-titlebar { position: relative; }
+.camp-sheet .camp-titlebar {
+  position:    relative;
+  padding:     8px 14px;
+  min-height:  calc(var(--camp-title-size) + 14px);
+  gap:         10px;
+}
 .camp-sheet .camp-title-name {
-  position:       absolute;
-  left:           50%;
-  transform:      translateX(-50%);
-  flex:           none;
+  position:       static;
+  transform:      none;
+  flex:           0 1 auto;
   font-size:      var(--camp-title-size);
   font-weight:    600;
   letter-spacing: .04em;
   line-height:    1.1;
   max-width:      60%;
-  pointer-events: none;
 }
 .camp-sheet .camp-title-label { margin-left: auto; }
-/* 标题变大之后标题栏也要跟着长高，否则 42px 的字会顶破 6px 的内边距 */
-.camp-sheet .camp-titlebar { padding: 10px 14px; min-height: calc(var(--camp-title-size) + 16px); }
+/* 图标跟着标题一起放大，两者不等高会显得标题在"飘" */
+.camp-sheet .camp-title-icon {
+  width:  calc(var(--camp-title-size) * .86);
+  height: calc(var(--camp-title-size) * .86);
+}
+.camp-sheet .camp-lock-toggle { font-size: calc(var(--camp-title-size) * .42); }
+
+/* 解锁后：图标可点（换图），名称就地改成输入框 */
+.camp-sheet .camp-title-icon.editable { cursor: pointer; }
+.camp-sheet .camp-title-icon.editable:hover {
+  outline:        1px solid var(--gold-active);
+  outline-offset: 1px;
+}
+.camp-sheet input.camp-title-input {
+  background:  rgba(0, 0, 0, .35);
+  border:      1px solid var(--border-gold);
+  border-radius: 3px;
+  color:       var(--text-main);
+  padding:     0 8px;
+  height:      calc(var(--camp-title-size) + 6px);
+  font-family: inherit;
+  min-width:   6em;
+}
+.camp-sheet input.camp-title-input:focus {
+  outline:      none;
+  border-color: var(--gold-active);
+}
+
+/* ── 图层：画布与 HUD 之上，其他窗口之下 ──────────────────────
+   普通窗口的 z-index 从 100 起跳，钉在 90 = 盖住画布与侧边栏、盖不住物品卡。
+   CSS 拦不住 bringToTop 写的内联值，.mjs 里也覆写了一份。 */
+#camp-sheet-layer, .app.camp { z-index: 90 !important; }

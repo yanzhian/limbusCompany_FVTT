@@ -9,8 +9,15 @@
         <i class="fas fa-{{#if editUnlocked}}lock-open{{else}}lock{{/if}}"></i>
       </span>
     {{/if}}
-    <img src="{{actor.img}}" class="camp-title-icon" alt="camp">
-    <span class="camp-title-name">{{actor.name}}</span>
+    {{!-- 解锁（GM）后图标可换、名称可改；锁着时就是一张图 + 一行字 --}}
+    <img src="{{actor.img}}" class="camp-title-icon{{#if canEditTitle}} editable{{/if}}"
+         alt="camp" {{#if canEditTitle}}title="点击更换营地图标"{{/if}}>
+    {{#if canEditTitle}}
+      <input type="text" class="camp-title-name camp-title-input" value="{{actor.name}}"
+             placeholder="营地名称" title="回车或失焦保存">
+    {{else}}
+      <span class="camp-title-name">{{actor.name}}</span>
+    {{/if}}
     <span class="camp-title-label">营地</span>
   </div>
 
