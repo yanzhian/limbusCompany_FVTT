@@ -10556,3 +10556,58 @@ input.item-piles-quantity {
    盖住画布与侧边栏，而点开的物品卡 / 聊天窗仍浮在营地之上。
    仅靠 CSS 不够（bringToTop 会写内联 z-index），.mjs 里也覆写了一份。 */
 #camp-sheet-layer, .app.camp { z-index: 90 !important; }
+
+/* ── 营地卡 v4：排版收口 ──────────────────────────────────────────────
+   2K 上暴露出来的三个排版问题，逐条对应：
+
+   ① **中栏被拉成一片空地。** 仓库是唯一 flex:1 的一栏，屏幕多出来的
+      600+px 全灌给了它，可网格只有 8×12 那么大 —— 于是"面板很宽、内容
+      很小"，视线在中间掉进一个洞里。给仓库设上限，多余宽度不再由它吸收。
+   ② **三栏靠左、右栏贴边。** 三栏成组居中之后，左右对称留白，幕布与地图
+      从两侧透出来，才是【简单任务】那种"浮层"观感。
+   ③ **网格在超宽面板里靠左。** 面板内再居中一次，标题栏的统计数字也就
+      和网格对得上了。
+
+   另外把标题按先前定的样式落进来：绝对居中、42px。 */
+
+/* ① + ② 三栏成组居中，仓库不再无限吃宽 */
+.camp-sheet .camp-body { justify-content: center; }
+.camp-sheet .camp-warehouse-panel {
+  flex:      1 1 var(--camp-wh-min);
+  max-width: var(--camp-wh-max, 900px);
+}
+
+/* ③ 网格在面板里居中；面板头跟着用同一个内容宽度，数字才不会飘在远端 */
+.camp-sheet .camp-warehouse-grid-wrap {
+  display:         flex;
+  justify-content: center;
+  align-items:     flex-start;
+  overflow:        auto;
+}
+.camp-sheet .camp-char-grid-wrap {
+  display:         flex;
+  justify-content: center;
+}
+
+/* Title 展示区：卡片顶部对齐，别被拉成一张一米高的空卡 */
+.camp-sheet .camp-title-dock { align-items: flex-start; }
+
+/* 标题：绝对居中 + 42px。跟着 flex 走会被左边的锁与图标推偏，所以绝对定位，
+   并关掉指针事件——它压在标题栏上，挡住的话锁点不着。 */
+.camp-sheet { --camp-title-size: 42px; }
+.camp-sheet .camp-titlebar { position: relative; }
+.camp-sheet .camp-title-name {
+  position:       absolute;
+  left:           50%;
+  transform:      translateX(-50%);
+  flex:           none;
+  font-size:      var(--camp-title-size);
+  font-weight:    600;
+  letter-spacing: .04em;
+  line-height:    1.1;
+  max-width:      60%;
+  pointer-events: none;
+}
+.camp-sheet .camp-title-label { margin-left: auto; }
+/* 标题变大之后标题栏也要跟着长高，否则 42px 的字会顶破 6px 的内边距 */
+.camp-sheet .camp-titlebar { padding: 10px 14px; min-height: calc(var(--camp-title-size) + 16px); }
