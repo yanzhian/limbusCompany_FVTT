@@ -293,6 +293,14 @@ export class LimbusCampSheet extends ActorSheet {
   activateListeners(html) {
     super.activateListeners(html);
 
+    // Foundry 基类在 !isEditable 时会禁用卡内所有 <button>。营地的制作 / 取出
+    // 本来就不依赖对营地 Actor 的编辑权限（写操作走 GM socket 代执行），
+    // 权限为「无 / 查看」的玩家进来会发现按钮全灰，所以手动恢复。
+    // 「制作」自身还有原料是否够的禁用态，那个由模板决定，这里不碰。
+    if (!game.user.isGM && !this.isEditable) {
+      html.find("button.camp-craft-btn:not(.camp-craft-disabled)").prop("disabled", false);
+    }
+
     // 恢复水平滚动位置（垂直由 defaultOptions.scrollY 处理）
     this._restoreScrollX(html);
 
