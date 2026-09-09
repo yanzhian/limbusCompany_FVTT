@@ -1136,6 +1136,19 @@ function _installTokenDoubleClickOpenActorSheet() {
     return original.call(this, event, ...args);
   };
 
+  // 双击的前提是这块 Token "看得见"：MouseInteractionManager 用 _canView 决定
+  // 要不要派发 clickLeft2。权限为「无」时 Foundry 的 _canView 直接 false，
+  // 上面那段补丁根本没机会跑——这才是"PL 双击设施 Token 没反应"的真正原因。
+  // 对三种场景设施放行；能不能真打开仍由各 Sheet 的距离守卫说了算。
+  const originalCanView = tokenProto._canView;
+  if (typeof originalCanView === "function") {
+    tokenProto._canView = function(user, event) {
+      const baseActor = game.actors?.get(this.document?.actorId) ?? this.actor;
+      if (["loot", "camp", "merchant"].includes(baseActor?.type)) return true;
+      return originalCanView.call(this, user, event);
+    };
+  }
+
   tokenProto.__limbusDblClickPatched = true;
 }
 
