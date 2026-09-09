@@ -970,7 +970,12 @@ export class LimbusLootSheet extends ActorSheet {
 
     // 玩家发起的取出必须先揭晓（GM 不受限制）
     const triggerUser = game.users.get(userId);
-    const placement   = (lootActor.system.lootContents ?? [])[placementIdx];
+    const shelf       = lootActor.system.lootContents ?? [];
+    // 下标只当线索：期间有人取走别的格子，整张表会前移（与揭晓同一个坑）
+    let placement = shelf[placementIdx];
+    if (!placement || placement.uuid !== itemUuid) {
+      placement = shelf.find(p => p.uuid === itemUuid) ?? placement;
+    }
     if (!triggerUser?.isGM && !(placement?.revealed ?? false)) {
       ui.notifications.warn(`[战利品] ${item.name} 尚未揭晓，无法拾取。`);
       return;

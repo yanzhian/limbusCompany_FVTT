@@ -1117,6 +1117,18 @@ function _installTokenDoubleClickOpenActorSheet() {
         return;
       }
 
+      // 战利品：**不看权限**。宝箱本来就是给全队开的，把每个箱子都调成
+      // 「观察者」太琐碎，而且权限一给，玩家在侧边栏也就能翻到它了。
+      // 这里只放开"打开这张卡"；箱子里的写操作（揭晓 / 拾取 / 拿钱）一律
+      // 还是走 GM socket 代执行，权限该拦的仍然拦得住。
+      if (baseActor?.type === "loot") {
+        event?.preventDefault?.();
+        event?.stopPropagation?.();
+        this.release?.();
+        baseActor.sheet?.render(true, { focus: true });
+        return;
+      }
+
     } catch (err) {
       console.warn("limbusCompany_FVTT | Token 双击打开角色卡失败，回退默认行为", err);
     }
