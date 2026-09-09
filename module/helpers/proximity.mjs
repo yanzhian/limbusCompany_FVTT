@@ -62,20 +62,47 @@ function _myTokens() {
  * @returns {{ok: boolean, gap: number|null, range: number}}
  *          ok=false 时 gap 是最近的那个距离（null 表示压根没找到 Token）
  */
+/**
+ * 调试开关。控制台里 `limbusProximityDebug(true)` 打开，之后每次判定都会把
+ * 完整过程打到控制台：设置里的格数、双方 Token、算出来的间隙、放行原因。
+ * 「距离被无视」有五六条不同的短路路径（GM、range=0、找不到 Token…），
+ * 光看结果分不出是哪一条，所以把每一条都写清楚。
+ */
+let _debug = false;
+export function setProximityDebug(on = true) {
+  _debug = !!on;
+  console.log(`limbusCompany_FVTT | 距离判定调试：${_debug ? "开" : "关"}`);
+  return _debug;
+}
+function _log(verdict, detail) {
+  if (!_debug) return;
+  console.log(`limbusCompany_FVTT | 距离判定 → ${verdict}`, detail);
+}
+
 export function isWithinInteractRange(actor, { token = null } = {}) {
   let range = 3;
   try { range = game.settings.get("limbusCompany_FVTT", "interactRange") ?? 3; }
   catch { /* 设置没注册（早期加载）时用默认值 */ }
 
   // 0 = 关闭距离限制；GM 不受限
-  if (!range || game.user?.isGM) return { ok: true, gap: null, range };
+  if (!range) { _log("放行：设置里的距离为 0（限制已关闭）", { range }); return { ok: true, gap: null, range }; }
+  if (game.user?.isGM) { _log("放行：你是 GM", { range }); return { ok: true, gap: null, range }; }
 
   // 明确给了 Token（双击进来的那一块）就只跟它比：同名设施可能摆了好几处，
   // 拿"任意一块最近的"算距离会让站在 A 号箱子旁边的人打开 B 号箱子。
   const targets = token ? [token] : (actor?.getActiveTokens?.(false, false) ?? []);
   const mine    = _myTokens();
   // 任一方在当前场景没有 Token：放行（见文件头说明）
-  if (!targets.length || !mine.length) return { ok: true, gap: null, range };
+  if (!targets.length || !mine.length) {
+    _log("放行：找不到 Token（设施侧或你这侧）", {
+      range,
+      设施Token: targets.map(t => t?.name ?? t?.document?.name),
+      我方Token: mine.map(t => t?.name),
+      提示: targets.length ? "你这边没有可用 Token：没选中、没设主控角色、场上也没有你拥有的角色"
+                          : "这个设施在当前场景没有 Token（用宏/侧边栏打开时就是这种）",
+    });
+    return { ok: true, gap: null, range };
+  }
 
   let best = null;
   for (const t of targets) {
@@ -85,7 +112,16 @@ export function isWithinInteractRange(actor, { token = null } = {}) {
       if (best === null || gap < best) best = gap;
     }
   }
-  if (best === null) return { ok: true, gap: null, range };
+  if (best === null) {
+    _log("放行：两两之间都算不出格数（Token 不在同一场景？）", { range });
+    return { ok: true, gap: null, range };
+  }
+  _log(best <= range ? `放行：${best} 格 ≤ ${range} 格` : `拦下：${best} 格 > ${range} 格`, {
+    range, gap: best,
+    设施Token: targets.map(t => t?.name ?? t?.document?.name),
+    我方Token: mine.map(t => t?.name),
+    指名的Token: token ? (token.name ?? token.document?.name) : "（没指名，跟该设施的所有 Token 比取最近）",
+  });
   return { ok: best <= range, gap: best, range };
 }
 

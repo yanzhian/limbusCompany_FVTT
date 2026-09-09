@@ -31,6 +31,7 @@ import { LimbusItemSheet }    from "./sheets/item-sheet.mjs";
 import { LimbusMerchantSheet } from "./sheets/merchant-sheet.mjs";
 import { LimbusCampSheet }    from "./sheets/camp-sheet.mjs";
 import { LimbusLootSheet }    from "./sheets/loot-sheet.mjs";
+import { setProximityDebug, isWithinInteractRange } from "./helpers/proximity.mjs";
 import { GMConsole }          from "./sheets/gm-console.mjs";
 import { SquadHUD }           from "./sheets/squad-hud.mjs";
 import { ClashManager }     from "./helpers/clash.mjs";
@@ -245,6 +246,20 @@ Hooks.once("ready", () => {
   ]);
 
   console.log("limbusCompany_FVTT | 系统已就绪。");
+
+  // 距离判定调试开关：控制台里 limbusProximityDebug(true) 打开，
+  // 之后每次开设施面板都会打出完整判定过程（哪一条短路放的行）。
+  globalThis.limbusProximityDebug = (on = true) => setProximityDebug(on);
+  globalThis.limbusProximityCheck = (actor) => {
+    const a = actor
+      ?? canvas?.tokens?.controlled?.[0]?.actor
+      ?? canvas?.tokens?.placeables?.find(t => ["camp", "merchant", "loot"].includes(t.actor?.type))?.actor;
+    if (!a) return console.warn("没找到设施 Actor：选中一块设施 Token 再跑，或者传进来。");
+    const was = setProximityDebug(true);
+    const r = isWithinInteractRange(a);
+    setProximityDebug(was && false);
+    return r;
+  };
 
   // 【展示稀有度】：开关状态落到 body 上
   _applyRarityDisplay(game.settings.get("limbusCompany_FVTT", "showRarity"));
