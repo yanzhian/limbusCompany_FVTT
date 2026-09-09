@@ -14,20 +14,6 @@
     <span class="loot-title-label">战利品</span>
   </div>
 
-  {{!-- ── 货币栏 ──────────────────────────────────────────────────────────── --}}
-  <div class="loot-currency-bar">
-    <span class="loot-currency-icon" title="眼（货币）">👁</span>
-    <span class="loot-currency-value">{{currency}}</span>
-    <span class="loot-currency-unit">眼</span>
-
-    {{#if isGM}}
-      <button type="button" class="loot-fill-btn sheet-btn" title="填充眼">填充</button>
-    {{else}}
-      <button type="button" class="loot-take-currency-btn sheet-btn" title="拿走眼">拿走</button>
-      <button type="button" class="loot-split-currency-btn sheet-btn" title="将眼平分给队伍1成员">一键平分</button>
-    {{/if}}
-  </div>
-
   {{!-- ── 网格工具栏（GM） ──────────────────────────────────────────────── --}}
   {{#if isGM}}
   <div class="loot-grid-toolbar">
@@ -118,5 +104,20 @@
     {{/if}}
 
   </div>{{!-- /loot-body --}}
+
+  {{!-- ── 货币栏（放在最下面：拿走/平分是"看完东西再操作"的收尾动作） ─────── --}}
+  <div class="loot-currency-bar">
+    <img class="loot-currency-icon" title="眼（货币）" alt="眼"
+         src="systems/limbusCompany_FVTT/assets/icons/Base_icon/眼.webp">
+    <span class="loot-currency-value">{{currency}}</span>
+    <span class="loot-currency-unit">眼</span>
+
+    {{#if isGM}}
+      <button type="button" class="loot-fill-btn sheet-btn" title="填充眼">填充</button>
+    {{else}}
+      <button type="button" class="loot-take-currency-btn sheet-btn" title="拿走眼">拿走</button>
+      <button type="button" class="loot-split-currency-btn sheet-btn" title="将眼平分给队伍1成员">一键平分</button>
+    {{/if}}
+  </div>
 
 </form>

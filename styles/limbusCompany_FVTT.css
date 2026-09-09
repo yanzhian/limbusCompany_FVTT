@@ -10584,3 +10584,60 @@ input.item-piles-quantity {
    CSS 拦不住 bringToTop 写的内联值，.mjs 里也覆写了一份。 */
 #camp-sheet-layer, .app.camp { z-index: 90 !important; }
 
+
+/* ── 战利品：揭晓标记与货币栏 ────────────────────────────────────────────
+   ① ♻ 转圈没了，是被稀有度光晕挤掉的：
+      `.cg-item-tile[class*="rarity-"]::before` 把 ::before 征用去画光晕，
+      它的选择器比 `.loot-tile--silhouette::before` 更具体，content 被覆盖成 ""。
+      标记改用 ::after，两者各占一个伪元素，谁也不挡谁。
+   ② 货币栏挪到卡片最下方（拿走/平分是看完东西之后的收尾动作）。 */
+.limbuscompany .loot-tile--silhouette::before { content: none; }
+.limbuscompany .loot-tile--silhouette::after {
+  content:        "?";
+  position:       absolute;
+  top:            50%;
+  left:           50%;
+  transform:      translate(-50%, -50%);
+  font-size:      20px;
+  font-weight:    bold;
+  color:          rgba(200, 158, 112, .85);
+  text-shadow:    0 0 8px rgba(200, 158, 112, .4);
+  z-index:        5;
+  pointer-events: none;
+}
+.limbuscompany .loot-tile--searching::after {
+  content:   "♻";
+  animation: loot-spin 1.1s linear infinite;
+}
+
+/* 货币栏：贴在底部，去掉整条的底色，只留一条分隔线 */
+.loot-sheet .loot-currency-bar {
+  order:         99;
+  margin-top:    auto;
+  background:    none;
+  border-bottom: none;
+  border-top:    1px solid rgba(200, 158, 112, .18);
+  padding:       5px 10px;
+}
+.loot-sheet .loot-currency-icon {
+  width:      18px;
+  height:     18px;
+  object-fit: contain;
+}
+/* 按钮：矮一档，深底浅字（原来的 max-width:20px 把字挤没了） */
+.loot-sheet .loot-currency-bar .sheet-btn,
+.loot-sheet .loot-currency-bar .loot-fill-btn {
+  max-width:     none;
+  padding:       2px 12px;
+  line-height:   1.5;
+  font-size:     12px;
+  background:    #0A0605;
+  border:        1px solid rgba(200, 158, 112, .35);
+  color:         #E8CAA2;
+}
+.loot-sheet .loot-currency-bar .sheet-btn:hover,
+.loot-sheet .loot-currency-bar .loot-fill-btn:hover {
+  background:   #0A0605;
+  border-color: var(--gold-active);
+  color:        var(--gold-active);
+}
