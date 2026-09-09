@@ -42,7 +42,7 @@ export class LimbusCampSheet extends ActorSheet {
       // 窗口化：按内容需要的宽度开（配方 420 + 仓库 900 + 背包 ~330 + 边距），
       // 但不超过视口的 92%——2K 上铺满整屏只会让三栏之间空出一大片。
       width:     Math.min(Math.round(window.innerWidth * 0.92), 1720),
-      height:    Math.min(Math.round(window.innerHeight * 0.92), 980),
+      height:    Math.min(Math.round(window.innerHeight * 0.92), 1200),
       resizable: true,
       // 重渲染时保持这些容器的滚动位置（拖动仓库物品后不回顶）
       scrollY:   [".camp-warehouse-grid-wrap", ".camp-char-grid-wrap", ".camp-recipe-list"],
@@ -793,20 +793,21 @@ export class LimbusCampSheet extends ActorSheet {
     const item = await fromUuid(uuid).catch(() => null);
     if (!item || seq !== this._campHoverSeq) return;
 
-    // 锁住的卡不换：中键锁定就是"钉住这一张"，鼠标再扫过别的图块也不动
-    if (this._campTitleCard?.data("tcLocked")) return;
-
-    const dock = this.element?.find(".camp-title-dock");
-    if (!dock?.length) return;
-
     this._onCgTileHoverEnd(null, true);
     this._campTitleCard = buildItemTitleCard(item);
     if (!this._campTitleCard) return;
 
-    // 卡钉在角色栏下方的展示区里（营地卡现在是全屏，浮卡会挡住半张仓库），
-    // buildItemTitleCard 造出来的是浮卡，定位与阴影交给 .camp-title-dock 的 CSS 收拾
-    dock.children(".camp-title-dock-empty").hide();
-    dock.append(this._campTitleCard);
+    // 定位：营地卡右侧，不够则左侧
+    const rect  = this.element[0].getBoundingClientRect();
+    const cardW = 280, cardH = 500;
+    let left = rect.right + 8;
+    if (left + cardW > window.innerWidth - 8) left = rect.left - cardW - 8;
+    const top = Math.max(8, Math.min(rect.top, window.innerHeight - cardH - 8));
+
+    this._campTitleCard.css({ position: "fixed", left, top, zIndex: 99998 });
+    $("body").append(this._campTitleCard);
+    this._campTitleCard.on("mouseenter", () => clearTimeout(this._campCloseTimer));
+    this._campTitleCard.on("mouseleave", () => this._onCgTileHoverEnd(null));
   }
 
   /**
@@ -817,17 +818,15 @@ export class LimbusCampSheet extends ActorSheet {
   _onCgTileHoverEnd(event, force = false) {
     if (event?.currentTarget) $(event.currentTarget).removeClass("cg-tile-hover");
     clearTimeout(this._campHoverTimer);
-    // 展示区是**常驻**的：鼠标离开图块不清卡，卡一直留到扫过下一个图块为止。
-    // 强制关闭（拖动开始 / 关窗）才真的收走。
-    if (!force) return;
+    if (!force) {
+      clearTimeout(this._campCloseTimer);
+      this._campCloseTimer = setTimeout(() => this._onCgTileHoverEnd(null, true), 150);
+      return;
+    }
     clearTimeout(this._campCloseTimer);
     this._campHoverSeq = (this._campHoverSeq ?? 0) + 1; // 使进行中的 hoverStart 失效
     closeTitleCardUnlessLocked(this._campTitleCard);
-    if (!this._campTitleCard?.data("tcLocked")) {
-      this._campTitleCard = null;
-      // 展示区空了就把占位提示放回来
-      this.element?.find(".camp-title-dock .camp-title-dock-empty").show();
-    }
+    if (!this._campTitleCard?.data("tcLocked")) this._campTitleCard = null;
   }
 
   /* ─── 仓库图块双击：容器直接打开 ────────────────────────────────────── */

@@ -21,7 +21,7 @@
     <span class="camp-title-label">营地</span>
   </div>
 
-  {{!-- ── 主体：配方（左） + 仓库（中） + 角色背包/Title 展示区（右） ─────── --}}
+  {{!-- ── 主体：配方（左） + 仓库（中） + 角色背包（右） ────────────────────── --}}
   <div class="camp-body">
 
     {{!-- ══ 左栏：配方 ════════════════════════════════════════════════════════ --}}
@@ -162,7 +162,7 @@
 
     </div>{{!-- /camp-warehouse-panel --}}
 
-    {{!-- ══ 右栏：我的角色背包 + Title 常驻展示区 ════════════════════════════ --}}
+    {{!-- ══ 右栏：我的角色背包 ══════════════════════════════════════════════ --}}
     <div class="camp-char-panel">
       {{#if myChar}}
       <div class="camp-panel-header">
@@ -195,13 +195,6 @@
         <i class="fas fa-exchange-alt"></i> 仓库物品拖到此处取出
       </div>
       {{/if}}
-
-      {{!-- Title 展示区：原先跟随鼠标的浮卡改为钉在这里，鼠标扫过图块即换卡 --}}
-      <div class="camp-title-dock">
-        <div class="camp-title-dock-empty">
-          鼠标移到物品上<br>这里显示它的卡面
-        </div>
-      </div>
     </div>{{!-- /camp-char-panel --}}
 
   </div>{{!-- /camp-body --}}

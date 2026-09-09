@@ -10460,8 +10460,8 @@ input.item-piles-quantity {
 .camp-sheet .camp-warehouse-grid-wrap { padding: var(--camp-pad); min-height: 0; }
 /* 角色背包按内容定高，剩下的竖向空间让给 Title 展示区 */
 .camp-sheet .camp-char-grid-wrap {
-  flex:     0 0 auto;
-  overflow: visible;
+  flex:     1 1 auto;
+  overflow: auto;
   padding:  var(--camp-pad);
 }
 
@@ -10473,34 +10473,6 @@ input.item-piles-quantity {
 .camp-sheet .camp-warehouse-stats,
 .camp-sheet .camp-grid-size-label { margin-left: auto; }
 
-/* ── 角色栏下方：Title 卡常驻展示区 ──────────────────────────
-   取代原先跟随鼠标的 position:fixed 浮卡（camp-sheet.mjs:741）。 */
-.camp-title-dock {
-  flex:        1 1 auto;
-  min-height:  var(--camp-dock-min);
-  display:     flex;
-  align-items: flex-start;
-  justify-content: center;
-  overflow:    auto;
-  padding:     var(--camp-pad);
-  border-top:  1px solid var(--border-gold);
-  background:  rgba(0, 0, 0, .22);
-}
-.camp-title-dock-empty {
-  margin:      auto;
-  text-align:  center;
-  font-size:   .78em;
-  color:       var(--text-dim);
-  line-height: 1.8;
-}
-/* buildItemTitleCard() 造出来的卡默认是浮卡，钉进展示区要去掉定位与阴影 */
-.camp-title-dock .limbus-title-card {
-  position:   static !important;
-  width:      100%;
-  max-width:  100%;
-  margin:     0;
-  box-shadow: none;
-}
 
 /* ── 图层：画布与 HUD 之上，其他窗口之下 ──────────────────────
    Foundry 给普通窗口的 z-index 从 100 起跳，所以钉在 90 = 营地铺满屏幕、
@@ -10529,7 +10501,6 @@ input.item-piles-quantity {
 .camp-sheet .camp-char-panel { background: var(--bg-dark); }
 .camp-sheet .camp-titlebar     { background: var(--bg-title-bar); }
 .camp-sheet .camp-panel-header { background: rgba(255, 255, 255, .035); }
-.camp-sheet .camp-title-dock   { background: rgba(0, 0, 0, .22); }
 
 /* 角色背包：+30px 余量（cg-wrap 边距 + 滚动条槽），消掉那条横向滚动条 */
 .camp-sheet .camp-char-panel {
@@ -10554,7 +10525,6 @@ input.item-piles-quantity {
   overflow:        auto;
 }
 .camp-sheet .camp-char-grid-wrap { display: flex; justify-content: center; }
-.camp-sheet .camp-title-dock     { align-items: flex-start; }
 
 /* ── 标题栏：锁与图标靠左，名称绝对居中 ──────────────────────────────
    名称若跟着 flex 排，就会被左边的锁和图标推得偏左；绝对定位才真的居中。
@@ -10614,38 +10584,3 @@ input.item-piles-quantity {
    CSS 拦不住 bringToTop 写的内联值，.mjs 里也覆写了一份。 */
 #camp-sheet-layer, .app.camp { z-index: 90 !important; }
 
-/* ── 营地卡 v6：Title 展示区不再"只显示一半" ─────────────────────────
-   症结是这一列的高度没被真正夹住：
-   · 角色栏是 flex 列，网格 wrap 之前写了 overflow: visible（为了让物品
-     图块的外发光不被裁掉），于是它按内容撑高；
-   · 展示区又给了 min-height，两段加起来超过面板高度；
-   · flex 项的默认 min-height 是 auto，**不会**被压缩，于是整列顶破面板。
-   解决：展示区改成"可压缩的滚动区"（flex-basis 0 + min-height 0），
-   面板与网格 wrap 一并夹住高度，卡片自己在展示区里滚。 */
-.camp-sheet .camp-char-panel {
-  overflow: hidden;
-  min-height: 0;
-}
-.camp-sheet .camp-char-grid-wrap {
-  flex:       0 0 auto;
-  min-height: 0;
-  overflow-y: hidden;
-}
-.camp-sheet .camp-title-dock {
-  flex:       1 1 0;
-  min-height: 0;         /* 覆盖前面按 --camp-dock-min 给的最小高 */
-  overflow:   auto;
-}
-/* 卡片本体：钉住排版，别再带着浮卡那套定位与固定高度 */
-.camp-title-dock .limbus-title-card {
-  position:   static !important;
-  inset:      auto !important;
-  height:     auto !important;
-  max-height: none !important;
-  width:      100%;
-  max-width:  100%;
-  margin:     0;
-  box-shadow: none;
-}
-/* 卡片内部若自带滚动区，让它跟着展示区一起长，不要再嵌一层固定高 */
-.camp-title-dock .limbus-title-card .tc-body { max-height: none !important; }
