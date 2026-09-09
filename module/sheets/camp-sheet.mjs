@@ -38,6 +38,11 @@ export class LimbusCampSheet extends ActorSheet {
   static get defaultOptions() {
     return foundry.utils.mergeObject(super.defaultOptions, {
       classes:   ["limbuscompany", "sheet", "actor", "camp"],
+      // 权限为「无」的玩家也要能开这张卡：Foundry 的 DocumentSheet.render
+      // 会先拿 viewPermission（默认 LIMITED）挡一道，挡下来就是那句
+      // 「你没有足够的权限来查看角色卡」。设施类卡片改由**距离守卫**把门，
+      // 写操作照旧走 GM socket 代执行，所以这里把观看门槛降到 NONE。
+      viewPermission: CONST.DOCUMENT_OWNERSHIP_LEVELS.NONE,
       template:  "systems/limbusCompany_FVTT/templates/actor/camp-sheet.hbs",
       // 窗口化：按内容需要的宽度开（配方 420 + 仓库 900 + 背包 ~330 + 边距），
       // 但不超过视口的 92%——2K 上铺满整屏只会让三栏之间空出一大片。

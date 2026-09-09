@@ -32,6 +32,11 @@ export class LimbusLootSheet extends ActorSheet {
   static get defaultOptions() {
     return foundry.utils.mergeObject(super.defaultOptions, {
       classes:   ["limbuscompany", "sheet", "actor", "loot"],
+      // 权限为「无」的玩家也要能开这张卡：Foundry 的 DocumentSheet.render
+      // 会先拿 viewPermission（默认 LIMITED）挡一道，挡下来就是那句
+      // 「你没有足够的权限来查看角色卡」。设施类卡片改由**距离守卫**把门，
+      // 写操作照旧走 GM socket 代执行，所以这里把观看门槛降到 NONE。
+      viewPermission: CONST.DOCUMENT_OWNERSHIP_LEVELS.NONE,
       template:  "systems/limbusCompany_FVTT/templates/actor/loot-sheet.hbs",
       width:     game.user?.isGM ? 700 : 400,
       height:    520,
