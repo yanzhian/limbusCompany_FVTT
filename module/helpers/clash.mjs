@@ -686,7 +686,7 @@ export class ClashManager {
    * 它们直接改写技能物品自身（会被持久化），连击时重复执行就会累积。
    */
   static COMBO_ONCE_EFFECTS = new Set([
-    "diceAdj", "diceFacesAdj", "baseValue", "weightAdj", "diceTypeChg",
+    "diceAdj", "diceFacesAdj", "baseValue", "weightAdj", "diceTypeChg", "noClashChg",
   ]);
 
   /**
@@ -2322,6 +2322,23 @@ export class ClashManager {
               : `替换恐慌卡：无法写入【${effTgt.name}】`;
             break;
           }
+          case "noClashChg": {
+            // 【无法拼点】：卡面的布尔字段，不是骰子类型，所以单开一条。
+            // 默认**临时**（登记 tempMods，[攻击后] 自动还原）；
+            // 勾了「永久」就直接写死，并把该路径从 tempMods 里摘掉——
+            // 同一次攻击里若先有临时改动记过原值，不摘的话 [攻击后] 会拿
+            // 那个旧原值把永久改动一起抹平。
+            if (item) {
+              const on   = eff.noClashVal !== false;      // 缺省视为"变成无法拼点"
+              const perm = eff.durMode === "permanent";
+              const _p   = ClashManager._modPath(item, "system.noClash");
+              if (perm) await ClashManager._forgetItemMod(item, _p);
+              else      await ClashManager._stashItemMod(item, _p);
+              await ClashManager._safeDocUpdate(item, { [_p]: on });
+              descStr = `【${item.name}】${on ? "变为" : "解除"}【无法拼点】${perm ? "（永久）" : ""}`;
+            }
+            break;
+          }
           case "diceTypeChg": {
             const newDiceType = eff.diceTypeVal ?? "normal";
             if (item) {
@@ -2751,6 +2768,10 @@ export class ClashManager {
       const pool  = (eff.buffPool ?? []).map(e => ClashManager._buffLabel(e.buff ?? "")).join("、");
       const count = eff.count ?? 1;
       return `为${tgt}随机抽取 ${count} 个BUFF（${pool || "未配置"}）`;
+    }
+    if (t === "noClashChg") {
+      const on = eff.noClashVal !== false;
+      return `本技能${on ? "变为" : "解除"}【无法拼点】${eff.durMode === "permanent" ? "（永久）" : ""}`;
     }
     if (t === "diceTypeChg") {
       const label = eff.diceTypeVal === "unbreakable" ? "不可摧毁" : "一般骰子";
@@ -4811,7 +4832,7 @@ export class ClashManager {
   /** 会写回物品、因而需要打完还原的字段 */
   static TEMP_MOD_PATHS = [
     "system.diceCount", "system.diceFaces", "system.baseValue",
-    "system.weight", "system.diceType",
+    "system.weight", "system.diceType", "system.noClash",
   ];
 
   /**
@@ -4825,6 +4846,22 @@ export class ClashManager {
     const orig = foundry.utils.getProperty(item, path);
     await ClashManager._safeDocUpdate(item, {
       [`flags.limbusCompany_FVTT.tempMods`]: { ...cur, [path]: orig },
+    });
+  }
+
+  /**
+   * 把某个路径从 tempMods 里摘掉：这条改动要**永久**留下，不参与 [攻击后] 还原。
+   * 同一次攻击里先临时后永久时必须摘，否则还原会拿旧原值把永久改动抹平。
+   */
+  static async _forgetItemMod(item, path) {
+    if (!item) return;
+    const cur = item.getFlag?.("limbusCompany_FVTT", "tempMods") ?? {};
+    if (!Object.prototype.hasOwnProperty.call(cur, path)) return;
+    const next = { ...cur };
+    delete next[path];
+    await ClashManager._safeDocUpdate(item, {
+      "flags.limbusCompany_FVTT.-=tempMods": null,
+      "flags.limbusCompany_FVTT.tempMods": next,
     });
   }
 

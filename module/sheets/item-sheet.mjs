@@ -2849,6 +2849,7 @@ function _activityEffectLabels() {
     { value: "triggerBuff",  label: "触发BUFF" },
     { value: "useSkill",     label: "使用技能" },
     { value: "diceTypeChg",  label: "骰子类型" },
+    { value: "noClashChg",   label: "无法拼点" },
     { value: "rangeChg",     label: "范围修改" },
     { value: "extraDamage",  label: "追加伤害" },
     { value: "relatedSkillConvert", label: "相关技能转换" },
@@ -3462,6 +3463,7 @@ function _buildEffectRow(eff, idx, cfg) {
   // 来源只保留 [标签+等级] 与 [技能名字]；旧数据的 uuid / equipped 一律回落为标签模式
   const useSkillRef    = eff?.skillRef === "name" ? "name" : "tag";
   const isDiceTypeChg  = type === "diceTypeChg";
+  const isNoClashChg   = type === "noClashChg";
   const isRangeChg     = type === "rangeChg";
   const isExtraDamage  = type === "extraDamage";
   const isRelConvert   = type === "relatedSkillConvert";
@@ -3473,7 +3475,7 @@ function _buildEffectRow(eff, idx, cfg) {
   const roundOpts  = _ROUND_OPTIONS
     .map(v => `<option value="${v}" ${roundVal === v ? "selected" : ""}>${v}</option>`).join("");
   const formulaVal = _esc(eff?.value ?? "");
-  const isValSec   = !isBuff && !isTriggerBuff && !isRandomBuff && !isUseSkill && !isDiceTypeChg && !isRelConvert && !isFieldEff && !isPanicSwap;
+  const isValSec   = !isBuff && !isTriggerBuff && !isRandomBuff && !isUseSkill && !isDiceTypeChg && !isNoClashChg && !isRelConvert && !isFieldEff && !isPanicSwap;
   return `
     <div class="ae-row ae-eff-row">
       <div class="ae-row-hd">
@@ -3587,6 +3589,17 @@ function _buildEffectRow(eff, idx, cfg) {
             <option value="normal"      ${(eff?.diceTypeVal ?? "normal") === "normal"      ? "selected" : ""}>一般骰子</option>
             <option value="unbreakable" ${(eff?.diceTypeVal ?? "normal") === "unbreakable" ? "selected" : ""}>不可摧毁</option>
           </select>
+        </span>
+        <span class="ae-eff-noclashchg-sec" ${isNoClashChg ? "" : 'style="display:none"'}>
+          <label>无法拼点</label>
+          <select class="ae-sel eff-noclash-val">
+            <option value="on"  ${eff?.noClashVal === false ? "" : "selected"}>变为【无法拼点】</option>
+            <option value="off" ${eff?.noClashVal === false ? "selected" : ""}>解除【无法拼点】</option>
+          </select>
+          <label class="ae-inline-check" title="默认只在本次攻击内有效，[攻击后] 自动还原；勾上则永久写进卡里">
+            <input type="checkbox" class="eff-noclash-perm" ${eff?.durMode === "permanent" ? "checked" : ""}>
+            永久
+          </label>
         </span>
         <span class="ae-eff-rangechg-sec" ${isRangeChg ? "" : 'style="display:none"'}>
           <label>攻击方式</label>
@@ -3956,21 +3969,23 @@ function _bindEffType(html) {
     const isTriggerBuff = type === "triggerBuff";
     const isUseSkill    = type === "useSkill";
     const isDiceTypeChg = type === "diceTypeChg";
+    const isNoClashChg  = type === "noClashChg";
     const isExtraDamage = type === "extraDamage";
     const isRelConvert  = type === "relatedSkillConvert";
     const isFieldEff    = type === "fieldResource";
     const isPanicSwap   = type === "panicCardSwap";
-    row.find(".ae-eff-target-sec").toggle(!isUseSkill && !isDiceTypeChg && !isRelConvert && !isFieldEff);
+    row.find(".ae-eff-target-sec").toggle(!isUseSkill && !isDiceTypeChg && !isNoClashChg && !isRelConvert && !isFieldEff);
     row.find(".ae-eff-field-sec").toggle(isFieldEff);
     row.find(".eff-field-stacks").attr("placeholder", _effValuePlaceholder("hpAdj"));
     row.find(".ae-eff-round-sec").toggle(isAddBuff);
     row.find(".ae-eff-buff-sec").toggle(isBuff);
-    row.find(".ae-eff-val-sec").toggle(!isBuff && !isTriggerBuff && !isRandomBuff && !isUseSkill && !isDiceTypeChg && !isRelConvert && !isFieldEff && !isPanicSwap);
+    row.find(".ae-eff-val-sec").toggle(!isBuff && !isTriggerBuff && !isRandomBuff && !isUseSkill && !isDiceTypeChg && !isNoClashChg && !isRelConvert && !isFieldEff && !isPanicSwap);
     row.find(".eff-value").attr("placeholder", _effValuePlaceholder(type));
     row.find(".ae-eff-trig-sec").toggle(isTriggerBuff);
     row.find(".ae-eff-random-sec").toggle(isRandomBuff);
     row.find(".ae-eff-useskill-sec").toggle(isUseSkill);
     row.find(".ae-eff-dicetypechg-sec").toggle(isDiceTypeChg);
+    row.find(".ae-eff-noclashchg-sec").toggle(isNoClashChg);
     row.find(".ae-eff-rangechg-sec").toggle(type === "rangeChg");
     row.find(".ae-eff-extradmg-sec").toggle(isExtraDamage);
     row.find(".ae-eff-relconvert-sec").toggle(isRelConvert);
@@ -4234,6 +4249,15 @@ function _readActivityForm(html, original) {
         skillName:  skillRef === "name" ? ($r.find(".eff-skill-name").val()?.trim() || "") : "",
         reactTarget: $r.find(".eff-react-target").val() || "defender",
         ..._readBgTagMeta($r, "eff"),
+      });
+      return;
+    }
+    if (type === "noClashChg") {
+      effects.push({
+        type,
+        noClashVal: $r.find(".eff-noclash-val").val() !== "off",
+        // 默认临时（[攻击后] 还原）；勾了「永久」才写死进卡里
+        durMode:    $r.find(".eff-noclash-perm").is(":checked") ? "permanent" : "attack",
       });
       return;
     }

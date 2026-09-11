@@ -10666,3 +10666,16 @@ input.item-piles-quantity {
   outline:      none;
   border-color: var(--gold-active);
 }
+
+/* 效果编辑器：行内小勾选（【无法拼点】的「永久」用它） */
+.ae-eff-row .ae-inline-check {
+  display:     inline-flex;
+  align-items: center;
+  gap:         4px;
+  margin-left: 8px;
+  font-size:   .8em;
+  color:       var(--text-sub);
+  cursor:      pointer;
+  white-space: nowrap;
+}
+.ae-eff-row .ae-inline-check input { margin: 0; }

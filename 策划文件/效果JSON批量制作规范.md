@@ -390,6 +390,13 @@
 // 骰子类型（本次攻击内有效）
 { "type": "diceTypeChg", "diceTypeVal": "unbreakable" }   // normal / unbreakable / severing
 
+// 【无法拼点】：卡面那个勾选框，不是骰子类型，所以单独一个效果
+{ "type": "noClashChg", "noClashVal": true, "durMode": "attack" }      // 默认：本次攻击内，[攻击后] 自动还原
+{ "type": "noClashChg", "noClashVal": true, "durMode": "permanent" }   // 永久：直接写进卡里，不还原
+// noClashVal: true=变为【无法拼点】，false=解除
+// durMode 省略按 "attack" 处理。永久写入会把该字段从 tempMods 里摘掉——
+// 同一次攻击里先临时后永久时，不摘的话 [攻击后] 会拿旧原值把永久改动抹平。
+
 // 替换恐慌卡（BOSS 特殊能力：给目标换一张【陷入恐慌】或【士气低落】）
 // panicSlot: "panic"（陷入恐慌，默认）/ "lowMorale"（士气低落）
 // panicCardName: 按名字在**世界物品与全部合集包**里检索——恐慌卡不像技能那样
