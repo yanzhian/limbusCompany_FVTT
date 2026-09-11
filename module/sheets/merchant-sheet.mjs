@@ -512,8 +512,16 @@ export class LimbusMerchantSheet extends ActorSheet {
     if (!item) return;
     const card = buildItemTitleCard(item);
     if (!card) return;
-    const r = event.currentTarget.getBoundingClientRect();
-    card.css({ position: "fixed", left: `${r.right + 8}px`, top: `${r.top}px`, zIndex: 200 });
+    // z-index 用 99998，与营地 / 战利品 / 角色卡的 Title 卡一致。
+    // 原来是 200：Foundry 的窗口从 100 起跳、每次点击还会往上抬，
+    // 开几扇窗之后商人卡自己就爬过 200，卡片于是被压在商人卡下面。
+    // 右边放不下就翻到左边，免得贴着屏幕边缘被裁掉。
+    const r     = event.currentTarget.getBoundingClientRect();
+    const cardW = 280;
+    let left = r.right + 8;
+    if (left + cardW > window.innerWidth - 8) left = Math.max(8, r.left - cardW - 8);
+    const top = Math.max(8, Math.min(r.top, window.innerHeight - 500 - 8));
+    card.css({ position: "fixed", left: `${left}px`, top: `${top}px`, zIndex: 99998 });
     $("body").append(card);
     this._titleCard = card;
   }
