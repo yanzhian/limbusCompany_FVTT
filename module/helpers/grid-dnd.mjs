@@ -309,7 +309,13 @@ function _onPointerUp(ev) {
   _endDrag();
 
   if (phase === "pending") return;                  // 没超过阈值：算点击，交给别的监听
-  if (!hover?.ok) return;                           // 缝隙 / 越界 / 重叠：原样退回
+
+  // 松手时不在任何网格上：可能是丢向装备槽 / 技能槽 / 物品列表这些**网格之外**
+  // 的投放点。表格模式用的是原生 HTML5 拖放，那些地方早有 drop 处理器；
+  // 网格模式走的是本模块的指针拖放，不合成事件的话就石沉大海——
+  // "网格模式没法把装备拖进装备栏"就是这么来的。
+  if (!hover) { _dropOutside(drag, ev); return; }
+  if (!hover.ok) return;                            // 缝隙 / 越界 / 重叠：原样退回
 
   // 把落点换算成目标格子元素，合成一个原生 drop 事件投过去——
   // 转移规则一律沿用各 Sheet 既有的 drop 处理器，本模块不重复实现。
@@ -338,6 +344,39 @@ function _onPointerUp(ev) {
     return;
   }
   cell.dispatchEvent(new DragEvent("drop", {
+    bubbles: true, cancelable: true, dataTransfer: dt,
+    clientX: ev.clientX, clientY: ev.clientY,
+  }));
+}
+
+/** 网格之外的投放点：装备槽、技能槽、物品列表…… */
+const OUTSIDE_TARGETS = [
+  ".equip-slot",
+  ".skill-slot-wrap",
+  ".basic-skill-slots",
+  ".ego-skill-grid",
+  ".defense-skill-slot",
+  ".equip-grid",
+  ".item-list-panel",
+  ".skill-list-panel",
+].join(",");
+
+/**
+ * 把 payload 合成成一个原生 drop 事件，投给光标底下那个投放点。
+ * 规则一概不在这里实现——照旧由各 Sheet 既有的 drop 处理器消化，
+ * 和表格模式拖过去时走的是同一条路。
+ */
+function _dropOutside(drag, ev) {
+  const el = document.elementFromPoint(ev.clientX, ev.clientY)?.closest?.(OUTSIDE_TARGETS);
+  if (!el) return;
+
+  let dt;
+  try {
+    dt = new DataTransfer();
+    dt.setData("text/plain", JSON.stringify({ ...drag.payload, rotatePending: drag.rotated }));
+  } catch { return; }   // 浏览器不支持合成拖放数据：当作没放
+
+  el.dispatchEvent(new DragEvent("drop", {
     bubbles: true, cancelable: true, dataTransfer: dt,
     clientX: ev.clientX, clientY: ev.clientY,
   }));
