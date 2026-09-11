@@ -63,6 +63,22 @@ export class LimbusItemSheet extends ItemSheet {
   /** 当前 sheet 绑定的所有 Title 卡 hover controller（activateListeners 时填充） */
   _titleCardCtrls = [];
 
+  /**
+   * 住在场景设施（营地 / 战利品 / 商人）身上的物品，观看门槛降到 NONE。
+   *
+   * 这些 Actor 对玩家的权限就是「无」——门槛交给距离守卫，写操作走 GM
+   * socket 代执行。可**内嵌物品的权限跟着宿主走**，于是仓库里的箱子双击
+   * 打不开：DocumentSheet.render 先拿 viewPermission（默认 LIMITED）挡下了。
+   * 只放开"看"，能不能改仍由 isEditable 决定（对玩家依旧是否）。
+   */
+  constructor(...args) {
+    super(...args);
+    const hostType = this.object?.parent?.type;
+    if (["camp", "loot", "merchant"].includes(hostType)) {
+      this.options.viewPermission = CONST.DOCUMENT_OWNERSHIP_LEVELS.NONE;
+    }
+  }
+
   /* ─── 默认选项 ──────────────────────────────────────────────────────────── */
 
   static get defaultOptions() {
