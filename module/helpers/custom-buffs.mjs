@@ -822,6 +822,61 @@ registerCustomBuff("bloodFlame", {
 });
 
 /**
+ * 【护卫姿态】
+ * - 最大值：2 层
+ * - [回合开始时]：每有 1 级【呼吸法】为自己添加 1 层【护盾】（护盾总量最多 20）
+ * - [回合结束时]：为自己添加 1 层 3 级【呼吸法】，下回合添加 1 层【援护防御】
+ * - 回合结束时本效果层数 -1，归零移除
+ *
+ * 顺序要紧：回合结束先发呼吸法与援护防御，再给自己掉一层——不然最后一层
+ * 那回合会白白少一次收益。
+ */
+registerCustomBuff("guardStance", {
+  label:       "护卫姿态",
+  description: "- 最大值：2 层\n"
+    + "[回合开始时]：自己每拥有 1 级【呼吸法】，为自己添加 1 层【护盾】（最多 20 点）\n"
+    + "[回合结束时]：为自己添加 1 层 3 级【呼吸法】，下回合为自己添加 1 层【援护防御】\n"
+    + "- 回合结束时本效果层数减少 1 层",
+  maxStacks:   2,
+
+  /** 回合开始：按呼吸法**强度**发护盾，并把护盾总量压在 20 以内 */
+  async onRoundStart(actor, buff) {
+    const { ClashManager } = await import("./clash.mjs");
+    const breathing = (actor.system?.buffs ?? [])
+      .filter(b => b.type === "breathing")
+      .reduce((sum, b) => sum + (b.intensity ?? 0), 0);
+    if (breathing <= 0) return;
+
+    // 上限是**护盾总量**而不是本次发放量：已经有 15 层时最多再补 5 层
+    const cur  = (actor.system?.buffs ?? [])
+      .filter(b => b.type === "shield")
+      .reduce((sum, b) => sum + (b.stacks ?? 0), 0);
+    const add = Math.max(0, Math.min(breathing, 20 - cur));
+    if (add <= 0) return "【护卫姿态】：护盾已达 20 点上限。";
+
+    await ClashManager._addBuff(actor, "shield", 0, add, "本回合");
+    return `【护卫姿态】：按 <strong>${breathing}</strong> 级【呼吸法】获得 <strong>${add}</strong> 层【护盾】。`;
+  },
+
+  /** 回合结束：先结算收益，再掉自己一层 */
+  async onRoundEnd(actor, buff) {
+    const { ClashManager } = await import("./clash.mjs");
+    await ClashManager._addBuff(actor, "breathing", 3, 1, "本回合");
+    await ClashManager._addBuff(actor, "coverDefense", 0, 1, "下回合");
+
+    const buffs = foundry.utils.deepClone(actor.system?.buffs ?? []);
+    const idx   = buffs.findIndex(b => b.id === buff.id);
+    if (idx >= 0) {
+      const left = (buffs[idx].stacks ?? 1) - 1;
+      if (left <= 0) buffs.splice(idx, 1);
+      else buffs[idx].stacks = left;
+      await _safeUpdate(actor, { "system.buffs": buffs });
+    }
+    return "【护卫姿态】：获得 <strong>1</strong> 层 3 级【呼吸法】，下回合获得 <strong>1</strong> 层【援护防御】。";
+  },
+});
+
+/**
  * 【血斗本能】
  * - 最大值：20 层
  * - [回合结束时]：每有 10 层，下回合为自己添加 1 层【迅捷】
