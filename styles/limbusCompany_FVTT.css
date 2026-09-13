@@ -10679,3 +10679,15 @@ input.item-piles-quantity {
   white-space: nowrap;
 }
 .ae-eff-row .ae-inline-check input { margin: 0; }
+
+/* 学习等级：Title 卡顶部的「升级后预览」标条 */
+.lud-preview-tag {
+  padding:        3px 8px;
+  background:     linear-gradient(90deg, rgba(243, 206, 64, .22), transparent);
+  border-bottom:  1px solid var(--border-gold);
+  color:          var(--gold-active);
+  font-size:      .74rem;
+  letter-spacing: .06em;
+  text-align:     center;
+}
+.lud-preview-tag b { color: #FFF0B8; }

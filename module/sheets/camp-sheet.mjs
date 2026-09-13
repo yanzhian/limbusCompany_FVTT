@@ -182,10 +182,8 @@ export class LimbusCampSheet extends ActorSheet {
     // ── 配方列表 ──────────────────────────────────────────────────────────
     // 只统计实际放置在仓库格中的物品（warehouseContents 有记录的），
     // 避免已删除但缓存未刷新的孤立物品，或同名产出物品被错误计入原料。
-    const _placedIds = new Set(
-      (sys.warehouseContents ?? []).map(p => p.uuid.split(".").pop())
-    );
-    const _warehouseItems = actor.items.contents.filter(i => _placedIds.has(i.id));
+    // 原料统计连箱子内部一起数（见 _collectWarehouseStock）
+    const _warehouseItems = LimbusCampSheet._collectWarehouseStock(actor).items;
 
     ctx.recipes = (sys.recipes ?? [])
       .filter(r => isGM || !r.hidden)
@@ -277,6 +275,42 @@ export class LimbusCampSheet extends ActorSheet {
   }
 
   /* ─── 配方检查 ──────────────────────────────────────────────────────── */
+
+  /**
+   * 仓库里"能用来制作的全部原料"。
+   *
+   * 原来只数网格上直接摆着的那些，于是**放进箱子就等于退出流水线**——
+   * 而营地的正常用法恰恰是把建材收进建材箱。现在连箱子内部一起数，
+   * 并记下每件东西的宿主容器（`null` = 直接摆在网格上），扣料时要靠它
+   * 回头把容器里的占位记录一并摘掉。
+   *
+   * @param {Actor} campActor
+   * @returns {{ items: Item[], hostOf: Map<string, Item|null> }}
+   */
+  static _collectWarehouseStock(campActor) {
+    const items  = [];
+    const hostOf = new Map();
+    const seen   = new Set();          // 防环：箱子套箱子万一写成了自指
+
+    const idOf = (uuid) => String(uuid ?? "").split(".").pop();
+
+    const walk = (itemIds, host) => {
+      for (const id of itemIds) {
+        if (!id || seen.has(id)) continue;
+        const item = campActor.items.get(id);
+        if (!item) continue;           // 孤儿记录：物品早没了，格子还占着
+        seen.add(id);
+        items.push(item);
+        hostOf.set(id, host);
+        if (item.type === "container") {
+          walk((item.system?.contents ?? []).map(c => idOf(c.uuid)), item);
+        }
+      }
+    };
+
+    walk((campActor.system?.warehouseContents ?? []).map(p => idOf(p.uuid)), null);
+    return { items, hostOf };
+  }
 
   _getIngredientDetails(recipe, warehouseItems) {
     return (recipe.ingredients ?? []).map(ing => {
@@ -1333,11 +1367,8 @@ export class LimbusCampSheet extends ActorSheet {
     _CRAFTING.add(campActorId);
     try {
 
-    // ── 1. 检查原料（只计算实际放置在仓库格中的物品，与 getData 逻辑一致） ──
-    const placedIds    = new Set(
-      (campActor.system.warehouseContents ?? []).map(p => p.uuid.split(".").pop())
-    );
-    const currentItems = campActor.items.contents.filter(i => placedIds.has(i.id));
+    // ── 1. 检查原料（网格上的 + 仓库里各容器内部的，与 getData 同一套） ──
+    const { items: currentItems, hostOf } = LimbusCampSheet._collectWarehouseStock(campActor);
     const ingDetails   = (recipe.ingredients ?? []).map(ing => {
       const matches = currentItems.filter(i => i.name === ing.name);
       const hasInfinite = matches.some(i => i.system?.infinite);
@@ -1385,6 +1416,25 @@ export class LimbusCampSheet extends ActorSheet {
     }
 
     // ── 3. 执行原料消耗 ──────────────────────────────────────────────
+    // 删物品之前先把容器里的占位记录摘掉：留着就成了孤儿格，
+    // 箱子里会空出一块点不动的位置（仓库那侧的记录在第 4 步统一处理）
+    if (idsToDelete.length) {
+      const byHost = new Map();
+      for (const id of idsToDelete) {
+        const host = hostOf.get(id);
+        if (!host) continue;                       // 直接摆在网格上的走仓库那条路
+        if (!byHost.has(host.id)) byHost.set(host.id, []);
+        byHost.get(host.id).push(id);
+      }
+      for (const [hostId, ids] of byHost) {
+        const host = campActor.items.get(hostId);
+        if (!host) continue;
+        const dead = new Set(ids);
+        const kept = (host.system?.contents ?? [])
+          .filter(c => !dead.has(String(c.uuid ?? "").split(".").pop()));
+        await host.update({ "system.contents": kept });
+      }
+    }
     if (idsToDelete.length)
       await campActor.deleteEmbeddedDocuments("Item", idsToDelete);
     if (bulkUpdates.length)
