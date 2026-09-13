@@ -107,13 +107,31 @@ export class LearnPointsDialog extends Application {
   }
 
   async _onHover(event) {
-    const uuid = event.currentTarget.dataset.itemUuid;
+    const row  = event.currentTarget;
+    const uuid = row.dataset.itemUuid;
     if (!uuid) return;
     const item = await fromUuid(uuid).catch(() => null);
     this._onHoverEnd(true);
     if (!item) return;
-    const card = buildItemTitleCard(item);
+
+    // 花钱之前先看货：把卡按**下一阶**投影一遍再画。
+    // trainLevel 一改，prepareDerivedData 就会把 trainForms.lvN 投到顶层字段上，
+    // 所以临时 clone 出来的这张卡显示的正是升上去之后的数值。
+    // clone 不落库，原卡一个字节都不会动。
+    const NUM     = { 1: "Ⅰ", 2: "Ⅱ", 3: "Ⅲ", 4: "Ⅳ", 5: "Ⅴ" };
+    const cur     = item.system?.trainLevel ?? 3;
+    const next    = cur + 1;
+    const hasNext = !!item.system?.trainForms?.[`lv${next}`]?.initialized;
+    const preview = (next <= 5 && hasNext)
+      ? item.clone({ "system.trainLevel": next }, { keepId: true })
+      : null;
+
+    const card = buildItemTitleCard(preview ?? item);
     if (!card) return;
+    if (preview) {
+      card.prepend(
+        `<div class="lud-preview-tag">${NUM[cur] ?? cur} → <b>${NUM[next] ?? next}</b> 阶预览</div>`);
+    }
     const rect = event.currentTarget.getBoundingClientRect();
     card.css({ position: "fixed", left: `${rect.right + 12}px`, top: `${rect.top}px`, zIndex: 100000 });
     $("body").append(card);
