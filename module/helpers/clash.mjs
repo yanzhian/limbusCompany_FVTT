@@ -2411,6 +2411,12 @@ export class ClashManager {
                                 : relUntil === "afterClash" ? "（本次结算后还原）"
                                 : relUntil === "endOfTurn"  ? "（本回合结束时还原）"
                                 : relUntil === "untilRest"  ? "（长休时还原）" : "永久";
+            // 换掉的正是**本次实际打出的那一骰**时，告诉结算流程一声：
+            // 它手里攥的还是老卡的引用，图标、名字、骰式都会停在转换前。
+            // （只在 [攻击前] 之后那一处生效——再往后骰子已经投完了。）
+            if (replaced && ctx && (ctx._currentItemId ?? item.id) === item.id) {
+              ctx._convertedActingId = newItem.id;
+            }
             descStr = replaced
               ? `【${item.name}】${relUntil ? "临时" : relUntilLabel}转换为【${newItem.name}】${relUntil ? relUntilLabel : ""}`
               : `相关技能转换：未找到【${item.name}】所在的技能槽位`;
@@ -3651,7 +3657,8 @@ export class ClashManager {
 
     // 攻击方技能物品（用于 activity 触发）
     // 若技能由反应的 UUID 触发（非角色自有物品），需通过 fromUuid 回退查找
-    const atkItem = atkActor?.items?.get(initFlags.itemId)
+    // let 而非 const：[攻击前] 里若把这一骰转换成了别的技能，下面会换成新卡
+    let atkItem = atkActor?.items?.get(initFlags.itemId)
       ?? (initFlags.itemUuid ? await fromUuid(initFlags.itemUuid).catch(() => null) : null)
       ?? null;
     // 共享的 perTurn 计数器（攻守双方共用，本次对抗内全程共享）
@@ -3694,6 +3701,33 @@ export class ClashManager {
     // ── [攻击前]：玩家B点击【对抗】后，拼点/结算前触发 ──────────────────
     await ClashManager._applyActivitiesAndEquip(atkItem, "攻击前", atkCtx);
     await ClashManager._applyActivitiesAndEquip(defItem, "攻击前", defCtx);
+
+    // [攻击前] 里把这一骰转换成了别的技能时，把引用换成新卡。
+    // 不换的话后面全程攥着老卡：图标、名字、骰式、[命中时] 效果都还是转换前的，
+    // 表现就是"卡换了、结算没换"。换成新卡之后，下面那段"公式变了就重投"
+    // 自然会按新技能的骰式重投一次——骰数/面数也就跟着变了。
+    // 换下来的老卡仍要参与 [攻击后] 的临时改动还原，所以单独记一份。
+    const _swappedOut = [];
+    for (const [ctx2, setItem] of [[atkCtx, (v) => { atkItem = v; }],
+                                   [defCtx, (v) => { defItem = v; }]]) {
+      const newId = ctx2._convertedActingId;
+      if (!newId) continue;
+      const swapped = ctx2.owner?.items?.get(newId) ?? null;
+      if (!swapped) continue;
+      _swappedOut.push(ctx2.owner?.items?.get(ctx2._currentItemId) ?? null);
+      setItem(swapped);
+      ctx2._currentItemId = swapped.id;
+      // 攻方那张卡的图标/名字是从 initFlags 里读的（宣言时就快照好了），
+      // 不同步改的话卡面还画着老图标
+      if (ctx2 === atkCtx) {
+        initFlags.itemId   = swapped.id;
+        initFlags.itemUuid = swapped.uuid;
+        initFlags.itemName = swapped.name;
+        initFlags.itemImg  = swapped.img;
+      }
+      _actMsgs.push({ trigger: "技能转换", itemName: swapped.name,
+        msgs: [`本骰改由【${swapped.name}】结算（图标与骰式一并替换）`] });
+    }
 
     // ── [攻击时] / [拼点时]：无论对抗类型，攻击时效果均应在此触发 ───────
     // 【流血】挂在 [攻击时] 与 [拼点时] 上，因此连击时每次交锋都会再发作一次
@@ -3862,7 +3896,7 @@ export class ClashManager {
       await ClashManager._applyActivitiesAndEquip(defItem,  "命中时", defCtx);
       await ClashManager._applyActivitiesAndEquip(atkItem,  "攻击后", atkCtx);
       await ClashManager._applyActivitiesAndEquip(defItem,  "攻击后", defCtx);
-      await ClashManager._restoreAllItemMods(atkItem, defItem);
+      await ClashManager._restoreAllItemMods(atkItem, defItem, ..._swappedOut);
       await ClashManager.restoreItemSnaps(_statSnap);
       ClashManager._armReactionCheck({ lastSkillUuid: atkItem?.uuid ?? null, attacker: atkActor, defender: defActor });
       await ClashManager._resolveDirectCounter(atkActor, defActor, effectiveInitFlags, defItem, defFinalRoll, defFinalFormula, _actMsgs);
@@ -3880,7 +3914,7 @@ export class ClashManager {
       await ClashManager._applyActivitiesAndEquip(atkItem,  "命中时", atkCtx);
       await ClashManager._applyActivitiesAndEquip(atkItem,  "攻击后", atkCtx);
       await ClashManager._applyActivitiesAndEquip(defItem,  "攻击后", defCtx);
-      await ClashManager._restoreAllItemMods(atkItem, defItem);
+      await ClashManager._restoreAllItemMods(atkItem, defItem, ..._swappedOut);
       await ClashManager.restoreItemSnaps(_statSnap);
       ClashManager._armReactionCheck({ lastSkillUuid: atkItem?.uuid ?? null, attacker: atkActor, defender: defActor });
       await ClashManager._resolveDirectBlock(atkActor, defActor, effectiveInitFlags, defItem, defFinalRoll, defFinalFormula, _actMsgs);
@@ -4037,7 +4071,7 @@ export class ClashManager {
     // 骰值改动只影响 item，resolution 里的点数早就算好了，不受影响。
     await ClashManager._applyActivitiesAndEquip(atkItem, "攻击后", atkCtx);
     await ClashManager._applyActivitiesAndEquip(defItem,  "攻击后", defCtx);
-    await ClashManager._restoreAllItemMods(atkItem, defItem);
+    await ClashManager._restoreAllItemMods(atkItem, defItem, ..._swappedOut);
     await ClashManager.restoreItemSnaps(_statSnap);
 
     // 【不可摧毁】反击：建卡之前先算好（只算不发），触发行、结算说明与伤害
