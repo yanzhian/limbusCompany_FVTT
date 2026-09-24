@@ -5818,7 +5818,7 @@ export class ClashManager {
       speaker: ChatMessage.getSpeaker({ actor }),
       content: `
         <div class="limbus-clash-card" data-clash-type="support">
-          ${ClashManager._chatHeader(actor, "辅助")}
+          ${ClashManager._chatHeader(actor, "二元性")}
           ${ClashManager._goldDivider()}
           <div style="display:flex;align-items:center;gap:10px;margin:8px 0;">
             <img src="${item.img}" style="width:44px;height:44px;object-fit:cover;border-radius:3px;" alt="">

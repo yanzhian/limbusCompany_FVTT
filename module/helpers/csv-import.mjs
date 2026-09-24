@@ -195,6 +195,7 @@ export const COLUMN_ALIASES = {
   "无法装备": "system.noEquip",
   "援护防御": "system.coverDefense",
   "无法拼点": "system.noClash",
+  "二元性": "system.duality",
   "无差别攻击": "system.indiscriminate", "无差别": "system.indiscriminate",
 
   // ── 容器：存放限制（两条 AND，留空 = 不限制，多个用 / 分隔）─────────
@@ -1080,7 +1081,7 @@ export function mergeSkillVariants(items, warnings = []) {
   // 名称 / 类型 / 分类 / 罪孽 / 等级 / 标签 跨阶共用，一律取最低那一阶的
   const TRAIN_OVERRIDABLE = ["baseValue", "diceCount", "diceFaces", "negativeDice",
                        "diceType", "counterType", "weight", "spreadMode", "spreadRange",
-                       "indiscriminate", "noEquip", "coverDefense", "noClash",
+                       "indiscriminate", "noEquip", "coverDefense", "noClash", "duality",
                        "sanityCost", "stellarCost", "weaponRestriction",
                        "effectDesc", "activities"];
   const TRAIN_SHARED = { name: "名称", type: "类型", category: "分类",
@@ -1237,7 +1238,7 @@ const TEMPLATE_COLUMNS = {
   // 技能也要有 图标/完成：少了「完成」这一列，做好的技能就只能新建不能覆盖
   skill:      ["图标", "完成", "名称", "类型", "分类", "罪孽", "等级", "训练等级", "骰数",
                "攻击容量", "容量扩散", "骰子类型", "无法装备", "无法拼点", "援护防御",
-               "无差别攻击", "标签", "效果", "理智消耗", "罪孽资源消耗", "抗性修改"],
+               "二元性", "无差别攻击", "标签", "效果", "理智消耗", "罪孽资源消耗", "抗性修改"],
   consumable: ["图标", "完成", "名称", "类型", "分类", "稀有度", "可复用", "无限耐久",
                "可堆叠", "数量", "容量", "标签", "效果", "价格",
                "内部数量", "允许类型", "允许分类"],
@@ -1348,6 +1349,7 @@ const COLUMN_NOTES = {
   "价格":     "物品的「眼」价——卡面上显示、商人也按它报价（写入 system.cost）",
   "训练等级": "一列两用：基础/守备填 Ⅰ～Ⅴ（或 1～5；Ⅲ/Ⅳ/Ⅴ 也可写作 默认/精通/强化），E.G.O 填 觉醒/侵蚀。同名的几行会合并成同一张卡的多套数值，留空的格子沿用打底那一行——基础/守备沿用低一阶，侵蚀沿用觉醒。共用列（基础/守备：名称·类型·分类·罪孽·等级·标签；E.G.O：名称·罪孽·EGO等级·罪孽资源消耗·抗性修改·标签·骰子类型）一律取打底那一行的值",
   "无法拼点": "填 是/否、TRUE/FALSE；被锁定的目标只能【承受】，不能对抗",
+  "二元性":   "填 是/否、TRUE/FALSE；指向友方时不投骰、不造成伤害、不进行对抗，只跑 [使用时]/[攻击前]/[攻击后]",
   "攻击范围": "仅武器：留空=近战1格；填数字=近战N格（长矛/锁链）；填「远程6」=远程6格",
   "允许类型": "容器存放限制·类型，多个用 / 分隔（消耗品/材料），留空=不限制",
   "允许分类": "容器存放限制·分类，多个用 / 分隔（医疗/食材），与类型同时满足才收",
