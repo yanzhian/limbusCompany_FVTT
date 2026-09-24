@@ -229,7 +229,7 @@
 | `background` | `bgName` | 背景名或背景标签 |
 | `equipped` | `equipName`/`equipTag`/`equipCategory`、`count`、`perEach`、`maxTimes` | 装备格里符合条件的件数；`perEach: true` 时也提供倍数 |
 | `equipSlotCategory` | `equipSlot`（`weapon`/`upper`/`lower`/`accessory`，留空=不限部位）、`equipCategory`（分类，多个用 `/` 分隔） | 【装备分类】：某部位装备的分类是否命中（「若你武器的分类为弓刀」） |
-| `allyTag` | `target`（`bgTag`/`bgTagOther`/`allTeamOther`…）、`targetTag`、`targetTagCount`、`perEach`、`maxTimes` | 场上有没有符合条件的友方（「若有其他背景带有X的友方」）；`perEach: true` 时人数也当倍数 |
+| `allyTag` | `target`（`bgTag`/`bgTagOther`/`allTeamOther`…）、`targetTag`、`targetTagCount`、`perEach`、`maxTimes` | 场上有没有符合条件的友方（「若有其他背景带有X的友方」）；`perEach: true` 时人数也当倍数。**`target: "allTeam"` 例外**：那是「**本次目标是不是友方**」（【二元性】技能用它写「若目标为友方」），不问场上有没有人 |
 | `fieldResource` | `fieldName`、`comparison`、`stacks` | 公用场地层数 |
 | `sinResource` | `sinType`、`comparison`、`value` | 全局罪孽池点数 |
 

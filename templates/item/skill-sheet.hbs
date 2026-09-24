@@ -99,6 +99,9 @@
               {{#if system.noClash}}
                 <span class="dice-type-badge no-clash-badge">无法拼点</span>
               {{/if}}
+              {{#if system.duality}}
+                <span class="dice-type-badge duality-badge">二元性</span>
+              {{/if}}
               {{#if form.indiscriminate}}
                 <span class="dice-type-badge indiscriminate-badge">无差别攻击</span>
               {{/if}}
@@ -129,6 +132,11 @@
               <label class="no-equip-toggle" title="被这张技能锁定的目标只能【承受】：不能对抗，也不会询问【援护防御】">
                 <input type="checkbox" name="{{fpDice}}noClash" {{#if system.noClash}}checked{{/if}}>
                 无法拼点
+              </label>
+              {{!-- 二元性：指向友方时不投骰、不造成伤害、不让对方对抗，只跑辅助那一面 --}}
+              <label class="no-equip-toggle" title="【二元性】：指向友方时不投骰、不造成伤害、目标也不会被要求对抗，只派发 [使用时] / [攻击前] / [攻击后]；指向敌方时与普通技能一样">
+                <input type="checkbox" name="{{fpDice}}duality" {{#if system.duality}}checked{{/if}}>
+                二元性
               </label>
               {{!-- 无差别攻击：容量扩散敌我不分，友方同样会被打到（常见于 EGO 侵蚀形态） --}}
               <label class="no-equip-toggle" title="【无差别攻击】：容量扩散时敌我不分，范围内的友方也会被打到（自己除外）">

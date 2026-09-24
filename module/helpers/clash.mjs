@@ -1564,6 +1564,13 @@ export class ClashManager {
         // 目标（bgTag / bgTagOther / allTeamOther…），人数门槛复用 targetTagCount。
         // _resolveTargets 在人数不足时本就返回空数组，所以这里只需判空。
         if (pre.type === "allyTag") {
+          // 目标选「本队全部」时语义变成**判定本次目标是不是友方**（【二元性】用它）：
+          // 场上有没有队友是另一回事——「若目标为友方」问的是这一发打向谁。
+          // 其余目标值（bgTag / bgTagOther / allTeamOther…）维持原义：场上有没有人。
+          if ((pre.target ?? "") === "allTeam") {
+            if (!other || !ClashManager._isAllyOf(owner, other)) { precondFail = true; break; }
+            continue;
+          }
           const allies = await ClashManager._resolveTargets(
             pre.target ?? "bgTagOther", owner, other, pre, ctx);
           if (!allies.length) { precondFail = true; break; }
@@ -2994,6 +3001,18 @@ export class ClashManager {
                 if (effectiveSanityCost > 0) {
                   await actor.setSanity?.((sanCur - effectiveSanityCost));
                 }
+              }
+
+              // ── 【二元性】指向友方：走辅助那一面 ───────────────────────
+              // 不投骰、不发对抗卡、不让对方对抗，也不结算伤害；
+              // 只派发 [使用时] / [攻击前] / [攻击后]（见 _resolveDualitySupport）。
+              if (sys.duality && targetActorId
+                  && ClashManager._isAllyOf(actor, game.actors.get(targetActorId))) {
+                await ClashManager._resolveDualitySupport(actor, item, game.actors.get(targetActorId));
+                if (isEgo) await ClashManager._applyEgoResistanceChanges(actor, item);
+                if (sys.sinType) await SinResourceHUD.addSin(sys.sinType, 1);
+                resolve(true);
+                return;
               }
 
               const roll = new Roll(full);
@@ -5753,6 +5772,68 @@ export class ClashManager {
     if (t1.includes(actorId)) return t2;
     if (t2.includes(actorId)) return t1;
     return null;
+  }
+
+  /**
+   * 两个角色是不是**友方**。
+   * 先按小队编成判（GM 在【小队编成】里配的那两队），没配小队才退回
+   * Token 阵营——与容量扩散的敌对判定（_foeIdsOf）同一套口径，免得
+   * 「谁是敌人」在两处给出不同答案。自己算自己的友方。
+   */
+  static _isAllyOf(a, b) {
+    if (!a || !b) return false;
+    if (a.id === b.id) return true;
+    const foes = ClashManager._foeIdsOf(a.id);
+    if (foes) return !foes.includes(b.id);
+    const ta = ClashManager._tokenOfActor(a), tb = ClashManager._tokenOfActor(b);
+    if (!ta || !tb) return false;          // 判不出来时不当友方：宁可照常打
+    return ta.document.disposition === tb.document.disposition;
+  }
+
+  /**
+   * 【二元性】指向友方：辅助结算。
+   *
+   * 没有骰、没有对抗、没有伤害，所以整条链路里只剩"效果"这一件事：
+   * 按 [使用时] → [攻击前] → [攻击后] 依次派发，消息收进一张【辅助】卡。
+   * （[攻击时] / [命中时] / [暴击命中时] 一律不派发——这一发压根没打中谁。）
+   */
+  static async _resolveDualitySupport(actor, item, target) {
+    const _actMsgs = [];
+    const ctx = {
+      atkActor: actor, defActor: target,
+      owner: actor, other: target,
+      _fireCounts: {}, _actMsgs, _currentItemId: item?.id ?? "",
+    };
+
+    ClashManager._beginTakeAgg?.();
+    for (const trigger of ["使用时", "攻击前", "攻击后"]) {
+      await ClashManager._applyActivitiesAndEquip(item, trigger, ctx);
+    }
+    // [攻击前] 里改了骰数/面数之类的临时改动，这里一并还原——
+    // 这一发不投骰，留着会污染这张卡的下一次使用
+    await ClashManager._restoreAllItemMods(item);
+
+    const fold = ClashManager._buildDetailsFold(_actMsgs, { label: "详细信息" });
+    await ClashManager._safeChatCreate({
+      speaker: ChatMessage.getSpeaker({ actor }),
+      content: `
+        <div class="limbus-clash-card" data-clash-type="support">
+          ${ClashManager._chatHeader(actor, "辅助")}
+          ${ClashManager._goldDivider()}
+          <div style="display:flex;align-items:center;gap:10px;margin:8px 0;">
+            <img src="${item.img}" style="width:44px;height:44px;object-fit:cover;border-radius:3px;" alt="">
+            <div style="flex:1;">
+              <div style="font-size:15px;color:#E8C9A2;font-weight:bold;">${item.name}</div>
+              <div style="font-size:12px;color:#9A8462;">
+                指向友方 <strong style="color:#E8C9A2;">${target?.name ?? "?"}</strong>：不造成伤害，不进行对抗
+              </div>
+            </div>
+          </div>
+          ${fold}
+          ${ClashManager._goldDivider()}
+        </div>`,
+    });
+    await ClashManager._flushTakeAgg?.();
   }
 
   /** 切比雪夫格距（1 格 = 5ft；半径 N → N×5+2.5 ft） */

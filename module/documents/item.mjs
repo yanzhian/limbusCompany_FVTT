@@ -201,6 +201,7 @@ export class SkillData extends foundry.abstract.TypeDataModel {
       noEquip:      new fields.BooleanField({ required: false, nullable: true, initial: null }),
       coverDefense: new fields.BooleanField({ required: false, nullable: true, initial: null }),
       noClash:      new fields.BooleanField({ required: false, nullable: true, initial: null }),
+      duality:      new fields.BooleanField({ required: false, nullable: true, initial: null }),
       sanityCost:   new fields.NumberField({ required: false, nullable: true, integer: true, min: 0, initial: null }),
       stellarCost:  new fields.NumberField({ required: false, nullable: true, integer: true, min: 0, initial: null }),
       weaponRestriction: new fields.StringField({ required: false, nullable: true, initial: null }),
@@ -334,6 +335,11 @@ export class SkillData extends foundry.abstract.TypeDataModel {
       // 优先级最高——【援护防御】也不会被询问（顶上去也只是换个人承受）
       noClash: new fields.BooleanField({ required: false, initial: false }),
 
+      // 【二元性】：同一张卡既能打人也能帮人。
+      // 指向**友方**时不投骰、不造成伤害、不让目标对抗，只派发 [使用时] /
+      // [攻击前] / [攻击后]（辅助那一面）；指向敌方时与普通技能毫无区别。
+      duality: new fields.BooleanField({ required: false, initial: false }),
+
       // 标签
       tags: new fields.ArrayField(
         new fields.StringField({ required: true }),
@@ -388,7 +394,7 @@ export class SkillData extends foundry.abstract.TypeDataModel {
         // 名称 / 类型 / 分类 / 罪孽 / 等级 / 标签 不在这里 —— 那六项跨阶共用
         for (const key of ["baseValue", "diceCount", "diceFaces", "negativeDice",
                            "diceType", "counterType", "weight", "spreadMode", "spreadRange",
-                           "indiscriminate", "noEquip", "coverDefense", "noClash",
+                           "indiscriminate", "noEquip", "coverDefense", "noClash", "duality",
                            "sanityCost", "stellarCost", "weaponRestriction"]) {
           if (tf[key] !== null && tf[key] !== undefined) this[key] = tf[key];
         }

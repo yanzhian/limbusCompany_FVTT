@@ -10691,3 +10691,11 @@ input.item-piles-quantity {
   text-align:     center;
 }
 .lud-preview-tag b { color: #FFF0B8; }
+
+/* 技能卡徽章：二元性 */
+.dice-type-badge.duality-badge,
+.tcs-flag.f-duality {
+  background: rgba(120, 190, 150, .16);
+  border:     1px solid rgba(120, 190, 150, .5);
+  color:      #8FD8B0;
+}

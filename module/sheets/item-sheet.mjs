@@ -262,6 +262,7 @@ export class LimbusItemSheet extends ItemSheet {
       [`system.trainForms.${key}.noEquip`]:      !!val("noEquip", false),
       [`system.trainForms.${key}.coverDefense`]: !!val("coverDefense", false),
       [`system.trainForms.${key}.noClash`]:      !!val("noClash", false),
+      [`system.trainForms.${key}.duality`]:      !!val("duality", false),
       [`system.trainForms.${key}.sanityCost`]:   val("sanityCost", 0),
       [`system.trainForms.${key}.stellarCost`]:  val("stellarCost", 1),
       [`system.trainForms.${key}.weaponRestriction`]: val("weaponRestriction", "") || "",
@@ -2581,6 +2582,7 @@ const sinColor    = cfg.SIN_COLORS?.[sys.sinType] ?? "#5F3E21";
   const flags = [];
   if (sys.noEquip)        flags.push(`<span class="tcs-flag f-noequip">无法装备</span>`);
   if (sys.noClash)        flags.push(`<span class="tcs-flag f-noclash">无法拼点</span>`);
+  if (sys.duality)        flags.push(`<span class="tcs-flag f-duality">二元性</span>`);
   if (sys.coverDefense)   flags.push(`<span class="tcs-flag f-cover">援护防御</span>`);
   if (sys.indiscriminate) flags.push(`<span class="tcs-flag f-indis">无差别攻击</span>`);
 
@@ -3036,7 +3038,7 @@ function _buildCondRow(cond, idx, cfg) {
           <option value="useSin"      ${condType === "useSin"      ? "selected" : ""}>使用罪孽</option>
           <option value="background"  ${condType === "background"  ? "selected" : ""}>背景</option>
           <option value="equipped"    ${condType === "equipped"    ? "selected" : ""}>已装备</option>
-          <option value="allyTag"     ${condType === "allyTag"     ? "selected" : ""}>友方存在</option>
+          <option value="allyTag"     ${condType === "allyTag"     ? "selected" : ""}>友方存在（目标选「本队全部」＝判定本次目标是友方）</option>
           <option value="equipSlotCategory" ${condType === "equipSlotCategory" ? "selected" : ""}>装备分类</option>
           <option value="fieldResource" ${condType === "fieldResource" ? "selected" : ""}>公用场地</option>
           <option value="sinResource"   ${condType === "sinResource"   ? "selected" : ""}>罪孽资源</option>
