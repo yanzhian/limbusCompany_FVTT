@@ -30,7 +30,7 @@
     {{#each candidates}}
       <div class="lud-train-row{{#unless canUpgrade}} disabled{{/unless}}{{#if equipped}} equipped{{/if}}"
            data-item-id="{{id}}" data-item-uuid="{{uuid}}" data-cost="{{cost}}"
-           title="{{#if maxed}}已经是 Ⅴ 阶，无法再强化{{else if hasNextData}}{{#if affordable}}花 {{cost}} 点强化到 {{nextNumeral}} 阶{{else}}点数不足：需要 {{cost}} 点{{/if}}{{else}}这张卡还没写 {{nextNumeral}} 阶的数值，强化了也不会有变化{{/if}}">
+           title="{{#if maxed}}已经是 Ⅴ 阶，无法再强化{{else if levelLocked}}角色到 {{minLevel}} 级才能升到 {{nextNumeral}} 阶{{else if hasNextData}}{{#if affordable}}花 {{cost}} 点强化到 {{nextNumeral}} 阶{{else}}点数不足：需要 {{cost}} 点{{/if}}{{else}}这张卡还没写 {{nextNumeral}} 阶的数值，强化了也不会有变化{{/if}}">
         <img src="{{img}}" class="lud-train-icon" alt="{{name}}">
         <span class="lud-train-name">{{name}}</span>
         {{#if equipped}}<span class="lud-train-slot">{{slotLabel}}</span>{{/if}}
@@ -42,6 +42,7 @@
         {{/unless}}
         {{#unless canUpgrade}}
           <span class="lud-train-warn">{{#if maxed}}已满阶
+            {{~else if levelLocked}}需 {{minLevel}} 级
             {{~else if hasNextData}}点数不足
             {{~else}}无 {{nextNumeral}} 阶数据{{/if}}</span>
         {{/unless}}

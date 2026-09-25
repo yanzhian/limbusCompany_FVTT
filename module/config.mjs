@@ -202,6 +202,19 @@ LIMBUSCOMPANY.TRAIN_LEVEL_ADD  = { 1: 0, 2: 0, 3: 2 };
  */
 LIMBUSCOMPANY.TRAIN_LEVEL_ADD_FROM = 4;
 
+/**
+ * 升到某一阶所需的**角色等级**门槛。
+ *
+ * 价格只管总量、管不住投向：14 点平摊是 7 张全 Ⅲ，但玩家大可以把点数
+ * 全堆在一张卡上——4 点就能把它推到 Ⅳ，也就是角色 5 级。门槛负责把
+ * 前期的上限钉死，攒下的点数不作废，到点再花。
+ */
+LIMBUSCOMPANY.TRAIN_STAGE_MIN_LEVEL = { 3: 1, 4: 15, 5: 30 };
+
+/** 升到 `toStage` 阶所需的角色等级；没配的阶不设门槛 */
+LIMBUSCOMPANY.trainStageMinLevel = (toStage) =>
+  LIMBUSCOMPANY.TRAIN_STAGE_MIN_LEVEL[toStage] ?? 1;
+
 /** 旧表，保留给可能引用它的宏；引擎本身已不再读 */
 LIMBUSCOMPANY.TRAIN_UPGRADE_COST = { 1: 1, 2: 2, 3: 5 };
 

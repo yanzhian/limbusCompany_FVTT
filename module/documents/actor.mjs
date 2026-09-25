@@ -981,6 +981,9 @@ export class LimbusActor extends Actor {
       // 花费 = 升到第几阶的阶段价 + 技能自身等级（Lv.1/2/3）的小幅加成
       const cost = cfg.trainUpgradeCost?.(item.system?.level ?? 1, next)
                 ?? (cfg.TRAIN_STAGE_COST?.[next] ?? 9);
+      // 等级门槛：前期就算点数够也不许推上去（攒着不作废）
+      const minLevel    = cfg.trainStageMinLevel?.(next) ?? 1;
+      const levelLocked = (this.system?.level ?? 1) < minLevel;
       rows.push({
         id: item.id, uuid: item.uuid, name: item.name, img: item.img,
         level: lv, numeral: NUM[lv] ?? lv, nextNumeral: NUM[next] ?? next,
@@ -989,7 +992,8 @@ export class LimbusActor extends Actor {
         equipped:  slotOf.has(item.id),
         slotLabel: slotOf.get(item.id) ?? "",
         hasNextData,
-        canUpgrade: next <= 5 && hasNextData && points >= cost,
+        minLevel, levelLocked,
+        canUpgrade: next <= 5 && hasNextData && !levelLocked && points >= cost,
         maxed: next > 5,
       });
     }
@@ -1018,6 +1022,13 @@ export class LimbusActor extends Actor {
 
     // 点数在这里扣，不在对话框里——宏或其它入口调用时同样要付钱
     const cfg   = CONFIG.LIMBUSCOMPANY ?? {};
+    // 等级门槛同理：拦在这一层，三个入口（升级对话框 / 学习等级 / 宏）都受约束
+    const minLevel = cfg.trainStageMinLevel?.(next) ?? 1;
+    if ((this.system?.level ?? 1) < minLevel) {
+      ui.notifications?.warn?.(
+        `【${item.name}】升到 ${next} 阶需要角色等级 ${minLevel} 级（当前 ${this.system?.level ?? 1} 级）。`);
+      return false;
+    }
     const cost  = cfg.trainUpgradeCost?.(item.system?.level ?? 1, next)
                ?? (cfg.TRAIN_STAGE_COST?.[next] ?? 9);
     const have  = this.system.learnPoints ?? 0;
