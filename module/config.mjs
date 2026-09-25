@@ -185,11 +185,22 @@ LIMBUSCOMPANY.LEARN_POINTS_PER_LEVEL = 1;
  * Lv.1 技能两阶合计 2 点，角色 3 级就顶满；而 Ⅳ 阶那一跳明明是数值差距
  * 最大的一阶，却和 Ⅱ→Ⅲ 一个价。
  *
- * 现在主要看**升到第几阶**：Ⅱ 是底子，Ⅱ→Ⅲ 便宜，Ⅲ→Ⅳ 才是大头（多数技能
- * 的终点），Ⅳ→Ⅴ 属于例外。技能 Lv. 只做小幅加成，免得高级技能贵到没人练。
+ * 现在主要看**升到第几阶**。数值是按实际配置倒推的：一套 7 张
+ *（4×Lv.1 + 2×Lv.2 + 守备 Lv.1）、每升 1 级得 1 点——
+ *   · 15 级（14 点）：7 张全部 Ⅱ→Ⅲ，恰好花完；
+ *   · 29 级（28 点）：再全部 Ⅲ→Ⅳ，多数技能就此封顶；
+ *   · Ⅴ 阶单价 6（Lv.3 为 8）＝ 三阶的量，一个角色全程只推得动两三张。
+ * 14 次强化摊 29 点，所以每次必须压在 2 点上下——Ⅳ 阶收 5 点那种配法
+ * 在这套节奏里是付不起的（7 张就要 35 点）。
  */
-LIMBUSCOMPANY.TRAIN_STAGE_COST = { 2: 1, 3: 2, 4: 5, 5: 9 };
-LIMBUSCOMPANY.TRAIN_LEVEL_ADD  = { 1: 0, 2: 1, 3: 2 };
+LIMBUSCOMPANY.TRAIN_STAGE_COST = { 2: 1, 3: 2, 4: 2, 5: 6 };
+LIMBUSCOMPANY.TRAIN_LEVEL_ADD  = { 1: 0, 2: 0, 3: 2 };
+
+/**
+ * 等级加成从第几阶开始计入。前两阶人人平价（谁都升得起 Ⅲ），
+ * 差距只在 Ⅳ/Ⅴ 体现——否则 Lv.3 技能连入门都比别人贵。
+ */
+LIMBUSCOMPANY.TRAIN_LEVEL_ADD_FROM = 4;
 
 /** 旧表，保留给可能引用它的宏；引擎本身已不再读 */
 LIMBUSCOMPANY.TRAIN_UPGRADE_COST = { 1: 1, 2: 2, 3: 5 };
@@ -200,9 +211,12 @@ LIMBUSCOMPANY.TRAIN_UPGRADE_COST = { 1: 1, 2: 2, 3: 5 };
  * @param {number} skillLevel 技能自身的 Lv.（1/2/3）
  * @param {number} toStage    升到第几阶（2~5）
  */
-LIMBUSCOMPANY.trainUpgradeCost = (skillLevel, toStage = 5) =>
-  (LIMBUSCOMPANY.TRAIN_STAGE_COST[toStage] ?? 9)
-  + (LIMBUSCOMPANY.TRAIN_LEVEL_ADD[skillLevel] ?? 0);
+LIMBUSCOMPANY.trainUpgradeCost = (skillLevel, toStage = 5) => {
+  const stage = LIMBUSCOMPANY.TRAIN_STAGE_COST[toStage] ?? 6;
+  const add   = (toStage >= (LIMBUSCOMPANY.TRAIN_LEVEL_ADD_FROM ?? 4))
+    ? (LIMBUSCOMPANY.TRAIN_LEVEL_ADD[skillLevel] ?? 0) : 0;
+  return stage + add;
+};
 
 /**
  * 从 Lv `level` 升到 Lv `level+1` 所需的经验值。
