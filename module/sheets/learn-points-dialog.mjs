@@ -74,7 +74,7 @@ export class LearnPointsDialog extends Application {
     const id   = row.dataset.itemId;
     const item = this.actor.items.get(id);
     if (!item) return;
-    const from = item.system?.trainLevel ?? 3;
+    const from = item.system?.trainLevel ?? 2;
     const cost = Number(row.dataset.cost) || 0;
     if (!await this.actor.applyTrainUpgrade(id)) return;
     const NUM = { 1: "Ⅰ", 2: "Ⅱ", 3: "Ⅲ", 4: "Ⅳ", 5: "Ⅴ" };
@@ -119,7 +119,7 @@ export class LearnPointsDialog extends Application {
     // 所以临时 clone 出来的这张卡显示的正是升上去之后的数值。
     // clone 不落库，原卡一个字节都不会动。
     const NUM     = { 1: "Ⅰ", 2: "Ⅱ", 3: "Ⅲ", 4: "Ⅳ", 5: "Ⅴ" };
-    const cur     = item.system?.trainLevel ?? 3;
+    const cur     = item.system?.trainLevel ?? 2;
     const next    = cur + 1;
     const hasNext = !!item.system?.trainForms?.[`lv${next}`]?.initialized;
     const preview = (next <= 5 && hasNext)

@@ -125,7 +125,7 @@ export class LevelUpDialog extends Application {
     const id   = row.dataset.itemId;
     const item = this.actor.items.get(id);
     if (!item) return;
-    const from = item.system?.trainLevel ?? 3;
+    const from = item.system?.trainLevel ?? 2;
     const cost = Number(row.dataset.cost) || 0;
     // 扣费与校验都在 applyTrainUpgrade 里，付不起会自己弹提示并返回 false
     if (!await this.actor.applyTrainUpgrade(id)) return;

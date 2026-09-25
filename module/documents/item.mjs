@@ -64,7 +64,7 @@ export function activeVariantPrefix(item) {
   if (sys.type === "ego") {
     return (sys.corrode?.initialized && sys._ownerInPanic) ? "corrode." : "";
   }
-  const key = `lv${sys.trainLevel ?? 3}`;
+  const key = `lv${sys.trainLevel ?? 2}`;
   return sys.trainForms?.[key]?.initialized ? `trainForms.${key}.` : "";
 }
 
@@ -272,14 +272,16 @@ export class SkillData extends foundry.abstract.TypeDataModel {
       }),
 
       // ── 训练等级（基础 / 守备技能）────────────────────────────────────
-      // 规则里的「默认Ⅲ级、精通Ⅳ级、强化Ⅴ级」。同一张卡随角色练上去会换一套
+      // 规则里的「基线Ⅱ级、熟练Ⅲ级、精通Ⅳ级、强化Ⅴ级」。同一张卡随角色练上去会换一套
       // 数值，因此走和【觉醒/侵蚀】一样的思路：一件物品挂多套数据，而不是做成
       // 多张同名卡。trainLevel 即当前生效的那一阶。
       // E.G.O 不用这套（它用 egoForm 的觉醒/侵蚀），避免 2×5 的组合爆炸。
-      trainLevel: new fields.NumberField({ required: false, integer: true, min: 1, max: 5, initial: 3 }),
+      // 基线是 Ⅱ 阶：卡面顶层那一套写的就是 Ⅱ，Ⅲ/Ⅳ 靠学习点数练上去，
+      // Ⅴ 属于例外（多数技能到 Ⅳ 封顶）。
+      trainLevel: new fields.NumberField({ required: false, integer: true, min: 1, max: 5, initial: 2 }),
 
-      // 顶层那一套数值属于哪一阶（导入时由最低的一行决定；手改卡时就是默认的 Ⅲ）
-      trainBaseLevel: new fields.NumberField({ required: false, integer: true, min: 1, max: 5, initial: 3 }),
+      // 顶层那一套数值属于哪一阶（导入时由最低的一行决定；手改卡时就是基线 Ⅱ）
+      trainBaseLevel: new fields.NumberField({ required: false, integer: true, min: 1, max: 5, initial: 2 }),
 
       // 各阶的覆盖数值；未 initialized 的阶完全沿用顶层字段。
       // 顶层字段 = 这张卡的"底子"，通常就是 Ⅲ 阶。
@@ -389,7 +391,7 @@ export class SkillData extends foundry.abstract.TypeDataModel {
     // 训练等级：把当前阶的覆盖值盖到顶层（没填的字段沿用顶层）。
     // E.G.O 走 egoForm，不参与这套。
     if (this.type !== "ego") {
-      const tf = this.trainForms?.[`lv${this.trainLevel ?? 3}`];
+      const tf = this.trainForms?.[`lv${this.trainLevel ?? 2}`];
       if (tf?.initialized) {
         // 名称 / 类型 / 分类 / 罪孽 / 等级 / 标签 不在这里 —— 那六项跨阶共用
         for (const key of ["baseValue", "diceCount", "diceFaces", "negativeDice",

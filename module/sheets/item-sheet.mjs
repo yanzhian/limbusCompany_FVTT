@@ -140,7 +140,7 @@ export class LimbusItemSheet extends ItemSheet {
     if (it.type !== "skill") return "";
     const src = it.toObject().system ?? {};
     if (src.type === "ego") return src.egoForm === "corrode" ? "corrode." : "";
-    const key = `lv${src.trainLevel ?? 3}`;
+    const key = `lv${src.trainLevel ?? 2}`;
     return src.trainForms?.[key]?.initialized ? `trainForms.${key}.` : "";
   }
 
@@ -193,13 +193,13 @@ export class LimbusItemSheet extends ItemSheet {
 
   /** 顶层数据代表的那一阶 */
   get _trainBaseLevel() {
-    return this.item.toObject().system?.trainBaseLevel ?? 3;
+    return this.item.toObject().system?.trainBaseLevel ?? 2;
   }
 
   /** 这张卡上已经写过数据的训练等级，从小到大；顶层那一套算作 baseLevel 一档 */
   get _trainLevels() {
     const src = this.item.toObject().system ?? {};
-    const set = new Set([this._trainBaseLevel, src.trainLevel ?? 3]);
+    const set = new Set([this._trainBaseLevel, src.trainLevel ?? 2]);
     for (let i = 1; i <= 5; i++) {
       if (src.trainForms?.[`lv${i}`]?.initialized) set.add(i);
     }
@@ -227,7 +227,7 @@ export class LimbusItemSheet extends ItemSheet {
     event.preventDefault();
     const src     = this.item.toObject().system ?? {};
     const levels  = this._trainLevels;
-    const cur     = src.trainLevel ?? 3;
+    const cur     = src.trainLevel ?? 2;
     const idx     = levels.indexOf(cur);
     if (!this._canToggleTrain) return;
     const canEdit = this.isEditable && !this.isLocked;
@@ -277,7 +277,7 @@ export class LimbusItemSheet extends ItemSheet {
     event.preventDefault();
     if (!this.isEditable || this.isLocked) return;
     const src = this.item.toObject().system ?? {};
-    const cur = src.trainLevel ?? 3;
+    const cur = src.trainLevel ?? 2;
     if (!src.trainForms?.[`lv${cur}`]?.initialized) return;   // 顶层那一套
     const ok = await Dialog.confirm({
       title: "删除训练等级",
@@ -355,8 +355,8 @@ export class LimbusItemSheet extends ItemSheet {
       context.egoFormLabel = corrode ? "侵蚀" : "觉醒";
 
       // ── 训练等级（基础 / 守备技能；E.G.O 用觉醒/侵蚀，两者不叠加）──────
-      const tLv   = src.trainLevel ?? 3;
-      const tBase = src.trainBaseLevel ?? 3;
+      const tLv   = src.trainLevel ?? 2;
+      const tBase = src.trainBaseLevel ?? 2;
       const tKey  = `lv${tLv}`;
       const tSrc  = (!context.isEgo && src.trainForms?.[tKey]?.initialized)
         ? src.trainForms[tKey] : null;
@@ -2562,7 +2562,7 @@ const sinColor    = cfg.SIN_COLORS?.[sys.sinType] ?? "#5F3E21";
   const descText    = linkifyHtml(sys.effectDesc ?? sys.description ?? "");
 
   // 训练等级徽章：基础/守备技能才有（E.G.O 走觉醒/侵蚀）。素材缺失时退回罗马数字。
-  const trainLv = sys.type === "ego" ? 0 : (sys.trainLevel ?? 3);
+  const trainLv = sys.type === "ego" ? 0 : (sys.trainLevel ?? 2);
   const trainIcoHtml = trainLv ? `<img src="${trainLevelIcon(trainLv)}" class="tc-train-ic"
        alt="${TRAIN_NUMERALS[trainLv] ?? trainLv}" title="训练等级 ${TRAIN_NUMERALS[trainLv] ?? trainLv}"
        onerror="this.outerHTML='<span class=&quot;tc-train-num&quot;>${TRAIN_NUMERALS[trainLv] ?? trainLv}</span>'">` : "";

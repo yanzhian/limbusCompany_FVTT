@@ -974,7 +974,7 @@ export class LimbusActor extends Actor {
     for (const item of this.items) {
       if (item.type !== "skill") continue;
       if (item.system?.type === "ego") continue;          // E.G.O 走觉醒/侵蚀
-      const lv   = item.system?.trainLevel ?? 3;
+      const lv   = item.system?.trainLevel ?? 2;
       const next = lv + 1;
       // 下一阶有没有真的写过数值——没写的话这次强化等于白花
       const hasNextData = !!item.system?.trainForms?.[`lv${next}`]?.initialized;
@@ -1013,7 +1013,7 @@ export class LimbusActor extends Actor {
     const item = this.items.get(itemId);
     if (!item || item.type !== "skill") return false;
     if (item.system?.type === "ego") return false;
-    const next = (item.system?.trainLevel ?? 3) + 1;
+    const next = (item.system?.trainLevel ?? 2) + 1;
     if (next > 5) return false;
 
     // 点数在这里扣，不在对话框里——宏或其它入口调用时同样要付钱
