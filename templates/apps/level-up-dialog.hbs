@@ -55,7 +55,7 @@
       <div class="lud-train-hint">
         学习点数 <b class="lud-points">{{points}}</b> 点
         —— 点一个技能花点数把它的训练等级提升一阶。<br>
-        <small>价格看技能自己的等级：Lv.1 花 1 点、Lv.2 花 2 点、Lv.3 花 5 点。花不完的点数会留到下次。</small>
+        <small>价格主要看升到第几阶（Ⅲ 便宜、Ⅳ 是大头、Ⅴ 属例外），技能自身 Lv. 再加 0/1/2 点。花不完的点数会留到下次。</small>
       </div>
       {{#if trainDone.length}}
         <div class="lud-train-done">
@@ -74,7 +74,7 @@
               {{numeral}}{{#if canUpgrade}} <span class="lud-arrow">→</span> <b>{{nextNumeral}}</b>{{/if}}
             </span>
             {{#unless maxed}}
-              <span class="lud-train-cost{{#unless affordable}} poor{{/unless}}">Lv.{{skillLevel}} · {{cost}} 点</span>
+              <span class="lud-train-cost{{#unless affordable}} poor{{/unless}}">→{{nextNumeral}} · {{cost}} 点</span>
             {{/unless}}
             {{#unless canUpgrade}}
               <span class="lud-train-warn">{{#if maxed}}已满阶

@@ -978,9 +978,9 @@ export class LimbusActor extends Actor {
       const next = lv + 1;
       // 下一阶有没有真的写过数值——没写的话这次强化等于白花
       const hasNextData = !!item.system?.trainForms?.[`lv${next}`]?.initialized;
-      // 花费看**技能自身的等级**（Lv.1/2/3），不是要升到第几阶
-      const cost = cfg.trainUpgradeCost?.(item.system?.level ?? 1)
-                ?? (cfg.TRAIN_UPGRADE_COST?.[item.system?.level ?? 1] ?? 5);
+      // 花费 = 升到第几阶的阶段价 + 技能自身等级（Lv.1/2/3）的小幅加成
+      const cost = cfg.trainUpgradeCost?.(item.system?.level ?? 1, next)
+                ?? (cfg.TRAIN_STAGE_COST?.[next] ?? 9);
       rows.push({
         id: item.id, uuid: item.uuid, name: item.name, img: item.img,
         level: lv, numeral: NUM[lv] ?? lv, nextNumeral: NUM[next] ?? next,
@@ -1018,7 +1018,8 @@ export class LimbusActor extends Actor {
 
     // 点数在这里扣，不在对话框里——宏或其它入口调用时同样要付钱
     const cfg   = CONFIG.LIMBUSCOMPANY ?? {};
-    const cost  = cfg.trainUpgradeCost?.(item.system?.level ?? 1) ?? 5;
+    const cost  = cfg.trainUpgradeCost?.(item.system?.level ?? 1, next)
+               ?? (cfg.TRAIN_STAGE_COST?.[next] ?? 9);
     const have  = this.system.learnPoints ?? 0;
     if (have < cost) {
       ui.notifications?.warn?.(

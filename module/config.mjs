@@ -178,12 +178,31 @@ LIMBUSCOMPANY.MAX_LEVEL = 50;
  */
 LIMBUSCOMPANY.LEARN_POINTS_PER_LEVEL = 1;
 
-/** 技能等级 → 强化一阶所需学习点数 */
+/**
+ * 强化一阶的花费 = 阶段价 + 技能等级加成。
+ *
+ * 两个因子分开的理由：原来只按技能 Lv. 收费（1/2/5），于是每一阶同价——
+ * Lv.1 技能两阶合计 2 点，角色 3 级就顶满；而 Ⅳ 阶那一跳明明是数值差距
+ * 最大的一阶，却和 Ⅱ→Ⅲ 一个价。
+ *
+ * 现在主要看**升到第几阶**：Ⅱ 是底子，Ⅱ→Ⅲ 便宜，Ⅲ→Ⅳ 才是大头（多数技能
+ * 的终点），Ⅳ→Ⅴ 属于例外。技能 Lv. 只做小幅加成，免得高级技能贵到没人练。
+ */
+LIMBUSCOMPANY.TRAIN_STAGE_COST = { 2: 1, 3: 2, 4: 5, 5: 9 };
+LIMBUSCOMPANY.TRAIN_LEVEL_ADD  = { 1: 0, 2: 1, 3: 2 };
+
+/** 旧表，保留给可能引用它的宏；引擎本身已不再读 */
 LIMBUSCOMPANY.TRAIN_UPGRADE_COST = { 1: 1, 2: 2, 3: 5 };
 
-/** 取某个技能升一阶的花费；等级异常时按最贵算，避免白给 */
-LIMBUSCOMPANY.trainUpgradeCost = (skillLevel) =>
-  LIMBUSCOMPANY.TRAIN_UPGRADE_COST[skillLevel] ?? 5;
+/**
+ * 取某个技能升到 `toStage` 阶的花费。
+ * 阶段缺省按最贵算（Ⅴ），等级缺省按 Lv.1 加成算——宁可贵，不要白给。
+ * @param {number} skillLevel 技能自身的 Lv.（1/2/3）
+ * @param {number} toStage    升到第几阶（2~5）
+ */
+LIMBUSCOMPANY.trainUpgradeCost = (skillLevel, toStage = 5) =>
+  (LIMBUSCOMPANY.TRAIN_STAGE_COST[toStage] ?? 9)
+  + (LIMBUSCOMPANY.TRAIN_LEVEL_ADD[skillLevel] ?? 0);
 
 /**
  * 从 Lv `level` 升到 Lv `level+1` 所需的经验值。
